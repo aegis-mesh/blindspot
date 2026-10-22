@@ -54,11 +54,10 @@ done
 
 echo "advice by OS"
 mkdir -p "$WORK/fakebin"
-for O in Linux FreeBSD MINGW64_NT-10.0; do
+for O in Darwin Linux FreeBSD MINGW64_NT-10.0; do
   printf '#!/bin/sh\nif [ "$1" = -s ]; then echo %s; else exec /usr/bin/uname "$@"; fi\n' "$O" > "$WORK/fakebin/uname"; chmod +x "$WORK/fakebin/uname"
-  HOME="$WORK/home" PATH="$WORK/fakebin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/os-$O.txt"
+  HOME="$WORK/home" PATH="$WORK/fakebin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/os-$O.txt"   # the advice wraps, so it is matched on one line
 done
-tr -s ' \n' '  ' < "$WORK/out-3.txt" > "$WORK/os-Darwin.txt"   # the advice wraps, so it is matched on one line
 has    "Linux is pointed at its keyring"        'GNOME Keyring or KWallet' "$WORK/os-Linux.txt"
 hasnot "Linux is not told to use the Keychain"  'macOS Keychain' "$WORK/os-Linux.txt"
 has    "another OS is pointed at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/os-FreeBSD.txt"
