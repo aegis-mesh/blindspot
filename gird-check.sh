@@ -509,6 +509,18 @@ game_loop() {
   # the main script has already set it up and will put it back.
   if [ "$G_MODE" != C ]; then G_SAVED=$(stty -g 2>/dev/null); stty -echo -icanon -icrnl min 0 time 0 2>/dev/null; fi
   printf '%s' "$HIDE"
+  # A fast scan never shows the game: it waits out G_HOLD seconds behind a one-line
+  # spinner, and leaves without drawing if the results are ready first.
+  G_HOLD=2; _hi=0
+  while [ "$G_READY" -eq 0 ] && [ $((SECONDS - G_T0)) -le "$G_HOLD" ]; do
+    printf '%s  %s%s%s  %sChecking your agents, configs and keys%s' "$CR${E}[K" "$TEAL" "${G_SPIN:$(( (_hi % 10) * 3 )):3}" "$RST" "$DIM" "$RST"
+    _hi=$((_hi + 1)); sleep 0.1
+  done
+  printf '%s' "$CR${E}[K"
+  if [ "$G_READY" -eq 1 ]; then
+    [ "$G_MODE" = C ] || stty "$G_SAVED" 2>/dev/null || stty sane 2>/dev/null
+    printf '%s' "$SHOW"; exit 0
+  fi
   _i=0; while [ "$_i" -lt "$G_H" ]; do printf '\n'; _i=$((_i + 1)); done
   while :; do
     g_wait

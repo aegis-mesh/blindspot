@@ -21,5 +21,6 @@ for B in $BASHES; do
   else
     FAILED=1
   fi
+  FAKEHOME="$WORK/home" SCRIPT="$PWD/gird-check.sh" BASHBIN="$B" expect tests/fast.exp || FAILED=1
 done
 exit "$FAILED"
