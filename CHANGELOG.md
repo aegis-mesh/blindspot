@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Your number among the first 1,000 now sits on its own line above your result, not inside it, and is the only line that mentions the first 1,000. Until 1,000 developers have run it, the line under the banner is left out.
+
 ## 1.1.0, 23 October 2026
 
 - How you compare instead of a letter grade. The report opens with a line such as "Safer than 72% of 1,234 developers who ran Blindspot", taken from the reply to the report it already sends.

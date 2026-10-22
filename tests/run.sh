@@ -140,7 +140,7 @@ PY
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
   has  "leads with the percentile when nothing is urgent" 'SAFER THAN 72% OF 1,234 DEVELOPERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
-  PROUD="▌ ★ You're developer #142 to run Blindspot\. One of the first 1,000\."
+  PROUD="^  ★ You're developer #142 to run Blindspot\. One of the first 1,000\."
   printf '%s' '{"devices":1234567,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   for B in $BASHES; do
     V=$("$B" -c 'echo "${BASH_VERSINFO[0]}"')
@@ -168,7 +168,13 @@ PY
   printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
   printf '%s' '{"devices":999,"devices_7d":120,"key_files":300,"clean":0.4}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/early.txt" 2>&1
-  has    "says early adopter instead of a total under 1,000" "★ You're one of the first 1,000 developers to run Blindspot\." "$WORK/early.txt"
+  has    "under 1,000 the rank sits above the header" "^  ★ You're developer #142 to run Blindspot\." "$WORK/early.txt"
+  if [ "$(grep -c 'first 1,000' "$WORK/early.txt")" -eq 1 ]; then ok "under 1,000 the first 1,000 are named once"; else bad "under 1,000 the first 1,000 are named once"; fi
+  if grep -aA2 "developer #142" "$WORK/early.txt" | grep -aqE '▌ .*(THINGS TO FIX|SAFER THAN|ACT NOW)'; then ok "the header follows the rank line"; else bad "the header follows the rank line"; fi
+  printf '%s' '{"p":72,"n":1234}' > "$WORK/reply.json"
+  HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/early-no-rank.txt" 2>&1
+  has    "says early adopter when the reply has no rank" "^  ★ You're one of the first 1,000 developers to run Blindspot\." "$WORK/early-no-rank.txt"
+  printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
   hasnot "never shows a total under 1,000"       '★ (999 developers|120 developers|Blindspot has found|40% of developers)' "$WORK/early.txt"
   printf '%s' '{"devices":1000,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/at-1000.txt" 2>&1
@@ -176,7 +182,7 @@ PY
   printf '{"devices":"\033[2J\033]0;pwned\007","key_files":99999999999999999999}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/hostile.txt" 2>&1
   if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')" "$WORK/hostile.txt"; then bad "a hostile totals reply can't reach the terminal"; else ok "a hostile totals reply can't reach the terminal"; fi
-  hasnot "a bad totals reply shows no total"     '^  ★' "$WORK/hostile.txt"
+  hasnot "a bad totals reply shows no total"     '^  ★ ([0-9]|Blindspot has found|You.re one of)' "$WORK/hostile.txt"
 
   echo "case-study counts in the report"
   # Checks one report against the fixed lists in the script and what the

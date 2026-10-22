@@ -193,7 +193,8 @@ EOF
 }
 # One line of real, public totals under the banner, picked at random from the
 # ones big enough to mean something. Nothing when they don't arrive in time.
-# Below 1,000 developers it says you're one of the first 1,000 instead.
+# Below 1,000 developers it shows nothing: the header says you're one of the
+# first 1,000 instead, with your number once the reply brings it.
 proof_line() {
   [ -n "$SP_PID" ] || return 0
   wait "$SP_PID" 2>/dev/null; SP_PID=""
@@ -201,17 +202,14 @@ proof_line() {
   _dv=$(jnum devices "$_pj"); _d7=$(jnum devices_7d "$_pj"); _kf=$(jnum key_files "$_pj")
   _cl=$(printf '%s' "$_pj" | grep -oE '"clean":(0(\.[0-9]{1,6})?|1(\.0{1,6})?)([,}]|$)' | head -n 1 | sed -E 's/"clean":([0-9.]+).*/\1/')
   [ -n "$_dv" ] || return 0
+  if [ "$_dv" -lt 1000 ]; then EARLY=1; return 0; fi
   _pm=()
-  if [ "$_dv" -lt 1000 ]; then
-    _pm[0]="You're one of the first 1,000 developers to run Blindspot."
-  else
-    _pm[0]="$(commas "$_dv") developers have run Blindspot."
-    if [ -n "$_d7" ] && [ "$_d7" -ge 50 ]; then _pm[${#_pm[@]}]="$(commas "$_d7") developers ran it this week."; fi
-    if [ -n "$_kf" ] && [ "$_kf" -ge 100 ]; then _pm[${#_pm[@]}]="Blindspot has found $(commas "$_kf") files with AI keys in plain text so far."; fi
-    if [ -n "$_cl" ]; then
-      _cp=$(awk -v c="$_cl" 'BEGIN { printf "%d", c * 100 + 0.5 }')
-      if [ "$_cp" -ge 1 ] && [ "$_cp" -le 99 ]; then _pm[${#_pm[@]}]="$_cp% of developers had no keys in plain text. Let's see about you."; fi
-    fi
+  _pm[0]="$(commas "$_dv") developers have run Blindspot."
+  if [ -n "$_d7" ] && [ "$_d7" -ge 50 ]; then _pm[${#_pm[@]}]="$(commas "$_d7") developers ran it this week."; fi
+  if [ -n "$_kf" ] && [ "$_kf" -ge 100 ]; then _pm[${#_pm[@]}]="Blindspot has found $(commas "$_kf") files with AI keys in plain text so far."; fi
+  if [ -n "$_cl" ]; then
+    _cp=$(awk -v c="$_cl" 'BEGIN { printf "%d", c * 100 + 0.5 }')
+    if [ "$_cp" -ge 1 ] && [ "$_cp" -le 99 ]; then _pm[${#_pm[@]}]="$_cp% of developers had no keys in plain text. Let's see about you."; fi
   fi
   printf '\n  %s★%s %s%s%s\n' "$GOLD" "$RST" "$B" "${_pm[$((RANDOM % ${#_pm[@]}))]}" "$RST"
 }
@@ -546,7 +544,7 @@ drain_keys() {
   stty "$_rs" </dev/tty 2>/dev/null
 }
 
-PROG_FILE=""; SP_FILE=""; SP_PID=""
+PROG_FILE=""; SP_FILE=""; SP_PID=""; EARLY=0
 cleanup() {
   spin_stop
   if [ -n "$SP_PID" ]; then kill "$SP_PID" 2>/dev/null; wait "$SP_PID" 2>/dev/null; SP_PID=""; fi
@@ -1297,6 +1295,12 @@ PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Safer than $PCT% of $(commas "$PCT_N") dev
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
 upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 CAPTURE=1; CAP=""
+# The first 1,000 get their place in line, above either header.
+if [ -n "$RANK" ]; then
+  wrap "You're developer #$(commas "$RANK") to run Blindspot. One of the first 1,000." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
+elif [ "$EARLY" -eq 1 ]; then
+  wrap "You're one of the first 1,000 developers to run Blindspot." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
+fi
 if [ "$LITELLM_HIT" -eq 1 ]; then
   emit "  ${SEV}▌${RST} ${B}ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE${RST}"
   if [ -n "$PCT_TXT" ]; then emit "  ${SEV}▌${RST} ${B}${PCT_TXT}.${RST} ${FIXN}."; else emit "  ${SEV}▌${RST} ${FIXN}."; fi
@@ -1309,11 +1313,6 @@ fi
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
-# The first 1,000 get their place in line, as the last line of either header.
-if [ -n "$RANK" ]; then
-  wrap "You're developer #$(commas "$RANK") to run Blindspot. One of the first 1,000." 6 "  ${SEV}▌${RST} ${GOLD}★${RST} " "  ${SEV}▌${RST}   " "$B"
-  HEAD_SHORT="$HEAD_SHORT$CAP"; HEAD_FULL="$HEAD_FULL$CAP"; CAP=""
-fi
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
 if [ "$N_AG" -eq 0 ]; then emit "     No coding agents found."; fi
