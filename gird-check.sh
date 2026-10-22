@@ -1153,7 +1153,13 @@ todo() { # section text
   esac
 }
 [ "$LITELLM_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow LiteLLM's advisory, and rotate every key the machine could reach."
-[ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into the macOS Keychain or a secrets manager, then rotate them."
+case "$OS" in
+  Darwin) _store="the macOS Keychain or a secrets manager" ;;
+  Linux)  _store="your desktop keyring (GNOME Keyring or KWallet) or a secrets manager" ;;
+  MINGW*|MSYS*|CYGWIN*) _store="Windows Credential Manager or a secrets manager" ;;
+  *)      _store="a secrets manager" ;;
+esac
+[ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
 [ "$HIST_KEYS" -gt 0 ] && todo 3 "Keys in shell history were typed into a command. Treat them as exposed and rotate them."
 [ "$N_MCP_TOKEN" -gt 0 ] && todo 2 "Replace tokens written into MCP configs with environment variable references, then rotate them."
 [ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."

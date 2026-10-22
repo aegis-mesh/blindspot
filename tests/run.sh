@@ -52,6 +52,20 @@ for B in $BASHES; do
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 done
 
+echo "advice by OS"
+mkdir -p "$WORK/fakebin"
+for O in Linux FreeBSD MINGW64_NT-10.0; do
+  printf '#!/bin/sh\nif [ "$1" = -s ]; then echo %s; else exec /usr/bin/uname "$@"; fi\n' "$O" > "$WORK/fakebin/uname"; chmod +x "$WORK/fakebin/uname"
+  HOME="$WORK/home" PATH="$WORK/fakebin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/os-$O.txt"
+done
+tr -s ' \n' '  ' < "$WORK/out-3.txt" > "$WORK/os-Darwin.txt"   # the advice wraps, so it is matched on one line
+has    "Linux is pointed at its keyring"        'GNOME Keyring or KWallet' "$WORK/os-Linux.txt"
+hasnot "Linux is not told to use the Keychain"  'macOS Keychain' "$WORK/os-Linux.txt"
+has    "another OS is pointed at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/os-FreeBSD.txt"
+hasnot "another OS is not told to use the Keychain" 'macOS Keychain' "$WORK/os-FreeBSD.txt"
+has    "Windows bash is pointed at Credential Manager" 'into Windows Credential Manager or a secrets manager' "$WORK/os-MINGW64_NT-10.0.txt"
+has    "macOS is pointed at the Keychain"       'into the macOS Keychain' "$WORK/os-Darwin.txt"
+
 echo "summary"
 OUT=$WORK/compact.txt
 HOME="$WORK/home" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline > "$OUT" 2>&1

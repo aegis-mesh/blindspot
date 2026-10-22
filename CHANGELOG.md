@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Your number among the first 1,000 now sits on its own line above your result, not inside it, and is the only line that mentions the first 1,000. Until 1,000 developers have run it, the line under the banner is left out.
+- The advice for keys in plain text names the place to keep them for your system: the macOS Keychain on a Mac, GNOME Keyring or KWallet on Linux, Windows Credential Manager under Git Bash, MSYS or Cygwin, and a secrets manager anywhere else.
 
 ## 1.1.0, 23 October 2026
 
