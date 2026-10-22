@@ -614,27 +614,119 @@ command_secret() {
   grep -aoE "$ALL_KEYS|$P_ASSIGN" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
 }
 
-# Count MCP servers in a JSON config without running Python: jq if present,
+# ---------------------------------------------------------------------------
+# Fixed lists for the case-study counts in the report. Only ids from these
+# lists, counts and yes/no leave the Mac: never a path, a file name or a name
+# you gave an MCP server. gird.ai keeps the same lists and drops anything else,
+# so change both together. Agent ids are in the table under "1. Coding agents".
+# ---------------------------------------------------------------------------
+# Key providers, for key_providers and provider_files (names in providers_in).
+PROVIDER_IDS="anthropic openai google openrouter groq xai huggingface perplexity replicate aws github npm"
+
+# MCP clients, for mcp_clients and mcp_token_clients, by the file the servers are in:
+#   claude-code     ~/.claude.json, and .mcp.json in a project folder
+#   claude-desktop  Claude Desktop's claude_desktop_config.json
+#   cursor          ~/.cursor/mcp.json, and .cursor/mcp.json in a project folder
+#   windsurf        ~/.codeium/windsurf/mcp_config.json
+#   codex           ~/.codex/config.toml
+#   gemini-cli      ~/.gemini/settings.json
+#   vscode          VS Code's mcp.json, and .vscode/mcp.json in a project folder
+#   cline           Cline's cline_mcp_settings.json, in VS Code or in Cursor
+#   continue        ~/.continue/config.json and ~/.continue/config.yaml
+#   goose           ~/.config/goose/config.yaml
+#   opencode        ~/.config/opencode/opencode.json
+#   other           any other file
+MCP_CLIENT_IDS="claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other"
+
+# Well-known MCP servers, for mcp_known. A server's label, its name in the
+# config, is lowercased and cut to the part after the last / (so @scope/name
+# gives name). Spaces, dots and underscores become -, and mcp- and server- come
+# off the front and -mcp and -server off the end, as often as they appear. When
+# nothing is left, as with @playwright/mcp, the part before the / is used. What
+# remains must equal an id below or an alias (alias=id). Any other label only
+# adds one to mcp_other, and is never sent.
+MCP_KNOWN_IDS="github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
+  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
+  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
+  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
+  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
+  shadcn deepwiki neon prisma netlify heroku azure huggingface"
+MCP_ALIASES="gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
+  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
+  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
+  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
+  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
+  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface"
+
+# Places, for key_places. Each file counted in key_files gets the first that fits:
+#   shell_rc       ~/.zshrc .zprofile .zshenv .zlogin .bashrc .bash_profile .profile, fish's config.fish
+#   shell_history  the shell and REPL history files, the same ones history_keys counts
+#   env_file       .env, .env.* and .envrc, anywhere
+#   mcp_config     an MCP config from the list of clients above, at home or in a project folder
+#   agent_config   other coding-agent settings, like ~/.claude/settings.json or ~/.aider.conf.yml
+#   project_file   any other file found in a project folder
+#   other          anything else
+KEY_PLACE_IDS="shell_rc shell_history env_file mcp_config agent_config project_file other"
+
+in_list() { for _il in $2; do [ "$_il" = "$1" ] && return 0; done; return 1; } # id list
+# The well-known ids among MCP server labels ("=label" lines on stdin), in list
+# order, then how many labels matched none: "github linear|2". Only ids from
+# the list and a number come out, never a label.
+mcp_match() {
+  KNOWN="$MCP_KNOWN_IDS" ALIASES="$MCP_ALIASES" awk '
+    function strip(s,   t) {
+      gsub(/[ ._]+/, "-", s)
+      do {
+        t = s
+        sub(/^-+/, "", s); sub(/-+$/, "", s)
+        sub(/^mcp-/, "", s); sub(/^server-/, "", s)
+        sub(/-mcp$/, "", s); sub(/-server$/, "", s)
+      } while (s != t)
+      if (s == "mcp" || s == "server") s = ""
+      return s
+    }
+    function part(s) { sub(/^@+/, "", s); sub(/@.*$/, "", s); return strip(s) }
+    BEGIN {
+      n = split(ENVIRON["KNOWN"], id, " "); for (i = 1; i <= n; i++) ok[id[i]] = 1
+      m = split(ENVIRON["ALIASES"], a, " ")
+      for (i = 1; i <= m; i++) if (split(a[i], p, "=") == 2 && (p[2] in ok)) al[p[1]] = p[2]
+    }
+    /^=/ {
+      k = split(tolower(substr($0, 2)), seg, "/")
+      s = k ? part(seg[k]) : ""
+      if (s == "" && k > 1) s = part(seg[k - 1])
+      if (s in ok) hit[s] = 1; else if (s in al) hit[al[s]] = 1; else other++
+    }
+    END {
+      out = ""; for (i = 1; i <= n; i++) if (id[i] in hit) out = out (out == "" ? "" : " ") id[i]
+      printf "%s|%d", out, other
+    }'
+}
+
+# The MCP servers in a JSON config, read without running Python: jq if present,
 # otherwise macOS's built-in JavaScript (osascript), which only reads the file.
+# Prints "#count", then each server's label as "=label" with any control
+# character made "?", so one label is one line. Nothing if it can't be read.
 json_servers() {
   if command -v jq >/dev/null 2>&1; then
     jq -r '[ (.mcpServers // {} | objects | keys[]),
              (.servers // {} | objects | keys[]),
              (.mcp // {} | objects | if has("servers") then (.servers | objects | keys[]) else keys[] end),
              (.projects // {} | objects | to_entries[] | (.value.mcpServers // {}) | objects | keys[]) ]
-           | unique | length' "$1" 2>/dev/null
+           | unique | "#\(length)", (.[] | "=" + (explode | map(if . < 32 or . == 127 then 63 else . end) | implode))' "$1" 2>/dev/null
   elif [ "$OS" = Darwin ]; then
     /usr/bin/osascript -l JavaScript - "$1" 2>/dev/null <<'JXA'
 function run(argv) {
   var s = $.NSString.stringWithContentsOfFileEncodingError(argv[0], $.NSUTF8StringEncoding, null);
   if (s.isNil()) return "";
   var j; try { j = JSON.parse(s.js); } catch (e) { return ""; }
-  var seen = {};
+  var seen = Object.create(null);
   function add(o) { if (o && typeof o === "object" && !Array.isArray(o)) for (var k in o) seen[k] = 1; }
   add(j.mcpServers); add(j.servers);
   if (j.mcp && typeof j.mcp === "object") { if (j.mcp.servers) add(j.mcp.servers); else add(j.mcp); }
   if (j.projects && typeof j.projects === "object") for (var p in j.projects) if (j.projects[p]) add(j.projects[p].mcpServers);
-  return String(Object.keys(seen).length);
+  var names = Object.keys(seen);
+  return ["#" + names.length].concat(names.map(function (k) { return "=" + k.replace(/[\x00-\x1f\x7f]/g, "?"); })).join("\n");
 }
 JXA
   fi
@@ -741,7 +833,7 @@ Aider|aider|||aider
 Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks|cline
 Continue||$H/.continue|$H/.continue/sessions|continue"
 
-AG_ROWS=""; AGENT_IDS=""; AG_NAMES=""; N_AG=0; N_IDLE=0; IDLE_NAMES=""
+AG_ROWS=""; AGENT_IDS=""; AG_NAMES=""; N_AG=0; N_IDLE=0; IDLE_NAMES=""; IDLE_IDS=""
 while IFS='|' read -r name bins paths acts aid; do
   [ -n "$name" ] || continue
   inst=0; old_ifs=$IFS; IFS=';'
@@ -762,7 +854,7 @@ while IFS='|' read -r name bins paths acts aid; do
     IFS=$old_ifs
     if [ "$recent" -eq 1 ]; then state=active
     else
-      N_IDLE=$((N_IDLE + 1)); IDLE_NAMES="${IDLE_NAMES:+$IDLE_NAMES, }$name"
+      N_IDLE=$((N_IDLE + 1)); IDLE_NAMES="${IDLE_NAMES:+$IDLE_NAMES, }$name"; IDLE_IDS="${IDLE_IDS:+$IDLE_IDS }$aid"
       if [ "$any" -eq 1 ]; then state=idle; else state=unused; fi
     fi
   fi
@@ -775,48 +867,71 @@ if [ "$N_AG" -gt 0 ]; then progress i "Found $(plural "$N_AG" "coding agent" "co
 else progress i "No coding agents found"; fi
 
 # --- 2. MCP servers ----------------------------------------------------------
-MCP_FILES="Claude Code|$H/.claude.json
-Claude Desktop|$AS/Claude/claude_desktop_config.json
-Cursor|$H/.cursor/mcp.json
-Windsurf|$H/.codeium/windsurf/mcp_config.json
-Codex|$H/.codex/config.toml
-Gemini CLI|$H/.gemini/settings.json
-VS Code|$AS/Code/User/mcp.json
-Cline|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
-Cline in Cursor|$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
-Continue|$H/.continue/config.json
-Continue|$H/.continue/config.yaml
-Goose|$H/.config/goose/config.yaml
-OpenCode|$H/.config/opencode/opencode.json"
+# app | client id, from the fixed list | config file
+MCP_FILES="Claude Code|claude-code|$H/.claude.json
+Claude Desktop|claude-desktop|$AS/Claude/claude_desktop_config.json
+Cursor|cursor|$H/.cursor/mcp.json
+Windsurf|windsurf|$H/.codeium/windsurf/mcp_config.json
+Codex|codex|$H/.codex/config.toml
+Gemini CLI|gemini-cli|$H/.gemini/settings.json
+VS Code|vscode|$AS/Code/User/mcp.json
+Cline|cline|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+Cline in Cursor|cline|$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+Continue|continue|$H/.continue/config.json
+Continue|continue|$H/.continue/config.yaml
+Goose|goose|$H/.config/goose/config.yaml
+OpenCode|opencode|$H/.config/opencode/opencode.json"
 
 MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""
-MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
+# For the report: "client count" lines, the labels to match, and clients with a token.
+MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
+MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
 MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | files_matching "$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET" | tr '\n' '|')"
-mcp_row() { # who file
-  _f=$2; _c=""
+mcp_row() { # who file client-id
+  _f=$2; _c=""; _nm=""
   case "$_f" in
-    *.toml) _c=$(grep -cE '^\[mcp_servers\.("[^"]+"|[^].]+)\][[:space:]]*$' "$_f" 2>/dev/null) ;;
-    *.json) _c=$(json_servers "$_f") ;;
+    *.toml) # one [mcp_servers.NAME] table per server
+      if [ -r "$_f" ]; then
+        _nm=$(sed -nE 's/^\[mcp_servers\.("([^"]+)"|([^].]+))\][[:space:]]*$/=\2\3/p' "$_f" 2>/dev/null)
+        _c=0; [ -n "$_nm" ] && _c=$(printf '%s\n' "$_nm" | grep -c '^=')
+      fi ;;
+    *.json)
+      _js=$(json_servers "$_f")
+      case "$_js" in
+        '#'*) _c=${_js%%"$NL"*}; _c=${_c#\#}; case "$_js" in *"$NL"*) _nm=${_js#*"$NL"} ;; esac ;;
+      esac
+      case "$_c" in *[!0-9]*) _c=""; _nm="" ;; esac ;;
     *.yaml|*.yml) grep -qE '^[[:space:]]*(mcpServers|extensions):' "$_f" 2>/dev/null || _c=0 ;;
   esac
   _tok=0
   case "$MCP_FLAGGED" in *"|$_f|"*) inline_secret "$_f" && _tok=1 ;; esac
   [ "$_c" = 0 ] && [ "$_tok" -eq 0 ] && return
-  [ -n "$_c" ] && N_MCP=$((N_MCP + _c))
+  _ci=$3; in_list "$_ci" "$MCP_CLIENT_IDS" || _ci=other
+  if [ -n "$_c" ]; then
+    N_MCP=$((N_MCP + _c)); MCP_TALLY="$MCP_TALLY$_ci $_c
+"
+    [ -n "$_nm" ] && MCP_NAMES="$MCP_NAMES$_nm
+"
+  fi
   if [ "$_tok" -eq 1 ]; then
     N_MCP_TOKEN=$((N_MCP_TOKEN + 1)); [ -n "$MCP_TOK_FIRST" ] || MCP_TOK_FIRST=$_f
+    case " $MCP_TOK_IDS " in *" $_ci "*) ;; *) MCP_TOK_IDS="${MCP_TOK_IDS:+$MCP_TOK_IDS }$_ci" ;; esac
     progress x "Token written in an MCP config: $(short "$_f")"
   fi
   MCP_ROWS="$MCP_ROWS$1|$_f|$_c|$_tok
 "
 }
-while IFS='|' read -r who f; do
-  [ -n "$who" ] && [ -f "$f" ] && mcp_row "$who" "$f"
+while IFS='|' read -r who cid f; do
+  [ -n "$who" ] && [ -f "$f" ] && mcp_row "$who" "$f" "$cid"
 done <<EOF
 $MCP_FILES
 EOF
 while IFS= read -r f; do
-  [ -n "$f" ] && [ -f "$f" ] && mcp_row "Project" "$f"
+  [ -n "$f" ] && [ -f "$f" ] || continue
+  case "$f" in
+    */.cursor/mcp.json) cid=cursor ;; */.vscode/mcp.json) cid=vscode ;; */.mcp.json) cid=claude-code ;; *) cid=other ;;
+  esac
+  mcp_row "Project" "$f" "$cid"
 done <<EOF
 $PROJECT_MCP
 EOF
@@ -843,21 +958,41 @@ CANDIDATES=$(
   } | awk 'NF && !seen[$0]++'
 )
 MATCHED=$(printf '%s\n' "$CANDIDATES" | files_matching "$ALL_KEYS")
+# For the report: one place id per file, and one provider id per file and provider.
+KEY_PLACES=""; PROV_TALLY=""
+MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n' "$PROJECT_FILES" | tr '\n' '|')"
+key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
+  case "$1" in
+    "$H/.zshrc"|"$H/.zprofile"|"$H/.zshenv"|"$H/.zlogin"|"$H/.bashrc"|"$H/.bash_profile"|"$H/.profile"|"$H/.config/fish/config.fish")
+      KP=shell_rc; return 0 ;;
+    "$H/.zsh_history"|"$H/.bash_history"|"$H/.local/share/fish/fish_history"|"$H/.python_history"|"$H/.node_repl_history")
+      KP=shell_history; return 0 ;;
+  esac
+  case "${1##*/}" in .env|.env.*|.envrc) KP=env_file; return 0 ;; esac
+  case "$MCP_SET" in *"|$1|"*) KP=mcp_config; return 0 ;; esac
+  case "$1" in
+    "$H"/.claude/*|"$H"/.codex/*|"$H"/.gemini/*|"$H"/.cursor/*|"$H"/.codeium/*|"$H"/.continue/*) KP=agent_config; return 0 ;;
+    "$H"/.copilot/*|"$H"/.config/goose/*|"$H"/.config/opencode/*|"$H"/.local/share/opencode/*|"$H"/.aider*|"$AS"/Claude/*) KP=agent_config; return 0 ;;
+  esac
+  case "$PROJECT_SET" in *"|$1|"*) KP=project_file; return 0 ;; esac
+  KP=other
+}
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   _p=$(providers_in "$f")
   [ -n "$_p" ] || continue
   KEY_FILES=$((KEY_FILES + 1)); [ -n "$KEY_FIRST" ] || KEY_FIRST="$f|$_p"
   progress x "Key in plain text: $(short "$f") ($_p)"
-  case "$f" in
-    "$H/.zsh_history"|"$H/.bash_history"|"$H/.local/share/fish/fish_history"|"$H/.python_history"|"$H/.node_repl_history")
-      HIST_KEYS=$((HIST_KEYS + 1)) ;;
-  esac
+  key_place "$f"; KEY_PLACES="$KEY_PLACES$KP
+"
+  [ "$KP" = shell_history ] && HIST_KEYS=$((HIST_KEYS + 1))
   old_ifs=$IFS; IFS=','
   for _nm in $_p; do
     _nm=${_nm# }
     case "$_nm" in "Hugging Face") _id=huggingface ;; *) _id=$(printf '%s' "$_nm" | tr 'A-Z' 'a-z') ;; esac
     case " $PROV_IDS " in *" $_id "*) ;; *) PROV_IDS="${PROV_IDS:+$PROV_IDS }$_id" ;; esac
+    PROV_TALLY="$PROV_TALLY$_id
+"
   done
   IFS=$old_ifs
   KEY_ROWS="$KEY_ROWS$f|$_p
@@ -1069,12 +1204,24 @@ if [ "$GAME_RC" -ge 1 ] && [ "$GAME_RC" -le 100 ]; then GP=1; GB=$(( (GAME_RC - 
 # DO_NOT_TRACK=1. The reply says how this machine compares with other developers.
 # They are the numbers above plus a few facts about the setup,
 # each squeezed into a fixed list or a strict pattern before it goes. Never a
-# path, a key, a username, a hostname or the raw hardware ID. The device ID is a
+# path, a file name, a key, a name you gave an MCP server, a username, a
+# hostname or the raw hardware ID. The device ID is a
 # one-way SHA-256 of the hardware UUID (Linux: machine-id) salted for this
 # script, so repeat runs can be counted; it can't be turned back into the ID.
 # The server keeps the country, not the IP address.
 # ---------------------------------------------------------------------------
 json_list() { _o=""; for _x in $1; do _o="${_o:+$_o,}\"$_x\""; done; printf '[%s]' "$_o"; }
+# {"id":n,...} over the ids of a fixed list, in its order, from lines of "id"
+# (counts one) or "id n" (adds n). An id outside the list is dropped.
+json_tally() { # list lines
+  printf '%s\n' "$2" | IDS="$1" awk '
+    NF { t[$1] += (NF > 1 ? $2 : 1); seen[$1] = 1 }
+    END {
+      n = split(ENVIRON["IDS"], id, " "); out = ""
+      for (i = 1; i <= n; i++) if (id[i] in seen) out = out (out == "" ? "" : ",") "\"" id[i] "\":" (t[id[i]] + 0)
+      printf "{%s}", out
+    }'
+}
 sha_hex() { if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum 2>/dev/null; fi | cut -c1-64; }
 HWID=""
 if [ "$OS" = Darwin ]; then HWID=$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/ {print $4; exit}')
@@ -1108,7 +1255,15 @@ VIA=none; [ -n "${CLAUDECODE:-}" ] && VIA=claude-code
 count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf 0; fi; }
 N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(count_lines "$MCP_ROWS")
 BASHV=${BASH_VERSINFO[0]:-0}
-PAYLOAD="{\"v\":\"1\",\"kind\":\"report\",\"run_id\":\"$RUN_ID\",\"device_id\":\"$DEVICE_ID\",\"script\":\"$VERSION\",\"os\":\"$OSV\",\"arch\":\"$ARCH_ID\",\"model\":\"$MODEL\",\"terminal\":\"$TERMAPP\",\"tmux\":$TMUXED,\"shell\":\"$SHELLNAME\",\"bash\":$BASHV,\"lang\":\"$LANGCODE\",\"via\":\"$VIA\",\"grade\":\"$GRADE\",\"score\":$SCORE,\"agents\":$(json_list "$AGENT_IDS"),\"agents_idle\":$N_IDLE,\"mcp_servers\":$N_MCP,\"mcp_configs\":$N_MCPF,\"mcp_token_files\":$N_MCP_TOKEN,\"key_files\":$KEY_FILES,\"key_providers\":$(json_list "$PROV_IDS"),\"history_keys\":$HIST_KEYS,\"env_files\":$N_ENVF,\"allow_list_files\":$N_ALLOWF,\"allow_list_keys\":$N_ALLOW,\"allow_list_npm\":$N_ALLOW_NPM,\"login_files\":$(json_list "$LOGIN_IDS"),\"ssh_keys\":$N_SSH,\"ssh_no_passphrase\":$N_SSH_OPEN,\"python_envs\":$N_PY,\"litellm_installed\":$N_LITE,\"litellm_found\":$LITELLM_HIT,\"opencode\":$OC,\"railway\":$RW,\"files_found\":$N_FOUND,\"scan_seconds\":$SCAN_SECS,\"all_folders\":$ALL,\"game_played\":$GP,\"game_best\":$GB,\"results_wait_seconds\":$WAIT_SECS}"
+# For case studies: ids from the fixed lists near the top, and counts. Labels go
+# in, but only list ids and a number come out of mcp_match.
+MCP_MATCH=$(printf '%s' "$MCP_NAMES" | mcp_match)
+case "$MCP_MATCH" in *[![:lower:][:digit:]\ \|-]*|'') MCP_MATCH="|0" ;; esac
+MCP_KNOWN=${MCP_MATCH%|*}; MCP_OTHER=${MCP_MATCH##*|}
+case "$MCP_OTHER" in ''|*[!0-9]*) MCP_OTHER=0 ;; esac
+J_IDLE=$(json_list "$IDLE_IDS"); J_MCPC=$(json_tally "$MCP_CLIENT_IDS" "$MCP_TALLY"); J_MCPT=$(json_list "$MCP_TOK_IDS")
+J_KNOWN=$(json_list "$MCP_KNOWN"); J_PLACES=$(json_tally "$KEY_PLACE_IDS" "$KEY_PLACES"); J_PROVF=$(json_tally "$PROVIDER_IDS" "$PROV_TALLY")
+PAYLOAD="{\"v\":\"1\",\"kind\":\"report\",\"run_id\":\"$RUN_ID\",\"device_id\":\"$DEVICE_ID\",\"script\":\"$VERSION\",\"os\":\"$OSV\",\"arch\":\"$ARCH_ID\",\"model\":\"$MODEL\",\"terminal\":\"$TERMAPP\",\"tmux\":$TMUXED,\"shell\":\"$SHELLNAME\",\"bash\":$BASHV,\"lang\":\"$LANGCODE\",\"via\":\"$VIA\",\"grade\":\"$GRADE\",\"score\":$SCORE,\"agents\":$(json_list "$AGENT_IDS"),\"agents_idle\":$N_IDLE,\"agents_idle_ids\":$J_IDLE,\"mcp_servers\":$N_MCP,\"mcp_configs\":$N_MCPF,\"mcp_token_files\":$N_MCP_TOKEN,\"mcp_clients\":$J_MCPC,\"mcp_token_clients\":$J_MCPT,\"mcp_known\":$J_KNOWN,\"mcp_other\":$MCP_OTHER,\"key_files\":$KEY_FILES,\"key_places\":$J_PLACES,\"key_providers\":$(json_list "$PROV_IDS"),\"provider_files\":$J_PROVF,\"history_keys\":$HIST_KEYS,\"env_files\":$N_ENVF,\"allow_list_files\":$N_ALLOWF,\"allow_list_keys\":$N_ALLOW,\"allow_list_npm\":$N_ALLOW_NPM,\"login_files\":$(json_list "$LOGIN_IDS"),\"ssh_keys\":$N_SSH,\"ssh_no_passphrase\":$N_SSH_OPEN,\"python_envs\":$N_PY,\"litellm_installed\":$N_LITE,\"litellm_found\":$LITELLM_HIT,\"opencode\":$OC,\"railway\":$RW,\"files_found\":$N_FOUND,\"scan_seconds\":$SCAN_SECS,\"all_folders\":$ALL,\"game_played\":$GP,\"game_best\":$GB,\"results_wait_seconds\":$WAIT_SECS}"
 send_stats() { # payload [seconds]: POST it with a short timeout, https only when the API is; prints the reply
   if [ "${API#https://}" != "$API" ]; then _pp='=https'; else _pp='=http,https'; fi
   curl -fsS --proto "$_pp" --max-time "${2:-5}" --max-filesize 65536 -X POST -H 'Content-Type: application/json' --data "$1" "$API" 2>/dev/null

@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0, 22 October 2026
+## 1.1.0, 23 October 2026
 
 - How you compare instead of a letter grade. The report opens with a line such as "Safer than 72% of 1,234 developers who ran Blindspot", taken from the reply to the report it already sends.
 - The first 1,000 developers to run it see their number with the result, such as "You're developer #142 to run Blindspot."
@@ -8,7 +8,8 @@
 - While it scans, the game or the spinner shows what it just found.
 - One line of real totals under the banner, such as how many developers have run it. Until 1,000 have, it says you're one of the first 1,000 instead.
 - When the results are ready, ENTER opens your Blindspot certificate. q quits.
-- The certificate link also carries your number, how many SSH keys it found, how many shell history files hold keys, and the run's random ID, so the certificate can show more of what you got right. If you press a share button there, the page sends that ID back with which button and what kind of result.
+- The certificate link also carries your number, the agents it found, how many SSH keys it found, how many shell history files hold keys, and the run's random ID, so the certificate page can write your post and show more of what you got right. If you press a share button there, the page sends that ID back with which button and what kind of result.
+- The counts it shares also say which well-known MCP servers you have, from a fixed list, and how many others. Any other server name is never sent. They also say how many servers each app has and which apps keep a token in their config, where files with keys sit by kind of file, how many files hold each provider's keys, and which agents are idle. TELEMETRY.md lists every field.
 - The web page moved to gird.ai/blindspot. Old gird.ai/check links redirect there.
 - The banner says Blindspot, and the certificate opens at gird.ai/blindspot/card.
 

@@ -6,11 +6,11 @@ When the script finishes, it sends one **report** to `https://gird.ai/api/check`
 
 Turn all of it off, the totals request included, with `--offline` or `DO_NOT_TRACK=1`.
 
-Everything is built in one place near the end of [`gird-check.sh`](gird-check.sh), so you can read exactly what goes. Every field is a number or comes from a fixed list or a strict pattern. The server applies the same rules and drops anything else.
+Everything is built in one place near the end of [`gird-check.sh`](gird-check.sh), so you can read exactly what goes. Every field is a number or comes from a fixed list or a strict pattern. The fixed lists of MCP apps, well-known MCP servers and kinds of file are in one block in the script, under "Fixed lists for the case-study counts". The server applies the same rules and drops anything else.
 
 ## Never sent
 
-File paths, keys, key fragments, usernames, emails, hostnames, IP addresses or your raw hardware ID.
+File paths, file names, keys, key fragments, MCP server names that aren't on the fixed list, usernames, emails, hostnames, IP addresses or your raw hardware ID.
 
 ## The report
 
@@ -27,8 +27,13 @@ File paths, keys, key fragments, usernames, emails, hostnames, IP addresses or y
 | `via` | `"none"` | `claude-code` when the script runs inside Claude Code |
 | `grade`, `score` | `"C"`, `64` | The result. The grade is for research counts only; the script shows how you compare instead |
 | `agents`, `agents_idle` | `["claude-code","codex"]`, `1` | Agents installed, from a fixed list, and how many weren't used in 30 days |
+| `agents_idle_ids` | `["codex"]` | Which of those agents weren't used in 30 days |
 | `mcp_servers`, `mcp_configs`, `mcp_token_files` | `6`, `3`, `1` | MCP servers, config files with servers, and configs with a token written in |
+| `mcp_clients`, `mcp_token_clients` | `{"claude-code":4,"codex":2}`, `["codex"]` | How many MCP servers each app has, and which apps keep a token written in their config. Apps from a fixed list |
+| `mcp_known`, `mcp_other` | `["github","playwright"]`, `3` | Which well-known MCP servers you have, from a fixed list, and how many others. Any other server name is never sent |
 | `key_files`, `key_providers`, `history_keys` | `4`, `["anthropic","aws"]`, `1` | Files with keys in plain text, which providers from a fixed list, and how many shell history files hold keys |
+| `key_places` | `{"shell_rc":1,"shell_history":1,"env_file":2}` | Where those files sit, by kind of file: shell config, shell history, .env files, MCP configs, agent settings, project files or other. Each file counts once |
+| `provider_files` | `{"anthropic":3,"aws":1}` | How many files hold each provider's keys |
 | `env_files` | `12` | `.env` files scanned |
 | `allow_list_files`, `allow_list_keys`, `allow_list_npm` | `2`, `1`, `1` | Claude Code settings files, how many hold a saved command with a key, and how many an npm publish would ship |
 | `login_files` | `["aws","ssh"]` | Kinds of login files present, from a fixed list |

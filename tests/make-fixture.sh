@@ -37,6 +37,17 @@ touch -t 202608200000 "$F/.codex/sessions/2026/08/old.jsonl"
 printf '[mcp_servers.fs]\ncommand = "x"\n[mcp_servers.fs.env]\nX = "1"\n[mcp_servers."web search"]\ncommand = "y"\n' > "$F/.codex/config.toml"
 mkdir -p "$F/.cursor"
 printf '{"mcpServers":{"github":{"command":"npx","env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"%s"}}}}\n' "$GH" > "$F/.cursor/mcp.json"
+# More MCP configs for the case-study counts: well-known servers written in
+# different ways, and names of your own that must never leave the machine.
+printf '{"mcpServers":{"acme-internal-db":{"command":"node"},"@modelcontextprotocol/server-postgres":{"command":"npx"},"MCP_DOCKER":{"command":"docker"}}}\n' > "$F/code/app/.mcp.json"
+mkdir -p "$F/code/lib/.vscode"
+printf '{"servers":{"Playwright":{"command":"npx"},"gh":{"type":"http"}}}\n' > "$F/code/lib/.vscode/mcp.json"
+if [ "$(uname -s)" = Darwin ]; then AS="$F/Library/Application Support"; else AS="$F/.config"; fi
+mkdir -p "$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings"
+printf '{"mcpServers":{"github.com/upstash/context7-mcp":{"command":"npx"},"Figma Dev Mode MCP":{"url":"http://127.0.0.1:3845/sse"},"my notes":{"command":"node"}}}\n' \
+  > "$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+mkdir -p "$F/.config/goose"
+printf 'extensions:\n  github:\n    enabled: true\n' > "$F/.config/goose/config.yaml"
 mkdir -p "$F/.gemini"
 mkdir -p "$F/.local/share/opencode"; printf '{}\n' > "$F/.local/share/opencode/auth.json"
 
