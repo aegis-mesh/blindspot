@@ -18,6 +18,10 @@ expect {
   -re {score 0*[1-9]} { pass "the space bar starts the game" }
   timeout { fail "the game ignored the space bar" }
 }
+expect {
+  -re {Scan done|Key in plain text|Found [0-9]+ coding agent|Checking ~/} { pass "shows findings while you play" }
+  timeout { fail "no findings while playing" }
+}
 for {set i 0} {$i < 8} {incr i} {
   expect -timeout 1 "never-matches-this" {}
   send " "
@@ -28,17 +32,21 @@ expect {
 }
 send "\r"
 expect {
-  "Press a key:" { pass "shows the menu after the results" }
-  timeout { fail "no menu" }
-}
-send "c"
-expect {
-  "check/card/#v=1" { pass "builds the share card link" }
-  timeout { fail "no share card link" }
+  "Keys in plain text" { pass "shows the summary" }
+  timeout { fail "no summary" }
 }
 expect {
-  "Press a key:" {}
-  timeout { fail "no menu after the card" }
+  "Blindspot certificate" { pass "asks boldly for the certificate" }
+  timeout { fail "no hero prompt" }
+}
+send "3"
+expect {
+  "KEYS IN PLAIN TEXT" { pass "3 shows the keys section in full" }
+  timeout { fail "3 showed no details" }
+}
+expect {
+  "Blindspot certificate" {}
+  timeout { fail "no prompt after the details" }
 }
 send "s"
 expect {
@@ -46,8 +54,17 @@ expect {
   timeout { fail "did not save" }
 }
 expect {
-  "Press a key:" {}
-  timeout { fail "no menu after saving" }
+  "Blindspot certificate" {}
+  timeout { fail "no prompt after saving" }
+}
+send "\r"
+expect {
+  "blindspot/card/#v=2" { pass "ENTER opens the certificate link" }
+  timeout { fail "ENTER gave no certificate link" }
+}
+expect {
+  "Blindspot certificate" {}
+  timeout { fail "no prompt after the certificate" }
 }
 send "q"
 expect {

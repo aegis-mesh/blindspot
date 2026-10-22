@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot report in a terminal: the GIRD banner, a grade, and the coding agents, MCP servers and plain-text keys it found" width="760"></a>
+  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot report in a terminal: the GIRD banner, how this Mac compares, and the coding agents, MCP servers and plain-text keys it found" width="760"></a>
 </p>
 
 # Blindspot
@@ -21,15 +21,16 @@ shasum -a 256 gird-check.sh   # compare with the release notes
 bash gird-check.sh
 ```
 
-You can also copy it from [gird.ai/check](https://gird.ai/check). It takes under a minute. While it scans, press space to play GIRD Runner.
+You can also copy it from [gird.ai/blindspot](https://gird.ai/blindspot). It takes under a minute. While it scans, press space to play GIRD Runner and watch what it finds.
 
 Please don't pipe it straight into a shell. Reading it first is the point.
 
 | Option | What it does |
 |---|---|
+| `--full` | Prints every detail instead of the summary. |
 | `--all` | Also scans Desktop, Documents and Downloads. macOS asks for permission. |
 | `--offline` | Shares nothing. `DO_NOT_TRACK=1` does the same. |
-| `--save` | Saves the report as a text file without asking. |
+| `--save` | Saves the full report as a text file without asking. |
 | `--no-game` | Skips the game while it scans. |
 | `NO_COLOR=1` | Plain text, no colors. |
 
@@ -41,29 +42,29 @@ Please don't pipe it straight into a shell. Reading it first is the point.
 4. **Keys saved in Claude Code allow lists.** Click "always allow" on a command that has a key in it, and Claude Code saves the whole command in the project's settings file. Blindspot flags each one, and whether an npm publish from that folder would ship it.
 5. **That week's leaks.** Files left by the LiteLLM 1.107.0 malware in every Python environment it finds, the bad package in your uv cache, and what to rotate if you use OpenCode Console or Railway.
 
-At the end you get a grade from A to F, a short list of what to fix, and a menu: save the report, get a share card, or try Argus.
+At the end you get a short summary: how you compare with the other developers who ran it, one line per check, and the first thing to fix. Press 1 to 5 for the details of a check, s to save the full report, or ENTER for your Blindspot certificate, a card you can post. `--full` prints every detail instead, and so does running it into a file or a pipe.
 
 ## What it never does
 
 - Print a key. It names the provider, never the value.
 - Use sudo or ask for your password.
 - Start an agent, an MCP server or Python.
-- Write a file, unless you ask it to save the report.
+- Leave a file behind, unless you ask it to save the report. It keeps two small temp files while it runs, for the progress line and the public totals, and deletes them when it exits.
 - Send a path, a key, a username, a hostname or your raw hardware ID.
 
 ## What it shares
 
-When it finishes, it sends one report to gird.ai: the counts above, a few facts about your setup such as your terminal app and macOS version, and a hashed device ID so repeat runs can be counted. Every field is listed in [TELEMETRY.md](TELEMETRY.md). Run it with `--offline`, or set `DO_NOT_TRACK=1`, and it sends nothing.
+When it starts, it asks gird.ai for public totals, such as how many developers have run it. That request sends nothing else. When it finishes, it sends one report to gird.ai: the counts above, a few facts about your setup such as your terminal app and macOS version, and a hashed device ID so repeat runs can be counted. The reply says how your result compares. Every field is listed in [TELEMETRY.md](TELEMETRY.md). Run it with `--offline`, or set `DO_NOT_TRACK=1`, and it makes no requests at all.
 
 ## GIRD Runner
 
 <img src="docs/game.png" alt="GIRD Runner: a teal runner jumping red leaked keys such as AKIA and .env in a bordered arena, with the scan timer below" width="760">
 
-A small jump game that runs while the scan does. Jump the leaked keys. When your results are ready, it asks whether to show them or let you keep playing for another minute.
+A small jump game that runs while the scan does, with the latest finding shown under it. Jump the leaked keys. When your results are ready, it asks whether to show them or let you keep playing for another minute.
 
 ## Requirements
 
-macOS 13 or later, or Linux. It runs on the bash that ships with macOS (3.2) and on newer versions, and uses standard tools only: find, grep, awk, sed, od and stty. curl is used only to share counts. jq is used if it is installed.
+macOS 13 or later, or Linux. It runs on the bash that ships with macOS (3.2) and on newer versions, and uses standard tools only: find, grep, awk, sed, od and stty. curl is used only for the public totals and to share counts. jq is used if it is installed.
 
 ## Limits
 

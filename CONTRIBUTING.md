@@ -44,4 +44,4 @@ Add a Developer Certificate of Origin sign-off to each commit with `git commit -
 
 ## Releases
 
-Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` in the release notes. gird.ai/check serves the released file, never `main`.
+Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` in the release notes. gird.ai/blindspot serves the released file, never `main`.

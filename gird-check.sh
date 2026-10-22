@@ -1,36 +1,39 @@
 #!/usr/bin/env bash
-# GIRD AI key check, version 1 (22 October 2026)
-# https://gird.ai/check
+# Blindspot, the GIRD AI key check, version 1.1.0 (22 October 2026)
+# https://gird.ai/blindspot
 #
 # Shows the AI coding agents and MCP servers on this machine, AI and cloud keys
 # stored in plain text, keys saved in Claude Code allow lists, and signs of this
 # week's LiteLLM, OpenCode and Railway incidents.
 #
 # It never uses sudo, starts an agent, an MCP server or Python, or prints a key.
-# It reads files and prints paths and counts. When it finishes it shares counts
-# and a hashed device ID with gird.ai, never paths or keys; --offline stops that.
+# It reads files and prints paths and counts. It asks gird.ai for public totals
+# when it starts. When it finishes it shares counts and a hashed device ID, never
+# paths or keys, and gets back how you compare. --offline stops all of that.
 # Key formats come from Argus.
 #
-#   bash gird-check.sh             skips Desktop, Documents and Downloads
-#   bash gird-check.sh --all       includes them (macOS may ask for permission)
+#   bash gird-check.sh             a short summary; press 1 to 5 for details
+#   bash gird-check.sh --full      every detail, no summary
+#   bash gird-check.sh --all       also scans Desktop, Documents and Downloads
 #   bash gird-check.sh --offline   shares nothing (DO_NOT_TRACK=1 works too)
-#   bash gird-check.sh --save      saves the report as a text file without asking
+#   bash gird-check.sh --save      saves the full report as a text file
 #   bash gird-check.sh --no-game   skips the game while it scans
 #   NO_COLOR=1 bash gird-check.sh  plain text, no colors
 
 ORIG_LANG=${LC_ALL:-${LANG:-}}
 export LC_ALL=C
 
-ALL=0; SAVE=0; NOGAME=0; OFFLINE=0
+ALL=0; SAVE=0; NOGAME=0; OFFLINE=0; FULL=0
 [ "${DO_NOT_TRACK:-0}" = 1 ] && OFFLINE=1
 for arg in "$@"; do
   case "$arg" in
     --all) ALL=1 ;;
+    --full) FULL=1 ;;
     --save) SAVE=1 ;;
     --no-game) NOGAME=1 ;;
     --offline) OFFLINE=1 ;;
     --no-color) NO_COLOR=1 ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf 'Unknown option: %s (try --help)\n' "$arg"; exit 2 ;;
   esac
 done
@@ -50,6 +53,11 @@ if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"; else AS="$H/.co
 # Text uses the terminal's own palette, so it reads on light and dark themes.
 # ---------------------------------------------------------------------------
 TTY=0; [ -t 1 ] && TTY=1
+# A summary on a terminal, with details on request. Every detail with --full or
+# when the output goes to a file or a pipe. GIRD_CHECK_COMPACT=1 is for tests.
+COMPACT=0; [ "$TTY" -eq 1 ] && COMPACT=1
+[ "${GIRD_CHECK_COMPACT:-}" = 1 ] && COMPACT=1
+[ "$FULL" -eq 1 ] && COMPACT=0
 E=$(printf '\033'); CR=$'\r'; NL=$'\n'
 if [ "$TTY" -eq 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
   RST="${E}[0m"; B="${E}[1m"; DIM="${E}[2m"; RED="${E}[31m"; GRN="${E}[32m"; YEL="${E}[33m"
@@ -71,10 +79,16 @@ if [ "$TTY" -eq 1 ]; then
 fi
 RULE=$(printf '%*s' $((W - 4)) '' | sed 's/ /─/g')
 
-# Everything shown is also kept in REPORT, so it can be saved at the end.
-REPORT=""
-emit() { printf '%s\n' "$1"; REPORT="$REPORT$1
-"; }
+# Everything shown is also kept in REPORT, so it can be saved at the end. While
+# CAPTURE=1, lines go to CAP instead, so the report can be built in parts and
+# shown as a summary or in full.
+REPORT=""; CAPTURE=0; CAP=""
+emit() {
+  if [ "$CAPTURE" -eq 1 ]; then CAP="$CAP$1
+"; return 0; fi
+  printf '%s\n' "$1"; REPORT="$REPORT$1
+"
+}
 blank() { emit ""; }
 # Paths are shown with control characters replaced, so a hostile file name
 # can't send escape sequences to your terminal.
@@ -84,6 +98,30 @@ short() {
   case "$_s" in "$H"/*) printf '~/%s' "${_s#"$H"/}" ;; *) printf '%s' "$_s" ;; esac
 }
 plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s' "$1" "$3"; fi; }
+# 1234567 -> 1,234,567
+commas() {
+  _cn=$1; _co=""
+  while [ "${#_cn}" -gt 3 ]; do _co=",${_cn: -3}$_co"; _cn=${_cn:0:$((${#_cn} - 3))}; done
+  printf '%s%s' "$_cn" "$_co"
+}
+# "a, b, c, d" 2 -> "a, b +2"
+first_names() {
+  _fo=""; _fc=0; _fr=0; _fifs=$IFS; IFS=','
+  for _fx in $1; do
+    _fx=${_fx# }; _fc=$((_fc + 1))
+    if [ "$_fc" -le "$2" ]; then _fo="${_fo:+$_fo, }$_fx"; else _fr=$((_fr + 1)); fi
+  done
+  IFS=$_fifs
+  [ "$_fr" -gt 0 ] && _fo="$_fo +$_fr"
+  printf '%s' "$_fo"
+}
+# A whole number from a small JSON reply, or nothing. Only digits ever come out,
+# so a reply can't put anything else on your screen.
+jnum() {
+  _jv=$(printf '%s' "$2" | grep -oE "\"$1\":[0-9]{1,12}([,}]|\$)" | head -n 1 | cut -d: -f2 | tr -d ',}')
+  case "$_jv" in ''|*[!0-9]*) _jv="" ;; esac
+  printf '%s' "$_jv"
+}
 # wrap TEXT INDENT_WIDTH FIRST_PREFIX REST_PREFIX [COLOR]
 wrap() {
   _w=$((W - $2 - 3)); [ "$_w" -lt 20 ] && _w=20
@@ -143,7 +181,7 @@ banner() {
   done <<EOF
 $_wm
 EOF
-  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}AI KEY CHECK${RST}  ${DIM}v1 · 22 Oct 2026 · gird.ai/check${RST}"
+  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.1.0 · 22 Oct 2026 · gird.ai/blindspot${RST}"
   blank
   emit "  ${DIM}Read-only. Prints paths and counts, never a key.${RST}"
   if [ "$OFFLINE" -eq 0 ]; then
@@ -152,6 +190,30 @@ EOF
   if [ "$ALL" -eq 0 ]; then
     emit "  ${DIM}Skips Desktop, Documents and Downloads. Add --all to include them.${RST}"
   fi
+}
+# One line of real, public totals under the banner, picked at random from the
+# ones big enough to mean something. Nothing when they don't arrive in time.
+# Below 1,000 developers it says you're one of the first 1,000 instead.
+proof_line() {
+  [ -n "$SP_PID" ] || return 0
+  wait "$SP_PID" 2>/dev/null; SP_PID=""
+  _pj=$(head -c 65536 "$SP_FILE" 2>/dev/null | tr -d ' \n\r\t')
+  _dv=$(jnum devices "$_pj"); _d7=$(jnum devices_7d "$_pj"); _kf=$(jnum key_files "$_pj")
+  _cl=$(printf '%s' "$_pj" | grep -oE '"clean":(0(\.[0-9]{1,6})?|1(\.0{1,6})?)([,}]|$)' | head -n 1 | sed -E 's/"clean":([0-9.]+).*/\1/')
+  [ -n "$_dv" ] || return 0
+  _pm=()
+  if [ "$_dv" -lt 1000 ]; then
+    _pm[0]="You're one of the first 1,000 developers to run Blindspot."
+  else
+    _pm[0]="$(commas "$_dv") developers have run Blindspot."
+    if [ -n "$_d7" ] && [ "$_d7" -ge 50 ]; then _pm[${#_pm[@]}]="$(commas "$_d7") developers ran it this week."; fi
+    if [ -n "$_kf" ] && [ "$_kf" -ge 100 ]; then _pm[${#_pm[@]}]="Blindspot has found $(commas "$_kf") files with AI keys in plain text so far."; fi
+    if [ -n "$_cl" ]; then
+      _cp=$(awk -v c="$_cl" 'BEGIN { printf "%d", c * 100 + 0.5 }')
+      if [ "$_cp" -ge 1 ] && [ "$_cp" -le 99 ]; then _pm[${#_pm[@]}]="$_cp% of developers had no keys in plain text. Let's see about you."; fi
+    fi
+  fi
+  printf '\n  %s★%s %s%s%s\n' "$GOLD" "$RST" "$B" "${_pm[$((RANDOM % ${#_pm[@]}))]}" "$RST"
 }
 
 # ---------------------------------------------------------------------------
@@ -163,9 +225,13 @@ spin_start() {
   printf '%s' "$HIDE"
   (
     trap 'exit 0' TERM
-    _i=0; _s=$SECONDS; _f='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    _i=0; _s=$SECONDS; _f='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'; _lbl=$1; _mx=$((W - 16))
     while :; do
-      printf '\r  %s%s%s  %s  %s%ss%s%s' "$TEAL" "${_f:$(( (_i % 10) * 3 )):3}" "$RST" "$1" "$DIM" "$((SECONDS - _s))" "$RST" "${E}[K"
+      if [ -n "$PROG_FILE" ] && [ $((_i % 5)) -eq 0 ]; then # the latest finding, twice a second
+        _tk=""; IFS= read -r _tk 2>/dev/null < "$PROG_FILE"
+        if [ -n "$_tk" ]; then _lbl=${_tk#?|}; [ "${#_lbl}" -gt "$_mx" ] && _lbl="${_lbl:0:$((_mx - 3))}..."; fi
+      fi
+      printf '\r  %s%s%s  %s  %s%ss%s%s' "$TEAL" "${_f:$(( (_i % 10) * 3 )):3}" "$RST" "$_lbl" "$DIM" "$((SECONDS - _s))" "$RST" "${E}[K"
       _i=$((_i + 1)); sleep 0.1
     done
   ) &
@@ -370,6 +436,16 @@ g_draw() {
   fi
   _o="$_o$CR${E}[K  $_m"
   [ -n "$_rt" ] && _o="$_o$CR${E}[$((G_W + 4 - ${#_rt}))C${DIM}${_rt}${RST}"
+  # The latest thing the scan found, read from its progress file a few times a second.
+  if [ -n "$PROG_FILE" ] && [ $((G_F % 10)) -eq 1 ]; then
+    _tk=""; IFS= read -r _tk 2>/dev/null < "$PROG_FILE"; [ -n "$_tk" ] && G_TICK=$_tk
+  fi
+  _o="$_o$NL$CR${E}[K"
+  if [ -n "$G_TICK" ]; then
+    case "$G_TICK" in x\|*) _tg="${RED}✗${RST}" ;; w\|*) _tg="${YEL}!${RST}" ;; o\|*) _tg="${GRN}✓${RST}" ;; *) _tg="${TEAL}·${RST}" ;; esac
+    _tt=${G_TICK#?|}; [ "${#_tt}" -gt $((G_W - 2)) ] && _tt="${_tt:0:$((G_W - 5))}..."
+    _o="$_o    $_tg ${DIM}${_tt}${RST}"
+  fi
   printf '%s' "$_o$NL"
 }
 g_step() { # returns 1 when the game should end
@@ -419,7 +495,7 @@ game_loop() {
   fi
   G_READY=0; G_PLAYED=0; G_STATE=idle; G_BEST=0; G_F=0; G_REMIND=0; G_SINCE=0; G_DONE=""
   G_W=$((W - 6)); [ "$G_W" -gt 72 ] && G_W=72
-  G_PX=6; G_H=9
+  G_PX=6; G_H=10; G_TICK=""
   G_TOKS=("sk-ant" "AKIA" "ghp_" ".env" "sk-" "npm_" "xai-")
   G_SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
   G_T0=$SECONDS
@@ -470,12 +546,15 @@ drain_keys() {
   stty "$_rs" </dev/tty 2>/dev/null
 }
 
-STATS_PID=""
+PROG_FILE=""; SP_FILE=""; SP_PID=""
 cleanup() {
   spin_stop
+  if [ -n "$SP_PID" ]; then kill "$SP_PID" 2>/dev/null; wait "$SP_PID" 2>/dev/null; SP_PID=""; fi
   if [ -n "$GAME_PID" ]; then kill "$GAME_PID" 2>/dev/null; wait "$GAME_PID" 2>/dev/null; GAME_PID=""; fi
   if [ -n "$KEYS_PID" ]; then kill "$KEYS_PID" 2>/dev/null; wait "$KEYS_PID" 2>/dev/null; KEYS_PID=""; fi
   if [ -n "$SAVED_TTY" ]; then stty "$SAVED_TTY" </dev/tty 2>/dev/null; SAVED_TTY=""; fi
+  [ -n "$PROG_FILE" ] && rm -f "$PROG_FILE"
+  [ -n "$SP_FILE" ] && rm -f "$SP_FILE"
   printf '%s' "$SHOW"
 }
 trap cleanup EXIT
@@ -595,9 +674,38 @@ scan_home() {
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' \) -print \) 2>/dev/null
 }
 
+# Findings for the game or the spinner to show while the scan runs: a mark (x a
+# problem, w worth a look, o fine, i working), a bar, then the text. Paths go
+# through short() and keys are never part of it.
+progress() { [ -n "$PROG_FILE" ] && printf '%s|%s\n' "$1" "$2" > "$PROG_FILE" 2>/dev/null; return 0; }
+scan_progress() { # pass the home scan's output through, showing some paths as they turn up
+  _n=0
+  while IFS= read -r _l; do
+    printf '%s\n' "$_l"
+    _n=$((_n + 1)); [ $((_n % 4)) -eq 1 ] || continue
+    _s=${_l//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
+    # shellcheck disable=SC2088  # a literal ~ for home paths, as short() prints
+    case "$_s" in "$H"/*) _s="~/${_s#"$H"/}" ;; esac
+    progress i "Checking $_s"
+  done
+}
+
 # ===========================================================================
+# Public totals for the line under the banner, fetched while the banner prints.
+# Only the request itself goes out, and nothing at all with --offline.
+TMPD=${TMPDIR:-/tmp}; TMPD=${TMPD%/}
+if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
+  SP_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || SP_FILE=""
+  if [ -n "$SP_FILE" ]; then
+    if [ "${API#https://}" != "$API" ]; then _sp='=https'; else _sp='=http,https'; fi
+    curl -fsS --proto "$_sp" --max-time 2 --max-filesize 65536 "$API/stats" > "$SP_FILE" 2>/dev/null &
+    SP_PID=$!
+  fi
+fi
 banner
+proof_line
 blank
+PROG_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || PROG_FILE=""
 if game_ok; then
   SAVED_TTY=$(stty -g </dev/tty 2>/dev/null)
   [ "$G_MODE" = C ] && stty -echo -icanon min 0 time 5 </dev/tty 2>/dev/null
@@ -609,7 +717,8 @@ else
 fi
 SCAN_T0=$SECONDS
 
-FOUND=$(scan_home)
+progress i "Looking through your home folder"
+FOUND=$(scan_home | scan_progress)
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -632,7 +741,7 @@ Aider|aider|||aider
 Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks|cline
 Continue||$H/.continue|$H/.continue/sessions|continue"
 
-AG_ROWS=""; AGENT_IDS=""; N_AG=0; N_IDLE=0; IDLE_NAMES=""
+AG_ROWS=""; AGENT_IDS=""; AG_NAMES=""; N_AG=0; N_IDLE=0; IDLE_NAMES=""
 while IFS='|' read -r name bins paths acts aid; do
   [ -n "$name" ] || continue
   inst=0; old_ifs=$IFS; IFS=';'
@@ -640,7 +749,7 @@ while IFS='|' read -r name bins paths acts aid; do
   for p in $paths; do [ -n "$p" ] && [ -e "$p" ] && inst=1; done
   IFS=$old_ifs
   [ "$inst" -eq 1 ] || continue
-  N_AG=$((N_AG + 1)); AGENT_IDS="${AGENT_IDS:+$AGENT_IDS }$aid"
+  N_AG=$((N_AG + 1)); AGENT_IDS="${AGENT_IDS:+$AGENT_IDS }$aid"; AG_NAMES="${AG_NAMES:+$AG_NAMES, }$name"
   if [ -z "$acts" ]; then
     state=installed
   else
@@ -662,6 +771,8 @@ while IFS='|' read -r name bins paths acts aid; do
 done <<EOF
 $AGENTS
 EOF
+if [ "$N_AG" -gt 0 ]; then progress i "Found $(plural "$N_AG" "coding agent" "coding agents"): $(first_names "$AG_NAMES" 3)"
+else progress i "No coding agents found"; fi
 
 # --- 2. MCP servers ----------------------------------------------------------
 MCP_FILES="Claude Code|$H/.claude.json
@@ -678,7 +789,7 @@ Continue|$H/.continue/config.yaml
 Goose|$H/.config/goose/config.yaml
 OpenCode|$H/.config/opencode/opencode.json"
 
-MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0
+MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
 MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | files_matching "$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET" | tr '\n' '|')"
 mcp_row() { # who file
@@ -692,7 +803,10 @@ mcp_row() { # who file
   case "$MCP_FLAGGED" in *"|$_f|"*) inline_secret "$_f" && _tok=1 ;; esac
   [ "$_c" = 0 ] && [ "$_tok" -eq 0 ] && return
   [ -n "$_c" ] && N_MCP=$((N_MCP + _c))
-  [ "$_tok" -eq 1 ] && N_MCP_TOKEN=$((N_MCP_TOKEN + 1))
+  if [ "$_tok" -eq 1 ]; then
+    N_MCP_TOKEN=$((N_MCP_TOKEN + 1)); [ -n "$MCP_TOK_FIRST" ] || MCP_TOK_FIRST=$_f
+    progress x "Token written in an MCP config: $(short "$_f")"
+  fi
   MCP_ROWS="$MCP_ROWS$1|$_f|$_c|$_tok
 "
 }
@@ -706,9 +820,13 @@ while IFS= read -r f; do
 done <<EOF
 $PROJECT_MCP
 EOF
+if [ "$N_MCP_TOKEN" -eq 0 ]; then
+  if [ "$N_MCP" -gt 0 ]; then progress o "Found $(plural "$N_MCP" "MCP server" "MCP servers"), no tokens written in their configs"
+  else progress i "No MCP servers configured"; fi
+fi
 
 # --- 3. Keys in plain text ---------------------------------------------------
-KEY_ROWS=""; KEY_FILES=0; HIST_KEYS=0; PROV_IDS=""
+KEY_ROWS=""; KEY_FILES=0; HIST_KEYS=0; PROV_IDS=""; KEY_FIRST=""
 PROJECT_FILES=$(printf '%s\n%s\n' "$ENV_FILES" "$PROJECT_MCP")
 CANDIDATES=$(
   {
@@ -729,7 +847,8 @@ while IFS= read -r f; do
   [ -n "$f" ] || continue
   _p=$(providers_in "$f")
   [ -n "$_p" ] || continue
-  KEY_FILES=$((KEY_FILES + 1))
+  KEY_FILES=$((KEY_FILES + 1)); [ -n "$KEY_FIRST" ] || KEY_FIRST="$f|$_p"
+  progress x "Key in plain text: $(short "$f") ($_p)"
   case "$f" in
     "$H/.zsh_history"|"$H/.bash_history"|"$H/.local/share/fish/fish_history"|"$H/.python_history"|"$H/.node_repl_history")
       HIST_KEYS=$((HIST_KEYS + 1)) ;;
@@ -746,6 +865,7 @@ while IFS= read -r f; do
 done <<EOF
 $MATCHED
 EOF
+[ "$KEY_FILES" -eq 0 ] && progress o "No keys in shell profiles, history, agent configs or .env files"
 
 # Login files any agent you run can read.
 LOGINS=""; LOGIN_IDS=""
@@ -786,20 +906,23 @@ if [ "$N_SSH" -gt 0 ]; then
   LOGINS="${LOGINS:+$LOGINS, }$_s"; LOGIN_IDS="${LOGIN_IDS:+$LOGIN_IDS }ssh"
 fi
 N_LOGIN=0; for _x in $LOGIN_IDS; do N_LOGIN=$((N_LOGIN + 1)); done
+[ -n "$LOGINS" ] && progress w "Login files any agent you run can read: $LOGINS"
 
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
-ALLOW_ROWS=""; N_ALLOW=0; N_ALLOW_NPM=0
+ALLOW_ROWS=""; N_ALLOW=0; N_ALLOW_NPM=0; ALLOW_FIRST=""
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | files_matching "$ALL_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
-  N_ALLOW=$((N_ALLOW + 1))
+  N_ALLOW=$((N_ALLOW + 1)); [ -n "$ALLOW_FIRST" ] || ALLOW_FIRST=$f
+  progress x "Saved Claude Code command with a key: $(short "$f")"
   npm=0; npm_would_ship "${f%/.claude/*}" && { npm=1; N_ALLOW_NPM=$((N_ALLOW_NPM + 1)); }
   ALLOW_ROWS="$ALLOW_ROWS$f|$npm
 "
 done <<EOF
 $ALLOW_ALL
 EOF
+[ "$N_ALLOW" -eq 0 ] && progress o "No saved Claude Code commands with keys"
 
 # --- 5. This week's key leaks ------------------------------------------------
 # Folders that hold Python environments. Fixed system locations are read by name;
@@ -833,6 +956,7 @@ SITES_ALL=$(
     done
   } | grep -v '^$' | sort -u
 )
+progress i "Checking $(plural "$(printf '%s\n' "$SITES_ALL" | grep -c .)" "Python environment" "Python environments") for the LiteLLM malware"
 N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""
 while IFS= read -r sp; do
   [ -n "$sp" ] && [ -d "$sp" ] || continue
@@ -869,23 +993,40 @@ fi
 UV_BAD=$(find "$H/.cache/uv" -maxdepth 6 -name 'litellm-1.107.0*' -print -quit 2>/dev/null)
 LITELLM_HIT=0
 if [ -n "$LITE_BAD" ] || [ -n "$MARKS" ] || [ "$LOADER" -eq 1 ]; then LITELLM_HIT=1; fi
+if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Signs of the LiteLLM malware found"
+else progress o "No signs of the LiteLLM malware in $(plural "$N_PY" "Python environment" "Python environments")"; fi
 OC=0
 if command -v opencode >/dev/null 2>&1 || [ -d "$H/.config/opencode" ] || [ -d "$H/.local/share/opencode" ]; then OC=1; fi
 RW=0
 if command -v railway >/dev/null 2>&1 || [ -f "$H/.railway/config.json" ]; then RW=1; fi
 
-# --- What to do, and the grade -----------------------------------------------
-TODO=""; ISSUES=0
-todo() { TODO="$TODO$1
-"; ISSUES=$((ISSUES + 1)); }
-[ "$LITELLM_HIT" -eq 1 ] && todo "Treat this machine as compromised. Don't run Python in the affected environments, follow LiteLLM's advisory, and rotate every key the machine could reach."
-[ "$KEY_FILES" -gt 0 ] && todo "Move keys out of shell profiles, history and .env files into the macOS Keychain or a secrets manager, then rotate them."
-[ "$HIST_KEYS" -gt 0 ] && todo "Keys in shell history were typed into a command. Treat them as exposed and rotate them."
-[ "$N_MCP_TOKEN" -gt 0 ] && todo "Replace tokens written into MCP configs with environment variable references, then rotate them."
-[ "$N_ALLOW" -gt 0 ] && todo "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
-[ "$N_SSH_OPEN" -gt 0 ] && todo "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
-[ "$N_IDLE" -gt 0 ] && todo "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
-if [ "$OC" -eq 1 ] || [ "$RW" -eq 1 ]; then todo "If you used OpenCode Console or deploy on Railway, rotate the keys stored there, even if nothing above looks wrong."; fi
+# --- What to do, and the score -----------------------------------------------
+# Each fix also belongs to a section, so that section's details can end with it.
+TODO=""; ISSUES=0; FIX1=""; FIX2=""; FIX3=""; FIX4=""; FIX5=""
+todo() { # section text
+  TODO="$TODO$2
+"; ISSUES=$((ISSUES + 1))
+  case "$1" in
+    1) FIX1="$FIX1$2
+" ;;
+    2) FIX2="$FIX2$2
+" ;;
+    3) FIX3="$FIX3$2
+" ;;
+    4) FIX4="$FIX4$2
+" ;;
+    *) FIX5="$FIX5$2
+" ;;
+  esac
+}
+[ "$LITELLM_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow LiteLLM's advisory, and rotate every key the machine could reach."
+[ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into the macOS Keychain or a secrets manager, then rotate them."
+[ "$HIST_KEYS" -gt 0 ] && todo 3 "Keys in shell history were typed into a command. Treat them as exposed and rotate them."
+[ "$N_MCP_TOKEN" -gt 0 ] && todo 2 "Replace tokens written into MCP configs with environment variable references, then rotate them."
+[ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
+[ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
+[ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
+if [ "$OC" -eq 1 ] || [ "$RW" -eq 1 ]; then todo 5 "If you used OpenCode Console or deploy on Railway, rotate the keys stored there, even if nothing above looks wrong."; fi
 
 SCORE=100
 [ "$LITELLM_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
@@ -898,6 +1039,10 @@ _d=$((N_IDLE * 3)); [ "$_d" -gt 12 ] && _d=12; SCORE=$((SCORE - _d))
 [ "$SCORE" -lt 0 ] && SCORE=0
 if [ "$SCORE" -ge 90 ]; then GRADE=A; elif [ "$SCORE" -ge 78 ]; then GRADE=B
 elif [ "$SCORE" -ge 64 ]; then GRADE=C; elif [ "$SCORE" -ge 50 ]; then GRADE=D; else GRADE=F; fi
+# GRADE only goes in the research counts. People see how they compare instead.
+if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Scan done. Signs of the LiteLLM malware: act now"
+elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
+else progress o "Scan done: nothing to fix"; fi
 
 # For demos and tests: keep the scan phase running for at least this many seconds.
 case "${GIRD_CHECK_MIN_SECONDS:-}" in
@@ -919,150 +1064,10 @@ fi
 GP=0; GB=0
 if [ "$GAME_RC" -ge 1 ] && [ "$GAME_RC" -le 100 ]; then GP=1; GB=$(( (GAME_RC - 1) * 50 )); fi
 
-# ===========================================================================
-# The report
-# ===========================================================================
-if [ "$LITELLM_HIT" -eq 1 ]; then SEV=$RED; HEAD="GRADE $GRADE · ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE"
-elif [ "$ISSUES" -gt 0 ]; then
-  if [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ]; then SEV=$RED; else SEV=$YEL; fi
-  HEAD="GRADE $GRADE · $(plural "$ISSUES" "THING" "THINGS") TO FIX"
-else SEV=$GRN; HEAD="GRADE $GRADE · NOTHING TO FIX"; fi
-STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
-emit "  ${SEV}▌${RST} ${B}${HEAD}${RST}"
-wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
-
-section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
-if [ "$N_AG" -eq 0 ]; then emit "     No coding agents found."; fi
-while IFS='|' read -r n st; do
-  [ -n "$n" ] || continue
-  case "$st" in
-    active) pair "${GRN}●${RST}" "$n" 20 "used in the last 30 days" ;;
-    idle)   pair "${YEL}○${RST}" "$n" 20 "${DIM}installed, not used in 30 days${RST}" ;;
-    unused) pair "${YEL}○${RST}" "$n" 20 "${DIM}installed, no use recorded${RST}" ;;
-    *)      pair "${DIM}•${RST}" "$n" 20 "${DIM}installed${RST}" ;;
-  esac
-done <<EOF
-$AG_ROWS
-EOF
-
-section 02 "MCP SERVERS" "$(plural "$N_MCP" server servers)"
-if [ -z "$MCP_ROWS" ]; then emit "     No MCP servers configured."; fi
-while IFS='|' read -r who f c tok; do
-  [ -n "$who" ] || continue
-  if [ -n "$c" ]; then d=$(plural "$c" server servers); else d="servers configured"; fi
-  printf -v nm '%-14s %s' "$who" "$(short "$f")"
-  if [ "$tok" = 1 ]; then pair "${RED}✗${RST}" "$nm" 46 "$d, ${RED}token in the file${RST}"
-  else pair "${TEAL}•${RST}" "$nm" 46 "$d"; fi
-done <<EOF
-$MCP_ROWS
-EOF
-
-section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
-if [ "$KEY_FILES" -eq 0 ]; then
-  wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "
-fi
-_shown=0
-while IFS='|' read -r f p; do
-  [ -n "$f" ] || continue
-  _shown=$((_shown + 1)); [ "$_shown" -le 20 ] || continue
-  pair "${RED}✗${RST}" "$(short "$f")" 44 "$p"
-done <<EOF
-$KEY_ROWS
-EOF
-[ "$KEY_FILES" -gt 20 ] && emit "        ${DIM}and $((KEY_FILES - 20)) more${RST}"
-if [ -n "$LOGINS" ]; then
-  blank
-  emit "     ${B}Login files any agent you run can read${RST}"
-  wrap "$LOGINS" 8 "        " "        "
-fi
-
-section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
-if [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
-while IFS='|' read -r f npm; do
-  [ -n "$f" ] || continue
-  emit "     ${RED}✗${RST}  $(short "$f")"
-  emit "        A saved command contains a key."
-  [ "$npm" = 1 ] && wrap "An npm publish from this folder would include it." 8 "        " "        " "$RED"
-done <<EOF
-$ALLOW_ROWS
-EOF
-
-section 05 "THIS WEEK'S KEY LEAKS" "3 checked"
-if [ "$LITELLM_HIT" -eq 1 ]; then
-  pair "${RED}✗${RST}" "LiteLLM 1.107.0" 16 "${RED}signs of the malware found${RST}"
-  while IFS= read -r l; do
-    [ -n "$l" ] && emit "        $(short "$l")"
-  done <<EOF
-$LITE_BAD$MARKS
-EOF
-  [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
-  wrap "Don't run Python or pip in these environments. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 "        " "        "
-else
-  pair "${GRN}✓${RST}" "LiteLLM 1.107.0" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"
-  [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $LITE_VERS${RST}"
-fi
-[ -n "$UV_BAD" ] && wrap "Your uv cache holds the 1.107.0 package. Clear it with: uv cache clean litellm" 8 "        " "        " "$YEL"
-if [ "$OC" -eq 1 ]; then
-  pair "${YEL}!${RST}" "OpenCode" 16 "installed"
-  wrap "If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected." 26 "                          " "                          " "$DIM"
-else
-  pair "${DIM}·${RST}" "OpenCode" 16 "${DIM}not installed${RST}"
-fi
-if [ "$RW" -eq 1 ]; then
-  pair "${YEL}!${RST}" "Railway" 16 "CLI found"
-  wrap "Railway asked every customer to rotate all secrets stored on the platform and to check their logs." 26 "                          " "                          " "$DIM"
-else
-  pair "${DIM}·${RST}" "Railway" 16 "${DIM}CLI not found${RST}"
-fi
-
-heading "WHAT TO DO" "most urgent first"
-_i=0
-while IFS= read -r t; do
-  [ -n "$t" ] || continue
-  _i=$((_i + 1)); printf -v _num '%2d' "$_i"
-  wrap "$t" 10 "     ${TEAL}${_num}.${RST}  " "          "
-done <<EOF
-$TODO
-EOF
-_i=$((_i + 1)); printf -v _num '%2d' "$_i"
-wrap "Set a monthly spend limit on every AI provider key, at the provider." 10 "     ${TEAL}${_num}.${RST}  " "          "
-
-# Argus: said once, plainly, tied to what this scan found. Every claim matches
-# gird.ai/argus/download and the Argus privacy notice.
-BAR="  ${TEAL}▌${RST} "
-blank
-if [ "$OS" = Darwin ]; then
-  if [ "$LITELLM_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then
-    _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
-  elif [ "$N_IDLE" -gt 0 ]; then
-    _t="THIS SCAN IS A SNAPSHOT"
-    _p1="$(plural "$N_IDLE" "agent you haven't used in 30 days is" "agents you haven't used in 30 days are") still installed. A poisoned package can drive an installed agent, and nothing on your Mac would tell you."
-  else
-    _t="CLEAN TODAY"
-    _p1="Nothing here needs fixing. The next leak won't wait for you to run a scan."
-  fi
-  emit "${BAR}${B}${_t}${RST}"
-  wrap "$_p1" 4 "$BAR" "$BAR"
-  emit "${BAR}"
-  wrap "That's why we built Argus for Mac. It runs quietly in the background and tells you the moment an agent opens a key file or tries to send a key off your Mac. It can also stop terminal agents from reading your keys. Free for individuals, and your code never reaches us." 4 "$BAR" "$BAR"
-  emit "${BAR}"
-  if [ "$ARCH" = arm64 ]; then
-    emit "${BAR}${TEAL}${B}Try it free:${RST} ${B}gird.ai/argus/download${RST}"
-    wrap "Apple Silicon, macOS 13 or later, set up in a few minutes. What it sends us: gird.ai/privacy/argus-community" 4 "$BAR" "$BAR" "$DIM"
-  else
-    wrap "Argus runs on Apple Silicon Macs today. Intel Macs can get notified at gird.ai/argus/download" 4 "$BAR" "$BAR" "$DIM"
-  fi
-else
-  wrap "Built by GIRD. Argus, our free Mac app, shows what AI coding agents actually do: gird.ai/argus" 2 "  " "  " "$DIM"
-fi
-
-blank
-wrap "Finding nothing does not prove nothing leaked. This shows what could reach your keys, not what your agents did with them." 2 "  " "  " "$DIM"
-
 # ---------------------------------------------------------------------------
-# Counts for GIRD's research, sent once in the background unless --offline or
-# DO_NOT_TRACK=1. They are the numbers above plus a few facts about the setup,
+# Counts for GIRD's research, sent once when the scan is done unless --offline or
+# DO_NOT_TRACK=1. The reply says how this machine compares with other developers.
+# They are the numbers above plus a few facts about the setup,
 # each squeezed into a fixed list or a strict pattern before it goes. Never a
 # path, a key, a username, a hostname or the raw hardware ID. The device ID is a
 # one-way SHA-256 of the hardware UUID (Linux: machine-id) salted for this
@@ -1104,25 +1109,284 @@ count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf
 N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(count_lines "$MCP_ROWS")
 BASHV=${BASH_VERSINFO[0]:-0}
 PAYLOAD="{\"v\":\"1\",\"kind\":\"report\",\"run_id\":\"$RUN_ID\",\"device_id\":\"$DEVICE_ID\",\"script\":\"$VERSION\",\"os\":\"$OSV\",\"arch\":\"$ARCH_ID\",\"model\":\"$MODEL\",\"terminal\":\"$TERMAPP\",\"tmux\":$TMUXED,\"shell\":\"$SHELLNAME\",\"bash\":$BASHV,\"lang\":\"$LANGCODE\",\"via\":\"$VIA\",\"grade\":\"$GRADE\",\"score\":$SCORE,\"agents\":$(json_list "$AGENT_IDS"),\"agents_idle\":$N_IDLE,\"mcp_servers\":$N_MCP,\"mcp_configs\":$N_MCPF,\"mcp_token_files\":$N_MCP_TOKEN,\"key_files\":$KEY_FILES,\"key_providers\":$(json_list "$PROV_IDS"),\"history_keys\":$HIST_KEYS,\"env_files\":$N_ENVF,\"allow_list_files\":$N_ALLOWF,\"allow_list_keys\":$N_ALLOW,\"allow_list_npm\":$N_ALLOW_NPM,\"login_files\":$(json_list "$LOGIN_IDS"),\"ssh_keys\":$N_SSH,\"ssh_no_passphrase\":$N_SSH_OPEN,\"python_envs\":$N_PY,\"litellm_installed\":$N_LITE,\"litellm_found\":$LITELLM_HIT,\"opencode\":$OC,\"railway\":$RW,\"files_found\":$N_FOUND,\"scan_seconds\":$SCAN_SECS,\"all_folders\":$ALL,\"game_played\":$GP,\"game_best\":$GB,\"results_wait_seconds\":$WAIT_SECS}"
-send_stats() { # payload: POST it with a short timeout; https only when the API is https
-  case "$API" in
-    https://*) curl -fsS --proto '=https' --max-time 5 -X POST -H 'Content-Type: application/json' --data "$1" "$API" >/dev/null 2>&1 ;;
-    *) curl -fsS --max-time 5 -X POST -H 'Content-Type: application/json' --data "$1" "$API" >/dev/null 2>&1 ;;
-  esac
+send_stats() { # payload [seconds]: POST it with a short timeout, https only when the API is; prints the reply
+  if [ "${API#https://}" != "$API" ]; then _pp='=https'; else _pp='=http,https'; fi
+  curl -fsS --proto "$_pp" --max-time "${2:-5}" --max-filesize 65536 -X POST -H 'Content-Type: application/json' --data "$1" "$API" 2>/dev/null
 }
+# The reply holds p, the share of developers whose latest run scored lower, n,
+# how many developers that is, and r, this device's place in line when it is one
+# of the first 1,000 to run Blindspot. Only digits are read from it.
+PCT=""; PCT_N=""; RANK=""; LINK_RUN_ID=""
 if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
-  send_stats "$PAYLOAD" &
-  STATS_PID=$!
-  printf '  %sSharing counts and a hashed device ID with gird.ai. --offline skips it.%s\n' "$DIM" "$RST"
+  LINK_RUN_ID=$RUN_ID   # the certificate link carries the run ID only when a report did
+  [ "$TTY" -eq 1 ] && printf '  %sComparing with other developers...%s' "$DIM" "$RST"
+  _rp=$(send_stats "$PAYLOAD" 3 | head -c 4096 | tr -d ' \n\r\t')
+  [ "$TTY" -eq 1 ] && printf '\r%s' "${E}[K"
+  _p=$(jnum p "$_rp"); _n=$(jnum n "$_rp"); _rank=$(jnum r "$_rp")
+  if [ -n "$_p" ] && [ -n "$_n" ] && [ "${#_n}" -le 9 ] && [ "$_p" -ge 1 ] && [ "$_p" -le 99 ] && [ "$_n" -ge 1 ]; then PCT=$_p; PCT_N=$_n; fi
+  case "$_rank" in [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|1000) RANK=$_rank ;; esac   # a whole number from 1 to 1000, or unknown
 fi
 
+
+# ===========================================================================
+# The report. Every part is built first, then shown: a summary on a terminal,
+# with each section's details a key press away, or every detail with --full or
+# when the output isn't a terminal. A saved report always has every detail.
+# ===========================================================================
+if [ "$LITELLM_HIT" -eq 1 ]; then SEV=$RED
+elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ]; then SEV=$RED
+elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
+else SEV=$GRN; fi
+if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="Nothing to fix"; fi
+PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Safer than $PCT% of $(commas "$PCT_N") developers who ran Blindspot"
+STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
+upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
+CAPTURE=1; CAP=""
+if [ "$LITELLM_HIT" -eq 1 ]; then
+  emit "  ${SEV}▌${RST} ${B}ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE${RST}"
+  if [ -n "$PCT_TXT" ]; then emit "  ${SEV}▌${RST} ${B}${PCT_TXT}.${RST} ${FIXN}."; else emit "  ${SEV}▌${RST} ${FIXN}."; fi
+elif [ -n "$PCT_TXT" ]; then
+  emit "  ${SEV}▌${RST} ${B}$(upper "$PCT_TXT")${RST}"
+  emit "  ${SEV}▌${RST} ${FIXN}."
+else
+  emit "  ${SEV}▌${RST} ${B}$(upper "$FIXN")${RST}"
+fi
+HEAD_SHORT=$CAP; CAP=""
+wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
+HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
+# The first 1,000 get their place in line, as the last line of either header.
+if [ -n "$RANK" ]; then
+  wrap "You're developer #$(commas "$RANK") to run Blindspot. One of the first 1,000." 6 "  ${SEV}▌${RST} ${GOLD}★${RST} " "  ${SEV}▌${RST}   " "$B"
+  HEAD_SHORT="$HEAD_SHORT$CAP"; HEAD_FULL="$HEAD_FULL$CAP"; CAP=""
+fi
+
+section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
+if [ "$N_AG" -eq 0 ]; then emit "     No coding agents found."; fi
+while IFS='|' read -r n st; do
+  [ -n "$n" ] || continue
+  case "$st" in
+    active) pair "${GRN}●${RST}" "$n" 20 "used in the last 30 days" ;;
+    idle)   pair "${YEL}○${RST}" "$n" 20 "${DIM}installed, not used in 30 days${RST}" ;;
+    unused) pair "${YEL}○${RST}" "$n" 20 "${DIM}installed, no use recorded${RST}" ;;
+    *)      pair "${DIM}•${RST}" "$n" 20 "${DIM}installed${RST}" ;;
+  esac
+done <<EOF
+$AG_ROWS
+EOF
+
+SEC1=$CAP; CAP=""
+section 02 "MCP SERVERS" "$(plural "$N_MCP" server servers)"
+if [ -z "$MCP_ROWS" ]; then emit "     No MCP servers configured."; fi
+while IFS='|' read -r who f c tok; do
+  [ -n "$who" ] || continue
+  if [ -n "$c" ]; then d=$(plural "$c" server servers); else d="servers configured"; fi
+  printf -v nm '%-14s %s' "$who" "$(short "$f")"
+  if [ "$tok" = 1 ]; then pair "${RED}✗${RST}" "$nm" 46 "$d, ${RED}token in the file${RST}"
+  else pair "${TEAL}•${RST}" "$nm" 46 "$d"; fi
+done <<EOF
+$MCP_ROWS
+EOF
+
+SEC2=$CAP; CAP=""
+section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
+if [ "$KEY_FILES" -eq 0 ]; then
+  wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "
+fi
+_shown=0
+while IFS='|' read -r f p; do
+  [ -n "$f" ] || continue
+  _shown=$((_shown + 1)); [ "$_shown" -le 20 ] || continue
+  pair "${RED}✗${RST}" "$(short "$f")" 44 "$p"
+done <<EOF
+$KEY_ROWS
+EOF
+[ "$KEY_FILES" -gt 20 ] && emit "        ${DIM}and $((KEY_FILES - 20)) more${RST}"
+if [ -n "$LOGINS" ]; then
+  blank
+  emit "     ${B}Login files any agent you run can read${RST}"
+  wrap "$LOGINS" 8 "        " "        "
+fi
+
+SEC3=$CAP; CAP=""
+section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
+if [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
+while IFS='|' read -r f npm; do
+  [ -n "$f" ] || continue
+  emit "     ${RED}✗${RST}  $(short "$f")"
+  emit "        A saved command contains a key."
+  [ "$npm" = 1 ] && wrap "An npm publish from this folder would include it." 8 "        " "        " "$RED"
+done <<EOF
+$ALLOW_ROWS
+EOF
+
+SEC4=$CAP; CAP=""
+section 05 "THIS WEEK'S KEY LEAKS" "3 checked"
+if [ "$LITELLM_HIT" -eq 1 ]; then
+  pair "${RED}✗${RST}" "LiteLLM 1.107.0" 16 "${RED}signs of the malware found${RST}"
+  while IFS= read -r l; do
+    [ -n "$l" ] && emit "        $(short "$l")"
+  done <<EOF
+$LITE_BAD$MARKS
+EOF
+  [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
+  wrap "Don't run Python or pip in these environments. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 "        " "        "
+else
+  pair "${GRN}✓${RST}" "LiteLLM 1.107.0" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"
+  [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $LITE_VERS${RST}"
+fi
+[ -n "$UV_BAD" ] && wrap "Your uv cache holds the 1.107.0 package. Clear it with: uv cache clean litellm" 8 "        " "        " "$YEL"
+if [ "$OC" -eq 1 ]; then
+  pair "${YEL}!${RST}" "OpenCode" 16 "installed"
+  wrap "If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected." 26 "                          " "                          " "$DIM"
+else
+  pair "${DIM}·${RST}" "OpenCode" 16 "${DIM}not installed${RST}"
+fi
+if [ "$RW" -eq 1 ]; then
+  pair "${YEL}!${RST}" "Railway" 16 "CLI found"
+  wrap "Railway asked every customer to rotate all secrets stored on the platform and to check their logs." 26 "                          " "                          " "$DIM"
+else
+  pair "${DIM}·${RST}" "Railway" 16 "${DIM}CLI not found${RST}"
+fi
+
+SEC5=$CAP; CAP=""
+heading "WHAT TO DO" "most urgent first"
+_i=0
+while IFS= read -r t; do
+  [ -n "$t" ] || continue
+  _i=$((_i + 1)); printf -v _num '%2d' "$_i"
+  wrap "$t" 10 "     ${TEAL}${_num}.${RST}  " "          "
+done <<EOF
+$TODO
+EOF
+_i=$((_i + 1)); printf -v _num '%2d' "$_i"
+wrap "Set a monthly spend limit on every AI provider key, at the provider." 10 "     ${TEAL}${_num}.${RST}  " "          "
+
+SEC_TODO=$CAP; CAP=""
+
+# Argus: said once, plainly, tied to what this scan found. Every claim matches
+# gird.ai/argus/download and the Argus privacy notice.
+BAR="  ${TEAL}▌${RST} "
+blank
+if [ "$OS" = Darwin ]; then
+  if [ "$LITELLM_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then
+    _t="THIS SCAN IS A SNAPSHOT"
+    _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
+  elif [ "$N_IDLE" -gt 0 ]; then
+    _t="THIS SCAN IS A SNAPSHOT"
+    _p1="$(plural "$N_IDLE" "agent you haven't used in 30 days is" "agents you haven't used in 30 days are") still installed. A poisoned package can drive an installed agent, and nothing on your Mac would tell you."
+  else
+    _t="CLEAN TODAY"
+    _p1="Nothing here needs fixing. The next leak won't wait for you to run a scan."
+  fi
+  emit "${BAR}${B}${_t}${RST}"
+  wrap "$_p1" 4 "$BAR" "$BAR"
+  emit "${BAR}"
+  wrap "That's why we built Argus for Mac. It runs quietly in the background and tells you the moment an agent opens a key file or tries to send a key off your Mac. It can also stop terminal agents from reading your keys. Free for individuals, and your code never reaches us." 4 "$BAR" "$BAR"
+  emit "${BAR}"
+  if [ "$ARCH" = arm64 ]; then
+    emit "${BAR}${TEAL}${B}Try it free:${RST} ${B}gird.ai/argus/download${RST}"
+    wrap "Apple Silicon, macOS 13 or later, set up in a few minutes. What it sends us: gird.ai/privacy/argus-community" 4 "$BAR" "$BAR" "$DIM"
+  else
+    wrap "Argus runs on Apple Silicon Macs today. Intel Macs can get notified at gird.ai/argus/download" 4 "$BAR" "$BAR" "$DIM"
+  fi
+else
+  wrap "Built by GIRD. Argus, our free Mac app, shows what AI coding agents actually do: gird.ai/argus" 2 "  " "  " "$DIM"
+fi
+
+SEC_ARGUS=$CAP; CAP=""
+blank
+wrap "Finding nothing does not prove nothing leaked. This shows what could reach your keys, not what your agents did with them." 2 "  " "  " "$DIM"
+SEC_FOOT=$CAP; CAP=""
+
+# Details for one section: the section, then its fixes.
+fixes() {
+  [ -n "$1" ] || return 0
+  blank
+  emit "     ${B}What to do${RST}"
+  while IFS= read -r _t; do
+    [ -n "$_t" ] && wrap "$_t" 8 "     ${TEAL}•${RST}  " "        "
+  done <<EOF
+$1
+EOF
+}
+fixes "$FIX1"; DET1="$SEC1$CAP"; CAP=""
+fixes "$FIX2"; DET2="$SEC2$CAP"; CAP=""
+fixes "$FIX3"; DET3="$SEC3$CAP"; CAP=""
+fixes "$FIX4"; DET4="$SEC4$CAP"; CAP=""
+fixes "$FIX5"; DET5="$SEC5$CAP"; CAP=""
+
+# The summary: one line per section with the most important finding in it.
+cline() { # number mark label detail
+  printf -v _cb '%-20s' "$3"
+  _room=$((W - 31)); [ "$_room" -lt 16 ] && _room=16
+  _cd=$4; [ "${#_cd}" -gt "$_room" ] && _cd="${_cd:0:$((_room - 3))}..."
+  emit "   ${TEAL}${B}$1${RST}  $2  ${B}${_cb}${RST}${_cd}"
+}
+if [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
+elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
+else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi
+if [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$(plural "$N_MCP" server servers), tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
+elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$(plural "$N_MCP" server servers), a token in $(short "$MCP_TOK_FIRST")"
+elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$(plural "$N_MCP" server servers), no tokens in their configs"
+else G2="${GRN}✓${RST}"; D2="none configured"; fi
+if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST%%|*}") (${KEY_FIRST#*|})"
+elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST%%|*}") holds ${KEY_FIRST#*|} keys"
+elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
+else G3="${GRN}✓${RST}"; D3="no AI or cloud keys in plain text"; fi
+if [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"
+elif [ "$N_ALLOW_NPM" -gt 0 ] && [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="1 saved key, and an npm publish would ship it"
+elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship"
+elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
+else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
+if [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the LiteLLM malware. Act now"
+elif [ "$OC" -eq 1 ] && [ "$RW" -eq 1 ]; then G5="${YEL}!${RST}"; D5="OpenCode and Railway found: rotate their keys"
+elif [ "$OC" -eq 1 ]; then G5="${YEL}!${RST}"; D5="OpenCode found: used its Console? Rotate keys"
+elif [ "$RW" -eq 1 ]; then G5="${YEL}!${RST}"; D5="Railway CLI found: rotate secrets stored there"
+else G5="${GRN}✓${RST}"; D5="no signs of the LiteLLM, OpenCode or Railway leaks"; fi
+blank
+cline 01 "$G1" "Coding agents" "$D1"
+cline 02 "$G2" "MCP servers" "$D2"
+cline 03 "$G3" "Keys in plain text" "$D3"
+cline 04 "$G4" "Allow lists" "$D4"
+cline 05 "$G5" "This week's leaks" "$D5"
+if [ "$ISSUES" -gt 0 ]; then
+  blank
+  wrap "$(printf '%s' "$TODO" | head -n 1)" 14 "   ${B}First fix:${RST} " "              "
+fi
+# Argus in two lines, with the same claims as the full report.
+if [ "$OS" = Darwin ]; then
+  if [ "$ARCH" = arm64 ]; then _how="Free for individuals: gird.ai/argus/download"
+  else _how="It runs on Apple Silicon Macs today: gird.ai/argus/download"; fi
+  if [ "$LITELLM_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then _lead="This scan is a snapshot."
+  elif [ "$N_IDLE" -gt 0 ]; then _lead="A poisoned package can drive an agent you no longer use."
+  else _lead="The next leak won't wait for a scan."; fi
+  blank
+  wrap "$_lead Argus for Mac tells you the moment an agent opens a key file or tries to send a key off your Mac. $_how" 4 "$BAR" "$BAR"
+else
+  blank
+  wrap "Built by GIRD. Argus, our free Mac app, shows what AI coding agents actually do: gird.ai/argus" 2 "  " "  " "$DIM"
+fi
+if [ "$ISSUES" -eq 0 ]; then
+  blank
+  wrap "Finding nothing does not prove nothing leaked. This shows what could reach your keys, not what your agents did with them." 2 "  " "  " "$DIM"
+fi
+SUMMARY=$CAP; CAP=""; CAPTURE=0
+
+REPORT="$REPORT$HEAD_FULL$SEC1$SEC2$SEC3$SEC4$SEC5$SEC_TODO$SEC_ARGUS$SEC_FOOT"
+if [ "$COMPACT" -eq 1 ]; then printf '%s' "$HEAD_SHORT$SUMMARY"
+else printf '%s' "$HEAD_FULL$SEC1$SEC2$SEC3$SEC4$SEC5$SEC_TODO$SEC_ARGUS$SEC_FOOT"; fi
+
 # ---------------------------------------------------------------------------
-# What next: save, share card, Argus. One key each, nothing happens unasked.
+# What next: the certificate first, then details, save and Argus. One key each,
+# nothing happens unasked.
 # ---------------------------------------------------------------------------
+# u is the run ID, so a share from the certificate can be matched to its run, r the
+# early rank, sk the SSH private keys and hk the shell history files with keys.
 card_url() {
-  printf '%s/check/card/#v=1&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s' \
+  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s' \
     "$WEB" "$SCORE" "$GRADE" "$N_AG" "$N_IDLE" "$N_MCP" "$N_MCP_TOKEN" "$KEY_FILES" "$(printf '%s' "$PROV_IDS" | tr ' ' '.')" \
-    "$N_ALLOW" "$N_ALLOW_NPM" "$LITELLM_HIT" "$N_LOGIN" "$N_SSH_OPEN" "$(date +%Y-%m-%d)"
+    "$N_ALLOW" "$N_ALLOW_NPM" "$LITELLM_HIT" "$N_LOGIN" "$N_SSH_OPEN" "$(date +%Y-%m-%d)" "$PCT" "$PCT_N" \
+    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')"
 }
 open_url() {
   [ -n "${GIRD_CHECK_NO_OPEN:-}" ] && return 1
@@ -1142,9 +1406,14 @@ do_save() {
 }
 do_card() {
   _u=$(card_url); ACT_CARD=1
-  if open_url "$_u"; then printf '  %s✓ Opened your share card in the browser.%s\n' "$GRN" "$RST"; else printf '  Open your share card:\n'; fi
+  if open_url "$_u"; then printf '  %s✓ Opened your certificate in the browser.%s\n' "$GRN" "$RST"; else printf '  Open your certificate:\n'; fi
   printf '  %s%s%s\n' "$DIM" "$_u" "$RST"
-  printf '  %sThe link carries only your counts, after the #, which browsers never send to a server.%s\n' "$DIM" "$RST"
+  if [ -n "$LINK_RUN_ID" ]; then
+    printf '  %sThe link carries only counts and a random run ID, after the #, which browsers never send.%s\n' "$DIM" "$RST"
+    printf '  %sIf you press share there, the page sends back that ID, the button and the kind of result.%s\n' "$DIM" "$RST"
+  else
+    printf '  %sThe link carries only your counts, after the #, which browsers never send to a server.%s\n' "$DIM" "$RST"
+  fi
 }
 do_argus() {
   _u="$WEB/argus/download/?ref=check"; ACT_ARGUS=1
@@ -1156,40 +1425,43 @@ ACT_SAVED=0; ACT_CARD=0; ACT_ARGUS=0; MENU_SHOWN=0; MENU_T0=$SECONDS
 if [ "$TTY" -eq 1 ] && [ -t 0 ]; then
   MENU_SHOWN=1
   drain_keys
-  printf '\n  %sWHAT NEXT%s\n  %s%s%s\n' "$B" "$RST" "$DIM" "$RULE" "$RST"
-  printf '     %s%ss%s   Save this report as a text file\n' "$TEAL" "$B" "$RST"
-  printf '     %s%sc%s   Get your share card: your grade on a GIRD image, ready to post\n' "$TEAL" "$B" "$RST"
-  [ "$OS" = Darwin ] && printf '     %s%sa%s   Try Argus free\n' "$TEAL" "$B" "$RST"
-  printf '     %s%sq%s   Quit\n' "$TEAL" "$B" "$RST"
-  _keys='s, c, a or q'; [ "$OS" = Darwin ] || _keys='s, c or q'
+  if [ -n "$PCT" ]; then HERO="Press ENTER to see how you rank and get your Blindspot certificate"
+  else HERO="Press ENTER to get your Blindspot certificate"; fi
+  HINT="1-5 details   s save"; [ "$OS" = Darwin ] && HINT="$HINT   a Argus"; HINT="$HINT   q quit"
+  _keys='ENTER, 1-5, s, a or q'; [ "$OS" = Darwin ] || _keys='ENTER, 1-5, s or q'
+  show_menu() { printf '\n  %s%s▶ %s%s\n    %s%s%s  ' "$GOLD" "$B" "$HERO" "$RST" "$DIM" "$HINT" "$RST"; }
+  show_menu
   _hint=0
-  printf '\n  %sPress a key:%s ' "$DIM" "$RST"
   while :; do
     read_key
     [ "$OS" = Darwin ] || case "$RK" in 97|65) RK=0 ;; esac
     case "$RK" in
+      10|13|99|67) printf '\n'; do_card ;;
+      49) printf '1\n'; printf '%s' "$DET1" ;;
+      50) printf '2\n'; printf '%s' "$DET2" ;;
+      51) printf '3\n'; printf '%s' "$DET3" ;;
+      52) printf '4\n'; printf '%s' "$DET4" ;;
+      53) printf '5\n'; printf '%s' "$DET5" ;;
       115|83) printf 's\n'; do_save ;;
-      99|67)  printf 'c\n'; do_card ;;
       97|65)  printf 'a\n'; do_argus ;;
-      113|81|10|13|"") printf 'q\n'; break ;;
+      113|81|"") printf 'q\n'; break ;;
       *) # any other key, like the rest of an arrow key: hint once, then keep waiting
          [ "$_hint" -eq 0 ] && printf '%s(%s)%s ' "$DIM" "$_keys" "$RST"
          _hint=1; continue ;;
     esac
     _hint=0
-    printf '\n  %sPress a key:%s ' "$DIM" "$RST"
+    show_menu
   done
 else
-  printf '\n  Your share card: %s\n' "$(card_url)"
+  printf '\n  Your Blindspot certificate: %s\n' "$(card_url)"
   [ "$OS" = Darwin ] && printf '  Try Argus free: %s/argus/download/\n' "$WEB"
 fi
 # What people did at the end, for the same research: one more small event.
 ACT_PID=""
 if [ "$OFFLINE" -eq 0 ] && [ "$MENU_SHOWN" -eq 1 ] && command -v curl >/dev/null 2>&1; then
-  send_stats "{\"v\":\"1\",\"kind\":\"actions\",\"run_id\":\"$RUN_ID\",\"device_id\":\"$DEVICE_ID\",\"saved\":$ACT_SAVED,\"card\":$ACT_CARD,\"argus\":$ACT_ARGUS,\"menu_seconds\":$((SECONDS - MENU_T0))}" &
+  send_stats "{\"v\":\"1\",\"kind\":\"actions\",\"run_id\":\"$RUN_ID\",\"device_id\":\"$DEVICE_ID\",\"saved\":$ACT_SAVED,\"card\":$ACT_CARD,\"argus\":$ACT_ARGUS,\"menu_seconds\":$((SECONDS - MENU_T0))}" >/dev/null &
   ACT_PID=$!
 fi
-# Let both finish sending; curl gives up after 5 seconds.
-[ -n "$STATS_PID" ] && wait "$STATS_PID" 2>/dev/null
+# Let it finish sending; curl gives up after 5 seconds.
 [ -n "$ACT_PID" ] && wait "$ACT_PID" 2>/dev/null
 printf '\n'
