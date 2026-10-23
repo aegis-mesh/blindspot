@@ -244,7 +244,8 @@ hasnot "the report holds no path"              '/(Users|home|private|tmp|var)/|~
 nokeys "the report holds no planted key" "$WORK/keys.txt" "$WORK/report-ps.json"
 has    "shows one real total under the banner" '(1,234 AI builders have run Blindspot|456 AI builders ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of AI builders had no keys in plain text)' "$OUT"
 has    "shows how this computer compares"      'Better than 72% of 1,234 AI builders who ran Blindspot' "$OUT"
-has    "shows the place in line"               "You're AI builder #142 to run Blindspot\. One of the first 1,000\." "$OUT"
+has    "says one of the first 1,000"           "You're one of the first 1,000 AI builders to run Blindspot\." "$OUT"
+hasnot "never shows the place in line"         "AI builder #|#142" "$OUT"
 RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/report-ps.json" | cut -d'"' -f4)
 has    "the link carries the percentile, run ID, rank and key counts" "blindspot/card/#v=2&s=[0-9]+&g=[ABCDF]&.*&pc=72&pn=1234&u=${RID:-no-run-id}&r=142&sk=2&hk=2&ag=[a-z0-9.-]*\$" "$OUT"
 psrun "$WORK/home" GIRD_CHECK_API="$API" -- > /dev/null 2>&1

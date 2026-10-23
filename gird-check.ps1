@@ -1007,11 +1007,8 @@ $PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of $(Commas $PCT_N) AI bu
 $SlowText = "$(Plural $SlowFiles.Count 'file' 'files') skipped: took too long to check"
 $Stats = "$(Plural $N_AG 'coding agent' 'coding agents'), $N_IDLE not used in 30 days, $(Plural $N_MCP 'MCP server' 'MCP servers'), $(Plural $KEY_FILES 'file' 'files') with keys in plain text, $(Plural $N_ALLOW 'key' 'keys') in allow lists"
 $Capture = $true; [void]$Cap.Clear()
-# The first 1,000 get their place in line, above either header.
-if ($RANK) {
-  $first = ''; if ([long]$RANK -le 1000) { $first = ' One of the first 1,000.' }
-  Wrap "You're AI builder #$(Commas $RANK) to run Blindspot.$first" 4 "  $cGold$gStar$cRst " '    ' $cBold; Blank
-} elseif ($Early) {
+# The first 1,000 are told so, above either header. The place in line itself is never shown.
+if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
   Wrap "You're one of the first 1,000 AI builders to run Blindspot." 4 "  $cGold$gStar$cRst " '    ' $cBold; Blank
 }
 if ($LITELLM_HIT -eq 1) {

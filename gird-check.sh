@@ -1442,11 +1442,8 @@ PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of $(commas "$PCT_N") AI
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
 upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 CAPTURE=1; CAP=""
-# The first 1,000 get their place in line, above either header.
-if [ -n "$RANK" ]; then
-  _first=""; [ "$RANK" -le 1000 ] && _first=" One of the first 1,000."
-  wrap "You're AI builder #$(commas "$RANK") to run Blindspot.$_first" 4 "  ${GOLD}★${RST} " "    " "$B"; blank
-elif [ "$EARLY" -eq 1 ]; then
+# The first 1,000 are told so, above either header. The place in line itself is never shown.
+if { [ -n "$RANK" ] && [ "$RANK" -le 1000 ]; } || { [ -z "$RANK" ] && [ "$EARLY" -eq 1 ]; }; then
   wrap "You're one of the first 1,000 AI builders to run Blindspot." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
 fi
 if [ "$LITELLM_HIT" -eq 1 ]; then
