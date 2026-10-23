@@ -11,6 +11,10 @@ CHECK=0; [ "${1:-}" = --check ] && CHECK=1
 WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 
 rows() { grep -v '^#' "$1" | grep -v '^[[:space:]]*$'; }
+# Characters that would break the generated bash, awk or PowerShell are refused.
+bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
+      rows data/sessions.tsv | awk -F '\t' 'NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || $4 ~ /[\047"`$|\\]/ || $4 ~ /\{ENV:[^}]*\{/ { print "data/sessions.tsv: " $0 }')
+if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
 
 # --- keys -------------------------------------------------------------------
 rows data/keys.tsv | awk -F '\t' '
