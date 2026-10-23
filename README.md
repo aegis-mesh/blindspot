@@ -73,7 +73,15 @@ Run `gird-check.sh` in Git Bash (it comes with Git for Windows), MSYS2 or Cygwin
 
 In WSL it checks the Linux system you run it in, not the files on the Windows side, and says so at the end.
 
-For plain PowerShell, with nothing to install, there is a PowerShell version, `gird-check.ps1`, with the same checks and the same report.
+For plain PowerShell, with nothing to install, there is a PowerShell version, `gird-check.ps1`, with the same checks and the same report. It runs on Windows PowerShell 5.1 and PowerShell 7:
+
+```powershell
+irm https://gird.ai/blindspot/gird-check.ps1 -OutFile gird-check.ps1
+Get-FileHash .\gird-check.ps1
+powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
+```
+
+`-ExecutionPolicy Bypass` applies to that one run. The switches are `-All`, `-Full`, `-Offline` and `-Save`, and `DO_NOT_TRACK=1` works too. It also reads PowerShell's command history. It has no game. A file that takes too long to check is listed as skipped, never counted as clean. On the same PC, Git Bash and PowerShell send the same device ID.
 
 ## Limits
 
