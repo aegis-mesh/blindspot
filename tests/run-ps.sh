@@ -145,7 +145,7 @@ has    "a partial check says how much it covered" 'Checked the newest 2 of 6 age
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > "$SE/clean.txt" 2>&1
 has    "a full check with nothing found says so" 'No keys in 2 agent session files\.' "$SE/clean.txt"
 mkdir -p "$SE/piece/.claude/projects/p" "$SE/piece/AppData/Roaming" "$SE/piece/AppData/Local/Temp"
-python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'aB3' * 20 + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
 psrun "$SE/piece" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/piece.txt" 2>&1
 has    "a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece.txt"
 : > "$SE/hold"
