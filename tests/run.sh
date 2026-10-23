@@ -90,7 +90,7 @@ echo "Windows: Git Bash, MSYS, Cygwin"
 # installed on this machine. Git Bash's HOME is a different folder here, as on Cygwin.
 WR=$WORK/win; WP=$WR/Users/me; WB=$WORK/winbin
 mkdir -p "$WB" "$WR/Temp" "$WR/msyshome"
-K_ANT=$(sed -n 1p "$WORK/keys.txt"); K_GH=$(sed -n 3p "$WORK/keys.txt"); K_AWS=$(sed -n 4p "$WORK/keys.txt"); K_GROQ=$(sed -n 5p "$WORK/keys.txt")
+K_ANT=$(sed -n 1p "$WORK/keys.txt"); K_AWS=$(sed -n 4p "$WORK/keys.txt"); K_GROQ=$(sed -n 5p "$WORK/keys.txt")
 mkdir -p "$WP/.claude/projects/p" "$WP/AppData/Roaming/Claude" "$WP/AppData/Roaming/Code/User" "$WP/AppData/Local/Programs/cursor" \
   "$WP/AppData/Roaming/Block/goose/config" "$WP/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine" \
   "$WP/AppData/Roaming/GitHub CLI" "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages" \
@@ -209,12 +209,23 @@ sed 's/\[ "\$N_IDLE" -gt 0 \]/[ 0 -gt 1 ]/g' "$SCRIPT" > "$WORK/no-idle.sh"
 rm -rf "$WORK/ni-empty"; mkdir -p "$WORK/ni-empty"
 HOME="$WORK/ni-empty" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-empty.txt"
 has    "nothing found: the header says no findings"        'NO FINDINGS IN THIS SCAN' "$WORK/ni-empty.txt"
-has    "nothing found: it says this is not a guarantee"    'not a .*guarantee' "$WORK/ni-empty.txt"
+# The closing paragraph comes with the Argus for Mac pitch, so only macOS shows it;
+# other systems keep the plain no-guarantee line and the count in the header.
+if [ "$(uname -s)" = Darwin ]; then
+  has  "nothing found: it says this is not a guarantee"    'not a .*guarantee' "$WORK/ni-empty.txt"
+else
+  has  "nothing found: it says this is not a guarantee"    'does not prove nothing leaked' "$WORK/ni-empty.txt"
+fi
 hasnot "nothing found: no old clean-today wording"         'CLEAN TODAY|needs fixing|Nothing to fix' "$WORK/ni-empty.txt"
 rm -rf "$WORK/ni-pyc"; mkdir -p "$WORK/ni-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__"; : > "$WORK/ni-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__/cook.cpython-312.pyc"
 HOME="$WORK/ni-pyc" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-pyc.txt"
-has    "a pyc-only run counts its things to fix"           'It found [0-9]+ things?.*to fix' "$WORK/ni-pyc.txt"
-has    "a pyc-only run still says the scan is a snapshot"  'THIS SCAN IS A SNAPSHOT' "$WORK/ni-pyc.txt"
+if [ "$(uname -s)" = Darwin ]; then
+  has  "a pyc-only run counts its things to fix"           'It found [0-9]+ things?.*to fix' "$WORK/ni-pyc.txt"
+  has  "a pyc-only run still says the scan is a snapshot"  'THIS SCAN IS A SNAPSHOT' "$WORK/ni-pyc.txt"
+else
+  has  "a pyc-only run counts its things to fix"           '[0-9]+ THINGS? TO FIX' "$WORK/ni-pyc.txt"
+  has  "a pyc-only run keeps the no-guarantee line"        'does not prove nothing leaked' "$WORK/ni-pyc.txt"
+fi
 hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS SCAN' "$WORK/ni-pyc.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
@@ -275,7 +286,7 @@ has    "--full lists every key file"           '~/\.zsh_history +GitHub' "$WORK/
 echo "hostile file names"
 EVIL="$WORK/home/code/evil$(printf '\033[2J\033]0;pwned\007\302\233')31m"
 mkdir -p "$EVIL"
-printf 'AWS_ACCESS_KEY_ID=AK%s\n' "IA$(LC_ALL=C tr -dc 'A-Z0-9' </dev/urandom | head -c 16)" > "$EVIL/.env"
+printf 'AWS_ACCESS_KEY_ID=AK%s\n' "IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)" > "$EVIL/.env"
 HOME="$WORK/home" bash "$SCRIPT" --offline > "$WORK/evil.txt" 2>&1
 if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')\|$(printf '\302\233')" "$WORK/evil.txt"; then bad "control characters in file names never reach the terminal"; else ok "control characters in file names never reach the terminal"; fi
 has "the hostile folder is still reported" 'code/evil\?' "$WORK/evil.txt"
@@ -337,20 +348,21 @@ PY
   if grep -aqF -f "$WORK/keys.txt" "$WORK/received.log"; then bad "the report holds no planted key"; else ok "the report holds no planted key"; fi
   if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
   has  "shows one real total under the banner" '★ (1,234 AI builders have run Blindspot|456 AI builders ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of AI builders had no keys in plain text)' "$OUT"
-  hasi "shows how this machine compares"       'better than 72% of 1,234 AI builders who ran Blindspot' "$OUT"
+  hasi "shows how this machine compares"       'better than 72% of AI builders who ran Blindspot' "$OUT"
+  hasnot "the percentile line carries no count" 'of 1,234 AI builders' "$OUT"
   has  "the result link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
   has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
-  has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF 1,234 AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
+  has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
   PROUD="^  ★ You're one of the first 1,000 AI builders to run Blindspot\."
   printf '%s' '{"devices":1234567,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   for B in $BASHES; do
     V=$("$B" -c 'echo "${BASH_VERSINFO[0]}"')
     HOME="$WORK/home" GIRD_CHECK_API="$API" "$B" "$SCRIPT" > "$WORK/online-$V.txt" 2>&1
     has  "bash $V: the total gets thousands separators" '★ 1,234,567 AI builders have run Blindspot\.' "$WORK/online-$V.txt"
-    hasi "bash $V: shows how this machine compares"     'better than 72% of 1,234 AI builders who ran Blindspot' "$WORK/online-$V.txt"
+    hasi "bash $V: shows how this machine compares"     'better than 72% of AI builders who ran Blindspot' "$WORK/online-$V.txt"
     has  "bash $V: the full report shows the rank"      "$PROUD" "$WORK/online-$V.txt"
     HOME="$WORK/home" GIRD_CHECK_API="$API" GIRD_CHECK_COMPACT=1 "$B" "$SCRIPT" > "$WORK/compact-online-$V.txt" 2>&1
     has  "bash $V: the summary shows the rank"          "$PROUD" "$WORK/compact-online-$V.txt"
@@ -504,7 +516,7 @@ PY
   if grep -aqF -f "$WORK/keys-places.txt" "$WORK/received.log"; then bad "no report holds the extra planted keys"; else ok "no report holds the extra planted keys"; fi
   # After the checks above: the Windows run has a GitHub CLI login, so its report says "gh".
   GIRD_CHECK_API="$API" report_of "$WORK/report-win.json" winrun
-  GIRD_CHECK_API="$API" FAKE_BUILD= FAKE_UNAME=MINGW64_NT-10.0-19045 report_of "$WORK/report-win10.json" winrun
+  GIRD_CHECK_API="$API" FAKE_BUILD='' FAKE_UNAME=MINGW64_NT-10.0-19045 report_of "$WORK/report-win10.json" winrun
   report_of "$WORK/report-wsl.json" env HOME="$WORK/home" FAKE_UNAME=Linux GIRD_CHECK_PROC="$WORK/proc-wsl" GIRD_CHECK_API="$API" PATH="$WB:/usr/bin:/bin" bash "$SCRIPT"
   WANT_ID=$(printf 'gird-check-v1:%s' "$GUID" | shasum -a 256 | cut -c1-64)
   has    "Windows: os is Windows 11 for build 22000 and up" '"os":"Windows 11"' "$WORK/report-win.json"

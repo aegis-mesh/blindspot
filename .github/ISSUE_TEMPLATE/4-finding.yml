@@ -1,0 +1,47 @@
+name: Missed or wrong finding
+description: Blindspot missed a key, an agent or an MCP token, or flagged something that isn't one
+title: "Finding: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste a key here, not even a revoked one. Describe its shape instead: the provider, the first few characters of its prefix, and its length.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong
+      options:
+        - It missed something
+        - It flagged something that isn't a problem
+    validations:
+      required: true
+  - type: dropdown
+    id: check
+    attributes:
+      label: Which check
+      options:
+        - Coding agents
+        - MCP servers
+        - Keys in plain text
+        - Allow lists
+        - This week's leaks
+    validations:
+      required: true
+  - type: textarea
+    id: detail
+    attributes:
+      label: What it was
+      description: For a key, the provider and its shape, for example "Groq, starts gsk_, 56 characters". For an agent, its name and where it installs.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where it sits
+      description: The kind of file and roughly where, for example "a .env file inside a project" or "~/.config/<app>/config.json". Replace your username.
+  - type: input
+    id: system
+    attributes:
+      label: Your setup
+      description: Blindspot version (in the report's header), and macOS, Linux, WSL or Windows with your terminal app.

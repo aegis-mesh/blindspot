@@ -1,0 +1,11 @@
+# gitleaks reads this file from the repository root. It keeps every default rule and
+# allows one line: the P_AWS pattern in gird-check.sh and gird-check.ps1, which holds
+# the fixed prefix every Amazon Bedrock short-term key starts with, so Blindspot can
+# find those keys. A real key on any other line is still reported.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Blindspot's own Bedrock key pattern, not a key"
+regexTarget = "line"
+regexes = ['''P_AWS ?= ?'.*bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t'''']

@@ -14,7 +14,7 @@ body:
     id: install
     attributes:
       label: How it installs
-      description: The command it adds to PATH, or the app it puts in /Applications.
+      description: The command it adds to PATH, or where the app installs (/Applications on macOS, Program Files or AppData on Windows).
   - type: textarea
     id: paths
     attributes:
