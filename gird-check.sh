@@ -1035,7 +1035,7 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 # settings.local.json is personal and never part of a clone, so only settings.json is read.
 AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""
 # The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
-WORM_RUN='\.(claude|vscode)/(setup\.mjs|router_runtime\.js|tanstack_runner\.js)'
+WORM_RUN='\.(claude|vscode)/(router_runtime|tanstack_runner)\.js'
 auto_row() { # file what
   grep -qE "$WORM_RUN" "$1" 2>/dev/null && WORM_REFS="$WORM_REFS$1
 "
@@ -1044,12 +1044,14 @@ auto_row() { # file what
   AUTO_ROWS="$AUTO_ROWS$1|$2
 "
 }
-HOOK_EVENTS='PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact'
+HOOK_EVENTS='PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact|PermissionRequest'
 while IFS= read -r f; do
   case "$f" in */.claude/settings.json) ;; *) continue ;; esac
+  # A worktree carries the same committed settings as its repo, so it is not listed again.
+  case "$f" in */.claude/worktrees/*) continue ;; esac
   [ "$f" != "$H/.claude/settings.json" ] && [ -f "$f" ] || continue
   _w=""
-  if grep -qE "\"($HOOK_EVENTS)\"[[:space:]]*:" "$f" 2>/dev/null || grep -qE '"apiKeyHelper"[[:space:]]*:' "$f" 2>/dev/null; then
+  if grep -qE "\"($HOOK_EVENTS)\"[[:space:]]*:" "$f" 2>/dev/null || grep -qE '"(apiKeyHelper|statusLine)"[[:space:]]*:|"hooks"[[:space:]]*:[[:space:]]*\{[[:space:]]*"' "$f" 2>/dev/null; then
     _w="run commands while the agent works"
   fi
   if grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"' "$f" 2>/dev/null; then
@@ -1064,6 +1066,7 @@ $ALLOW_FILES
 EOF
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
+  case "$f" in */.claude/worktrees/*) continue ;; esac
   grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' "$f" 2>/dev/null && auto_row "$f" "run a task when the folder opens in VS Code or Cursor"
 done <<EOF
 $TASK_FILES

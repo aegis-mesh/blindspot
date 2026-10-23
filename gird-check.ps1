@@ -689,10 +689,10 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 # settings.local.json is personal and never part of a clone, so only settings.json is read.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
 # The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
-$RxWormRun = New-Object regex('\.(claude|vscode)[/\\]+(setup\.mjs|router_runtime\.js|tanstack_runner\.js)', $RxOpt, $RxTimeout)
-$RxHooks = New-Object regex('"(PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact|apiKeyHelper)"\s*:', $RxOpt, $RxTimeout)
+$RxWormRun = New-Object regex('\.(claude|vscode)[/\\]+(router_runtime|tanstack_runner)\.js', $RxOpt, $RxTimeout)
+$RxHooks = New-Object regex('"(PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact|PermissionRequest|apiKeyHelper|statusLine)"\s*:|"hooks"\s*:\s*\{\s*"', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
-$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?!https?://(localhost|127\.0\.0\.1|\[::1\])([:/]|"))[^"]*"', $RxOpt, $RxTimeout)
+$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?![^"]*://(localhost|127\.0\.0\.1|\[::1\])([:/]|"))[^"]*"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
 function Auto-Row([string]$f, [string]$what) {
   if (Has-Match $f $RxWormRun) { $WormRefs.Add($f) }
@@ -700,14 +700,15 @@ function Auto-Row([string]$f, [string]$what) {
 }
 $homeSettings = J $HomeDir '.claude/settings.json'
 foreach ($f in $AllowFiles) {
-  if ([IO.Path]::GetFileName($f) -cne 'settings.json' -or $f.Equals($homeSettings, $PathCmp)) { continue }
+  # A worktree carries the same committed settings as its repo, so it is not listed again.
+  if ([IO.Path]::GetFileName($f) -cne 'settings.json' -or $f.Equals($homeSettings, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/worktrees/') { continue }
   $w = New-Object System.Collections.Generic.List[string]
   if (Has-Match $f $RxHooks) { $w.Add('run commands while the agent works') }
   if (Has-Match $f $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Has-Match $f $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
   if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') }
 }
-foreach ($f in $TaskFiles) { if (Has-Match $f $RxFolderOpen) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' } }
+foreach ($f in $TaskFiles) { if (($f -replace '\\', '/') -notmatch '/\.claude/worktrees/' -and (Has-Match $f $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' } }
 $N_AUTO = $AutoRows.Count
 
 # --- 3. Keys in plain text ---------------------------------------------------
@@ -1047,7 +1048,7 @@ function Npm-Hit([string]$where, [string]$nm, [string]$v) {
 # Tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache) and name@version tokens
 # (pnpm, bun, yarn berry's name@npm:version).
 $RxTgz = New-Object regex('/((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))/-/([A-Za-z0-9._~-]+)\.tgz', $RxOpt, $RxTimeout)
-$RxTok = New-Object regex('(?<![A-Za-z0-9._~@/-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
+$RxTok = New-Object regex('(?<![A-Za-z0-9._~@-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
 function Npm-Scan([string]$where, [string]$text) {
   try {
     foreach ($m in $RxTgz.Matches($text)) {
@@ -1055,13 +1056,16 @@ function Npm-Scan([string]$where, [string]$text) {
       if ($base.StartsWith("$b-", [StringComparison]::Ordinal)) { Npm-Hit $where $nm $base.Substring($b.Length + 1) }
     }
     foreach ($m in $RxTok.Matches($text)) { Npm-Hit $where $m.Groups[1].Value $m.Groups[2].Value }
-  } catch { Mark-Slow $where }
+  } catch { $script:NpmSlow++; Mark-Slow $where }
 }
-$N_LOCK = 0
-foreach ($f in $LockFiles) { $t = Read-Text $f; if ($null -eq $t) { continue }; $N_LOCK++; Npm-Scan $f $t }
+# Read directly rather than through Read-Text, so big lockfiles are not kept in memory.
+$N_LOCK = 0; $NpmSlow = 0
+foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { continue }; $N_LOCK++; Npm-Scan $f $t }
 # Global installs and npx's cache, read from each package's package.json.
 $NpmRoots = New-Object System.Collections.Generic.List[string]
-foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'))) { if (Is-Dir $r) { $NpmRoots.Add($r) } }
+foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'),
+    '/opt/homebrew/lib/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules')) { if (Is-Dir $r) { $NpmRoots.Add($r) } }
+foreach ($d in (Glob-Dirs (J $HomeDir '.nvm/versions/node') '*')) { $r = J $d 'lib/node_modules'; if (Is-Dir $r) { $NpmRoots.Add($r) } }
 foreach ($c in @((J $LocalAppData 'npm-cache/_npx'), (J $HomeDir '.npm/_npx'))) { foreach ($d in (Glob-Dirs $c '*')) { $r = J $d 'node_modules'; if (Is-Dir $r) { $NpmRoots.Add($r) } } }
 foreach ($r in $NpmRoots) {
   foreach ($nm in $NpmNames) {
@@ -1073,9 +1077,8 @@ foreach ($r in $NpmRoots) {
 # npm's download cache keeps a package after it is uninstalled, and the malware ran when it installed.
 foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
   $ix = J $c '_cacache/index-v5'; if (-not (Is-Dir $ix)) { continue }
-  $sb = New-Object System.Text.StringBuilder
-  try { foreach ($f in [IO.Directory]::GetFiles($ix, '*', [IO.SearchOption]::AllDirectories)) { try { [void]$sb.AppendLine([IO.File]::ReadAllText($f)) } catch { } } } catch { }
-  Npm-Scan "$c (npm's download cache)" $sb.ToString()
+  $files = @(); try { $files = [IO.Directory]::GetFiles($ix, '*', [IO.SearchOption]::AllDirectories) } catch { }
+  foreach ($f in $files) { try { $t = [IO.File]::ReadAllText($f) } catch { continue }; Npm-Scan "$c (npm's download cache)" $t }
 }
 $NPM_HIT = 0; if ($NpmRows.Count -gt 0) { $NPM_HIT = 1 }
 # What these worms leave behind. gh-token-monitor erases the home folder once the stolen GitHub
@@ -1345,6 +1348,8 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
   foreach ($r in $NpmRows) { $shown++; if ($shown -le 12) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2]))$cRst" } }
   if ($shown -gt 12) { Emit "        ${cDim}and $($shown - 12) more$cRst" }
   foreach ($r in $Persist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
+} elseif ($WIPER_HIT -eq 0 -and $NpmSlow -gt 0) {
+  Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $(Plural $NpmSlow 'file' 'files') took too long$cRst"
 } elseif ($WIPER_HIT -eq 0) {
   Pair "$cGrn$gOk$cRst" 'npm worms' 16 "no bad versions in $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs or npm's cache"
 }
