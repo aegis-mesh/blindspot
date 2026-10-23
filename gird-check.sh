@@ -1438,7 +1438,7 @@ elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ];
 elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
 else SEV=$GRN; fi
 if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="No findings in this scan"; fi
-PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of $(commas "$PCT_N") AI builders who ran Blindspot"
+PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of AI builders who ran Blindspot"
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
 upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 CAPTURE=1; CAP=""
@@ -1776,8 +1776,8 @@ ACT_SAVED=0; ACT_CARD=0; ACT_ARGUS=0; MENU_SHOWN=0; MENU_T0=$SECONDS
 if [ "$TTY" -eq 1 ] && [ -t 0 ]; then
   MENU_SHOWN=1
   drain_keys
-  if [ -n "$PCT" ]; then HERO="Press ENTER to see how you rank and get your AI Exposure Check"
-  else HERO="Press ENTER to get your AI Exposure Check"; fi
+  if [ -n "$PCT" ]; then HERO="Press ENTER to see how you rank and help spread awareness"
+  else HERO="Press ENTER to get your AI Exposure Check and help spread awareness"; fi
   HINT="1-5 details   s save"; [ "$OS" = Darwin ] && HINT="$HINT   a Argus"; HINT="$HINT   q quit"
   _keys='ENTER, 1-5, s, a or q'; [ "$OS" = Darwin ] || _keys='ENTER, 1-5, s or q'
   show_menu() { printf '\n  %s%s▶ %s%s\n    %s%s%s  ' "$GOLD" "$B" "$HERO" "$RST" "$DIM" "$HINT" "$RST"; }

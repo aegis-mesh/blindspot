@@ -329,20 +329,21 @@ PY
   if grep -aqF -f "$WORK/keys.txt" "$WORK/received.log"; then bad "the report holds no planted key"; else ok "the report holds no planted key"; fi
   if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
   has  "shows one real total under the banner" '★ (1,234 AI builders have run Blindspot|456 AI builders ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of AI builders had no keys in plain text)' "$OUT"
-  hasi "shows how this machine compares"       'better than 72% of 1,234 AI builders who ran Blindspot' "$OUT"
+  hasi "shows how this machine compares"       'better than 72% of AI builders who ran Blindspot' "$OUT"
+  hasnot "the percentile line carries no count" 'of 1,234 AI builders' "$OUT"
   has  "the result link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
   has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
-  has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF 1,234 AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
+  has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
   PROUD="^  ★ You're one of the first 1,000 AI builders to run Blindspot\."
   printf '%s' '{"devices":1234567,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   for B in $BASHES; do
     V=$("$B" -c 'echo "${BASH_VERSINFO[0]}"')
     HOME="$WORK/home" GIRD_CHECK_API="$API" "$B" "$SCRIPT" > "$WORK/online-$V.txt" 2>&1
     has  "bash $V: the total gets thousands separators" '★ 1,234,567 AI builders have run Blindspot\.' "$WORK/online-$V.txt"
-    hasi "bash $V: shows how this machine compares"     'better than 72% of 1,234 AI builders who ran Blindspot' "$WORK/online-$V.txt"
+    hasi "bash $V: shows how this machine compares"     'better than 72% of AI builders who ran Blindspot' "$WORK/online-$V.txt"
     has  "bash $V: the full report shows the rank"      "$PROUD" "$WORK/online-$V.txt"
     HOME="$WORK/home" GIRD_CHECK_API="$API" GIRD_CHECK_COMPACT=1 "$B" "$SCRIPT" > "$WORK/compact-online-$V.txt" 2>&1
     has  "bash $V: the summary shows the rank"          "$PROUD" "$WORK/compact-online-$V.txt"

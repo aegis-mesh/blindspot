@@ -1003,7 +1003,7 @@ if ($LITELLM_HIT -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
 if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
-$PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of $(Commas $PCT_N) AI builders who ran Blindspot" }
+$PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of AI builders who ran Blindspot" }
 $SlowText = "$(Plural $SlowFiles.Count 'file' 'files') skipped: took too long to check"
 $Stats = "$(Plural $N_AG 'coding agent' 'coding agents'), $N_IDLE not used in 30 days, $(Plural $N_MCP 'MCP server' 'MCP servers'), $(Plural $KEY_FILES 'file' 'files') with keys in plain text, $(Plural $N_ALLOW 'key' 'keys') in allow lists"
 $Capture = $true; [void]$Cap.Clear()
@@ -1227,7 +1227,7 @@ if ($IsConsole -and $InConsole) {
   $MenuShown = $true
   # Drop anything typed during the scan, so it can't answer a question by accident.
   try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { }
-  if ($PCT) { $Hero = 'Press ENTER to see how you rank and get your AI Exposure Check' } else { $Hero = 'Press ENTER to get your AI Exposure Check' }
+  if ($PCT) { $Hero = 'Press ENTER to see how you rank and help spread awareness' } else { $Hero = 'Press ENTER to get your AI Exposure Check and help spread awareness' }
   $Hint = '1-5 details   s save   q quit'
   $tri = [string][char]0x25B6; if (-not $Fancy) { $tri = '>' }
   $hinted = $false

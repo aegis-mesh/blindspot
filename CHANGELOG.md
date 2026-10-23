@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The percentile line no longer says how many AI builders ran Blindspot: "Better than 72% of AI builders who ran Blindspot". The prompt at the end asks you to help spread awareness.
 - `gird-check.ps1`: Blindspot for plain Windows PowerShell (5.1 and 7), with the same checks, wording, report and result link as `gird-check.sh`. It reads PowerShell's command history, has no game, and lists any file that takes too long to check as skipped.
 - Windows: under Git Bash, MSYS2 or Cygwin the script now looks in the Windows places. Agents and MCP configs in your user folder, `%APPDATA%` and `%LOCALAPPDATA%` (Claude Desktop, Cursor, VS Code, Windsurf, Antigravity, Goose, Cline), PowerShell's command history, Windows Python installs, conda and the uv cache, the LiteLLM marker files in `%TEMP%`, and the Google Cloud, GitHub CLI and `_netrc` logins kept there. The report says `Windows 10` or `Windows 11`, the device ID comes from the Windows MachineGuid the same way the PowerShell version computes it, the terminal is `windows-terminal` in Windows Terminal, and ENTER opens your result in the Windows browser.
 - WSL is recognised. It is scanned as Linux, the key advice says to use a secrets manager, ENTER opens the result with wslview or the Windows browser, and the end of the report says files on the Windows side were not checked.

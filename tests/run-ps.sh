@@ -243,7 +243,7 @@ has    "shell is pwsh under PowerShell 7"      '"shell":"pwsh"' "$WORK/report-ps
 hasnot "the report holds no path"              '/(Users|home|private|tmp|var)/|~/|AppData' "$WORK/report-ps.json"
 nokeys "the report holds no planted key" "$WORK/keys.txt" "$WORK/report-ps.json"
 has    "shows one real total under the banner" '(1,234 AI builders have run Blindspot|456 AI builders ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of AI builders had no keys in plain text)' "$OUT"
-has    "shows how this computer compares"      'Better than 72% of 1,234 AI builders who ran Blindspot' "$OUT"
+has    "shows how this computer compares"      'Better than 72% of AI builders who ran Blindspot' "$OUT"
 has    "says one of the first 1,000"           "You're one of the first 1,000 AI builders to run Blindspot\." "$OUT"
 hasnot "never shows the place in line"         "AI builder #|#142" "$OUT"
 RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/report-ps.json" | cut -d'"' -f4)
