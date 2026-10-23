@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Wording: the report and the result page say "people" where they said "developers", the early-rank label is "AI builder", and a result with nothing in it reads "No findings in this scan" with a note that it is not a guarantee. What used to be called the certificate is now your "AI Exposure Check": the prompt, the result link and the image say so, and the image no longer says it was verified.
+- Wording: the report and the result page say "AI builders" where they said "developers", "Better than" where they said "Safer than", the early-rank label is "AI builder", and a result with nothing in it reads "No findings in this scan" with a note that it is not a guarantee. What used to be called the certificate is now your "AI Exposure Check": the prompt, the result link and the image say so, and the image no longer says it was verified.
 - Every device gets its number, not only the first 1,000: "You're AI builder #1,234 to run Blindspot." Up to 1,000 it adds "One of the first 1,000."
 - A leftover `cook.pyc` alone is now a "possible leftover" to check, not an act-now hit. `cook.pth`, `cook.py`, the 1.107.0 install record, the marker files or a running loader still are.
 - The spend-limit tip is a plain line under "What to do", no longer a numbered item, so the list matches the "things to fix" count in the header.

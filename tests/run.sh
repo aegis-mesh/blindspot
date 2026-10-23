@@ -232,21 +232,21 @@ PY
   hasnot "the report holds no path"     '/(Users|home|private|tmp)/|~/' "$WORK/received.log"
   if grep -aqF -f "$WORK/keys.txt" "$WORK/received.log"; then bad "the report holds no planted key"; else ok "the report holds no planted key"; fi
   if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
-  has  "shows one real total under the banner" '★ (1,234 people have run Blindspot|456 people ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of people had no keys in plain text)' "$OUT"
-  hasi "shows how this machine compares"       'safer than 72% of 1,234 people who ran Blindspot' "$OUT"
+  has  "shows one real total under the banner" '★ (1,234 AI builders have run Blindspot|456 AI builders ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of AI builders had no keys in plain text)' "$OUT"
+  hasi "shows how this machine compares"       'better than 72% of 1,234 AI builders who ran Blindspot' "$OUT"
   has  "the result link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
   has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
-  has  "leads with the percentile when nothing is urgent" 'SAFER THAN 72% OF 1,234 PEOPLE WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
+  has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF 1,234 AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
   PROUD="^  ★ You're AI builder #142 to run Blindspot\. One of the first 1,000\."
   printf '%s' '{"devices":1234567,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   for B in $BASHES; do
     V=$("$B" -c 'echo "${BASH_VERSINFO[0]}"')
     HOME="$WORK/home" GIRD_CHECK_API="$API" "$B" "$SCRIPT" > "$WORK/online-$V.txt" 2>&1
-    has  "bash $V: the total gets thousands separators" '★ 1,234,567 people have run Blindspot\.' "$WORK/online-$V.txt"
-    hasi "bash $V: shows how this machine compares"     'safer than 72% of 1,234 people who ran Blindspot' "$WORK/online-$V.txt"
+    has  "bash $V: the total gets thousands separators" '★ 1,234,567 AI builders have run Blindspot\.' "$WORK/online-$V.txt"
+    hasi "bash $V: shows how this machine compares"     'better than 72% of 1,234 AI builders who ran Blindspot' "$WORK/online-$V.txt"
     has  "bash $V: the full report shows the rank"      "$PROUD" "$WORK/online-$V.txt"
     HOME="$WORK/home" GIRD_CHECK_API="$API" GIRD_CHECK_COMPACT=1 "$B" "$SCRIPT" > "$WORK/compact-online-$V.txt" 2>&1
     has  "bash $V: the summary shows the rank"          "$PROUD" "$WORK/compact-online-$V.txt"
@@ -276,15 +276,15 @@ PY
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/early.txt" 2>&1
   has    "under 1,000 the rank sits above the header" "^  ★ You're AI builder #142 to run Blindspot\." "$WORK/early.txt"
   if [ "$(grep -c 'first 1,000' "$WORK/early.txt")" -eq 1 ]; then ok "under 1,000 the first 1,000 are named once"; else bad "under 1,000 the first 1,000 are named once"; fi
-  if grep -aA2 "AI builder #142" "$WORK/early.txt" | grep -aqE '▌ .*(THINGS TO FIX|SAFER THAN|ACT NOW)'; then ok "the header follows the rank line"; else bad "the header follows the rank line"; fi
+  if grep -aA2 "AI builder #142" "$WORK/early.txt" | grep -aqE '▌ .*(THINGS TO FIX|BETTER THAN|ACT NOW)'; then ok "the header follows the rank line"; else bad "the header follows the rank line"; fi
   printf '%s' '{"p":72,"n":1234}' > "$WORK/reply.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/early-no-rank.txt" 2>&1
-  has    "says early adopter when the reply has no rank" "^  ★ You're one of the first 1,000 people to run Blindspot\." "$WORK/early-no-rank.txt"
+  has    "says early adopter when the reply has no rank" "^  ★ You're one of the first 1,000 AI builders to run Blindspot\." "$WORK/early-no-rank.txt"
   printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
-  hasnot "never shows a total under 1,000"       '★ (999 people|120 people|Blindspot has found|40% of people)' "$WORK/early.txt"
+  hasnot "never shows a total under 1,000"       '★ (999 AI builders|120 AI builders|Blindspot has found|40% of AI builders)' "$WORK/early.txt"
   printf '%s' '{"devices":1000,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/at-1000.txt" 2>&1
-  has    "shows the total from 1,000 people"  '★ 1,000 people have run Blindspot\.' "$WORK/at-1000.txt"
+  has    "shows the total from 1,000 people"  '★ 1,000 AI builders have run Blindspot\.' "$WORK/at-1000.txt"
   printf '{"devices":"\033[2J\033]0;pwned\007","key_files":99999999999999999999}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/hostile.txt" 2>&1
   if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')" "$WORK/hostile.txt"; then bad "a hostile totals reply can't reach the terminal"; else ok "a hostile totals reply can't reach the terminal"; fi

@@ -204,12 +204,12 @@ proof_line() {
   [ -n "$_dv" ] || return 0
   if [ "$_dv" -lt 1000 ]; then EARLY=1; return 0; fi
   _pm=()
-  _pm[0]="$(commas "$_dv") people have run Blindspot."
-  if [ -n "$_d7" ] && [ "$_d7" -ge 50 ]; then _pm[${#_pm[@]}]="$(commas "$_d7") people ran it this week."; fi
+  _pm[0]="$(commas "$_dv") AI builders have run Blindspot."
+  if [ -n "$_d7" ] && [ "$_d7" -ge 50 ]; then _pm[${#_pm[@]}]="$(commas "$_d7") AI builders ran it this week."; fi
   if [ -n "$_kf" ] && [ "$_kf" -ge 100 ]; then _pm[${#_pm[@]}]="Blindspot has found $(commas "$_kf") files with AI keys in plain text so far."; fi
   if [ -n "$_cl" ]; then
     _cp=$(awk -v c="$_cl" 'BEGIN { printf "%d", c * 100 + 0.5 }')
-    if [ "$_cp" -ge 1 ] && [ "$_cp" -le 99 ]; then _pm[${#_pm[@]}]="$_cp% of people had no keys in plain text. Let's see about you."; fi
+    if [ "$_cp" -ge 1 ] && [ "$_cp" -le 99 ]; then _pm[${#_pm[@]}]="$_cp% of AI builders had no keys in plain text. Let's see about you."; fi
   fi
   printf '\n  %s★%s %s%s%s\n' "$GOLD" "$RST" "$B" "${_pm[$((RANDOM % ${#_pm[@]}))]}" "$RST"
 }
@@ -1311,7 +1311,7 @@ send_stats() { # payload [seconds]: POST it with a short timeout, https only whe
 PCT=""; PCT_N=""; RANK=""; LINK_RUN_ID=""
 if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
   LINK_RUN_ID=$RUN_ID   # the certificate link carries the run ID only when a report did
-  [ "$TTY" -eq 1 ] && printf '  %sComparing with other people...%s' "$DIM" "$RST"
+  [ "$TTY" -eq 1 ] && printf '  %sComparing with other AI builders...%s' "$DIM" "$RST"
   _rp=$(send_stats "$PAYLOAD" 3 | head -c 4096 | tr -d ' \n\r\t')
   [ "$TTY" -eq 1 ] && printf '\r%s' "${E}[K"
   _p=$(jnum p "$_rp"); _n=$(jnum n "$_rp"); _rank=$(jnum r "$_rp")
@@ -1330,7 +1330,7 @@ elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ];
 elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
 else SEV=$GRN; fi
 if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="No findings in this scan"; fi
-PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Safer than $PCT% of $(commas "$PCT_N") people who ran Blindspot"
+PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of $(commas "$PCT_N") AI builders who ran Blindspot"
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
 upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 CAPTURE=1; CAP=""
@@ -1339,7 +1339,7 @@ if [ -n "$RANK" ]; then
   _first=""; [ "$RANK" -le 1000 ] && _first=" One of the first 1,000."
   wrap "You're AI builder #$(commas "$RANK") to run Blindspot.$_first" 4 "  ${GOLD}★${RST} " "    " "$B"; blank
 elif [ "$EARLY" -eq 1 ]; then
-  wrap "You're one of the first 1,000 people to run Blindspot." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
+  wrap "You're one of the first 1,000 AI builders to run Blindspot." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
 fi
 if [ "$LITELLM_HIT" -eq 1 ]; then
   emit "  ${SEV}▌${RST} ${B}ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE${RST}"
