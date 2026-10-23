@@ -71,7 +71,7 @@ echo "Windows: Git Bash, MSYS, Cygwin"
 # installed on this machine. Git Bash's HOME is a different folder here, as on Cygwin.
 WR=$WORK/win; WP=$WR/Users/me; WB=$WORK/winbin
 mkdir -p "$WB" "$WR/Temp" "$WR/msyshome"
-K_ANT=$(sed -n 1p "$WORK/keys.txt"); K_GH=$(sed -n 3p "$WORK/keys.txt"); K_AWS=$(sed -n 4p "$WORK/keys.txt"); K_GROQ=$(sed -n 5p "$WORK/keys.txt")
+K_ANT=$(sed -n 1p "$WORK/keys.txt"); K_AWS=$(sed -n 4p "$WORK/keys.txt"); K_GROQ=$(sed -n 5p "$WORK/keys.txt")
 mkdir -p "$WP/.claude/projects/p" "$WP/AppData/Roaming/Claude" "$WP/AppData/Roaming/Code/User" "$WP/AppData/Local/Programs/cursor" \
   "$WP/AppData/Roaming/Block/goose/config" "$WP/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine" \
   "$WP/AppData/Roaming/GitHub CLI" "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages" \
@@ -485,7 +485,7 @@ PY
   if grep -aqF -f "$WORK/keys-places.txt" "$WORK/received.log"; then bad "no report holds the extra planted keys"; else ok "no report holds the extra planted keys"; fi
   # After the checks above: the Windows run has a GitHub CLI login, so its report says "gh".
   GIRD_CHECK_API="$API" report_of "$WORK/report-win.json" winrun
-  GIRD_CHECK_API="$API" FAKE_BUILD= FAKE_UNAME=MINGW64_NT-10.0-19045 report_of "$WORK/report-win10.json" winrun
+  GIRD_CHECK_API="$API" FAKE_BUILD='' FAKE_UNAME=MINGW64_NT-10.0-19045 report_of "$WORK/report-win10.json" winrun
   report_of "$WORK/report-wsl.json" env HOME="$WORK/home" FAKE_UNAME=Linux GIRD_CHECK_PROC="$WORK/proc-wsl" GIRD_CHECK_API="$API" PATH="$WB:/usr/bin:/bin" bash "$SCRIPT"
   WANT_ID=$(printf 'gird-check-v1:%s' "$GUID" | shasum -a 256 | cut -c1-64)
   has    "Windows: os is Windows 11 for build 22000 and up" '"os":"Windows 11"' "$WORK/report-win.json"
