@@ -18,11 +18,11 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 |---|---|---|
 | `v`, `kind` | `"1"`, `"report"` | Format version and event type |
 | `run_id` | `"4b78c51d64d15aa0"` | Random for each run. Links a report to its actions event and to shares from its result page |
-| `device_id` | 64 hex characters | One-way SHA-256 of your Mac's hardware UUID (Linux: `/etc/machine-id`), salted with `gird-check-v1:`. Lets us count repeat runs. It can't be turned back into the hardware ID |
+| `device_id` | 64 hex characters | One-way SHA-256 of your Mac's hardware UUID (Linux and WSL: `/etc/machine-id`; Windows: the `MachineGuid` in the registry, as stored), salted with `gird-check-v1:`. Lets us count repeat runs, and Git Bash and PowerShell give the same ID on one PC. It can't be turned back into the hardware ID |
 | `script` | `"1"` | Script version |
-| `os`, `arch`, `model` | `"macOS 26.4"`, `"arm64"`, `"MacBookPro18,1"` | macOS version, processor type, Mac model identifier |
-| `terminal`, `tmux` | `"iterm2"`, `0` | Terminal app, from a fixed list, and whether tmux is running |
-| `shell`, `bash` | `"zsh"`, `3` | Your login shell, from a fixed list, and the bash major version running the script |
+| `os`, `arch`, `model` | `"macOS 26.4"`, `"arm64"`, `"MacBookPro18,1"` | macOS version, `"Linux"`, or `"Windows 10"` / `"Windows 11"` (build 22000 and up is 11; `"Windows"` when the build is unknown). Processor type: `arm64`, `x86_64` or `other`. Mac model identifier, empty elsewhere |
+| `terminal`, `tmux` | `"iterm2"`, `0` | Terminal app, from a fixed list (on Windows also `windows-terminal` and `conhost`), and whether tmux is running |
+| `shell`, `bash` | `"zsh"`, `3` | Your login shell, from a fixed list (the PowerShell version sends `pwsh`, `powershell` or `cmd`), and the bash major version running the script |
 | `lang` | `"en_IN"` | Language and region setting |
 | `via` | `"none"` | `claude-code` when the script runs inside Claude Code |
 | `grade`, `score` | `"C"`, `64` | The result. The grade is for research counts only; the script shows how you compare instead |
@@ -74,4 +74,11 @@ Work out your device ID on a Mac:
 printf 'gird-check-v1:%s' "$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformUUID/ {print $4}')" | shasum -a 256
 ```
 
-On Linux, replace the `ioreg` part with `cat /etc/machine-id`. Email the hash to [hello@gird.ai](mailto:hello@gird.ai) and we'll delete every event with it.
+On Linux or WSL, replace the `ioreg` part with `cat /etc/machine-id`. On Windows, in PowerShell:
+
+```powershell
+$g = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Cryptography').MachineGuid
+-join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes("gird-check-v1:$g")) | ForEach-Object { $_.ToString('x2') })
+```
+
+Email the hash to [hello@gird.ai](mailto:hello@gird.ai) and we'll delete every event with it.

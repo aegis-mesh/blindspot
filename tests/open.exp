@@ -1,0 +1,24 @@
+# Used by tests/interactive.sh: ENTER opens the result with the browser opener of
+# the system the script thinks it is on. PATH starts with stand-ins that log what
+# they were given to $env(OPENLOG). LABEL names the case.
+set timeout 60
+log_user 0
+match_max 100000
+spawn -noecho env HOME=$env(FAKEHOME) TERM=xterm-256color $env(BASHBIN) $env(SCRIPT) --offline --no-game
+stty rows 50 columns 90 < $spawn_out(slave,name)
+expect {
+  "AI Exposure Check" {}
+  timeout { puts "  FAIL  $env(LABEL): no prompt"; exit 1 }
+}
+send "\r"
+expect {
+  "Opened your result in the browser" { puts "  ok    $env(LABEL): ENTER opens the result in the browser" }
+  "Open your result:" { puts "  FAIL  $env(LABEL): the result was not opened"; exit 1 }
+  timeout { puts "  FAIL  $env(LABEL): no result link"; exit 1 }
+}
+expect {
+  "AI Exposure Check" {}
+  timeout { puts "  FAIL  $env(LABEL): no prompt after the result"; exit 1 }
+}
+send "q"
+expect eof

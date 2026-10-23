@@ -46,7 +46,48 @@ if [ -z "$H" ] || [ ! -d "$H" ]; then echo "HOME is not set."; exit 1; fi
 OS=$(uname -s); ARCH=$(uname -m)
 # Apple Silicon even when Terminal runs under Rosetta
 if [ "$OS" = Darwin ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then ARCH=arm64; fi
-if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"; else AS="$H/.config"; fi
+# WIN: Git Bash, MSYS2 or Cygwin on Windows. WSL: a Linux system inside Windows,
+# scanned as Linux; its Windows-side files are not.
+WIN=0; WSL=0
+case "$OS" in
+  MINGW*|MSYS*|CYGWIN*) WIN=1 ;;
+  Linux) _pr=${GIRD_CHECK_PROC:-/proc}
+         grep -qi microsoft "$_pr/sys/kernel/osrelease" "$_pr/version" 2>/dev/null && WSL=1 ;;
+esac
+# A Windows path such as C:\Users\me as this shell writes it: /c/Users/me, or
+# /cygdrive/c/Users/me on Cygwin, where cygpath knows which.
+winpath() {
+  case "$1" in '') return 0 ;; /*) printf '%s' "$1"; return 0 ;; esac
+  if command -v cygpath >/dev/null 2>&1; then _wp=$(cygpath -u "$1" 2>/dev/null) && [ -n "$_wp" ] && { printf '%s' "$_wp"; return 0; }; fi
+  _wp=${1//\\//}
+  case "$_wp" in
+    [A-Za-z]:*) printf '/%s%s' "$(printf '%s' "${_wp%%:*}" | tr 'A-Z' 'a-z')" "${_wp#?:}" ;;
+    *) printf '%s' "$_wp" ;;
+  esac
+}
+# HH is the shell's own home, for its dotfiles. On Windows the agents keep theirs
+# in the Windows profile, which can differ (Cygwin's /home/me, a HOME on another drive).
+HH=$H
+if [ "$WIN" -eq 1 ]; then
+  _up=$(winpath "${USERPROFILE:-}"); _up=${_up%/}
+  [ -n "$_up" ] && [ -d "$_up" ] && H=$_up
+  WAPP=$(winpath "${APPDATA:-}"); WAPP=${WAPP%/}; [ -n "$WAPP" ] || WAPP="$H/AppData/Roaming"
+  WLAPP=$(winpath "${LOCALAPPDATA:-}"); WLAPP=${WLAPP%/}; [ -n "$WLAPP" ] || WLAPP="$H/AppData/Local"
+  WTEMP=$(winpath "${TEMP:-${TMP:-}}"); WTEMP=${WTEMP%/}; [ -n "$WTEMP" ] || WTEMP="$WLAPP/Temp"
+  AS=$WAPP
+  # Install folders of the per-user Windows installers, and Goose's config, which
+  # follows the Windows layout rather than ~/.config.
+  APP_CLAUDE="$WLAPP/AnthropicClaude"; APP_CURSOR="$WLAPP/Programs/cursor"
+  APP_WINDSURF="$WLAPP/Programs/Windsurf"; APP_ANTIGRAVITY="$WLAPP/Programs/Antigravity"
+  GOOSE_CFG="$WAPP/Block/goose/config"; GOOSE_DATA="$WAPP/Block/goose/data"
+  PSRL="$WAPP/Microsoft/Windows/PowerShell/PSReadLine"
+else
+  if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"; else AS="$H/.config"; fi
+  APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
+  APP_WINDSURF=/Applications/Windsurf.app; APP_ANTIGRAVITY=/Applications/Antigravity.app
+  GOOSE_CFG="$H/.config/goose"; GOOSE_DATA="$H/.local/share/goose"
+  WAPP=""; WLAPP=""; WTEMP=""; PSRL=""
+fi
 
 # ---------------------------------------------------------------------------
 # Look and feel. Colors only on a terminal, never with NO_COLOR or when piped.
@@ -255,8 +296,11 @@ spin_stop() {
 # ---------------------------------------------------------------------------
 GAME_PID=""; KEYS_PID=""; GAME_RC=0; SAVED_TTY=""
 if [ -n "${EPOCHREALTIME:-}" ]; then G_MODE=A; elif [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then G_MODE=B; else G_MODE=C; fi
+# stty must work on /dev/tty too: some Windows terminals (mintty without a console)
+# have a terminal on stdin that stty can't set, and then the spinner is shown instead.
 game_ok() {
-  [ "$NOGAME" -eq 0 ] && [ "$TTY" -eq 1 ] && [ -t 0 ] && [ -n "$TEAL" ] && [ "$W" -ge 64 ] && command -v stty >/dev/null 2>&1
+  [ "$NOGAME" -eq 0 ] && [ "$TTY" -eq 1 ] && [ -t 0 ] && [ -n "$TEAL" ] && [ "$W" -ge 64 ] && command -v stty >/dev/null 2>&1 &&
+    stty -g </dev/tty >/dev/null 2>&1
 }
 g_act() { # a typed character to an action
   case "$1" in
@@ -772,6 +816,10 @@ scan_home() {
     -o -path "$H/Music" -o -path "$H/Public" -o -path "$H/go" -o -path "$H/.vscode" -o -path "$H/.cursor" \
     -o -path "$H/.windsurf" -o -path "$H/.local/share" -o -path "$H/Dropbox" -o -path "$H/Google Drive" \
     -o -path "$H/OneDrive*"
+  if [ "$WIN" -eq 1 ]; then
+    set -- "$@" -o -path "$H/AppData" -o -path "$H/Application Data" -o -path "$H/Local Settings" \
+      -o -path "$H/Videos" -o -path "$H/Saved Games" -o -path "$H/3D Objects" -o -path "$H/scoop"
+  fi
   if [ "$ALL" -eq 0 ]; then set -- "$@" -o -path "$H/Desktop" -o -path "$H/Documents" -o -path "$H/Downloads"; fi
   find "$H" -maxdepth 6 \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
@@ -834,15 +882,15 @@ VENVS=$(printf '%s\n' "$FOUND" | grep -E '/pyvenv\.cfg$' | sed 's#/pyvenv\.cfg$#
 # --- 1. Coding agents --------------------------------------------------------
 # name | commands | install paths | folders that change when it is used | id
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
-Claude Desktop||/Applications/Claude.app;$AS/Claude|$AS/Claude|claude-desktop
+Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
 Gemini CLI|gemini|$H/.gemini|$H/.gemini/tmp|gemini-cli
-Cursor|cursor|/Applications/Cursor.app;$H/.cursor|$AS/Cursor/User/workspaceStorage|cursor
-Windsurf|windsurf|/Applications/Windsurf.app;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage|windsurf
-Antigravity|antigravity|/Applications/Antigravity.app|$AS/Antigravity/User/workspaceStorage|antigravity
+Cursor|cursor|$APP_CURSOR;$H/.cursor|$AS/Cursor/User/workspaceStorage|cursor
+Windsurf|windsurf|$APP_WINDSURF;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage|windsurf
+Antigravity|antigravity|$APP_ANTIGRAVITY|$AS/Antigravity/User/workspaceStorage|antigravity
 GitHub Copilot CLI|copilot|$H/.copilot|$H/.copilot|copilot-cli
 OpenCode|opencode|$H/.config/opencode;$H/.local/share/opencode|$H/.local/share/opencode|opencode
-Goose|goose|$H/.config/goose|$H/.local/share/goose|goose
+Goose|goose|$GOOSE_CFG|$GOOSE_DATA|goose
 Aider|aider|||aider
 Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks|cline
 Continue||$H/.continue|$H/.continue/sessions|continue"
@@ -893,7 +941,7 @@ Cline|cline|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mc
 Cline in Cursor|cline|$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
 Continue|continue|$H/.continue/config.json
 Continue|continue|$H/.continue/config.yaml
-Goose|goose|$H/.config/goose/config.yaml
+Goose|goose|$GOOSE_CFG/config.yaml
 OpenCode|opencode|$H/.config/opencode/opencode.json"
 
 MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""; N_MCP_CACHE=0; N_MCP_CACHEF=0
@@ -980,6 +1028,11 @@ CANDIDATES=$(
       printf '%s\n' "$H/$f"
     done
     printf '%s\n' "$AS/Claude/claude_desktop_config.json"
+    if [ "$WIN" -eq 1 ]; then
+      printf '%s\n' "$GOOSE_CFG/config.yaml"
+      for f in "$PSRL"/*_history.txt; do [ -f "$f" ] && printf '%s\n' "$f"; done
+      [ "$HH" != "$H" ] && for f in .bashrc .bash_profile .profile .bash_history; do printf '%s\n' "$HH/$f"; done
+    fi
     printf '%s\n' "$PROJECT_FILES"
   } | awk 'NF && !seen[$0]++'
 )
@@ -993,12 +1046,16 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
       KP=shell_rc; return 0 ;;
     "$H/.zsh_history"|"$H/.bash_history"|"$H/.local/share/fish/fish_history"|"$H/.python_history"|"$H/.node_repl_history")
       KP=shell_history; return 0 ;;
+    "$HH/.bashrc"|"$HH/.bash_profile"|"$HH/.profile") KP=shell_rc; return 0 ;;
+    "$HH/.bash_history") KP=shell_history; return 0 ;;
   esac
+  # PowerShell's history on Windows, where typed keys most often end up
+  if [ -n "$PSRL" ]; then case "$1" in "$PSRL"/*_history.txt) KP=shell_history; return 0 ;; esac; fi
   case "${1##*/}" in .env|.env.*|.envrc) KP=env_file; return 0 ;; esac
   case "$MCP_SET" in *"|$1|"*) KP=mcp_config; return 0 ;; esac
   case "$1" in
     "$H"/.claude/*|"$H"/.codex/*|"$H"/.gemini/*|"$H"/.cursor/*|"$H"/.codeium/*|"$H"/.continue/*) KP=agent_config; return 0 ;;
-    "$H"/.copilot/*|"$H"/.config/goose/*|"$H"/.config/opencode/*|"$H"/.local/share/opencode/*|"$H"/.aider*|"$AS"/Claude/*) KP=agent_config; return 0 ;;
+    "$H"/.copilot/*|"$H"/.config/goose/*|"$H"/.config/opencode/*|"$H"/.local/share/opencode/*|"$H"/.aider*|"$AS"/Claude/*|"$GOOSE_CFG"/*) KP=agent_config; return 0 ;;
   esac
   case "$PROJECT_SET" in *"|$1|"*) KP=project_file; return 0 ;; esac
   KP=other
@@ -1050,6 +1107,11 @@ login "$H/.claude/.credentials.json" "Claude Code login" claude-code
 login "$H/.gemini/oauth_creds.json" "Gemini CLI login" gemini
 login "$H/.local/share/opencode/auth.json" "OpenCode provider keys" opencode
 login "$H/.railway/config.json" "Railway login" railway
+if [ "$WIN" -eq 1 ]; then # where these tools keep the same logins on Windows
+  case " $LOGIN_IDS " in *" gcloud "*) ;; *) login "$WAPP/gcloud/application_default_credentials.json" "Google Cloud login" gcloud ;; esac
+  case " $LOGIN_IDS " in *" netrc "*) ;; *) login "$H/_netrc" "saved passwords in _netrc" netrc ;; esac
+  case " $LOGIN_IDS " in *" gh "*) ;; *) login "$WAPP/GitHub CLI/hosts.yml" "GitHub CLI token" gh 'oauth_token' ;; esac
+fi
 N_SSH=0; N_SSH_OPEN=0
 for k in "$H"/.ssh/*; do
   [ -f "$k" ] || continue
@@ -1100,6 +1162,20 @@ $H/.local/share/uv
 /opt/homebrew/anaconda3
 /opt/anaconda3
 /opt/miniconda3"
+if [ "$WIN" -eq 1 ]; then
+  PY_ROOTS="$PY_ROOTS
+$H/pipx
+$WLAPP/pipx
+$WAPP/uv
+$WLAPP/Programs/Python
+$WAPP/Python
+$WLAPP/miniconda3
+$WLAPP/anaconda3"
+  _pd=$(winpath "${PROGRAMDATA:-}"); _pd=${_pd%/}
+  [ -n "$_pd" ] && PY_ROOTS="$PY_ROOTS
+$_pd/miniconda3
+$_pd/anaconda3"
+fi
 SITES_ALL=$(
   {
     printf '%s\n' "$SITES"
@@ -1139,9 +1215,10 @@ while IFS= read -r sp; do
 done <<EOF
 $SITES_ALL
 EOF
-MARKS=""
-for t in /tmp "${TMPDIR%/}"; do
+MARKS=""; _seen_t="|"
+for t in /tmp "${TMPDIR%/}" "$WTEMP"; do
   [ -n "$t" ] && [ -d "$t" ] || continue
+  case "$_seen_t" in *"|$t|"*) continue ;; esac; _seen_t="$_seen_t$t|"
   for m in "$t/remote_code_loader.lock" "$t"/.pc_once_* "$t"/.pc_sq_* "$t"/.pc_e_*; do
     [ -e "$m" ] && MARKS="$MARKS$m
 "
@@ -1154,6 +1231,7 @@ if [ -e /tmp/remote_code_loader.lock ] && command -v lsof >/dev/null 2>&1; then
   [ -n "$(lsof -t /tmp/remote_code_loader.lock 2>/dev/null)" ] && LOADER=1
 fi
 UV_BAD=$(find "$H/.cache/uv" -maxdepth 6 -name 'litellm-1.107.0*' -print -quit 2>/dev/null)
+[ -z "$UV_BAD" ] && [ "$WIN" -eq 1 ] && UV_BAD=$(find "$WLAPP/uv/cache" -maxdepth 6 -name 'litellm-1.107.0*' -print -quit 2>/dev/null)
 LITELLM_HIT=0
 if [ -n "$LITE_BAD" ] || [ -n "$MARKS" ] || [ "$LOADER" -eq 1 ]; then LITELLM_HIT=1; fi
 if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Signs of the LiteLLM malware found"
@@ -1189,7 +1267,8 @@ todo() { # section text
 [ "$LITELLM_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow LiteLLM's advisory, and rotate every key the machine could reach."
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
-  Linux)  _store="your desktop keyring (GNOME Keyring or KWallet) or a secrets manager" ;;
+  Linux)  if [ "$WSL" -eq 1 ]; then _store="a secrets manager" # WSL usually has no desktop keyring
+          else _store="your desktop keyring (GNOME Keyring or KWallet) or a secrets manager"; fi ;;
   MINGW*|MSYS*|CYGWIN*) _store="Windows Credential Manager or a secrets manager" ;;
   *)      _store="a secrets manager" ;;
 esac
@@ -1244,7 +1323,7 @@ if [ "$GAME_RC" -ge 1 ] && [ "$GAME_RC" -le 100 ]; then GP=1; GB=$(( (GAME_RC - 
 # each squeezed into a fixed list or a strict pattern before it goes. Never a
 # path, a file name, a key, a name you gave an MCP server, a username, a
 # hostname or the raw hardware ID. The device ID is a
-# one-way SHA-256 of the hardware UUID (Linux: machine-id) salted for this
+# one-way SHA-256 of the hardware UUID (Linux and WSL: machine-id, Windows: MachineGuid) salted for this
 # script, so repeat runs can be counted; it can't be turned back into the ID.
 # The server keeps the country, not the IP address.
 # ---------------------------------------------------------------------------
@@ -1261,8 +1340,22 @@ json_tally() { # list lines
     }'
 }
 sha_hex() { if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum 2>/dev/null; fi | cut -c1-64; }
+# One value from the Windows registry, read with reg.exe. The path conversion of
+# Git Bash and MSYS is turned off, or it would rewrite /v into a file path. The
+# 64-bit view comes first, since a 32-bit reg.exe can't see MachineGuid otherwise.
+win_reg() { # key value
+  for _rv in /reg:64 ""; do
+    _rr=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' reg query "$1" /v "$2" $_rv 2>/dev/null | tr -d '\r' |
+      awk -v n="$2" '$1 == n && $2 ~ /^REG_/ { print $NF; exit }')
+    [ -n "$_rr" ] && { printf '%s' "$_rr"; return 0; }
+  done
+  return 1
+}
 HWID=""
 if [ "$OS" = Darwin ]; then HWID=$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/ {print $4; exit}')
+elif [ "$WIN" -eq 1 ]; then # as stored, no case change, so gird-check.ps1 gets the same ID on this PC
+  HWID=$(win_reg 'HKLM\SOFTWARE\Microsoft\Cryptography' MachineGuid)
+  case "$HWID" in *[!0-9A-Fa-f-]*) HWID="" ;; esac
 elif [ -r /etc/machine-id ]; then HWID=$(head -c 64 /etc/machine-id 2>/dev/null); fi
 DEVICE_ID=""; [ -n "$HWID" ] && DEVICE_ID=$(printf 'gird-check-v1:%s' "$HWID" | sha_hex)
 HWID=""
@@ -1271,6 +1364,18 @@ RUN_ID=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
 case "$RUN_ID" in *[!0-9a-f]*) RUN_ID="" ;; esac; [ "${#RUN_ID}" -eq 16 ] || RUN_ID=""
 OSV=Linux
 if [ "$OS" = Darwin ]; then OSV="macOS $(sw_vers -productVersion 2>/dev/null | tr -cd '0-9.' | cut -d. -f1-2)"; OSV=${OSV% }; fi
+if [ "$WIN" -eq 1 ]; then
+  # Windows 11 still says 10.0; its build number starts at 22000. uname -s ends
+  # in the build on newer Git Bash, MSYS2 and Cygwin (MINGW64_NT-10.0-22631).
+  _wb=$(win_reg 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion' CurrentBuildNumber)
+  case "$_wb" in ''|*[!0-9]*) _wb=${OS##*-} ;; esac
+  case "$_wb" in ''|*[!0-9]*) _wb=0 ;; esac
+  _wb=${_wb:0:9}
+  if [ "$_wb" -ge 22000 ]; then OSV="Windows 11"; elif [ "$_wb" -ge 10240 ]; then OSV="Windows 10"; else OSV=Windows; fi
+  case "${PROCESSOR_ARCHITEW6432:-${PROCESSOR_ARCHITECTURE:-}}" in
+    AMD64|amd64) ARCH=x86_64 ;; ARM64|arm64) ARCH=arm64 ;; '') ;; *) ARCH=other ;;
+  esac
+fi
 case "$ARCH" in arm64|aarch64) ARCH_ID=arm64 ;; x86_64) ARCH_ID=x86_64 ;; *) ARCH_ID=other ;; esac
 MODEL=""; [ "$OS" = Darwin ] && MODEL=$(sysctl -n hw.model 2>/dev/null | tr -cd 'A-Za-z0-9,' | cut -c1-20)
 case "${__CFBundleIdentifier:-}" in
@@ -1285,6 +1390,9 @@ case "${__CFBundleIdentifier:-}" in
        '') TERMAPP=unknown ;; *) TERMAPP=other ;;
      esac ;;
 esac
+if [ "$WIN" -eq 1 ] || [ "$WSL" -eq 1 ]; then
+  case "$TERMAPP" in unknown|other) [ -n "${WT_SESSION:-}" ] && TERMAPP=windows-terminal ;; esac
+fi
 TMUXED=0; [ -n "${TMUX:-}" ] && TMUXED=1
 case "${SHELL##*/}" in zsh|bash|fish|sh|dash|ksh|tcsh|nu|elvish|xonsh) SHELLNAME=${SHELL##*/} ;; '') SHELLNAME=unknown ;; *) SHELLNAME=other ;; esac
 LANGCODE=${ORIG_LANG%%.*}
@@ -1514,6 +1622,8 @@ fi
 SEC_ARGUS=$CAP; CAP=""
 blank
 wrap "Finding nothing does not prove nothing leaked. This shows what could reach your keys, not what your agents did with them." 2 "  " "  " "$DIM"
+WSL_NOTE="This ran inside WSL, so files on the Windows side were not checked. Run it in Git Bash, or gird-check.ps1 in PowerShell, to check those."
+[ "$WSL" -eq 1 ] && wrap "$WSL_NOTE" 2 "  " "  " "$DIM"
 SEC_FOOT=$CAP; CAP=""
 
 # Details for one section: the section, then its fixes.
@@ -1597,6 +1707,7 @@ if [ "$ISSUES" -eq 0 ]; then
   blank
   wrap "Finding nothing does not prove nothing leaked. This shows what could reach your keys, not what your agents did with them." 2 "  " "  " "$DIM"
 fi
+if [ "$WSL" -eq 1 ]; then blank; wrap "$WSL_NOTE" 2 "  " "  " "$DIM"; fi
 SUMMARY=$CAP; CAP=""; CAPTURE=0
 
 REPORT="$REPORT$HEAD_FULL$SEC1$SEC2$SEC3$SEC4$SEC5$SEC_TODO$SEC_ARGUS$SEC_FOOT"
@@ -1615,9 +1726,25 @@ card_url() {
     "$N_ALLOW" "$N_ALLOW_NPM" "$LITELLM_HIT" "$N_LOGIN" "$N_SSH_OPEN" "$(date +%Y-%m-%d)" "$PCT" "$PCT_N" \
     "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')"
 }
+# Windows' default browser, from Git Bash or WSL. cmd.exe would read each & in the
+# link as a new command, so they are escaped as ^&. explorer.exe reports failure
+# even when it opens the page, so its exit code is not used.
+win_open() {
+  if command -v cmd.exe >/dev/null 2>&1; then
+    ( cd / 2>/dev/null; MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' cmd.exe /d /c start "" "${1//&/^&}" ) >/dev/null 2>&1 && return 0
+  fi
+  if command -v explorer.exe >/dev/null 2>&1; then explorer.exe "$1" >/dev/null 2>&1; return 0; fi
+  return 1
+}
 open_url() {
   [ -n "${GIRD_CHECK_NO_OPEN:-}" ] && return 1
   if [ "$OS" = Darwin ] && command -v open >/dev/null 2>&1; then open "$1" >/dev/null 2>&1 && return 0; fi
+  if [ "$WIN" -eq 1 ]; then win_open "$1"; return; fi
+  if [ "$WSL" -eq 1 ]; then
+    if command -v wslview >/dev/null 2>&1; then wslview "$1" >/dev/null 2>&1 && return 0; fi
+    if command -v explorer.exe >/dev/null 2>&1; then explorer.exe "$1" >/dev/null 2>&1; return 0; fi
+    win_open "$1" && return 0
+  fi
   if command -v xdg-open >/dev/null 2>&1; then xdg-open "$1" >/dev/null 2>&1 & return 0; fi
   return 1
 }

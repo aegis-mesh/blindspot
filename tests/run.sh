@@ -65,6 +65,91 @@ hasnot "another OS is not told to use the Keychain" 'macOS Keychain' "$WORK/os-F
 has    "Windows bash is pointed at Credential Manager" 'into Windows Credential Manager or a secrets manager' "$WORK/os-MINGW64_NT-10.0.txt"
 has    "macOS is pointed at the Keychain"       'into the macOS Keychain' "$WORK/os-Darwin.txt"
 
+echo "Windows: Git Bash, MSYS, Cygwin"
+# A fake C: drive under $WORK/win, with the Windows profile at C:\Users\me. Fake
+# uname, reg and cygpath stand in for Windows, and a minimal PATH hides any agent
+# installed on this machine. Git Bash's HOME is a different folder here, as on Cygwin.
+WR=$WORK/win; WP=$WR/Users/me; WB=$WORK/winbin
+mkdir -p "$WB" "$WR/Temp" "$WR/msyshome"
+K_ANT=$(sed -n 1p "$WORK/keys.txt"); K_GH=$(sed -n 3p "$WORK/keys.txt"); K_AWS=$(sed -n 4p "$WORK/keys.txt"); K_GROQ=$(sed -n 5p "$WORK/keys.txt")
+mkdir -p "$WP/.claude/projects/p" "$WP/AppData/Roaming/Claude" "$WP/AppData/Roaming/Code/User" "$WP/AppData/Local/Programs/cursor" \
+  "$WP/AppData/Roaming/Block/goose/config" "$WP/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine" \
+  "$WP/AppData/Roaming/GitHub CLI" "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages" \
+  "$WP/AppData/Local/uv/cache/wheels-v5/pypi/litellm/litellm-1.107.0-py3-none-any"
+printf '{}\n' > "$WP/.claude/projects/p/s.jsonl"
+mkdir -p "$WP/AppData/Roaming/Cursor/User/workspaceStorage/w"; printf '{}\n' > "$WP/AppData/Roaming/Cursor/User/workspaceStorage/w/state.json"
+printf '{"mcpServers":{"github":{"command":"npx"}}}\n' > "$WP/.claude.json"
+printf '{"mcpServers":{"slack":{"command":"npx","env":{"SLACK_BOT_TOKEN":"%s"}}}}\n' "$K_ANT" > "$WP/AppData/Roaming/Claude/claude_desktop_config.json"
+printf '{"servers":{"playwright":{"command":"npx"},"memory":{"command":"npx"}}}\n' > "$WP/AppData/Roaming/Code/User/mcp.json"
+printf 'extensions:\n  github:\n    enabled: true\n' > "$WP/AppData/Roaming/Block/goose/config/config.yaml"
+printf 'git status\n$env:AWS_ACCESS_KEY_ID = "%s"\n' "$K_AWS" > "$WP/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt"
+printf 'github.com:\n    oauth_token: x\n' > "$WP/AppData/Roaming/GitHub CLI/hosts.yml"
+printf 'machine example.com login me password x\n' > "$WP/_netrc"
+printf 'import cook\n' > "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages/cook.pth"
+: > "$WR/Temp/.pc_once_1"
+printf 'export GROQ_API_KEY=%s\n' "$K_GROQ" > "$WR/msyshome/.bash_history"
+printf '#!/bin/sh\n[ "$1" = -s ] && { echo "${FAKE_UNAME:-MINGW64_NT-10.0}"; exit 0; }\nexec /usr/bin/uname "$@"\n' > "$WB/uname"
+# reg query KEY /v NAME [/reg:64], printed the way reg.exe prints, with CRLF line ends.
+cat > "$WB/reg" <<'SH'
+#!/bin/sh
+[ "$1" = query ] && [ "$3" = /v ] || exit 1
+case "$2|$4" in
+  'HKLM\SOFTWARE\Microsoft\Cryptography|MachineGuid') v=$FAKE_GUID ;;
+  'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion|CurrentBuildNumber') v=${FAKE_BUILD:-} ;;
+  *) exit 1 ;;
+esac
+[ -n "$v" ] || exit 1
+printf '\r\nHKEY_LOCAL_MACHINE\\x\r\n    %s    REG_SZ    %s\r\n\r\n' "$4" "$v"
+SH
+cat > "$WB/cygpath" <<'SH'
+#!/bin/sh
+[ "$1" = -u ] || exit 1
+printf '%s\n' "$2" | tr '\\' / | sed "s#^[Cc]:#$FAKE_ROOT#"
+SH
+chmod +x "$WB/uname" "$WB/reg" "$WB/cygpath"
+JQ=$(command -v jq 2>/dev/null); [ -n "$JQ" ] && ln -sf "$JQ" "$WB/jq"
+GUID='3F2504E0-4f89-11D3-9A0C-0305E82C3301'
+winrun() { # runs the script as Git Bash on Windows 11, x64, in Windows Terminal; extra args go to the script
+  env -u __CFBundleIdentifier -u TERM_PROGRAM -u TMPDIR HOME="$WR/msyshome" USERPROFILE='C:\Users\me' \
+    APPDATA='C:\Users\me\AppData\Roaming' LOCALAPPDATA='C:\Users\me\AppData\Local' TEMP='C:\Temp' \
+    FAKE_ROOT="$WR" FAKE_GUID="$GUID" FAKE_BUILD="${FAKE_BUILD-22631}" PROCESSOR_ARCHITECTURE=AMD64 WT_SESSION=1 \
+    PATH="$WB:/usr/bin:/bin" bash "$SCRIPT" "$@"
+}
+winrun --offline > "$WORK/win.txt" 2>&1
+tr -s ' \n' '  ' < "$WORK/win.txt" > "$WORK/win1.txt"
+has    "Windows: finds Claude Desktop in AppData"       'Claude Desktop +used in the last 30 days' "$WORK/win.txt"
+has    "Windows: finds Cursor and its use in AppData"   'Cursor +used in the last 30 days' "$WORK/win.txt"
+has    "Windows: finds Goose in its Windows config"     'Goose +installed' "$WORK/win.txt"
+has    "Windows: Claude Code in the Windows profile"    'Claude Code +used in the last 30 days' "$WORK/win.txt"
+has    "Windows: reads Claude Desktop's MCP config"     'Claude Desktop +~/AppData/Roaming/Claude/claude_desktop_config\.json.*token in the file' "$WORK/win1.txt"
+has    "Windows: reads VS Code's MCP config"            'VS Code +~/AppData/Roaming/Code/User/mcp\.json' "$WORK/win1.txt"
+has    "Windows: reads Goose's MCP config"              'Goose +~/AppData/Roaming/Block/goose/config/config\.yaml' "$WORK/win1.txt"
+has    "Windows: flags a key in PowerShell history"     '~/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history\.txt +AWS' "$WORK/win1.txt"
+has    "Windows: keys in the shell's own home too"      'msyshome/\.bash_history +Groq' "$WORK/win1.txt"
+has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
+has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
+has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
+has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
+has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
+if grep -aqF -f "$WORK/keys.txt" "$WORK/win.txt"; then bad "Windows: never prints a planted key"; else ok "Windows: never prints a planted key"; fi
+
+echo "WSL"
+mkdir -p "$WORK/proc-wsl/sys/kernel" "$WORK/proc-linux/sys/kernel"
+printf '5.15.153.1-microsoft-standard-WSL2\n' > "$WORK/proc-wsl/sys/kernel/osrelease"
+printf '6.8.0-45-generic\n' > "$WORK/proc-linux/sys/kernel/osrelease"
+printf 'Linux version 6.8.0-45-generic (buildd@ubuntu)\n' > "$WORK/proc-linux/version"
+wslrun() { # proc-dir: runs the script as Linux with that /proc
+  HOME="$WORK/home" FAKE_UNAME=Linux GIRD_CHECK_PROC="$1" PATH="$WB:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '
+}
+wslrun "$WORK/proc-wsl" > "$WORK/wsl.txt"
+wslrun "$WORK/proc-linux" > "$WORK/notwsl.txt"
+has    "WSL is pointed at a secrets manager"            'files into a secrets manager, then rotate' "$WORK/wsl.txt"
+hasnot "WSL is not told to use a desktop keyring"       'GNOME Keyring' "$WORK/wsl.txt"
+has    "WSL says Windows-side files were not checked"   'inside WSL, so files on the Windows side were not checked' "$WORK/wsl.txt"
+if grep -q 'inside WSL' "$WORK/wsl.txt" && ! grep -q 'inside WSL' "$WORK/notwsl.txt" && grep -q 'GNOME Keyring or KWallet' "$WORK/notwsl.txt"; then
+  ok "only WSL, not plain Linux, gets the WSL note and loses the keyring advice"
+else bad "only WSL, not plain Linux, gets the WSL note and loses the keyring advice"; fi
+
 echo "Zeabur and the LiteLLM leftovers"
 # A minimal PATH hides any opencode, railway or zeabur command on this machine, so
 # only the files in the fake home decide.
@@ -398,6 +483,23 @@ PY
   hasnot "no report holds a file name" '\.zshrc|zsh_history|python_history|bash_profile|\.env|\.mcp|mcp\.json|config\.(toml|yaml)|cline_mcp|claude_desktop|settings(\.local)?\.json|\.aider' "$WORK/received.log"
   hasnot "no report holds a path"                        '/(Users|home|private|tmp|var)/|~/' "$WORK/received.log"
   if grep -aqF -f "$WORK/keys-places.txt" "$WORK/received.log"; then bad "no report holds the extra planted keys"; else ok "no report holds the extra planted keys"; fi
+  # After the checks above: the Windows run has a GitHub CLI login, so its report says "gh".
+  GIRD_CHECK_API="$API" report_of "$WORK/report-win.json" winrun
+  GIRD_CHECK_API="$API" FAKE_BUILD= FAKE_UNAME=MINGW64_NT-10.0-19045 report_of "$WORK/report-win10.json" winrun
+  report_of "$WORK/report-wsl.json" env HOME="$WORK/home" FAKE_UNAME=Linux GIRD_CHECK_PROC="$WORK/proc-wsl" GIRD_CHECK_API="$API" PATH="$WB:/usr/bin:/bin" bash "$SCRIPT"
+  WANT_ID=$(printf 'gird-check-v1:%s' "$GUID" | shasum -a 256 | cut -c1-64)
+  has    "Windows: os is Windows 11 for build 22000 and up" '"os":"Windows 11"' "$WORK/report-win.json"
+  has    "Windows: os is Windows 10 from uname's build when reg has none" '"os":"Windows 10"' "$WORK/report-win10.json"
+  has    "Windows: device_id is sha256 of the salt and MachineGuid as stored" "\"device_id\":\"$WANT_ID\"" "$WORK/report-win.json"
+  has    "Windows: arch from PROCESSOR_ARCHITECTURE"      '"arch":"x86_64"' "$WORK/report-win.json"
+  has    "Windows: terminal is windows-terminal with WT_SESSION" '"terminal":"windows-terminal"' "$WORK/report-win.json"
+  has    "Windows: the agents found in Windows places are reported" '"agents":\["claude-code","claude-desktop","cursor",.*"goose"' "$WORK/report-win.json"
+  has    "Windows: PowerShell history counts as shell history" '"history_keys":2,.*' "$WORK/report-win.json"
+  has    "Windows: key_places puts PSReadLine history in shell_history" '"shell_history":2' "$WORK/report-win.json"
+  hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|msyshome|_netrc' "$WORK/report-win.json"
+  if grep -q '"os":"Linux"' "$WORK/report-wsl.json" && [ -s "$WORK/wsl.txt" ] && grep -q 'files into a secrets manager' "$WORK/wsl.txt"; then
+    ok "WSL reports os Linux while giving the WSL advice"
+  else bad "WSL reports os Linux while giving the WSL advice"; fi
 else
   echo "  skip  python3 not installed"
 fi

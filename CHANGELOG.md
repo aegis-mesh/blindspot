@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Windows: under Git Bash, MSYS2 or Cygwin the script now looks in the Windows places. Agents and MCP configs in your user folder, `%APPDATA%` and `%LOCALAPPDATA%` (Claude Desktop, Cursor, VS Code, Windsurf, Antigravity, Goose, Cline), PowerShell's command history, Windows Python installs, conda and the uv cache, the LiteLLM marker files in `%TEMP%`, and the Google Cloud, GitHub CLI and `_netrc` logins kept there. The report says `Windows 10` or `Windows 11`, the device ID comes from the Windows MachineGuid the same way the PowerShell version computes it, the terminal is `windows-terminal` in Windows Terminal, and ENTER opens your result in the Windows browser.
+- WSL is recognised. It is scanned as Linux, the key advice says to use a secrets manager, ENTER opens the result with wslview or the Windows browser, and the end of the report says files on the Windows side were not checked.
+- The game only starts when the terminal's settings can be changed, so terminals that can't (some Windows ones) get the spinner.
 - Wording: the report and the result page say "AI builders" where they said "developers", "Better than" where they said "Safer than", the early-rank label is "AI builder", and a result with nothing in it reads "No findings in this scan" with a note that it is not a guarantee. What used to be called the certificate is now your "AI Exposure Check": the prompt, the result link and the image say so, and the image no longer says it was verified.
 - Every device gets its number, not only the first 1,000: "You're AI builder #1,234 to run Blindspot." Up to 1,000 it adds "One of the first 1,000."
 - A leftover `cook.pyc` alone is now a "possible leftover" to check, not an act-now hit. `cook.pth`, `cook.py`, the 1.107.0 install record, the marker files or a running loader still are.

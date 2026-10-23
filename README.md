@@ -4,7 +4,7 @@
 
 # Blindspot
 
-**See the AI keys and agents you can't.** A free, read-only check for your Mac, from [GIRD](https://gird.ai).
+**See the AI keys and agents you can't.** A free, read-only check for your Mac, Linux or Windows computer, from [GIRD](https://gird.ai).
 
 [![release](https://img.shields.io/github/v/release/aegis-mesh/blindspot?color=0D9488&label=release)](https://github.com/aegis-mesh/blindspot/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-0D9488)](LICENSE)
@@ -65,7 +65,15 @@ A small jump game that runs while the scan does, with the latest finding shown u
 
 ## Requirements
 
-macOS 13 or later, or Linux. It runs on the bash that ships with macOS (3.2) and on newer versions, and uses standard tools only: find, grep, awk, sed, od and stty. curl is used only for the public totals and to share counts. jq is used if it is installed.
+macOS 13 or later, Linux, or Windows. It runs on the bash that ships with macOS (3.2) and on newer versions, and uses standard tools only: find, grep, awk, sed, od and stty. curl is used only for the public totals and to share counts. jq is used if it is installed.
+
+### Windows
+
+Run `gird-check.sh` in Git Bash (it comes with Git for Windows), MSYS2 or Cygwin, the same way as above. It checks the Windows places: agents and MCP configs in your user folder and in `%APPDATA%` and `%LOCALAPPDATA%` (Claude Desktop, Cursor, VS Code, Windsurf, Goose), PowerShell's command history, Python installs and the uv cache under `AppData`, and the LiteLLM marker files in `%TEMP%`. Without jq, which Git Bash doesn't include, it finds MCP config files but can't count the servers in JSON ones.
+
+In WSL it checks the Linux system you run it in, not the files on the Windows side, and says so at the end.
+
+For plain PowerShell, with nothing to install, there is a PowerShell version, `gird-check.ps1`, with the same checks and the same report.
 
 ## Limits
 
