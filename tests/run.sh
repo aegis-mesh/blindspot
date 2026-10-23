@@ -127,6 +127,11 @@ LAST=$(grep -aE '^ +[0-9]+\.  ' "$OUT" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr 
 ISS=$(grep -aoE '[0-9]+ things? to fix' "$OUT" | head -n 1 | grep -aoE '^[0-9]+')
 if [ -n "$LAST" ] && [ "$LAST" = "$ISS" ]; then ok "the numbered list matches the fix count ($ISS)"; else bad "the numbered list matches the fix count"; printf '        list ends at %s, header says %s\n' "$LAST" "$ISS"; fi
 
+rm -rf "$WORK/tip-empty"; mkdir -p "$WORK/tip-empty"
+HOME="$WORK/tip-empty" bash "$SCRIPT" --offline > "$WORK/tip-empty.txt" 2>&1
+has    "with nothing found the tip is still a plain line" '^     Also: set a monthly spend limit' "$WORK/tip-empty.txt"
+hasnot "with nothing found there is no numbered fix"      '^ +1\.  ' "$WORK/tip-empty.txt"
+
 echo "summary"
 OUT=$WORK/compact.txt
 HOME="$WORK/home" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline > "$OUT" 2>&1
