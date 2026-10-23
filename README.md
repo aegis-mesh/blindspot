@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot run in a terminal: better than 72% of 846 AI builders who ran it, AI builder #142, one of the first 1,000, one line per check, and the prompt to get your AI Exposure Check" width="760"></a>
+  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot run in a terminal: one of the first 1,000 AI builders, better than 72% of 846 who ran it, 9 things to fix, one line per check, and the prompt to get your AI Exposure Check" width="760"></a>
 </p>
 
 # Blindspot

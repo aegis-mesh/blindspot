@@ -10,7 +10,8 @@ It never uses admin rights, starts an agent, an MCP server or Python, or prints 
 key. It reads files and prints paths and counts. It asks gird.ai for public totals
 when it starts. When it finishes it shares counts and a hashed device ID, never
 paths or keys, and gets back how you compare. -Offline stops all of that.
-Key formats come from Argus. gird-check.sh is the source of truth for every check.
+Key types and session locations come from data/keys.tsv and data/sessions.tsv; gird-check.sh is
+the source of truth for every other check.
 
   powershell -ExecutionPolicy Bypass -File gird-check.ps1            a short summary
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Full      every detail

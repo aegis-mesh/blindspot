@@ -10,7 +10,7 @@
 # It reads files and prints paths and counts. It asks gird.ai for public totals
 # when it starts. When it finishes it shares counts and a hashed device ID, never
 # paths or keys, and gets back how you compare. --offline stops all of that.
-# Key formats come from Argus.
+# Key types and agent session locations come from data/keys.tsv and data/sessions.tsv.
 #
 #   bash gird-check.sh             a short summary; press 1 to 5 for details
 #   bash gird-check.sh --full      every detail, no summary
