@@ -237,16 +237,30 @@ $P_GITHUB = 'gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59
 $P_NPM = 'npm_[A-Za-z0-9]{36}'
 $ALL_KEYS = "$P_ANTHROPIC|$P_OPENAI|$P_GOOGLE|$P_OPENROUTER|$P_GROQ|$P_XAI|$P_HF|$P_PPLX|$P_REPLICATE|$P_AWS|$P_GITHUB|$P_NPM"
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
-$P_ASSIGN = '[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^\s"$\\]{12,}'
-$P_JSONSECRET = '"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|accessToken|access_token|authToken|token|secret)"\s*:\s*"[^"$<{][^"]{11,}"'
-$P_TOMLSECRET = '[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\s*=\s*"[^"$<{][^"]{11,}"'
+# These match what gird-check.sh's patterns match, rewritten so .NET's backtracking
+# stays linear: a name is tried once from its first character, (?>...) never gives
+# characters back, and the lookahead finds KEY, TOKEN, SECRET or PASSWORD in one
+# pass. gird-check.sh's P_ASSIGN wants a capital letter somewhere before the word.
+# grep reads a line at a time, so [^\S\n] and [^"\n] keep a match on one line.
+$P_NAME = '(?<![A-Z0-9_])(?=[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))(?>[A-Z0-9_]*)'
+$P_ASSIGN = '(?<![A-Z0-9_])(?=(?>[0-9_]*)[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))(?>[A-Z0-9_]+)=[^\s"$\\]{12,}'
+$P_JSONSECRET = '"(?:(?=[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))(?>[A-Z0-9_]*)|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[^\S\n]*:[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
+$P_TOMLSECRET = $P_NAME + '[^\S\n]*=[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 # grep reads line by line, so ^ and $ are line ends here too.
+# Every pattern has a time limit. A file that hits it is listed as skipped, never
+# taken as clean. GIRD_CHECK_REGEX_TIMEOUT_MS is for tests.
 $RxOpt = [Text.RegularExpressions.RegexOptions]::Multiline
-$RxKeys = New-Object regex($ALL_KEYS, $RxOpt)
-$RxInline = New-Object regex("$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET", $RxOpt)
-$RxCommand = New-Object regex("$ALL_KEYS|$P_ASSIGN", $RxOpt)
-$RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$RxTimeout = [TimeSpan]::FromSeconds(2)
+if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS -gt 0) { $RxTimeout = [TimeSpan]::FromMilliseconds([int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS) }
+$RxKeys = New-Object regex($ALL_KEYS, $RxOpt, $RxTimeout)
+$RxInline = New-Object regex("$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET", $RxOpt, $RxTimeout)
+$RxCommand = New-Object regex("$ALL_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
+$RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
+$SlowFiles = New-Object System.Collections.Generic.List[string]
+function Mark-Slow([string]$f) {
+  if (-not $SlowFiles.Contains($f)) { $SlowFiles.Add($f); Progress "Skipped, took too long to check: $(Short $f)" }
+}
 
 $TextCache = @{}
 function Read-Text([string]$f) {
@@ -256,17 +270,24 @@ function Read-Text([string]$f) {
   $TextCache[$f] = $t
   $t
 }
-function Has-Match([string]$f, [regex]$rx) { $t = Read-Text $f; ($null -ne $t) -and $rx.IsMatch($t) }
+function Has-Match([string]$f, [regex]$rx) {
+  if ($SlowFiles.Contains($f)) { return $false }
+  $t = Read-Text $f; if ($null -eq $t) { return $false }
+  try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false }
+}
 # A match that is not a placeholder like your-key-here.
 function Has-RealMatch([string]$f, [regex]$rx) {
+  if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
-  foreach ($m in $rx.Matches($t)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { return $true } }
+  try { foreach ($m in $rx.Matches($t)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { return $true } } } catch { Mark-Slow $f }
   $false
 }
 function Providers-In([string]$f) {
+  if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
   $seen = New-Object System.Collections.Generic.List[string]
-  foreach ($m in $RxKeys.Matches($t)) {
+  try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
+  foreach ($m in $all) {
     $s = $m.Value -replace '^[^A-Za-z]+', ''
     $p = $null
     if ($s -cmatch '^sk-ant-') { $p = 'Anthropic' }
@@ -395,12 +416,12 @@ function Json-Servers([string]$f) {
 function Npm-WouldShip([string]$dir) {
   $pkg = J $dir 'package.json'; $t = Read-Text $pkg
   if ($null -eq $t) { return $false }
-  if ($t -match '"private"\s*:\s*true') { return $false }
-  if ($t -match '"files"\s*:') { return $false }
+  if ($t -cmatch '"private"\s*:\s*true') { return $false }
+  if ($t -cmatch '"files"\s*:') { return $false }
   $ni = Read-Text (J $dir '.npmignore')
-  if ($null -ne $ni) { return -not ($ni -match '(?m)(^|/)\.claude') }
+  if ($null -ne $ni) { return -not ($ni -cmatch '(?m)(^|/)\.claude') }
   $gi = Read-Text (J $dir '.gitignore')
-  if ($null -ne $gi -and $gi -match '\.claude') { return $false }
+  if ($null -ne $gi -and $gi -cmatch '\.claude') { return $false }
   $true
 }
 
@@ -426,7 +447,7 @@ $PruneNames = @('node_modules', '.git', '.Trash', '.cache', '.npm', '.pnpm-store
   '.m2', '.pyenv', '.rbenv', '.nvm', '.bun', '.deno', '__pycache__', '.tox', '.next', 'dist', 'build', 'target', 'vendor',
   'Pods', 'DerivedData', '.terraform', '.gem', '.cocoapods', '.android', '.pub-cache', '.dartServer', '.swiftpm', '.ollama',
   '.lmstudio', '.colima', '.lima', '.orbstack', '.minikube', '.vagrant.d', '.docker', '.oh-my-zsh', '.zsh_sessions',
-  '.codeium', '.vscode-server')
+  '.codeium', '.vscode-server', '.nuget', '.dotnet', 'anaconda3', 'miniconda3', 'miniforge3')
 $PrunePaths = New-Object System.Collections.Generic.List[string]
 foreach ($p in @('AppData', 'Library', 'Applications', 'Pictures', 'Videos', 'Movies', 'Music', 'Public', 'go', '.vscode', '.cursor',
     '.windsurf', '.local/share', 'Dropbox', 'Google Drive', 'Saved Games', 'Favorites', 'Contacts', 'Links', 'Searches',
@@ -606,7 +627,7 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
     if ($null -ne $names) { $nm = @($names); $c = $nm.Count }
   } elseif ($f.EndsWith('.yaml') -or $f.EndsWith('.yml')) {
     $t = Read-Text $f
-    if (-not ($null -ne $t -and $t -match '(?m)^\s*(mcpServers|extensions):')) { $c = 0 }
+    if (-not ($null -ne $t -and $t -cmatch '(?m)^\s*(mcpServers|extensions):')) { $c = 0 }
   }
   $tok = $false
   if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline)) { $tok = $true }
@@ -704,7 +725,7 @@ $Logins = New-Object System.Collections.Generic.List[string]; $LoginIds = New-Ob
 function Login($paths, [string]$label, [string]$id, [string]$marker = '') {
   foreach ($f in @($paths)) {
     if (-not (Is-File $f)) { continue }
-    if ($marker) { $t = Read-Text $f; if ($null -eq $t -or -not ($t -match $marker)) { continue } }
+    if ($marker) { $t = Read-Text $f; if ($null -eq $t -or -not ($t -cmatch $marker)) { continue } }
     $Logins.Add($label); $LoginIds.Add($id); return
   }
 }
@@ -790,7 +811,7 @@ foreach ($sp in $SitesAll) {
   if (-not (Is-Dir $sp)) { continue }
   $N_PY++
   foreach ($d in (Glob-Dirs $sp 'litellm-*.dist-info')) {
-    $v = [IO.Path]::GetFileName($d) -replace '^litellm-', '' -replace '\.dist-info$', ''
+    $v = [regex]::Replace(([IO.Path]::GetFileName($d) -replace '^litellm-', '' -replace '\.dist-info$', ''), '[\x00-\x1f\x7f-\x9f]', '?')
     $N_LITE++; if (-not $LiteVers.Contains($v)) { $LiteVers.Add($v) }
   }
   $bad = New-Object System.Collections.Generic.List[string]
@@ -965,6 +986,7 @@ elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0) { $Sev = $cR
 elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
 if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
 $PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of $(Commas $PCT_N) AI builders who ran Blindspot" }
+$SlowText = "$(Plural $SlowFiles.Count 'file' 'files') skipped: took too long to check"
 $Stats = "$(Plural $N_AG 'coding agent' 'coding agents'), $N_IDLE not used in 30 days, $(Plural $N_MCP 'MCP server' 'MCP servers'), $(Plural $KEY_FILES 'file' 'files') with keys in plain text, $(Plural $N_ALLOW 'key' 'keys') in allow lists"
 $Capture = $true; [void]$Cap.Clear()
 # The first 1,000 get their place in line, above either header.
@@ -1015,6 +1037,11 @@ if ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, ag
 $shown = 0
 foreach ($r in $KeyRows) { $shown++; if ($shown -le 20) { Pair "$cRed$gX$cRst" (Short $r[0]) 44 $r[1] } }
 if ($KEY_FILES -gt 20) { Emit "        ${cDim}and $($KEY_FILES - 20) more$cRst" }
+if ($SlowFiles.Count -gt 0) {
+  Blank
+  Emit "     $cYel!$cRst  $cBold$SlowText$cRst"
+  foreach ($f in ($SlowFiles | Select-Object -First 20)) { Emit "        $(Short $f)" }
+}
 if ($LoginsText) {
   Blank
   Emit "     ${cBold}Login files any agent you run can read$cRst"
@@ -1125,6 +1152,7 @@ CLine '02' $G2 'MCP servers' $D2
 CLine '03' $G3 'Keys in plain text' $D3
 CLine '04' $G4 'Allow lists' $D4
 CLine '05' $G5 "This week's leaks" $D5
+if ($SlowFiles.Count -gt 0) { Blank; Wrap "$SlowText, like $(Short $SlowFiles[0])" 5 "   $cYel!$cRst " '     ' }
 if ($ISSUES -gt 0) { Blank; Wrap $Todo[0] 14 "   ${cBold}First fix:$cRst " (' ' * 14) }
 Blank
 Wrap $ArgusLine 2 '  ' '  ' $cDim

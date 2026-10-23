@@ -129,11 +129,41 @@ has    "-Full shows every detail"              'KEYS IN PLAIN TEXT' "$WORK/full.
 echo "placeholders and the LiteLLM leftovers"
 mkdir -p "$WORK/ph/code/ph" "$WORK/ph/AppData/Local/Temp"
 printf '{"mcpServers":{"x":{"command":"npx","env":{"API_KEY":"your-api-key-goes-here"}}}}\n' > "$WORK/ph/code/ph/.mcp.json"
-printf 'OPENAI_API_KEY=%s\n' 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > "$WORK/ph/code/ph/.env"
+# A placeholder shaped like a real command key, which only the placeholder screen stops.
+mkdir -p "$WORK/ph/code/ph/.claude"; printf '{"name":"ph","private":true}\n' > "$WORK/ph/code/ph/package.json"
+printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here npm test)"]}}\n' > "$WORK/ph/code/ph/.claude/settings.local.json"
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
-has    "a placeholder key is not a key"        'no AI or cloud keys in plain text' "$WORK/ph.txt"
+has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
 has    "no malware in a clean home"            'no LiteLLM, OpenCode, Railway or Zeabur leaks' "$WORK/ph.txt"
+
+echo "files built to make a pattern backtrack"
+# Long runs of capitals and of KEY, with and without the = or quote a match needs,
+# next to a real key. gird-check.sh's patterns, run as they are in .NET, took
+# seconds to forever on these.
+mkdir -p "$WORK/slow/code/s/.claude" "$WORK/slow/AppData/Local/Temp"
+python3 - "$WORK/slow/code/s" "$(sed -n 5p "$WORK/keys.txt")" <<'PY2'
+import sys
+d, key = sys.argv[1], sys.argv[2]
+k = 'KEY' * 7000; a = 'A' * 20000
+lines = [a, k, '"' + k, k + ' = "abc', '_' * 5000 + 'A' + k, 'GROQ_API_KEY=' + key]
+open(d + '/.env', 'w').write('\n'.join(lines) + '\n')
+open(d + '/.claude/settings.local.json', 'w').write('{"permissions":{"allow":["Bash(' + a + k + ')"]}}\n')
+open(d + '/.mcp.json', 'w').write('{"mcpServers":{"x":{"command":"' + k + '"}}, "' + k + '": "' + a + '\n')
+PY2
+T0=$(date +%s)
+psrun "$WORK/slow" -- -Offline > "$WORK/slow.txt" 2>&1
+T=$(( $(date +%s) - T0 ))
+if [ "$T" -le 20 ]; then ok "it finishes quickly (${T}s)"; else bad "it finishes quickly, took ${T}s"; fi
+hasnot "no file is skipped"                    'skipped: took too long' "$WORK/slow.txt"
+has    "the real key next to them is found"    '~/code/s/\.env +Groq' "$WORK/slow.txt"
+# With a limit too short for a large file, the file is listed, not taken as clean.
+python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/slow/code/s/.env.big"
+psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 -- -Offline > "$WORK/slow-to.txt" 2>&1
+psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_COMPACT=1 -- -Offline > "$WORK/slow-to-c.txt" 2>&1
+has    "a file that hits the time limit is listed" '[0-9]+ files? skipped: took too long to check' "$WORK/slow-to.txt"
+has    "with its path"                         '^ +~/code/s/\.env\.big$' "$WORK/slow-to.txt"
+has    "and the summary says so"               'skipped: took too long to check, like' "$WORK/slow-to-c.txt"
 cp -R "$WORK/clean" "$WORK/pyc"
 SP="$WORK/pyc/code/winpy/.venv/Lib/site-packages"; mkdir -p "$SP/__pycache__"; printf 'home = C:\\Python312\n' > "$WORK/pyc/code/winpy/.venv/pyvenv.cfg"
 : > "$SP/__pycache__/cook.cpython-312.pyc"
@@ -242,8 +272,8 @@ B_LINK=$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/bash-online.txt" | tail -n 1 |
 P_LINK=$(grep -aoE 'blindspot/card/#[^ ]*' "$OUT" | tail -n 1 | tr '&' '\n' | sed 's/=.*//' | tr '\n' ' ')
 if [ -n "$B_LINK" ] && [ "$B_LINK" = "$P_LINK" ]; then ok "the result link has gird-check.sh's parameters in its order"; else bad "the result link has gird-check.sh's parameters"; printf '        bash: %s\n        pwsh: %s\n' "$B_LINK" "$P_LINK"; fi
 
-# The Worker's own validation, with the three Windows values checked against the
-# plan instead, since the Worker learns them in the same release.
+# The Worker's own validation. It must keep the Windows values as sent, not turn
+# them into 'other', and they must be the plan's values.
 WORKER=${GIRD_CHECK_WORKER:-}
 if [ -n "$WORKER" ] && [ -f "$WORKER" ] && command -v node >/dev/null 2>&1; then
   node --no-warnings --input-type=module - "$WORKER" "$WORK/report-ps.json" > "$WORK/worker.txt" 2>&1 <<'JS'
@@ -253,8 +283,8 @@ const { validateEvent } = await import(pathToFileURL(process.argv[2]).href)
 const r = JSON.parse(readFileSync(process.argv[3], 'utf8').split('\n')[0])
 const plan = { os: /^(Windows( 10| 11)?|macOS|Linux)$/, shell: /^(pwsh|powershell)$/, terminal: /^(windows-terminal|conhost|vscode|other|unknown)$/ }
 const bad = Object.entries(plan).filter(([k, re]) => !re.test(r[k])).map(([k]) => k)
-const v = validateEvent({ ...r, os: 'Linux', shell: 'other', terminal: 'other' })
-const dropped = v.ok ? Object.keys(r).filter((k) => !(k in v.event)) : []
+const v = validateEvent(r)
+const dropped = v.ok ? Object.keys(r).filter((k) => JSON.stringify(v.event[k]) !== JSON.stringify(r[k])) : []
 console.log(v.ok && !bad.length && !dropped.length ? 'valid' : `invalid: ${v.why || ''} plan: ${bad} dropped: ${dropped}`)
 JS
   if grep -qx valid "$WORK/worker.txt"; then ok "the Worker accepts the report and keeps every field"; else bad "the Worker accepts the report"; sed 's/^/        /' "$WORK/worker.txt"; fi
