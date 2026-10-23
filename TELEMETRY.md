@@ -64,7 +64,7 @@ The result link also carries the run's random ID, the `run_id` from the report. 
 
 ## On our side
 
-The totals and percentiles come from each device's latest report. The server stores each event with the time it arrived and the two-letter country Cloudflare derives from the connection. It doesn't store your IP address. Events are kept for 24 months, then deleted. We use them for aggregate statistics and case studies, and never publish figures about a group smaller than 20 devices. The privacy notice is at [gird.ai/privacy](https://gird.ai/privacy).
+The totals and percentiles come from each device's latest report. The server stores each event with the time it arrived and the two-letter country Cloudflare derives from the connection. It doesn't store your IP address. Events are kept for 24 months, then deleted. We use them for aggregate statistics and case studies. The public totals at `gird.ai/api/check/stats` cover every device together and start once 2 devices have run it, so while few devices have run it they describe a small group. Case-study figures are never published for a group smaller than 20 devices. The privacy notice is at [gird.ai/privacy](https://gird.ai/privacy).
 
 ## Deleting your data
 

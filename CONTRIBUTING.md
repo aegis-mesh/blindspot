@@ -20,7 +20,7 @@ Security problems go privately through [SECURITY.md](SECURITY.md), never into a 
 5. Sign off every commit with `git commit -s` (see [Sign your commits](#sign-your-commits)).
 6. Open the pull request against `main`, fill in the template's checklist, and link the issue (`Fixes #123`).
 7. CI runs shellcheck and the tests on macOS and Linux. It has to pass.
-8. A maintainer reviews the change. Only maintainers can merge.
+8. A code owner who didn't write the change reviews it. Only maintainers can merge, and nothing reaches `main` without that approval and a green CI.
 
 ## The rules the script keeps
 
