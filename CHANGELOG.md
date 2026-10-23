@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- MCP servers found inside plugin folders and caches (Codex's `.tmp/plugins`, Claude's `plugins` folder) are counted apart, such as "9 servers, 50 more in plugin folders", and shown as one line in the details. They no longer inflate the server count, and they are left out of the counts the script shares. A token written into one of those files is still flagged.
 - Zeabur joins OpenCode and Railway in the check for this week's leaks: if the Zeabur CLI or its settings folder is on your Mac, it says to rotate the keys stored there. A leftover compiled `cook` file from the LiteLLM malware now counts as a sign of it, even after `cook.py` was deleted.
 - Your number among the first 1,000 now sits on its own line above your result, not inside it, and is the only line that mentions the first 1,000. Until 1,000 developers have run it, the line under the banner is left out.
 - A scan that finishes within about two seconds goes straight to the results. The game only appears when the scan is still running after that, instead of flashing up for a moment.

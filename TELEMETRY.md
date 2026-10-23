@@ -28,7 +28,7 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | `grade`, `score` | `"C"`, `64` | The result. The grade is for research counts only; the script shows how you compare instead |
 | `agents`, `agents_idle` | `["claude-code","codex"]`, `1` | Agents installed, from a fixed list, and how many weren't used in 30 days |
 | `agents_idle_ids` | `["codex"]` | Which of those agents weren't used in 30 days |
-| `mcp_servers`, `mcp_configs`, `mcp_token_files` | `6`, `3`, `1` | MCP servers, config files with servers, and configs with a token written in |
+| `mcp_servers`, `mcp_configs`, `mcp_token_files` | `6`, `3`, `1` | MCP servers, config files with servers, and configs with a token written in. Configs inside plugin folders and caches are not counted in the first two |
 | `mcp_clients`, `mcp_token_clients` | `{"claude-code":4,"codex":2}`, `["codex"]` | How many MCP servers each app has, and which apps keep a token written in their config. Apps from a fixed list |
 | `mcp_known`, `mcp_other` | `["github","playwright"]`, `3` | Which well-known MCP servers you have, from a fixed list, and how many others. Any other server name is never sent |
 | `key_files`, `key_providers`, `history_keys` | `4`, `["anthropic","aws"]`, `1` | Files with keys in plain text, which providers from a fixed list, and how many shell history files hold keys |

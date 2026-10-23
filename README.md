@@ -38,7 +38,7 @@ Please don't pipe it straight into a shell. Reading it first is the point.
 ## What it checks
 
 1. **Coding agents.** Every agent installed, such as Claude Code, Codex, Cursor, Gemini CLI and OpenCode, and whether you used it in the last 30 days. An agent you never open can still be driven by a poisoned package. That is how the Nx attack stole keys from developer laptops.
-2. **MCP servers.** The servers each agent is set up to start, and any token written straight into a config file.
+2. **MCP servers.** The servers each agent is set up to start, and any token written straight into a config file. Configs inside plugin folders and caches, such as Codex's `.tmp/plugins`, are shown as a separate count.
 3. **Keys in plain text.** AI and cloud keys in shell profiles, shell history, agent configs and `.env` files, grouped by provider and file. It also lists login files any agent can read, such as AWS credentials and SSH keys without a passphrase.
 4. **Keys saved in Claude Code allow lists.** Click "always allow" on a command that has a key in it, and Claude Code saves the whole command in the project's settings file. Blindspot flags each one, and whether an npm publish from that folder would ship it.
 5. **That week's leaks.** Files left by the LiteLLM 1.107.0 malware in every Python environment it finds, the bad package in your uv cache, and what to rotate if you use OpenCode Console, Railway or Zeabur.

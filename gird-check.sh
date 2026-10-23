@@ -896,7 +896,13 @@ Continue|continue|$H/.continue/config.yaml
 Goose|goose|$H/.config/goose/config.yaml
 OpenCode|opencode|$H/.config/opencode/opencode.json"
 
-MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""
+MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""; N_MCP_CACHE=0; N_MCP_CACHEF=0
+# Configs inside plugin catalogs and caches (Codex's .tmp/plugins, Claude's plugins folder) are
+# counted apart: they are copies of other people's configs, not servers this person set up.
+is_plugin_path() {
+  case "$1" in */.codex/.tmp/*|*/.claude/plugins/*|*/.cache/*|*/Library/Caches/*|*/node_modules/*) return 0 ;; esac
+  return 1
+}
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
@@ -921,7 +927,10 @@ mcp_row() { # who file client-id
   case "$MCP_FLAGGED" in *"|$_f|"*) inline_secret "$_f" && _tok=1 ;; esac
   [ "$_c" = 0 ] && [ "$_tok" -eq 0 ] && return
   _ci=$3; in_list "$_ci" "$MCP_CLIENT_IDS" || _ci=other
-  if [ -n "$_c" ]; then
+  _pl=0; is_plugin_path "$_f" && _pl=1
+  if [ -n "$_c" ] && [ "$_pl" -eq 1 ]; then
+    N_MCP_CACHE=$((N_MCP_CACHE + _c)); N_MCP_CACHEF=$((N_MCP_CACHEF + 1))
+  elif [ -n "$_c" ]; then
     N_MCP=$((N_MCP + _c)); MCP_TALLY="$MCP_TALLY$_ci $_c
 "
     [ -n "$_nm" ] && MCP_NAMES="$MCP_NAMES$_nm
@@ -932,7 +941,7 @@ mcp_row() { # who file client-id
     case " $MCP_TOK_IDS " in *" $_ci "*) ;; *) MCP_TOK_IDS="${MCP_TOK_IDS:+$MCP_TOK_IDS }$_ci" ;; esac
     progress x "Token written in an MCP config: $(short "$_f")"
   fi
-  MCP_ROWS="$MCP_ROWS$1|$_f|$_c|$_tok
+  MCP_ROWS="$MCP_ROWS$1|$_f|$_c|$_tok|$_pl
 "
 }
 while IFS='|' read -r who cid f; do
@@ -949,9 +958,10 @@ while IFS= read -r f; do
 done <<EOF
 $PROJECT_MCP
 EOF
+MCP_CACHE_NOTE=""; [ "$N_MCP_CACHE" -gt 0 ] && MCP_CACHE_NOTE=", $N_MCP_CACHE more in plugin folders"
 if [ "$N_MCP_TOKEN" -eq 0 ]; then
-  if [ "$N_MCP" -gt 0 ]; then progress o "Found $(plural "$N_MCP" "MCP server" "MCP servers"), no tokens written in their configs"
-  else progress i "No MCP servers configured"; fi
+  if [ "$N_MCP" -gt 0 ]; then progress o "Found $(plural "$N_MCP" "MCP server" "MCP servers")$MCP_CACHE_NOTE, no tokens written in their configs"
+  else progress i "No MCP servers configured$MCP_CACHE_NOTE"; fi
 fi
 
 # --- 3. Keys in plain text ---------------------------------------------------
@@ -1276,7 +1286,7 @@ LANGCODE=${ORIG_LANG%%.*}
 case "$LANGCODE" in [a-z][a-z]|[a-z][a-z]_[A-Z][A-Z]) ;; *) LANGCODE=other ;; esac
 VIA=none; [ -n "${CLAUDECODE:-}" ] && VIA=claude-code
 count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf 0; fi; }
-N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(count_lines "$MCP_ROWS")
+N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s' "$MCP_ROWS" | grep -c '|0$')
 BASHV=${BASH_VERSINFO[0]:-0}
 # For case studies: ids from the fixed lists near the top, and counts. Labels go
 # in, but only list ids and a number come out of mcp_match.
@@ -1355,9 +1365,10 @@ EOF
 
 SEC1=$CAP; CAP=""
 section 02 "MCP SERVERS" "$(plural "$N_MCP" server servers)"
-if [ -z "$MCP_ROWS" ]; then emit "     No MCP servers configured."; fi
-while IFS='|' read -r who f c tok; do
+if [ "$N_MCP" -eq 0 ] && [ "$N_MCP_TOKEN" -eq 0 ]; then emit "     No MCP servers configured."; fi
+while IFS='|' read -r who f c tok pl; do
   [ -n "$who" ] || continue
+  [ "$pl" = 1 ] && [ "$tok" != 1 ] && continue
   if [ -n "$c" ]; then d=$(plural "$c" server servers); else d="servers configured"; fi
   printf -v nm '%-14s %s' "$who" "$(short "$f")"
   if [ "$tok" = 1 ]; then pair "${RED}✗${RST}" "$nm" 46 "$d, ${RED}token in the file${RST}"
@@ -1365,6 +1376,9 @@ while IFS='|' read -r who f c tok; do
 done <<EOF
 $MCP_ROWS
 EOF
+if [ "$N_MCP_CACHE" -gt 0 ]; then
+  pair "${DIM}·${RST}" "Plugin folders" 46 "${DIM}$(plural "$N_MCP_CACHE" server servers) in $(plural "$N_MCP_CACHEF" file files), not counted above${RST}"
+fi
 
 SEC2=$CAP; CAP=""
 section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
@@ -1510,9 +1524,9 @@ cline() { # number mark label detail
 if [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi
-if [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$(plural "$N_MCP" server servers), tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
-elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$(plural "$N_MCP" server servers), a token in $(short "$MCP_TOK_FIRST")"
-elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$(plural "$N_MCP" server servers), no tokens in their configs"
+if [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
+elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE, a token in $(short "$MCP_TOK_FIRST")"
+elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE, no tokens in their configs"
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST%%|*}") (${KEY_FIRST#*|})"
 elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST%%|*}") holds ${KEY_FIRST#*|} keys"

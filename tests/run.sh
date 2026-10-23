@@ -93,6 +93,22 @@ has    "a leftover cook.pyc is a sign of the malware" 'site-packages: cook\.pyc'
 has    "and it is flagged as act now"          'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc.txt"
 hasnot "no pyc, no malware flag"               'Act now' "$WORK/zb-none.txt"
 
+echo "MCP configs in plugin folders"
+cp -R "$WORK/clean" "$WORK/mcp-pl"
+mkdir -p "$WORK/mcp-pl/.codex/.tmp/plugins/plugins/a" "$WORK/mcp-pl/.claude/plugins/synced/b"
+printf '{"mcpServers":{"one":{"command":"x"},"two":{"command":"y"}}}\n' > "$WORK/mcp-pl/.codex/.tmp/plugins/plugins/a/.mcp.json"
+printf '{"mcpServers":{"three":{"command":"z"}}}\n' > "$WORK/mcp-pl/.claude/plugins/synced/b/.mcp.json"
+HOME="$WORK/clean" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-base.txt"
+HOME="$WORK/mcp-pl" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-pl.txt"
+HOME="$WORK/mcp-pl" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-pl-full.txt"
+BASE=$(grep -aoE '02 . MCP servers +[0-9]+ servers' "$WORK/mcp-base.txt" | grep -aoE '[0-9]+ servers')
+if [ -n "$BASE" ]; then ok "the baseline has a server count ($BASE)"; else bad "the baseline has a server count"; fi
+has    "plugin-folder servers are counted apart" "02 . MCP servers +$BASE, 3 more in plugin folders" "$WORK/mcp-pl.txt"
+hasnot "the baseline mentions no plugin folders" 'plugin folders' "$WORK/mcp-base.txt"
+has    "the details total only the servers set up" "MCP SERVERS +$BASE " "$WORK/mcp-pl-full.txt"
+has    "the details give one plugin-folders line" 'Plugin folders +3 servers in 2 files, not counted above' "$WORK/mcp-pl-full.txt"
+hasnot "plugin-folder files are not listed one by one" 'plugins/a/\.mcp\.json' "$WORK/mcp-pl-full.txt"
+
 echo "summary"
 OUT=$WORK/compact.txt
 HOME="$WORK/home" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline > "$OUT" 2>&1
