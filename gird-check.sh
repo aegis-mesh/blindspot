@@ -1057,7 +1057,7 @@ while IFS= read -r f; do
   if grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"' "$f" 2>/dev/null; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
   fi
-  if grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | grep -qvE '://(localhost|127\.0\.0\.1|\[::1\])([:/"]|$)'; then
+  if grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | grep -qvE ':[[:space:]]*"[A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/[^"]*)?"$'; then
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
   [ -n "$_w" ] && auto_row "$f" "$_w"

@@ -692,7 +692,7 @@ $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-
 $RxWormRun = New-Object regex('\.(claude|vscode)[/\\]+(router_runtime|tanstack_runner)\.js', $RxOpt, $RxTimeout)
 $RxHooks = New-Object regex('"(PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact|PermissionRequest|apiKeyHelper|statusLine)"\s*:|"hooks"\s*:\s*\{\s*"', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
-$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?![^"]*://(localhost|127\.0\.0\.1|\[::1\])([:/]|"))[^"]*"', $RxOpt, $RxTimeout)
+$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
 function Auto-Row([string]$f, [string]$what) {
   if (Has-Match $f $RxWormRun) { $WormRefs.Add($f) }
@@ -1056,7 +1056,7 @@ function Npm-Scan([string]$where, [string]$text) {
       if ($base.StartsWith("$b-", [StringComparison]::Ordinal)) { Npm-Hit $where $nm $base.Substring($b.Length + 1) }
     }
     foreach ($m in $RxTok.Matches($text)) { Npm-Hit $where $m.Groups[1].Value $m.Groups[2].Value }
-  } catch { $script:NpmSlow++; Mark-Slow $where }
+  } catch { if (-not $SlowFiles.Contains($where)) { $script:NpmSlow++ }; Mark-Slow $where }
 }
 # Read directly rather than through Read-Text, so big lockfiles are not kept in memory.
 $N_LOCK = 0; $NpmSlow = 0
@@ -1421,6 +1421,7 @@ $leaks = @(); if ($OC -eq 1) { $leaks += 'OpenCode' }; if ($RW -eq 1) { $leaks +
 if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor found. Remove it before revoking tokens' }
 elseif ($MAL_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of npm malware. Act now' }
 elseif ($LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of the LiteLLM malware. Act now' }
+elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"

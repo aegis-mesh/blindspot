@@ -103,6 +103,7 @@ hasnot "ignores near-miss versions and names" 'axios 1\.14\.10|my-axios|keyv 6\.
 has    "finds a bad version in a pnpm 8 lockfile" '@tanstack/history 1\.161\.9 \(TanStack worm' "$OUT"
 has    "finds a planted worm file"            'code/planted/\.vscode/tanstack_runner\.js' "$OUT"
 hasnot "does not list a worktree's settings again" 'worktrees/w1' "$OUT"
+has    "a localhost name with a login prefix is not local" 'code/sneaky/\.claude/settings\.json' "$OUT"
 has    "finds any version of a fake AI tool package" 'claud-code 1\.0\.3 \(fake AI tool packages' "$OUT"
 has    "finds a bad package in npm's cache"    '@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI' "$OUT"
 has    "puts the wiper first"                  'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' "$OUT"
@@ -182,11 +183,15 @@ hasnot "no file is skipped"                    'skipped: took too long' "$WORK/s
 has    "the real key next to them is found"    '~/code/s/\.env +Groq' "$WORK/slow.txt"
 # With a limit too short for a large file, the file is listed, not taken as clean.
 python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/slow/code/s/.env.big"
+mkdir -p "$WORK/slow/.npm/_cacache/index-v5/aa"
+python3 -c "import sys; open(sys.argv[1], 'w').write('pkg-name@1.2.3 /pkg-name/-/pkg-name-1.2.3.tgz ' * 200000)" "$WORK/slow/.npm/_cacache/index-v5/aa/big"
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 -- -Offline > "$WORK/slow-to.txt" 2>&1
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_COMPACT=1 -- -Offline > "$WORK/slow-to-c.txt" 2>&1
 has    "a file that hits the time limit is listed" '[0-9]+ files? skipped: took too long to check' "$WORK/slow-to.txt"
 has    "with its path"                         '^ +~/code/s/\.env\.big$' "$WORK/slow-to.txt"
 has    "and the summary says so"               'skipped: took too long to check, like' "$WORK/slow-to-c.txt"
+has    "npm's cache that hits the limit is not called clean" 'npm worms +not fully checked: 1 file took too long' "$WORK/slow-to.txt"
+has    "and the summary row is not green"      'Recent leaks +npm packages not fully checked' "$WORK/slow-to-c.txt"
 cp -R "$WORK/clean" "$WORK/pyc"
 SP="$WORK/pyc/code/winpy/.venv/Lib/site-packages"; mkdir -p "$SP/__pycache__"; printf 'home = C:\\Python312\n' > "$WORK/pyc/code/winpy/.venv/pyvenv.cfg"
 : > "$SP/__pycache__/cook.cpython-312.pyc"

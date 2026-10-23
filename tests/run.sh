@@ -59,6 +59,7 @@ for B in $BASHES; do
   has    "finds a bad version in a pnpm 8 lockfile" '@tanstack/history 1\.161\.9 \(TanStack worm' "$OUT"
   has    "finds a planted worm file"            'code/planted/\.vscode/tanstack_runner\.js' "$OUT"
   hasnot "does not list a worktree's settings again" 'worktrees/w1' "$OUT"
+  has    "a localhost name with a login prefix is not local" 'code/sneaky/\.claude/settings\.json' "$OUT"
   has    "finds any version of a fake AI tool package" 'claud-code 1\.0\.3 \(fake AI tool packages' "$OUT"
   has    "finds a bad package in npm's cache"    '@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI' "$OUT"
   has    "puts the wiper first"                  'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' "$OUT"
