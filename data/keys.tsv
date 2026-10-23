@@ -1,0 +1,17 @@
+# Key types Blindspot looks for. One line each, tab separated, most specific first: the first
+# line whose start matches names the provider. After editing, run: bash tools/gen.sh
+# A new id must also be added to PROVIDERS in gird-website worker/check-stats.js, or gird.ai
+# drops it from the counts. Patterns are POSIX extended regexes that .NET reads the same way.
+# id	name	starts	pattern
+anthropic	Anthropic	sk-ant-	sk-ant-[A-Za-z0-9_-]{90,}
+openrouter	OpenRouter	sk-or-v1-	sk-or-v1-[a-f0-9]{64}
+openai	OpenAI	sk-	sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
+google	Google	AIza|AQ[.]	AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}
+groq	Groq	gsk_	gsk_[A-Za-z0-9]{52}
+xai	xAI	xai-	xai-[A-Za-z0-9]{64,}
+huggingface	Hugging Face	hf_	(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)
+perplexity	Perplexity	pplx-	pplx-[A-Za-z0-9]{40,52}
+replicate	Replicate	r8_	r8_[A-Za-z0-9]{37}
+aws	AWS	AKIA|bedrock-api-key	(^|[^A-Z0-9])AKIA[0-9A-Z]{16}([^A-Z0-9]|$)|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t
+github	GitHub	gh[pousr]_|github_pat_	gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
+npm	npm	npm_	npm_[A-Za-z0-9]{36}

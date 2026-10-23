@@ -16,7 +16,8 @@ OPENAI="${s}${d}proj${d}$(rnd 130)"
 GH="g""hp_$(rnd 36)"
 AWSK="AK""IA$(upper 16)"
 GROQ="gs""k_$(rnd 52)"
-printf '%s\n' "$ANTH" "$OPENAI" "$GH" "$AWSK" "$GROQ" > "$KEYS"
+HFK="h""f_$(rnd 36)"
+printf '%s\n' "$ANTH" "$OPENAI" "$GH" "$AWSK" "$GROQ" "$HFK" > "$KEYS"
 
 printf 'export ANTHROPIC_API_KEY=%s\nexport OPENAI_API_KEY=%s\n' "$ANTH" "$OPENAI" > "$F/.zshrc"
 printf ": 1729000000:0;curl -H 'Authorization: token %s' https://api.github.com/user\n" "$GH" > "$F/.zsh_history"
@@ -68,6 +69,13 @@ printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}
 # Lockfiles with good versions of packages that once had bad ones.
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.10","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.10.tgz"},"node_modules/my-axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/my-axios/-/my-axios-1.14.1.tgz"},"node_modules/keyv-x":{"resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.0-beta.1.tgz"},"node_modules/keyv":{"version":"6.0.1","resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.1.tgz"}}}\n' > "$F/code/lib/package-lock.json"
 if [ "$MODE" = full ]; then
+  # Agent sessions: a key right after an escaped newline, a made-up one, and one per agent.
+  printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" > "$F/.claude/projects/p1/k.jsonl"
+  mkdir -p "$F/.codex/sessions/2026/10"
+  printf '{"payload":{"output":"OPENAI_API_KEY=%s"}}\n' "$OPENAI" > "$F/.codex/sessions/2026/10/rollout-k.jsonl"
+  touch -t 202608200000 "$F/.codex/sessions/2026/10/rollout-k.jsonl"   # Codex stays idle
+  mkdir -p "$F/code/aid"; printf '#### run the eval\n> export GROQ_API_KEY=%s\n' "$GROQ" > "$F/code/aid/.aider.chat.history.md"
+  mkdir -p "$F/.codeium/windsurf/cascade"; printf 'x' > "$F/.codeium/windsurf/cascade/a.pb"
   mkdir -p "$F/code/cloned/.claude" "$F/code/cloned/.vscode" "$F/code/proxy/.claude" "$F/code/web" "$F/code/berry"
   printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/router_runtime.js"}]}]},"enableAllProjectMcpServers":true}\n' > "$F/code/cloned/.claude/settings.json"
   printf '{"version":"2.0.0","tasks":[{"label":"setup","command":"node x.js","runOptions":{"runOn":"folderOpen"}}]}\n' > "$F/code/cloned/.vscode/tasks.json"

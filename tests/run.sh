@@ -71,6 +71,49 @@ for B in $BASHES; do
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 done
 
+echo "data files"
+if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match data/keys.tsv and data/sessions.tsv"; else bad "both scripts match data/keys.tsv and data/sessions.tsv"; head -n 8 "$WORK/gen.txt"; fi
+
+echo "keys in agent sessions"
+SE=$WORK/sess; mkdir -p "$SE"
+for E in perl rg; do
+  if [ "$E" = rg ] && ! command -v rg >/dev/null 2>&1; then echo "  skip  ripgrep is not installed"; continue; fi
+  HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline > "$SE/$E.txt" 2>&1
+  sed -n '/Keys in agent sessions/,/^$/p' "$SE/$E.txt" > "$SE/$E.block"
+  has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.txt"
+  has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.txt"
+  has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.txt"
+  hasnot "$E: a made-up key is not counted"        'Anthropic' "$SE/$E.block"
+  has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
+  has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.txt"
+  if grep -aqF -f "$WORK/keys.txt" "$SE/$E.txt"; then bad "$E: never prints a key"; else ok "$E: never prints a key"; fi
+done
+if [ -s "$SE/rg.block" ]; then
+  if diff -q "$SE/perl.block" "$SE/rg.block" >/dev/null; then ok "perl and ripgrep report the same"; else bad "perl and ripgrep report the same"; diff "$SE/perl.block" "$SE/rg.block" | head -n 6; fi
+fi
+HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_STOP_AFTER=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
+has    "a partial check says how much it covered" 'Checked the newest 2 of 5 agent session files' "$SE/part.txt"
+HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$SE/clean.txt" 2>&1
+has    "a full check with nothing found says so" 'No keys in 2 agent session files\.' "$SE/clean.txt"
+HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_STOP_AFTER=0 bash "$SCRIPT" --offline > "$SE/clean-part.txt" 2>&1
+hasnot "a partial check with nothing found never says no keys" 'No keys in .*agent session' "$SE/clean-part.txt"
+has    "and says it was partial"                 'Checked the newest 0 of 2 agent session files' "$SE/clean-part.txt"
+HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=none bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/none.txt"
+has    "with no engine the sessions are named as not checked" 'agent session files were not checked: this needs perl or ripgrep' "$SE/none.txt"
+# A held engine is still running when the rest of the check is done: it is stopped, and nothing is left behind.
+mkfifo "$SE/hold"
+HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" bash "$SCRIPT" --offline > "$SE/held.txt" 2>&1; RC=$?
+if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad "a held engine does not hold up the check, exit $RC"; fi
+has    "and the report says the sessions were not all checked" 'Checked the newest 0 of 2' "$SE/held.txt"
+if pgrep -f GIRD_CHECK_SESSIONS_HOLD >/dev/null 2>&1 || pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "no engine process is left running"; else ok "no engine process is left running"; fi
+# Closing the terminal (HUP) mid-check stops the engine too.
+HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 &
+BP=$!
+for _i in $(seq 1 100); do pgrep -f 'SESS_PRE' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
+if pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "HUP leaves no engine process"; pkill -f 'SESS_PRE'; else ok "HUP leaves no engine process"; fi
+if ls "${TMPDIR:-/tmp}"/blindspot.* >/dev/null 2>&1 && ls -l "${TMPDIR:-/tmp}"/blindspot.*.fifo >/dev/null 2>&1; then bad "no fifo is left behind"; else ok "no fifo is left behind"; fi
+
 echo "advice by OS"
 mkdir -p "$WORK/fakebin"
 for O in Darwin Linux FreeBSD MINGW64_NT-10.0; do

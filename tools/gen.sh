@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Writes the key types (data/keys.tsv) and the agent session locations (data/sessions.tsv) into
+# gird-check.sh and gird-check.ps1, between their "# >>> keys" / "# >>> sessions" markers and the
+# matching "# <<<" lines. The scripts stay single files people can download and check.
+#
+#   bash tools/gen.sh           rewrite the blocks
+#   bash tools/gen.sh --check   exit 1 if a block differs from the data files
+set -eu
+cd "$(dirname "$0")/.."
+CHECK=0; [ "${1:-}" = --check ] && CHECK=1
+WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
+
+rows() { grep -v '^#' "$1" | grep -v '^[[:space:]]*$'; }
+
+# --- keys -------------------------------------------------------------------
+rows data/keys.tsv | awk -F '\t' '
+  { id[NR] = $1; nm[NR] = $2; st[NR] = $3; pat[NR] = $4; n = NR }
+  END {
+    print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
+    all = ""; ids = ""; starts = ""
+    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i] }
+    print "ALL_KEYS=\047" all "\047"
+    print "PROVIDER_IDS=\"" ids "\""
+    print "KEY_STARTS=\047" starts "\047"
+    print "PROV_AWK=\047"
+    print "function prov(s) {"
+    print "  sub(/^[^A-Za-z]*\\\\[ntr\"]/, \"\", s); sub(/^[^A-Za-z]+/, \"\", s)"
+    for (i = 1; i <= n; i++) print "  if (s ~ /^(" st[i] ")/) return \"" nm[i] "\""
+    print "  return \"\""
+    print "}\047"
+    printf "prov_id() { case \"$1\" in"
+    for (i = 1; i <= n; i++) printf " \"%s\") printf %s ;;", nm[i], id[i]
+    print " esac; }"
+    print "# <<< keys"
+  }' > "$WORK/keys.sh"
+
+rows data/keys.tsv | awk -F '\t' '
+  { id[NR] = $1; nm[NR] = $2; st[NR] = $3; pat[NR] = $4; n = NR }
+  END {
+    print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
+    all = ""; ids = ""; starts = ""
+    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i] }
+    print "$ALL_KEYS = \047" all "\047"
+    print "$PROVIDER_IDS = \047" ids "\047"
+    print "$KEY_STARTS = \047" starts "\047"
+    print "$KeyProviderFn = @\047"
+    print "function Key-Provider([string]$s) {"
+    print "  $s = $s -replace \047^[^A-Za-z]*\\\\[ntr\"]\047, \047\047 -replace \047^[^A-Za-z]+\047, \047\047"
+    for (i = 1; i <= n; i++) print "  if ($s -cmatch \047^(" st[i] ")\047) { return \047" nm[i] "\047 }"
+    print "  $null"
+    print "}"
+    printf "function Provider-Id([string]$n) { switch -CaseSensitive ($n) {"
+    for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", nm[i], id[i]
+    print " default { $null } } }"
+    print "\047@"
+    print "# <<< keys"
+  }' > "$WORK/keys.ps1"
+
+# --- sessions ---------------------------------------------------------------
+rows data/sessions.tsv | awk -F '\t' '
+  function sh(p,   v, fb, rest, k) {
+    if (p ~ /^\{ENV:/) {
+      k = index(p, "}"); v = substr(p, 6, k - 6); rest = substr(p, k + 1)
+      fb = substr(v, index(v, ":") + 1); v = substr(v, 1, index(v, ":") - 1)
+      return "${" v ":-" sh(fb) "}" rest
+    }
+    sub(/^~/, "$H", p); sub(/^\{AS\}/, "$AS", p); sub(/^\{LOCALAPPDATA\}/, "$WLAPP", p)
+    sub(/^\{XDG_DATA\}/, "${XDG_DATA_HOME:-$H/.local/share}", p); sub(/^\{GOOSE_DATA\}/, "$GOOSE_DATA", p)
+    return p
+  }
+  BEGIN { print "# >>> sessions: generated from data/sessions.tsv by tools/gen.sh. Edit that file, then run it."
+          printf "SESS_TABLE=\"" }
+  { printf "%s%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, sh($4) }
+  END { print "\""; print "# <<< sessions" }' > "$WORK/sessions.sh"
+
+rows data/sessions.tsv | awk -F '\t' '
+  function ps(p,   v, fb, rest, k, base) {
+    if (p ~ /^\{ENV:/) {
+      k = index(p, "}"); v = substr(p, 6, k - 6); rest = substr(p, k + 1)
+      fb = substr(v, index(v, ":") + 1); v = substr(v, 1, index(v, ":") - 1)
+      base = "(Env-Or \047" v "\047 " ps(fb) ")"
+    } else if (p ~ /^~/) { base = "$HomeDir"; rest = substr(p, 2) }
+    else if (p ~ /^\{AS\}/) { base = "$AppData"; rest = substr(p, 5) }
+    else if (p ~ /^\{LOCALAPPDATA\}/) { base = "$LocalAppData"; rest = substr(p, 15) }
+    else if (p ~ /^\{XDG_DATA\}/) { base = "(Env-Or \047XDG_DATA_HOME\047 (J $HomeDir \047.local/share\047))"; rest = substr(p, 11) }
+    else if (p ~ /^\{GOOSE_DATA\}/) { base = "(J $AppData \047Block/goose/data\047)"; rest = substr(p, 13) }
+    sub(/^\//, "", rest)
+    return rest == "" ? base : "(J " base " \047" rest "\047)"
+  }
+  BEGIN { print "# >>> sessions: generated from data/sessions.tsv by tools/gen.sh. Edit that file, then run it."
+          print "$SessTable = @(" }
+  $1 == "all" || $1 == "win" { if (n++) print ","; printf "  @(\047%s\047, \047%s\047, %s)", $2, $3, ps($4) }
+  END { print ")"; print "# <<< sessions" }' > "$WORK/sessions.ps1"
+
+# --- splice -----------------------------------------------------------------
+splice() { # file block-name generated-file
+  awk -v name="$2" -v gen="$3" '
+    $0 ~ "^# >>> " name "[: ]" || $0 == "# >>> " name { while ((getline l < gen) > 0) print l; skip = 1; found = 1; next }
+    skip && $0 == "# <<< " name { skip = 0; next }
+    !skip { print }
+    END { if (!found) { print "no \"# >>> " name "\" marker" > "/dev/stderr"; exit 3 } }' "$1"
+}
+RC=0
+for f in gird-check.sh gird-check.ps1; do
+  ext=${f##*.}
+  splice "$f" keys "$WORK/keys.$ext" > "$WORK/a" && splice "$WORK/a" sessions "$WORK/sessions.$ext" > "$WORK/b" || { RC=1; continue; }
+  if [ "$CHECK" -eq 1 ]; then
+    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/: run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
+  elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
+done
+exit "$RC"
