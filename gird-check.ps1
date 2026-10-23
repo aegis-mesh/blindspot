@@ -619,7 +619,7 @@ $SessWorker = {
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
   $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
   $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
-  $rxSep = New-Object regex('[^A-Za-z0-9_.\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
+  $rxSep = New-Object regex('[^A-Za-z0-9_.\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
@@ -653,9 +653,10 @@ $SessWorker = {
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
-    # Read 1 MB at a time and cut just after the last character that can't be in a key (before it,
-    # for the backslash of \n, \t or \r), so a huge database file never loads at once, a piece never
-    # ends inside a token unless one runs past 8 MB, and a stop is seen within one piece.
+    # Read 1 MB at a time and cut just after the last character that can't be in a key or start an
+    # escape such as \n (a backslash never ends a piece), so a huge database file never loads at
+    # once, a piece never ends inside a token unless one runs past 8 MB, and a stop is seen within
+    # one piece.
     $sr = $null; $whole = $true
     try {
       $sr = New-Object IO.StreamReader((New-Object IO.FileStream($f.FullName, 'Open', 'Read', 'ReadWrite')), $latin)
@@ -667,7 +668,6 @@ $SessWorker = {
         if (-not $sep.Success -and $t.Length -lt 8388608) { $carry = $t; continue }
         if ($sep.Success) {
           $at = $sep.Index + 1
-          if ($t[$sep.Index] -eq [char]92 -and $at -lt $t.Length -and 'ntr'.IndexOf($t[$at]) -ge 0) { $at = $sep.Index }  # keep \n with the key after it
           $carry = $t.Substring($at); $t = $t.Substring(0, $at)
         } else { $carry = '' }
         if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }

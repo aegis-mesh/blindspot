@@ -9,7 +9,7 @@
 [![release](https://img.shields.io/github/v/release/aegis-mesh/blindspot?color=0D9488&label=release)](https://github.com/aegis-mesh/blindspot/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-0D9488)](LICENSE)
 
-Coding agents run with your access: your shell, your repos and the keys in your home folder. In October 2026, OpenCode, Railway, Zeabur and LiteLLM all leaked developer keys. Blindspot shows where your AI keys sit in plain text, which coding agents could read them, and whether that week's leaks touched you. It never prints a key.
+Coding agents run with your access: your shell, your repos and the keys in your home folder. What they read lands in their session history, and with a hosted model it goes to the AI service too. Blindspot shows where your AI keys sit in plain text, which keys your agents have already seen, which coding agents could read them, and whether this year's npm worms and key leaks touched you. It never prints a key.
 
 ## Run it
 

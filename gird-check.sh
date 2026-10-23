@@ -927,8 +927,8 @@ SESS_PRE=$KEY_STARTS
 # the parent, which is the only writer to its output, so lines never interleave. A worker prints
 # K (a match) and then D (done) for a file, or Z for a compressed one; the parent prints T (the
 # total) first. Files are read 1 MB at a time and cut just after the last character that can't be
-# in a key (before it, for the backslash of \n, \t or \r), so a huge database file never loads at
-# once and a piece never ends inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers; a worker exits when its parent or the
+# in a key or start an escape such as \n (a backslash never ends a piece), so a huge database file
+# never loads at once and a piece never ends inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers; a worker exits when its parent or the
 # script that started everything is gone, so a kill -9 of the script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
@@ -960,8 +960,7 @@ for my $w (0 .. $n - 1) {
         exit 0 unless $alive->();
         select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
         $buf .= $c;
-        my $cut = $buf =~ /[^A-Za-z0-9_.-][A-Za-z0-9_.-]*\z/ ? $-[0] + 1 : -1;
-        $cut-- if $cut > 0 && substr($buf, $cut - 1, 1) eq "\\" && substr($buf, $cut, 1) =~ /[ntr]/;  # keep \n with the key after it
+        my $cut = $buf =~ /[^A-Za-z0-9_.\\-][A-Za-z0-9_.\\-]*\z/ ? $-[0] + 1 : -1;
         next if $cut < 0 && length($buf) < 8388608;
         $scan->(substr($buf, 0, $cut < 0 ? length($buf) : $cut, ""));
       }

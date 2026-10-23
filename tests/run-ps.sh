@@ -152,6 +152,10 @@ mkdir -p "$SE/esc/.claude/projects/p" "$SE/esc/AppData/Roaming" "$SE/esc/AppData
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 2) + '\\\\n' + 'hf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc/.claude/projects/p/a.jsonl"
 psrun "$SE/esc" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/esc.txt" 2>&1
 has    "a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc.txt"
+mkdir -p "$SE/esc2/.claude/projects/p" "$SE/esc2/AppData/Roaming" "$SE/esc2/AppData/Local/Temp"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 1) + '\\\\' + 'nhf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc2/.claude/projects/p/a.jsonl"
+psrun "$SE/esc2" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/esc2.txt" 2>&1
+has    "a key after a backslash that ends a read is found" 'Claude Code +1 file: Hugging Face' "$SE/esc2.txt"
 : > "$SE/hold"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" -- -Offline > "$SE/held.txt" 2>&1; RC=$?
 if [ "$RC" -eq 0 ]; then ok "a held check does not hold up the report"; else bad "a held check does not hold up the report, exit $RC"; fi
