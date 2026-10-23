@@ -1459,8 +1459,8 @@ while IFS= read -r t; do
 done <<EOF
 $TODO
 EOF
-_i=$((_i + 1)); printf -v _num '%2d' "$_i"
-wrap "Set a monthly spend limit on every AI provider key, at the provider." 10 "     ${TEAL}${_num}.${RST}  " "          "
+[ "$_i" -gt 0 ] && blank
+wrap "Also: set a monthly spend limit on every AI provider key, at the provider." 5 "     " "     "
 
 SEC_TODO=$CAP; CAP=""
 

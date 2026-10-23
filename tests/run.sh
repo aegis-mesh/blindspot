@@ -118,6 +118,15 @@ mkdir -p "$WORK/mcp-only/.codex/.tmp/plugins/plugins/a"; cp "$WORK/mcp-pl/.codex
 HOME="$WORK/mcp-only" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-only.txt"
 has    "with only plugin-folder configs the row says none set up" '02 . MCP servers +none set up, 2 in plugin folders' "$WORK/mcp-only.txt"
 
+echo "the spend limit tip"
+OUT=$WORK/tip.txt
+HOME="$WORK/home" bash "$SCRIPT" --offline > "$OUT" 2>&1
+has    "the spend limit tip is a plain line"      '^     Also: set a monthly spend limit on every AI provider key' "$OUT"
+hasnot "the spend limit tip is not numbered"      '^ *[0-9]+\. +.*spend limit' "$OUT"
+LAST=$(grep -aE '^ +[0-9]+\.  ' "$OUT" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr -d ' ')
+ISS=$(grep -aoE '[0-9]+ things? to fix' "$OUT" | head -n 1 | grep -aoE '^[0-9]+')
+if [ -n "$LAST" ] && [ "$LAST" = "$ISS" ]; then ok "the numbered list matches the fix count ($ISS)"; else bad "the numbered list matches the fix count"; printf '        list ends at %s, header says %s\n' "$LAST" "$ISS"; fi
+
 echo "summary"
 OUT=$WORK/compact.txt
 HOME="$WORK/home" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline > "$OUT" 2>&1
