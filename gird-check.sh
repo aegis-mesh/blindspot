@@ -828,7 +828,11 @@ scan_home() {
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' \
        -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \
-       -o -name package-lock.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \) -print \) 2>/dev/null
+       -o -path '*/.claude/setup.mjs' -o -path '*/.claude/math_init.js' \
+       -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \) -print \) -o \
+    \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
+       -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' -o -path '*/.claude/setup.mjs' \
+       -o -path '*/.claude/math_init.js' -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \) -print \) 2>/dev/null
 }
 
 # Findings for the game or the spinner to show while the scan runs: a mark (x a
@@ -876,11 +880,12 @@ SCAN_T0=$SECONDS
 
 progress i "Looking through your home folder"
 FOUND=$(scan_home | scan_progress)
-LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
+LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
-WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.(claude|vscode)/(router_runtime|tanstack_runner)\.js$')
+# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs and math_init.js).
+WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js)$|/\.claude/(setup\.mjs|math_init\.js)$')
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
-FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.vscode/tasks\.json|\.(claude|vscode)/(router_runtime|tanstack_runner)\.js)$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.vscode/tasks\.json|\.(claude|vscode)/(router_runtime|tanstack_runner)\.js|\.claude/(setup\.mjs|math_init\.js))$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -1031,46 +1036,58 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 
 # Project settings that make an agent or editor run something, or trust the project's MCP
 # servers, as soon as the folder is opened. A cloned repo brings them along (Check Point,
-# CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks).
-# settings.local.json is personal and never part of a clone, so only settings.json is read.
-AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""
+# CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks). Both
+# settings.json and settings.local.json are read, since repos commit either. Each file is read as
+# one line, so pretty-printed JSON matches too, with JSONC comments removed first.
+AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN="|"
 # The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
-WORM_RUN='\.(claude|vscode)/(router_runtime|tanstack_runner)\.js'
-auto_row() { # file what
-  grep -qE "$WORM_RUN" "$1" 2>/dev/null && WORM_REFS="$WORM_REFS$1
+WORM_RUN='\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+TAB=$(printf '\t')
+flat() { sed -E 's#(^|[[:space:],{[])//.*$#\1#' "$1" 2>/dev/null | tr '\n\r\t' '   ' | sed -E 's#/\*([^*]|\*+[^*/])*\*+/##g'; }
+auto_row() { # file what flattened-text
+  # A worm file counts only when a command runs it, not when a rule merely names it.
+  printf '%s' "$3" | grep -qE "\"(command|args)\"[[:space:]]*:[[:space:]]*(\"[^\"]*|\[[^]]*)$WORM_RUN" && WORM_REFS="$WORM_REFS$1
 "
+  # Worktrees and copies carry the same settings: one row, with how many more folders have it.
+  _sum=$(printf '%s' "$3" | cksum | cut -d' ' -f1)
+  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | awk -F "$TAB" -v OFS="$TAB" -v s="$_sum" '$3 == s { $4++ } { print }')
+"; return ;; esac
+  AUTO_SEEN="$AUTO_SEEN$_sum|"
   N_AUTO=$((N_AUTO + 1))
   progress w "Project settings that $2: $(short "$1")"
-  AUTO_ROWS="$AUTO_ROWS$1|$2
+  AUTO_ROWS="$AUTO_ROWS$1$TAB$2$TAB$_sum${TAB}0
 "
 }
-HOOK_EVENTS='PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact|PermissionRequest'
+# Keys that make Claude Code run a command: hooks and its helper commands.
+CMD_KEYS='apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
 while IFS= read -r f; do
-  case "$f" in */.claude/settings.json) ;; *) continue ;; esac
-  # A worktree carries the same committed settings as its repo, so it is not listed again.
-  case "$f" in */.claude/worktrees/*) continue ;; esac
-  [ "$f" != "$H/.claude/settings.json" ] && [ -f "$f" ] || continue
-  _w=""
-  if grep -qE "\"($HOOK_EVENTS)\"[[:space:]]*:" "$f" 2>/dev/null || grep -qE '"(apiKeyHelper|statusLine)"[[:space:]]*:|"hooks"[[:space:]]*:[[:space:]]*\{[[:space:]]*"' "$f" 2>/dev/null; then
+  case "$f" in */.claude/settings.json|*/.claude/settings.local.json) ;; *) continue ;; esac
+  case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
+  [ -f "$f" ] || continue
+  _t=$(flat "$f"); _w=""
+  if printf '%s' "$_t" | grep -qE "\"hooks\"[[:space:]]*:[[:space:]]*\{[[:space:]]*\"|\"($CMD_KEYS)\"[[:space:]]*:"; then
     _w="run commands while the agent works"
   fi
-  if grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"' "$f" 2>/dev/null; then
+  if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
   fi
-  if grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' "$f" 2>/dev/null | grep -qvE ':[[:space:]]*"[A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/[^"]*)?"$'; then
+  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -qvE ':[[:space:]]*"[A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/[^"]*)?"$'; then
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
-  [ -n "$_w" ] && auto_row "$f" "$_w"
+  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
 done <<EOF
 $ALLOW_FILES
 EOF
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
-  case "$f" in */.claude/worktrees/*) continue ;; esac
-  grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' "$f" 2>/dev/null && auto_row "$f" "run a task when the folder opens in VS Code or Cursor"
+  case "$f" in */.claude/plugins/*) continue ;; esac
+  _t=$(flat "$f")
+  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' && auto_row "$f" "run a task when the folder opens in VS Code or Cursor" "$_t"
 done <<EOF
 $TASK_FILES
 EOF
+# Row 02 counts projects: the folders holding these settings.
+N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/[^/]*$##' | sort -u | grep -c .)
 if [ "$N_MCP_TOKEN" -eq 0 ]; then
   if [ "$N_MCP" -gt 0 ]; then progress o "Found $(plural "$N_MCP" "MCP server" "MCP servers")$MCP_CACHE_NOTE, no tokens written in their configs"
   else progress i "No MCP servers configured$MCP_CACHE_NOTE"; fi
@@ -1300,8 +1317,10 @@ if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Signs of the LiteLLM malware found
 elif [ -n "$LITE_PYC" ]; then progress w "A leftover cook.pyc may come from the LiteLLM malware"
 else progress o "No signs of the LiteLLM malware in $(plural "$N_PY" "Python environment" "Python environments")"; fi
 # npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
-# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-jgg6-4rpr-wfh7, and one advisory per package for the rest.
-# A version of * means every version of that name is malware.
+# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9 and
+# GHSA-rccm-wwph-vgxc, OpenSearch GHSA-298w-vvm4-ww55, and one advisory per package for the rest.
+# A version of * means every version of that name is malware. Not complete: the AntV, UiPath and
+# Red Hat waves and most packages the keyv worm spread to are not listed.
 BAD_NPM="axios 1.14.1 axios
 axios 0.30.4 axios
 plain-crypto-js * axios
@@ -1418,7 +1437,40 @@ claud-code * sandworm
 cloude-code * sandworm
 rimarf * sandworm
 naniod * sandworm
-suport-color * sandworm"
+suport-color * sandworm
+@keyv/bigmap 6.0.0 keyv
+@keyv/cloudflare-kv 6.0.0 keyv
+@keyv/compress-brotli 6.0.0 keyv
+@keyv/compress-gzip 6.0.0 keyv
+@keyv/compress-lz4 6.0.0 keyv
+@keyv/dynamo 6.0.0 keyv
+@keyv/encrypt-node 6.0.0 keyv
+@keyv/encrypt-web 6.0.0 keyv
+@keyv/etcd 6.0.0 keyv
+@keyv/memcache 6.0.0 keyv
+@keyv/mongo 6.0.0 keyv
+@keyv/mysql 6.0.0 keyv
+@keyv/postgres 6.0.0 keyv
+@keyv/redis 6.0.0 keyv
+@keyv/serialize-msgpackr 6.0.0 keyv
+@keyv/serialize-superjson 6.0.0 keyv
+@keyv/sqlite 6.0.0 keyv
+@keyv/test-suite 6.0.0 keyv
+@keyv/valkey 6.0.0 keyv
+@opensearch-project/opensearch 3.5.3 opensearch
+@opensearch-project/opensearch 3.6.2 opensearch
+@opensearch-project/opensearch 3.7.0 opensearch
+@opensearch-project/opensearch 3.8.0 opensearch
+tensorlake 0.5.144 tensorlake
+cloude * sandworm
+opencraw * sandworm
+crypto-reader-info * sandworm
+format-defaults * sandworm
+hardhta * sandworm
+iru-caches * sandworm
+iruchache * sandworm
+node-native-bridge * sandworm
+secp256 * sandworm"
 npm_label() {
   case "$1" in
     axios)     printf 'Axios takeover, March 2026' ;;
@@ -1427,12 +1479,17 @@ npm_label() {
     bitwarden) printf 'Bitwarden CLI, April 2026' ;;
     mastra)    printf 'Mastra worm, June 2026' ;;
     keyv)      printf 'keyv worm, August 2026' ;;
-    *)         printf 'fake AI tool packages, February 2026' ;;
+    opensearch) printf 'OpenSearch client, May 2026' ;;
+    tensorlake) printf 'tensorlake package, October 2026' ;;
+    *)         printf 'SANDWORM_MODE worm, February 2026' ;;
   esac
 }
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
-# tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache) and name@version tokens
-# (pnpm, bun, yarn berry's name@npm:version).
+# tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
+# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
+# (locks written without URLs) and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
+# moves away from a version, so overrides are skipped. Versions are printed only if they look like
+# versions, so a package can't put terminal control codes in the report.
 npm_hits() {
   BAD_NPM_LIST=$BAD_NPM awk '
     BEGIN {
@@ -1441,9 +1498,27 @@ npm_hits() {
         if (f[2] == "*") any[f[1]] = f[3]; else bad[f[1] "@" f[2]] = f[3] }
     }
     function hit(nm, v,   k, t) {
+      if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
       k = nm "@" v; t = ""
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "|" nm " " v "|" t }
+    }
+    FNR == 1 { over = 0; depth = 0; pend = "" }
+    FILENAME ~ /pnpm-lock\.yaml$/ && /^[^ #]/ { over = ($0 ~ /^overrides:/) }
+    FILENAME ~ /bun\.lock$/ {
+      if (over) { o = $0; depth += gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
+      if ($0 ~ /"overrides"[[:space:]]*:[[:space:]]*\{/) { over = 1; o = $0; depth = gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
+    }
+    over { next }
+    FILENAME ~ /(package-lock|npm-shrinkwrap)\.json$/ {
+      if (match($0, /"(node_modules\/)*(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
+        pend = substr($0, RSTART + 1); sub(/"[[:space:]]*:.*/, "", pend); sub(/^.*node_modules\//, "", pend)
+      } else if (pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
+        v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); hit(pend, v); pend = ""
+      }
+    }
+    FILENAME ~ /pnpm-lock\.yaml$/ && match($0, /^[[:space:]]+\/(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+\/[0-9][^:(_\/]*/) {
+      t = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]+\//, "", t); k = match(t, /\/[0-9]/); hit(substr(t, 1, k - 1), substr(t, k + 1))
     }
     {
       line = $0; gsub(/@npm:/, "@", line); rest = line
@@ -1466,10 +1541,16 @@ EOF
 if [ "$N_LOCK" -gt 0 ]; then
   NPM_ROWS=$(printf '%s\n' "$LOCKFILES" | while IFS= read -r f; do [ -r "$f" ] && npm_hits "$f"; done)
 fi
-# Global installs and npx's cache, read from each package's package.json.
+# Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv),
+# pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
 NPM_ROOTS=$(
   for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
-           "$H"/.nvm/versions/node/*/lib/node_modules "$H/.bun/install/global/node_modules" "$H"/.npm/_npx/*/node_modules; do
+           "$H"/.nvm/versions/node/*/lib/node_modules "$H"/.volta/tools/image/node/*/lib/node_modules \
+           "$H"/.volta/tools/image/packages/*/lib/node_modules "$H"/.local/share/fnm/node-versions/*/installation/lib/node_modules \
+           "$H"/Library/Application\ Support/fnm/node-versions/*/installation/lib/node_modules \
+           "$H"/.asdf/installs/nodejs/*/lib/node_modules "$H"/.local/share/mise/installs/node/*/lib/node_modules \
+           "$H"/.nodenv/versions/*/lib/node_modules "$H"/Library/pnpm/global/*/node_modules \
+           "$H"/.local/share/pnpm/global/*/node_modules "$H/.bun/install/global/node_modules" "$H"/.npm/_npx/*/node_modules; do
     [ -d "$r" ] && printf '%s\n' "$r"
   done
   if [ "$WIN" -eq 1 ]; then
@@ -1481,9 +1562,13 @@ _g=$(
   printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
     [ -n "$r" ] || continue
     for nm in $NPM_NAMES; do
-      [ -f "$r/$nm/package.json" ] || continue
-      v=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$r/$nm/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/')
-      printf '%s\n' "$BAD_NPM" | awk -v n="$nm" -v v="$v" -v r="$r/$nm" '$1 == n && ($2 == v || $2 == "*") { print r "|" n " " v "|" $3; exit }'
+      # The package itself, or a dependency of a globally installed tool.
+      for d in "$r/$nm" "$r"/*/node_modules/"$nm" "$r"/@*/*/node_modules/"$nm"; do
+        [ -f "$d/package.json" ] || continue
+        v=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$d/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/')
+        case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; esac
+        printf '%s\n' "$BAD_NPM" | N=$nm V=$v D=$d awk '$1 == ENVIRON["N"] && ($2 == ENVIRON["V"] || $2 == "*") { print ENVIRON["D"] "|" ENVIRON["N"] " " ENVIRON["V"] "|" $3; exit }'
+      done
     done
   done
 )
@@ -1496,14 +1581,21 @@ for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
   [ -n "$_h" ] && NPM_ROWS="$NPM_ROWS
 $_h"
 done
-NPM_ROWS=$(printf '%s\n' "$NPM_ROWS" | grep -v '^$' | sort -u)
+NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)|" | grep -v '^$' | sort -u
+              printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)|" | sort -u; } )
 [ -n "$NPM_ROWS" ] && NPM_HIT=1
-# What these worms leave behind. gh-token-monitor erases the home folder once the stolen GitHub
-# token stops working, so it must go before any token is revoked (Wiz, TanStack; Socket, keyv).
+# What these worms leave behind. gh-token-monitor runs a destructive command when the stolen GitHub
+# token stops working (it erased the home folder in the TanStack wave, Wiz; in the keyv wave it runs
+# an attacker-supplied command, SANS), so it must be stopped before any token is revoked.
 WIPER=""
 for m in "$H/Library/LaunchAgents/com.user.gh-token-monitor.plist" "$H/.config/systemd/user/gh-token-monitor.service" \
-         "$H/.local/bin/gh-token-monitor.sh" "$H/.config/gh-token-monitor" /tmp/gh-token-monitor.out.log /tmp/gh-token-monitor.err.log; do
+         "$H/.local/bin/gh-token-monitor.sh" "$H/.config/gh-token-monitor"; do
   [ -e "$m" ] && WIPER="$WIPER$m
+"
+done
+# Its logs in the shared /tmp count only if this person owns them.
+for m in /tmp/gh-token-monitor.out.log /tmp/gh-token-monitor.err.log; do
+  [ -e "$m" ] && [ -O "$m" ] && WIPER="$WIPER$m
 "
 done
 # The Mastra worm's startup files (Socket).
@@ -1539,6 +1631,9 @@ if command -v zeabur >/dev/null 2>&1 || [ -d "$H/.config/zeabur" ]; then ZB=1; f
 # Each fix also belongs to a section, so that section's details can end with it.
 TODO=""; ISSUES=0; FIX1=""; FIX2=""; FIX3=""; FIX4=""; FIX5=""
 todo() { # section text
+  set -- "$1" "$2"
+  # With gh-token-monitor present, revoking a token sets it off: every other rotate waits for it.
+  case "$WIPER_HIT:$1:$2" in 1:[1-4]:*rotate*) set -- "$1" "$2 Only once gh-token-monitor is stopped and removed (section 5)." ;; esac
   TODO="$TODO$2
 "; ISSUES=$((ISSUES + 1))
   case "$1" in
@@ -1554,7 +1649,7 @@ todo() { # section text
 " ;;
   esac
 }
-[ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First remove gh-token-monitor, listed in section 5: it erases your home folder when the stolen token stops working. Then rotate every key this machine could reach."
+[ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."
 [ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 [ "$LITELLM_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow LiteLLM's advisory, and rotate every key the machine could reach."
@@ -1568,10 +1663,10 @@ esac
 [ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
 [ "$HIST_KEYS" -gt 0 ] && todo 3 "Keys in shell history were typed into a command. Treat them as exposed and rotate them."
 [ "$N_MCP_TOKEN" -gt 0 ] && todo 2 "Replace tokens written into MCP configs with environment variable references, then rotate them."
-[ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
+[ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 if [ "$OC" -eq 1 ] || [ "$RW" -eq 1 ] || [ "$ZB" -eq 1 ]; then todo 5 "If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong."; fi
 
 SCORE=100
@@ -1782,10 +1877,11 @@ fi
 if [ "$N_AUTO" -gt 0 ]; then
   blank
   emit "     ${B}Project settings that act as soon as the folder is opened${RST}"
-  while IFS='|' read -r f w; do
+  while IFS="$TAB" read -r f w _s n; do
     [ -n "$f" ] || continue
     emit "     ${YEL}!${RST}  $(short "$f")"
-    wrap "Set to $w." 8 "        " "        " "$DIM"
+    _more=""; [ "${n:-0}" -gt 0 ] && _more=" The same settings are in $(plural "$n" "more folder" "more folders"), such as worktrees."
+    wrap "Set to $w.$_more" 8 "        " "        " "$DIM"
   done <<EOF
 $AUTO_ROWS
 EOF
@@ -1852,20 +1948,23 @@ if [ "$WIPER_HIT" -eq 1 ]; then
   while IFS= read -r l; do [ -n "$l" ] && emit "        $(short "$l")"; done <<EOF
 $WIPER
 EOF
-  wrap "Don't revoke any GitHub token until these are gone: gh-token-monitor erases your home folder when the stolen token stops working. On a Mac, unload it first with launchctl bootout gui/$(id -u 2>/dev/null)/com.user.gh-token-monitor, then delete the files." 8 "        " "        " "$RED"
+  case "$OS" in
+    Darwin) _stop="launchctl bootout gui/$(id -u 2>/dev/null)/com.user.gh-token-monitor" ;;
+    Linux)  _stop="systemctl --user disable --now gh-token-monitor.service" ;;
+    *)      _stop="" ;;
+  esac
+  wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and erased the home folder in the TanStack wave." 8 "        " "        " "$RED"
+  wrap "Stop it with ${_stop:+$_stop, then }pkill -f gh-token-monitor, then delete the files above." 8 "        " "        " "$RED"
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
   [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
-  _shown=0
   while IFS='|' read -r f p t; do
     [ -n "$f" ] || continue
-    _shown=$((_shown + 1)); [ "$_shown" -le 12 ] || continue
     emit "        $(short "$f")"
     emit "          ${p} ${DIM}($(npm_label "$t"))${RST}"
   done <<EOF
 $NPM_ROWS
 EOF
-  [ "$_shown" -gt 12 ] && emit "        ${DIM}and $((_shown - 12)) more${RST}"
   while IFS='|' read -r f p; do
     [ -n "$f" ] || continue
     emit "        $(short "$f")"
@@ -1874,7 +1973,8 @@ EOF
 $PERSIST
 EOF
 elif [ "$WIPER_HIT" -eq 0 ]; then
-  pair "${GRN}✓${RST}" "npm worms" 16 "no bad versions in $(plural "$N_LOCK" lockfile lockfiles), global installs or npm's cache"
+  pair "${GRN}✓${RST}" "npm worms" 16 "none of the $(count_lines "$BAD_NPM") known bad versions"
+  emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
 fi
 if [ "$OC" -eq 1 ]; then
   pair "${YEL}!${RST}" "OpenCode" 16 "installed"
@@ -1985,7 +2085,7 @@ elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE id
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi
 if [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
-elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO" "project acts" "projects act") on opening"
+elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
 elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in their configs"
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST%%|*}") (${KEY_FIRST#*|})"
@@ -1997,7 +2097,8 @@ elif [ "$N_ALLOW_NPM" -gt 0 ] && [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"
 elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship"
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
-if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor found. Remove it before revoking tokens"
+if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop it before revoking tokens"
+elif [ "$MAL_HIT" -eq 1 ] && [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="npm and LiteLLM malware found. Act now"
 elif [ "$MAL_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of npm malware. Act now"
 elif [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the LiteLLM malware. Act now"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
@@ -2052,12 +2153,13 @@ else printf '%s' "$HEAD_FULL$SEC1$SEC2$SEC3$SEC4$SEC5$SEC_TODO$SEC_ARGUS$SEC_FOO
 # nothing happens unasked.
 # ---------------------------------------------------------------------------
 # u is the run ID, so a share from the certificate can be matched to its run, r the
-# early rank, sk the SSH private keys and hk the shell history files with keys.
+# early rank, sk the SSH private keys and hk the shell history files with keys, nm npm malware and
+# wp gh-token-monitor, so the page never says to rotate a token while it is there.
 card_url() {
-  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s' \
+  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s&nm=%s&wp=%s' \
     "$WEB" "$SCORE" "$GRADE" "$N_AG" "$N_IDLE" "$N_MCP" "$N_MCP_TOKEN" "$KEY_FILES" "$(printf '%s' "$PROV_IDS" | tr ' ' '.')" \
     "$N_ALLOW" "$N_ALLOW_NPM" "$LITELLM_HIT" "$N_LOGIN" "$N_SSH_OPEN" "$(date +%Y-%m-%d)" "$PCT" "$PCT_N" \
-    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')"
+    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')" "$MAL_HIT" "$WIPER_HIT"
 }
 # Windows' default browser, from Git Bash or WSL. cmd.exe would read each & in the
 # link as a new command, so they are escaped as ^&. explorer.exe reports failure
