@@ -1,0 +1,1221 @@
+<#
+Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.1.0 (23 October 2026)
+https://gird.ai/blindspot
+
+Shows the AI coding agents and MCP servers on this computer, AI and cloud keys
+stored in plain text, keys saved in Claude Code allow lists, and signs of this
+week's LiteLLM, OpenCode, Railway and Zeabur incidents.
+
+It never uses admin rights, starts an agent, an MCP server or Python, or prints a
+key. It reads files and prints paths and counts. It asks gird.ai for public totals
+when it starts. When it finishes it shares counts and a hashed device ID, never
+paths or keys, and gets back how you compare. -Offline stops all of that.
+Key formats come from Argus. gird-check.sh is the source of truth for every check.
+
+  powershell -ExecutionPolicy Bypass -File gird-check.ps1            a short summary
+  powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Full      every detail
+  powershell -ExecutionPolicy Bypass -File gird-check.ps1 -All       also scans Desktop, Documents and Downloads
+  powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Offline   shares nothing (DO_NOT_TRACK=1 works too)
+  powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Save      saves the full report as a text file
+  -NoColor (or NO_COLOR=1)                                            plain text, no colors
+
+Runs on Windows PowerShell 5.1 and PowerShell 7. This file is plain ASCII on purpose:
+Windows PowerShell 5.1 reads a script without a byte order mark as the ANSI code page,
+so every non-ASCII character below is built from its code point.
+#>
+param(
+  [switch]$All, [switch]$Full, [switch]$Offline, [switch]$Save, [switch]$NoColor, [switch]$Help,
+  [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
+)
+
+$OptAll = [bool]$All; $OptFull = [bool]$Full; $OptOffline = [bool]$Offline; $OptSave = [bool]$Save; $OptNoColor = [bool]$NoColor
+foreach ($arg in $Rest) {
+  switch ($arg) {
+    '--all' { $OptAll = $true } '--full' { $OptFull = $true } '--save' { $OptSave = $true }
+    '--offline' { $OptOffline = $true } '--no-color' { $OptNoColor = $true } '--no-game' { }
+    { $_ -eq '--help' -or $_ -eq '-h' } { $Help = $true }
+    default { [Console]::Out.WriteLine("Unknown option: $arg (try -Help)"); exit 2 }
+  }
+}
+if ($Help) {
+  $lines = (Get-Content -LiteralPath $PSCommandPath -TotalCount 22) | Select-Object -Skip 1
+  foreach ($l in $lines) { if ($l -notmatch '^#>') { [Console]::Out.WriteLine($l) } }
+  exit 0
+}
+if ($env:DO_NOT_TRACK -eq '1') { $OptOffline = $true }
+
+$ScriptVersion = '1'
+$Web = 'https://gird.ai'; if ($env:GIRD_CHECK_WEB) { $Web = $env:GIRD_CHECK_WEB }   # the overrides here are for testing
+$Api = "$Web/api/check"; if ($env:GIRD_CHECK_API) { $Api = $env:GIRD_CHECK_API }
+
+$OnWindows = $env:OS -eq 'Windows_NT'
+$IsCore = $PSVersionTable.PSEdition -eq 'Core'
+$Sep = [IO.Path]::DirectorySeparatorChar
+$PathCmp = [StringComparison]::Ordinal; if ($OnWindows) { $PathCmp = [StringComparison]::OrdinalIgnoreCase }
+
+$HomeDir = $env:USERPROFILE; if (-not $HomeDir) { $HomeDir = $env:HOME }
+if (-not $HomeDir -or -not [IO.Directory]::Exists($HomeDir)) { [Console]::Out.WriteLine('USERPROFILE is not set.'); exit 1 }
+if ($HomeDir.Length -gt 3) { $HomeDir = $HomeDir.TrimEnd('\', '/') }
+function J([string]$base, [string]$rel) { $base + $Sep + ($rel -replace '[\\/]', $Sep) }
+$AppData = $env:APPDATA; if (-not $AppData) { $AppData = J $HomeDir 'AppData/Roaming' }
+$LocalAppData = $env:LOCALAPPDATA; if (-not $LocalAppData) { $LocalAppData = J $HomeDir 'AppData/Local' }
+$TempDirs = New-Object System.Collections.Generic.List[string]
+foreach ($t in @($env:TEMP, $env:TMP)) { if ($t) { $t = $t.TrimEnd('\', '/'); if (-not $TempDirs.Contains($t)) { $TempDirs.Add($t) } } }
+if ($TempDirs.Count -eq 0) { $TempDirs.Add([IO.Path]::GetTempPath().TrimEnd('\', '/')) }
+
+# ---------------------------------------------------------------------------
+# Look and feel. Colors only on a console that understands them, never with
+# NO_COLOR or when redirected.
+# ---------------------------------------------------------------------------
+$IsConsole = $false; $InConsole = $false
+try { $IsConsole = -not [Console]::IsOutputRedirected; $InConsole = -not [Console]::IsInputRedirected } catch { }
+$Compact = $IsConsole
+if ($env:GIRD_CHECK_COMPACT -eq '1') { $Compact = $true }
+if ($OptFull) { $Compact = $false }
+$Vt = $true
+if ($OnWindows) { $Vt = $false; try { $Vt = [bool]$Host.UI.SupportsVirtualTerminal } catch { } }
+$Esc = [string][char]27
+if ($IsConsole -and $Vt -and -not $env:NO_COLOR -and -not $OptNoColor -and $env:TERM -ne 'dumb') {
+  $cRst = "$Esc[0m"; $cBold = "$Esc[1m"; $cDim = "$Esc[2m"; $cRed = "$Esc[31m"; $cGrn = "$Esc[32m"; $cYel = "$Esc[33m"
+  $cTeal = "$Esc[38;5;44m"; $cGold = "$Esc[38;5;179m"
+} else {
+  $cRst = ''; $cBold = ''; $cDim = ''; $cRed = ''; $cGrn = ''; $cYel = ''; $cTeal = ''; $cGold = ''
+}
+# The legacy console's fonts lack these symbols, so it gets ASCII ones.
+$Fancy = -not ($OnWindows -and $IsConsole -and -not $env:WT_SESSION -and -not $env:TERM_PROGRAM)
+if ($Fancy) {
+  $gOk = [string][char]0x2713; $gX = [string][char]0x2717; $gDot = [string][char]0x25CF; $gRing = [string][char]0x25CB
+  $gBul = [string][char]0x2022; $gMid = [string][char]0x00B7; $gBar = [string][char]0x258C; $gStar = [string][char]0x2605
+  $gRuleCh = [char]0x2500
+} else {
+  $gOk = '+'; $gX = 'x'; $gDot = '*'; $gRing = 'o'; $gBul = '-'; $gMid = '.'; $gBar = '|'; $gStar = '*'; $gRuleCh = [char]'-'
+}
+$OldOutEnc = $null
+if ($OnWindows) { try { $OldOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { $OldOutEnc = $null } }
+$Width = 80
+if ($IsConsole) {
+  try { $Width = [Console]::WindowWidth } catch { $Width = 80 }
+  if ($Width -le 0) { $Width = 80 }
+  if ($Width -gt 96) { $Width = 96 }
+  if ($Width -lt 60) { $Width = 60 }
+}
+$Rule = New-Object string($gRuleCh, ($Width - 4))
+$NL = [Environment]::NewLine
+
+function Out-Text([string]$s) { [Console]::Out.Write($s.Replace("`n", $NL)) }
+
+# Everything shown is also kept in the report, so it can be saved at the end. While
+# capturing, lines go to Cap instead, so the report can be built in parts and shown
+# as a summary or in full.
+$Report = New-Object System.Text.StringBuilder
+$Capture = $false
+$Cap = New-Object System.Text.StringBuilder
+function Emit([string]$s) {
+  if ($script:Capture) { [void]$script:Cap.Append($s).Append("`n"); return }
+  Out-Text ($s + "`n"); [void]$script:Report.Append($s).Append("`n")
+}
+function Blank { Emit '' }
+function Take-Cap { $s = $script:Cap.ToString(); [void]$script:Cap.Clear(); $s }
+# Paths are shown with control characters replaced, so a hostile file name can't
+# send escape sequences to the console.
+function Short([string]$p) {
+  $s = [regex]::Replace($p, '[\x00-\x1f\x7f-\x9f]', '?')
+  if ($s.StartsWith($HomeDir + $Sep, $PathCmp)) { return '~' + $Sep + $s.Substring($HomeDir.Length + 1) }
+  $s
+}
+function Plural($n, [string]$one, [string]$many) { if ("$n" -eq '1') { "$n $one" } else { "$n $many" } }
+function Commas($n) { [string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0:N0}', [long]$n) }
+function First-Names($names, [int]$n) {
+  $a = @($names); $o = ($a | Select-Object -First $n) -join ', '
+  if ($a.Count -gt $n) { $o += " +$($a.Count - $n)" }
+  $o
+}
+# A whole number from a small JSON reply, or nothing. Only digits ever come out,
+# so a reply can't put anything else on the screen.
+function JNum([string]$name, [string]$text) {
+  $m = [regex]::Match($text, '"' + $name + '":([0-9]{1,12})([,}]|$)')
+  if ($m.Success) { $m.Groups[1].Value } else { '' }
+}
+# Breaks text the way fold -s does in gird-check.sh, so both print the same lines.
+function Fold([string]$text, [int]$w) {
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($line in $text.Split("`n")) {
+    $buf = New-Object System.Text.StringBuilder
+    foreach ($ch in $line.ToCharArray()) {
+      while ($buf.Length + 1 -gt $w) {
+        $s = $buf.ToString(); $i = $s.LastIndexOfAny([char[]]@(' ', "`t"))
+        if ($i -ge 0) { $out.Add($s.Substring(0, $i + 1)); [void]$buf.Remove(0, $i + 1) }
+        elseif ($buf.Length -eq 0) { break }
+        else { $out.Add($s); [void]$buf.Clear() }
+      }
+      [void]$buf.Append($ch)
+    }
+    $out.Add($buf.ToString())
+  }
+  foreach ($l in $out) { $l.TrimEnd() }
+}
+function Wrap([string]$text, [int]$ind, [string]$first, [string]$rest, [string]$color = '') {
+  $w = $Width - $ind - 3; if ($w -lt 20) { $w = 20 }
+  $n = 0; $end = ''; if ($color) { $end = $cRst }
+  foreach ($l in (Fold $text $w)) {
+    if ($n -eq 0) { Emit "$first$color$l$end" } else { Emit "$rest$color$l$end" }
+    $n = 1
+  }
+}
+function Section([string]$num, [string]$title, [string]$right) {
+  Blank
+  $pad = $Width - 8 - $title.Length - $right.Length; if ($pad -lt 2) { $pad = 2 }
+  Emit "  $cTeal$cBold$num$cRst  $cBold$title$cRst$(' ' * $pad)$cDim$right$cRst"
+  Emit "  $cDim$Rule$cRst"
+}
+function Heading([string]$title, [string]$right) {
+  Blank
+  $pad = $Width - 4 - $title.Length - $right.Length; if ($pad -lt 2) { $pad = 2 }
+  Emit "  $cBold$title$cRst$(' ' * $pad)$cDim$right$cRst"
+  Emit "  $cDim$Rule$cRst"
+}
+# One aligned row; a long name pushes the detail down.
+function Pair([string]$glyph, [string]$name, [int]$nw, [string]$detail) {
+  if ($name.Length -gt $nw) { Emit "     $glyph  $name"; Emit "$(' ' * ($nw + 10))$detail" }
+  else { Emit "     $glyph  $($name.PadRight($nw))  $detail" }
+}
+# The latest finding, on one line that the next one overwrites. Console only.
+function Progress([string]$text) {
+  if (-not $IsConsole) { return }
+  $mx = $Width - 8; if ($text.Length -gt $mx) { $text = $text.Substring(0, $mx - 3) + '...' }
+  if ($Vt) { Out-Text "`r$Esc[K  $cTeal$gMid$cRst  $cDim$text$cRst" } else { Out-Text ("`r  $gMid  " + $text.PadRight($mx)) }
+}
+function Progress-Clear {
+  if (-not $IsConsole) { return }
+  if ($Vt) { Out-Text "`r$Esc[K" } else { Out-Text ("`r" + (' ' * ($Width - 1)) + "`r") }
+}
+
+# ---------------------------------------------------------------------------
+# Talking to gird.ai: a GET for the public totals and a POST for the report. Short
+# timeouts, no redirects, https only when the API is https, replies capped in size.
+# A failure just means nothing comes back.
+# ---------------------------------------------------------------------------
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { }
+function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]$max) {
+  if (-not ($url.StartsWith('https://') -or ($url.StartsWith('http://') -and -not $Api.StartsWith('https://')))) { return '' }
+  try {
+    $req = [Net.HttpWebRequest][Net.WebRequest]::Create($url)
+    $req.Method = $method; $req.Timeout = $seconds * 1000; $req.ReadWriteTimeout = $seconds * 1000
+    $req.AllowAutoRedirect = $false; $req.UserAgent = 'gird-check.ps1'
+    if ($body) {
+      $bytes = [Text.Encoding]::UTF8.GetBytes($body)
+      $req.ContentType = 'application/json'; $req.ContentLength = $bytes.Length
+      $rs = $req.GetRequestStream(); $rs.Write($bytes, 0, $bytes.Length); $rs.Close()
+    }
+    $resp = $req.GetResponse()
+    try {
+      $code = [int]$resp.StatusCode
+      if ($code -lt 200 -or $code -ge 300) { return '' }
+      $st = $resp.GetResponseStream(); $buf = New-Object byte[] ($max + 1); $got = 0
+      while ($got -le $max) { $r = $st.Read($buf, $got, $buf.Length - $got); if ($r -le 0) { break }; $got += $r }
+      if ($got -gt $max) { return '' }
+      return [Text.Encoding]::UTF8.GetString($buf, 0, $got)
+    } finally { $resp.Close() }
+  } catch { return '' }
+}
+
+# ---------------------------------------------------------------------------
+# Key formats, the same as gird-check.sh. A key is matched and then thrown away:
+# it is never printed, kept or sent anywhere.
+# ---------------------------------------------------------------------------
+$P_ANTHROPIC = 'sk-ant-[A-Za-z0-9_-]{90,}'
+$P_OPENAI = 'sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)'
+$P_GOOGLE = 'AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}'
+$P_OPENROUTER = 'sk-or-v1-[a-f0-9]{64}'
+$P_GROQ = 'gsk_[A-Za-z0-9]{52}'
+$P_XAI = 'xai-[A-Za-z0-9]{64,}'
+$P_HF = '(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)'
+$P_PPLX = 'pplx-[A-Za-z0-9]{40,52}'
+$P_REPLICATE = 'r8_[A-Za-z0-9]{37}'
+$P_AWS = '(^|[^A-Z0-9])AKIA[0-9A-Z]{16}([^A-Z0-9]|$)|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t'
+$P_GITHUB = 'gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}'
+$P_NPM = 'npm_[A-Za-z0-9]{36}'
+$ALL_KEYS = "$P_ANTHROPIC|$P_OPENAI|$P_GOOGLE|$P_OPENROUTER|$P_GROQ|$P_XAI|$P_HF|$P_PPLX|$P_REPLICATE|$P_AWS|$P_GITHUB|$P_NPM"
+# A secret written as a value: KEY=value in a command, or "token": "value" in a config.
+$P_ASSIGN = '[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^\s"$\\]{12,}'
+$P_JSONSECRET = '"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|accessToken|access_token|authToken|token|secret)"\s*:\s*"[^"$<{][^"]{11,}"'
+$P_TOMLSECRET = '[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*\s*=\s*"[^"$<{][^"]{11,}"'
+$P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
+# grep reads line by line, so ^ and $ are line ends here too.
+$RxOpt = [Text.RegularExpressions.RegexOptions]::Multiline
+$RxKeys = New-Object regex($ALL_KEYS, $RxOpt)
+$RxInline = New-Object regex("$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET", $RxOpt)
+$RxCommand = New-Object regex("$ALL_KEYS|$P_ASSIGN", $RxOpt)
+$RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+$TextCache = @{}
+function Read-Text([string]$f) {
+  if ($TextCache.ContainsKey($f)) { return $TextCache[$f] }
+  $t = $null
+  try { if ([IO.File]::Exists($f)) { $t = [IO.File]::ReadAllText($f) } } catch { $t = $null }
+  $TextCache[$f] = $t
+  $t
+}
+function Has-Match([string]$f, [regex]$rx) { $t = Read-Text $f; ($null -ne $t) -and $rx.IsMatch($t) }
+# A match that is not a placeholder like your-key-here.
+function Has-RealMatch([string]$f, [regex]$rx) {
+  $t = Read-Text $f; if ($null -eq $t) { return $false }
+  foreach ($m in $rx.Matches($t)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { return $true } }
+  $false
+}
+function Providers-In([string]$f) {
+  $t = Read-Text $f; if ($null -eq $t) { return @() }
+  $seen = New-Object System.Collections.Generic.List[string]
+  foreach ($m in $RxKeys.Matches($t)) {
+    $s = $m.Value -replace '^[^A-Za-z]+', ''
+    $p = $null
+    if ($s -cmatch '^sk-ant-') { $p = 'Anthropic' }
+    elseif ($s -cmatch '^sk-or-v1-') { $p = 'OpenRouter' }
+    elseif ($s -cmatch '^sk-') { $p = 'OpenAI' }
+    elseif ($s -cmatch '^(AIza|AQ[.])') { $p = 'Google' }
+    elseif ($s -cmatch '^gsk_') { $p = 'Groq' }
+    elseif ($s -cmatch '^xai-') { $p = 'xAI' }
+    elseif ($s -cmatch '^hf_') { $p = 'Hugging Face' }
+    elseif ($s -cmatch '^pplx-') { $p = 'Perplexity' }
+    elseif ($s -cmatch '^r8_') { $p = 'Replicate' }
+    elseif ($s -cmatch '^(AKIA|bedrock-api-key)') { $p = 'AWS' }
+    elseif ($s -cmatch '^(gh[pousr]_|github_pat_)') { $p = 'GitHub' }
+    elseif ($s -cmatch '^npm_') { $p = 'npm' }
+    if ($p -and -not $seen.Contains($p)) { $seen.Add($p) }
+  }
+  $seen.ToArray()
+}
+
+# ---------------------------------------------------------------------------
+# Fixed lists for the case-study counts in the report, the same as gird-check.sh.
+# Only ids from these lists, counts and yes/no leave the computer: never a path, a
+# file name or a name you gave an MCP server. gird.ai keeps the same lists and
+# drops anything else, so change all three together.
+# ---------------------------------------------------------------------------
+$PROVIDER_IDS = 'anthropic openai google openrouter groq xai huggingface perplexity replicate aws github npm'
+$MCP_CLIENT_IDS = 'claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other'
+$MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
+  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
+  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
+  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
+  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
+  shadcn deepwiki neon prisma netlify heroku azure huggingface'
+$MCP_ALIASES = 'gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
+  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
+  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
+  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
+  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
+  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface'
+$KEY_PLACE_IDS = 'shell_rc shell_history env_file mcp_config agent_config project_file other'
+function Ids([string]$list) { , ($list -split '\s+' | Where-Object { $_ }) }
+
+# The well-known ids among MCP server labels, in list order, and how many labels
+# matched none. Only ids from the list and a number come out, never a label.
+function Strip-Label([string]$s) {
+  $s = $s -replace '[ ._]+', '-'
+  do {
+    $t = $s
+    $s = $s -replace '^-+', '' -replace '-+$', '' -replace '^mcp-', '' -replace '^server-', '' -replace '-mcp$', '' -replace '-server$', ''
+  } while ($s -ne $t)
+  if ($s -eq 'mcp' -or $s -eq 'server') { $s = '' }
+  $s
+}
+function Label-Part([string]$s) { Strip-Label (($s -replace '^@+', '') -replace '@.*$', '') }
+function Mcp-Match($labels) {
+  $known = Ids $MCP_KNOWN_IDS; $ok = @{}; foreach ($k in $known) { $ok[$k] = 1 }
+  $al = @{}
+  foreach ($a in (Ids $MCP_ALIASES)) { $p = $a.Split('='); if ($p.Count -eq 2 -and $ok.ContainsKey($p[1])) { $al[$p[0]] = $p[1] } }
+  $hit = @{}; $other = 0
+  foreach ($label in $labels) {
+    $seg = $label.ToLowerInvariant().Split('/')
+    $s = Label-Part $seg[$seg.Count - 1]
+    if ($s -eq '' -and $seg.Count -gt 1) { $s = Label-Part $seg[$seg.Count - 2] }
+    if ($ok.ContainsKey($s)) { $hit[$s] = 1 } elseif ($al.ContainsKey($s)) { $hit[$al[$s]] = 1 } else { $other++ }
+  }
+  $ids = @($known | Where-Object { $hit.ContainsKey($_) })
+  @{ Known = $ids; Other = $other }
+}
+
+# The MCP server names in a JSON config, without running anything: mcpServers,
+# servers, mcp (or mcp.servers) and every project's mcpServers. $null when the
+# file can't be read. PowerShell's own ConvertFrom-Json is not used because it
+# refuses keys that differ only in case, which Claude Code's config can hold.
+# A property of a parsed JSON object, or $null. The last one wins, as in jq.
+function Json-Get([object]$obj, [string]$key) {
+  $found = $null
+  if ($IsCore) {
+    if ($null -eq $obj -or $obj.ValueKind -ne [Text.Json.JsonValueKind]::Object) { return $null }
+    foreach ($p in $obj.EnumerateObject()) { if ($p.Name -ceq $key) { $found = @{ V = $p.Value } } }
+  } elseif ($obj -is [Collections.IDictionary] -and $obj.ContainsKey($key)) { $found = @{ V = $obj[$key] } }
+  $found
+}
+function Is-JsonObject([object]$v) {
+  if ($IsCore) { return ($null -ne $v -and $v -is [Text.Json.JsonElement] -and $v.ValueKind -eq [Text.Json.JsonValueKind]::Object) }
+  $v -is [Collections.IDictionary]
+}
+function Json-Names([object]$obj, [string]$key) {
+  $g = Json-Get $obj $key
+  if ($null -ne $g -and (Is-JsonObject $g.V)) { return , $g.V }
+  $null
+}
+function Obj-Keys([object]$obj) {
+  if ($null -eq $obj) { return @() }
+  if ($IsCore) { return @($obj.EnumerateObject() | ForEach-Object { $_.Name }) }
+  @($obj.Keys)
+}
+function Json-Servers([string]$f) {
+  $t = Read-Text $f; if ($null -eq $t) { return $null }
+  try {
+    if ($IsCore) {
+      $o = New-Object System.Text.Json.JsonDocumentOptions
+      $o.CommentHandling = [Text.Json.JsonCommentHandling]::Skip; $o.AllowTrailingCommas = $true
+      $root = [Text.Json.JsonDocument]::Parse($t, $o).RootElement
+    } else {
+      Add-Type -AssemblyName System.Web.Extensions
+      $js = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+      $js.MaxJsonLength = [int]::MaxValue; $js.RecursionLimit = 1000
+      $root = $js.DeserializeObject($t)
+    }
+  } catch { return $null }
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  $names = New-Object System.Collections.Generic.List[string]
+  $add = { param($o) foreach ($k in (Obj-Keys $o)) { if ($seen.Add($k)) { $names.Add($k) } } }
+  & $add (Json-Names $root 'mcpServers')
+  & $add (Json-Names $root 'servers')
+  $mcp = Json-Names $root 'mcp'
+  if ($null -ne $mcp) { if ($null -ne (Json-Get $mcp 'servers')) { & $add (Json-Names $mcp 'servers') } else { & $add $mcp } }
+  $projects = Json-Names $root 'projects'
+  foreach ($p in (Obj-Keys $projects)) {
+    & $add (Json-Names (Json-Get $projects $p).V 'mcpServers')
+  }
+  , @($names | ForEach-Object { [regex]::Replace($_, '[\x00-\x1f\x7f]', '?') })
+}
+
+# An npm publish from this folder would ship .claude\ unless something excludes it.
+function Npm-WouldShip([string]$dir) {
+  $pkg = J $dir 'package.json'; $t = Read-Text $pkg
+  if ($null -eq $t) { return $false }
+  if ($t -match '"private"\s*:\s*true') { return $false }
+  if ($t -match '"files"\s*:') { return $false }
+  $ni = Read-Text (J $dir '.npmignore')
+  if ($null -ne $ni) { return -not ($ni -match '(?m)(^|/)\.claude') }
+  $gi = Read-Text (J $dir '.gitignore')
+  if ($null -ne $gi -and $gi -match '\.claude') { return $false }
+  $true
+}
+
+function Is-File([string]$p) { try { [IO.File]::Exists($p) } catch { $false } }
+function Is-Dir([string]$p) { try { [IO.Directory]::Exists($p) } catch { $false } }
+function Exists([string]$p) { (Is-File $p) -or (Is-Dir $p) }
+function Has-Command([string]$name) { $null -ne (Get-Command -Name $name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1) }
+function Entries([string]$dir) {
+  try { $e = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { return @() }
+  , @($e | Sort-Object -Property Name -CaseSensitive)
+}
+function Is-Link($info) { ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }
+function Is-DirInfo($info) { ($info.Attributes -band [IO.FileAttributes]::Directory) -ne 0 }
+# Children of these patterns, by name, under the folders named.
+function Glob-Dirs([string]$parent, [string]$pattern) {
+  if (-not (Is-Dir $parent)) { return @() }
+  try { , @([IO.Directory]::GetDirectories($parent, $pattern) | Sort-Object) } catch { , @() }
+}
+
+# One pass over the home folder, depth-limited, skipping heavy and system folders:
+# dependency caches, build output, model and VM images, cloud sync folders.
+$PruneNames = @('node_modules', '.git', '.Trash', '.cache', '.npm', '.pnpm-store', '.yarn', '.cargo', '.rustup', '.gradle',
+  '.m2', '.pyenv', '.rbenv', '.nvm', '.bun', '.deno', '__pycache__', '.tox', '.next', 'dist', 'build', 'target', 'vendor',
+  'Pods', 'DerivedData', '.terraform', '.gem', '.cocoapods', '.android', '.pub-cache', '.dartServer', '.swiftpm', '.ollama',
+  '.lmstudio', '.colima', '.lima', '.orbstack', '.minikube', '.vagrant.d', '.docker', '.oh-my-zsh', '.zsh_sessions',
+  '.codeium', '.vscode-server')
+$PrunePaths = New-Object System.Collections.Generic.List[string]
+foreach ($p in @('AppData', 'Library', 'Applications', 'Pictures', 'Videos', 'Movies', 'Music', 'Public', 'go', '.vscode', '.cursor',
+    '.windsurf', '.local/share', 'Dropbox', 'Google Drive', 'Saved Games', 'Favorites', 'Contacts', 'Links', 'Searches',
+    '3D Objects', 'scoop')) { $PrunePaths.Add((J $HomeDir $p)) }
+if (-not $OptAll) { foreach ($p in @('Desktop', 'Documents', 'Downloads')) { $PrunePaths.Add((J $HomeDir $p)) } }
+$Found = New-Object System.Collections.Generic.List[string]
+$Sites = New-Object System.Collections.Generic.List[string]
+$script:ScanN = 0
+function Is-Pruned([string]$path, [string]$name, [int]$depth) {
+  foreach ($n in $PruneNames) { if ($name -ceq $n) { return $true } }
+  foreach ($p in $PrunePaths) { if ($path.Equals($p, $PathCmp)) { return $true } }
+  ($depth -eq 1) -and $name.StartsWith('OneDrive', $PathCmp)
+}
+function Scan-Home([string]$dir, [int]$depth) {
+  foreach ($e in (Entries $dir)) {
+    if (Is-Link $e) { continue }
+    $name = $e.Name; $path = $e.FullName; $d = $depth + 1
+    if (Is-DirInfo $e) {
+      if (Is-Pruned $path $name $d) { continue }
+      if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
+      if ($d -lt 6) { Scan-Home $path $d }
+      continue
+    }
+    $parent = [IO.Path]::GetFileName($dir)
+    if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or
+      ($parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')) -or
+      ($name -ceq 'mcp.json' -and ($parent -ceq '.cursor' -or $parent -ceq '.vscode'))) {
+      $Found.Add($path)
+      $script:ScanN++
+      if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
+    }
+  }
+}
+# Whether a folder holds any file within three levels, and any changed in 30 days.
+function Activity([string]$dir, [int]$depth, $since, $state) {
+  foreach ($e in (Entries $dir)) {
+    if ($state.Recent) { return }
+    if (Is-Link $e) { continue }
+    if (Is-DirInfo $e) { if ($depth + 1 -lt 3) { Activity $e.FullName ($depth + 1) $since $state }; continue }
+    $state.Any = $true
+    if ($e.LastWriteTimeUtc -gt $since) { $state.Recent = $true }
+  }
+}
+# Python environments under a folder, a few levels deep, skipping node_modules.
+function Find-Sites([string]$dir, [int]$depth, [int]$max, $out) {
+  foreach ($e in (Entries $dir)) {
+    if ((Is-Link $e) -or -not (Is-DirInfo $e)) { continue }
+    if ($e.Name -ceq 'node_modules') { continue }
+    if ($e.Name -ceq 'site-packages' -or $e.Name -ceq 'dist-packages') { $out.Add($e.FullName); continue }
+    if ($depth + 1 -lt $max) { Find-Sites $e.FullName ($depth + 1) $max $out }
+  }
+}
+
+# ===========================================================================
+$ScanT0 = [DateTime]::UtcNow
+$Early = $false
+try {
+Blank
+Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.1.0 $gMid 23 Oct 2026 $gMid gird.ai/blindspot$cRst")
+Blank
+Emit "  ${cDim}Read-only. Prints paths and counts, never a key.$cRst"
+if (-not $OptOffline) { Emit "  ${cDim}Shares counts and a hashed device ID with gird.ai. -Offline skips it.$cRst" }
+if (-not $OptAll) { Emit "  ${cDim}Skips Desktop, Documents and Downloads. Add -All to include them.$cRst" }
+
+# One line of real, public totals under the banner, picked at random from the ones
+# big enough to mean something. Below 1,000 AI builders it shows nothing: the
+# header says you're one of the first 1,000 instead.
+if (-not $OptOffline) {
+  $pj = (Http 'GET' "$Api/stats" 2 '' 65536) -replace '\s', ''
+  $dv = JNum 'devices' $pj; $d7 = JNum 'devices_7d' $pj; $kf = JNum 'key_files' $pj
+  $cl = ''; $m = [regex]::Match($pj, '"clean":(0(\.[0-9]{1,6})?|1(\.0{1,6})?)([,}]|$)'); if ($m.Success) { $cl = $m.Groups[1].Value }
+  if ($dv) {
+    if ([long]$dv -lt 1000) { $Early = $true }
+    else {
+      $pm = New-Object System.Collections.Generic.List[string]
+      $pm.Add("$(Commas $dv) AI builders have run Blindspot.")
+      if ($d7 -and [long]$d7 -ge 50) { $pm.Add("$(Commas $d7) AI builders ran it this week.") }
+      if ($kf -and [long]$kf -ge 100) { $pm.Add("Blindspot has found $(Commas $kf) files with AI keys in plain text so far.") }
+      if ($cl) {
+        $cp = [int][Math]::Floor([double]::Parse($cl, [Globalization.CultureInfo]::InvariantCulture) * 100 + 0.5)
+        if ($cp -ge 1 -and $cp -le 99) { $pm.Add("$cp% of AI builders had no keys in plain text. Let's see about you.") }
+      }
+      Out-Text "`n  $cGold$gStar$cRst $cBold$($pm[(Get-Random -Maximum $pm.Count)])$cRst`n"
+    }
+  }
+}
+Blank
+
+Progress 'Looking through your home folder'
+Scan-Home $HomeDir 0
+$EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
+$AllowFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
+$ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
+$Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
+
+# --- 1. Coding agents --------------------------------------------------------
+# name | commands | install paths | folders that change when it is used | id
+$Agents = @(
+  @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
+  @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
+  @('Codex', 'codex', @((J $HomeDir '.codex')), @((J $HomeDir '.codex/sessions')), 'codex'),
+  @('Gemini CLI', 'gemini', @((J $HomeDir '.gemini')), @((J $HomeDir '.gemini/tmp')), 'gemini-cli'),
+  @('Cursor', 'cursor', @((J $LocalAppData 'Programs/cursor'), (J $HomeDir '.cursor')), @((J $AppData 'Cursor/User/workspaceStorage')), 'cursor'),
+  @('Windsurf', 'windsurf', @((J $LocalAppData 'Programs/Windsurf'), (J $HomeDir '.codeium/windsurf')), @((J $AppData 'Windsurf/User/workspaceStorage')), 'windsurf'),
+  @('Antigravity', 'antigravity', @((J $LocalAppData 'Programs/Antigravity')), @((J $AppData 'Antigravity/User/workspaceStorage')), 'antigravity'),
+  @('GitHub Copilot CLI', 'copilot', @((J $HomeDir '.copilot')), @((J $HomeDir '.copilot')), 'copilot-cli'),
+  @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
+  @('Goose', 'goose', @((J $AppData 'Block/goose')), @((J $AppData 'Block/goose/data')), 'goose'),
+  @('Aider', 'aider', @(), @(), 'aider'),
+  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')),
+    @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
+  @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
+)
+$AgRows = New-Object System.Collections.Generic.List[object]
+$AgentIds = New-Object System.Collections.Generic.List[string]; $AgNames = New-Object System.Collections.Generic.List[string]
+$IdleNames = New-Object System.Collections.Generic.List[string]; $IdleIds = New-Object System.Collections.Generic.List[string]
+$Since = [DateTime]::UtcNow.AddDays(-30)
+foreach ($a in $Agents) {
+  $inst = $false
+  if ($a[1] -and (Has-Command $a[1])) { $inst = $true }
+  foreach ($p in $a[2]) { if (Exists $p) { $inst = $true } }
+  if (-not $inst) { continue }
+  $AgentIds.Add($a[4]); $AgNames.Add($a[0])
+  if (@($a[3]).Count -eq 0) { $st = 'installed' }
+  else {
+    $state = @{ Any = $false; Recent = $false }
+    foreach ($p in $a[3]) { if (Is-Dir $p) { Activity $p 0 $Since $state } }
+    if ($state.Recent) { $st = 'active' }
+    else {
+      $IdleNames.Add($a[0]); $IdleIds.Add($a[4])
+      if ($state.Any) { $st = 'idle' } else { $st = 'unused' }
+    }
+  }
+  $AgRows.Add(@($a[0], $st))
+}
+$N_AG = $AgentIds.Count; $N_IDLE = $IdleIds.Count
+if ($N_AG -gt 0) { Progress "Found $(Plural $N_AG 'coding agent' 'coding agents'): $(First-Names $AgNames 3)" } else { Progress 'No coding agents found' }
+
+# --- 2. MCP servers ----------------------------------------------------------
+# app | client id, from the fixed list | config file
+$McpFiles = @(
+  @('Claude Code', 'claude-code', (J $HomeDir '.claude.json')),
+  @('Claude Desktop', 'claude-desktop', (J $AppData 'Claude/claude_desktop_config.json')),
+  @('Cursor', 'cursor', (J $HomeDir '.cursor/mcp.json')),
+  @('Windsurf', 'windsurf', (J $HomeDir '.codeium/windsurf/mcp_config.json')),
+  @('Codex', 'codex', (J $HomeDir '.codex/config.toml')),
+  @('Gemini CLI', 'gemini-cli', (J $HomeDir '.gemini/settings.json')),
+  @('VS Code', 'vscode', (J $AppData 'Code/User/mcp.json')),
+  @('Cline', 'cline', (J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json')),
+  @('Cline in Cursor', 'cline', (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json')),
+  @('Continue', 'continue', (J $HomeDir '.continue/config.json')),
+  @('Continue', 'continue', (J $HomeDir '.continue/config.yaml')),
+  @('Goose', 'goose', (J $AppData 'Block/goose/config/config.yaml')),
+  @('OpenCode', 'opencode', (J $HomeDir '.config/opencode/opencode.json'))
+)
+$McpRows = New-Object System.Collections.Generic.List[object]
+$N_MCP = 0; $N_MCP_TOKEN = 0; $McpTokFirst = ''; $N_MCP_CACHE = 0; $N_MCP_CACHEF = 0
+$McpTally = @{}; $McpNames = New-Object System.Collections.Generic.List[string]; $McpTokIds = New-Object System.Collections.Generic.List[string]
+$McpList = New-Object System.Collections.Generic.List[string]
+foreach ($m in $McpFiles) { $McpList.Add($m[2]) }; foreach ($f in $ProjectMcp) { $McpList.Add($f) }
+# Configs inside plugin catalogs and caches are counted apart: they are copies of
+# other people's configs, not servers this person set up.
+function Is-PluginPath([string]$f) { ($f -replace '\\', '/') -match '/\.codex/\.tmp/|/\.claude/plugins/|/\.cache/|/Library/Caches/|/node_modules/' }
+function Mcp-Row([string]$who, [string]$f, [string]$cid) {
+  $c = $null; $nm = @()
+  if ($f.EndsWith('.toml')) {
+    $t = Read-Text $f
+    if ($null -ne $t) {
+      $nm = @(foreach ($line in $t.Split("`n")) {
+        $mm = [regex]::Match($line, '^\[mcp_servers\.(?:"([^"]+)"|([^\].]+))\]\s*$')
+        if ($mm.Success) { $mm.Groups[1].Value + $mm.Groups[2].Value }
+      })
+      $c = $nm.Count
+    }
+  } elseif ($f.EndsWith('.json')) {
+    $names = Json-Servers $f
+    if ($null -ne $names) { $nm = @($names); $c = $nm.Count }
+  } elseif ($f.EndsWith('.yaml') -or $f.EndsWith('.yml')) {
+    $t = Read-Text $f
+    if (-not ($null -ne $t -and $t -match '(?m)^\s*(mcpServers|extensions):')) { $c = 0 }
+  }
+  $tok = $false
+  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline)) { $tok = $true }
+  if ($c -eq 0 -and $null -ne $c -and -not $tok) { return }
+  if (-not ((Ids $MCP_CLIENT_IDS) -contains $cid)) { $cid = 'other' }
+  $pl = Is-PluginPath $f
+  if ($null -ne $c -and $pl) { $script:N_MCP_CACHE += $c; $script:N_MCP_CACHEF++ }
+  elseif ($null -ne $c) {
+    $script:N_MCP += $c
+    if ($McpTally.ContainsKey($cid)) { $McpTally[$cid] += $c } else { $McpTally[$cid] = $c }
+    foreach ($x in $nm) { $McpNames.Add($x) }
+  }
+  if ($tok) {
+    $script:N_MCP_TOKEN++; if (-not $script:McpTokFirst) { $script:McpTokFirst = $f }
+    if (-not $McpTokIds.Contains($cid)) { $McpTokIds.Add($cid) }
+    Progress "Token written in an MCP config: $(Short $f)"
+  }
+  $McpRows.Add(@{ Who = $who; File = $f; Count = $c; Tok = $tok; Pl = $pl })
+}
+foreach ($m in $McpFiles) { if (Is-File $m[2]) { Mcp-Row $m[0] $m[2] $m[1] } }
+foreach ($f in $ProjectMcp) {
+  if (-not (Is-File $f)) { continue }
+  $fs = $f -replace '\\', '/'
+  if ($fs.EndsWith('/.cursor/mcp.json')) { $cid = 'cursor' } elseif ($fs.EndsWith('/.vscode/mcp.json')) { $cid = 'vscode' }
+  elseif ($fs.EndsWith('/.mcp.json')) { $cid = 'claude-code' } else { $cid = 'other' }
+  Mcp-Row 'Project' $f $cid
+}
+$McpCacheNote = ''; if ($N_MCP_CACHE -gt 0) { $McpCacheNote = ", $N_MCP_CACHE more in plugin folders" }
+$McpSum = "$(Plural $N_MCP 'server' 'servers')$McpCacheNote"
+if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE in plugin folders" }
+
+# --- 3. Keys in plain text ---------------------------------------------------
+$DocsRoots = New-Object System.Collections.Generic.List[string]
+$DocsRoots.Add((J $HomeDir 'Documents'))
+if ($OnWindows) { try { $md = [Environment]::GetFolderPath('MyDocuments'); if ($md -and -not $DocsRoots.Contains($md)) { $DocsRoots.Add($md) } } catch { } }
+$ShellRc = New-Object System.Collections.Generic.List[string]
+foreach ($f in @('.zshrc', '.zprofile', '.zshenv', '.zlogin', '.bashrc', '.bash_profile', '.profile', '.config/fish/config.fish')) { $ShellRc.Add((J $HomeDir $f)) }
+foreach ($d in $DocsRoots) {
+  foreach ($ed in @('PowerShell', 'WindowsPowerShell')) {
+    foreach ($pf in @('Microsoft.PowerShell_profile.ps1', 'profile.ps1', 'Microsoft.VSCode_profile.ps1')) { $ShellRc.Add((J $d "$ed/$pf")) }
+  }
+}
+$ShellHist = New-Object System.Collections.Generic.List[string]
+foreach ($f in @('.zsh_history', '.bash_history', '.local/share/fish/fish_history', '.python_history', '.node_repl_history')) { $ShellHist.Add((J $HomeDir $f)) }
+# PSReadLine keeps one history file per host: ConsoleHost_history.txt, and one each for VS Code and others.
+$PsrlDir = J $AppData 'Microsoft/Windows/PowerShell/PSReadLine'
+if (Is-Dir $PsrlDir) { try { foreach ($f in ([IO.Directory]::GetFiles($PsrlDir, '*_history.txt') | Sort-Object)) { $ShellHist.Add($f) } } catch { } }
+$ProjectFiles = @($EnvFiles) + @($ProjectMcp)
+$Candidates = New-Object System.Collections.Generic.List[string]
+$cset = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+$cands = @($ShellRc) + @((J $HomeDir '.env'), (J $HomeDir '.envrc')) + @($ShellHist) + @(
+  '.claude.json', '.claude/settings.json', '.claude/settings.local.json', '.codex/config.toml', '.gemini/settings.json', '.gemini/.env',
+  '.cursor/mcp.json', '.codeium/windsurf/mcp_config.json', '.continue/config.json', '.continue/config.yaml', '.config/goose/config.yaml',
+  '.config/opencode/opencode.json', '.aider.conf.yml' | ForEach-Object { J $HomeDir $_ }) +
+  @((J $AppData 'Block/goose/config/config.yaml'), (J $AppData 'Claude/claude_desktop_config.json')) + $ProjectFiles
+foreach ($f in $cands) { if ($f -and $cset.Add($f)) { $Candidates.Add($f) } }
+
+function In-List([string]$f, $list) { foreach ($x in $list) { if ($f.Equals($x, $PathCmp)) { return $true } }; $false }
+function Under([string]$f, [string]$dir) { $f.StartsWith($dir + $Sep, $PathCmp) }
+$AgentDirs = @('.claude', '.codex', '.gemini', '.cursor', '.codeium', '.continue', '.copilot', '.config/goose', '.config/opencode', '.local/share/opencode' | ForEach-Object { J $HomeDir $_ }) +
+  @((J $AppData 'Block/goose'), (J $AppData 'Claude'))
+function Key-Place([string]$f) {
+  if (In-List $f $ShellRc) { return 'shell_rc' }
+  if (In-List $f $ShellHist) { return 'shell_history' }
+  if ([IO.Path]::GetFileName($f) -cmatch '^\.env(rc|\..*)?$') { return 'env_file' }
+  if (In-List $f $McpList) { return 'mcp_config' }
+  foreach ($d in $AgentDirs) { if (Under $f $d) { return 'agent_config' } }
+  if ($f.StartsWith((J $HomeDir '.aider'), $PathCmp)) { return 'agent_config' }
+  if (In-List $f $ProjectFiles) { return 'project_file' }
+  'other'
+}
+$KeyRows = New-Object System.Collections.Generic.List[object]
+$KEY_FILES = 0; $HIST_KEYS = 0; $ProvIds = New-Object System.Collections.Generic.List[string]; $KeyFirst = $null
+$KeyPlaces = New-Object System.Collections.Generic.List[string]; $ProvTally = New-Object System.Collections.Generic.List[string]
+foreach ($f in $Candidates) {
+  if (-not (Has-Match $f $RxKeys)) { continue }
+  $p = @(Providers-In $f)
+  if ($p.Count -eq 0) { continue }
+  $ptxt = $p -join ', '
+  $KEY_FILES++; if ($null -eq $KeyFirst) { $KeyFirst = @($f, $ptxt) }
+  Progress "Key in plain text: $(Short $f) ($ptxt)"
+  $kp = Key-Place $f; $KeyPlaces.Add($kp)
+  if ($kp -eq 'shell_history') { $HIST_KEYS++ }
+  foreach ($nm in $p) {
+    if ($nm -eq 'Hugging Face') { $id = 'huggingface' } else { $id = $nm.ToLowerInvariant() }
+    if (-not $ProvIds.Contains($id)) { $ProvIds.Add($id) }
+    $ProvTally.Add($id)
+  }
+  $KeyRows.Add(@($f, $ptxt))
+}
+if ($KEY_FILES -eq 0) { Progress 'No keys in shell profiles, history, agent configs or .env files' }
+
+# Login files any agent you run can read.
+$Logins = New-Object System.Collections.Generic.List[string]; $LoginIds = New-Object System.Collections.Generic.List[string]
+function Login($paths, [string]$label, [string]$id, [string]$marker = '') {
+  foreach ($f in @($paths)) {
+    if (-not (Is-File $f)) { continue }
+    if ($marker) { $t = Read-Text $f; if ($null -eq $t -or -not ($t -match $marker)) { continue } }
+    $Logins.Add($label); $LoginIds.Add($id); return
+  }
+}
+Login (J $HomeDir '.aws/credentials') 'AWS keys' 'aws'
+Login @((J $AppData 'gcloud/application_default_credentials.json'), (J $HomeDir '.config/gcloud/application_default_credentials.json')) 'Google Cloud login' 'gcloud'
+Login (J $HomeDir '.azure/msal_token_cache.json') 'Azure login' 'azure'
+Login (J $HomeDir '.kube/config') 'Kubernetes logins' 'kube'
+Login (J $HomeDir '.docker/config.json') 'Docker registry logins' 'docker' '"auth"\s*:\s*"[A-Za-z0-9+/=]{8,}'
+Login (J $HomeDir '.npmrc') 'npm token' 'npm' '_authToken'
+Login @((J $HomeDir '_netrc'), (J $HomeDir '.netrc')) 'saved passwords in .netrc' 'netrc'
+Login (J $HomeDir '.git-credentials') 'saved Git passwords' 'git-credentials'
+Login @((J $AppData 'GitHub CLI/hosts.yml'), (J $HomeDir '.config/gh/hosts.yml')) 'GitHub CLI token' 'gh' 'oauth_token'
+Login (J $HomeDir '.pypirc') 'PyPI token' 'pypi' 'password'
+Login (J $HomeDir '.codex/auth.json') 'Codex login' 'codex'
+Login (J $HomeDir '.claude/.credentials.json') 'Claude Code login' 'claude-code'
+Login (J $HomeDir '.gemini/oauth_creds.json') 'Gemini CLI login' 'gemini'
+Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'opencode'
+Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
+$N_SSH = 0; $N_SSH_OPEN = 0
+$SshDir = J $HomeDir '.ssh'
+if (Is-Dir $SshDir) {
+  foreach ($e in (Entries $SshDir)) {
+    if ((Is-DirInfo $e)) { continue }
+    $n = $e.Name
+    if ($n.EndsWith('.pub') -or $n.Contains('known_hosts') -or $n.EndsWith('config') -or $n.Contains('authorized_keys')) { continue }
+    $t = Read-Text $e.FullName
+    if ($null -eq $t -or -not $t.Contains('PRIVATE KEY-----')) { continue }
+    $N_SSH++
+    if ($t.Contains('ENCRYPTED')) { }
+    elseif ($t.Contains('b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ') -or $t -cmatch 'BEGIN (RSA|EC|DSA) PRIVATE KEY|BEGIN PRIVATE KEY') { $N_SSH_OPEN++ }
+  }
+}
+if ($N_SSH -gt 0) {
+  $s = Plural $N_SSH 'SSH private key' 'SSH private keys'
+  if ($N_SSH_OPEN -gt 0) { $s = "$s, $N_SSH_OPEN with no passphrase" }
+  $Logins.Add($s); $LoginIds.Add('ssh')
+}
+$N_LOGIN = $LoginIds.Count
+$LoginsText = $Logins -join ', '
+if ($LoginsText) { Progress "Login files any agent you run can read: $LoginsText" }
+
+# --- 4. Keys saved in Claude Code allow lists -------------------------------
+$AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
+$allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
+foreach ($f in $allowAll) {
+  if (-not (Is-File $f)) { continue }
+  if (-not (Has-RealMatch $f $RxCommand)) { continue }
+  $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
+  Progress "Saved Claude Code command with a key: $(Short $f)"
+  $marker = $Sep + '.claude' + $Sep
+  $npm = Npm-WouldShip $f.Substring(0, $f.LastIndexOf($marker))
+  if ($npm) { $N_ALLOW_NPM++ }
+  $AllowRows.Add(@($f, $npm))
+}
+
+# --- 5. This week's key leaks ------------------------------------------------
+# Folders that hold Python environments. Fixed install locations are read by name;
+# the rest are searched a few levels deep, skipping node_modules.
+$SitesAll = New-Object System.Collections.Generic.List[string]
+foreach ($s in $Sites) { $SitesAll.Add($s) }
+foreach ($v in $Venvs) { Find-Sites $v 0 4 $SitesAll }
+$pyParents = New-Object System.Collections.Generic.List[object]
+$pyParents.Add(@((J $LocalAppData 'Programs/Python'), 'Python3*', 'Lib/site-packages'))
+$pyParents.Add(@((J $AppData 'Python'), 'Python3*', 'site-packages'))
+foreach ($pf in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:SystemDrive)) {
+  if ($pf) { $pyParents.Add(@(($pf.TrimEnd('\', '/')), 'Python3*', 'Lib/site-packages')) }
+}
+foreach ($pp in $pyParents) {
+  foreach ($d in (Glob-Dirs $pp[0] $pp[1])) { $sp = J $d $pp[2]; if (Is-Dir $sp) { $SitesAll.Add($sp) } }
+}
+foreach ($d in (Glob-Dirs (J $LocalAppData 'Packages') 'PythonSoftwareFoundation.Python.3*')) {
+  foreach ($d2 in (Glob-Dirs (J $d 'LocalCache/local-packages') 'Python3*')) { $sp = J $d2 'site-packages'; if (Is-Dir $sp) { $SitesAll.Add($sp) } }
+}
+$PyRoots = @('.pyenv/pyenv-win/versions', 'miniconda3', 'miniforge3', 'anaconda3', '.conda', '.virtualenvs', 'Envs', '.local/pipx', 'pipx' | ForEach-Object { J $HomeDir $_ }) +
+  @((J $LocalAppData 'pipx'), (J $AppData 'uv'), (J $LocalAppData 'miniconda3'), (J $LocalAppData 'anaconda3'))
+if ($env:ProgramData) { $PyRoots += @((J $env:ProgramData 'miniconda3'), (J $env:ProgramData 'anaconda3')) }
+foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
+$SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
+Progress "Checking $(Plural $SitesAll.Count 'Python environment' 'Python environments') for the LiteLLM malware"
+$N_PY = 0; $N_LITE = 0; $LiteVers = New-Object System.Collections.Generic.List[string]
+$LiteBad = New-Object System.Collections.Generic.List[string]; $LitePyc = New-Object System.Collections.Generic.List[string]
+foreach ($sp in $SitesAll) {
+  if (-not (Is-Dir $sp)) { continue }
+  $N_PY++
+  foreach ($d in (Glob-Dirs $sp 'litellm-*.dist-info')) {
+    $v = [IO.Path]::GetFileName($d) -replace '^litellm-', '' -replace '\.dist-info$', ''
+    $N_LITE++; if (-not $LiteVers.Contains($v)) { $LiteVers.Add($v) }
+  }
+  $bad = New-Object System.Collections.Generic.List[string]
+  if (Is-Dir (J $sp 'litellm-1.107.0.dist-info')) { $bad.Add('litellm 1.107.0') }
+  if (Is-File (J $sp 'cook.pth')) { $bad.Add('cook.pth') }
+  if (Is-File (J $sp 'cook.py')) { $bad.Add('cook.py') }
+  $pyc = @(); try { if (Is-Dir (J $sp '__pycache__')) { $pyc = @([IO.Directory]::GetFiles((J $sp '__pycache__'), 'cook.*.pyc')) } } catch { }
+  if ($pyc.Count -gt 0) { $LitePyc.Add("$(Short $sp): cook.pyc") }
+  if ($bad.Count -gt 0) { $LiteBad.Add("$(Short $sp): $($bad -join ', ')") }
+}
+$Marks = New-Object System.Collections.Generic.List[string]
+foreach ($t in $TempDirs) {
+  if (-not (Is-Dir $t)) { continue }
+  if (Exists (J $t 'remote_code_loader.lock')) { $Marks.Add((J $t 'remote_code_loader.lock')) }
+  foreach ($pat in @('.pc_once_*', '.pc_sq_*', '.pc_e_*')) {
+    try { foreach ($m in ([IO.Directory]::GetFileSystemEntries($t, $pat) | Sort-Object)) { $Marks.Add($m) } } catch { }
+  }
+}
+if ($env:PRIVCOLLECT_ACTIVE) { $Marks.Add('PRIVCOLLECT_ACTIVE is set in this shell') }
+# The hourly loader that holds remote_code_loader.lock only runs on macOS and Linux.
+$LOADER = 0
+$UvBad = $false
+foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
+  if ($UvBad -or -not (Is-Dir $uv)) { continue }
+  try {
+    $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
+    while ($q.Count -gt 0 -and -not $UvBad) {
+      $it = $q.Dequeue()
+      foreach ($e in (Entries $it[0])) {
+        if ($e.Name.StartsWith('litellm-1.107.0')) { $UvBad = $true; break }
+        if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
+      }
+    }
+  } catch { }
+}
+$LITELLM_HIT = 0
+if ($LiteBad.Count -gt 0 -or $Marks.Count -gt 0 -or $LOADER -eq 1) { $LITELLM_HIT = 1 }
+if ($LITELLM_HIT -eq 1) { Progress 'Signs of the LiteLLM malware found' }
+elseif ($LitePyc.Count -gt 0) { Progress 'A leftover cook.pyc may come from the LiteLLM malware' }
+$OC = 0; if ((Has-Command 'opencode') -or (Is-Dir (J $HomeDir '.config/opencode')) -or (Is-Dir (J $HomeDir '.local/share/opencode'))) { $OC = 1 }
+$RW = 0; if ((Has-Command 'railway') -or (Is-File (J $HomeDir '.railway/config.json'))) { $RW = 1 }
+$ZB = 0; if ((Has-Command 'zeabur') -or (Is-Dir (J $HomeDir '.config/zeabur'))) { $ZB = 1 }
+
+# --- What to do, and the score -----------------------------------------------
+# Each fix also belongs to a section, so that section's details can end with it.
+$Todo = New-Object System.Collections.Generic.List[string]
+$Fixes = @{ 1 = (New-Object System.Collections.Generic.List[string]); 2 = (New-Object System.Collections.Generic.List[string]);
+  3 = (New-Object System.Collections.Generic.List[string]); 4 = (New-Object System.Collections.Generic.List[string]); 5 = (New-Object System.Collections.Generic.List[string]) }
+function Add-Todo([int]$sec, [string]$text) { $Todo.Add($text); $Fixes[$sec].Add($text) }
+if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
+if ($LITELLM_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Don''t run Python in the affected environments, follow LiteLLM''s advisory, and rotate every key the machine could reach.' }
+$Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
+if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
+if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
+if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs with environment variable references, then rotate them.' }
+if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys.' }
+if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
+if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
+if ($OC -eq 1 -or $RW -eq 1 -or $ZB -eq 1) { Add-Todo 5 'If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong.' }
+$ISSUES = $Todo.Count
+
+$SCORE = 100
+if ($LITELLM_HIT -eq 1) { $SCORE -= 40 }
+$SCORE -= [Math]::Min($KEY_FILES * 8, 32)
+$SCORE -= [Math]::Min($HIST_KEYS * 6, 12)
+$SCORE -= [Math]::Min($N_ALLOW * 10, 20)
+$SCORE -= [Math]::Min($N_MCP_TOKEN * 6, 12)
+$SCORE -= [Math]::Min($N_IDLE * 3, 12)
+if ($N_SSH_OPEN -gt 0) { $SCORE -= 4 }
+if ($SCORE -lt 0) { $SCORE = 0 }
+if ($SCORE -ge 90) { $GRADE = 'A' } elseif ($SCORE -ge 78) { $GRADE = 'B' } elseif ($SCORE -ge 64) { $GRADE = 'C' } elseif ($SCORE -ge 50) { $GRADE = 'D' } else { $GRADE = 'F' }
+# GRADE only goes in the research counts. People see how they compare instead.
+$SCAN_SECS = [int][Math]::Floor(([DateTime]::UtcNow - $ScanT0).TotalSeconds)
+Progress-Clear
+
+# ---------------------------------------------------------------------------
+# Counts for GIRD's research, sent once when the scan is done unless -Offline or
+# DO_NOT_TRACK=1, with the same fields as gird-check.sh. Never a path, a file name,
+# a key, a name you gave an MCP server, a username, a hostname or the raw machine
+# ID. The device ID is a one-way SHA-256 of the Windows MachineGuid salted for this
+# script, the same one gird-check.sh computes in Git Bash on this computer.
+# ---------------------------------------------------------------------------
+function Json-List($ids) { '[' + ((@($ids) | Where-Object { $_ } | ForEach-Object { '"' + $_ + '"' }) -join ',') + ']' }
+function Json-Tally([string]$list, $tally) {
+  $parts = foreach ($id in (Ids $list)) { if ($tally.ContainsKey($id)) { '"' + $id + '":' + $tally[$id] } }
+  '{' + (@($parts) -join ',') + '}'
+}
+function Count-Of($items) { $t = @{}; foreach ($x in $items) { if ($t.ContainsKey($x)) { $t[$x]++ } else { $t[$x] = 1 } }; $t }
+function Sha256Hex([string]$s) {
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($s)) | ForEach-Object { $_.ToString('x2') }) } finally { $sha.Dispose() }
+}
+$Guid = ''
+if ($env:GIRD_CHECK_TEST_MACHINEGUID) { $Guid = $env:GIRD_CHECK_TEST_MACHINEGUID }   # tests only
+elseif ($OnWindows) {
+  # The 64-bit view, so 32-bit PowerShell on 64-bit Windows reads the same value.
+  try {
+    $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+    $k = $base.OpenSubKey('SOFTWARE\Microsoft\Cryptography')
+    if ($k) { $Guid = [string]$k.GetValue('MachineGuid'); $k.Close() }
+    $base.Close()
+  } catch { $Guid = '' }
+}
+$DEVICE_ID = ''; if ($Guid) { $DEVICE_ID = Sha256Hex "gird-check-v1:$Guid" }
+$Guid = ''
+if ($DEVICE_ID -cnotmatch '^[0-9a-f]{64}$') { $DEVICE_ID = '' }
+$rb = New-Object byte[] 8; $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); $rng.GetBytes($rb); $rng.Dispose()
+$RUN_ID = -join ($rb | ForEach-Object { $_.ToString('x2') })
+if ($OnWindows) {
+  $ov = [Environment]::OSVersion.Version
+  if ($ov.Major -eq 10) { if ($ov.Build -ge 22000) { $OSV = 'Windows 11' } else { $OSV = 'Windows 10' } } else { $OSV = 'Windows' }
+} elseif (Is-Dir '/System/Library/CoreServices') { $OSV = 'macOS' } else { $OSV = 'Linux' }
+# The processor itself, even when PowerShell runs emulated on an Arm PC.
+$archRaw = ''
+if ($OnWindows) {
+  try {
+    $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+    $k = $base.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment')
+    if ($k) { $archRaw = [string]$k.GetValue('PROCESSOR_ARCHITECTURE'); $k.Close() }
+    $base.Close()
+  } catch { }
+  if (-not $archRaw) { $archRaw = $env:PROCESSOR_ARCHITEW6432 }
+  if (-not $archRaw) { $archRaw = $env:PROCESSOR_ARCHITECTURE }
+} else {
+  try { $archRaw = [string][Runtime.InteropServices.RuntimeInformation]::OSArchitecture } catch { }
+}
+switch (([string]$archRaw).ToUpperInvariant()) { 'ARM64' { $ARCH_ID = 'arm64' } 'AMD64' { $ARCH_ID = 'x86_64' } 'X64' { $ARCH_ID = 'x86_64' } default { $ARCH_ID = 'other' } }
+$MODEL = ''
+if ($env:WT_SESSION) { $TERMAPP = 'windows-terminal' }
+else {
+  switch ($env:TERM_PROGRAM) {
+    'vscode' { $TERMAPP = 'vscode' } 'WezTerm' { $TERMAPP = 'wezterm' } 'Hyper' { $TERMAPP = 'hyper' } 'tmux' { $TERMAPP = 'tmux' }
+    'Apple_Terminal' { $TERMAPP = 'terminal' } 'iTerm.app' { $TERMAPP = 'iterm2' } 'WarpTerminal' { $TERMAPP = 'warp' } 'ghostty' { $TERMAPP = 'ghostty' }
+    default { if ($env:TERM_PROGRAM) { $TERMAPP = 'other' } elseif ($OnWindows) { $TERMAPP = 'conhost' } else { $TERMAPP = 'unknown' } }
+  }
+}
+$TMUXED = 0; if ($env:TMUX) { $TMUXED = 1 }
+if ($IsCore) { $SHELLNAME = 'pwsh' } else { $SHELLNAME = 'powershell' }
+$LANGCODE = 'other'
+try { $cn = [Globalization.CultureInfo]::CurrentCulture.Name -replace '-', '_'; if ($cn -cmatch '^[a-z]{2}(_[A-Z]{2})?$') { $LANGCODE = $cn } } catch { }
+$VIA = 'none'; if ($env:CLAUDECODE) { $VIA = 'claude-code' }
+$N_FOUND = $Found.Count; $N_ENVF = @($EnvFiles).Count; $N_ALLOWF = @($AllowFiles).Count
+$N_MCPF = @($McpRows | Where-Object { -not $_.Pl }).Count
+$mm = Mcp-Match $McpNames
+$J_MCPC = Json-Tally $MCP_CLIENT_IDS $McpTally
+$J_PLACES = Json-Tally $KEY_PLACE_IDS (Count-Of $KeyPlaces)
+$J_PROVF = Json-Tally $PROVIDER_IDS (Count-Of $ProvTally)
+$OPTALL = 0; if ($OptAll) { $OPTALL = 1 }
+$PAYLOAD = "{""v"":""1"",""kind"":""report"",""run_id"":""$RUN_ID"",""device_id"":""$DEVICE_ID"",""script"":""$ScriptVersion"",""os"":""$OSV"",""arch"":""$ARCH_ID"",""model"":""$MODEL"",""terminal"":""$TERMAPP"",""tmux"":$TMUXED,""shell"":""$SHELLNAME"",""bash"":0,""lang"":""$LANGCODE"",""via"":""$VIA"",""grade"":""$GRADE"",""score"":$SCORE,""agents"":$(Json-List $AgentIds),""agents_idle"":$N_IDLE,""agents_idle_ids"":$(Json-List $IdleIds),""mcp_servers"":$N_MCP,""mcp_configs"":$N_MCPF,""mcp_token_files"":$N_MCP_TOKEN,""mcp_clients"":$J_MCPC,""mcp_token_clients"":$(Json-List $McpTokIds),""mcp_known"":$(Json-List $mm.Known),""mcp_other"":$($mm.Other),""key_files"":$KEY_FILES,""key_places"":$J_PLACES,""key_providers"":$(Json-List $ProvIds),""provider_files"":$J_PROVF,""history_keys"":$HIST_KEYS,""env_files"":$N_ENVF,""allow_list_files"":$N_ALLOWF,""allow_list_keys"":$N_ALLOW,""allow_list_npm"":$N_ALLOW_NPM,""login_files"":$(Json-List $LoginIds),""ssh_keys"":$N_SSH,""ssh_no_passphrase"":$N_SSH_OPEN,""python_envs"":$N_PY,""litellm_installed"":$N_LITE,""litellm_found"":$LITELLM_HIT,""opencode"":$OC,""railway"":$RW,""files_found"":$N_FOUND,""scan_seconds"":$SCAN_SECS,""all_folders"":$OPTALL,""game_played"":0,""game_best"":0,""results_wait_seconds"":0}"
+# The reply holds p, the share of people whose latest run scored lower, n, how many
+# people that is, and r, this device's place in line. Only digits are read from it.
+$PCT = ''; $PCT_N = ''; $RANK = ''; $LinkRunId = ''
+if (-not $OptOffline) {
+  $LinkRunId = $RUN_ID   # the result link carries the run ID only when a report did
+  if ($IsConsole) { Out-Text "  ${cDim}Comparing with other AI builders...$cRst" }
+  $rp = Http 'POST' $Api 3 $PAYLOAD 65536
+  if ($rp.Length -gt 4096) { $rp = $rp.Substring(0, 4096) }
+  $rp = $rp -replace '\s', ''
+  Progress-Clear
+  $p = JNum 'p' $rp; $n = JNum 'n' $rp; $rk = JNum 'r' $rp
+  if ($p -and $n -and $n.Length -le 9 -and [long]$p -ge 1 -and [long]$p -le 99 -and [long]$n -ge 1) { $PCT = $p; $PCT_N = $n }
+  if ($rk -and $rk -cmatch '^[1-9][0-9]{0,8}$') { $RANK = $rk }
+}
+
+# ===========================================================================
+# The report. Every part is built first, then shown: a summary on a console, or
+# every detail with -Full or when the output is redirected. A saved report always
+# has every detail.
+# ===========================================================================
+if ($LITELLM_HIT -eq 1) { $Sev = $cRed }
+elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0) { $Sev = $cRed }
+elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
+if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
+$PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of $(Commas $PCT_N) AI builders who ran Blindspot" }
+$Stats = "$(Plural $N_AG 'coding agent' 'coding agents'), $N_IDLE not used in 30 days, $(Plural $N_MCP 'MCP server' 'MCP servers'), $(Plural $KEY_FILES 'file' 'files') with keys in plain text, $(Plural $N_ALLOW 'key' 'keys') in allow lists"
+$Capture = $true; [void]$Cap.Clear()
+# The first 1,000 get their place in line, above either header.
+if ($RANK) {
+  $first = ''; if ([long]$RANK -le 1000) { $first = ' One of the first 1,000.' }
+  Wrap "You're AI builder #$(Commas $RANK) to run Blindspot.$first" 4 "  $cGold$gStar$cRst " '    ' $cBold; Blank
+} elseif ($Early) {
+  Wrap "You're one of the first 1,000 AI builders to run Blindspot." 4 "  $cGold$gStar$cRst " '    ' $cBold; Blank
+}
+if ($LITELLM_HIT -eq 1) {
+  Emit "  $Sev$gBar$cRst ${cBold}ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE$cRst"
+  if ($PctTxt) { Emit "  $Sev$gBar$cRst $cBold$PctTxt.$cRst $FixN." } else { Emit "  $Sev$gBar$cRst $FixN." }
+} elseif ($PctTxt) {
+  Emit "  $Sev$gBar$cRst $cBold$($PctTxt.ToUpperInvariant())$cRst"
+  Emit "  $Sev$gBar$cRst $FixN."
+} else {
+  Emit "  $Sev$gBar$cRst $cBold$($FixN.ToUpperInvariant())$cRst"
+}
+$HeadShort = Take-Cap
+Wrap $Stats 4 "  $Sev$gBar$cRst " "  $Sev$gBar$cRst " $cDim
+$HeadFull = $HeadShort + (Take-Cap)
+
+Section '01' 'CODING AGENTS' "$N_AG found, $N_IDLE idle"
+if ($N_AG -eq 0) { Emit '     No coding agents found.' }
+foreach ($r in $AgRows) {
+  switch ($r[1]) {
+    'active' { Pair "$cGrn$gDot$cRst" $r[0] 20 'used in the last 30 days' }
+    'idle' { Pair "$cYel$gRing$cRst" $r[0] 20 "${cDim}installed, not used in 30 days$cRst" }
+    'unused' { Pair "$cYel$gRing$cRst" $r[0] 20 "${cDim}installed, no use recorded$cRst" }
+    default { Pair "$cDim$gBul$cRst" $r[0] 20 "${cDim}installed$cRst" }
+  }
+}
+$Sec1 = Take-Cap
+Section '02' 'MCP SERVERS' (Plural $N_MCP 'server' 'servers')
+if ($N_MCP -eq 0 -and $N_MCP_TOKEN -eq 0) { Emit '     No MCP servers configured.' }
+foreach ($r in $McpRows) {
+  if ($r.Pl -and -not $r.Tok) { continue }
+  if ($null -ne $r.Count) { $d = Plural $r.Count 'server' 'servers' } else { $d = 'servers configured' }
+  $nm = '{0,-14} {1}' -f $r.Who, (Short $r.File)
+  if ($r.Tok) { Pair "$cRed$gX$cRst" $nm 46 "$d, ${cRed}token in the file$cRst" } else { Pair "$cTeal$gBul$cRst" $nm 46 $d }
+}
+if ($N_MCP_CACHE -gt 0) {
+  Pair "$cDim$gMid$cRst" 'Plugin folders' 46 "$cDim$(Plural $N_MCP_CACHE 'server' 'servers') in $(Plural $N_MCP_CACHEF 'file' 'files'), not counted above$cRst"
+}
+$Sec2 = Take-Cap
+Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
+if ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
+$shown = 0
+foreach ($r in $KeyRows) { $shown++; if ($shown -le 20) { Pair "$cRed$gX$cRst" (Short $r[0]) 44 $r[1] } }
+if ($KEY_FILES -gt 20) { Emit "        ${cDim}and $($KEY_FILES - 20) more$cRst" }
+if ($LoginsText) {
+  Blank
+  Emit "     ${cBold}Login files any agent you run can read$cRst"
+  Wrap $LoginsText 8 '        ' '        '
+}
+$Sec3 = Take-Cap
+Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
+if ($N_ALLOW -eq 0) { Emit "     $cGrn$gOk$cRst  No saved commands with keys." }
+foreach ($r in $AllowRows) {
+  Emit "     $cRed$gX$cRst  $(Short $r[0])"
+  Emit '        A saved command contains a key.'
+  if ($r[1]) { Wrap 'An npm publish from this folder would include it.' 8 '        ' '        ' $cRed }
+}
+$Sec4 = Take-Cap
+$ind26 = ' ' * 26
+Section '05' "THIS WEEK'S KEY LEAKS" '3 checked'
+if ($LITELLM_HIT -eq 1) {
+  Pair "$cRed$gX$cRst" 'LiteLLM 1.107.0' 16 "${cRed}signs of the malware found$cRst"
+  foreach ($l in (@($LiteBad) + @($Marks))) { Emit "        $(Short $l)" }
+  Wrap "Don't run Python or pip in these environments. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 '        ' '        '
+} elseif ($LitePyc.Count -gt 0) {
+  Pair "$cYel!$cRst" 'LiteLLM 1.107.0' 16 "${cYel}possible leftover$cRst"
+  foreach ($l in $LitePyc) { Emit "        $l" }
+  Wrap 'A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026' 8 '        ' '        '
+} else {
+  Pair "$cGrn$gOk$cRst" 'LiteLLM 1.107.0' 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')"
+  if ($N_LITE -gt 0) { Emit "$ind26${cDim}installed: $($LiteVers -join ' ')$cRst" }
+}
+if ($UvBad) { Wrap 'Your uv cache holds the 1.107.0 package. Clear it with: uv cache clean litellm' 8 '        ' '        ' $cYel }
+if ($OC -eq 1) {
+  Pair "$cYel!$cRst" 'OpenCode' 16 'installed'
+  Wrap 'If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.' 26 $ind26 $ind26 $cDim
+} else { Pair "$cDim$gMid$cRst" 'OpenCode' 16 "${cDim}not installed$cRst" }
+if ($RW -eq 1) {
+  Pair "$cYel!$cRst" 'Railway' 16 'CLI found'
+  Wrap 'Railway asked every customer to rotate all secrets stored on the platform and to check their logs.' 26 $ind26 $ind26 $cDim
+} else { Pair "$cDim$gMid$cRst" 'Railway' 16 "${cDim}CLI not found$cRst" }
+if ($ZB -eq 1) {
+  Pair "$cYel!$cRst" 'Zeabur' 16 'CLI found'
+  Wrap 'Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.' 26 $ind26 $ind26 $cDim
+} else { Pair "$cDim$gMid$cRst" 'Zeabur' 16 "${cDim}CLI not found$cRst" }
+$Sec5 = Take-Cap
+Heading 'WHAT TO DO' 'most urgent first'
+$i = 0
+foreach ($t in $Todo) { $i++; Wrap $t 10 "     $cTeal$($i.ToString().PadLeft(2)).$cRst  " '          ' }
+if ($i -gt 0) { Blank }
+Wrap 'Also: set a monthly spend limit on every AI provider key, at the provider.' 5 '     ' '     '
+$SecTodo = Take-Cap
+# Argus is a Mac app, so on Windows it is one line, as gird-check.sh says off a Mac.
+$ArgusLine = 'Built by GIRD. Argus, our free Mac app, shows what AI coding agents actually do: gird.ai/argus'
+Blank
+Wrap $ArgusLine 2 '  ' '  ' $cDim
+$SecArgus = Take-Cap
+Blank
+Wrap 'Finding nothing does not prove nothing leaked. This shows what could reach your keys, not what your agents did with them.' 2 '  ' '  ' $cDim
+$SecFoot = Take-Cap
+
+# Details for one section: the section, then its fixes.
+function Fix-Lines($list) {
+  if ($list.Count -eq 0) { return }
+  Blank
+  Emit "     ${cBold}What to do$cRst"
+  foreach ($t in $list) { Wrap $t 8 "     $cTeal$gBul$cRst  " '        ' }
+}
+Fix-Lines $Fixes[1]; $Det1 = $Sec1 + (Take-Cap)
+Fix-Lines $Fixes[2]; $Det2 = $Sec2 + (Take-Cap)
+Fix-Lines $Fixes[3]; $Det3 = $Sec3 + (Take-Cap)
+Fix-Lines $Fixes[4]; $Det4 = $Sec4 + (Take-Cap)
+Fix-Lines $Fixes[5]; $Det5 = $Sec5 + (Take-Cap)
+
+# The summary: one line per section with the most important finding in it.
+function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
+  $room = $Width - 31; if ($room -lt 16) { $room = 16 }
+  if ($detail.Length -gt $room) { $detail = $detail.Substring(0, $room - 3) + '...' }
+  Emit "   $cTeal$cBold$num$cRst  $mark  $cBold$($label.PadRight(20))$cRst$detail"
+}
+if ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
+elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
+else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }
+if ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
+elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
+elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
+else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
+if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
+elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) holds $($KeyFirst[1]) keys" }
+elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
+else { $G3 = "$cGrn$gOk$cRst"; $D3 = 'no AI or cloud keys in plain text' }
+if ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
+elseif ($N_ALLOW_NPM -gt 0 -and $N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = '1 saved key, and an npm publish would ship it' }
+elseif ($N_ALLOW_NPM -gt 0) { $G4 = "$cRed$gX$cRst"; $D4 = "$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship" }
+elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $AllowFirst)" }
+else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
+$leaks = @(); if ($OC -eq 1) { $leaks += 'OpenCode' }; if ($RW -eq 1) { $leaks += 'Railway' }; if ($ZB -eq 1) { $leaks += 'Zeabur' }
+if ($LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of the LiteLLM malware. Act now' }
+elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
+elseif ($leaks.Count -ge 2) {
+  $G5 = "$cYel!$cRst"
+  $l = ($leaks[0..($leaks.Count - 2)] -join ', ') + ' and ' + $leaks[$leaks.Count - 1]
+  if ($leaks.Count -eq 3) { $D5 = "$l found: rotate keys" } else { $D5 = "$l found: rotate their keys" }
+}
+elseif ($OC -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'OpenCode found: used its Console? Rotate keys' }
+elseif ($RW -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'Railway CLI found: rotate secrets stored there' }
+elseif ($ZB -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'Zeabur CLI found: rotate secrets stored there' }
+else { $G5 = "$cGrn$gOk$cRst"; $D5 = 'no LiteLLM, OpenCode, Railway or Zeabur leaks' }
+Blank
+CLine '01' $G1 'Coding agents' $D1
+CLine '02' $G2 'MCP servers' $D2
+CLine '03' $G3 'Keys in plain text' $D3
+CLine '04' $G4 'Allow lists' $D4
+CLine '05' $G5 "This week's leaks" $D5
+if ($ISSUES -gt 0) { Blank; Wrap $Todo[0] 14 "   ${cBold}First fix:$cRst " (' ' * 14) }
+Blank
+Wrap $ArgusLine 2 '  ' '  ' $cDim
+if ($ISSUES -eq 0) {
+  Blank
+  Wrap 'Finding nothing does not prove nothing leaked. This shows what could reach your keys, not what your agents did with them.' 2 '  ' '  ' $cDim
+}
+$Summary = Take-Cap; $Capture = $false
+
+$FullText = $HeadFull + $Sec1 + $Sec2 + $Sec3 + $Sec4 + $Sec5 + $SecTodo + $SecArgus + $SecFoot
+[void]$Report.Append($FullText)
+if ($Compact) { Out-Text ($HeadShort + $Summary) } else { Out-Text $FullText }
+
+# ---------------------------------------------------------------------------
+# What next: the result link first, then details and save. One key each, nothing
+# happens unasked. u is the run ID, r the early rank, sk the SSH private keys and
+# hk the shell history files with keys.
+# ---------------------------------------------------------------------------
+function Card-Url {
+  $d = (Get-Date).ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
+  "$Web/blindspot/card/#v=2&s=$SCORE&g=$GRADE&a=$N_AG&i=$N_IDLE&m=$N_MCP&mt=$N_MCP_TOKEN&k=$KEY_FILES&p=$($ProvIds -join '.')&al=$N_ALLOW&an=$N_ALLOW_NPM&ll=$LITELLM_HIT&lf=$N_LOGIN&sp=$N_SSH_OPEN&d=$d&pc=$PCT&pn=$PCT_N&u=$LinkRunId&r=$RANK&sk=$N_SSH&hk=$HIST_KEYS&ag=$($AgentIds -join '.')"
+}
+$ActSaved = 0; $ActCard = 0
+function Do-Save {
+  $dir = (Get-Location).ProviderPath
+  $name = 'gird-ai-key-check-' + (Get-Date).ToString('yyyyMMdd-HHmmss', [Globalization.CultureInfo]::InvariantCulture) + '.txt'
+  $out = $null
+  foreach ($cand in @($dir, $HomeDir)) {
+    if (-not $cand) { continue }
+    try {
+      $path = J $cand $name
+      $fs = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(([regex]::Replace($Report.ToString(), "$Esc\[[0-9;]*m", '')).Replace("`n", $NL))
+      $fs.Write($bytes, 0, $bytes.Length); $fs.Close(); $out = $path; break
+    } catch { $out = $null }
+  }
+  if ($out) {
+    $script:ActSaved = 1
+    Out-Text "  $cGrn$gOk Saved$cRst $out`n  ${cDim}It lists file paths, not keys. Delete it when you are done.$cRst`n"
+  } else { Out-Text "  Could not save to $(J $dir $name)`n" }
+}
+function Do-Card {
+  $u = Card-Url; $script:ActCard = 1
+  $opened = $false
+  if (-not $env:GIRD_CHECK_NO_OPEN) { try { Start-Process $u; $opened = $true } catch { } }
+  if ($opened) { Out-Text "  $cGrn$gOk Opened your result in the browser.$cRst`n" } else { Out-Text "  Open your result:`n" }
+  Out-Text "  $cDim$u$cRst`n"
+  if ($LinkRunId) {
+    Out-Text "  ${cDim}The link carries only counts and a random run ID, after the #, which browsers never send.$cRst`n"
+    Out-Text "  ${cDim}If you press share there, the page sends back that ID, the button and the kind of result.$cRst`n"
+  } else { Out-Text "  ${cDim}The link carries only your counts, after the #, which browsers never send to a server.$cRst`n" }
+}
+
+$MenuShown = $false; $MenuT0 = [DateTime]::UtcNow
+if ($OptSave) { Do-Save }
+if ($IsConsole -and $InConsole) {
+  $MenuShown = $true
+  # Drop anything typed during the scan, so it can't answer a question by accident.
+  try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { }
+  if ($PCT) { $Hero = 'Press ENTER to see how you rank and get your AI Exposure Check' } else { $Hero = 'Press ENTER to get your AI Exposure Check' }
+  $Hint = '1-5 details   s save   q quit'
+  $tri = [string][char]0x25B6; if (-not $Fancy) { $tri = '>' }
+  $hinted = $false
+  Out-Text "`n  $cGold$cBold$tri $Hero$cRst`n    $cDim$Hint$cRst  "
+  while ($true) {
+    try { $k = [Console]::ReadKey($true) } catch { break }
+    $ch = [string]$k.KeyChar
+    if ($k.Key -eq [ConsoleKey]::Enter -or $ch -eq 'c' -or $ch -eq 'C') { Out-Text "`n"; Do-Card }
+    elseif ($ch -ge '1' -and $ch -le '5' -and $ch.Length -eq 1) {
+      Out-Text "$ch`n"
+      switch ($ch) { '1' { Out-Text $Det1 } '2' { Out-Text $Det2 } '3' { Out-Text $Det3 } '4' { Out-Text $Det4 } '5' { Out-Text $Det5 } }
+    }
+    elseif ($ch -eq 's' -or $ch -eq 'S') { Out-Text "s`n"; Do-Save }
+    elseif ($ch -eq 'q' -or $ch -eq 'Q' -or $k.Key -eq [ConsoleKey]::Escape) { Out-Text "q`n"; break }
+    else {
+      if (-not $hinted) { Out-Text "$cDim(ENTER, 1-5, s or q)$cRst " }
+      $hinted = $true; continue
+    }
+    $hinted = $false
+    Out-Text "`n  $cGold$cBold$tri $Hero$cRst`n    $cDim$Hint$cRst  "
+  }
+} else {
+  Out-Text "`n  Your AI Exposure Check: $(Card-Url)`n"
+}
+# What people did at the end, for the same research: one more small event.
+if (-not $OptOffline -and $MenuShown) {
+  $ms = [int][Math]::Floor(([DateTime]::UtcNow - $MenuT0).TotalSeconds)
+  [void](Http 'POST' $Api 5 "{""v"":""1"",""kind"":""actions"",""run_id"":""$RUN_ID"",""device_id"":""$DEVICE_ID"",""saved"":$ActSaved,""card"":$ActCard,""argus"":0,""menu_seconds"":$ms}" 65536)
+}
+Out-Text "`n"
+} finally {
+  if ($null -ne $OldOutEnc) { try { [Console]::OutputEncoding = $OldOutEnc } catch { } }
+}
+exit 0
