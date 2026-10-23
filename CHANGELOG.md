@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Wording: the report and the certificate say "people" where they said "developers", the early-rank label is "AI builder", and a result with nothing in it reads "No findings in this scan" with a note that it is not a guarantee. The certificate image is now an "AI Exposure Check" and says the scan was recorded, not verified.
+- A leftover `cook.pyc` alone is now a "possible leftover" to check, not an act-now hit. `cook.pth`, `cook.py`, the 1.107.0 install record, the marker files or a running loader still are.
 - The spend-limit tip is a plain line under "What to do", no longer a numbered item, so the list matches the "things to fix" count in the header.
 - MCP servers found inside plugin folders and caches (Codex's `.tmp/plugins`, Claude's `plugins` folder) are counted apart, such as "9 servers, 50 more in plugin folders", and shown as one line in the details. They no longer inflate the server count, and they are left out of the counts the script shares. A token written into one of those files is still flagged.
 - Zeabur joins OpenCode and Railway in the check for this week's leaks: if the Zeabur CLI or its settings folder is on your Mac, it says to rotate the keys stored there. A leftover compiled `cook` file from the LiteLLM malware now counts as a sign of it, even after `cook.py` was deleted.

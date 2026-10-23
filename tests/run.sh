@@ -89,9 +89,13 @@ cp -R "$WORK/zb-none" "$WORK/zb-pyc"; mkdir -p "$WORK/zb-pyc/code/py/.venv/lib/p
 : > "$WORK/zb-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__/cook.cpython-312.pyc"
 lp "$WORK/zb-pyc" > "$WORK/zb-pyc.txt"
 lpf "$WORK/zb-pyc" > "$WORK/zb-pyc-full.txt"
-has    "a leftover cook.pyc is a sign of the malware" 'site-packages: cook\.pyc' "$WORK/zb-pyc-full.txt"
-has    "and it is flagged as act now"          'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc.txt"
-hasnot "no pyc, no malware flag"               'Act now' "$WORK/zb-none.txt"
+has    "a leftover cook.pyc is listed as a possible leftover" 'possible leftover.*site-packages: cook\.pyc' "$WORK/zb-pyc-full.txt"
+has    "and row 05 asks to check it"           'possible LiteLLM leftover: check cook\.pyc' "$WORK/zb-pyc.txt"
+hasnot "but it is not an act-now hit"          'Act now|ACT NOW' "$WORK/zb-pyc-full.txt"
+hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftover' "$WORK/zb-none.txt"
+cp -R "$WORK/zb-pyc" "$WORK/zb-pyc-strong"; printf 'import cook\n' > "$WORK/zb-pyc-strong/code/py/.venv/lib/python3.12/site-packages/cook.pth"
+lp "$WORK/zb-pyc-strong" > "$WORK/zb-pyc-strong.txt"
+has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
@@ -211,53 +215,53 @@ PY
   hasnot "the report holds no path"     '/(Users|home|private|tmp)/|~/' "$WORK/received.log"
   if grep -aqF -f "$WORK/keys.txt" "$WORK/received.log"; then bad "the report holds no planted key"; else ok "the report holds no planted key"; fi
   if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
-  has  "shows one real total under the banner" '★ (1,234 developers have run Blindspot|456 developers ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of developers had no keys in plain text)' "$OUT"
-  hasi "shows how this machine compares"       'safer than 72% of 1,234 developers who ran Blindspot' "$OUT"
+  has  "shows one real total under the banner" '★ (1,234 people have run Blindspot|456 people ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of people had no keys in plain text)' "$OUT"
+  hasi "shows how this machine compares"       'safer than 72% of 1,234 people who ran Blindspot' "$OUT"
   has  "the certificate link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
   has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
-  has  "leads with the percentile when nothing is urgent" 'SAFER THAN 72% OF 1,234 DEVELOPERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
-  PROUD="^  ★ You're developer #142 to run Blindspot\. One of the first 1,000\."
+  has  "leads with the percentile when nothing is urgent" 'SAFER THAN 72% OF 1,234 PEOPLE WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
+  PROUD="^  ★ You're AI builder #142 to run Blindspot\. One of the first 1,000\."
   printf '%s' '{"devices":1234567,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   for B in $BASHES; do
     V=$("$B" -c 'echo "${BASH_VERSINFO[0]}"')
     HOME="$WORK/home" GIRD_CHECK_API="$API" "$B" "$SCRIPT" > "$WORK/online-$V.txt" 2>&1
-    has  "bash $V: the total gets thousands separators" '★ 1,234,567 developers have run Blindspot\.' "$WORK/online-$V.txt"
-    hasi "bash $V: shows how this machine compares"     'safer than 72% of 1,234 developers who ran Blindspot' "$WORK/online-$V.txt"
+    has  "bash $V: the total gets thousands separators" '★ 1,234,567 people have run Blindspot\.' "$WORK/online-$V.txt"
+    hasi "bash $V: shows how this machine compares"     'safer than 72% of 1,234 people who ran Blindspot' "$WORK/online-$V.txt"
     has  "bash $V: the full report shows the rank"      "$PROUD" "$WORK/online-$V.txt"
     HOME="$WORK/home" GIRD_CHECK_API="$API" GIRD_CHECK_COMPACT=1 "$B" "$SCRIPT" > "$WORK/compact-online-$V.txt" 2>&1
     has  "bash $V: the summary shows the rank"          "$PROUD" "$WORK/compact-online-$V.txt"
   done
   printf '%s' '{"p":72,"n":1234}' > "$WORK/reply.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/no-rank.txt" 2>&1
-  hasnot "a reply without r shows no rank"       "developer #" "$WORK/no-rank.txt"
+  hasnot "a reply without r shows no rank"       "AI builder #" "$WORK/no-rank.txt"
   has    "a reply without r leaves r empty in the link" '&pn=1234&u=[0-9a-f]{16}&r=&sk=2' "$WORK/no-rank.txt"
   SHOWN=""
   for R in null 0 1001 '"142"' 14.2; do
     printf '{"p":72,"n":1234,"r":%s}' "$R" > "$WORK/reply.json"
     HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/bad-rank.txt" 2>&1
-    if grep -aqE 'developer #|&r=[^&]' "$WORK/bad-rank.txt"; then SHOWN="$SHOWN $R"; fi
+    if grep -aqE 'AI builder #|&r=[^&]' "$WORK/bad-rank.txt"; then SHOWN="$SHOWN $R"; fi
   done
   if [ -z "$SHOWN" ]; then ok "a rank that isn't a whole number from 1 to 1000 shows nothing"; else bad "a rank that isn't a whole number from 1 to 1000 shows nothing"; printf '        shown for:%s\n' "$SHOWN"; fi
   printf '%s' '{"p":72,"n":1234,"r":1000}' > "$WORK/reply.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/rank-1000.txt" 2>&1
-  has    "rank 1000 is still shown, with a separator" "★ You're developer #1,000 to run Blindspot\." "$WORK/rank-1000.txt"
+  has    "rank 1000 is still shown, with a separator" "★ You're AI builder #1,000 to run Blindspot\." "$WORK/rank-1000.txt"
   printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
   printf '%s' '{"devices":999,"devices_7d":120,"key_files":300,"clean":0.4}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/early.txt" 2>&1
-  has    "under 1,000 the rank sits above the header" "^  ★ You're developer #142 to run Blindspot\." "$WORK/early.txt"
+  has    "under 1,000 the rank sits above the header" "^  ★ You're AI builder #142 to run Blindspot\." "$WORK/early.txt"
   if [ "$(grep -c 'first 1,000' "$WORK/early.txt")" -eq 1 ]; then ok "under 1,000 the first 1,000 are named once"; else bad "under 1,000 the first 1,000 are named once"; fi
-  if grep -aA2 "developer #142" "$WORK/early.txt" | grep -aqE '▌ .*(THINGS TO FIX|SAFER THAN|ACT NOW)'; then ok "the header follows the rank line"; else bad "the header follows the rank line"; fi
+  if grep -aA2 "AI builder #142" "$WORK/early.txt" | grep -aqE '▌ .*(THINGS TO FIX|SAFER THAN|ACT NOW)'; then ok "the header follows the rank line"; else bad "the header follows the rank line"; fi
   printf '%s' '{"p":72,"n":1234}' > "$WORK/reply.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/early-no-rank.txt" 2>&1
-  has    "says early adopter when the reply has no rank" "^  ★ You're one of the first 1,000 developers to run Blindspot\." "$WORK/early-no-rank.txt"
+  has    "says early adopter when the reply has no rank" "^  ★ You're one of the first 1,000 people to run Blindspot\." "$WORK/early-no-rank.txt"
   printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
-  hasnot "never shows a total under 1,000"       '★ (999 developers|120 developers|Blindspot has found|40% of developers)' "$WORK/early.txt"
+  hasnot "never shows a total under 1,000"       '★ (999 people|120 people|Blindspot has found|40% of people)' "$WORK/early.txt"
   printf '%s' '{"devices":1000,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/at-1000.txt" 2>&1
-  has    "shows the total from 1,000 developers"  '★ 1,000 developers have run Blindspot\.' "$WORK/at-1000.txt"
+  has    "shows the total from 1,000 people"  '★ 1,000 people have run Blindspot\.' "$WORK/at-1000.txt"
   printf '{"devices":"\033[2J\033]0;pwned\007","key_files":99999999999999999999}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/hostile.txt" 2>&1
   if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')" "$WORK/hostile.txt"; then bad "a hostile totals reply can't reach the terminal"; else ok "a hostile totals reply can't reach the terminal"; fi

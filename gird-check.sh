@@ -204,12 +204,12 @@ proof_line() {
   [ -n "$_dv" ] || return 0
   if [ "$_dv" -lt 1000 ]; then EARLY=1; return 0; fi
   _pm=()
-  _pm[0]="$(commas "$_dv") developers have run Blindspot."
-  if [ -n "$_d7" ] && [ "$_d7" -ge 50 ]; then _pm[${#_pm[@]}]="$(commas "$_d7") developers ran it this week."; fi
+  _pm[0]="$(commas "$_dv") people have run Blindspot."
+  if [ -n "$_d7" ] && [ "$_d7" -ge 50 ]; then _pm[${#_pm[@]}]="$(commas "$_d7") people ran it this week."; fi
   if [ -n "$_kf" ] && [ "$_kf" -ge 100 ]; then _pm[${#_pm[@]}]="Blindspot has found $(commas "$_kf") files with AI keys in plain text so far."; fi
   if [ -n "$_cl" ]; then
     _cp=$(awk -v c="$_cl" 'BEGIN { printf "%d", c * 100 + 0.5 }')
-    if [ "$_cp" -ge 1 ] && [ "$_cp" -le 99 ]; then _pm[${#_pm[@]}]="$_cp% of developers had no keys in plain text. Let's see about you."; fi
+    if [ "$_cp" -ge 1 ] && [ "$_cp" -le 99 ]; then _pm[${#_pm[@]}]="$_cp% of people had no keys in plain text. Let's see about you."; fi
   fi
   printf '\n  %s★%s %s%s%s\n' "$GOLD" "$RST" "$B" "${_pm[$((RANDOM % ${#_pm[@]}))]}" "$RST"
 }
@@ -1118,7 +1118,7 @@ SITES_ALL=$(
   } | grep -v '^$' | sort -u
 )
 progress i "Checking $(plural "$(printf '%s\n' "$SITES_ALL" | grep -c .)" "Python environment" "Python environments") for the LiteLLM malware"
-N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""
+N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""
 while IFS= read -r sp; do
   [ -n "$sp" ] && [ -d "$sp" ] || continue
   N_PY=$((N_PY + 1))
@@ -1132,7 +1132,8 @@ while IFS= read -r sp; do
   [ -d "$sp/litellm-1.107.0.dist-info" ] && bad="litellm 1.107.0"
   [ -f "$sp/cook.pth" ] && bad="${bad:+$bad, }cook.pth"
   [ -f "$sp/cook.py" ] && bad="${bad:+$bad, }cook.py"
-  for _pyc in "$sp"/__pycache__/cook.*.pyc; do [ -f "$_pyc" ] && { bad="${bad:+$bad, }cook.pyc"; break; }; done
+  for _pyc in "$sp"/__pycache__/cook.*.pyc; do [ -f "$_pyc" ] && { LITE_PYC="$LITE_PYC$(short "$sp"): cook.pyc
+"; break; }; done
   [ -n "$bad" ] && LITE_BAD="$LITE_BAD$(short "$sp"): $bad
 "
 done <<EOF
@@ -1183,6 +1184,7 @@ todo() { # section text
 " ;;
   esac
 }
+[ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 [ "$LITELLM_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow LiteLLM's advisory, and rotate every key the machine could reach."
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
@@ -1212,7 +1214,7 @@ elif [ "$SCORE" -ge 64 ]; then GRADE=C; elif [ "$SCORE" -ge 50 ]; then GRADE=D; 
 # GRADE only goes in the research counts. People see how they compare instead.
 if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Scan done. Signs of the LiteLLM malware: act now"
 elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
-else progress o "Scan done: nothing to fix"; fi
+else progress o "Scan done: no findings"; fi
 
 # For demos and tests: keep the scan phase running for at least this many seconds.
 case "${GIRD_CHECK_MIN_SECONDS:-}" in
@@ -1309,7 +1311,7 @@ send_stats() { # payload [seconds]: POST it with a short timeout, https only whe
 PCT=""; PCT_N=""; RANK=""; LINK_RUN_ID=""
 if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
   LINK_RUN_ID=$RUN_ID   # the certificate link carries the run ID only when a report did
-  [ "$TTY" -eq 1 ] && printf '  %sComparing with other developers...%s' "$DIM" "$RST"
+  [ "$TTY" -eq 1 ] && printf '  %sComparing with other people...%s' "$DIM" "$RST"
   _rp=$(send_stats "$PAYLOAD" 3 | head -c 4096 | tr -d ' \n\r\t')
   [ "$TTY" -eq 1 ] && printf '\r%s' "${E}[K"
   _p=$(jnum p "$_rp"); _n=$(jnum n "$_rp"); _rank=$(jnum r "$_rp")
@@ -1327,16 +1329,16 @@ if [ "$LITELLM_HIT" -eq 1 ]; then SEV=$RED
 elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ]; then SEV=$RED
 elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
 else SEV=$GRN; fi
-if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="Nothing to fix"; fi
-PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Safer than $PCT% of $(commas "$PCT_N") developers who ran Blindspot"
+if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="No findings in this scan"; fi
+PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Safer than $PCT% of $(commas "$PCT_N") people who ran Blindspot"
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
 upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 CAPTURE=1; CAP=""
 # The first 1,000 get their place in line, above either header.
 if [ -n "$RANK" ]; then
-  wrap "You're developer #$(commas "$RANK") to run Blindspot. One of the first 1,000." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
+  wrap "You're AI builder #$(commas "$RANK") to run Blindspot. One of the first 1,000." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
 elif [ "$EARLY" -eq 1 ]; then
-  wrap "You're one of the first 1,000 developers to run Blindspot." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
+  wrap "You're one of the first 1,000 people to run Blindspot." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
 fi
 if [ "$LITELLM_HIT" -eq 1 ]; then
   emit "  ${SEV}▌${RST} ${B}ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE${RST}"
@@ -1425,6 +1427,14 @@ $LITE_BAD$MARKS
 EOF
   [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
   wrap "Don't run Python or pip in these environments. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 "        " "        "
+elif [ -n "$LITE_PYC" ]; then
+  pair "${YEL}!${RST}" "LiteLLM 1.107.0" 16 "${YEL}possible leftover${RST}"
+  while IFS= read -r l; do
+    [ -n "$l" ] && emit "        $(short "$l")"
+  done <<EOF
+$LITE_PYC
+EOF
+  wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 "        " "        "
 else
   pair "${GRN}✓${RST}" "LiteLLM 1.107.0" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"
   [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $LITE_VERS${RST}"
@@ -1476,8 +1486,8 @@ if [ "$OS" = Darwin ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="$(plural "$N_IDLE" "agent you haven't used in 30 days is" "agents you haven't used in 30 days are") still installed. A poisoned package can drive an installed agent, and nothing on your Mac would tell you."
   else
-    _t="CLEAN TODAY"
-    _p1="Nothing here needs fixing. The next leak won't wait for you to run a scan."
+    _t="NO FINDINGS IN THIS SCAN"
+    _p1="Nothing turned up in the places this scan covers, which is not a guarantee. The next leak won't wait for you to run a scan."
   fi
   emit "${BAR}${B}${_t}${RST}"
   wrap "$_p1" 4 "$BAR" "$BAR"
@@ -1540,6 +1550,7 @@ elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved key
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
 if [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the LiteLLM malware. Act now"
+elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
 elif [ $((OC + RW + ZB)) -ge 2 ]; then
   G5="${YEL}!${RST}"; _l=""; _n=$((OC + RW + ZB)); _i=0
   for _p in "OpenCode:$OC" "Railway:$RW" "Zeabur:$ZB"; do

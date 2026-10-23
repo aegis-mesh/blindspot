@@ -55,8 +55,8 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 
 | From | Example | What it is |
 |---|---|---|
-| The totals | `{"devices":1234,"devices_7d":456,"key_files":3412,"clean":0.31,...}` | Public totals, the same for everyone. The script shows one of them under the banner. Until 1,000 developers have run it, it shows none, and says you're one of the first 1,000 above your result instead |
-| The reply to the report | `{"p":72,"n":1234,"r":142}` | `p` is the share of developers whose latest run scored lower than yours, `n` how many developers that is. No `p` until at least 25 developers have run it. `r` is your place in line: 142 means 141 devices ran it before yours. Only the first 1,000 get one, and the script shows it above your result |
+| The totals | `{"devices":1234,"devices_7d":456,"key_files":3412,"clean":0.31,...}` | Public totals, the same for everyone. The script shows one of them under the banner. Until 1,000 people have run it, it shows none, and says you're one of the first 1,000 above your result instead |
+| The reply to the report | `{"p":72,"n":1234,"r":142}` | `p` is the share of people whose latest run scored lower than yours, `n` how many people that is. No `p` until at least 25 people have run it. `r` is your place in line: 142 means 141 devices ran it before yours. Only the first 1,000 get one, and the script shows it above your result |
 
 The script reads only digits from either reply, so a reply can't put anything else on your screen. The certificate link carries `p`, `n` and `r` after the `#`, which browsers never send to a server.
 
