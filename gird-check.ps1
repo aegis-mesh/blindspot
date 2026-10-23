@@ -653,9 +653,9 @@ $SessWorker = {
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
-    # Read 1 MB at a time and cut just after the last character that can't be in a key, so a huge
-    # database file never loads at once, a piece never ends inside a token, and a stop is seen
-    # within one piece.
+    # Read 1 MB at a time and cut just after the last character that can't be in a key (before it,
+    # for the backslash of \n, \t or \r), so a huge database file never loads at once, a piece never
+    # ends inside a token unless one runs past 8 MB, and a stop is seen within one piece.
     $sr = $null; $whole = $true
     try {
       $sr = New-Object IO.StreamReader((New-Object IO.FileStream($f.FullName, 'Open', 'Read', 'ReadWrite')), $latin)
@@ -665,7 +665,11 @@ $SessWorker = {
         $t = $carry + (New-Object string($buf, 0, $got))
         $sep = $rxSep.Match($t)
         if (-not $sep.Success -and $t.Length -lt 8388608) { $carry = $t; continue }
-        if ($sep.Success) { $carry = $t.Substring($sep.Index + 1); $t = $t.Substring(0, $sep.Index + 1) } else { $carry = '' }
+        if ($sep.Success) {
+          $cut = $sep.Index + 1
+          if ($t[$sep.Index] -eq [char]92 -and $cut -lt $t.Length -and 'ntr'.IndexOf($t[$cut]) -ge 0) { $cut = $sep.Index }  # keep \n with the key after it
+          $carry = $t.Substring($cut); $t = $t.Substring(0, $cut)
+        } else { $carry = '' }
         if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
       }
       if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }

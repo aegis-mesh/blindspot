@@ -148,6 +148,10 @@ mkdir -p "$SE/piece/.claude/projects/p" "$SE/piece/AppData/Roaming" "$SE/piece/A
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
 psrun "$SE/piece" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/piece.txt" 2>&1
 has    "a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece.txt"
+mkdir -p "$SE/esc/.claude/projects/p" "$SE/esc/AppData/Roaming" "$SE/esc/AppData/Local/Temp"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 2) + '\\\\n' + 'hf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc/.claude/projects/p/a.jsonl"
+psrun "$SE/esc" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/esc.txt" 2>&1
+has    "a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc.txt"
 : > "$SE/hold"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" -- -Offline > "$SE/held.txt" 2>&1; RC=$?
 if [ "$RC" -eq 0 ]; then ok "a held check does not hold up the report"; else bad "a held check does not hold up the report, exit $RC"; fi

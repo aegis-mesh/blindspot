@@ -125,20 +125,27 @@ fi
 # A long token that crosses a 1 MB piece is not mistaken for a key.
 mkdir -p "$SE/piece/.claude/projects/p"
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
+mkdir -p "$SE/esc/.claude/projects/p"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 2) + '\\\\n' + 'hf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc/.claude/projects/p/a.jsonl"
 for E in perl rg; do
   if [ "$E" = rg ] && ! command -v rg >/dev/null 2>&1; then continue; fi
   HOME="$SE/piece" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/piece-$E.txt" 2>&1
   has    "$E: a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece-$E.txt"
+  HOME="$SE/esc" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/esc-$E.txt" 2>&1
+  has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
 done
 # A kill -9 of the script stops the perl workers within one piece of a file.
 mkdir -p "$SE/k9/.claude/projects/p"
 python3 -c "import sys; open(sys.argv[1], 'w').write(('x ' * 524288 + '\n') * 32)" "$SE/k9/.claude/projects/p/a.jsonl"
 HOME="$SE/k9" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_SLOW=1 bash "$SCRIPT" --offline --all-sessions > /dev/null 2>&1 &
 BP=$!
-for _i in $(seq 1 100); do pgrep -f 'SESS_PRE' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+K9="$SE/k9/.claude/projects"
+for _i in $(seq 1 100); do pgrep -f "$K9" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+if pgrep -f "$K9" >/dev/null 2>&1; then K9UP=1; else K9UP=0; fi
 kill -9 "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
-for _i in $(seq 1 10); do pgrep -f 'SESS_PRE' >/dev/null 2>&1 || break; sleep 0.1; done      # one piece takes 0.3 s here; the file has 32
-if pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "kill -9 of the script stops the workers"; pkill -f 'SESS_PRE'; else ok "kill -9 of the script stops the workers"; fi
+for _i in $(seq 1 10); do pgrep -f "$K9" >/dev/null 2>&1 || break; sleep 0.1; done      # one piece takes 0.3 s here; the file has 32
+if [ "$K9UP" -eq 0 ]; then bad "kill -9 of the script stops the workers: they never started"
+elif pgrep -f "$K9" >/dev/null 2>&1; then bad "kill -9 of the script stops the workers"; pkill -f "$K9"; else ok "kill -9 of the script stops the workers"; fi
 pkill -f "$SE/k9" 2>/dev/null; rm -f "${TMPDIR:-/tmp}"/blindspot.?????? "${TMPDIR:-/tmp}"/blindspot.??????.fifo 2>/dev/null   # a kill -9 leaves these, as documented
 
 # A held engine is still running when the rest of the check is done: it is stopped, and nothing is left behind.
