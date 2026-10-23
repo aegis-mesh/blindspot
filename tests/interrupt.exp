@@ -1,0 +1,12 @@
+# Used by tests/interactive.sh: Ctrl-C during the game's hold leaves the banner on screen.
+set timeout 20
+log_user 0
+match_max 100000
+spawn -noecho env HOME=$env(FAKEHOME) TERM=xterm-256color GIRD_CHECK_NO_OPEN=1 GIRD_CHECK_MIN_SECONDS=8 $env(BASHBIN) $env(SCRIPT) --offline
+stty rows 50 columns 90 < $spawn_out(slave,name)
+expect "Checking your agents"
+send "\003"
+expect eof
+if {[regexp {\x1b\[10A(\r\x1b\[K\r?\n){10}} $expect_out(buffer)]} { puts "  FAIL  Ctrl-C during the hold erased lines above"; exit 1 }
+puts "  ok    Ctrl-C during the hold erases nothing"
+exit 0

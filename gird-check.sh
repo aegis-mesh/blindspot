@@ -244,7 +244,7 @@ spin_stop() {
 # ---------------------------------------------------------------------------
 # GIRD Runner, a small game for the wait. It runs in a background process while
 # the scan runs in the foreground. When the scan is done the game gets USR1 and
-# asks whether to show the results. Its exit code says whether it was played
+# asks whether to show the results, or just leaves if it hasn't been drawn yet. Its exit code says whether it was played
 # and roughly the best score. How it keeps time depends on the bash running it:
 #   A  bash 5+   reads keys with timeouts against the microsecond clock
 #   B  bash 4    reads keys with a frame-long timeout
@@ -477,9 +477,12 @@ g_step() { # returns 1 when the game should end
 g_end() {
   [ -n "$G_DONE" ] && return 0
   G_DONE=1
-  _o="${E}[${G_H}A"; _i=0
-  while [ "$_i" -lt "$G_H" ]; do _o="$_o$CR${E}[K$NL"; _i=$((_i + 1)); done
-  printf '%s%s' "$_o" "${E}[${G_H}A"
+  if [ "$G_HOLDING" -eq 1 ]; then printf '%s' "$CR${E}[K"   # the game's rows are not drawn yet
+  else
+    _o="${E}[${G_H}A"; _i=0
+    while [ "$_i" -lt "$G_H" ]; do _o="$_o$CR${E}[K$NL"; _i=$((_i + 1)); done
+    printf '%s%s' "$_o" "${E}[${G_H}A"
+  fi
   [ "$G_MODE" = C ] || stty "$G_SAVED" 2>/dev/null || stty sane 2>/dev/null
   printf '%s' "$SHOW"
 }
@@ -491,7 +494,7 @@ game_loop() {
     trap '[ -z "$G_SIG" ] && G_SIG=jump' USR2
     trap 'G_SIG=enter' ALRM; trap 'G_SIG=cont' VTALRM; trap 'G_SIG=quit' PROF
   fi
-  G_READY=0; G_PLAYED=0; G_STATE=idle; G_BEST=0; G_F=0; G_REMIND=0; G_SINCE=0; G_DONE=""
+  G_READY=0; G_HOLDING=1; G_PLAYED=0; G_STATE=idle; G_BEST=0; G_F=0; G_REMIND=0; G_SINCE=0; G_DONE=""
   G_W=$((W - 6)); [ "$G_W" -gt 72 ] && G_W=72
   G_PX=6; G_H=10; G_TICK=""
   G_TOKS=("sk-ant" "AKIA" "ghp_" ".env" "sk-" "npm_" "xai-")
@@ -521,6 +524,7 @@ game_loop() {
     [ "$G_MODE" = C ] || stty "$G_SAVED" 2>/dev/null || stty sane 2>/dev/null
     printf '%s' "$SHOW"; exit 0
   fi
+  G_HOLDING=0
   _i=0; while [ "$_i" -lt "$G_H" ]; do printf '\n'; _i=$((_i + 1)); done
   while :; do
     g_wait
