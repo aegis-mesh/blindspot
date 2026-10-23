@@ -2,6 +2,26 @@
 
 Thanks for helping. New agents, key formats and incident checks are the most useful contributions, and new leaks happen every week.
 
+## Report a bug or a missed key
+
+1. Search the [open issues](https://github.com/aegis-mesh/blindspot/issues) first. If yours is there, add what you see to it.
+2. Open a [new issue](https://github.com/aegis-mesh/blindspot/issues/new/choose) and pick the template that fits: **Bug**, **Missed or wrong finding**, **New agent** or **New check**.
+3. Say which version you ran (it's in the report's header) and where: macOS, Linux, WSL or Windows, and your terminal app.
+4. Never paste a key, not even a revoked one. Describe its shape instead: the provider, the first few characters of its prefix, and its length. Blindspot never prints keys, but its paths can name your projects or your username, so read the output before you paste it.
+
+Security problems go privately through [SECURITY.md](SECURITY.md), never into a public issue. Questions and ideas go to [Discussions](https://github.com/aegis-mesh/blindspot/discussions).
+
+## Open a pull request
+
+1. For anything bigger than a small fix, open or find an issue first, so we can agree on the approach before you write code.
+2. Fork the repository and create a branch from `main`.
+3. Make one change per pull request, and keep to the rules below.
+4. Add a test for what you changed, and run everything in [Test](#test).
+5. Sign off every commit with `git commit -s` (see [Sign your commits](#sign-your-commits)).
+6. Open the pull request against `main`, fill in the template's checklist, and link the issue (`Fixes #123`).
+7. CI runs shellcheck and the tests on macOS and Linux. It has to pass.
+8. A maintainer reviews the change. Only maintainers can merge.
+
 ## The rules the script keeps
 
 Every change has to keep these true. Reviews check them first.
@@ -10,6 +30,7 @@ Every change has to keep these true. Reviews check them first.
 - **Never prints a key.** Match keys inside `grep` or `awk` pipes. Never put a key value in a variable or the output.
 - **Runs nothing it finds.** No Python, no agents, no MCP servers, no git inside other people's repos, no sudo.
 - **No new dependencies.** Only tools that ship with macOS and common Linux distributions. It must run on bash 3.2, the version macOS ships.
+- **Windows too.** `gird-check.ps1` keeps the same rules and must run on Windows PowerShell 5.1, which ships with Windows, and on PowerShell 7.
 - **Shares nothing new by accident.** Anything added to the shared counts must be a number or come from a fixed list, and must be listed in [TELEMETRY.md](TELEMETRY.md).
 
 ## Add an agent
@@ -34,9 +55,10 @@ Open an issue with the **New check** template first, with links to the vendor ad
 bash tests/run.sh            # builds a fake home folder and checks what the script finds and never prints
 bash tests/interactive.sh    # macOS: drives the game and the menu with expect
 shellcheck -s bash -S warning gird-check.sh tests/*.sh
+PWSH=/path/to/pwsh bash tests/run-ps.sh   # if you changed gird-check.ps1
 ```
 
-Run all three before you open a pull request. `tests/run.sh` and `tests/interactive.sh` each run on the bash that ships with macOS (3.2) and on a newer bash from your PATH if you have one. Maintainers run them again before merging.
+Run them before you open a pull request. `tests/run.sh` and `tests/interactive.sh` each run on the bash that ships with macOS (3.2) and on a newer bash from your PATH if you have one. Maintainers run them again before merging.
 
 ## Sign your commits
 

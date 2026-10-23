@@ -91,7 +91,9 @@ Blindspot shows what could reach your keys, not what your agents did with them. 
 
 ## Contributing
 
-New agents, key formats and incident checks are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Report security issues privately, as described in [SECURITY.md](SECURITY.md).
+Found a bug, or a key it missed? [Open an issue](https://github.com/aegis-mesh/blindspot/issues/new/choose). New agents, key formats and incident checks are welcome, and [CONTRIBUTING.md](CONTRIBUTING.md) has the steps for an issue or a pull request. Report security issues privately, as described in [SECURITY.md](SECURITY.md).
+
+If Blindspot is useful to you, a star helps other developers find it.
 
 ## License
 
