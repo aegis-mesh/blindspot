@@ -90,6 +90,21 @@ has    "finds Claude Desktop under AppData"    'Claude Desktop +installed, no us
 has    "finds LiteLLM malware markers"         'signs of the malware found' "$OUT"
 has    "finds the bad package in the uv cache" 'uv cache holds the 1\.107\.0 package' "$OUT"
 has    "counts SSH keys with no passphrase"    '2 SSH private keys, 1 with no passphrase' "$OUT"
+has    "flags project hooks and MCP auto-approval" 'Set to run commands while the agent works, turn on MCP servers' "$OUT"
+has    "flags a folderOpen task"               'code/cloned/\.vscode/tasks\.json' "$OUT"
+has    "flags a remote API address in project settings" 'code/proxy/\.claude/settings\.json' "$OUT"
+hasnot "ignores a localhost API address"       'code/lib/\.claude/settings\.json' "$OUT"
+hasnot "ignores a task that does not run on open" 'code/own/\.vscode' "$OUT"
+hasnot "ignores the person's own global hooks" '^ +! +~/\.claude/settings\.json' "$OUT"
+has    "finds a bad axios in a package-lock"   'axios 1\.14\.1 \(Axios takeover, March 2026\)' "$OUT"
+has    "finds a bad TanStack version in pnpm-lock" '@tanstack/router-core 1\.169\.5 \(TanStack worm' "$OUT"
+has    "finds a bad keyv in a yarn berry lock" 'keyv 6\.0\.0 \(keyv worm' "$OUT"
+hasnot "ignores good versions of the same packages" 'axios 1\.14\.0|keyv 6\.0\.1|code/lib/package-lock' "$OUT"
+has    "finds any version of a fake AI tool package" 'claud-code 1\.0\.3 \(fake AI tool packages' "$OUT"
+has    "finds a bad package in npm's cache"    '@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI' "$OUT"
+has    "puts the wiper first"                  'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' "$OUT"
+has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
+has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
 tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat.txt"   # the advice wraps, so it is matched on one line
 has    "points other systems at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/out-flat.txt"
 has    "uses the non-Mac Argus line"           'Argus, our free Mac app, shows what AI coding agents' "$OUT"
@@ -100,6 +115,11 @@ nokeys "never prints a planted key" "$WORK/keys.txt" "$OUT"
 if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "redirected output has no escape codes"; else ok "redirected output has no escape codes"; fi
 
 echo "the same findings as gird-check.sh"
+bl() { sed -n "/$2/,/$3/p" "$1" | grep -E '^[@a-z0-9].* (\*|[0-9][^ ]*) [a-z]+$'; }
+sed -n '/^BAD_NPM="/,/"$/p' "$BASH_SCRIPT" | sed -e 's/^BAD_NPM="//' -e 's/"$//' > "$WORK/bad-sh.txt"
+bl "$SCRIPT" "^\\\$BadNpm = @'" "^'@" > "$WORK/bad-ps.txt"
+if [ -s "$WORK/bad-sh.txt" ] && diff -q "$WORK/bad-sh.txt" "$WORK/bad-ps.txt" >/dev/null; then ok "the same bad npm package list ($(wc -l < "$WORK/bad-ps.txt" | tr -d ' ') entries)"
+else bad "the same bad npm package list"; diff "$WORK/bad-sh.txt" "$WORK/bad-ps.txt" | head -n 6; fi
 # gird-check.sh, on the same home with its Mac paths, must find the same files.
 bash tests/make-fixture.sh "$WORK/bhome" "$WORK/keys-b.txt" >/dev/null
 HOME="$WORK/bhome" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline > "$WORK/bash.txt" 2>&1
@@ -117,11 +137,11 @@ if [ -s "$WORK/ps-fixes.txt" ] && diff -q "$WORK/bash-fixes.txt" "$WORK/ps-fixes
 echo "summary"
 OUT=$WORK/compact.txt
 psrun "$WORK/home" GIRD_CHECK_COMPACT=1 -- -Offline > "$OUT" 2>&1
-for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' "This week's leaks"; do
+for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' 'Recent leaks'; do
   has "one summary line for $label" "^   0[1-5] .*$label" "$OUT"
 done
 has    "the keys line names the first file"    'Keys in plain text +5 files, like ~/\.zshrc \(Anthropic, OpenAI\)' "$OUT"
-has    "the summary leads with the first fix"  'First fix: Treat this machine as compromised' "$OUT"
+has    "the summary leads with the first fix"  'First fix: Don.t revoke any GitHub token yet' "$OUT"
 hasnot "the summary has no section tables"     'KEYS IN PLAIN TEXT' "$OUT"
 psrun "$WORK/home" GIRD_CHECK_COMPACT=1 -- -Offline -Full > "$WORK/full.txt" 2>&1
 has    "-Full shows every detail"              'KEYS IN PLAIN TEXT' "$WORK/full.txt"
@@ -135,7 +155,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no malware in a clean home"            'no LiteLLM, OpenCode, Railway or Zeabur leaks' "$WORK/ph.txt"
+has    "no malware in a clean home"            'no LiteLLM, npm, OpenCode, Railway, Zeabur leaks' "$WORK/ph.txt"
 
 echo "files built to make a pattern backtrack"
 # Long runs of capitals and of KEY, with and without the = or quote a match needs,

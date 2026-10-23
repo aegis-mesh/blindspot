@@ -46,6 +46,21 @@ for B in $BASHES; do
   has    "finds the bad package in the uv cache" 'uv cache holds the 1\.107\.0 package' "$OUT"
   has    "counts SSH keys with no passphrase"    '2 SSH private keys, 1 with no passphrase' "$OUT"
   hasnot "never shows a letter grade"           'GRADE [ABCDF]|[Gg]rade [ABCDF]\b' "$OUT"
+  has    "flags project hooks and MCP auto-approval" 'Set to run commands while the agent works, turn on MCP servers' "$OUT"
+  has    "flags a folderOpen task"               'code/cloned/\.vscode/tasks\.json' "$OUT"
+  has    "flags a remote API address in project settings" 'code/proxy/\.claude/settings\.json' "$OUT"
+  hasnot "ignores a localhost API address"       'code/lib/\.claude/settings\.json' "$OUT"
+  hasnot "ignores a task that does not run on open" 'code/own/\.vscode' "$OUT"
+  hasnot "ignores the person's own global hooks" '^ +! +~/\.claude/settings\.json' "$OUT"
+  has    "finds a bad axios in a package-lock"   'axios 1\.14\.1 \(Axios takeover, March 2026\)' "$OUT"
+  has    "finds a bad TanStack version in pnpm-lock" '@tanstack/router-core 1\.169\.5 \(TanStack worm' "$OUT"
+  has    "finds a bad keyv in a yarn berry lock" 'keyv 6\.0\.0 \(keyv worm' "$OUT"
+  hasnot "ignores good versions of the same packages" 'axios 1\.14\.0|keyv 6\.0\.1|code/lib/package-lock' "$OUT"
+  has    "finds any version of a fake AI tool package" 'claud-code 1\.0\.3 \(fake AI tool packages' "$OUT"
+  has    "finds a bad package in npm's cache"    '@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI' "$OUT"
+  has    "puts the wiper first"                  'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' "$OUT"
+  has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
+  has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
   has    "full output lists every key file"      '~/\.cursor/mcp\.json +GitHub' "$OUT"
   has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*$' "$OUT"
   if grep -aqF -f "$WORK/keys.txt" "$OUT"; then bad "never prints a planted key"; else ok "never prints a planted key"; fi
@@ -157,7 +172,7 @@ lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offlin
 lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
-has    "no leaks found: row 05 names all four" 'no LiteLLM, OpenCode, Railway or Zeabur leaks' "$WORK/zb-none.txt"
+has    "no leaks found: row 05 names all five" 'no LiteLLM, npm, OpenCode, Railway, Zeabur leaks' "$WORK/zb-none.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
@@ -240,11 +255,11 @@ has    "on a near-empty home the tip is still a plain line" '^     Also: set a m
 echo "summary"
 OUT=$WORK/compact.txt
 HOME="$WORK/home" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline > "$OUT" 2>&1
-for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' "This week's leaks"; do
+for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' 'Recent leaks'; do
   has "one summary line for $label" "^   0[1-5] .*$label" "$OUT"
 done
 has    "the keys line names the first file"    'Keys in plain text +4 files, like ~/\.zshrc \(Anthropic, OpenAI\)' "$OUT"
-has    "the summary leads with the first fix"  'First fix: Treat this machine as compromised' "$OUT"
+has    "the summary leads with the first fix"  'First fix: Don.t revoke any GitHub token yet' "$OUT"
 hasnot "the summary leaves out the other key files" '~/\.zsh_history +GitHub' "$OUT"
 hasnot "the summary has no section tables"     'KEYS IN PLAIN TEXT' "$OUT"
 hasnot "the summary shows no letter grade"     'GRADE [ABCDF]|[Gg]rade [ABCDF]\b' "$OUT"

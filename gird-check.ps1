@@ -454,6 +454,10 @@ foreach ($p in @('AppData', 'Library', 'Applications', 'Pictures', 'Videos', 'Mo
     '3D Objects', 'scoop')) { $PrunePaths.Add((J $HomeDir $p)) }
 if (-not $OptAll) { foreach ($p in @('Desktop', 'Documents', 'Downloads')) { $PrunePaths.Add((J $HomeDir $p)) } }
 $Found = New-Object System.Collections.Generic.List[string]
+# Kept apart from $Found, so files_found counts what it always has.
+$LockFiles = New-Object System.Collections.Generic.List[string]
+$TaskFiles = New-Object System.Collections.Generic.List[string]
+$WormFiles = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
@@ -478,7 +482,9 @@ function Scan-Home([string]$dir, [int]$depth) {
       $Found.Add($path)
       $script:ScanN++
       if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
-    }
+    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { $LockFiles.Add($path) }
+    elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
+    elseif (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and ($name -ceq 'router_runtime.js' -or $name -ceq 'tanstack_runner.js')) { $WormFiles.Add($path) }
   }
 }
 # Whether a folder holds any file within three levels, and any changed in 30 days.
@@ -677,6 +683,33 @@ $McpCacheNote = ''; if ($N_MCP_CACHE -gt 0) { $McpCacheNote = ", $N_MCP_CACHE mo
 $McpSum = "$(Plural $N_MCP 'server' 'servers')$McpCacheNote"
 if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE in plugin folders" }
 
+# Project settings that make an agent or editor run something, or trust the project's MCP
+# servers, as soon as the folder is opened. A cloned repo brings them along (Check Point,
+# CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks).
+# settings.local.json is personal and never part of a clone, so only settings.json is read.
+$AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
+# The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
+$RxWormRun = New-Object regex('\.(claude|vscode)[/\\]+(setup\.mjs|router_runtime\.js|tanstack_runner\.js)', $RxOpt, $RxTimeout)
+$RxHooks = New-Object regex('"(PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact|apiKeyHelper)"\s*:', $RxOpt, $RxTimeout)
+$RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
+$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?!https?://(localhost|127\.0\.0\.1|\[::1\])([:/]|"))[^"]*"', $RxOpt, $RxTimeout)
+$RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
+function Auto-Row([string]$f, [string]$what) {
+  if (Has-Match $f $RxWormRun) { $WormRefs.Add($f) }
+  $AutoRows.Add(@($f, $what)); Progress "Project settings that $($what): $(Short $f)"
+}
+$homeSettings = J $HomeDir '.claude/settings.json'
+foreach ($f in $AllowFiles) {
+  if ([IO.Path]::GetFileName($f) -cne 'settings.json' -or $f.Equals($homeSettings, $PathCmp)) { continue }
+  $w = New-Object System.Collections.Generic.List[string]
+  if (Has-Match $f $RxHooks) { $w.Add('run commands while the agent works') }
+  if (Has-Match $f $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
+  if (Has-Match $f $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
+  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') }
+}
+foreach ($f in $TaskFiles) { if (Has-Match $f $RxFolderOpen) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' } }
+$N_AUTO = $AutoRows.Count
+
 # --- 3. Keys in plain text ---------------------------------------------------
 $DocsRoots = New-Object System.Collections.Generic.List[string]
 $DocsRoots.Add((J $HomeDir 'Documents'))
@@ -799,7 +832,7 @@ foreach ($f in $allowAll) {
   $AllowRows.Add(@($f, $npm))
 }
 
-# --- 5. This week's key leaks ------------------------------------------------
+# --- 5. Recent key leaks -----------------------------------------------------
 # Folders that hold Python environments. Fixed install locations are read by name;
 # the rest are searched a few levels deep, skipping node_modules.
 $SitesAll = New-Object System.Collections.Generic.List[string]
@@ -869,6 +902,208 @@ $LITELLM_HIT = 0
 if ($LiteBad.Count -gt 0 -or $Marks.Count -gt 0 -or $LOADER -eq 1) { $LITELLM_HIT = 1 }
 if ($LITELLM_HIT -eq 1) { Progress 'Signs of the LiteLLM malware found' }
 elseif ($LitePyc.Count -gt 0) { Progress 'A leftover cook.pyc may come from the LiteLLM malware' }
+# npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
+# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-jgg6-4rpr-wfh7, and one advisory per package for the rest.
+# A version of * means every version of that name is malware. The same list as gird-check.sh.
+$BadNpm = @'
+axios 1.14.1 axios
+axios 0.30.4 axios
+plain-crypto-js * axios
+@tanstack/arktype-adapter 1.166.12 tanstack
+@tanstack/arktype-adapter 1.166.15 tanstack
+@tanstack/eslint-plugin-router 1.161.9 tanstack
+@tanstack/eslint-plugin-router 1.161.12 tanstack
+@tanstack/eslint-plugin-start 0.0.4 tanstack
+@tanstack/eslint-plugin-start 0.0.7 tanstack
+@tanstack/history 1.161.9 tanstack
+@tanstack/history 1.161.12 tanstack
+@tanstack/nitro-v2-vite-plugin 1.154.12 tanstack
+@tanstack/nitro-v2-vite-plugin 1.154.15 tanstack
+@tanstack/react-router 1.169.5 tanstack
+@tanstack/react-router 1.169.8 tanstack
+@tanstack/react-router-devtools 1.166.16 tanstack
+@tanstack/react-router-devtools 1.166.19 tanstack
+@tanstack/react-router-ssr-query 1.166.15 tanstack
+@tanstack/react-router-ssr-query 1.166.18 tanstack
+@tanstack/react-start 1.167.68 tanstack
+@tanstack/react-start 1.167.71 tanstack
+@tanstack/react-start-client 1.166.51 tanstack
+@tanstack/react-start-client 1.166.54 tanstack
+@tanstack/react-start-rsc 0.0.47 tanstack
+@tanstack/react-start-rsc 0.0.50 tanstack
+@tanstack/react-start-server 1.166.55 tanstack
+@tanstack/react-start-server 1.166.58 tanstack
+@tanstack/router-cli 1.166.46 tanstack
+@tanstack/router-cli 1.166.49 tanstack
+@tanstack/router-core 1.169.5 tanstack
+@tanstack/router-core 1.169.8 tanstack
+@tanstack/router-devtools 1.166.16 tanstack
+@tanstack/router-devtools 1.166.19 tanstack
+@tanstack/router-devtools-core 1.167.6 tanstack
+@tanstack/router-devtools-core 1.167.9 tanstack
+@tanstack/router-generator 1.166.45 tanstack
+@tanstack/router-generator 1.166.48 tanstack
+@tanstack/router-plugin 1.167.38 tanstack
+@tanstack/router-plugin 1.167.41 tanstack
+@tanstack/router-ssr-query-core 1.168.3 tanstack
+@tanstack/router-ssr-query-core 1.168.6 tanstack
+@tanstack/router-utils 1.161.11 tanstack
+@tanstack/router-utils 1.161.14 tanstack
+@tanstack/router-vite-plugin 1.166.53 tanstack
+@tanstack/router-vite-plugin 1.166.56 tanstack
+@tanstack/solid-router 1.169.5 tanstack
+@tanstack/solid-router 1.169.8 tanstack
+@tanstack/solid-router-devtools 1.166.16 tanstack
+@tanstack/solid-router-devtools 1.166.19 tanstack
+@tanstack/solid-router-ssr-query 1.166.15 tanstack
+@tanstack/solid-router-ssr-query 1.166.18 tanstack
+@tanstack/solid-start 1.167.65 tanstack
+@tanstack/solid-start 1.167.68 tanstack
+@tanstack/solid-start-client 1.166.50 tanstack
+@tanstack/solid-start-client 1.166.53 tanstack
+@tanstack/solid-start-server 1.166.54 tanstack
+@tanstack/solid-start-server 1.166.57 tanstack
+@tanstack/start-client-core 1.168.5 tanstack
+@tanstack/start-client-core 1.168.8 tanstack
+@tanstack/start-fn-stubs 1.161.9 tanstack
+@tanstack/start-fn-stubs 1.161.12 tanstack
+@tanstack/start-plugin-core 1.169.23 tanstack
+@tanstack/start-plugin-core 1.169.26 tanstack
+@tanstack/start-server-core 1.167.33 tanstack
+@tanstack/start-server-core 1.167.36 tanstack
+@tanstack/start-static-server-functions 1.166.44 tanstack
+@tanstack/start-static-server-functions 1.166.47 tanstack
+@tanstack/start-storage-context 1.166.38 tanstack
+@tanstack/start-storage-context 1.166.41 tanstack
+@tanstack/valibot-adapter 1.166.12 tanstack
+@tanstack/valibot-adapter 1.166.15 tanstack
+@tanstack/virtual-file-routes 1.161.10 tanstack
+@tanstack/virtual-file-routes 1.161.13 tanstack
+@tanstack/vue-router 1.169.5 tanstack
+@tanstack/vue-router 1.169.8 tanstack
+@tanstack/vue-router-devtools 1.166.16 tanstack
+@tanstack/vue-router-devtools 1.166.19 tanstack
+@tanstack/vue-router-ssr-query 1.166.15 tanstack
+@tanstack/vue-router-ssr-query 1.166.18 tanstack
+@tanstack/vue-start 1.167.61 tanstack
+@tanstack/vue-start 1.167.64 tanstack
+@tanstack/vue-start-client 1.166.46 tanstack
+@tanstack/vue-start-client 1.166.49 tanstack
+@tanstack/vue-start-server 1.166.50 tanstack
+@tanstack/vue-start-server 1.166.53 tanstack
+@tanstack/zod-adapter 1.166.12 tanstack
+@tanstack/zod-adapter 1.166.15 tanstack
+@mistralai/mistralai 2.2.2 mistral
+@mistralai/mistralai 2.2.3 mistral
+@mistralai/mistralai 2.2.4 mistral
+@mistralai/mistralai-azure 1.7.1 mistral
+@mistralai/mistralai-azure 1.7.2 mistral
+@mistralai/mistralai-azure 1.7.3 mistral
+@mistralai/mistralai-gcp 1.7.1 mistral
+@mistralai/mistralai-gcp 1.7.2 mistral
+@mistralai/mistralai-gcp 1.7.3 mistral
+@bitwarden/cli 2026.4.0 bitwarden
+@mastra/core 1.42.1 mastra
+mastra 1.13.1 mastra
+create-mastra 1.13.1 mastra
+easy-day-js 1.11.22 mastra
+keyv 6.0.0 keyv
+cacheable 2.5.1 keyv
+cache-manager 7.2.10 keyv
+cacheable-request 13.0.20 keyv
+flat-cache 6.1.24 keyv
+file-entry-cache 11.1.6 keyv
+@cacheable/net 2.1.1 keyv
+@cacheable/node-cache 3.1.2 keyv
+@cacheable/memory 2.2.1 keyv
+@cacheable/utils 2.5.1 keyv
+ecto 5.0.1 keyv
+claud-code * sandworm
+cloude-code * sandworm
+rimarf * sandworm
+naniod * sandworm
+suport-color * sandworm
+'@
+$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]
+foreach ($l in ($BadNpm -split "`r?`n")) {
+  $p = $l -split ' '; if ($p.Count -lt 3) { continue }
+  if ($p[1] -ceq '*') { $NpmAny[$p[0]] = $p[2] } else { $NpmBad["$($p[0])@$($p[1])"] = $p[2] }
+  if (-not $NpmNames.Contains($p[0])) { $NpmNames.Add($p[0]) }
+}
+function Npm-Label([string]$t) {
+  switch ($t) {
+    'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI packages, May 2026' }
+    'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' }
+    default { 'fake AI tool packages, February 2026' }
+  }
+}
+$NpmRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
+function Npm-Hit([string]$where, [string]$nm, [string]$v) {
+  $k = "$nm@$v"; $t = $null
+  if ($NpmBad.ContainsKey($k)) { $t = $NpmBad[$k] } elseif ($NpmAny.ContainsKey($nm)) { $t = $NpmAny[$nm] }
+  if ($null -eq $t -or $NpmSeen.ContainsKey("$where|$k")) { return }
+  $NpmSeen["$where|$k"] = $true; $NpmRows.Add(@($where, "$nm $v", $t))
+}
+# Tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache) and name@version tokens
+# (pnpm, bun, yarn berry's name@npm:version).
+$RxTgz = New-Object regex('/((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))/-/([A-Za-z0-9._~-]+)\.tgz', $RxOpt, $RxTimeout)
+$RxTok = New-Object regex('(?<![A-Za-z0-9._~@/-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
+function Npm-Scan([string]$where, [string]$text) {
+  try {
+    foreach ($m in $RxTgz.Matches($text)) {
+      $nm = $m.Groups[1].Value; $b = $nm -replace '^@[^/]*/', ''; $base = $m.Groups[2].Value
+      if ($base.StartsWith("$b-", [StringComparison]::Ordinal)) { Npm-Hit $where $nm $base.Substring($b.Length + 1) }
+    }
+    foreach ($m in $RxTok.Matches($text)) { Npm-Hit $where $m.Groups[1].Value $m.Groups[2].Value }
+  } catch { Mark-Slow $where }
+}
+$N_LOCK = 0
+foreach ($f in $LockFiles) { $t = Read-Text $f; if ($null -eq $t) { continue }; $N_LOCK++; Npm-Scan $f $t }
+# Global installs and npx's cache, read from each package's package.json.
+$NpmRoots = New-Object System.Collections.Generic.List[string]
+foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'))) { if (Is-Dir $r) { $NpmRoots.Add($r) } }
+foreach ($c in @((J $LocalAppData 'npm-cache/_npx'), (J $HomeDir '.npm/_npx'))) { foreach ($d in (Glob-Dirs $c '*')) { $r = J $d 'node_modules'; if (Is-Dir $r) { $NpmRoots.Add($r) } } }
+foreach ($r in $NpmRoots) {
+  foreach ($nm in $NpmNames) {
+    $pj = J $r "$nm/package.json"; if (-not (Is-File $pj)) { continue }
+    $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"')
+    if ($m.Success) { Npm-Hit (J $r $nm) $nm $m.Groups[1].Value }
+  }
+}
+# npm's download cache keeps a package after it is uninstalled, and the malware ran when it installed.
+foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
+  $ix = J $c '_cacache/index-v5'; if (-not (Is-Dir $ix)) { continue }
+  $sb = New-Object System.Text.StringBuilder
+  try { foreach ($f in [IO.Directory]::GetFiles($ix, '*', [IO.SearchOption]::AllDirectories)) { try { [void]$sb.AppendLine([IO.File]::ReadAllText($f)) } catch { } } } catch { }
+  Npm-Scan "$c (npm's download cache)" $sb.ToString()
+}
+$NPM_HIT = 0; if ($NpmRows.Count -gt 0) { $NPM_HIT = 1 }
+# What these worms leave behind. gh-token-monitor erases the home folder once the stolen GitHub
+# token stops working, so it must go before any token is revoked (Wiz, TanStack; Socket, keyv).
+$Wiper = New-Object System.Collections.Generic.List[string]
+foreach ($m in @((J $HomeDir 'Library/LaunchAgents/com.user.gh-token-monitor.plist'), (J $HomeDir '.config/systemd/user/gh-token-monitor.service'),
+    (J $HomeDir '.local/bin/gh-token-monitor.sh'), (J $HomeDir '.config/gh-token-monitor'), '/tmp/gh-token-monitor.out.log', '/tmp/gh-token-monitor.err.log')) {
+  if (Exists $m) { $Wiper.Add($m) }
+}
+# The Mastra worm's startup files (Socket).
+$Persist = New-Object System.Collections.Generic.List[object]
+foreach ($m in @((J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), (J $HomeDir 'Library/NodePackages/protocal.cjs'),
+    (J $HomeDir '.config/systemd/user/nvmconf.service'), (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'))) {
+  if (Exists $m) { $Persist.Add(@($m, 'starts the Mastra worm at login')) }
+}
+if ($OnWindows) {
+  if ($env:ProgramData -and (Exists (J $env:ProgramData 'NodePackages/protocal.cjs'))) { $Persist.Add(@((J $env:ProgramData 'NodePackages/protocal.cjs'), 'starts the Mastra worm at login')) }
+  try {
+    $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
+    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra worm at login')) }; $rk.Close() }
+  } catch { }
+}
+foreach ($f in $WormFiles) { $Persist.Add(@($f, 'a file the TanStack and keyv worms plant')) }
+foreach ($f in $WormRefs) { $Persist.Add(@($f, 'runs a file the TanStack and keyv worms plant')) }
+$WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
+$MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
+if ($WIPER_HIT -eq 1) { Progress 'A wiper waits for a GitHub token to be revoked: gh-token-monitor' }
+elseif ($MAL_HIT -eq 1) { Progress 'Signs of npm malware found' }
 $OC = 0; if ((Has-Command 'opencode') -or (Is-Dir (J $HomeDir '.config/opencode')) -or (Is-Dir (J $HomeDir '.local/share/opencode'))) { $OC = 1 }
 $RW = 0; if ((Has-Command 'railway') -or (Is-File (J $HomeDir '.railway/config.json'))) { $RW = 1 }
 $ZB = 0; if ((Has-Command 'zeabur') -or (Is-Dir (J $HomeDir '.config/zeabur'))) { $ZB = 1 }
@@ -879,12 +1114,15 @@ $Todo = New-Object System.Collections.Generic.List[string]
 $Fixes = @{ 1 = (New-Object System.Collections.Generic.List[string]); 2 = (New-Object System.Collections.Generic.List[string]);
   3 = (New-Object System.Collections.Generic.List[string]); 4 = (New-Object System.Collections.Generic.List[string]); 5 = (New-Object System.Collections.Generic.List[string]) }
 function Add-Todo([int]$sec, [string]$text) { $Todo.Add($text); $Fixes[$sec].Add($text) }
+if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First remove gh-token-monitor, listed in section 5: it erases your home folder when the stolen token stops working. Then rotate every key this machine could reach.' }
+if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($LITELLM_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Don''t run Python in the affected environments, follow LiteLLM''s advisory, and rotate every key the machine could reach.' }
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
 if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
 if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs with environment variable references, then rotate them.' }
+if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys.' }
 if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
@@ -893,6 +1131,7 @@ $ISSUES = $Todo.Count
 
 $SCORE = 100
 if ($LITELLM_HIT -eq 1) { $SCORE -= 40 }
+if ($MAL_HIT -eq 1) { $SCORE -= 40 }
 $SCORE -= [Math]::Min($KEY_FILES * 8, 32)
 $SCORE -= [Math]::Min($HIST_KEYS * 6, 12)
 $SCORE -= [Math]::Min($N_ALLOW * 10, 20)
@@ -999,7 +1238,7 @@ if (-not $OptOffline) {
 # every detail with -Full or when the output is redirected. A saved report always
 # has every detail.
 # ===========================================================================
-if ($LITELLM_HIT -eq 1) { $Sev = $cRed }
+if ($LITELLM_HIT -eq 1 -or $MAL_HIT -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
 if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
@@ -1011,8 +1250,12 @@ $Capture = $true; [void]$Cap.Clear()
 if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
   Wrap "You're one of the first 1,000 AI builders to run Blindspot." 4 "  $cGold$gStar$cRst " '    ' $cBold; Blank
 }
-if ($LITELLM_HIT -eq 1) {
-  Emit "  $Sev$gBar$cRst ${cBold}ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE$cRst"
+$Act = ''
+if ($WIPER_HIT -eq 1) { $Act = 'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' }
+elseif ($MAL_HIT -eq 1) { $Act = 'ACT NOW: SIGNS OF NPM MALWARE' }
+elseif ($LITELLM_HIT -eq 1) { $Act = 'ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE' }
+if ($Act) {
+  Emit "  $Sev$gBar$cRst $cBold$Act$cRst"
   if ($PctTxt) { Emit "  $Sev$gBar$cRst $cBold$PctTxt.$cRst $FixN." } else { Emit "  $Sev$gBar$cRst $FixN." }
 } elseif ($PctTxt) {
   Emit "  $Sev$gBar$cRst $cBold$($PctTxt.ToUpperInvariant())$cRst"
@@ -1046,6 +1289,11 @@ foreach ($r in $McpRows) {
 if ($N_MCP_CACHE -gt 0) {
   Pair "$cDim$gMid$cRst" 'Plugin folders' 46 "$cDim$(Plural $N_MCP_CACHE 'server' 'servers') in $(Plural $N_MCP_CACHEF 'file' 'files'), not counted above$cRst"
 }
+if ($N_AUTO -gt 0) {
+  Blank
+  Emit "     ${cBold}Project settings that act as soon as the folder is opened$cRst"
+  foreach ($r in $AutoRows) { Emit "     $cYel!$cRst  $(Short $r[0])"; Wrap "Set to $($r[1])." 8 '        ' '        ' $cDim }
+}
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
 if ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
@@ -1072,7 +1320,7 @@ foreach ($r in $AllowRows) {
 }
 $Sec4 = Take-Cap
 $ind26 = ' ' * 26
-Section '05' "THIS WEEK'S KEY LEAKS" '3 checked'
+Section '05' 'RECENT KEY LEAKS' '5 checked'
 if ($LITELLM_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'LiteLLM 1.107.0' 16 "${cRed}signs of the malware found$cRst"
   foreach ($l in (@($LiteBad) + @($Marks))) { Emit "        $(Short $l)" }
@@ -1086,6 +1334,20 @@ if ($LITELLM_HIT -eq 1) {
   if ($N_LITE -gt 0) { Emit "$ind26${cDim}installed: $($LiteVers -join ' ')$cRst" }
 }
 if ($UvBad) { Wrap 'Your uv cache holds the 1.107.0 package. Clear it with: uv cache clean litellm' 8 '        ' '        ' $cYel }
+if ($WIPER_HIT -eq 1) {
+  Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}a wiper is waiting$cRst"
+  foreach ($l in $Wiper) { Emit "        $(Short $l)" }
+  Wrap "Don't revoke any GitHub token until these are gone: gh-token-monitor erases your home folder when the stolen token stops working." 8 '        ' '        ' $cRed
+}
+if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
+  if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}signs of the malware found$cRst" }
+  $shown = 0
+  foreach ($r in $NpmRows) { $shown++; if ($shown -le 12) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2]))$cRst" } }
+  if ($shown -gt 12) { Emit "        ${cDim}and $($shown - 12) more$cRst" }
+  foreach ($r in $Persist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
+} elseif ($WIPER_HIT -eq 0) {
+  Pair "$cGrn$gOk$cRst" 'npm worms' 16 "no bad versions in $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs or npm's cache"
+}
 if ($OC -eq 1) {
   Pair "$cYel!$cRst" 'OpenCode' 16 'installed'
   Wrap 'If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.' 26 $ind26 $ind26 $cDim
@@ -1138,6 +1400,7 @@ elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE i
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }
 if ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
+elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO 'project acts' 'projects act') on opening" }
 elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
@@ -1150,7 +1413,9 @@ elseif ($N_ALLOW_NPM -gt 0) { $G4 = "$cRed$gX$cRst"; $D4 = "$N_ALLOW saved keys,
 elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $AllowFirst)" }
 else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
 $leaks = @(); if ($OC -eq 1) { $leaks += 'OpenCode' }; if ($RW -eq 1) { $leaks += 'Railway' }; if ($ZB -eq 1) { $leaks += 'Zeabur' }
-if ($LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of the LiteLLM malware. Act now' }
+if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor found. Remove it before revoking tokens' }
+elseif ($MAL_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of npm malware. Act now' }
+elseif ($LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of the LiteLLM malware. Act now' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"
@@ -1160,13 +1425,13 @@ elseif ($leaks.Count -ge 2) {
 elseif ($OC -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'OpenCode found: used its Console? Rotate keys' }
 elseif ($RW -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'Railway CLI found: rotate secrets stored there' }
 elseif ($ZB -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'Zeabur CLI found: rotate secrets stored there' }
-else { $G5 = "$cGrn$gOk$cRst"; $D5 = 'no LiteLLM, OpenCode, Railway or Zeabur leaks' }
+else { $G5 = "$cGrn$gOk$cRst"; $D5 = 'no LiteLLM, npm, OpenCode, Railway, Zeabur leaks' }
 Blank
 CLine '01' $G1 'Coding agents' $D1
 CLine '02' $G2 'MCP servers' $D2
 CLine '03' $G3 'Keys in plain text' $D3
 CLine '04' $G4 'Allow lists' $D4
-CLine '05' $G5 "This week's leaks" $D5
+CLine '05' $G5 'Recent leaks' $D5
 if ($SlowFiles.Count -gt 0) { Blank; Wrap "$SlowText, like $(Short $SlowFiles[0])" 5 "   $cYel!$cRst " '     ' }
 if ($ISSUES -gt 0) { Blank; Wrap $Todo[0] 14 "   ${cBold}First fix:$cRst " (' ' * 14) }
 Blank
