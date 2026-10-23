@@ -883,8 +883,8 @@ fi
 SCAN_T0=$SECONDS
 
 # --- Keys in agent sessions, checked in the background --------------------------
-# docs/designs/transcripts.md. Each line is: agent | a folder or file of its sessions. Kept apart
-# from AGENTS, whose ids go into the report.
+# docs/designs/transcripts.md. SESS_TABLE rows are os|kind|agent|path, from data/sessions.tsv.
+# Kept apart from AGENTS, whose ids go into the report.
 # >>> sessions: generated from data/sessions.tsv by tools/gen.sh. Edit that file, then run it.
 SESS_TABLE="all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/projects
 mac|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
@@ -923,37 +923,56 @@ SESS_SEALED=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all"
 SESS_ROOTS=$(printf '%s\n' "$SESS_SOURCES" | while IFS='|' read -r _a _p; do [ -e "$_p" ] && printf '%s\n' "$_p"; done)
 # Lines without a key's start are skipped cheaply.
 SESS_PRE=$KEY_STARTS
-# One perl parent lists the files newest first and forks workers. Each prints K (a match) and then
-# D (done) for a file, or Z for a compressed one. The parent prints T (the total) first. On TERM
-# or HUP it stops its workers, and a worker whose parent is gone exits before its next file.
+# One perl parent lists the files newest first and forks workers, each with its own pipe back to
+# the parent, which is the only writer to its output, so lines never interleave. A worker prints
+# K (a match) and then D (done) for a file, or Z for a compressed one; the parent prints T (the
+# total) first. Files are read in 1 MB pieces that overlap, so a huge database file never loads at
+# once. On TERM, HUP or INT the parent stops its workers; a worker exits when its parent or the
+# script that started everything is gone, so a kill -9 of the script stops them at the next piece.
 SESS_PERL='
-use strict; use warnings; use File::Find;
-my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $parent = $$; my @kids;
-$SIG{TERM} = $SIG{HUP} = $SIG{INT} = sub { kill "TERM", @kids; exit 0 };
+use strict; use warnings; use File::Find; use IO::Select;
+my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
+$SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
 my @f;
-find({ no_chdir => 1, wanted => sub { push @f, $_ if -f $_ && !-l $_ } }, grep { -e } @ARGV);
+find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } },
+  map { -d $_ ? "$_/" : $_ } grep { -e } @ARGV);
 my %m; $m{$_} = (stat $_)[9] || 0 for @f;
 @f = sort { $m{$b} <=> $m{$a} or $a cmp $b } @f;
 $| = 1; print "T\t" . scalar(@f) . "\n";
 my $cut = $ENV{GIRD_CHECK_SESSIONS_STOP_AFTER};
 @f = @f[0 .. $cut - 1] if defined $cut && $cut =~ /^[0-9]+$/ && $cut < @f;
-my $n = $ENV{SESS_WORKERS} || 4;
+my $n = $ENV{SESS_WORKERS} || 4; my $sel = IO::Select->new;
 for my $w (0 .. $n - 1) {
-  my $pid = fork; last unless defined $pid;
+  pipe(my $r, my $wr) or last;
+  my $pid = fork; unless (defined $pid) { close $r; close $wr; last }
   if ($pid == 0) {
-    $SIG{TERM} = $SIG{HUP} = $SIG{INT} = "DEFAULT"; my $out = "";
+    $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = "DEFAULT"; close $r; select $wr; $| = 1;
     if (my $hold = $ENV{GIRD_CHECK_SESSIONS_HOLD}) { my $x; open($x, "<", $hold) and <$x> }  # tests only
-    for (my $i = $w; $i < @f; $i += $n) {
-      exit 0 if getppid() != $parent;
+    my $alive = sub { getppid() == $parent && kill(0, $owner) };
+    FILE: for (my $i = $w; $i < @f; $i += $n) {
+      exit 0 unless $alive->();
       my $file = $f[$i];
-      if ($file =~ /\.zst$/) { syswrite STDOUT, "Z\t$file\n"; next }
-      open(my $h, "<", $file) or next; binmode $h; $out = "";
-      while (my $l = <$h>) { next unless $l =~ $pre; while ($l =~ /$re/g) { $out .= "K\t$file\t$&\n" } }
-      close $h; syswrite STDOUT, $out . "D\t$file\n";
+      if ($file =~ /\.zst$/) { print "Z\t$file\n"; next }
+      open(my $h, "<", $file) or next; binmode $h; local $/ = \1048576; my $tail = "";
+      while (defined(my $c = <$h>)) {
+        exit 0 unless $alive->();
+        my $t = $tail . $c;
+        if ($t =~ $pre) { while ($t =~ /$re/g) { print "K\t$file\t$&\n" } }
+        $tail = length($t) > 512 ? substr($t, -512) : $t;
+      }
+      close $h; print "D\t$file\n";
     }
     exit 0;
   }
-  push @kids, $pid;
+  close $wr; $sel->add($r); push @kids, $pid;
+}
+my %buf;
+while ($sel->count) {
+  for my $fh ($sel->can_read) {
+    my $got = sysread($fh, my $chunk, 65536);
+    if ($got) { $buf{$fh} .= $chunk; while ($buf{$fh} =~ s/^([^\n]*\n)//) { print $1 } }
+    else { $sel->remove($fh); close $fh }
+  }
 }
 1 while wait() != -1;'
 # Turns matches into "H<tab>file<tab>provider", once per file and provider, and drops keys that
@@ -968,7 +987,7 @@ sess_filter() {
         if (c == last) { if (++run >= 8) return 1 } else { run = 1; last = c }
         if (!(c in seen)) { seen[c] = 1; n++ }
       }
-      return n < 12
+      return n < (length(k) < 30 ? 8 : 12)
     }
     $1 == "T" || $1 == "D" || $1 == "Z" { print; fflush(); next }
     {
@@ -982,7 +1001,7 @@ sess_filter() {
 SESS_ENGINE=none; SESS_RC=""
 RG_BIN=$(type -P rg 2>/dev/null)
 if [ -n "$GIRD_CHECK_SESSIONS_ENGINE" ]; then SESS_ENGINE=$GIRD_CHECK_SESSIONS_ENGINE
-elif [ -n "$RG_BIN" ]; then SESS_ENGINE=rg
+elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null | sed -n '1s/^ripgrep \([0-9]*\).*/\1/p')" -ge 13 ] 2>/dev/null; then SESS_ENGINE=rg
 elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
 [ "$SESS_ENGINE" = rg ] && [ -z "$RG_BIN" ] && SESS_ENGINE=none
 [ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
@@ -1000,7 +1019,7 @@ EOF
     "$RG_BIN" -a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename \
       --field-match-separator="$(printf '\t')" -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
     SESS_PID=$!
-    case "$RG_BIN" in *.exe|*.EXE) SESS_WIN=1 ;; esac
+    [ "$WIN" -eq 1 ] && SESS_WIN=1
   else
     _nw=$( (sysctl -n hw.ncpu || nproc || getconf _NPROCESSORS_ONLN) 2>/dev/null | head -n 1)
     case "$_nw" in ''|*[!0-9]*) _nw=4 ;; esac
@@ -1695,13 +1714,18 @@ if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
   if [ "$SESS_ENGINE" = perl ]; then
     SESS_TOTAL=$(awk -F '\t' '$1 == "T" { print $2; exit }' "$SESS_FILE")
     SESS_DONE=$(grep -c '^D' "$SESS_FILE")
+    # Stopped while still listing the files: count them here, none were checked.
+    if [ -z "$SESS_TOTAL" ]; then
+      SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find "$_r" -type f 2>/dev/null; done | wc -l | tr -d ' ')
+    fi
     SESS_ZST=$(grep -c '^Z' "$SESS_FILE")
   else
     _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
 $SESS_ROOTS
 EOF
-    SESS_TOTAL=$(find "${_roots[@]}" -type f 2>/dev/null | wc -l | tr -d ' ')
-    SESS_ZST=$(find "${_roots[@]}" -type f -name '*.zst' 2>/dev/null | wc -l | tr -d ' ')
+    _rs=(); for _r in "${_roots[@]}"; do if [ -d "$_r" ]; then _rs+=("$_r/"); else _rs+=("$_r"); fi; done
+    SESS_TOTAL=$(find "${_rs[@]}" -type f 2>/dev/null | wc -l | tr -d ' ')
+    SESS_ZST=$(find "${_rs[@]}" -type f -name '*.zst' 2>/dev/null | wc -l | tr -d ' ')
     # ripgrep reports no progress per file: it either finished (0 or 1) or did not.
     case "$SESS_RC" in 0|1) SESS_DONE=$((SESS_TOTAL - SESS_ZST)) ;; *) SESS_DONE=-1 ;; esac
   fi
@@ -1741,6 +1765,8 @@ if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
     !(($1 "|" $3) in pv) { pv[$1 "|" $3] = 1; ps[$1] = ps[$1] (ps[$1] == "" ? "" : ", ") $3 }
     END { for (i = 1; i <= k; i++) print name[i] "|" n[name[i]] "|" ps[name[i]] }' | sort -t '|' -k2,2nr -k1,1)
 fi
+SESS_PARTIAL=0
+if [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_ENGINE" = none ] || [ "$SESS_DONE" -lt 0 ] || [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; }; then SESS_PARTIAL=1; fi
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done)
 if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent session file" "agent session files")"; fi
 
@@ -2233,6 +2259,7 @@ else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST%%|*}") (${KEY_FIRST#*|})"
 elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST%%|*}") holds ${KEY_FIRST#*|} keys"
 elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session" "agent sessions"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
+elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agent sessions partly checked"
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
 else G3="${GRN}✓${RST}"; D3="no AI or cloud keys in plain text"; fi
 if [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"

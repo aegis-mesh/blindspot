@@ -83,7 +83,8 @@ for E in perl rg; do
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.txt"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.txt"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.txt"
-  hasnot "$E: a made-up key is not counted"        'Anthropic' "$SE/$E.block"
+  hasnot "$E: a made-up key is not counted"        'Anthropic|AWS|GitHub' "$SE/$E.block"
+  has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
   has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.txt"
   if grep -aqF -f "$WORK/keys.txt" "$SE/$E.txt"; then bad "$E: never prints a key"; else ok "$E: never prints a key"; fi
@@ -92,7 +93,7 @@ if [ -s "$SE/rg.block" ]; then
   if diff -q "$SE/perl.block" "$SE/rg.block" >/dev/null; then ok "perl and ripgrep report the same"; else bad "perl and ripgrep report the same"; diff "$SE/perl.block" "$SE/rg.block" | head -n 6; fi
 fi
 HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_STOP_AFTER=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
-has    "a partial check says how much it covered" 'Checked the newest 2 of 5 agent session files' "$SE/part.txt"
+has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$SE/clean.txt" 2>&1
 has    "a full check with nothing found says so" 'No keys in 2 agent session files\.' "$SE/clean.txt"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_STOP_AFTER=0 bash "$SCRIPT" --offline > "$SE/clean-part.txt" 2>&1
@@ -100,6 +101,26 @@ hasnot "a partial check with nothing found never says no keys" 'No keys in .*age
 has    "and says it was partial"                 'Checked the newest 0 of 2 agent session files' "$SE/clean-part.txt"
 HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=none bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/none.txt"
 has    "with no engine the sessions are named as not checked" 'agent session files were not checked: this needs perl or ripgrep' "$SE/none.txt"
+# A file that can't be read is not counted as checked.
+mkdir -p "$SE/unread/.claude/projects/p"; printf '{}\n' > "$SE/unread/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/unread/.claude/projects/p/b.jsonl"; chmod 000 "$SE/unread/.claude/projects/p/b.jsonl"
+HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-perl.txt"
+has    "perl: an unreadable session is not counted as checked" 'Checked the newest 1 of 2 agent session files' "$SE/unread-perl.txt"
+HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-sum.txt"
+has    "the summary row is not a check mark after a partial check" 'Keys in plain text none in files; agent sessions partly checked' "$SE/unread-sum.txt"
+if command -v rg >/dev/null 2>&1; then
+  HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
+  has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
+  # A session ripgrep never finishes (a pipe nobody writes to) is stopped when the rest is done.
+  mkdir -p "$SE/stuck/.codex"; mkfifo "$SE/stuck/.codex/history.jsonl"
+  HOME="$SE/stuck" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline > "$SE/stuck.txt" 2>&1; RC=$?
+  if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check, exit $RC"; fi
+  if pgrep -f 'field-match-separator' >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f 'field-match-separator'; else ok "rg: no ripgrep process is left running"; fi
+  HOME="$SE/stuck" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 &
+  BP=$!
+  for _i in $(seq 1 100); do pgrep -f 'field-match-separator' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+  kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
+  if pgrep -f 'field-match-separator' >/dev/null 2>&1; then bad "rg: HUP leaves no ripgrep process"; pkill -f 'field-match-separator'; else ok "rg: HUP leaves no ripgrep process"; fi
+fi
 # A held engine is still running when the rest of the check is done: it is stopped, and nothing is left behind.
 mkfifo "$SE/hold"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" bash "$SCRIPT" --offline > "$SE/held.txt" 2>&1; RC=$?

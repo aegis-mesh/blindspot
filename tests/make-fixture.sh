@@ -70,10 +70,11 @@ printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.10","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.10.tgz"},"node_modules/my-axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/my-axios/-/my-axios-1.14.1.tgz"},"node_modules/keyv-x":{"resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.0-beta.1.tgz"},"node_modules/keyv":{"version":"6.0.1","resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.1.tgz"}}}\n' > "$F/code/lib/package-lock.json"
 if [ "$MODE" = full ]; then
   # Agent sessions: a key right after an escaped newline, a made-up one, and one per agent.
-  printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" > "$F/.claude/projects/p1/k.jsonl"
+  printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s docs AKIAIOSFODNN7EXAMPLE and ghp_%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" "$(printf 'ab%.0s' $(seq 1 18))" > "$F/.claude/projects/p1/k.jsonl"
   mkdir -p "$F/.codex/sessions/2026/10"
   printf '{"payload":{"output":"OPENAI_API_KEY=%s"}}\n' "$OPENAI" > "$F/.codex/sessions/2026/10/rollout-k.jsonl"
   touch -t 202608200000 "$F/.codex/sessions/2026/10/rollout-k.jsonl"   # Codex stays idle
+  printf 'x' > "$F/.codex/sessions/2026/08/old.jsonl.zst"; touch -t 202608100000 "$F/.codex/sessions/2026/08/old.jsonl.zst"
   mkdir -p "$F/code/aid"; printf '#### run the eval\n> export GROQ_API_KEY=%s\n' "$GROQ" > "$F/code/aid/.aider.chat.history.md"
   mkdir -p "$F/.codeium/windsurf/cascade"; printf 'x' > "$F/.codeium/windsurf/cascade/a.pb"
   mkdir -p "$F/code/cloned/.claude" "$F/code/cloned/.vscode" "$F/code/proxy/.claude" "$F/code/web" "$F/code/berry"

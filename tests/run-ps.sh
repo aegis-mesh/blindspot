@@ -128,7 +128,8 @@ for E in net rg; do
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.block"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.block"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.block"
-  hasnot "$E: a made-up key is not counted"        'Anthropic' "$SE/$E.block"
+  hasnot "$E: a made-up key is not counted"        'Anthropic|AWS|GitHub' "$SE/$E.block"
+  has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.block"
   nokeys "$E: never prints a key" "$WORK/keys.txt" "$SE/$E.txt"
 done
@@ -139,7 +140,7 @@ bash tests/make-fixture.sh "$SE/bh" "$SE/bk" >/dev/null
 HOME="$SE/bh" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/bash.block"
 if diff -q "$SE/bash.block" "$SE/net.block" >/dev/null; then ok "the same session block as gird-check.sh"; else bad "the same session block as gird-check.sh"; diff "$SE/bash.block" "$SE/net.block" | head -n 6; fi
 psrun "$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
-has    "a partial check says how much it covered" 'Checked the newest 2 of 5 agent session files' "$SE/part.txt"
+has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > "$SE/clean.txt" 2>&1
 has    "a full check with nothing found says so" 'No keys in 2 agent session files\.' "$SE/clean.txt"
 : > "$SE/hold"
@@ -147,6 +148,9 @@ psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE
 if [ "$RC" -eq 0 ]; then ok "a held check does not hold up the report"; else bad "a held check does not hold up the report, exit $RC"; fi
 hasnot "a partial check with nothing found never says no keys" 'No keys in .*agent session' "$SE/held.txt"
 has    "and says it was partial"                 'Checked the newest 0 of 2 agent session files' "$SE/held.txt"
+mkdir -p "$SE/min/.claude/projects/p" "$SE/min/AppData/Roaming" "$SE/min/AppData/Local/Temp"; printf '{}\n' > "$SE/min/.claude/projects/p/a.jsonl"
+psrun "$SE/min" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/held-sum.txt"
+has    "the summary row is not a check mark after a partial check" 'Keys in plain text none in files; agent sessions partly checked' "$SE/held-sum.txt"
 
 echo "the same findings as gird-check.sh"
 bl() { sed -n "/$2/,/$3/p" "$1" | grep -E '^[@a-z0-9].* (\*|[0-9][^ ]*) [a-z]+$'; }

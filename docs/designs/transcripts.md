@@ -90,11 +90,14 @@ machines will differ:
   compressed (`.zst`) counts as not checked, and compressed files are named.
 - ripgrep reports no per-file progress, so a stopped ripgrep run reads "partly checked", with no
   number.
-- Stopping: the perl parent traps TERM and HUP, kills its workers and exits; workers also exit
-  when their parent is gone (`getppid`), so nothing outlives the script even after a kill -9.
-  ripgrep is killed by its process ID; under Git Bash, a native `rg.exe` is stopped with
-  `taskkill`. The results file is made with `mktemp`, removed by the existing cleanup, which also
-  traps HUP from now on, and holds paths and provider ids only.
+- Stopping: the perl parent traps TERM, HUP and INT, kills its workers and exits. Each worker
+  has its own pipe to the parent, which is the only writer, so result lines never interleave.
+  Workers also exit when their parent or the script itself is gone, checked before each file and
+  each 1 MB piece of one, so after a kill -9 of the script they stop within one piece. ripgrep is
+  killed by its process ID, and under Git Bash with `taskkill`; after a kill -9 of the script it
+  runs to its end. The results file is made with `mktemp` and removed by the existing cleanup,
+  which also traps HUP from now on; a kill -9 leaves it behind, holding paths and provider names
+  only.
 
 ## Fetching ripgrep
 

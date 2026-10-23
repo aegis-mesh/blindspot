@@ -306,7 +306,8 @@ function Made-Up([string]$k) {
   if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
   $set = New-Object 'System.Collections.Generic.HashSet[char]'
   foreach ($c in $k.ToCharArray()) { [void]$set.Add($c) }
-  $set.Count -lt 12
+  $min = 12; if ($k.Length -lt 30) { $min = 8 }
+  $set.Count -lt $min
 }
 '@
 . ([scriptblock]::Create($KeyFns))
@@ -635,29 +636,39 @@ $SessWorker = {
     } catch { } finally { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
     return
   }
+  # Stopped while still listing: Listed stays false and the report says the sessions were not all checked.
   $files = New-Object System.Collections.Generic.List[object]
   foreach ($r in $roots) {
     try {
       if ([IO.File]::Exists($r)) { $files.Add((New-Object IO.FileInfo $r)) }
-      else { foreach ($f in (New-Object IO.DirectoryInfo $r).EnumerateFiles('*', [IO.SearchOption]::AllDirectories)) { $files.Add($f) } }
+      else { foreach ($f in (New-Object IO.DirectoryInfo $r).EnumerateFiles('*', [IO.SearchOption]::AllDirectories)) { if ($st.Stop) { return }; $files.Add($f) } }
     } catch { }
   }
   $sorted = @($files | Sort-Object -Property @{ Expression = 'LastWriteTimeUtc'; Descending = $true }, FullName)
-  $st.Total = $sorted.Count
-  $n = 0
+  $st.Total = $sorted.Count; $st.Listed = $true
+  $n = 0; $latin = [Text.Encoding]::GetEncoding(28591); $buf = New-Object char[] 1048576
   foreach ($f in $sorted) {
     if ($st.Stop) { break }
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
+    # Read in 1 MB pieces that overlap, so a huge database file never loads at once and a stop
+    # is seen within one piece.
+    $sr = $null; $whole = $true
     try {
-      $t = [IO.File]::ReadAllText($f.FullName)
-      if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
-      $st.Done++
-    } catch { }
+      $sr = New-Object IO.StreamReader((New-Object IO.FileStream($f.FullName, 'Open', 'Read', 'ReadWrite')), $latin)
+      $tail = ''
+      while (($got = $sr.Read($buf, 0, $buf.Length)) -gt 0) {
+        if ($st.Stop) { $whole = $false; break }
+        $t = $tail + (New-Object string($buf, 0, $got))
+        if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
+        if ($t.Length -gt 512) { $tail = $t.Substring($t.Length - 512) } else { $tail = $t }
+      }
+      if ($whole) { $st.Done++ }
+    } catch { } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Total = 0; Done = 0; Zst = 0; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -1237,7 +1248,7 @@ $ZB = 0; if ((Has-Command 'zeabur') -or (Is-Dir (J $HomeDir '.config/zeabur'))) 
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
 Sess-Stop $OptAllSess
 $SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst
-if ($SessEngine -ne 'net') {
+if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
   $sessAll = New-Object System.Collections.Generic.List[string]
   foreach ($r in $SessRoots) {
     try { if ([IO.File]::Exists($r)) { $sessAll.Add($r) } else { foreach ($f in [IO.Directory]::EnumerateFiles($r, '*', [IO.SearchOption]::AllDirectories)) { $sessAll.Add($f) } } } catch { }
@@ -1245,6 +1256,7 @@ if ($SessEngine -ne 'net') {
   $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.EndsWith('.zst') }).Count
   # rg.exe reports no progress per file: it either finished (0 or 1) or did not.
   if ($SessEngine -eq 'rg' -and -not $SessSt.Stopped -and ($SessSt.RgExit -eq 0 -or $SessSt.RgExit -eq 1)) { $SESS_DONE = $SESS_TOTAL - $SESS_ZST } elseif ($SessEngine -eq 'rg') { $SESS_DONE = -1 } else { $SESS_DONE = 0 }
+  if ($SessEngine -eq 'net' -and -not $SessSt.Listed) { $SESS_DONE = 0 }
 }
 $sessHits = New-Object System.Collections.Generic.List[string]
 foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
@@ -1270,6 +1282,7 @@ foreach ($h in $sessHits) {
 $SessFiles.Sort([StringComparer]::Ordinal)
 $N_SESS = $SessFiles.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
+$SESS_PARTIAL = $SESS_TOTAL -gt 0 -and ($SessEngine -eq 'none' -or $SESS_DONE -lt 0 -or $SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST))
 $SessSealedFound = @($SessSealed | Where-Object { Is-Dir $_[1] } | ForEach-Object { $_[0] })
 if ($N_SESS -gt 0) { Progress "Keys in $(Plural $N_SESS 'agent session file' 'agent session files')" }
 
@@ -1591,6 +1604,7 @@ else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
 elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) holds $($KeyFirst[1]) keys" }
 elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session' 'agent sessions'): $($SessRows[0][0])" }
+elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessions partly checked' }
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
 else { $G3 = "$cGrn$gOk$cRst"; $D3 = 'no AI or cloud keys in plain text' }
 if ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
