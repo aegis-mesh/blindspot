@@ -447,7 +447,7 @@ $PruneNames = @('node_modules', '.git', '.Trash', '.cache', '.npm', '.pnpm-store
   '.m2', '.pyenv', '.rbenv', '.nvm', '.bun', '.deno', '__pycache__', '.tox', '.next', 'dist', 'build', 'target', 'vendor',
   'Pods', 'DerivedData', '.terraform', '.gem', '.cocoapods', '.android', '.pub-cache', '.dartServer', '.swiftpm', '.ollama',
   '.lmstudio', '.colima', '.lima', '.orbstack', '.minikube', '.vagrant.d', '.docker', '.oh-my-zsh', '.zsh_sessions',
-  '.codeium', '.vscode-server', '.nuget', '.dotnet', 'anaconda3', 'miniconda3', 'miniforge3')
+  '.codeium', '.vscode-server', '.nuget', '.dotnet')
 $PrunePaths = New-Object System.Collections.Generic.List[string]
 foreach ($p in @('AppData', 'Library', 'Applications', 'Pictures', 'Videos', 'Movies', 'Music', 'Public', 'go', '.vscode', '.cursor',
     '.windsurf', '.local/share', 'Dropbox', 'Google Drive', 'Saved Games', 'Favorites', 'Contacts', 'Links', 'Searches',
