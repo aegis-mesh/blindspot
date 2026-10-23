@@ -256,15 +256,21 @@ PY
   hasnot "a reply without r shows no rank"       "AI builder #" "$WORK/no-rank.txt"
   has    "a reply without r leaves r empty in the link" '&pn=1234&u=[0-9a-f]{16}&r=&sk=2' "$WORK/no-rank.txt"
   SHOWN=""
-  for R in null 0 1001 '"142"' 14.2; do
+  for R in null 0 '"142"' 14.2 0142 1234567890; do
     printf '{"p":72,"n":1234,"r":%s}' "$R" > "$WORK/reply.json"
     HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/bad-rank.txt" 2>&1
     if grep -aqE 'AI builder #|&r=[^&]' "$WORK/bad-rank.txt"; then SHOWN="$SHOWN $R"; fi
   done
-  if [ -z "$SHOWN" ]; then ok "a rank that isn't a whole number from 1 to 1000 shows nothing"; else bad "a rank that isn't a whole number from 1 to 1000 shows nothing"; printf '        shown for:%s\n' "$SHOWN"; fi
+  if [ -z "$SHOWN" ]; then ok "a rank that isn't a whole number from 1 shows nothing"; else bad "a rank that isn't a whole number from 1 shows nothing"; printf '        shown for:%s\n' "$SHOWN"; fi
   printf '%s' '{"p":72,"n":1234,"r":1000}' > "$WORK/reply.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/rank-1000.txt" 2>&1
   has    "rank 1000 is still shown, with a separator" "★ You're AI builder #1,000 to run Blindspot\." "$WORK/rank-1000.txt"
+  printf '%s' '{"p":72,"n":1234,"r":1001}' > "$WORK/reply.json"
+  HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/rank-1001.txt" 2>&1
+  has    "rank 1001 is shown"                       "★ You're AI builder #1,001 to run Blindspot\.$" "$WORK/rank-1001.txt"
+  hasnot "rank 1001 is not one of the first 1,000"  "AI builder #1,001 to run Blindspot\. One of the first" "$WORK/rank-1001.txt"
+  has    "rank 1001 goes in the result link"        '&r=1001&' "$WORK/rank-1001.txt"
+  has    "rank 1000 is one of the first 1,000"      "AI builder #1,000 to run Blindspot\. One of the first 1,000\." "$WORK/rank-1000.txt"
   printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
   printf '%s' '{"devices":999,"devices_7d":120,"key_files":300,"clean":0.4}' > "$WORK/stats.json"
   HOME="$WORK/home" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/early.txt" 2>&1

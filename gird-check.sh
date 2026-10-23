@@ -1306,9 +1306,8 @@ send_stats() { # payload [seconds]: POST it with a short timeout, https only whe
   if [ "${API#https://}" != "$API" ]; then _pp='=https'; else _pp='=http,https'; fi
   curl -fsS --proto "$_pp" --max-time "${2:-5}" --max-filesize 65536 -X POST -H 'Content-Type: application/json' --data "$1" "$API" 2>/dev/null
 }
-# The reply holds p, the share of developers whose latest run scored lower, n,
-# how many developers that is, and r, this device's place in line when it is one
-# of the first 1,000 to run Blindspot. Only digits are read from it.
+# The reply holds p, the share of people whose latest run scored lower, n, how
+# many people that is, and r, this device's place in line. Only digits are read from it.
 PCT=""; PCT_N=""; RANK=""; LINK_RUN_ID=""
 if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
   LINK_RUN_ID=$RUN_ID   # the certificate link carries the run ID only when a report did
@@ -1317,7 +1316,7 @@ if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
   [ "$TTY" -eq 1 ] && printf '\r%s' "${E}[K"
   _p=$(jnum p "$_rp"); _n=$(jnum n "$_rp"); _rank=$(jnum r "$_rp")
   if [ -n "$_p" ] && [ -n "$_n" ] && [ "${#_n}" -le 9 ] && [ "$_p" -ge 1 ] && [ "$_p" -le 99 ] && [ "$_n" -ge 1 ]; then PCT=$_p; PCT_N=$_n; fi
-  case "$_rank" in [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|1000) RANK=$_rank ;; esac   # a whole number from 1 to 1000, or unknown
+  case "$_rank" in ""|0*|*[!0-9]*) ;; *) [ "${#_rank}" -le 9 ] && RANK=$_rank ;; esac   # a whole number from 1, or unknown
 fi
 
 
@@ -1337,7 +1336,8 @@ upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
 CAPTURE=1; CAP=""
 # The first 1,000 get their place in line, above either header.
 if [ -n "$RANK" ]; then
-  wrap "You're AI builder #$(commas "$RANK") to run Blindspot. One of the first 1,000." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
+  _first=""; [ "$RANK" -le 1000 ] && _first=" One of the first 1,000."
+  wrap "You're AI builder #$(commas "$RANK") to run Blindspot.$_first" 4 "  ${GOLD}★${RST} " "    " "$B"; blank
 elif [ "$EARLY" -eq 1 ]; then
   wrap "You're one of the first 1,000 people to run Blindspot." 4 "  ${GOLD}★${RST} " "    " "$B"; blank
 fi
