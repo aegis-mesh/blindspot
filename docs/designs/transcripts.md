@@ -1,6 +1,7 @@
 # Keys in agent sessions
 
-Status: design, not built. Builds on PR #12 (npm worms and project settings).
+Status: built in gird-check.sh and gird-check.ps1, on top of PR #12. `--fetch-rg` is not built. The
+key types and session locations are in `data/keys.tsv` and `data/sessions.tsv`.
 
 ## Why
 
