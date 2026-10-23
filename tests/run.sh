@@ -95,6 +95,23 @@ hasnot "but it is not an act-now hit"          'Act now|ACT NOW' "$WORK/zb-pyc-f
 hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftover' "$WORK/zb-none.txt"
 cp -R "$WORK/zb-pyc" "$WORK/zb-pyc-strong"; printf 'import cook\n' > "$WORK/zb-pyc-strong/code/py/.venv/lib/python3.12/site-packages/cook.pth"
 lp "$WORK/zb-pyc-strong" > "$WORK/zb-pyc-strong.txt"
+cp -R "$WORK/zb-pyc" "$WORK/zb-pyc-oc"; mkdir -p "$WORK/zb-pyc-oc/.config/opencode"
+lpf "$WORK/zb-pyc-oc" > "$WORK/zb-pyc-oc.txt"
+has    "a weak pyc and OpenCode both show in the details"  'possible leftover.*OpenCode +installed' "$WORK/zb-pyc-oc.txt"
+has    "a weak pyc shows in row 05 and the fix list"       'A leftover cook\.pyc can come from the LiteLLM 1\.107\.0 malware' "$WORK/zb-pyc-oc.txt"
+# Idle agents are found on any Mac (Claude Desktop is in /Applications), so a copy of the
+# script that ignores them stands in for a machine with no idle agent.
+sed 's/\[ "\$N_IDLE" -gt 0 \]/[ 0 -gt 1 ]/g' "$SCRIPT" > "$WORK/no-idle.sh"
+rm -rf "$WORK/ni-empty"; mkdir -p "$WORK/ni-empty"
+HOME="$WORK/ni-empty" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-empty.txt"
+has    "nothing found: the header says no findings"        'NO FINDINGS IN THIS SCAN' "$WORK/ni-empty.txt"
+has    "nothing found: it says this is not a guarantee"    'not a .*guarantee' "$WORK/ni-empty.txt"
+hasnot "nothing found: no old clean-today wording"         'CLEAN TODAY|needs fixing|Nothing to fix' "$WORK/ni-empty.txt"
+cp -R "$WORK/zb-none" "$WORK/ni-pyc"; mkdir -p "$WORK/ni-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__"; : > "$WORK/ni-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__/cook.cpython-312.pyc"
+HOME="$WORK/ni-pyc" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-pyc.txt"
+has    "a pyc-only run counts its things to fix"           'It found [0-9]+ things? to fix' "$WORK/ni-pyc.txt"
+has    "a pyc-only run still says the scan is a snapshot"  'THIS SCAN IS A SNAPSHOT' "$WORK/ni-pyc.txt"
+hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS SCAN' "$WORK/ni-pyc.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "MCP configs in plugin folders"

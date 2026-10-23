@@ -1157,6 +1157,7 @@ UV_BAD=$(find "$H/.cache/uv" -maxdepth 6 -name 'litellm-1.107.0*' -print -quit 2
 LITELLM_HIT=0
 if [ -n "$LITE_BAD" ] || [ -n "$MARKS" ] || [ "$LOADER" -eq 1 ]; then LITELLM_HIT=1; fi
 if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Signs of the LiteLLM malware found"
+elif [ -n "$LITE_PYC" ]; then progress w "A leftover cook.pyc may come from the LiteLLM malware"
 else progress o "No signs of the LiteLLM malware in $(plural "$N_PY" "Python environment" "Python environments")"; fi
 OC=0
 if command -v opencode >/dev/null 2>&1 || [ -d "$H/.config/opencode" ] || [ -d "$H/.local/share/opencode" ]; then OC=1; fi
@@ -1479,12 +1480,18 @@ SEC_TODO=$CAP; CAP=""
 BAR="  ${TEAL}▌${RST} "
 blank
 if [ "$OS" = Darwin ]; then
-  if [ "$LITELLM_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then
+  if [ "$KEY_FILES" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
+  elif [ "$LITELLM_HIT" -eq 1 ]; then
+    _t="THIS SCAN IS A SNAPSHOT"
+    _p1="It found signs of the LiteLLM malware. It can't tell you what the malware already took, or what your agents do after you close this window."
   elif [ "$N_IDLE" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="$(plural "$N_IDLE" "agent you haven't used in 30 days is" "agents you haven't used in 30 days are") still installed. A poisoned package can drive an installed agent, and nothing on your Mac would tell you."
+  elif [ "$ISSUES" -gt 0 ]; then
+    _t="THIS SCAN IS A SNAPSHOT"
+    _p1="It found $(plural "$ISSUES" "thing" "things") to fix. It can't tell you whether an agent already used what it found, or what your agents do after you close this window."
   else
     _t="NO FINDINGS IN THIS SCAN"
     _p1="Nothing turned up in the places this scan covers, which is not a guarantee. The next leak won't wait for you to run a scan."
@@ -1578,6 +1585,7 @@ if [ "$OS" = Darwin ]; then
   else _how="It runs on Apple Silicon Macs today: gird.ai/argus/download"; fi
   if [ "$LITELLM_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then _lead="This scan is a snapshot."
   elif [ "$N_IDLE" -gt 0 ]; then _lead="A poisoned package can drive an agent you no longer use."
+  elif [ "$ISSUES" -gt 0 ]; then _lead="This scan is a snapshot."
   else _lead="The next leak won't wait for a scan."; fi
   blank
   wrap "$_lead Argus for Mac tells you the moment an agent opens a key file or tries to send a key off your Mac. $_how" 4 "$BAR" "$BAR"
