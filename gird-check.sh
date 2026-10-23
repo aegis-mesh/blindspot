@@ -1310,7 +1310,7 @@ send_stats() { # payload [seconds]: POST it with a short timeout, https only whe
 # many people that is, and r, this device's place in line. Only digits are read from it.
 PCT=""; PCT_N=""; RANK=""; LINK_RUN_ID=""
 if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
-  LINK_RUN_ID=$RUN_ID   # the certificate link carries the run ID only when a report did
+  LINK_RUN_ID=$RUN_ID   # the result link carries the run ID only when a report did
   [ "$TTY" -eq 1 ] && printf '  %sComparing with other AI builders...%s' "$DIM" "$RST"
   _rp=$(send_stats "$PAYLOAD" 3 | head -c 4096 | tr -d ' \n\r\t')
   [ "$TTY" -eq 1 ] && printf '\r%s' "${E}[K"

@@ -43,7 +43,7 @@ Please don't pipe it straight into a shell. Reading it first is the point.
 4. **Keys saved in Claude Code allow lists.** Click "always allow" on a command that has a key in it, and Claude Code saves the whole command in the project's settings file. Blindspot flags each one, and whether an npm publish from that folder would ship it.
 5. **That week's leaks.** Files left by the LiteLLM 1.107.0 malware in every Python environment it finds, the bad package in your uv cache, and what to rotate if you use OpenCode Console, Railway or Zeabur.
 
-At the end you get a short summary: how you compare with the other AI builders who ran it, one line per check, and the first thing to fix. Everyone gets their number, and the first 1,000 are marked. Press 1 to 5 for the details of a check, s to save the full report, or ENTER for your AI Exposure Check: a page with your result, the steps to fix what it found, and an image to post on LinkedIn or X. `--full` prints every detail instead, and so does running it into a file or a pipe.
+At the end you get a short summary: how you compare with the other AI builders who ran it, one line per check, and the first thing to fix. Everyone who shares their result gets a number, and the first 1,000 are marked. Press 1 to 5 for the details of a check, s to save the full report, or ENTER for your AI Exposure Check: a page with your result, the steps to fix what it found, and an image to post on LinkedIn or X. `--full` prints every detail instead, and so does running it into a file or a pipe.
 
 ## What it never does
 
