@@ -17,7 +17,7 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | Field | Example | What it is |
 |---|---|---|
 | `v`, `kind` | `"1"`, `"report"` | Format version and event type |
-| `run_id` | `"4b78c51d64d15aa0"` | Random for each run. Links a report to its actions event and to shares from its certificate |
+| `run_id` | `"4b78c51d64d15aa0"` | Random for each run. Links a report to its actions event and to shares from its result page |
 | `device_id` | 64 hex characters | One-way SHA-256 of your Mac's hardware UUID (Linux: `/etc/machine-id`), salted with `gird-check-v1:`. Lets us count repeat runs. It can't be turned back into the hardware ID |
 | `script` | `"1"` | Script version |
 | `os`, `arch`, `model` | `"macOS 26.4"`, `"arm64"`, `"MacBookPro18,1"` | macOS version, processor type, Mac model identifier |
@@ -48,7 +48,7 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | Field | What it is |
 |---|---|
 | `run_id`, `device_id` | Same as the report |
-| `saved`, `card`, `argus` | Whether you saved the report, opened your certificate or opened the Argus download page |
+| `saved`, `card`, `argus` | Whether you saved the report, opened your result or opened the Argus download page |
 | `menu_seconds` | Time spent in the menu |
 
 ## What comes back
@@ -56,11 +56,11 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | From | Example | What it is |
 |---|---|---|
 | The totals | `{"devices":1234,"devices_7d":456,"key_files":3412,"clean":0.31,...}` | Public totals, the same for everyone. The script shows one of them under the banner. Until 1,000 people have run it, it shows none, and says you're one of the first 1,000 above your result instead |
-| The reply to the report | `{"p":72,"n":1234,"r":142}` | `p` is the share of people whose latest run scored lower than yours, `n` how many people that is. No `p` until at least 25 people have run it. `r` is your place in line: 142 means 141 devices ran it before yours. Only the first 1,000 get one, and the script shows it above your result |
+| The reply to the report | `{"p":72,"n":1234,"r":142}` | `p` is the share of people whose latest run scored lower than yours, `n` how many people that is. No `p` until at least 2 people have run it. `r` is your place in line: 142 means 141 devices ran it before yours. Only the first 1,000 get one, and the script shows it above your result |
 
-The script reads only digits from either reply, so a reply can't put anything else on your screen. The certificate link carries `p`, `n` and `r` after the `#`, which browsers never send to a server.
+The script reads only digits from either reply, so a reply can't put anything else on your screen. The result link carries `p`, `n` and `r` after the `#`, which browsers never send to a server.
 
-The certificate link also carries the run's random ID, the `run_id` from the report. When someone presses a share button, the certificate page sends that ID back with which button and what kind of result, nothing else. With `--offline` the link has no run ID.
+The result link also carries the run's random ID, the `run_id` from the report. When someone presses a share button, the result page sends that ID back with which button and what kind of result, nothing else. With `--offline` the link has no run ID.
 
 ## On our side
 

@@ -234,7 +234,7 @@ PY
   if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
   has  "shows one real total under the banner" '★ (1,234 people have run Blindspot|456 people ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of people had no keys in plain text)' "$OUT"
   hasi "shows how this machine compares"       'safer than 72% of 1,234 people who ran Blindspot' "$OUT"
-  has  "the certificate link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
+  has  "the result link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
   has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below

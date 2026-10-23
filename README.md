@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot run in a terminal: safer than 72% of 846 people who ran it, AI builder #142 of the first 1,000, one line per check, and the prompt to get a certificate" width="760"></a>
+  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot run in a terminal: safer than 72% of 846 people who ran it, AI builder #142 of the first 1,000, one line per check, and the prompt to get your AI Exposure Check" width="760"></a>
 </p>
 
 # Blindspot
@@ -43,7 +43,7 @@ Please don't pipe it straight into a shell. Reading it first is the point.
 4. **Keys saved in Claude Code allow lists.** Click "always allow" on a command that has a key in it, and Claude Code saves the whole command in the project's settings file. Blindspot flags each one, and whether an npm publish from that folder would ship it.
 5. **That week's leaks.** Files left by the LiteLLM 1.107.0 malware in every Python environment it finds, the bad package in your uv cache, and what to rotate if you use OpenCode Console, Railway or Zeabur.
 
-At the end you get a short summary: how you compare with the other people who ran it, one line per check, and the first thing to fix. The first 1,000 people also get their number. Press 1 to 5 for the details of a check, s to save the full report, or ENTER for your Blindspot certificate: a page with your result, the steps to fix what it found, and a certificate image to post on LinkedIn or X. `--full` prints every detail instead, and so does running it into a file or a pipe.
+At the end you get a short summary: how you compare with the other people who ran it, one line per check, and the first thing to fix. The first 1,000 people also get their number. Press 1 to 5 for the details of a check, s to save the full report, or ENTER for your AI Exposure Check: a page with your result, the steps to fix what it found, and an image to post on LinkedIn or X. `--full` prints every detail instead, and so does running it into a file or a pipe.
 
 ## What it never does
 
@@ -55,7 +55,7 @@ At the end you get a short summary: how you compare with the other people who ra
 
 ## What it shares
 
-When it starts, it asks gird.ai for public totals, such as how many people have run it. That request sends nothing else. When it finishes, it sends one report to gird.ai: the counts above, which agents, key providers and well-known MCP servers it saw (from fixed lists, so no name you typed is sent), where keys sit by kind of file, a few facts about your setup such as your terminal app and macOS version, and a hashed device ID so repeat runs can be counted. The reply says how your result compares and, for the first 1,000 devices, your number. The certificate link carries a random run ID, and the certificate page sends it back only when you press a share button. Every field is listed in [TELEMETRY.md](TELEMETRY.md). Run it with `--offline`, or set `DO_NOT_TRACK=1`, and it makes no requests at all.
+When it starts, it asks gird.ai for public totals, such as how many people have run it. That request sends nothing else. When it finishes, it sends one report to gird.ai: the counts above, which agents, key providers and well-known MCP servers it saw (from fixed lists, so no name you typed is sent), where keys sit by kind of file, a few facts about your setup such as your terminal app and macOS version, and a hashed device ID so repeat runs can be counted. The reply says how your result compares and, for the first 1,000 devices, your number. The result link carries a random run ID, and the result page sends it back only when you press a share button. Every field is listed in [TELEMETRY.md](TELEMETRY.md). Run it with `--offline`, or set `DO_NOT_TRACK=1`, and it makes no requests at all.
 
 ## GIRD Runner
 

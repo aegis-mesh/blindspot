@@ -1633,7 +1633,7 @@ do_save() {
 }
 do_card() {
   _u=$(card_url); ACT_CARD=1
-  if open_url "$_u"; then printf '  %s✓ Opened your certificate in the browser.%s\n' "$GRN" "$RST"; else printf '  Open your certificate:\n'; fi
+  if open_url "$_u"; then printf '  %s✓ Opened your result in the browser.%s\n' "$GRN" "$RST"; else printf '  Open your result:\n'; fi
   printf '  %s%s%s\n' "$DIM" "$_u" "$RST"
   if [ -n "$LINK_RUN_ID" ]; then
     printf '  %sThe link carries only counts and a random run ID, after the #, which browsers never send.%s\n' "$DIM" "$RST"
@@ -1652,8 +1652,8 @@ ACT_SAVED=0; ACT_CARD=0; ACT_ARGUS=0; MENU_SHOWN=0; MENU_T0=$SECONDS
 if [ "$TTY" -eq 1 ] && [ -t 0 ]; then
   MENU_SHOWN=1
   drain_keys
-  if [ -n "$PCT" ]; then HERO="Press ENTER to see how you rank and get your Blindspot certificate"
-  else HERO="Press ENTER to get your Blindspot certificate"; fi
+  if [ -n "$PCT" ]; then HERO="Press ENTER to see how you rank and get your AI Exposure Check"
+  else HERO="Press ENTER to get your AI Exposure Check"; fi
   HINT="1-5 details   s save"; [ "$OS" = Darwin ] && HINT="$HINT   a Argus"; HINT="$HINT   q quit"
   _keys='ENTER, 1-5, s, a or q'; [ "$OS" = Darwin ] || _keys='ENTER, 1-5, s or q'
   show_menu() { printf '\n  %s%s▶ %s%s\n    %s%s%s  ' "$GOLD" "$B" "$HERO" "$RST" "$DIM" "$HINT" "$RST"; }
@@ -1680,7 +1680,7 @@ if [ "$TTY" -eq 1 ] && [ -t 0 ]; then
     show_menu
   done
 else
-  printf '\n  Your Blindspot certificate: %s\n' "$(card_url)"
+  printf '\n  Your AI Exposure Check: %s\n' "$(card_url)"
   [ "$OS" = Darwin ] && printf '  Try Argus free: %s/argus/download/\n' "$WEB"
 fi
 # What people did at the end, for the same research: one more small event.

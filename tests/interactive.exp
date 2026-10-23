@@ -36,7 +36,7 @@ expect {
   timeout { fail "no summary" }
 }
 expect {
-  "Blindspot certificate" { pass "asks boldly for the certificate" }
+  "AI Exposure Check" { pass "asks boldly for the AI Exposure Check" }
   timeout { fail "no hero prompt" }
 }
 send "3"
@@ -45,7 +45,7 @@ expect {
   timeout { fail "3 showed no details" }
 }
 expect {
-  "Blindspot certificate" {}
+  "AI Exposure Check" {}
   timeout { fail "no prompt after the details" }
 }
 send "s"
@@ -54,17 +54,17 @@ expect {
   timeout { fail "did not save" }
 }
 expect {
-  "Blindspot certificate" {}
+  "AI Exposure Check" {}
   timeout { fail "no prompt after saving" }
 }
 send "\r"
 expect {
-  "blindspot/card/#v=2" { pass "ENTER opens the certificate link" }
-  timeout { fail "ENTER gave no certificate link" }
+  "blindspot/card/#v=2" { pass "ENTER opens the result link" }
+  timeout { fail "ENTER gave no result link" }
 }
 expect {
-  "Blindspot certificate" {}
-  timeout { fail "no prompt after the certificate" }
+  "AI Exposure Check" {}
+  timeout { fail "no prompt after the result" }
 }
 send "q"
 expect {
