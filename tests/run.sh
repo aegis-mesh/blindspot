@@ -267,7 +267,7 @@ has    "--full lists every key file"           '~/\.zsh_history +GitHub' "$WORK/
 echo "hostile file names"
 EVIL="$WORK/home/code/evil$(printf '\033[2J\033]0;pwned\007\302\233')31m"
 mkdir -p "$EVIL"
-printf 'AWS_ACCESS_KEY_ID=AK%s\n' "IA$(LC_ALL=C tr -dc 'A-Z0-9' </dev/urandom | head -c 16)" > "$EVIL/.env"
+printf 'AWS_ACCESS_KEY_ID=AK%s\n' "IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)" > "$EVIL/.env"
 HOME="$WORK/home" bash "$SCRIPT" --offline > "$WORK/evil.txt" 2>&1
 if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')\|$(printf '\302\233')" "$WORK/evil.txt"; then bad "control characters in file names never reach the terminal"; else ok "control characters in file names never reach the terminal"; fi
 has "the hostile folder is still reported" 'code/evil\?' "$WORK/evil.txt"

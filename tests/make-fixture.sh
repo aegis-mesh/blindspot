@@ -8,8 +8,11 @@
 set -e
 F=$1; KEYS=$2; MODE=${3:-full}
 rm -rf "$F"; mkdir -p "$F"
-rnd()   { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$1"; }
-upper() { LC_ALL=C tr -dc 'A-Z0-9' </dev/urandom | head -c "$1"; }
+# Random characters from a bounded read: tr reads from head, not straight from
+# /dev/urandom, so it always reaches the end of its input and exits. With SIGPIPE
+# ignored, as on CI runners, macOS tr would otherwise read /dev/urandom forever.
+rnd()   { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c "$1"; }
+upper() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c "$1"; }
 s='sk'; d='-'
 ANTH="${s}${d}ant${d}api03${d}$(rnd 95)"
 OPENAI="${s}${d}proj${d}$(rnd 130)"
