@@ -56,7 +56,7 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | From | Example | What it is |
 |---|---|---|
 | The totals | `{"devices":1234,"devices_7d":456,"key_files":3412,"clean":0.31,...}` | Public totals, the same for everyone. The script shows one of them under the banner. Until 1,000 AI builders have run it, it shows none, and says you're one of the first 1,000 above your result instead |
-| The reply to the report | `{"p":72,"n":1234,"r":142}` | `p` is the share of AI builders whose latest run scored lower than yours, `n` how many AI builders that is. No `p` until at least 25 have run it. `r` is your place in line: 142 means 141 devices ran it before yours. Every device gets one, and the script shows it above your result, saying "One of the first 1,000" up to 1,000 |
+| The reply to the report | `{"p":72,"n":1234,"r":142}` | `p` is the share of AI builders whose latest run scored lower than yours, `n` how many AI builders that is. No `p` until at least 2 devices have run it. `r` is your place in line: 142 means 141 devices ran it before yours. Every device gets one, and the script shows it above your result, saying "One of the first 1,000" up to 1,000 |
 
 The script reads only digits from either reply, so a reply can't put anything else on your screen. The result link carries `p`, `n` and `r` after the `#`, which browsers never send to a server.
 
