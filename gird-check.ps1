@@ -666,9 +666,9 @@ $SessWorker = {
         $sep = $rxSep.Match($t)
         if (-not $sep.Success -and $t.Length -lt 8388608) { $carry = $t; continue }
         if ($sep.Success) {
-          $cut = $sep.Index + 1
-          if ($t[$sep.Index] -eq [char]92 -and $cut -lt $t.Length -and 'ntr'.IndexOf($t[$cut]) -ge 0) { $cut = $sep.Index }  # keep \n with the key after it
-          $carry = $t.Substring($cut); $t = $t.Substring(0, $cut)
+          $at = $sep.Index + 1
+          if ($t[$sep.Index] -eq [char]92 -and $at -lt $t.Length -and 'ntr'.IndexOf($t[$at]) -ge 0) { $at = $sep.Index }  # keep \n with the key after it
+          $carry = $t.Substring($at); $t = $t.Substring(0, $at)
         } else { $carry = '' }
         if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
       }
