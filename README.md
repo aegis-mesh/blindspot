@@ -9,7 +9,7 @@
 [![release](https://img.shields.io/github/v/release/aegis-mesh/blindspot?color=0D9488&label=release)](https://github.com/aegis-mesh/blindspot/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-0D9488)](LICENSE)
 
-Coding agents run with your access: your shell, your repos and the keys in your home folder. In October 2026, OpenCode, Railway and LiteLLM all leaked developer keys. Blindspot shows where your AI keys sit in plain text, which coding agents could read them, and whether that week's leaks touched you. It never prints a key.
+Coding agents run with your access: your shell, your repos and the keys in your home folder. In October 2026, OpenCode, Railway, Zeabur and LiteLLM all leaked developer keys. Blindspot shows where your AI keys sit in plain text, which coding agents could read them, and whether that week's leaks touched you. It never prints a key.
 
 ## Run it
 
@@ -41,7 +41,7 @@ Please don't pipe it straight into a shell. Reading it first is the point.
 2. **MCP servers.** The servers each agent is set up to start, and any token written straight into a config file.
 3. **Keys in plain text.** AI and cloud keys in shell profiles, shell history, agent configs and `.env` files, grouped by provider and file. It also lists login files any agent can read, such as AWS credentials and SSH keys without a passphrase.
 4. **Keys saved in Claude Code allow lists.** Click "always allow" on a command that has a key in it, and Claude Code saves the whole command in the project's settings file. Blindspot flags each one, and whether an npm publish from that folder would ship it.
-5. **That week's leaks.** Files left by the LiteLLM 1.107.0 malware in every Python environment it finds, the bad package in your uv cache, and what to rotate if you use OpenCode Console or Railway.
+5. **That week's leaks.** Files left by the LiteLLM 1.107.0 malware in every Python environment it finds, the bad package in your uv cache, and what to rotate if you use OpenCode Console, Railway or Zeabur.
 
 At the end you get a short summary: how you compare with the other developers who ran it, one line per check, and the first thing to fix. The first 1,000 developers also get their number. Press 1 to 5 for the details of a check, s to save the full report, or ENTER for your Blindspot certificate: a page with your result, the steps to fix what it found, and a certificate image to post on LinkedIn or X. `--full` prints every detail instead, and so does running it into a file or a pipe.
 

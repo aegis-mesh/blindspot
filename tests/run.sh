@@ -65,6 +65,34 @@ hasnot "another OS is not told to use the Keychain" 'macOS Keychain' "$WORK/os-F
 has    "Windows bash is pointed at Credential Manager" 'into Windows Credential Manager or a secrets manager' "$WORK/os-MINGW64_NT-10.0.txt"
 has    "macOS is pointed at the Keychain"       'into the macOS Keychain' "$WORK/os-Darwin.txt"
 
+echo "Zeabur and the LiteLLM leftovers"
+# A minimal PATH hides any opencode, railway or zeabur command on this machine, so
+# only the files in the fake home decide.
+lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
+lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
+cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
+lp "$WORK/zb-none" > "$WORK/zb-none.txt"
+has    "no leaks found: row 05 names all four" 'no LiteLLM, OpenCode, Railway or Zeabur leaks' "$WORK/zb-none.txt"
+cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
+lp "$WORK/zb-one" > "$WORK/zb-one.txt"
+lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
+has    "Zeabur alone is flagged"               'Zeabur CLI found: rotate secrets stored there' "$WORK/zb-one.txt"
+has    "Zeabur adds a fix"                     'deploy on Railway or Zeabur, rotate the keys stored there' "$WORK/zb-one-full.txt"
+has    "Zeabur has its own detail line"        'Zeabur CLI found' "$WORK/zb-one-full.txt"
+cp -R "$WORK/zb-one" "$WORK/zb-two"; mkdir -p "$WORK/zb-two/.railway"; printf '{}\n' > "$WORK/zb-two/.railway/config.json"
+lp "$WORK/zb-two" > "$WORK/zb-two.txt"
+has    "Railway and Zeabur are named together" 'Railway and Zeabur found: rotate their keys' "$WORK/zb-two.txt"
+cp -R "$WORK/zb-two" "$WORK/zb-three"; mkdir -p "$WORK/zb-three/.config/opencode"
+lp "$WORK/zb-three" > "$WORK/zb-three.txt"
+has    "all three are named in order"          'OpenCode, Railway and Zeabur found: rotate keys' "$WORK/zb-three.txt"
+cp -R "$WORK/zb-none" "$WORK/zb-pyc"; mkdir -p "$WORK/zb-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__"
+: > "$WORK/zb-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__/cook.cpython-312.pyc"
+lp "$WORK/zb-pyc" > "$WORK/zb-pyc.txt"
+lpf "$WORK/zb-pyc" > "$WORK/zb-pyc-full.txt"
+has    "a leftover cook.pyc is a sign of the malware" 'site-packages: cook\.pyc' "$WORK/zb-pyc-full.txt"
+has    "and it is flagged as act now"          'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc.txt"
+hasnot "no pyc, no malware flag"               'Act now' "$WORK/zb-none.txt"
+
 echo "summary"
 OUT=$WORK/compact.txt
 HOME="$WORK/home" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline > "$OUT" 2>&1

@@ -4,7 +4,7 @@
 #
 # Shows the AI coding agents and MCP servers on this machine, AI and cloud keys
 # stored in plain text, keys saved in Claude Code allow lists, and signs of this
-# week's LiteLLM, OpenCode and Railway incidents.
+# week's LiteLLM, OpenCode, Railway and Zeabur incidents.
 #
 # It never uses sudo, starts an agent, an MCP server or Python, or prints a key.
 # It reads files and prints paths and counts. It asks gird.ai for public totals
@@ -1120,6 +1120,7 @@ while IFS= read -r sp; do
   [ -d "$sp/litellm-1.107.0.dist-info" ] && bad="litellm 1.107.0"
   [ -f "$sp/cook.pth" ] && bad="${bad:+$bad, }cook.pth"
   [ -f "$sp/cook.py" ] && bad="${bad:+$bad, }cook.py"
+  for _pyc in "$sp"/__pycache__/cook.*.pyc; do [ -f "$_pyc" ] && { bad="${bad:+$bad, }cook.pyc"; break; }; done
   [ -n "$bad" ] && LITE_BAD="$LITE_BAD$(short "$sp"): $bad
 "
 done <<EOF
@@ -1148,6 +1149,8 @@ OC=0
 if command -v opencode >/dev/null 2>&1 || [ -d "$H/.config/opencode" ] || [ -d "$H/.local/share/opencode" ]; then OC=1; fi
 RW=0
 if command -v railway >/dev/null 2>&1 || [ -f "$H/.railway/config.json" ]; then RW=1; fi
+ZB=0
+if command -v zeabur >/dev/null 2>&1 || [ -d "$H/.config/zeabur" ]; then ZB=1; fi
 
 # --- What to do, and the score -----------------------------------------------
 # Each fix also belongs to a section, so that section's details can end with it.
@@ -1181,7 +1184,7 @@ esac
 [ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
-if [ "$OC" -eq 1 ] || [ "$RW" -eq 1 ]; then todo 5 "If you used OpenCode Console or deploy on Railway, rotate the keys stored there, even if nothing above looks wrong."; fi
+if [ "$OC" -eq 1 ] || [ "$RW" -eq 1 ] || [ "$ZB" -eq 1 ]; then todo 5 "If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong."; fi
 
 SCORE=100
 [ "$LITELLM_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
@@ -1423,6 +1426,12 @@ if [ "$RW" -eq 1 ]; then
 else
   pair "${DIM}·${RST}" "Railway" 16 "${DIM}CLI not found${RST}"
 fi
+if [ "$ZB" -eq 1 ]; then
+  pair "${YEL}!${RST}" "Zeabur" 16 "CLI found"
+  wrap "Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first." 26 "                          " "                          " "$DIM"
+else
+  pair "${DIM}·${RST}" "Zeabur" 16 "${DIM}CLI not found${RST}"
+fi
 
 SEC5=$CAP; CAP=""
 heading "WHAT TO DO" "most urgent first"
@@ -1515,10 +1524,17 @@ elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved key
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
 if [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the LiteLLM malware. Act now"
-elif [ "$OC" -eq 1 ] && [ "$RW" -eq 1 ]; then G5="${YEL}!${RST}"; D5="OpenCode and Railway found: rotate their keys"
+elif [ $((OC + RW + ZB)) -ge 2 ]; then
+  G5="${YEL}!${RST}"; _l=""; _n=$((OC + RW + ZB)); _i=0
+  for _p in "OpenCode:$OC" "Railway:$RW" "Zeabur:$ZB"; do
+    [ "${_p#*:}" -eq 1 ] || continue
+    _i=$((_i + 1)); if [ "$_i" -eq 1 ]; then _l=${_p%:*}; elif [ "$_i" -eq "$_n" ]; then _l="$_l and ${_p%:*}"; else _l="$_l, ${_p%:*}"; fi
+  done
+  if [ "$_n" -eq 3 ]; then D5="$_l found: rotate keys"; else D5="$_l found: rotate their keys"; fi
 elif [ "$OC" -eq 1 ]; then G5="${YEL}!${RST}"; D5="OpenCode found: used its Console? Rotate keys"
 elif [ "$RW" -eq 1 ]; then G5="${YEL}!${RST}"; D5="Railway CLI found: rotate secrets stored there"
-else G5="${GRN}✓${RST}"; D5="no signs of the LiteLLM, OpenCode or Railway leaks"; fi
+elif [ "$ZB" -eq 1 ]; then G5="${YEL}!${RST}"; D5="Zeabur CLI found: rotate secrets stored there"
+else G5="${GRN}✓${RST}"; D5="no LiteLLM, OpenCode, Railway or Zeabur leaks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"
 cline 02 "$G2" "MCP servers" "$D2"
