@@ -465,10 +465,11 @@ function Is-Pruned([string]$path, [string]$name, [int]$depth) {
   foreach ($p in $PrunePaths) { if ($path.Equals($p, $PathCmp)) { return $true } }
   ($depth -eq 1) -and $name.StartsWith('OneDrive', $PathCmp)
 }
-# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs and math_init.js).
+# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs, .claude/math_init.js
+# and .vscode/setup.mjs).
 function Is-WormFile([string]$parent, [string]$name) {
   (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and ($name -ceq 'router_runtime.js' -or $name -ceq 'tanstack_runner.js')) -or
-  ($parent -ceq '.claude' -and ($name -ceq 'setup.mjs' -or $name -ceq 'math_init.js'))
+  (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and $name -ceq 'setup.mjs') -or ($parent -ceq '.claude' -and $name -ceq 'math_init.js')
 }
 function Scan-Home([string]$dir, [int]$depth) {
   foreach ($e in (Entries $dir)) {
@@ -698,12 +699,15 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 # servers, as soon as the folder is opened. A cloned repo brings them along (Check Point,
 # CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks). Both
 # settings.json and settings.local.json are read, since repos commit either. Each file is read as
-# one line, so pretty-printed JSON matches too, with JSONC comments removed first.
+# one line, so pretty-printed JSON matches too; only tasks.json (JSONC) has comments removed first.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
 $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
 # The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
-# A worm file counts only when a command runs it, not when a rule merely names it.
-$RxWormRun = New-Object regex('"(command|args)"\s*:\s*("[^"]*|\[[^\]]*)\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)', $RxOpt, $RxTimeout)
+# A worm file counts only when a command runs it (an interpreter given its path, the path as the
+# command itself, or a task's argument), not when a rule or a guard merely names it.
+$WormName = '\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+$RxWormRun = New-Object regex(('"command"\s*:\s*"(?:[^"\\]|\\.)*\b(node|bun|deno|tsx)\s(?:[^"\\]|\\.)*' + $WormName +
+  '|"command"\s*:\s*"\s*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?[/\\]|\.[/\\])?' + $WormName + '|"args"\s*:\s*\[[^\]]*' + $WormName), $RxOpt, $RxTimeout)
 # Keys that make Claude Code run a command: hooks and its helper commands.
 $RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper)"\s*:', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
@@ -713,15 +717,17 @@ $RxLineComment = New-Object regex('(^|[\s,{\[])//[^\n]*', $RxOpt, $RxTimeout)
 $RxBlockComment = New-Object regex('/\*(?:[^*]|\*+[^*/])*\*+/', $RxOpt, $RxTimeout)
 function Flat-Text([string]$f) {
   $t = Read-Text $f; if ($null -eq $t) { return $null }
+  if (-not $f.EndsWith('tasks.json')) { return ($t -replace '[\r\n\t]', ' ') }
   try { $RxBlockComment.Replace(($RxLineComment.Replace($t, '$1') -replace '[\r\n\t]', ' '), '') } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 function Auto-Row([string]$f, [string]$what, [string]$t) {
   if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
-  # Worktrees and copies carry the same settings: one row, with how many more folders have it.
-  if ($AutoSeen.ContainsKey($t)) { $AutoSeen[$t].More = $AutoSeen[$t].More + 1; return }
+  # A repo's worktrees carry the same settings: one row, with how many more folders have it.
+  $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
+  if ($AutoSeen.ContainsKey($key)) { $AutoSeen[$key].More = $AutoSeen[$key].More + 1; return }
   $row = @{ File = $f; What = $what; More = 0 }
-  $AutoSeen[$t] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
+  $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
 $homeClaude = J $HomeDir '.claude'
 foreach ($f in $AllowFiles) {
@@ -939,7 +945,8 @@ elseif ($LitePyc.Count -gt 0) { Progress 'A leftover cook.pyc may come from the 
 # npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
 # TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9 and
 # GHSA-rccm-wwph-vgxc, OpenSearch GHSA-298w-vvm4-ww55, and one advisory per package for the rest.
-# A version of * means every version of that name is malware. Not complete: the AntV, UiPath and
+# A version of * means every version of that name is malware. tensorlake's advisory also lists every
+# version, but names only 0.5.144 as malicious, so only that one is flagged. Not complete: the AntV, UiPath and
 # Red Hat waves and most packages the keyv worm spread to are not listed. The same list as gird-check.sh.
 $BadNpm = @'
 axios 1.14.1 axios
@@ -1270,7 +1277,7 @@ $Fixes = @{ 1 = (New-Object System.Collections.Generic.List[string]); 2 = (New-O
   3 = (New-Object System.Collections.Generic.List[string]); 4 = (New-Object System.Collections.Generic.List[string]); 5 = (New-Object System.Collections.Generic.List[string]) }
 function Add-Todo([int]$sec, [string]$text) {
   # With gh-token-monitor present, revoking a token sets it off: every other rotate waits for it.
-  if ($WIPER_HIT -eq 1 -and $sec -ge 1 -and $sec -le 4 -and $text.Contains('rotate')) { $text += ' Only once gh-token-monitor is stopped and removed (section 5).' }
+  if ($WIPER_HIT -eq 1 -and -not $text.StartsWith("Don't revoke") -and $text -match 'rotate') { $text += ' Only once gh-token-monitor is stopped and removed (section 5).' }
   $Todo.Add($text); $Fixes[$sec].Add($text)
 }
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
@@ -1516,7 +1523,7 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
   if ($NpmUnread -gt 0) { $why.Add("part of npm's cache could not be read") }
   Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
 } elseif ($WIPER_HIT -eq 0) {
-  Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of the $N_BAD_NPM known bad versions"
+  Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
   Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
 }
 if ($OC -eq 1) {

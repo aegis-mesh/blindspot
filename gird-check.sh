@@ -828,11 +828,12 @@ scan_home() {
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' \
        -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \
-       -o -path '*/.claude/setup.mjs' -o -path '*/.claude/math_init.js' \
+       -o -path '*/.claude/setup.mjs' -o -path '*/.claude/math_init.js' -o -path '*/.vscode/setup.mjs' \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' -o -path '*/.claude/setup.mjs' \
-       -o -path '*/.claude/math_init.js' -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \) -print \) 2>/dev/null
+       -o -path '*/.claude/math_init.js' -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \
+       -o -path '*/.vscode/setup.mjs' \) -print \) 2>/dev/null
 }
 
 # Findings for the game or the spinner to show while the scan runs: a mark (x a
@@ -882,10 +883,11 @@ progress i "Looking through your home folder"
 FOUND=$(scan_home | scan_progress)
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
-# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs and math_init.js).
-WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js)$|/\.claude/(setup\.mjs|math_init\.js)$')
+# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs, .claude/math_init.js
+# and .vscode/setup.mjs).
+WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js|setup\.mjs)$|/\.claude/math_init\.js$')
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
-FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.vscode/tasks\.json|\.(claude|vscode)/(router_runtime|tanstack_runner)\.js|\.claude/(setup\.mjs|math_init\.js))$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.vscode/tasks\.json|\.(claude|vscode)/(router_runtime|tanstack_runner)\.js|\.claude/math_init\.js|\.(claude|vscode)/setup\.mjs)$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -1042,14 +1044,22 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN="|"
 # The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
 WORM_RUN='\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+# A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
+WORM_CMD='"command"[[:space:]]*:[[:space:]]*"([^"\\]|\\.)*(node|bun|deno|tsx)[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
 TAB=$(printf '\t')
-flat() { sed -E 's#(^|[[:space:],{[])//.*$#\1#' "$1" 2>/dev/null | tr '\n\r\t' '   ' | sed -E 's#/\*([^*]|\*+[^*/])*\*+/##g'; }
+# One line of text. Claude Code's settings are strict JSON; only tasks.json (JSONC) has comments to drop.
+flat() {
+  case "$1" in
+    */tasks.json) sed -E 's#(^|[[:space:],{[])//.*$#\1#' "$1" 2>/dev/null | tr '\n\r\t' '   ' | sed -E 's#/\*([^*]|\*+[^*/])*\*+/##g' ;;
+    *) tr '\n\r\t' '   ' < "$1" 2>/dev/null ;;
+  esac
+}
 auto_row() { # file what flattened-text
-  # A worm file counts only when a command runs it, not when a rule merely names it.
-  printf '%s' "$3" | grep -qE "\"(command|args)\"[[:space:]]*:[[:space:]]*(\"[^\"]*|\[[^]]*)$WORM_RUN" && WORM_REFS="$WORM_REFS$1
+  # A worm file counts only when a command runs it, not when a rule or a guard merely names it.
+  printf '%s' "$3" | grep -qE "$WORM_CMD" && WORM_REFS="$WORM_REFS$1
 "
   # Worktrees and copies carry the same settings: one row, with how many more folders have it.
-  _sum=$(printf '%s' "$3" | cksum | cut -d' ' -f1)
+  _sum="$(printf '%s' "$3" | cksum | cut -d' ' -f1):$(printf '%s' "$1" | sed -E 's#/\.claude/worktrees/[^/]+/#/#')"
   case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | awk -F "$TAB" -v OFS="$TAB" -v s="$_sum" '$3 == s { $4++ } { print }')
 "; return ;; esac
   AUTO_SEEN="$AUTO_SEEN$_sum|"
@@ -1319,7 +1329,8 @@ else progress o "No signs of the LiteLLM malware in $(plural "$N_PY" "Python env
 # npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
 # TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9 and
 # GHSA-rccm-wwph-vgxc, OpenSearch GHSA-298w-vvm4-ww55, and one advisory per package for the rest.
-# A version of * means every version of that name is malware. Not complete: the AntV, UiPath and
+# A version of * means every version of that name is malware. tensorlake's advisory also lists every
+# version, but names only 0.5.144 as malicious, so only that one is flagged. Not complete: the AntV, UiPath and
 # Red Hat waves and most packages the keyv worm spread to are not listed.
 BAD_NPM="axios 1.14.1 axios
 axios 0.30.4 axios
@@ -1501,7 +1512,7 @@ npm_hits() {
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
       k = nm "@" v; t = ""
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
-      if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "|" nm " " v "|" t }
+      if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "\t" nm " " v "\t" t }
     }
     FNR == 1 { over = 0; depth = 0; pend = "" }
     FILENAME ~ /pnpm-lock\.yaml$/ && /^[^ #]/ { over = ($0 ~ /^overrides:/) }
@@ -1567,7 +1578,7 @@ _g=$(
         [ -f "$d/package.json" ] || continue
         v=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$d/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/')
         case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; esac
-        printf '%s\n' "$BAD_NPM" | N=$nm V=$v D=$d awk '$1 == ENVIRON["N"] && ($2 == ENVIRON["V"] || $2 == "*") { print ENVIRON["D"] "|" ENVIRON["N"] " " ENVIRON["V"] "|" $3; exit }'
+        printf '%s\n' "$BAD_NPM" | N=$nm V=$v D=$d awk '$1 == ENVIRON["N"] && ($2 == ENVIRON["V"] || $2 == "*") { print ENVIRON["D"] "\t" ENVIRON["N"] " " ENVIRON["V"] "\t" $3; exit }'
       done
     done
   done
@@ -1577,12 +1588,12 @@ $_g"
 # npm's download cache keeps a package after it is uninstalled, and the malware ran when it installed.
 for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
   [ -n "$c" ] && [ -d "$c" ] || continue
-  _h=$(find "$c" -type f -print0 2>/dev/null | xargs -0 cat 2>/dev/null | npm_hits | awk -F'|' -v OFS='|' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u)
+  _h=$(find "$c" -type f -print0 2>/dev/null | xargs -0 cat 2>/dev/null | npm_hits | awk -F '\t' -v OFS='\t' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u)
   [ -n "$_h" ] && NPM_ROWS="$NPM_ROWS
 $_h"
 done
-NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)|" | grep -v '^$' | sort -u
-              printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)|" | sort -u; } )
+NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
+              printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 [ -n "$NPM_ROWS" ] && NPM_HIT=1
 # What these worms leave behind. gh-token-monitor runs a destructive command when the stolen GitHub
 # token stops working (it erased the home folder in the TanStack wave, Wiz; in the keyv wave it runs
@@ -1602,18 +1613,18 @@ done
 PERSIST=""
 for m in "$H/Library/LaunchAgents/com.nvm.protocal.plist" "$H/Library/NodePackages/protocal.cjs" \
          "$H/.config/systemd/user/nvmconf.service" "$H/.config/systemd/nvmconf/protocal.cjs"; do
-  [ -e "$m" ] && PERSIST="$PERSIST$m|starts the Mastra worm at login
+  [ -e "$m" ] && PERSIST="$PERSIST$m${TAB}starts the Mastra worm at login
 "
 done
 if [ "$WIN" -eq 1 ]; then
-  [ -n "$_pd" ] && [ -e "$_pd/NodePackages/protocal.cjs" ] && PERSIST="$PERSIST$_pd/NodePackages/protocal.cjs|starts the Mastra worm at login
+  [ -n "$_pd" ] && [ -e "$_pd/NodePackages/protocal.cjs" ] && PERSIST="$PERSIST$_pd/NodePackages/protocal.cjs${TAB}starts the Mastra worm at login
 "
-  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs|starts the Mastra worm at login
+  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra worm at login
 "
 fi
-[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | sed 's/$/|a file the TanStack and keyv worms plant/')
+[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | sed "s/\$/${TAB}a file the TanStack and keyv worms plant/")
 "
-[ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_REFS" | sed 's/$/|runs a file the TanStack and keyv worms plant/')
+[ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_REFS" | sed "s/\$/${TAB}runs a file the TanStack and keyv worms plant/")
 "
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
@@ -1633,7 +1644,7 @@ TODO=""; ISSUES=0; FIX1=""; FIX2=""; FIX3=""; FIX4=""; FIX5=""
 todo() { # section text
   set -- "$1" "$2"
   # With gh-token-monitor present, revoking a token sets it off: every other rotate waits for it.
-  case "$WIPER_HIT:$1:$2" in 1:[1-4]:*rotate*) set -- "$1" "$2 Only once gh-token-monitor is stopped and removed (section 5)." ;; esac
+  case "$WIPER_HIT:$2" in "1:Don't revoke"*) ;; 1:*[Rr]otate*) set -- "$1" "$2 Only once gh-token-monitor is stopped and removed (section 5)." ;; esac
   TODO="$TODO$2
 "; ISSUES=$((ISSUES + 1))
   case "$1" in
@@ -1958,14 +1969,14 @@ EOF
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
   [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
-  while IFS='|' read -r f p t; do
+  while IFS="$TAB" read -r f p t; do
     [ -n "$f" ] || continue
     emit "        $(short "$f")"
     emit "          ${p} ${DIM}($(npm_label "$t"))${RST}"
   done <<EOF
 $NPM_ROWS
 EOF
-  while IFS='|' read -r f p; do
+  while IFS="$TAB" read -r f p; do
     [ -n "$f" ] || continue
     emit "        $(short "$f")"
     emit "          ${p}"
@@ -1973,7 +1984,7 @@ EOF
 $PERSIST
 EOF
 elif [ "$WIPER_HIT" -eq 0 ]; then
-  pair "${GRN}✓${RST}" "npm worms" 16 "none of the $(count_lines "$BAD_NPM") known bad versions"
+  pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
 fi
 if [ "$OC" -eq 1 ]; then
