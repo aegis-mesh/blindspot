@@ -128,7 +128,8 @@ for E in net rg; do
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.block"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.block"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.block"
-  hasnot "$E: a made-up key is not counted"        'Anthropic|AWS|GitHub' "$SE/$E.block"
+  hasnot "$E: a made-up key is not counted"        'Claude Code .*(Anthropic|AWS|GitHub)' "$SE/$E.block"
+  has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.block"
   nokeys "$E: never prints a key" "$WORK/keys.txt" "$SE/$E.txt"
@@ -143,6 +144,10 @@ psrun "$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER
 has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > "$SE/clean.txt" 2>&1
 has    "a full check with nothing found says so" 'No keys in 2 agent session files\.' "$SE/clean.txt"
+mkdir -p "$SE/piece/.claude/projects/p" "$SE/piece/AppData/Roaming" "$SE/piece/AppData/Local/Temp"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'aB3' * 20 + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
+psrun "$SE/piece" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/piece.txt" 2>&1
+has    "a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece.txt"
 : > "$SE/hold"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" -- -Offline > "$SE/held.txt" 2>&1; RC=$?
 if [ "$RC" -eq 0 ]; then ok "a held check does not hold up the report"; else bad "a held check does not hold up the report, exit $RC"; fi

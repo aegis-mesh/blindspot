@@ -619,6 +619,7 @@ $SessWorker = {
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
   $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
   $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
+  $rxSep = New-Object regex('[^A-Za-z0-9_.\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
@@ -652,18 +653,22 @@ $SessWorker = {
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
-    # Read in 1 MB pieces that overlap, so a huge database file never loads at once and a stop
-    # is seen within one piece.
+    # Read 1 MB at a time and cut just after the last character that can't be in a key, so a huge
+    # database file never loads at once, a piece never ends inside a token, and a stop is seen
+    # within one piece.
     $sr = $null; $whole = $true
     try {
       $sr = New-Object IO.StreamReader((New-Object IO.FileStream($f.FullName, 'Open', 'Read', 'ReadWrite')), $latin)
-      $tail = ''
+      $carry = ''
       while (($got = $sr.Read($buf, 0, $buf.Length)) -gt 0) {
         if ($st.Stop) { $whole = $false; break }
-        $t = $tail + (New-Object string($buf, 0, $got))
+        $t = $carry + (New-Object string($buf, 0, $got))
+        $sep = $rxSep.Match($t)
+        if (-not $sep.Success -and $t.Length -lt 8388608) { $carry = $t; continue }
+        if ($sep.Success) { $carry = $t.Substring($sep.Index + 1); $t = $t.Substring(0, $sep.Index + 1) } else { $carry = '' }
         if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
-        if ($t.Length -gt 512) { $tail = $t.Substring($t.Length - 512) } else { $tail = $t }
       }
+      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
       if ($whole) { $st.Done++ }
     } catch { } finally { if ($sr) { $sr.Dispose() } }
   }

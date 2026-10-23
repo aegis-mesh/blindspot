@@ -72,7 +72,9 @@ if [ "$MODE" = full ]; then
   # Agent sessions: a key right after an escaped newline, a made-up one, and one per agent.
   printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s docs AKIAIOSFODNN7EXAMPLE and ghp_%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" "$(printf 'ab%.0s' $(seq 1 18))" > "$F/.claude/projects/p1/k.jsonl"
   mkdir -p "$F/.codex/sessions/2026/10"
-  printf '{"payload":{"output":"OPENAI_API_KEY=%s"}}\n' "$OPENAI" > "$F/.codex/sessions/2026/10/rollout-k.jsonl"
+  # A real-looking AWS key with only 11 different characters still counts.
+  printf '{"payload":{"output":"OPENAI_API_KEY=%s aws AKIA2B2B3C3C4D4D5E5E"}}\n' "$OPENAI" > "$F/.codex/sessions/2026/10/rollout-k.jsonl"
+  printf 'AKIA2B2B3C3C4D4D5E5E\n' >> "$KEYS"
   touch -t 202608200000 "$F/.codex/sessions/2026/10/rollout-k.jsonl"   # Codex stays idle
   printf 'x' > "$F/.codex/sessions/2026/08/old.jsonl.zst"; touch -t 202608100000 "$F/.codex/sessions/2026/08/old.jsonl.zst"
   mkdir -p "$F/code/aid"; printf '#### run the eval\n> export GROQ_API_KEY=%s\n' "$GROQ" > "$F/code/aid/.aider.chat.history.md"

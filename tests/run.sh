@@ -83,7 +83,8 @@ for E in perl rg; do
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.txt"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.txt"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.txt"
-  hasnot "$E: a made-up key is not counted"        'Anthropic|AWS|GitHub' "$SE/$E.block"
+  hasnot "$E: a made-up key is not counted"        'Claude Code .*(Anthropic|AWS|GitHub)' "$SE/$E.block"
+  has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
   has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.txt"
@@ -121,6 +122,25 @@ if command -v rg >/dev/null 2>&1; then
   kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
   if pgrep -f 'field-match-separator' >/dev/null 2>&1; then bad "rg: HUP leaves no ripgrep process"; pkill -f 'field-match-separator'; else ok "rg: HUP leaves no ripgrep process"; fi
 fi
+# A long token that crosses a 1 MB piece is not mistaken for a key.
+mkdir -p "$SE/piece/.claude/projects/p"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'aB3' * 20 + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
+for E in perl rg; do
+  if [ "$E" = rg ] && ! command -v rg >/dev/null 2>&1; then continue; fi
+  HOME="$SE/piece" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/piece-$E.txt" 2>&1
+  has    "$E: a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece-$E.txt"
+done
+# A kill -9 of the script stops the perl workers within one piece of a file.
+mkdir -p "$SE/k9/.claude/projects/p"
+python3 -c "import sys; open(sys.argv[1], 'w').write(('x ' * 524288 + '\n') * 8)" "$SE/k9/.claude/projects/p/a.jsonl"
+HOME="$SE/k9" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_SLOW=1 bash "$SCRIPT" --offline --all-sessions > /dev/null 2>&1 &
+BP=$!
+for _i in $(seq 1 100); do pgrep -f 'SESS_PRE' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+kill -9 "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
+for _i in $(seq 1 30); do pgrep -f 'SESS_PRE' >/dev/null 2>&1 || break; sleep 0.1; done      # one piece takes 0.3 s here
+if pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "kill -9 of the script stops the workers"; pkill -f 'SESS_PRE'; else ok "kill -9 of the script stops the workers"; fi
+pkill -f "$SE/k9" 2>/dev/null; rm -f "${TMPDIR:-/tmp}"/blindspot.?????? "${TMPDIR:-/tmp}"/blindspot.??????.fifo 2>/dev/null   # a kill -9 leaves these, as documented
+
 # A held engine is still running when the rest of the check is done: it is stopped, and nothing is left behind.
 mkfifo "$SE/hold"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" bash "$SCRIPT" --offline > "$SE/held.txt" 2>&1; RC=$?

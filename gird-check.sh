@@ -926,8 +926,8 @@ SESS_PRE=$KEY_STARTS
 # One perl parent lists the files newest first and forks workers, each with its own pipe back to
 # the parent, which is the only writer to its output, so lines never interleave. A worker prints
 # K (a match) and then D (done) for a file, or Z for a compressed one; the parent prints T (the
-# total) first. Files are read in 1 MB pieces that overlap, so a huge database file never loads at
-# once. On TERM, HUP or INT the parent stops its workers; a worker exits when its parent or the
+# total) first. Files are read 1 MB at a time and cut just after the last character that can't be
+# in a key, so a huge database file never loads at once and a piece never ends inside a token. On TERM, HUP or INT the parent stops its workers; a worker exits when its parent or the
 # script that started everything is gone, so a kill -9 of the script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
@@ -953,13 +953,17 @@ for my $w (0 .. $n - 1) {
       exit 0 unless $alive->();
       my $file = $f[$i];
       if ($file =~ /\.zst$/) { print "Z\t$file\n"; next }
-      open(my $h, "<", $file) or next; binmode $h; local $/ = \1048576; my $tail = "";
+      open(my $h, "<", $file) or next; binmode $h; local $/ = \1048576; my $buf = "";
+      my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { print "K\t$file\t$&\n" } } };
       while (defined(my $c = <$h>)) {
         exit 0 unless $alive->();
-        my $t = $tail . $c;
-        if ($t =~ $pre) { while ($t =~ /$re/g) { print "K\t$file\t$&\n" } }
-        $tail = length($t) > 512 ? substr($t, -512) : $t;
+        select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
+        $buf .= $c;
+        my $cut = $buf =~ /[^A-Za-z0-9_.-][A-Za-z0-9_.-]*\z/ ? $-[0] + 1 : -1;
+        next if $cut < 0 && length($buf) < 8388608;
+        $scan->(substr($buf, 0, $cut < 0 ? length($buf) : $cut, ""));
       }
+      $scan->($buf) if length $buf;
       close $h; print "D\t$file\n";
     }
     exit 0;
