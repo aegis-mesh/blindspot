@@ -1653,19 +1653,11 @@ iruchache * sandworm
 node-native-bridge * sandworm
 secp256 * sandworm"
 # <<< bad-npm
-npm_label() {
-  case "$1" in
-    axios)     printf 'Axios takeover, March 2026' ;;
-    tanstack)  printf 'TanStack worm, May 2026' ;;
-    mistral)   printf 'Mistral AI packages, May 2026' ;;
-    bitwarden) printf 'Bitwarden CLI, April 2026' ;;
-    mastra)    printf 'Mastra worm, June 2026' ;;
-    keyv)      printf 'keyv worm, August 2026' ;;
-    opensearch) printf 'OpenSearch client, May 2026' ;;
-    tensorlake) printf 'tensorlake package, October 2026' ;;
-    *)         printf 'SANDWORM_MODE worm, February 2026' ;;
-  esac
-}
+# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
+npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI packages, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; mastra) printf '%s' 'Mastra worm, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; esac; }
+incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI packages, May 2026: published with malware that Mistral says could not run. docs.mistral.ai' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; mastra) printf '%s' 'Mastra worm, June 2026: installed itself at login and sent browser history to the attackers. socket.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; esac; }
+incident_level() { case "$1" in mistral) printf update ;; *) printf act ;; esac; }
+# <<< incidents
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
 # bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
@@ -1716,7 +1708,7 @@ npm_hits() {
       }
     }' "$@" 2>/dev/null
 }
-NPM_ROWS=""; NPM_HIT=0; N_LOCK=0
+NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0
 while IFS= read -r f; do [ -n "$f" ] && [ -r "$f" ] && N_LOCK=$((N_LOCK + 1)); done <<EOF
 $LOCKFILES
 EOF
@@ -1765,7 +1757,11 @@ $_h"
 done
 NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
-[ -n "$NPM_ROWS" ] && NPM_HIT=1
+# Incidents whose malware could not run only need the version updated; the rest mean a compromised machine.
+NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
+for _t in $NPM_TAGS; do
+  if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
+done
 # What these worms leave behind. gh-token-monitor runs a destructive command when the stolen GitHub
 # token stops working (it erased the home folder in the TanStack wave, Wiz; in the keyv wave it runs
 # an attacker-supplied command, SANS), so it must be stopped before any token is revoked.
@@ -1915,6 +1911,7 @@ esac
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
+[ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
 if [ "$OC" -eq 1 ] || [ "$RW" -eq 1 ] || [ "$ZB" -eq 1 ]; then todo 5 "If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong."; fi
 
 SCORE=100
@@ -2236,8 +2233,12 @@ EOF
   wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and erased the home folder in the TanStack wave." 8 "        " "        " "$RED"
   wrap "Stop it with ${_stop:+$_stop, then }pkill -f gh-token-monitor, then delete the files above." 8 "        " "        " "$RED"
 fi
-if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
-  [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
+if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
+  if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
+    [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
+  else
+    pair "${YEL}!${RST}" "npm worms" 16 "${YEL}a bad version to update${RST}"
+  fi
   while IFS="$TAB" read -r f p t; do
     [ -n "$f" ] || continue
     emit "        $(short "$f")"
@@ -2252,6 +2253,7 @@ EOF
   done <<EOF
 $PERSIST
 EOF
+  for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
@@ -2384,6 +2386,7 @@ elif [ "$MAL_HIT" -eq 1 ] && [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"
 elif [ "$MAL_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of npm malware. Act now"
 elif [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the LiteLLM malware. Act now"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
+elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
 elif [ $((OC + RW + ZB)) -ge 2 ]; then
   G5="${YEL}!${RST}"; _l=""; _n=$((OC + RW + ZB)); _i=0
   for _p in "OpenCode:$OC" "Railway:$RW" "Zeabur:$ZB"; do

@@ -1,0 +1,17 @@
+# Incidents Blindspot checks for. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id      what data/bad-npm.tsv refers to
+#   name    as the report shows it
+#   when    month and year
+#   impact  what it did, at most about 14 words, every word supported by the source
+#   source  the primary source (vendor advisory, GitHub advisory, CISA or a named research post)
+#   level   act: treat the machine as compromised. update: remove the version, nothing ran
+# id	name	when	impact	source	level
+axios	Axios takeover	March 2026	downloaded payloads, including a remote access trojan, onto machines that installed it	https://www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager	act
+tanstack	TanStack worm	May 2026	stole cloud, GitHub, npm and SSH credentials on install, then republished itself	https://github.com/advisories/GHSA-g7cv-rxg3-hmpx	act
+mistral	Mistral AI packages	May 2026	published with malware that Mistral says could not run	https://docs.mistral.ai/resources/security-advisories/MAI-2026-002	update
+opensearch	OpenSearch client	May 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-298w-vvm4-ww55	act
+bitwarden	Bitwarden CLI	April 2026	stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs	https://www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools	act
+mastra	Mastra worm	June 2026	installed itself at login and sent browser history to the attackers	https://socket.dev/blog/mastra-npm-packages-compromised	act
+keyv	keyv worm	August 2026	stole cloud, GitHub and npm credentials, and planted hooks that run when repos open	https://socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain	act
+sandworm	SANDWORM_MODE worm	February 2026	stole credentials and AI provider keys, and added an MCP server to AI assistants	https://socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning	act
+tensorlake	tensorlake package	October 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-rqxj-g25x-4v9v	act

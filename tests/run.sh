@@ -70,6 +70,7 @@ for B in $BASHES; do
   has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&wp=[01]$' "$OUT"
   if grep -aqF -f "$WORK/keys.txt" "$OUT"; then bad "never prints a planted key"; else ok "never prints a planted key"; fi
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
+  tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat-incidents.txt"
 done
 
 echo "data files"
@@ -260,6 +261,19 @@ has    "npm and LiteLLM malware together are both named" 'npm and LiteLLM malwar
 cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
 HOME="$WORK/lite" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
 has    "a LiteLLM hit leads the summary"               'ACT NOW: SIGNS OF THE LITELLM 1\.107\.0 MALWARE' "$WORK/lite.txt"
+
+echo "incidents from data/incidents.tsv"
+has    "each npm incident found gets its sourced line" 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it\. cisa\.gov' "$WORK/out-flat-incidents.txt"
+cp -R "$WORK/clean" "$WORK/mis"; mkdir -p "$WORK/mis/code/m"
+printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.3","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.3.tgz"}}}\n' > "$WORK/mis/code/m/package-lock.json"
+HOME="$WORK/mis" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mis.txt"
+HOME="$WORK/mis" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mis-c.txt"
+hasnot "a version whose malware could not run is not 'compromised'" 'ACT NOW|Treat this machine as compromised' "$WORK/mis.txt"
+has    "it is a version to update instead"           'npm worms a bad version to update' "$WORK/mis.txt"
+has    "with the vendor's own explanation"           'Mistral AI packages, May 2026: published with malware that Mistral says could not run\. docs\.mistral\.ai' "$WORK/mis.txt"
+has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
+has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
+hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 
 echo "advice by OS"
 mkdir -p "$WORK/fakebin"

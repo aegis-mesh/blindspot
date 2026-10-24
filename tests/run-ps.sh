@@ -279,6 +279,16 @@ has    "and the summary row is not green either"       'Recent leaks npm package
 psrun "$WORK/home" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
 has    "Windows is told how to stop the wiper"         'Stop it with Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate, then delete the files above' "$WORK/wwin.txt"
 hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl' "$WORK/wwin.txt"
+# Incidents from data/incidents.tsv: a sourced line per incident, and the update level.
+has    "each npm incident found gets its sourced line" 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it\. cisa\.gov' "$WORK/out-flat.txt"
+cp -R "$WORK/clean" "$WORK/mis"; mkdir -p "$WORK/mis/code/m"
+printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.3","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.3.tgz"}}}\n' > "$WORK/mis/code/m/package-lock.json"
+psrun "$WORK/mis" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mis.txt"
+psrun "$WORK/mis" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mis-c.txt"
+hasnot "a version whose malware could not run is not 'compromised'" 'ACT NOW|Treat this machine as compromised' "$WORK/mis.txt"
+has    "it is a version to update instead"           'npm worms a bad version to update' "$WORK/mis.txt"
+has    "with the vendor's own explanation"           'Mistral AI packages, May 2026: published with malware that Mistral says could not run\. docs\.mistral\.ai' "$WORK/mis.txt"
+has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 psrun "$WORK/both" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"

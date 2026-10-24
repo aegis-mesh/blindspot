@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Writes the data files into gird-check.sh and gird-check.ps1, between each block's "# >>> <name>"
 # and "# <<< <name>" markers: key types (data/keys.tsv), agent session locations
-# (data/sessions.tsv) and bad npm packages (data/bad-npm.tsv). The scripts stay single files people
+# (data/sessions.tsv), bad npm packages (data/bad-npm.tsv) and incidents (data/incidents.tsv). The scripts stay single files people
 # can download and check.
 #
 #   bash tools/gen.sh           rewrite the blocks
@@ -14,6 +14,7 @@ WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 rows() { grep -v '^#' "$1" | grep -v '^[[:space:]]*$'; }
 # Characters that would break the generated bash, awk or PowerShell are refused.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
+      rows data/incidents.tsv | awk -F '\t' 'NF != 6 || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9]{4}$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ { print "data/incidents.tsv: " $0 }'
       rows data/bad-npm.tsv | awk -F '\t' 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $3 !~ /^[a-z0-9]+$/ { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' 'NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || $4 ~ /[\047"`$|\\]/ || $4 ~ /\{ENV:[^}]*\{/ { print "data/sessions.tsv: " $0 }')
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
@@ -98,6 +99,30 @@ rows data/sessions.tsv | awk -F '\t' '
   $1 == "all" || $1 == "win" { if (n++) print ","; printf "  @(\047%s\047, \047%s\047, %s)", $2, $3, ps($4) }
   END { print ")"; print "# <<< sessions" }' > "$WORK/sessions.ps1"
 
+# --- incidents ---------------------------------------------------------------
+# npm_label gives "name, month year"; incident_line adds what it did and the source's site;
+# incident_level says whether a hit means a compromised machine (act) or a version to update.
+rows data/incidents.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  { id[NR] = $1; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); lv[NR] = $6; n = NR }
+  END {
+    print "# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it."
+    printf "npm_label() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], lab[i]; print " esac; }"
+    printf "incident_line() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], line[i]; print " esac; }"
+    printf "incident_level() { case \"$1\" in"; for (i = 1; i <= n; i++) if (lv[i] != "act") printf " %s) printf %s ;;", id[i], lv[i]; print " *) printf act ;; esac; }"
+    print "# <<< incidents"
+  }' > "$WORK/incidents.sh"
+rows data/incidents.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  { id[NR] = $1; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); lv[NR] = $6; n = NR }
+  END {
+    print "# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it."
+    printf "function Npm-Label([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], lab[i]; print " default { $t } } }"
+    printf "function Incident-Line([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], line[i]; print " default { $t } } }"
+    printf "function Incident-Level([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) if (lv[i] != "act") printf " \047%s\047 { \047%s\047 }", id[i], lv[i]; print " default { \047act\047 } } }"
+    print "# <<< incidents"
+  }' > "$WORK/incidents.ps1"
+
 # --- bad npm packages ------------------------------------------------------
 rows data/bad-npm.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it."; printf "BAD_NPM=\"" }
@@ -120,7 +145,7 @@ RC=0
 for f in gird-check.sh gird-check.ps1; do
   ext=${f##*.}
   splice "$f" keys "$WORK/keys.$ext" > "$WORK/a" && splice "$WORK/a" sessions "$WORK/sessions.$ext" > "$WORK/c" &&
-    splice "$WORK/c" bad-npm "$WORK/bad-npm.$ext" > "$WORK/b" || { RC=1; continue; }
+    splice "$WORK/c" bad-npm "$WORK/bad-npm.$ext" > "$WORK/d" && splice "$WORK/d" incidents "$WORK/incidents.$ext" > "$WORK/b" || { RC=1; continue; }
   if [ "$CHECK" -eq 1 ]; then
     if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/: run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi

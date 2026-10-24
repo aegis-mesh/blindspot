@@ -1245,14 +1245,11 @@ foreach ($l in ($BadNpm -split "`r?`n")) {
   if ($p[1] -ceq '*') { $NpmAny[$p[0]] = $p[2] } else { $NpmBad["$($p[0])@$($p[1])"] = $p[2] }
   if (-not $NpmNames.Contains($p[0])) { $NpmNames.Add($p[0]) }
 }
-function Npm-Label([string]$t) {
-  switch ($t) {
-    'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI packages, May 2026' }
-    'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' }
-    'opensearch' { 'OpenSearch client, May 2026' } 'tensorlake' { 'tensorlake package, October 2026' }
-    default { 'SANDWORM_MODE worm, February 2026' }
-  }
-}
+# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
+function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI packages, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } default { $t } } }
+function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI packages, May 2026: published with malware that Mistral says could not run. docs.mistral.ai' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'mastra' { 'Mastra worm, June 2026: installed itself at login and sent browser history to the attackers. socket.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } default { $t } } }
+function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } default { 'act' } } }
+# <<< incidents
 $NpmRows = New-Object System.Collections.Generic.List[object]; $NpmCacheRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
 $NpmCacheTag = " (npm's download cache)"
 # Versions are shown only if they look like versions, so a package can't put terminal control codes in the report.
@@ -1368,7 +1365,10 @@ foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
 }
 $byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x[0], $y[0]); if ($o -eq 0) { $o = [string]::CompareOrdinal($x[1], $y[1]) }; $o }
 $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
-$NPM_HIT = 0; if ($NpmRows.Count -gt 0) { $NPM_HIT = 1 }
+# Incidents whose malware could not run only need the version updated; the rest mean a compromised machine.
+$NPM_HIT = 0; $NPM_UPD = 0
+$NpmTags = @($NpmRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
+foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } else { $NPM_UPD = 1 } }
 # What these worms leave behind. gh-token-monitor runs a destructive command when the stolen GitHub
 # token stops working (it erased the home folder in the TanStack wave, Wiz; in the keyv wave it runs
 # an attacker-supplied command, SANS), so it must be stopped before any token is revoked.
@@ -1473,6 +1473,7 @@ if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that con
 if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
+if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
 if ($OC -eq 1 -or $RW -eq 1 -or $ZB -eq 1) { Add-Todo 5 'If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong.' }
 $ISSUES = $Todo.Count
 
@@ -1711,10 +1712,13 @@ if ($WIPER_HIT -eq 1) {
   Wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and erased the home folder in the TanStack wave." 8 '        ' '        ' $cRed
   Wrap "Stop it with $($stop)delete the files above." 8 '        ' '        ' $cRed
 }
-if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
-  if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}signs of the malware found$cRst" }
+if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
+  if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
+    if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}signs of the malware found$cRst" }
+  } else { Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}a bad version to update$cRst" }
   foreach ($r in $NpmRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2]))$cRst" }
   foreach ($r in $Persist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
+  foreach ($t in $NpmTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 } elseif ($WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $NpmUnread -gt 0)) {
   $why = New-Object System.Collections.Generic.List[string]
   if ($NpmSlow -gt 0) { $why.Add("$(Plural $NpmSlow 'file' 'files') took too long") }
@@ -1798,6 +1802,7 @@ elseif ($LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of the LiteLLM
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
+elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"
   $l = ($leaks[0..($leaks.Count - 2)] -join ', ') + ' and ' + $leaks[$leaks.Count - 1]
