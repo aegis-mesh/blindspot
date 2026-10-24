@@ -1357,12 +1357,12 @@ tucyzirille-studio.angular-pro-tools-extension * glassworm
 vce-brendan-studio-eich.js-debuger-vscode * glassworm
 '@
 # <<< bad-extensions
-$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]; $N_BAD_NPM = 0
+$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
 foreach ($l in ($BadNpm -split "`r?`n")) {
   $p = $l -split ' '; if ($p.Count -lt 3) { continue }
   $N_BAD_NPM++
   if ($p[1] -ceq '*') { $NpmAny[$p[0]] = $p[2] } else { $NpmBad["$($p[0])@$($p[1])"] = $p[2] }
-  if (-not $NpmNames.Contains($p[0])) { $NpmNames.Add($p[0]) }
+  [void]$NpmNames.Add($p[0])
 }
 $NpmRows = New-Object System.Collections.Generic.List[object]; $NpmCacheRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
 $NpmCacheTag = " (npm's download cache)"
@@ -1444,24 +1444,29 @@ foreach ($g in @(@($nvmWin, 'node_modules'), @((J $fnmWin 'node-versions'), 'ins
     @((J $LocalAppData 'pnpm/global'), 'node_modules'), @((J $LocalAppData 'npm-cache/_npx'), 'node_modules'))) { $NpmGlobs.Add($g) }
 if ($env:PNPM_HOME) { $NpmGlobs.Add(@((J $env:PNPM_HOME 'global'), 'node_modules')) }
 foreach ($g in $NpmGlobs) { foreach ($d in (Glob-Dirs $g[0] '*')) { Add-NpmRoot (J $d $g[1]) } }
-foreach ($r in $NpmRoots) {
-  # The package itself, or a dependency of a globally installed tool.
-  $mods = New-Object System.Collections.Generic.List[string]; $mods.Add($r)
-  foreach ($d in (Glob-Dirs $r '*')) {
-    $dn = [IO.Path]::GetFileName($d); if ($dn.StartsWith('.')) { continue }
-    if (Is-Dir (J $d 'node_modules')) { $mods.Add((J $d 'node_modules')) }
-    if (-not $dn.StartsWith('@')) { continue }
-    foreach ($d2 in (Glob-Dirs $d '*')) { if (-not [IO.Path]::GetFileName($d2).StartsWith('.') -and (Is-Dir (J $d2 'node_modules'))) { $mods.Add((J $d2 'node_modules')) } }
-  }
-  foreach ($nm in $NpmNames) {
-    foreach ($md in $mods) {
-      $pd = J $md $nm; $pj = J $pd 'package.json'; if (-not (Is-File $pj)) { continue }
+# One pass over each root: a folder named for a bad package (node_modules/<name> or
+# node_modules/@<scope>/<name>) has its package.json read, as the package itself or as a dependency
+# of a globally installed tool. Nothing is looked up per bad name.
+function Npm-Package([string]$d, [string]$nm, [bool]$deep) {
+  if ($NpmNames.Contains($nm)) {
+    $pj = J $d 'package.json'
+    if (Is-File $pj) {
       $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"')
       $v = ''; if ($m.Success) { $v = $m.Groups[1].Value }
-      Npm-Hit $pd $nm $v
+      Npm-Hit $d $nm $v
     }
   }
+  if ($deep) { $nm2 = J $d 'node_modules'; if (Is-Dir $nm2) { Npm-Modules $nm2 $false } }
 }
+function Npm-Modules([string]$md, [bool]$deep) {
+  foreach ($d in (Glob-Dirs $md '*')) {
+    $dn = [IO.Path]::GetFileName($d); if ($dn.StartsWith('.')) { continue }
+    if ($dn.StartsWith('@')) {
+      foreach ($d2 in (Glob-Dirs $d '*')) { $n2 = [IO.Path]::GetFileName($d2); if (-not $n2.StartsWith('.')) { Npm-Package $d2 "$dn/$n2" $deep } }
+    } else { Npm-Package $d $dn $deep }
+  }
+}
+foreach ($r in $NpmRoots) { Npm-Modules $r $true }
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 $OutTable = @(
   ,@('cursor', 'Cursor', 'mac', 'plist', '/Applications/Cursor.app/Contents/Info.plist', '-', '3.0', 'a prompt injection could escape the sandbox', 'github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw')

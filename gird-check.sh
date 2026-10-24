@@ -1847,7 +1847,9 @@ if [ "$N_LOCK" -gt 0 ]; then
   NPM_ROWS=$(printf '%s\n' "$LOCKFILES" | while IFS= read -r f; do [ -r "$f" ] && npm_hits "$f"; done)
 fi
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv),
-# pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
+# pnpm's and bun's global folders, and npx's cache. One pass: the package.json of every package
+# under each root (the package itself, or a dependency of a globally installed tool) is listed by
+# its folder, and one awk reads the ones whose folder names a bad package.
 NPM_ROOTS=$(
   for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
            "$H"/.nvm/versions/node/*/lib/node_modules "$H"/.volta/tools/image/node/*/lib/node_modules \
@@ -1862,20 +1864,37 @@ NPM_ROOTS=$(
     for r in "$WAPP/npm/node_modules" "$WLAPP"/npm-cache/_npx/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done
   fi
 )
-NPM_NAMES=$(printf '%s\n' "$BAD_NPM" | awk '{print $1}' | sort -u)
+npm_global_hits() { # package.json paths on stdin; prints folder|name version|tag for each bad package
+  BAD_NPM_LIST=$BAD_NPM awk '
+    BEGIN {
+      n = split(ENVIRON["BAD_NPM_LIST"], L, "\n")
+      for (i = 1; i <= n; i++) { if (split(L[i], f, " ") < 3) continue
+        names[f[1]] = 1; if (f[2] == "*") any[f[1]] = f[3]; else bad[f[1] "@" f[2]] = f[3] }
+    }
+    {
+      # The folder names the package: node_modules/<name> or node_modules/@<scope>/<name>.
+      fn = $0; d = fn; sub(/\/package\.json$/, "", d)
+      k = split(d, c, "/"); nm = c[k]; if (k > 1 && c[k - 1] ~ /^@/) nm = c[k - 1] "/" nm
+      if (!(nm in names)) next
+      v = ""
+      while ((getline line < fn) > 0) {
+        if (match(line, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) { v = substr(line, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); break }
+      }
+      close(fn)
+      if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
+      if (v ~ /-security$/) next   # the empty placeholder npm puts in place of a removed package
+      t = ""; if ((nm "@" v) in bad) t = bad[nm "@" v]; else if (nm in any) t = any[nm]
+      if (t != "") print d "\t" nm " " v "\t" t
+    }' 2>/dev/null
+}
 _g=$(
   printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
     [ -n "$r" ] || continue
-    for nm in $NPM_NAMES; do
-      # The package itself, or a dependency of a globally installed tool.
-      for d in "$r/$nm" "$r"/*/node_modules/"$nm" "$r"/@*/*/node_modules/"$nm"; do
-        [ -f "$d/package.json" ] || continue
-        v=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$d/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/')
-        case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; (*-security) continue ;; esac
-        printf '%s\n' "$BAD_NPM" | N=$nm V=$v D=$d awk '$1 == ENVIRON["N"] && ($2 == ENVIRON["V"] || $2 == "*") { print ENVIRON["D"] "\t" ENVIRON["N"] " " ENVIRON["V"] "\t" $3; exit }'
-      done
+    for f in "$r"/*/package.json "$r"/@*/*/package.json "$r"/*/node_modules/*/package.json "$r"/*/node_modules/@*/*/package.json \
+             "$r"/@*/*/node_modules/*/package.json "$r"/@*/*/node_modules/@*/*/package.json; do
+      [ -f "$f" ] && printf '%s\n' "$f"
     done
-  done
+  done | npm_global_hits
 )
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"
