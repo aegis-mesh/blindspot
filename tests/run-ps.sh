@@ -319,6 +319,15 @@ has    "and its package"                               'axios 1\.14\.1 \(Axios t
 has    "two unrelated repos with the same settings are both listed (1)" 'p/r1/\.claude/settings\.json' "$WORK/rv.txt"
 has    "two unrelated repos with the same settings are both listed (2)" 'p/r2/\.claude/settings\.json' "$WORK/rv.txt"
 hasnot "a bun override pinning away is not a hit"      'code/bunpin/' "$WORK/rv.txt"
+# A worktree's copy listed before the repo's own file still leaves the row named for the repo's file:
+# the scan reads .claude, and the worktree's tasks.json under it, before the repo's own .vscode.
+mkdir -p "$WORK/wto/r/.claude/worktrees/w1/.claude" "$WORK/wto/r/.claude/worktrees/w1/.vscode" "$WORK/wto/r/.vscode" "$WORK/wto/AppData/Roaming" "$WORK/wto/AppData/Local/Temp"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' | tee "$WORK/wto/r/.claude/settings.json" > "$WORK/wto/r/.claude/worktrees/w1/.claude/settings.json"
+printf '{"tasks":[{"label":"setup","command":"make","runOptions":{"runOn":"folderOpen"}}]}\n' | tee "$WORK/wto/r/.vscode/tasks.json" > "$WORK/wto/r/.claude/worktrees/w1/.vscode/tasks.json"
+psrun "$WORK/wto" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wto.txt"
+hasnot "a worktree listed before its repo is not the row's name" 'worktrees/w1' "$WORK/wto.txt"
+has    "the repo's own settings file is named instead"  '~/r/\.claude/settings\.json Set to run commands while the agent works\. The same settings are in 1 more folder' "$WORK/wto.txt"
+has    "and so is the repo's own tasks file"            '~/r/\.vscode/tasks\.json Set to run a task when the folder opens in VS Code or Cursor\. The same settings are in 1 more folder' "$WORK/wto.txt"
 mkdir -p "$WORK/escq/p/.claude" "$WORK/escq/AppData/Roaming" "$WORK/escq/AppData/Local/Temp" "$WORK/vsp/p/.vscode" "$WORK/vsp/AppData/Roaming" "$WORK/vsp/AppData/Local/Temp"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node \\"$CLAUDE_PROJECT_DIR\\"/.claude/router_runtime.js"}]}]}}\n' > "$WORK/escq/p/.claude/settings.json"
 mkdir -p "$WORK/escq/q/.claude" "$WORK/escq/w/.claude"

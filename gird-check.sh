@@ -1300,9 +1300,11 @@ auto_row() { # file what flattened-text
   # A worm file counts only when a command runs it, not when a rule or a guard merely names it.
   printf '%s' "$3" | grep -qE "$WORM_CMD" && WORM_REFS="$WORM_REFS$1
 "
-  # Worktrees and copies carry the same settings: one row, with how many more folders have it.
+  # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
+  # row names the repo's own file, whichever one the scan listed first.
   _sum="$(printf '%s' "$3" | cksum | cut -d' ' -f1):$(printf '%s' "$1" | sed -E 's#/\.claude/worktrees/[^/]+/#/#')"
-  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | awk -F "$TAB" -v OFS="$TAB" -v s="$_sum" '$3 == s { $4++ } { print }')
+  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | S=$_sum F=$1 awk -F "$TAB" -v OFS="$TAB" '
+      $3 == ENVIRON["S"] { $4++; if ($1 ~ /\/\.claude\/worktrees\// && ENVIRON["F"] !~ /\/\.claude\/worktrees\//) $1 = ENVIRON["F"] } { print }')
 "; return ;; esac
   AUTO_SEEN="$AUTO_SEEN$_sum|"
   N_AUTO=$((N_AUTO + 1))

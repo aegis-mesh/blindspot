@@ -899,9 +899,14 @@ function Flat-Text([string]$f) {
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 function Auto-Row([string]$f, [string]$what, [string]$t) {
   if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
-  # A repo's worktrees carry the same settings: one row, with how many more folders have it.
+  # A repo's worktrees carry the same settings: one row, with how many more folders have it. The
+  # row names the repo's own file, whichever one the scan listed first.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
-  if ($AutoSeen.ContainsKey($key)) { $AutoSeen[$key].More = $AutoSeen[$key].More + 1; return }
+  if ($AutoSeen.ContainsKey($key)) {
+    $row = $AutoSeen[$key]; $row.More = $row.More + 1
+    if ($row.File -match '[/\\]\.claude[/\\]worktrees[/\\]' -and $f -notmatch '[/\\]\.claude[/\\]worktrees[/\\]') { $row.File = $f }
+    return
+  }
   $row = @{ File = $f; What = $what; More = 0 }
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
