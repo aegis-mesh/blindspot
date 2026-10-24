@@ -90,16 +90,49 @@ has    "finds Claude Desktop under AppData"    'Claude Desktop +installed, no us
 has    "finds LiteLLM malware markers"         'signs of the malware found' "$OUT"
 has    "finds the bad package in the uv cache" 'uv cache holds the 1\.107\.0 package' "$OUT"
 has    "counts SSH keys with no passphrase"    '2 SSH private keys, 1 with no passphrase' "$OUT"
+has    "flags project hooks and MCP auto-approval" 'Set to run commands while the agent works, turn on MCP servers' "$OUT"
+has    "flags a folderOpen task"               'code/cloned/\.vscode/tasks\.json' "$OUT"
+has    "flags a remote API address in project settings" 'code/proxy/\.claude/settings\.json' "$OUT"
+hasnot "ignores a localhost API address"       'code/lib/\.claude/settings\.json' "$OUT"
+hasnot "ignores a task that does not run on open" 'code/own/\.vscode' "$OUT"
+hasnot "ignores the person's own global hooks" '^ +! +~/\.claude/settings\.json' "$OUT"
+has    "finds a bad axios in a package-lock"   'axios 1\.14\.1 \(Axios takeover, March 2026\)' "$OUT"
+has    "finds a bad TanStack version in pnpm-lock" '@tanstack/router-core 1\.169\.5 \(TanStack worm' "$OUT"
+has    "finds a bad keyv in a yarn berry lock" 'keyv 6\.0\.0 \(keyv worm' "$OUT"
+hasnot "ignores near-miss versions and names" 'axios 1\.14\.10|my-axios|keyv 6\.0\.0-|keyv 6\.0\.1|code/lib/package-lock' "$OUT"
+has    "finds a bad version in a pnpm 8 lockfile" '@tanstack/history 1\.161\.9 \(TanStack worm' "$OUT"
+has    "finds a planted worm file"            'code/planted/\.vscode/tanstack_runner\.js' "$OUT"
+hasnot "a worktree with the same settings is not listed again" 'worktrees/w1' "$OUT"
+has    "and is counted under its repo's row" 'The same settings are in$' "$OUT"
+has    "a localhost name with a login prefix is not local" 'code/sneaky/\.claude/settings\.json' "$OUT"
+has    "finds any version of a fake AI tool package" 'claud-code 1\.0\.3 \(SANDWORM_MODE worm' "$OUT"
+has    "finds a bad package in npm's cache"    '@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI' "$OUT"
+has    "puts the wiper first"                  'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' "$OUT"
+has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
+has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
 tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat.txt"   # the advice wraps, so it is matched on one line
 has    "points other systems at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/out-flat.txt"
+has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
+has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
+hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/out-flat.txt"
+has    "the link flags npm malware and the wiper"      'nm=1&wp=1$' "$OUT"
 has    "uses the non-Mac Argus line"           'Argus, our free Mac app, shows what AI coding agents' "$OUT"
 hasnot "never offers the Argus download off a Mac" 'argus/download' "$OUT"
 hasnot "never shows a letter grade"            'GRADE [ABCDF]|[Gg]rade [ABCDF]\b' "$OUT"
-has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=2&ag=[a-z0-9.-]*$' "$OUT"
+has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=2&ag=[a-z0-9.-]*&nm=[01]&wp=[01]$' "$OUT"
 nokeys "never prints a planted key" "$WORK/keys.txt" "$OUT"
 if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "redirected output has no escape codes"; else ok "redirected output has no escape codes"; fi
 
 echo "the same findings as gird-check.sh"
+# Each list is cut out of its script, then the same filter keeps only entry lines on both sides.
+entries() { grep -E '^[@a-z0-9][^ ]* (\*|[0-9][^ ]*) [a-z]+$'; }
+sed -n '/^BAD_NPM="/,/"$/p' "$BASH_SCRIPT" | sed -e 's/^BAD_NPM="//' -e 's/"$//' > "$WORK/bad-sh-raw.txt"
+sed -n "/^\$BadNpm = @'/,/^'@/p" "$SCRIPT" | sed -e '1d' -e '$d' > "$WORK/bad-ps-raw.txt"
+entries < "$WORK/bad-sh-raw.txt" > "$WORK/bad-sh.txt"; entries < "$WORK/bad-ps-raw.txt" > "$WORK/bad-ps.txt"
+if [ -s "$WORK/bad-sh.txt" ] && diff -q "$WORK/bad-sh.txt" "$WORK/bad-ps.txt" >/dev/null; then ok "the same bad npm package list ($(wc -l < "$WORK/bad-ps.txt" | tr -d ' ') entries)"
+else bad "the same bad npm package list"; diff "$WORK/bad-sh.txt" "$WORK/bad-ps.txt" | head -n 6; fi
+if diff -q "$WORK/bad-sh-raw.txt" "$WORK/bad-sh.txt" >/dev/null && diff -q "$WORK/bad-ps-raw.txt" "$WORK/bad-ps.txt" >/dev/null; then ok "every line of both lists is an entry"
+else bad "every line of both lists is an entry"; diff "$WORK/bad-sh-raw.txt" "$WORK/bad-sh.txt" | head -n 3; diff "$WORK/bad-ps-raw.txt" "$WORK/bad-ps.txt" | head -n 3; fi
 # gird-check.sh, on the same home with its Mac paths, must find the same files.
 bash tests/make-fixture.sh "$WORK/bhome" "$WORK/keys-b.txt" >/dev/null
 HOME="$WORK/bhome" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline > "$WORK/bash.txt" 2>&1
@@ -110,18 +143,121 @@ done
 b=$(grep -aoE 'KEYS IN PLAIN TEXT +[0-9]+' "$WORK/bash.txt" | grep -oE '[0-9]+$'); p=$(grep -aoE 'KEYS IN PLAIN TEXT +[0-9]+' "$OUT" | grep -oE '[0-9]+$')
 if [ -n "$b" ] && [ "$p" = $((b + 1)) ]; then ok "key files agree, plus PowerShell's history ($p)"; else bad "key files agree: bash $b, pwsh $p"; fi
 # Only where keys go differs: the macOS Keychain there, a secrets manager here.
-fixes() { sed -n '/WHAT TO DO/,$p' "$1" | grep -aE '^ +[0-9]+\.' | sed -e 's/^ *[0-9]*\. *//' -e 's/ into .*//'; }
+# gird-check.sh finds Claude Desktop in this machine's own /Applications, which a test home can't
+# plant, so whether it is listed differs by machine: it is left out of both lists.
+# Each fix with its wrapped lines joined, so a name left out does not move where the others wrap.
+fixes() {
+  sed -n '/WHAT TO DO/,$p' "$1" | awk '
+    /^ +[0-9]+\. / { if (cur != "") print cur; sub(/^ *[0-9]+\. */, ""); cur = $0; next }
+    cur != "" && /^ +[^ ]/ { sub(/^ +/, ""); cur = cur " " $0; next }
+    { if (cur != "") print cur; cur = "" }
+    END { if (cur != "") print cur }' | sed -e 's/ into .*//' -e 's/Claude Desktop, //'
+}
 fixes "$WORK/bash.txt" > "$WORK/bash-fixes.txt"; fixes "$OUT" > "$WORK/ps-fixes.txt"
 if [ -s "$WORK/ps-fixes.txt" ] && diff -q "$WORK/bash-fixes.txt" "$WORK/ps-fixes.txt" >/dev/null; then ok "the same fixes in the same order"; else bad "the same fixes in the same order"; diff "$WORK/bash-fixes.txt" "$WORK/ps-fixes.txt" | head -n 6; fi
+
+echo "review fixes: npm, project settings and the wiper"
+RV=$WORK/rv; cp -R "$WORK/clean" "$RV"
+# Lockfiles: a pnpm override pinning away, an npm lock without URLs, a shrinkwrap, pnpm 5.
+mkdir -p "$RV/code/pin" "$RV/code/nourl" "$RV/code/shrink" "$RV/code/pnpm5"
+printf "lockfileVersion: '9.0'\n\noverrides:\n  axios@1.14.1: 1.14.2\n\npackages:\n\n  axios@1.14.2:\n    resolution: {integrity: sha512-x}\n" > "$RV/code/pin/pnpm-lock.yaml"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/keyv": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$RV/code/nourl/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$RV/code/shrink/npm-shrinkwrap.json"
+printf "lockfileVersion: 5.4\n\npackages:\n\n  /cacheable/2.5.1:\n    resolution: {integrity: sha512-x}\n" > "$RV/code/pnpm5/pnpm-lock.yaml"
+mkdir -p "$RV/code/esc"; printf '{\n  "packages": {\n    "node_modules/cloude": {\n      "version": "2.0\033[2K"\n    }\n  }\n}\n' > "$RV/code/esc/package-lock.json"
+# Global installs: a bad dependency inside a global tool, a version manager's folder, a version with control codes.
+mkdir -p "$RV/.npm-global/lib/node_modules/sometool/node_modules/axios" "$RV/.volta/tools/image/node/20.1.0/lib/node_modules/opencraw"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$RV/.npm-global/lib/node_modules/sometool/node_modules/axios/package.json"
+printf '{"name":"opencraw","version":"1.0.3\033[2K"}\n' > "$RV/.volta/tools/image/node/20.1.0/lib/node_modules/opencraw/package.json"
+# Project settings: pretty-printed, local, other command keys, a symlink, a deny rule naming a worm file,
+# a plugin marketplace clone, a commented-out task, and a | in a folder name.
+mkdir -p "$RV/p/pretty/.claude" "$RV/p/local/.claude" "$RV/p/aws/.claude" "$RV/p/link/.claude" "$RV/p/deny/.claude" \
+  "$RV/.claude/plugins/marketplaces/m/.claude" "$RV/p/comment/.vscode" "$RV/p/a|b/.claude" "$RV/p/real/.claude"
+printf '{\n  "enabledMcpjsonServers": [\n    "db"\n  ]\n}\n' > "$RV/p/pretty/.claude/settings.json"
+printf '{"enableAllProjectMcpServers": true}\n' > "$RV/p/local/.claude/settings.local.json"
+printf '{"awsAuthRefresh": "aws sso login"}\n' > "$RV/p/aws/.claude/settings.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say linked"}]}]}}\n' > "$RV/p/real/.claude/real.json"
+ln -s ../../real/.claude/real.json "$RV/p/link/.claude/settings.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make"}]}]},"permissions":{"deny":["Read(./.claude/router_runtime.js)"]}}\n' > "$RV/p/deny/.claude/settings.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"x"}]}]}}\n' > "$RV/.claude/plugins/marketplaces/m/.claude/settings.json"
+printf '{\n  "tasks": [{\n    "label": "x",\n    // "runOptions": {"runOn": "folderOpen"}\n    "command": "make"\n  }]\n}\n' > "$RV/p/comment/.vscode/tasks.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"y"}]}]}}\n' > "$RV/p/a|b/.claude/settings.json"
+mkdir -p "$RV/p/guard/.claude" "$RV/p/glob/.claude" "$RV/code/x|y" "$RV/p/r1/.claude" "$RV/p/r2/.claude" "$RV/code/bunpin"
+printf '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"test ! -e .claude/router_runtime.js || exit 2"}]}]}}\n' > "$RV/p/guard/.claude/settings.json"
+printf '{"permissions":{"allow":["Bash(ls /tmp/*)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"npx prettier --write src/**/*.ts"}]}]}}\n' > "$RV/p/glob/.claude/settings.json"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$RV/code/x|y/package-lock.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make fmt"}]}]}}\n' | tee "$RV/p/r1/.claude/settings.json" > "$RV/p/r2/.claude/settings.json"
+printf '{\n  "overrides": {\n    "axios@1.14.1": "1.14.2"\n  },\n  "packages": {\n    "axios": ["axios@1.14.2", ""]\n  }\n}\n' > "$RV/code/bunpin/bun.lock"
+psrun "$RV" -- -Offline > "$WORK/rv.txt" 2>&1
+hasnot "a pnpm override pinning away is not a hit"     'code/pin/' "$WORK/rv.txt"
+has    "an npm lock entry without a URL is read"       'keyv 6\.0\.0 \(keyv worm' "$WORK/rv.txt"
+has    "npm-shrinkwrap.json is read"                   'code/shrink/npm-shrinkwrap\.json' "$WORK/rv.txt"
+has    "a pnpm 5 lockfile is read"                     'cacheable 2\.5\.1' "$WORK/rv.txt"
+has    "a bad dependency inside a global tool is found" 'sometool/node_modules/axios' "$WORK/rv.txt"
+has    "a version manager's global folder is read"     '\.volta/tools/image/node/20\.1\.0/lib/node_modules/opencraw' "$WORK/rv.txt"
+has    "a version with control codes prints as ?"      'opencraw \? \(SANDWORM_MODE' "$WORK/rv.txt"
+has    "a lockfile version with control codes prints as ?" 'cloude \? \(SANDWORM_MODE' "$WORK/rv.txt"
+if LC_ALL=C grep -aq "$(printf '\033')" "$WORK/rv.txt"; then bad "no control code from a package reaches the output"; else ok "no control code from a package reaches the output"; fi
+has    "pretty-printed enabledMcpjsonServers is flagged" 'p/pretty/\.claude/settings\.json' "$WORK/rv.txt"
+has    "a project settings.local.json is flagged"      'p/local/\.claude/settings\.local\.json' "$WORK/rv.txt"
+has    "awsAuthRefresh counts as running a command"    'p/aws/\.claude/settings\.json' "$WORK/rv.txt"
+has    "a symlinked settings file is checked"          'p/link/\.claude/settings\.json' "$WORK/rv.txt"
+hasnot "a deny rule naming a worm file is not malware" 'runs a file the TanStack and keyv worms plant' "$WORK/rv.txt"
+hasnot "plugin marketplace clones are not projects"    'plugins/marketplaces' "$WORK/rv.txt"
+hasnot "a commented-out folderOpen task is not flagged" 'p/comment/' "$WORK/rv.txt"
+has    "a | in a folder name keeps its row intact"     'p/a\|b/\.claude/settings\.json' "$WORK/rv.txt"
+sed -n '/05  RECENT KEY LEAKS/,/WHAT TO DO/p' "$WORK/rv.txt" > "$WORK/rv-05.txt"
+hasnot "a guard hook naming a worm file is not malware" 'p/guard/' "$WORK/rv-05.txt"
+has    "a /* inside a settings string does not hide its hooks" 'p/glob/\.claude/settings\.json' "$WORK/rv.txt"
+has    "a | in a lockfile's folder keeps its row intact" '~/code/x\|y/package-lock\.json$' "$WORK/rv.txt"
+has    "two unrelated repos with the same settings are both listed (1)" 'p/r1/\.claude/settings\.json' "$WORK/rv.txt"
+has    "two unrelated repos with the same settings are both listed (2)" 'p/r2/\.claude/settings\.json' "$WORK/rv.txt"
+hasnot "a bun override pinning away is not a hit"      'code/bunpin/' "$WORK/rv.txt"
+mkdir -p "$WORK/escq/p/.claude" "$WORK/escq/AppData/Roaming" "$WORK/escq/AppData/Local/Temp" "$WORK/vsp/p/.vscode" "$WORK/vsp/AppData/Roaming" "$WORK/vsp/AppData/Local/Temp"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node \\"$CLAUDE_PROJECT_DIR\\"/.claude/router_runtime.js"}]}]}}\n' > "$WORK/escq/p/.claude/settings.json"
+mkdir -p "$WORK/escq/q/.claude" "$WORK/escq/w/.claude"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node.exe .claude/setup.mjs"}]}]}}\n' > "$WORK/escq/q/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude\\\\setup.mjs"}]}]}}\n' > "$WORK/escq/w/.claude/settings.json"
+psrun "$WORK/escq" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/escq.txt"
+has    "a hook running a worm file through an escaped path is malware" '~/p/\.claude/settings\.json runs a file the TanStack' "$WORK/escq.txt"
+has    "node.exe counts as running it"                 '~/q/\.claude/settings\.json runs a file the TanStack' "$WORK/escq.txt"
+has    "a Windows backslash path counts"               '~/w/\.claude/settings\.json runs a file the TanStack' "$WORK/escq.txt"
+printf 'x\n' > "$WORK/vsp/p/.vscode/setup.mjs"
+psrun "$WORK/vsp" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.txt"
+has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack and keyv worms plant' "$WORK/vsp.txt"
+awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
+if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
+# The clean line, against gird-check.sh's count, and a folder of npm's cache that can't be read.
+cp -R "$WORK/clean" "$WORK/npmok"; mkdir -p "$WORK/npmok/.npm/_cacache/index-v5/aa"
+psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmok.txt"
+has    "the clean line counts versions and packages apart, as gird-check.sh's list" "npm worms none of $(awk '$2 != "*"' "$WORK/bad-sh.txt" | grep -c .) bad versions or $(awk '$2 == "*"' "$WORK/bad-sh.txt" | grep -c .) bad packages" "$WORK/npmok.txt"
+chmod 000 "$WORK/npmok/.npm/_cacache/index-v5/aa"
+psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno.txt"
+psrun "$WORK/npmok" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno-c.txt"
+chmod 755 "$WORK/npmok/.npm/_cacache/index-v5/aa"
+has    "an unreadable cache folder is not called clean" "npm worms not fully checked: part of npm's cache could not be read" "$WORK/npmno.txt"
+has    "and the summary row is not green either"       'Recent leaks npm packages not fully checked: cache unreadable' "$WORK/npmno-c.txt"
+# Windows: no launchctl or systemctl, a PowerShell way to stop the wiper.
+psrun "$WORK/home" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
+has    "Windows is told how to stop the wiper"         'Stop it with Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate, then delete the files above' "$WORK/wwin.txt"
+hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl' "$WORK/wwin.txt"
+# npm malware and LiteLLM together, no wiper: the summary keeps both.
+cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
+psrun "$WORK/both" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
+has    "npm and LiteLLM malware together are both named" 'npm and LiteLLM malware found' "$WORK/both.txt"
+# LiteLLM alone still leads the summary.
+cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
+psrun "$WORK/lite" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
+has    "a LiteLLM hit leads the summary"               'ACT NOW: SIGNS OF THE LITELLM 1\.107\.0 MALWARE' "$WORK/lite.txt"
 
 echo "summary"
 OUT=$WORK/compact.txt
 psrun "$WORK/home" GIRD_CHECK_COMPACT=1 -- -Offline > "$OUT" 2>&1
-for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' "This week's leaks"; do
+for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' 'Recent leaks'; do
   has "one summary line for $label" "^   0[1-5] .*$label" "$OUT"
 done
 has    "the keys line names the first file"    'Keys in plain text +5 files, like ~/\.zshrc \(Anthropic, OpenAI\)' "$OUT"
-has    "the summary leads with the first fix"  'First fix: Treat this machine as compromised' "$OUT"
+has    "the summary leads with the first fix"  'First fix: Don.t revoke any GitHub token yet' "$OUT"
 hasnot "the summary has no section tables"     'KEYS IN PLAIN TEXT' "$OUT"
 psrun "$WORK/home" GIRD_CHECK_COMPACT=1 -- -Offline -Full > "$WORK/full.txt" 2>&1
 has    "-Full shows every detail"              'KEYS IN PLAIN TEXT' "$WORK/full.txt"
@@ -135,7 +271,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no malware in a clean home"            'no LiteLLM, OpenCode, Railway or Zeabur leaks' "$WORK/ph.txt"
+has    "no malware in a clean home"            'no LiteLLM, npm, OpenCode, Railway, Zeabur leaks' "$WORK/ph.txt"
 
 echo "files built to make a pattern backtrack"
 # Long runs of capitals and of KEY, with and without the = or quote a match needs,
@@ -159,11 +295,15 @@ hasnot "no file is skipped"                    'skipped: took too long' "$WORK/s
 has    "the real key next to them is found"    '~/code/s/\.env +Groq' "$WORK/slow.txt"
 # With a limit too short for a large file, the file is listed, not taken as clean.
 python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/slow/code/s/.env.big"
+mkdir -p "$WORK/slow/.npm/_cacache/index-v5/aa"
+python3 -c "import sys; open(sys.argv[1], 'w').write('pkg-name@1.2.3 /pkg-name/-/pkg-name-1.2.3.tgz ' * 200000)" "$WORK/slow/.npm/_cacache/index-v5/aa/big"
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 -- -Offline > "$WORK/slow-to.txt" 2>&1
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_COMPACT=1 -- -Offline > "$WORK/slow-to-c.txt" 2>&1
 has    "a file that hits the time limit is listed" '[0-9]+ files? skipped: took too long to check' "$WORK/slow-to.txt"
 has    "with its path"                         '^ +~/code/s/\.env\.big$' "$WORK/slow-to.txt"
 has    "and the summary says so"               'skipped: took too long to check, like' "$WORK/slow-to-c.txt"
+has    "npm's cache that hits the limit is not called clean" 'npm worms +not fully checked: 1 file took too long' "$WORK/slow-to.txt"
+has    "and the summary row is not green"      'Recent leaks +npm packages not fully checked' "$WORK/slow-to-c.txt"
 cp -R "$WORK/clean" "$WORK/pyc"
 SP="$WORK/pyc/code/winpy/.venv/Lib/site-packages"; mkdir -p "$SP/__pycache__"; printf 'home = C:\\Python312\n' > "$WORK/pyc/code/winpy/.venv/pyvenv.cfg"
 : > "$SP/__pycache__/cook.cpython-312.pyc"
@@ -247,7 +387,7 @@ has    "shows how this computer compares"      'Better than 72% of AI builders w
 has    "says one of the first 1,000"           "You're one of the first 1,000 AI builders to run Blindspot\." "$OUT"
 hasnot "never shows the place in line"         "AI builder #|#142" "$OUT"
 RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/report-ps.json" | cut -d'"' -f4)
-has    "the link carries the percentile, run ID, rank and key counts" "blindspot/card/#v=2&s=[0-9]+&g=[ABCDF]&.*&pc=72&pn=1234&u=${RID:-no-run-id}&r=142&sk=2&hk=2&ag=[a-z0-9.-]*\$" "$OUT"
+has    "the link carries the percentile, run ID, rank and key counts" "blindspot/card/#v=2&s=[0-9]+&g=[ABCDF]&.*&pc=72&pn=1234&u=${RID:-no-run-id}&r=142&sk=2&hk=2&ag=[a-z0-9.-]*&nm=[01]&wp=[01]\$" "$OUT"
 psrun "$WORK/home" GIRD_CHECK_API="$API" -- > /dev/null 2>&1
 if grep -q '"device_id":""' "$(printf '%s' "$WORK/received.log")" && [ "$(grep -c . "$WORK/received.log")" -eq 2 ]; then ok "with no MachineGuid the device ID is empty"; else bad "with no MachineGuid the device ID is empty"; fi
 
