@@ -21,7 +21,7 @@
 #   bash gird-check.sh --no-game   skips the game while it scans
 #   bash gird-check.sh --all-sessions  waits until every agent session is checked
 #   NO_COLOR=1 bash gird-check.sh  plain text, no colors
-#   sudo bash gird-check.sh --all-users  checks every account on this Mac, for IT teams (docs/fleet.md)
+#   sudo bash gird-check.sh --all-users  every account on this Mac, for IT teams: read docs/fleet.md first
 
 ORIG_LANG=${LC_ALL:-${LANG:-}}
 export LC_ALL=C
