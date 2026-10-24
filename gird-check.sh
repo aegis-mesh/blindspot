@@ -837,6 +837,9 @@ scan_home() {
   _pf=(); while IFS= read -r _pp; do [ -n "$_pp" ] && _pf+=(-o -path "*/$_pp"); done <<EOF
 $PLANTED
 EOF
+  _aa=(); while IFS= read -r _pp; do [ -n "$_pp" ] && _aa+=(-o -path "*/$_pp"); done <<EOF
+$AA_PROJECT
+EOF
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -861,9 +864,10 @@ EOF
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
-       -o -name .aider.chat.history.md \) -print \) -o \
+       -o -name .aider.chat.history.md "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
-       "${_pf[@]}" \) -print \) 2>/dev/null
+       "${_pf[@]}" \) -print \) -o \
+    \( -type l -lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} + \) 2>/dev/null
 }
 
 # Findings for the game or the spinner to show while the scan runs: a mark (x a
@@ -875,7 +879,7 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
   while IFS= read -r _l; do
     printf '%s\n' "$_l"
     _n=$((_n + 1)); [ $((_n % 4)) -eq 1 ] || continue
-    _s=${_l//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
+    _s=${_l#L }; _s=${_s//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
     # shellcheck disable=SC2088  # a literal ~ for home paths, as short() prints
     case "$_s" in "$H"/*) _s="~/${_s#"$H"/}" ;; esac
     progress i "Checking $_s"
@@ -1083,6 +1087,12 @@ TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv.
 WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($PLANTED_ERE)\$")
 AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
+# Links to ~/.ssh/authorized_keys (the scan prints them as "L path"), outside ~/.ssh itself, and the
+# project files of data/auto-approve.tsv.
+AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) printf '%s\n' "$_f" ;; esac; done)
+AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
+AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
+FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ' | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
@@ -1876,6 +1886,102 @@ claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web pa
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
 # <<< outdated
+# --- 1. Coding agents: settings and versions -------------------------------------
+# Agents set to run commands without asking (data/auto-approve.tsv). A pattern matches a line with
+# its spaces removed, starting at the line, a { or a , and ending at the line's end, a , } # or /,
+# so a longer key or another value never counts. Lines starting with // or # are skipped. In a
+# .toml file a setting after the first [table] belongs to that table, so only the lines before it count.
+aa_hit() { # file pattern|pattern...
+  case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
+  AA_P=$2 awk -v toml="$_tm" '
+    BEGIN { n = split(ENVIRON["AA_P"], p, "|"); for (i = 1; i <= n; i++) gsub(/[[:space:]]/, "", p[i]) }
+    { l = $0; gsub(/[[:space:]]/, "", l) }
+    l ~ /^(\/\/|#)/ { next }
+    toml && l ~ /^\[/ { exit }
+    { for (i = 1; i <= n; i++) {
+        if (i in got) continue
+        off = 0
+        while ((k = index(substr(l, off + 1), p[i])) > 0) {
+          k += off; b = k > 1 ? substr(l, k - 1, 1) : ""; a = substr(l, k + length(p[i]), 1)
+          if ((b == "" || b == "{" || b == ",") && (a == "" || a == "," || a == "}" || a == "#" || a == "/")) { got[i] = 1; break }
+          off = k
+        } } }
+    END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }' "$1" 2>/dev/null
+}
+AA_ROWS=""
+while IFS='|' read -r _aa _ao _ap _as _apat; do
+  [ -n "$_aa" ] || continue
+  case "$_ao" in all|"$_os") ;; *) continue ;; esac
+  case "$_ap" in
+    "{PROJECT}/"*) _rel=${_ap#"{PROJECT}/"}; _al=$(printf '%s\n' "$AA_FILES" | while IFS= read -r _f; do case "$_f" in (*/"$_rel") printf '%s\n' "$_f" ;; esac; done) ;;
+    *) _al=$_ap ;;
+  esac
+  while IFS= read -r _f; do
+    [ -n "$_f" ] && [ -f "$_f" ] && aa_hit "$_f" "$_apat" && AA_ROWS="$AA_ROWS$_f$TAB$_aa$TAB$_as
+"
+  done <<EOF
+$_al
+EOF
+done <<EOF
+$AA_TABLE
+EOF
+# One row per file: file<TAB>agent<TAB>settings.
+AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '!($1 in o) { o[$1] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[$1]] = st[o[$1]] ", " $3 }
+  END { for (i = 1; i <= n; i++) print f[i] "\t" ag[i] "\t" st[i] }')
+N_YOLO=$(count_lines "$AA_LIST")
+[ "$N_YOLO" -gt 0 ] && progress w "Agents set to run commands without asking: $(printf '%s\n' "$AA_LIST" | head -n 1 | cut -f2)"
+# Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
+# compared, part by part as numbers; anything else is not reported.
+ver_ok() { case "$1" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac; return 0; }
+ver_cmp() { # a b: prints -1, 0 or 1
+  awk -v a="$1" -v b="$2" 'BEGIN { n = split(a, x, "."); m = split(b, y, "."); k = n > m ? n : m
+    for (i = 1; i <= k; i++) { if (x[i] + 0 < y[i] + 0) { print -1; exit } if (x[i] + 0 > y[i] + 0) { print 1; exit } } print 0 }'
+}
+# name@version in a file, where nothing that can be part of a package name comes right before it.
+pkg_args() { # name files...
+  _pn=$1; shift
+  awk -v nm="$_pn@" '{ l = $0; off = 0
+    while ((k = index(substr(l, off + 1), nm)) > 0) {
+      k += off; off = k; b = k > 1 ? substr(l, k - 1, 1) : ""
+      if (b ~ /[A-Za-z0-9._\/@-]/) continue
+      r = substr(l, k + length(nm)); if (match(r, /^[0-9A-Za-z.+-]+/)) print substr(r, 1, RLENGTH)
+    } }' "$@" 2>/dev/null
+}
+OLD_ROWS=""
+while IFS='|' read -r _oid _onm _oos _okind _ow _olo _ohi _ohole _osrc; do
+  [ -n "$_oid" ] || continue
+  case "$_oos" in all|"$_os") ;; *) continue ;; esac
+  case "$_okind" in
+    plist) _vs=""; [ -f "$_ow" ] && _vs=$(tr '\n\r\t' '   ' < "$_ow" 2>/dev/null | sed -n 's#.*<key>CFBundleShortVersionString</key> *<string>\([^<]*\)</string>.*#\1#p') ;;
+    folder) _vs=""
+      for _d in "$_ow"/*/; do
+        _d=${_d%/}; _d=${_d##*/}; ver_ok "$_d" || continue
+        if [ -z "$_vs" ] || [ "$(ver_cmp "$_d" "$_vs")" = 1 ]; then _vs=$_d; fi
+      done ;;
+    npm) _vs=$(printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
+        [ -n "$r" ] && [ -f "$r/$_ow/package.json" ] && grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$r/$_ow/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/'
+      done) ;;
+    mcparg) _vs=$(printf '%s\n' "$MCP_LIST" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && pkg_args "$_ow" "$f"; done) ;;
+    *) _vs="" ;;
+  esac
+  while IFS= read -r _v; do
+    ver_ok "$_v" || continue
+    if [ "$_olo" != - ] && [ "$(ver_cmp "$_v" "$_olo")" = -1 ]; then continue; fi
+    [ "$(ver_cmp "$_v" "$_ohi")" = -1 ] || continue
+    OLD_ROWS="$OLD_ROWS$_oid$TAB$_onm$TAB$_v$TAB$_ohi$TAB$_ohole$TAB$_osrc
+"
+  done <<EOF
+$_vs
+EOF
+done <<EOF
+$OUT_TABLE
+EOF
+# One row per tool: name<TAB>versions<TAB>fixed<TAB>hole<TAB>advisory.
+OLD_LIST=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '!($1 in o) { o[$1] = ++n; r[n] = $2; v[n] = $3; rest[n] = $4 "\t" $5 "\t" $6; seen[$1 "|" $3] = 1; next }
+  !(($1 "|" $3) in seen) { seen[$1 "|" $3] = 1; v[o[$1]] = v[o[$1]] ", " $3 }
+  END { for (i = 1; i <= n; i++) print r[i] "\t" v[i] "\t" rest[i] }')
+N_OLD=$(count_lines "$OLD_LIST")
+[ "$N_OLD" -gt 0 ] && progress w "An agent with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
 for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
@@ -1886,7 +1992,25 @@ $_h"
 done
 NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
-# Incidents whose malware could not run only need the version updated; the rest mean a compromised machine.
+# Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
+# with a platform suffix such as -darwin-arm64, the id compared without case.
+_x=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; do
+    [ -d "$r" ] || continue
+    for d in "$r"/*; do [ -d "$d" ] && printf '%s\n' "$d"; done
+  done | BAD_EXT_LIST=$BAD_EXT awk '
+  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3] } }
+  { b = $0; sub(/.*\//, "", b); lb = tolower(b)
+    for (i = 1; i <= n; i++) {
+      if (substr(lb, 1, length(id[i]) + 1) != id[i] "-") continue
+      r = substr(b, length(id[i]) + 2)
+      if (!match(r, /^[0-9]+(\.[0-9]+)*/)) continue
+      ver = substr(r, 1, RLENGTH); rest = substr(r, RLENGTH + 1)
+      if (rest != "" && rest !~ /^-/) continue
+      if (v[i] == "*" || v[i] == ver) { print $0 "\t" sp[i] " " ver "\t" t[i]; break }
+    } }')
+[ -n "$_x" ] && NPM_ROWS="${NPM_ROWS:+$NPM_ROWS
+}$_x"
+# Incidents that leave the machine itself uncompromised only need the version updated; the rest mean a compromised machine.
 NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
 for _t in $NPM_TAGS; do
   if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
@@ -2054,12 +2178,16 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*) _store="Windows Credential Manager or a secrets manager" ;;
   *)      _store="a secrets manager" ;;
 esac
+N_AK=$(count_lines "$AK_LINKS")
+[ "$N_AK" -gt 0 ] && todo 2 "Delete the links to ~/.ssh/authorized_keys listed in section 2."
 [ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
 [ "$HIST_KEYS" -gt 0 ] && todo 3 "Keys in shell history were typed into a command. Treat them as exposed and rotate them."
 [ "$N_SESS" -gt 0 ] && todo 3 "Keys turned up in $(plural "$N_SESS" "agent session file" "agent session files"). An agent read or was given them: treat them as exposed and rotate them."
 [ "$N_MCP_TOKEN" -gt 0 ] && todo 2 "Replace tokens written into MCP configs with environment variable references, then rotate them."
 [ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
+[ "$N_YOLO" -gt 0 ] && todo 1 "Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox."
+[ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
@@ -2210,7 +2338,7 @@ fi
 # when the output isn't a terminal. A saved report always has every detail.
 # ===========================================================================
 if [ "$PY_HIT" -eq 1 ] || [ "$MAL_HIT" -eq 1 ]; then SEV=$RED
-elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ]; then SEV=$RED
+elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ] || [ "$N_AK" -gt 0 ]; then SEV=$RED
 elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
 else SEV=$GRN; fi
 if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="No findings in this scan"; fi
@@ -2255,6 +2383,29 @@ while IFS='|' read -r n st; do
 done <<EOF
 $AG_ROWS
 EOF
+if [ "$N_YOLO" -gt 0 ]; then
+  blank
+  emit "     ${B}Agents set to run commands without asking${RST}"
+  while IFS="$TAB" read -r f a st; do
+    [ -n "$f" ] || continue
+    printf -v nm '%-16s %s' "$a" "$(short "$f")"
+    pair "${YEL}!${RST}" "$nm" 46 "$st"
+  done <<EOF
+$AA_LIST
+EOF
+  wrap "A prompt injection in anything the agent reads can then run commands on this computer. Turn it off unless the agent runs in a sandbox." 8 "        " "        " "$DIM"
+fi
+if [ "$N_OLD" -gt 0 ]; then
+  blank
+  emit "     ${B}Agents with a security fix to install${RST}"
+  while IFS="$TAB" read -r nm vs fx hole src; do
+    [ -n "$nm" ] || continue
+    pair "${YEL}!${RST}" "$nm" 20 "$vs, update to $fx or later"
+    wrap "$(printf '%s' "${hole:0:1}" | tr 'a-z' 'A-Z')${hole:1}. $src" 8 "        " "        " "$DIM"
+  done <<EOF
+$OLD_LIST
+EOF
+fi
 
 SEC1=$CAP; CAP=""
 section 02 "MCP SERVERS" "$(plural "$N_MCP" server servers)"
@@ -2283,6 +2434,14 @@ if [ "$N_AUTO" -gt 0 ]; then
   done <<EOF
 $AUTO_ROWS
 EOF
+fi
+if [ "$N_AK" -gt 0 ]; then
+  blank
+  emit "     ${B}Files that link to your SSH logins${RST}"
+  while IFS= read -r f; do [ -n "$f" ] && emit "     ${RED}✗${RST}  $(short "$f")"; done <<EOF
+$AK_LINKS
+EOF
+  wrap "An agent that edits this file adds a login to this computer. Delete the link." 8 "        " "        " "$RED"
 fi
 
 SEC2=$CAP; CAP=""
@@ -2430,7 +2589,7 @@ EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
-  emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
+  emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs, npm's cache and editor extensions${RST}"
 fi
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
@@ -2530,10 +2689,13 @@ cline() { # number mark label detail
   _cd=$4; [ "${#_cd}" -gt "$_room" ] && _cd="${_cd:0:$((_room - 3))}..."
   emit "   ${TEAL}${B}$1${RST}  $2  ${B}${_cb}${RST}${_cd}"
 }
-if [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
+if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
+elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO set to run commands without asking"
+elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi
-if [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
+if [ "$N_AK" -gt 0 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, $(plural "$N_AK" "file links" "files link") to your SSH logins"
+elif [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
 elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in their configs"
