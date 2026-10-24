@@ -164,3 +164,5 @@ fleet: on Linux --all-users exits 13 with a message	gird-check.ps1 has no fleet 
 fleet: no colours, even on a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: the result is written to a new file and renamed into place	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: root reads a set number of bytes, then stops the run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an MDM item's options line works whatever arguments the MDM adds	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --result-tags puts the value between Jamf's result tags	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

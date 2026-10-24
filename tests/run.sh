@@ -1103,6 +1103,11 @@ if [ ! -e "$FL/fake-ran" ] && [ -z "$(ls "$FL/cwd")" ]; then ok "fleet: opens no
 ( cd / && env -i PATH=/usr/bin:/bin GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
     GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" /bin/bash "$SCRIPT" --all-users --summary-to-stdout < /dev/null > "$FL/mdm.out" 2>&1 )
 has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspot act accounts=2 ' "$FL/mdm.out"
+# An MDM item passes its options in one line under the first line (docs/fleet.md), whatever arguments the MDM adds.
+python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\n[ \"\${1:-}\" = --account-run ] || set -- --all-users --summary-to-stdout --deadline=600\n' + l[1])" "$SCRIPT" "$FL/mdm-item.sh"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$FL/mdm-item.sh" / "$(hostname)" root < /dev/null > "$FL/mdm-item.out" 2>&1
+has    "fleet: an MDM item's options line works whatever arguments the MDM adds" '^blindspot act accounts=2 act=1 update=1 not_checked=0 ' "$FL/mdm-item.out"
 
 # The Mac's shared places.
 : > "$FL/sharedtmp/.pc_once_x"; : > "/tmp/.pc_once_blindspot-fleet-test-$$"
@@ -1135,6 +1140,8 @@ has    "fleet: --inventory says none before the first run" '^none$' "$FL/inv0.ou
 fl_run inv
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$SCRIPT" --inventory > "$FL/inv1.out" 2>&1
 if [ "$(cat "$FL/inv1.out")" = "$(sed -n 's/^inventory=//p' "$FL/inv.flat")" ] && grep -qE '^v1 act 20[0-9-]{8}T[0-9]{2}:[0-9]{2}Z \| asha: act ' "$FL/inv1.out"; then ok "fleet: --inventory prints the saved inventory value"; else bad "fleet: --inventory prints the saved inventory value" "$(cat "$FL/inv1.out")"; fi
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$SCRIPT" --inventory --result-tags > "$FL/inv-tags.out" 2>&1
+has    "fleet: --result-tags puts the value between Jamf's result tags" '^<result>v1 act .*</result>$' "$FL/inv-tags.out"
 if [ "$(wc -c < "$FL/inv1.out")" -le 256 ] && ! grep -qE '/|\.zshrc|\.env' "$FL/inv1.out"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
 python3 - "$FL/state/last.json" <<'PY'
 import re, sys

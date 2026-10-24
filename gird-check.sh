@@ -27,7 +27,7 @@ ORIG_LANG=${LC_ALL:-${LANG:-}}
 export LC_ALL=C
 
 ALL=0; SAVE=0; NOGAME=0; OFFLINE=0; FULL=0; ALLSESS=0
-ALLUSERS=0; JSON=0; SUMOUT=0; EXITZERO=0; LISTONLY=0; HASHKEY=""; ACCTRUN=0; INVENTORY=0
+ALLUSERS=0; JSON=0; SUMOUT=0; EXITZERO=0; LISTONLY=0; HASHKEY=""; ACCTRUN=0; INVENTORY=0; RESULTTAGS=0
 DEADLINE=""; STALE_DAYS=""
 [ "${DO_NOT_TRACK:-0}" = 1 ] && OFFLINE=1
 for arg in "$@"; do
@@ -41,6 +41,7 @@ for arg in "$@"; do
     --deadline=*) DEADLINE=${arg#*=} ;;
     --inventory) INVENTORY=1 ;;
     --stale-days=*) STALE_DAYS=${arg#*=} ;;
+    --result-tags) RESULTTAGS=1 ;;
     --account-run) ACCTRUN=1 ;;
     --all) ALL=1 ;;
     --full) FULL=1 ;;
@@ -76,6 +77,7 @@ if [ "$ALLUSERS" -eq 0 ]; then
   done
 fi
 [ -n "$STALE_DAYS" ] && [ "$INVENTORY" -eq 0 ] && fleet_usage "--stale-days works with --inventory only"
+[ "$RESULTTAGS" -eq 1 ] && [ "$INVENTORY" -eq 0 ] && fleet_usage "--result-tags works with --inventory only"
 [ "$ALLUSERS" -eq 1 ] && [ "$INVENTORY" -eq 1 ] && fleet_usage "--inventory reads the saved result: run it without --all-users"
 [ "$ACCTRUN" -eq 1 ] && [ "$FLEET" -eq 1 ] && fleet_usage "--account-run is started by --all-users only"
 [ "$JSON" -eq 1 ] && [ "$SUMOUT" -eq 1 ] && fleet_usage "choose --json or --summary-to-stdout, not both"
@@ -1326,19 +1328,21 @@ fl_save() { # json
 # --inventory: reads the saved result, never scans. An MDM's inventory field shows the line it
 # prints: the inventory value, "stale" when the last run is older than --stale-days (3 by
 # default), "none" before the first run, "unreadable" when the file is not root's own.
+# --result-tags puts it between <result> tags.
+fl_inv_out() { if [ "$RESULTTAGS" -eq 1 ]; then printf '<result>%s</result>\n' "$1"; else printf '%s\n' "$1"; fi; }
 fl_inventory() {
   _f="$FL_STATE/last.json"
-  if [ ! -e "$_f" ] && [ ! -L "$_f" ]; then echo "none"; return 0; fi
-  if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(/usr/bin/stat -f '%u %Lp' "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then echo "unreadable"; return 0; fi
+  if [ ! -e "$_f" ] && [ ! -L "$_f" ]; then fl_inv_out none; return 0; fi
+  if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(/usr/bin/stat -f '%u %Lp' "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
   _ep=$(/usr/bin/sed -n 's/^  "checked_epoch": \([0-9]\{1,12\}\),$/\1/p' "$_f" | /usr/bin/head -n 1)
   _iv=$(/usr/bin/sed -n 's/^  "inventory": "\([A-Za-z0-9 ._:;,|+-]*\)",$/\1/p' "$_f" | /usr/bin/head -n 1)
   [ "${#_iv}" -le 300 ] || _iv=""
-  if [ -z "$_ep" ] || [ -z "$_iv" ]; then echo "unreadable"; return 0; fi
+  if [ -z "$_ep" ] || [ -z "$_iv" ]; then fl_inv_out unreadable; return 0; fi
   _age=$(( $(/bin/date -u +%s) - _ep ))
   if [ "$_age" -gt $(( ${STALE_DAYS:-3} * 86400 )) ] || [ "$_age" -lt -3600 ]; then
-    echo "stale: last run $(/bin/date -u -r "$_ep" +%Y-%m-%dT%H:%MZ)"; return 0
+    fl_inv_out "stale: last run $(/bin/date -u -r "$_ep" +%Y-%m-%dT%H:%MZ)"; return 0
   fi
-  printf '%s\n' "$_iv"
+  fl_inv_out "$_iv"
 }
 
 fleet_main() {
