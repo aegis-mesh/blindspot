@@ -1642,7 +1642,7 @@ incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: d
 incident_level() { case "$1" in mistral) printf update ;; injective) printf update ;; *) printf act ;; esac; }
 incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
 incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in glassworm) printf '%s' 'On a Mac, also delete /tmp/ijewf, /tmp/out.zip and any plist in ~/Library/LaunchAgents you do not recognize, such as com.user.nodestart.plist.' ;; injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+incident_advice() { case "$1" in glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
@@ -1664,10 +1664,10 @@ mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra 
 mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
 litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
-litellm|all|temp|yes|remote_code_loader.lock|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm|all|temp|yes|.pc_once_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm|all|temp|yes|.pc_sq_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm|all|temp|yes|.pc_e_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm|all|temp|yes|remote_code_loader.lock|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm|all|temp|yes|.pc_once_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm|all|temp|yes|.pc_sq_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm|all|temp|yes|.pc_e_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 mistralpy|linux|temp|yes|transformers.pyz|Kill any python process started from transformers.pyz, then delete the file."
 # <<< indicators
 SITES_ALL=$(
@@ -1756,7 +1756,8 @@ for t in /tmp "${TMPDIR%/}" "$WTEMP"; do
 $TEMP_IND
 EOF
 done
-# An environment variable and a running process are not files, so these two stay code.
+# An environment variable and a running process are not files, so these two stay code (the issue
+# LiteLLM's advisory links, BerriAI/litellm#47826, names both).
 [ -n "${PRIVCOLLECT_ACTIVE:-}" ] && MARKS="${MARKS}litellm${TAB}PRIVCOLLECT_ACTIVE is set in this shell
 "
 LOADER=0

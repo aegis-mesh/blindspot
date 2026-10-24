@@ -543,7 +543,7 @@ hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/m
 cp -R "$WORK/clean" "$WORK/lmark"; mkdir -p "$WORK/lmark/tmp"; : > "$WORK/lmark/tmp/.pc_once_1"
 HOME="$WORK/lmark" TMPDIR="$WORK/lmark/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmark.txt"
 has    "finds a malware marker in TEMP"               'LiteLLM 1\.107\.0 +signs of the malware found ~/tmp/\.pc_once_1' "$WORK/lmark.txt"
-has    "with LiteLLM's own advice"                    'Kill the detached python process that holds remote_code_loader\.lock, then delete these files\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth and cook\.py are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
+has    "with LiteLLM's own advice"                    'Kill the detached python process that holds remote_code_loader\.lock, then delete these files\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
 hasnot "a marker alone names no environment to stop"  "Don't run Python or pip in these environments" "$WORK/lmark.txt"
 # Another user's file in the shared temp folder is not this person's sign: a link to a root-owned file stands in for one.
 cp -R "$WORK/clean" "$WORK/lmo"; mkdir -p "$WORK/lmo/tmp"; ln -s /etc/passwd "$WORK/lmo/tmp/.pc_once_1"
@@ -782,7 +782,8 @@ has    "a GlassWorm extension at its bad version, with a platform suffix, in an 
 has    "a GlassWorm extension at any version, its id in another case" '~/\.cursor/extensions/Sol-Studio\.Solidity-Extension-2\.0\.0 sol-studio\.solidity-extension 2\.0\.0 \(GlassWorm' "$D"
 has    "with GlassWorm's sourced line"                'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs\. socket\.dev' "$D"
 has    "the GlassWorm fix names only what section 5 lists: the extensions" 'Treat this machine as compromised\. Uninstall the extensions listed in section 5 and rotate every key this machine could reach\.' "$D"
-has    "the GlassWorm advice names the staging files and the LaunchAgent to remove" 'On a Mac, also delete /tmp/ijewf, /tmp/out\.zip and any plist in ~/Library/LaunchAgents you do not recognize, such as com\.user\.nodestart\.plist\.' "$D"
+has    "the GlassWorm advice says to check the files its source names" 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com\.user\.nodestart\.plist, and for /tmp/ijewf and /tmp/out\.zip, where the malware collects what it steals\.' "$D"
+hasnot "and never to delete every LaunchAgent not recognized" 'delete [^.]*LaunchAgents|you do not recognize' "$D"
 has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective fix comes before the update it has to come before" 'into a new wallet\. .*Update the npm packages listed in section 5' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"

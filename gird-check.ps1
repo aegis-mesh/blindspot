@@ -1199,7 +1199,7 @@ function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, Ma
 function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'injective' { 'update' } default { 'act' } } }
 function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'injective' { 'Injective SDK' } default { $t } } }
 function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
-function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also delete /tmp/ijewf, /tmp/out.zip and any plist in ~/Library/LaunchAgents you do not recognize, such as com.user.nodestart.plist.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
+function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 $BadPypi = @'
@@ -1224,10 +1224,10 @@ $IndTable = @(
   ,@('mastra', 'win', 'startup', 'no', $(if ($env:ProgramData) { J $env:ProgramData 'NodePackages/protocal.cjs' } else { '' }), 'starts the Mastra worm at login')
   ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
   ,@('litellm', 'all', 'site', 'no', 'cook.py', '-')
-  ,@('litellm', 'all', 'temp', 'yes', 'remote_code_loader.lock', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
-  ,@('litellm', 'all', 'temp', 'yes', '.pc_once_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
-  ,@('litellm', 'all', 'temp', 'yes', '.pc_sq_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
-  ,@('litellm', 'all', 'temp', 'yes', '.pc_e_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'yes', 'remote_code_loader.lock', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'yes', '.pc_once_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'yes', '.pc_sq_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'yes', '.pc_e_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
   ,@('mistralpy', 'linux', 'temp', 'yes', 'transformers.pyz', 'Kill any python process started from transformers.pyz, then delete the file.')
 )
 # <<< indicators
@@ -1285,8 +1285,9 @@ foreach ($t in $TempDirs) {
     }
   }
 }
-# An environment variable and a running process are not files, so these stay code. The hourly
-# loader that holds remote_code_loader.lock only runs on macOS and Linux.
+# An environment variable and a running process are not files, so these stay code (the issue
+# LiteLLM's advisory links, BerriAI/litellm#47826, names both). The hourly loader that holds
+# remote_code_loader.lock only runs on macOS and Linux.
 if ($env:PRIVCOLLECT_ACTIVE) { $Marks.Add(@('litellm', 'PRIVCOLLECT_ACTIVE is set in this shell')) }
 $LOADER = 0
 # A bad version in uv's cache: the row of each one found, in the list's order. The cache is walked
