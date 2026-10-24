@@ -51,8 +51,9 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /-security$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' "$PATH_OK"'
         NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || !path_ok($4) { print "data/sessions.tsv: " $0 }'
-      # A Python incident means a compromised machine: one whose level is update is refused.
-      rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 3 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 { print "data/bad-pypi.tsv: " $0 }'
+      # A Python incident means a compromised machine: one whose level is update is refused. The os
+      # column says where the malware of that version could run; elsewhere it is a version to update.
+      rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(all|mac|linux|win)$/ { print "data/bad-pypi.tsv: " $0 }'
       # A startup line carries a note, a temp line the advice of its incident (the same on each of its
       # temp lines); wiper and site lines carry -. PowerShell gets the note quoted, so it may hold a quote.
       rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" "$PATH_OK"'
@@ -225,10 +226,10 @@ rows data/bad-npm.tsv | awk -F '\t' '
   END { print "\047@"; print "# <<< bad-npm" }' > "$WORK/bad-npm.ps1"
 
 # --- bad Python packages ------------------------------------------------------
-# PY_INCIDENTS lists every incident with a bad version or a site or temp indicator, in order:
-# section 5 has one row for each.
+# Rows are "name version incident os". PY_INCIDENTS lists every incident with a bad version or a
+# site or temp indicator, in order: section 5 has one row for each.
 { rows data/bad-pypi.tsv | awk -F '\t' '{ print "P\t" $0 }'; rows data/indicators.tsv | awk -F '\t' '{ print "I\t" $0 }'; } | awk -F '\t' '
-  $1 == "P" { pk[++n] = $2 " " $3 " " $4; if (!seen[$4]++) inc[++m] = $4 }
+  $1 == "P" { pk[++n] = $2 " " $3 " " $4 " " $5; if (!seen[$4]++) inc[++m] = $4 }
   $1 == "I" && $4 ~ /^(site|temp)$/ && !seen[$2]++ { inc[++m] = $2 }
   END {
     print "# >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it."

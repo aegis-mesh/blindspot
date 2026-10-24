@@ -3,6 +3,7 @@
 # listed twice covers two of its uses. "Not written yet" is not a reason: write the twin.
 a Python incident that is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a Python name with a hyphen	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python version with another os	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a temp line with no note	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 temp lines of one incident that disagree	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a path with an unknown token	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

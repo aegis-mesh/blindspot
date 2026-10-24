@@ -1088,8 +1088,8 @@ function Incident-Advice([string]$t) { switch ($t) { 'injective' { 'Move the fun
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 $BadPypi = @'
-litellm 1.107.0 litellm
-mistralai 2.4.6 mistralpy
+litellm 1.107.0 litellm all
+mistralai 2.4.6 mistralpy linux
 '@
 $PyIncidents = @('litellm', 'mistralpy')
 # <<< bad-pypi
@@ -1117,15 +1117,19 @@ $IndTable = @(
 # <<< indicators
 if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
 $IndOn = @($IndTable | Where-Object { $_[1] -eq 'all' -or $_[1] -eq $IndOs })
-$BadPypiRows = @($BadPypi -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 3 })
+# Rows are name, version, incident and os: where the version's malware could run.
+$BadPypiRows = @($BadPypi -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 4 })
 # Python incidents (data/bad-pypi.tsv and the site and temp lines of data/indicators.tsv). $LiteBad
-# and $Marks hold @(incident, what was found). The hit incidents' first words make "the LiteLLM malware".
+# and $Marks hold @(incident, what was found); $PyUpd holds @(incident, os, what was found) for a bad
+# version installed where its malware could not run (bad-pypi's os column): a version to update, not
+# a compromised machine. The hit incidents' first words make "the LiteLLM malware".
 function Py-Short($ids) { (@($ids | ForEach-Object { (Incident-Name $_).Split(' ')[0] }) -join ' and ') }
 # The advice shown under an incident's row when its temp files are found: the note of its temp lines.
 function Temp-Advice([string]$pi) { foreach ($r in $IndTable) { if ($r[0] -ceq $pi -and $r[2] -eq 'temp') { return $r[5] } }; '' }
 Progress "Checking $(Plural $SitesAll.Count 'Python environment' 'Python environments') for the $(Py-Short $PyIncidents) malware"
 $N_PY = 0; $N_LITE = 0; $LiteVers = New-Object System.Collections.Generic.List[string]
 $LiteBad = New-Object System.Collections.Generic.List[object]; $LitePyc = New-Object System.Collections.Generic.List[string]
+$PyUpd = New-Object System.Collections.Generic.List[object]
 foreach ($sp in $SitesAll) {
   if (-not (Is-Dir $sp)) { continue }
   $N_PY++
@@ -1136,7 +1140,11 @@ foreach ($sp in $SitesAll) {
   }
   foreach ($pi in $PyIncidents) {
     $bad = New-Object System.Collections.Generic.List[string]
-    foreach ($r in $BadPypiRows) { if ($r[2] -ceq $pi -and (Is-Dir (J $sp "$($r[0])-$($r[1]).dist-info"))) { $bad.Add("$($r[0]) $($r[1])") } }
+    foreach ($r in $BadPypiRows) {
+      if ($r[2] -cne $pi -or -not (Is-Dir (J $sp "$($r[0])-$($r[1]).dist-info"))) { continue }
+      # Where its malware could not run (the os column), the version is one to update, not a hit.
+      if ($r[3] -eq 'all' -or $r[3] -eq $IndOs) { $bad.Add("$($r[0]) $($r[1])") } else { $PyUpd.Add(@($pi, $r[3], "$(Short $sp): $($r[0]) $($r[1])")) }
+    }
     foreach ($r in $IndOn) { if ($r[2] -eq 'site' -and $r[0] -ceq $pi -and (Is-File (J $sp $r[4]))) { $bad.Add($r[4]) } }
     if ($bad.Count -gt 0) { $LiteBad.Add(@($pi, "$(Short $sp): $($bad -join ', ')")) }
   }
@@ -1164,26 +1172,25 @@ foreach ($t in $TempDirs) {
 # loader that holds remote_code_loader.lock only runs on macOS and Linux.
 if ($env:PRIVCOLLECT_ACTIVE) { $Marks.Add(@('litellm', 'PRIVCOLLECT_ACTIVE is set in this shell')) }
 $LOADER = 0
-# A bad version in uv's cache: @(incident, name, version) for each one found.
-$UvBad = New-Object System.Collections.Generic.List[object]
-foreach ($r in $BadPypiRows) {
-  # The exact version: 2.4.6 is not 2.4.60 or 2.4.6.post1.
-  $want = '^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$'; $found = $false
-  foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
-    if ($found -or -not (Is-Dir $uv)) { continue }
-    try {
-      $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
-      while ($q.Count -gt 0 -and -not $found) {
-        $it = $q.Dequeue()
-        foreach ($e in (Entries $it[0])) {
-          if ($e.Name -cmatch $want) { $found = $true; break }
-          if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
-        }
+# A bad version in uv's cache: the row of each one found, in the list's order. The cache is walked
+# once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or 2.4.6.post1.
+$uvWant = @(); foreach ($r in $BadPypiRows) { $uvWant += ('^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$') }
+$uvFound = @{}
+foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
+  if ($uvFound.Count -ge $uvWant.Count -or -not (Is-Dir $uv)) { continue }
+  try {
+    $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
+    while ($q.Count -gt 0 -and $uvFound.Count -lt $uvWant.Count) {
+      $it = $q.Dequeue()
+      foreach ($e in (Entries $it[0])) {
+        for ($i = 0; $i -lt $uvWant.Count; $i++) { if (-not $uvFound.ContainsKey($i) -and $e.Name -cmatch $uvWant[$i]) { $uvFound[$i] = $true } }
+        if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
       }
-    } catch { }
-  }
-  if ($found) { $UvBad.Add($r) }
+    }
+  } catch { }
 }
+$UvBad = New-Object System.Collections.Generic.List[object]
+for ($i = 0; $i -lt $BadPypiRows.Count; $i++) { if ($uvFound.ContainsKey($i)) { $UvBad.Add($BadPypiRows[$i]) } }
 $PyHits = New-Object System.Collections.Generic.List[string]
 foreach ($pi in $PyIncidents) {
   $hit = $pi -eq 'litellm' -and $LOADER -eq 1
@@ -1192,12 +1199,16 @@ foreach ($pi in $PyIncidents) {
   if ($hit) { $PyHits.Add($pi) }
 }
 $PY_HIT = 0; if ($PyHits.Count -gt 0) { $PY_HIT = 1 }
+# A bad version installed where its malware could not run: a version to update (yellow), with no
+# part in PY_HIT, the score or the card's py.
+$PY_UPD_HIT = 0; if ($PyUpd.Count -gt 0) { $PY_UPD_HIT = 1 }
 # litellm_found and the card's ll stay LiteLLM's own; the card's py is any other Python incident.
 $LITELLM_HIT = 0; if ($PyHits -contains 'litellm') { $LITELLM_HIT = 1 }
 $PY_OTHER = 0; if (@($PyHits | Where-Object { $_ -cne 'litellm' }).Count -gt 0) { $PY_OTHER = 1 }
 $PyShort = Py-Short $PyHits
 if ($PY_HIT -eq 1) { Progress "Signs of the $PyShort malware found" }
 elseif ($LitePyc.Count -gt 0) { Progress 'A leftover cook.pyc may come from the LiteLLM malware' }
+elseif ($PY_UPD_HIT -eq 1) { Progress 'A Python package to update: its malware could not run on this OS' }
 # >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it.
 $BadNpm = @'
 axios 1.14.1 axios
@@ -1743,6 +1754,7 @@ if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
+if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 # An incident's own fix (data/incidents.tsv), once for each incident found.
 foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) { $a = Incident-Advice $t; if ($a) { Add-Todo 5 $a } }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
@@ -1982,9 +1994,14 @@ $Sec4 = Take-Cap
 $ind26 = ' ' * 26
 $N_LEAKS = @($PyIncidents).Count + 1 + @($Platforms).Count
 Section '05' 'RECENT KEY LEAKS' "$N_LEAKS checked"
-# One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
+# One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
+# advice under a hit: for a bad package in an environment, don't run Python there; for its temp
+# files, the incident's own (data/indicators.tsv); for a version whose malware could not run on this
+# OS (data/bad-pypi.tsv), update it.
+function Os-Name([string]$o) { switch ($o) { 'mac' { 'macOS' } 'linux' { 'Linux' } 'win' { 'Windows' } default { $o } } }
 foreach ($pi in $PyIncidents) {
   $pl = Incident-Name $pi
+  $upd = @($PyUpd | Where-Object { $_[0] -ceq $pi })
   $do = ''
   if ($PyHits -contains $pi) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
@@ -1992,6 +2009,8 @@ foreach ($pi in $PyIncidents) {
     foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     if (@($LiteBad | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = "Don't run Python or pip in these environments." }
     if (@($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0 -or -not $do) { $do = (@($do, (Temp-Advice $pi)) | Where-Object { $_ }) -join ' ' }
+  } elseif ($upd.Count -gt 0) {
+    Pair "$cYel!$cRst" $pl 16 "${cYel}a bad version to update$cRst"
   } elseif ($pi -eq 'litellm' -and $LitePyc.Count -gt 0) {
     Pair "$cYel!$cRst" $pl 16 "${cYel}possible leftover$cRst"
     foreach ($l in $LitePyc) { Emit "        $l" }
@@ -1999,6 +2018,11 @@ foreach ($pi in $PyIncidents) {
   } else {
     Pair "$cGrn$gOk$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')"
     if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $(Short ($LiteVers -join ' '))$cRst" }
+  }
+  if ($upd.Count -gt 0) {
+    $oss = @()
+    foreach ($u in $upd) { Emit "        $(Short $u[2])"; $osn = Os-Name $u[1]; if ($oss -notcontains $osn) { $oss += $osn } }
+    $do = (@($do, "Its malware runs on $($oss -join ' and ') only, so it did not run here. Update to a version without it.") | Where-Object { $_ }) -join ' '
   }
   if ($do) { Wrap "$do Advisory: $(Incident-Source $pi)" 8 '        ' '        ' }
   foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
@@ -2112,7 +2136,9 @@ elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort mal
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
+elseif ($NPM_UPD -eq 1 -and $PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'npm and Python packages to update, see section 5' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
+elseif ($PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'a Python package to update, see section 5' }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"
   $names = @($leaks | ForEach-Object { $_.Name })

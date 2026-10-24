@@ -28,7 +28,7 @@ madepy${T}all${T}site${T}no${T}madepy_boot.pth${T}-
 madepy${T}all${T}temp${T}yes${T}.madepy_*${T}Stop any process started from these files, then delete them.
 EOF
 printf '.vscode\tmadeplant.js\tmadeworm\ta file the Made worm plants\n' >> "$R/data/planted.tsv"
-printf 'madepkg\t9.9.9\tmadepy\n' >> "$R/data/bad-pypi.tsv"
+printf 'madepkg\t9.9.9\tmadepy\tall\n' >> "$R/data/bad-pypi.tsv"
 printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >> "$R/data/auto-approve.tsv"
 printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\n' >> "$R/data/outdated.tsv"
 printf 'made.ext\t1.0.0\tmadeext\n' >> "$R/data/bad-extensions.tsv"

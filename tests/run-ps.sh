@@ -364,11 +364,23 @@ has    "the summary row says so in yellow"           'Recent leaks an npm packag
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
+# mistralai 2.4.6's malware ran on Linux only (Mistral's advisory): on Linux the version is an act-now
+# hit, on a Mac or Windows a version to update. gird-check.ps1 takes the OS from the machine it runs on.
 cp -R "$WORK/clean" "$WORK/mpy"; mkdir -p "$WORK/mpy/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"
 psrun "$WORK/mpy" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy.txt"
+psrun "$WORK/mpy" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy-c.txt"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
 has    "mistralai 2.4.6 from PyPI is its own act-now row" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
 has    "with its fix"                                "Treat this machine as compromised\. Don't run Python in the affected environments, follow mistralai's advisory" "$WORK/mpy.txt"
 has    "the link flags a Python incident, not LiteLLM" '&ll=0&.*&py=1&' "$WORK/mpy.txt"
+SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
+has    "on a Mac, mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
+has    "and says why"                                 'Its malware runs on Linux only, so it did not run here\. Update to a version without it\. Advisory: docs\.mistral\.ai' "$WORK/mpy.txt"
+hasnot "a Mac with it is not 'compromised'"           'ACT NOW|Treat this machine as compromised' "$WORK/mpy.txt"
+has    "with a fix to update it"                      'Update the Python packages listed in section 5 to a version without the malware' "$WORK/mpy.txt"
+has    "the link does not flag a Python incident"     '&ll=0&.*&py=0&' "$WORK/mpy.txt"
+has    "row 05 says a Python package to update"       'Recent leaks a Python package to update, see section 5' "$WORK/mpy-c.txt"
+SKIPPING=""
 # transformers.pyz in the temp folder is a Linux-only sign of mistralai 2.4.6.
 cp -R "$WORK/clean" "$WORK/mpyt"; : > "$WORK/mpyt/AppData/Local/Temp/transformers.pyz"
 psrun "$WORK/mpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt.txt"
@@ -924,6 +936,7 @@ printf 'git status\n$env:AWS_ACCESS_KEY_ID = "%s"\n' "$K_AWS" > "$WP/AppData/Roa
 printf 'github.com:\n    oauth_token: x\n' > "$WP/AppData/Roaming/GitHub CLI/hosts.yml"
 printf 'machine example.com login me password x\n' > "$WP/_netrc"
 printf 'import cook\n' > "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages/cook.pth"
+mkdir -p "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages/mistralai-2.4.6.dist-info"   # its malware ran on Linux only
 : > "$WP/AppData/Local/Temp/.pc_once_1"
 WGUID='3F2504E0-4f89-11D3-9A0C-0305E82C3301'
 winps() { psrun "$WP" OS=Windows_NT PROCESSOR_ARCHITECTURE=AMD64 WT_SESSION=1 GIRD_CHECK_TEST_MACHINEGUID="$WGUID" "$@"; }
@@ -939,6 +952,7 @@ has    "Windows: reads Goose's MCP config"              'Goose +~/AppData/Roamin
 has    "Windows: flags a key in PowerShell history"     '~/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history\.txt +AWS' "$WORK/win1.txt"
 has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
 has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
+has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/AppData/Local/Programs/Python/Python312/Lib/site-packages: mistralai 2\.4\.6' "$WORK/win1.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"

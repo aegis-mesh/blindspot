@@ -3,8 +3,11 @@
 #   name      the package as its .dist-info folder spells it in site-packages (litellm-1.107.0.dist-info)
 #   version   the exact version (every version, *, is not supported)
 #   incident  an id from data/incidents.tsv, whose level must be act
+#   os        all, mac, linux or win: where the version's malware could run, as its advisory says. The
+#             version is looked for on every OS; on one where its malware could not run, the report
+#             shows it as a version to update, not a compromised machine
 # Each line is looked for as a .dist-info folder in every Python environment found and as a
 # name-version entry in uv's cache. Section 5 shows one row per incident, named as incidents.tsv names it.
-# name	version	incident
-litellm	1.107.0	litellm
-mistralai	2.4.6	mistralpy
+# name	version	incident	os
+litellm	1.107.0	litellm	all
+mistralai	2.4.6	mistralpy	linux

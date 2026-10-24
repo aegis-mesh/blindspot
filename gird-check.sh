@@ -1480,8 +1480,8 @@ incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/al
 incident_advice() { case "$1" in injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
-BAD_PYPI="litellm 1.107.0 litellm
-mistralai 2.4.6 mistralpy"
+BAD_PYPI="litellm 1.107.0 litellm all
+mistralai 2.4.6 mistralpy linux"
 PY_INCIDENTS="litellm mistralpy"
 # <<< bad-pypi
 # >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1522,8 +1522,10 @@ SITES_ALL=$(
   } | grep -v '^$' | sort -u
 )
 # Python incidents (data/bad-pypi.tsv and the site and temp lines of data/indicators.tsv). LITE_BAD
-# and MARKS hold "incident<TAB>what was found". The names of the hit incidents' first words make
-# "the LiteLLM malware".
+# and MARKS hold "incident<TAB>what was found"; PY_UPD holds "incident<TAB>os<TAB>what was found" for
+# a bad version installed where its malware could not run (bad-pypi's os column): a version to
+# update, not a compromised machine. The names of the hit incidents' first words make "the LiteLLM
+# malware".
 py_short() {
   _ps=""; _pn=0
   for _pi in $1; do _pnm=$(incident_name "$_pi"); _pn=$((_pn + 1)); _ps="${_ps:+$_ps and }${_pnm%% *}"; done
@@ -1534,7 +1536,7 @@ SITE_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "site" && 
 TEMP_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "temp" && ($2 == "all" || $2 == o) { print $1 " " $4 " " $5 }')
 # The advice shown under an incident's row when its temp files are found: the note of its temp lines.
 temp_advice() { printf '%s\n' "$IND_TABLE" | awk -F '|' -v i="$1" '$1 == i && $3 == "temp" { print $6; exit }'; }
-N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""
+N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""; PY_UPD=""
 while IFS= read -r sp; do
   [ -n "$sp" ] && [ -d "$sp" ] || continue
   N_PY=$((N_PY + 1))
@@ -1547,8 +1549,11 @@ while IFS= read -r sp; do
   done
   for _pi in $PY_INCIDENTS; do
     bad=""
-    while read -r _n _v _i; do
-      [ "$_i" = "$_pi" ] && [ -d "$sp/$_n-$_v.dist-info" ] && bad="${bad:+$bad, }$_n $_v"
+    while read -r _n _v _i _o; do
+      [ "$_i" = "$_pi" ] && [ -d "$sp/$_n-$_v.dist-info" ] || continue
+      # Where its malware could not run (the os column), the version is one to update, not a hit.
+      case "$_o" in all|"$_os") bad="${bad:+$bad, }$_n $_v" ;; *) PY_UPD="$PY_UPD$_pi$TAB$_o$TAB$(short "$sp"): $_n $_v
+" ;; esac
     done <<EOF
 $BAD_PYPI
 EOF
@@ -1592,16 +1597,34 @@ LOADER=0
 if [ -e /tmp/remote_code_loader.lock ] && command -v lsof >/dev/null 2>&1; then
   [ -n "$(lsof -t /tmp/remote_code_loader.lock 2>/dev/null)" ] && LOADER=1
 fi
-# A bad version in uv's cache: "incident<TAB>name<TAB>version" for each one found.
-UV_BAD=""
-while read -r _n _v _i; do
+# A bad version in uv's cache: "incident<TAB>name<TAB>version" for each one found. The cache is
+# walked once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or
+# 2.4.6.post1.
+_uvn=()
+while read -r _n _v _i _o; do
   [ -n "$_i" ] || continue
-  # The exact version: 2.4.6 is not 2.4.60 or 2.4.6.post1.
-  _uvn=(-name "$_n-$_v" -o -name "$_n-$_v-*" -o -name "$_n-$_v.dist-info" -o -name "$_n-$_v.tar.gz" -o -name "$_n-$_v.zip")
-  _u=$(find "$H/.cache/uv" -maxdepth 6 \( "${_uvn[@]}" \) -print -quit 2>/dev/null)
-  [ -z "$_u" ] && [ "$WIN" -eq 1 ] && _u=$(find "$WLAPP/uv/cache" -maxdepth 6 \( "${_uvn[@]}" \) -print -quit 2>/dev/null)
-  [ -n "$_u" ] && UV_BAD="$UV_BAD$_i$TAB$_n$TAB$_v
+  [ "${#_uvn[@]}" -gt 0 ] && _uvn+=(-o)
+  _uvn+=(-name "$_n-$_v" -o -name "$_n-$_v-*" -o -name "$_n-$_v.dist-info" -o -name "$_n-$_v.tar.gz" -o -name "$_n-$_v.zip")
+done <<EOF
+$BAD_PYPI
+EOF
+_uvf=""
+if [ "${#_uvn[@]}" -gt 0 ]; then
+  for _uc in "$H/.cache/uv" ${WLAPP:+"$WLAPP/uv/cache"}; do
+    [ -d "$_uc" ] || continue
+    _uvf="$_uvf$(find "$_uc" -maxdepth 6 \( "${_uvn[@]}" \) -print 2>/dev/null)
 "
+  done
+fi
+UV_BAD=""
+while read -r _n _v _i _o; do
+  [ -n "$_i" ] || continue
+  if printf '%s\n' "$_uvf" | awk -v n="$_n-$_v" '{ b = $0; sub(/.*\//, "", b)
+      if (b == n || index(b, n "-") == 1 || b == n ".dist-info" || b == n ".tar.gz" || b == n ".zip") { f = 1; exit } }
+    END { exit !f }'; then
+    UV_BAD="$UV_BAD$_i$TAB$_n$TAB$_v
+"
+  fi
 done <<EOF
 $BAD_PYPI
 EOF
@@ -1612,12 +1635,16 @@ for _pi in $PY_INCIDENTS; do
   fi
 done
 PY_HIT=0; [ -n "$PY_HITS" ] && PY_HIT=1
+# A bad version installed where its malware could not run: a version to update (yellow), with no
+# part in PY_HIT, the score or the card's py.
+PY_UPD_HIT=0; [ -n "$PY_UPD" ] && PY_UPD_HIT=1
 # litellm_found and the card's ll stay LiteLLM's own; the card's py is any other Python incident.
 LITELLM_HIT=0; case " $PY_HITS " in *" litellm "*) LITELLM_HIT=1 ;; esac
 PY_OTHER=0; for _pi in $PY_HITS; do [ "$_pi" = litellm ] || PY_OTHER=1; done
 PY_SHORT=$(py_short "$PY_HITS")
 if [ "$PY_HIT" -eq 1 ]; then progress x "Signs of the $PY_SHORT malware found"
 elif [ -n "$LITE_PYC" ]; then progress w "A leftover cook.pyc may come from the LiteLLM malware"
+elif [ "$PY_UPD_HIT" -eq 1 ]; then progress w "A Python package to update: its malware could not run on this OS"
 else progress o "No signs of the $(py_short "$PY_INCIDENTS") malware in $(plural "$N_PY" "Python environment" "Python environments")"; fi
 # >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_NPM="axios 1.14.1 axios
@@ -2207,6 +2234,7 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
+[ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 # An incident's own fix (data/incidents.tsv), once for each incident found.
 for _t in $NPM_TAGS $EXT_TAGS $PY_HITS; do _a=$(incident_advice "$_t"); [ -n "$_a" ] && todo 5 "$_a"; done
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
@@ -2530,9 +2558,14 @@ EOF
 SEC4=$CAP; CAP=""
 N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 1 + N_PLAT))   # the Python incidents, npm and each platform
 section 05 "RECENT KEY LEAKS" "$N_LEAKS checked"
-# One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
+# One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
+# advice under a hit: for a bad package in an environment, don't run Python there; for its temp
+# files, the incident's own (data/indicators.tsv); for a version whose malware could not run on this
+# OS (data/bad-pypi.tsv), update it.
+os_name() { case "$1" in mac) printf macOS ;; linux) printf Linux ;; win) printf Windows ;; *) printf '%s' "$1" ;; esac; }
 for _pi in $PY_INCIDENTS; do
   _pl=$(incident_name "$_pi")
+  _upd=$(printf '%s' "$PY_UPD" | grep "^$_pi$TAB")
   _do=""
   case " $PY_HITS " in
     *" $_pi "*)
@@ -2547,7 +2580,9 @@ EOF
       if printf '%s' "$MARKS" | grep -q "^$_pi$TAB" || [ -z "$_do" ]; then _do="${_do:+$_do }$(temp_advice "$_pi")"; fi
       ;;
     *)
-      if [ "$_pi" = litellm ] && [ -n "$LITE_PYC" ]; then
+      if [ -n "$_upd" ]; then
+        pair "${YEL}!${RST}" "$_pl" 16 "${YEL}a bad version to update${RST}"
+      elif [ "$_pi" = litellm ] && [ -n "$LITE_PYC" ]; then
         pair "${YEL}!${RST}" "$_pl" 16 "${YEL}possible leftover${RST}"
         while IFS= read -r l; do
           [ -n "$l" ] && emit "        $(short "$l")"
@@ -2561,6 +2596,17 @@ EOF
       fi
       ;;
   esac
+  if [ -n "$_upd" ]; then
+    _oss=""
+    while IFS="$TAB" read -r _t _o l; do
+      [ -n "$l" ] || continue
+      emit "        $(short "$l")"
+      case " $_oss " in *" $(os_name "$_o") "*) ;; *) _oss="${_oss:+$_oss and }$(os_name "$_o")" ;; esac
+    done <<EOF
+$_upd
+EOF
+    _do="${_do:+$_do }Its malware runs on $_oss only, so it did not run here. Update to a version without it."
+  fi
   [ -n "$_do" ] && wrap "$_do Advisory: $(incident_source "$_pi")" 8 "        " "        "
   while IFS="$TAB" read -r _t _un _uv; do
     [ "$_t" = "$_pi" ] && wrap "Your uv cache holds the $_uv package. Clear it with: uv cache clean $_un" 8 "        " "        " "$YEL"
@@ -2750,7 +2796,9 @@ elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Ac
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
 elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
+elif [ "$NPM_UPD" -eq 1 ] && [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="npm and Python packages to update, see section 5"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
+elif [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="a Python package to update, see section 5"
 elif [ "$N_PLAT_FOUND" -ge 2 ]; then
   G5="${YEL}!${RST}"; _l=""; _i=0
   while IFS='|' read -r _pid _pnm _rest; do
