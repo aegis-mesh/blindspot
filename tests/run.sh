@@ -572,6 +572,7 @@ D=$WORK/dz-miss-flat.txt
 hasnot "near misses: no agent set to run without asking" 'Agents set to run commands without asking|run-without-asking' "$D"
 hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Tools with a security fix|that have a security fix' "$D"
 hasnot "near misses: no link inside ~/.ssh, none to another file" 'link to your SSH logins|links to ~/\.ssh' "$D"
+hasnot "a link to a repo's own .ssh/authorized_keys fixture is not this user's file" 'code/repo/sample' "$D"
 hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc' "$D"
 hasnot "the Marketplace build of oorzc.ssh-tools 0.5.1 in VS Code's own folder is not the bad build" 'oorzc\.ssh-tools 0\.5\.1' "$D"
 hasnot "Codex: a profile written as an inline table is not the top level" '! Codex ' "$D"

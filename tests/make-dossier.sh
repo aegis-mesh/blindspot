@@ -33,7 +33,8 @@ if [ "$MODE" = miss ]; then
   pkg "$F/.npm-global/lib/node_modules/mcp-remote" mcp-remote 0.1.16-beta.1
   mkdir -p "$F/.npm/_npx/a1/node_modules/@anthropic-ai/claude-code"; pkg "$F/.npm/_npx/a1/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 0.2.115
   mkdir -p "$F/code/mr"
-  printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.16"]},"s":{"command":"npx","args":["my-mcp-remote@0.0.9"]}}}\n' > "$F/code/mr/.mcp.json"
+  # mcp-remote@0.1 is a range npx resolves when it runs, not a version.
+  printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.16"]},"s":{"command":"npx","args":["my-mcp-remote@0.0.9"]},"t":{"command":"npx","args":["mcp-remote@0.1"]}}}\n' > "$F/code/mr/.mcp.json"
   ln -s authorized_keys "$F/.ssh/keys-link"
   ln -s ../../.ssh/known_hosts "$F/code/links/hosts"
   # A repo's own .ssh/authorized_keys fixture and a link to it: not this user's file.
