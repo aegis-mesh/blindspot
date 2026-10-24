@@ -21,18 +21,36 @@ ACT_IDS=" $(rows data/incidents.tsv | awk -F '\t' '$6 == "act" { printf "%s ", $
 # What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
-# A path for a file check: a token or an absolute path first, at least one folder or file after
-# it, and nothing a shell or PowerShell string would read as code, a glob or a separator.
-PATH_OK='function path_ok(p,   r) {
-    if (p ~ /[\047"`$|\\*?[;]/ || p ~ /\{ENV:[^}]*\{/ || p !~ /^(~|\{|\/)/) return 0
-    r = p; sub(/^(~|\{[^}]*\})/, "", r); return r ~ /^\/[^\/]/
+# A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
+# first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {PROGRAMDATA}, or {ENV:NAME:fallback} whose
+# fallback is ~ or a path), at least one folder or file after it, and nothing a shell or PowerShell
+# string would read as code, a glob or a separator. Anything else, such as a token the generators do
+# not know or {ENV:NAME} with no fallback, would come out as a PowerShell parse error or a bash "bad
+# substitution" for everyone, so it is refused.
+PATH_OK='function path_ok(p,   r, k, v) {
+    if (p ~ /[\047"`$|\\*?[;]/ || p ~ /\{ENV:[^}]*\{/) return 0
+    if (p ~ /^\{ENV:/) {
+      k = index(p, "}"); if (k == 0) return 0
+      v = substr(p, 6, k - 6); r = substr(p, k + 1)
+      if (v !~ /^[A-Za-z_][A-Za-z0-9_]*:/) return 0
+      v = substr(v, index(v, ":") + 1)
+      if (v != "~" && v !~ /^~\/[^\/]/ && v !~ /^\/[^\/]/) return 0
+    } else if (p ~ /^\{/) {
+      if (p !~ /^\{(AS|LOCALAPPDATA|XDG_DATA|GOOSE_DATA|PROGRAMDATA)\}/) return 0
+      r = substr(p, index(p, "}") + 1)
+    } else if (p ~ /^~/) r = substr(p, 2)
+    else if (p ~ /^\//) r = p
+    else return 0
+    return r ~ /^\/[^\/]/
   }'
 # Characters that would break the generated bash, awk or PowerShell are refused, and so is an
-# incident id no line of data/incidents.tsv has.
+# incident id no line of data/incidents.tsv has. The regexes spell out counts ([0-9][0-9][0-9][0-9],
+# not [0-9]{4}): Debian 12's mawk has no {n} intervals and would refuse every line.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
-      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" '(NF != 6 && NF != 7) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9]{4}$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
+      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" '(NF != 6 && NF != 7) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /-security$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
-      rows data/sessions.tsv | awk -F '\t' 'NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || $4 ~ /[\047"`$|\\]/ || $4 ~ /\{ENV:[^}]*\{/ { print "data/sessions.tsv: " $0 }'
+      rows data/sessions.tsv | awk -F '\t' "$PATH_OK"'
+        NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || !path_ok($4) { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused.
       rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 3 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 { print "data/bad-pypi.tsv: " $0 }'
       rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" "$PATH_OK"'
@@ -44,7 +62,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[
       rows data/auto-approve.tsv | awk -F '\t' "$PATH_OK"'
         function pat_ok(s) { return s ~ /[^[:space:]]/ && s !~ /[\047`$|\\]/ }
         { ok = NF >= 5 && $1 != "" && $1 !~ /[\047"`$|\\]/ && $2 ~ /^(all|mac|linux|win)$/ && $4 != "" && $4 !~ /[\047"`$|\\]/
-          if ($3 ~ /^\{PROJECT\}/) ok = ok && $3 ~ /^\{PROJECT\}(\/[A-Za-z0-9_.-]+){2,}$/ && $3 !~ /\/\.\.?(\/|$)/
+          if ($3 ~ /^\{PROJECT\}/) ok = ok && $3 ~ /^\{PROJECT\}(\/[A-Za-z0-9_.-]+)(\/[A-Za-z0-9_.-]+)+$/ && $3 !~ /\/\.\.?(\/|$)/
           else ok = ok && path_ok($3)
           for (i = 5; i <= NF; i++) if (!pat_ok($i)) ok = 0
           if (!ok) print "data/auto-approve.tsv: " $0 }'

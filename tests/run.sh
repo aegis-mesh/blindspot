@@ -642,6 +642,12 @@ gen_refuses "a site file with a slash"                  indicators.tsv "litellm$
 gen_refuses "a temp name of dots"                       indicators.tsv "litellm${T}all${T}temp${T}no${T}..${T}-"
 gen_refuses "a Python incident that is only an update"  bad-pypi.tsv "mistralai${T}1.0.0${T}mistral"
 gen_refuses "a Python name with a hyphen"               bad-pypi.tsv "lite-llm${T}1.0.0${T}litellm"
+# Only the path tokens the generators translate, in the syntax they translate: anything else would
+# come out as a PowerShell parse error or a bash bad substitution for everyone.
+gen_refuses "a path with an unknown token"              indicators.tsv "mastra${T}all${T}startup${T}no${T}{FOO}/x.cjs${T}note"
+gen_refuses "an ENV token with no fallback"             indicators.tsv "mastra${T}all${T}startup${T}no${T}{ENV:X}/x.cjs${T}note"
+gen_refuses "an ENV token whose fallback is not a path" indicators.tsv "mastra${T}all${T}startup${T}no${T}{ENV:X:y}/x.cjs${T}note"
+gen_refuses "a session path with an unknown token"      sessions.tsv "all${T}read${T}X${T}{FOO}/x${T}docs"
 gen_refuses "a planted file in another folder"          planted.tsv ".git${T}x.js${T}tanstack${T}note"
 gen_refuses "a planted file listed twice"               planted.tsv ".claude${T}setup.mjs${T}keyv${T}note"
 gen_refuses "an npm package with an unknown incident"   bad-npm.tsv "left-pad${T}1.0.0${T}nosuch"
