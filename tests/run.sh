@@ -286,7 +286,7 @@ if ls -d "$SE/tmph"/blindspot.*/pipe >/dev/null 2>&1; then bad "no fifo is left 
 # the signal is killed and counted in LEFT: a test never waits on it.
 signal_check() { # engine signal
   HOME="$WORK/clean" TMPDIR="$SE/tmph" GIRD_CHECK_SESSIONS_ENGINE=$1 GIRD_CHECK_SESSIONS_HOLD="$SE/hold" \
-    python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' bash "$SCRIPT" --offline --all-sessions > /dev/null 2>&1 &
+    python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); signal.signal(signal.SIGHUP, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' bash "$SCRIPT" --offline --all-sessions > /dev/null 2>&1 &
   BP=$!
   if [ "$1" = rg ]; then _up="$SE/hold"; else _up="SESS_PRE.*$WORK/clean"; fi
   for _i in $(seq 1 100); do pgrep -f "$_up" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts

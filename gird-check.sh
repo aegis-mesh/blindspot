@@ -2207,7 +2207,7 @@ while IFS= read -r _nc; do
     c="$c/$_part"; [ -d "$c" ] || { _ok=0; break; }
   done
   [ "$_ok" -eq 1 ] || continue
-  _r=$( { find "$c" -type f -print0 2>&9 | xargs -0 cat 2>&9 | npm_hits | awk -F '\t' -v OFS='\t' -v p="$_nc (npm's download cache)" '{ $1 = p; print }' | sort -u | sed 's/^/H/'; } 9>&1)
+  _r=$( { find "$c" -type f -print0 2>&9 | xargs -0 cat 2>&9 | npm_hits | P="$(rowsafe "$_nc") (npm's download cache)" awk -F '\t' -v OFS='\t' '{ $1 = ENVIRON["P"]; print }' | sort -u | sed 's/^/H/'; } 9>&1)
   _h=$(printf '%s\n' "$_r" | sed -n 's/^H//p')
   NPM_UNREAD=$((NPM_UNREAD + $(printf '%s\n' "$_r" | grep -c '^[^H]')))
   [ -n "$_h" ] && NPM_ROWS="$NPM_ROWS
