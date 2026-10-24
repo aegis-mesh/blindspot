@@ -22,27 +22,29 @@ has the agent before it ships, and "readable" is what we expect until then.
 
 | agent | where (macOS / Linux; Windows under `%USERPROFILE%` unless given) | format | expected readable | source |
 |---|---|---|---|---|
-| Claude Code | `~/.claude/projects/*/*.jsonl` (`CLAUDE_CONFIG_DIR` moves it) | JSONL | yes | measured on a Mac; docs |
-| Claude Desktop agent mode | `~/Library/Application Support/Claude/local-agent-mode-sessions/` | JSON | yes | measured on a Mac |
-| Codex | `~/.codex/sessions/**/rollout-*.jsonl`, `~/.codex/history.jsonl` (`CODEX_HOME`) | JSONL | yes | source |
-| Gemini CLI | `~/.gemini/tmp/*/chats/` (`GEMINI_CLI_HOME`) | JSONL, older JSON | yes | source |
-| Qwen Code | `~/.qwen/projects/*/chats/*.jsonl` (`QWEN_HOME`) | JSONL | yes | source |
-| OpenCode | `~/.local/share/opencode/opencode*.db` (`XDG_DATA_HOME`) | SQLite, plain text columns | yes | source |
-| GitHub Copilot CLI | `~/.copilot/session-state/` (`COPILOT_HOME`) | JSONL | yes | docs |
-| Roo Code | VS Code / Cursor `globalStorage/rooveterinaryinc.roo-cline/tasks/*/` | JSON | yes | source |
-| Cline | `globalStorage/saoudrizwan.claude-dev/tasks/*/`, newer `~/.cline/data/sessions/` | JSON, SQLite | yes | docs; old path from memory |
-| Continue | `~/.continue/sessions/` (`CONTINUE_GLOBAL_DIR`) | JSON | yes | source |
-| Goose | `~/.local/share/goose/sessions/sessions.db`; Windows `%APPDATA%\Block\goose\data\sessions\` | SQLite | yes | source; macOS path to confirm |
+| Claude Code | `~/.claude/projects/*/*.jsonl`, `~/.claude/history.jsonl` (typed prompts), `~/.claude/paste-cache/` (long pastes) (`CLAUDE_CONFIG_DIR` moves all three) | JSONL, text | yes | docs (claude-directory, terminal-config) |
+| Claude Desktop (Cowork) | `~/Library/Application Support/Claude/local-agent-mode-sessions/`; Windows `%APPDATA%\Claude\...` and, for the installer from Anthropic, `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\...` | JSON | yes | docs (cowork/hipaa-setup) |
+| Codex | `~/.codex/sessions/**/rollout-*.jsonl`, `~/.codex/archived_sessions/` (the same files after `/archive`), `~/.codex/history.jsonl` (`CODEX_HOME`) | JSONL | yes | source (codex-rs/rollout, message-history) |
+| Gemini CLI | `~/.gemini/tmp/*/chats/` (`GEMINI_CLI_HOME`); macOS sandbox runs write under `~/.cache/.gemini/tmp` | JSONL, older JSON | yes | docs (session-management); source (storage.ts) |
+| Qwen Code | `~/.qwen/projects/*/chats/*.jsonl`, older `~/.qwen/tmp/*/chats/` (`QWEN_HOME`; `QWEN_RUNTIME_DIR` takes priority and is not followed yet) | JSONL | yes | source (storage.ts) |
+| OpenCode | `~/.local/share/opencode/opencode.db` and its `-wal`, older `storage/` JSON (`XDG_DATA_HOME`; `OPENCODE_DB` and channel builds' `opencode-<channel>.db` are not followed yet) | SQLite, JSON | yes | docs (troubleshooting); source (global-roots, database-path) |
+| GitHub Copilot CLI | `~/.copilot/session-state/`, legacy `~/.copilot/history-session-state/` (`COPILOT_HOME`) | JSONL | yes | docs (cli-best-practices, changelog 0.0.342) |
+| Roo Code | VS Code / Cursor `globalStorage/rooveterinaryinc.roo-cline/tasks/*/` | JSON | yes | source (utils/storage.ts) |
+| Cline | `globalStorage/saoudrizwan.claude-dev/tasks/*/`; standalone `~/.cline/data/sessions/` and `~/.cline/data/tasks/` (`CLINE_DATA_DIR`) | JSON | yes | source (storage/disk.ts); docs (config, prompt-storage) |
+| Continue | `~/.continue/sessions/` (`CONTINUE_GLOBAL_DIR`) | JSON | yes | source (util/paths.ts) |
+| Goose | `~/.local/share/goose/sessions/` on macOS and Linux (the XDG strategy), `%APPDATA%\Block\goose\data\sessions\`; the last LLM requests and replies in `~/.local/state/goose/logs/` (Windows `...\data\logs\`) | SQLite, older JSONL | yes | docs (guides/logs); source (config/paths.rs) |
 | Aider | `.aider.chat.history.md` in each project, found by the home scan, so only as deep as the scan goes | Markdown | yes | source |
-| Amazon Q CLI | `amazon-q/data.sqlite3` in the platform data folder | SQLite | yes | source |
-| Kiro CLI | `~/.kiro/sessions/`, `kiro-cli/data.sqlite3` | JSONL, SQLite | yes | docs |
-| Factory Droid | `~/.factory/sessions/` | JSONL | yes | third party |
-| Cursor | `Cursor/User/globalStorage/state.vscdb`, `~/.cursor/projects/*/agent-transcripts/` | SQLite, JSONL | yes | third party |
-| Windsurf | `~/.codeium/windsurf/cascade/*.pb` | reported encrypted | no | third party |
-| Antigravity | `~/.gemini/antigravity/conversations/*.pb` | reported encrypted | no | third party |
+| Amazon Q CLI | `amazon-q/data.sqlite3` in the platform data folder | SQLite | yes | source (util/paths.rs, database) |
+| Kiro CLI | `~/.kiro/sessions/` (`KIRO_HOME`); `kiro-cli/data.sqlite3` in the platform data folder | JSONL, SQLite | yes | docs (cli/acp); the data folder's chat tables from issue reports only |
+| Factory Droid | `~/.factory/sessions/`, `~/.factory/projects/` (the hooks docs' transcript path) | JSONL | yes | vendor repo (factory-plugins session-navigation skill); hooks docs |
+| Cursor | `Cursor/User/globalStorage/state.vscdb`, `~/.cursor/projects/*/agent-transcripts/`, CLI `~/.cursor/chats/*/*/store.db` | SQLite, JSONL | yes | changelog and hooks docs for the transcripts; vendor forum staff for the two stores |
+| Windsurf | `~/.windsurf/transcripts/*.jsonl` (written when the transcript hook is set up) | JSONL | yes | docs (cascade/hooks) |
+| Windsurf | `~/.codeium/windsurf/cascade/*.pb` | AES-256-GCM with a fixed key, by third-party decryptors | no | third party; the vendor says nothing |
+| Antigravity | `~/.gemini/antigravity{,-cli,-ide}/brain/*/.system_generated/logs/transcript.jsonl` | JSONL | yes | docs (hooks) |
+| Antigravity | `~/.gemini/antigravity{,-cli,-ide}/conversations/*.pb` (newer `.db` files there are plain SQLite, not read yet) | AES-256-GCM with a fixed key, by third-party decryptors | no | third party; changelog for the `.db` format |
 
-An agent whose sessions can't be read (Windsurf, Antigravity) is named as not checked, never
-shown as clean. SQLite files are searched as bytes: text columns are stored as plain text, and a
+Conversation files that can't be read (Windsurf's and Antigravity's `.pb` stores) are named as not
+checked, never shown as clean. SQLite files are searched as bytes: text columns are stored as plain text, and a
 match in a freed page is still a key that was sent.
 
 ## Matching
@@ -87,7 +89,9 @@ machines will differ:
   the check is done. That is the signal; there is no timer.
 - `--all-sessions` waits for it to finish instead. (`--full` already means "every detail".)
 - Coverage counts only files with a done line. A file in flight when stopped, unreadable, or
-  compressed (`.zst`) counts as not checked, and compressed files are named.
+  compressed (`.zst`) counts as not checked, and compressed files are named. A folder that can't be
+  opened is counted too (perl reports how many, ripgrep only that there were some) and makes the
+  check "partly checked", never "no keys".
 - ripgrep reports no per-file progress, so a stopped ripgrep run reads "partly checked", with no
   number.
 - Stopping: the perl parent traps TERM, HUP and INT, kills its workers and exits. Each worker
@@ -95,7 +99,9 @@ machines will differ:
   Workers also exit when their parent or the script itself is gone, checked before each file and
   each 1 MB piece of one, so after a kill -9 of the script they stop within one piece. ripgrep is
   killed by its process ID, and under Git Bash with `taskkill`; after a kill -9 of the script it
-  runs to its end. The results file is made with `mktemp` and removed by the existing cleanup,
+  runs to its end. The pipe and the results file live in a `mktemp -d` folder (owner only, name
+  not guessable) removed by the existing cleanup; if it can't be made, the report says the
+  sessions were not checked. The filter the keys pass through is stopped with the engine,
   which also traps HUP from now on; a kill -9 leaves it behind, holding paths and provider names
   only.
 
@@ -130,9 +136,11 @@ Section 3, "Keys in plain text", gains a block like "Login files":
 - The score and the report payload do not change. A score that depended on how much was checked
   in time would differ between two runs on the same machine, and the payload needs a Worker and D1
   change first. Both are separate decisions.
-- `--full` and a saved report list up to 20 session files. Paths stay on the machine.
+- `--full` and a saved report list up to 20 places (the session folder, or the file when the
+  location is one file), not session files: a Claude Code session's path spells out the project
+  folder, username included, and reports get pasted into issues. Paths stay on the machine.
 - A session that is also a file Blindspot reads elsewhere (none today) is listed once, here.
-- The summary row for section 3 mentions sessions when there are no plain-text key files.
+- The summary row for section 3 counts session files when there are no plain-text key files.
 
 ## What it shares
 
@@ -155,5 +163,10 @@ needs the Worker and the D1 schema to accept them: a separate decision.
 
 - Codex may compress sessions older than 7 days into `.jsonl.zst`. The feature is off by
   default; such files are counted and named as not checked.
-- Encrypted session stores (Windsurf, Antigravity).
+- The encrypted `.pb` conversation stores of Windsurf and Antigravity (the plaintext transcript
+  copies Antigravity keeps under `brain/` are read). Antigravity's newer `.db` conversations sit in
+  the same folder as the `.pb` files and are not read yet.
+- Cursor's per-workspace `workspaceStorage/*/state.vscdb` and `~/.cursor/acp-sessions`, Hugging
+  Face organization tokens (`api_org_`), AWS `ABIA` and `ACCA` key ids, and the `QWEN_RUNTIME_DIR`
+  and `OPENCODE_DB` overrides.
 - Keys that were pasted and later deleted from a session by the agent itself.

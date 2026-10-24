@@ -34,3 +34,14 @@ the link does not flag a Python incident	gird-check.ps1 takes macOS from /System
 row 05 says a Python package to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
 Cursor below the fixed version	gird-check.ps1 reads Cursor's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
 the Worker accepts the report and keeps every field	needs the site's report validation (worker/check-stats.js), named by GIRD_CHECK_WORKER, and node
+ripgrep is on PATH	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key of counting digits is made up	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: keys at a line start, mid-line and after an escaped newline are all found	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and each format among them	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session folder name with a tab keeps the key with its agent	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session folder name with a newline keeps the key with its agent	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key-shaped run of 2 MB is not a key and does not slow the check	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session folder that cannot be read is named	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the sessions are not called clean	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+when the check cannot start the sessions are named as not checked	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed
+and are not called clean	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed

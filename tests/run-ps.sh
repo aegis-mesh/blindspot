@@ -125,19 +125,30 @@ if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no es
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE/rgbin"
 RG=$(command -v rg 2>/dev/null); [ -n "$RG" ] && ln -s "$RG" "$SE/rgbin/rg"
-NORG=""; [ -n "$RG" ] || NORG="ripgrep is not installed"
+# Random key pieces, as tests/make-fixture.sh builds them: no key-shaped string is written here.
+rnd()   { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c "$1"; }
+upper() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c "$1"; }
+_tab=$(printf '\t'); _nl=$(printf '\nx'); _nl=${_nl%x}
+# Without ripgrep its engine's tests are skipped. A CI job that installs ripgrep sets
+# GIRD_CHECK_TEST_REQUIRE_RG, so a missing ripgrep fails there instead of skipping.
+NORG=""
+if [ -n "$RG" ]; then ok "ripgrep is on PATH"
+elif [ -n "${GIRD_CHECK_TEST_REQUIRE_RG:-}" ]; then bad "ripgrep is on PATH" "GIRD_CHECK_TEST_REQUIRE_RG is set, so the ripgrep engine must be tested here"; NORG="ripgrep is not installed"
+else skip "ripgrep is on PATH" "ripgrep is not installed, so its engine is not tested here"; NORG="ripgrep is not installed"; fi
 for E in net rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   psrun "$WORK/home" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline > "$SE/$E.txt" 2>&1
   sed -n '/Keys in agent sessions/,/^$/p' "$SE/$E.txt" > "$SE/$E.block"
+  tr -s ' \n' '  ' < "$SE/$E.block" > "$SE/$E.flat"   # the notes wrap
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.block"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.block"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.block"
   hasnot "$E: a made-up key is not counted"        'Claude Code .*(Anthropic|AWS|GitHub)' "$SE/$E.block"
+  hasnot "$E: a key of counting digits is made up" 'Claude Code .*Groq' "$SE/$E.block"
   has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
-  has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.block"
+  has    "$E: names encrypted sessions as not checked" 'Windsurf conversation files are encrypted, so they were not checked' "$SE/$E.flat"
   nokeys "$E: never prints a key" "$WORK/keys.txt" "$SE/$E.txt"
 done
 SKIPPING=$NORG
@@ -181,6 +192,91 @@ for E in net rg; do
   has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
 done
 SKIPPING=""
+# Keys at the start of a line (after a newline, not only at the start of a file), in the middle
+# of one and after an escaped newline, for every format that needs a boundary in front of it:
+# legacy OpenAI sk-, Google AQ., Hugging Face hf_ and AWS AKIA. One file per key and place.
+mkdir -p "$SE/pos/.claude/projects/p" "$SE/pos/AppData/Roaming" "$SE/pos/AppData/Local/Temp"
+_n=0
+for _k in "sk""-$(rnd 48)" "AQ"".$(rnd 40)" "h""f_$(rnd 36)" "AK""IA$(upper 16)"; do
+  _n=$((_n + 1))
+  printf '{"a":1}\n%s was pasted\n' "$_k" > "$SE/pos/.claude/projects/p/start-$_n.jsonl"
+  printf '{"a":"x %s y"}\n' "$_k" > "$SE/pos/.claude/projects/p/mid-$_n.jsonl"
+  printf '{"a":"text\\n%s\\nmore"}\n' "$_k" > "$SE/pos/.claude/projects/p/esc-$_n.jsonl"
+done
+# A folder name with a tab or a newline in it under a session root; a 2 MB run of key characters
+# (data, not a key: the longest format is under 100 characters) in a session and in an Aider
+# history; and a folder under a session root that can't be read, whose files are unknown, so the
+# check is not complete.
+for D in tabdir nldir long urdir; do mkdir -p "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
+mkdir -p "$SE/tabdir/.claude/projects/p${_tab}q" "$SE/nldir/.claude/projects/p${_nl}q" "$SE/long/.claude/projects/p" "$SE/long/code/big"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/tabdir/.claude/projects/p${_tab}q/a.jsonl"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/nldir/.claude/projects/p${_nl}q/a.jsonl"
+python3 -c "
+import sys, random
+random.seed(7); cs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'
+run = 'sk-' + 'proj-' + ''.join(random.choice(cs) for _ in range(2 * 1024 * 1024))
+open(sys.argv[1], 'w').write('{\"x\":\"' + run + '\"}\n'); open(sys.argv[2], 'w').write('#### output\n' + run + '\n')" "$SE/long/.claude/projects/p/a.jsonl" "$SE/long/code/big/.aider.chat.history.md"
+mkdir -p "$SE/urdir/.claude/projects/p" "$SE/urdir/.claude/projects/locked"; printf '{}\n' > "$SE/urdir/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/urdir/.claude/projects/locked/b.jsonl"; chmod 000 "$SE/urdir/.claude/projects/locked"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$SE/pos" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/pos-$E.block"
+  has    "$E: keys at a line start, mid-line and after an escaped newline are all found" 'Claude Code +12 files: ' "$SE/pos-$E.block"
+  has    "$E: and each format among them"          'Claude Code +12 files: (AWS|Google|Hugging Face|OpenAI)(, (AWS|Google|Hugging Face|OpenAI)){3}$' "$SE/pos-$E.block"
+  psrun "$SE/tabdir" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/tabdir-$E.txt" 2>&1
+  has    "$E: a session folder name with a tab keeps the key with its agent" 'Claude Code +1 file: AWS' "$SE/tabdir-$E.txt"
+  psrun "$SE/nldir" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/nldir-$E.txt" 2>&1
+  has    "$E: a session folder name with a newline keeps the key with its agent" 'Claude Code +1 file: AWS' "$SE/nldir-$E.txt"
+  _t0=$SECONDS
+  psrun "$SE/long" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/long-$E.txt" 2>&1
+  _dt=$((SECONDS - _t0))
+  if grep -aq 'No keys in 2 agent session files' "$SE/long-$E.txt" && [ "$_dt" -lt 120 ]; then ok "$E: a key-shaped run of 2 MB is not a key and does not slow the check" "${_dt}s"
+  else bad "$E: a key-shaped run of 2 MB is not a key and does not slow the check" "${_dt}s: $(grep -a 'agent session' "$SE/long-$E.txt" | head -n 2 | tr -s ' \n' '  ')"; fi
+  psrun "$SE/urdir" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/urdir-$E.txt"
+  has    "$E: a session folder that cannot be read is named" 'Agent sessions were partly checked: (1 folder|some files or folders) could not be read' "$SE/urdir-$E.txt"
+  hasnot "$E: and the sessions are not called clean" 'No keys in' "$SE/urdir-$E.txt"
+done
+SKIPPING=""
+chmod 755 "$SE/urdir/.claude/projects/locked"
+# A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
+mkdir -p "$SE/aidtab/code/a${_tab}b" "$SE/aidtab/AppData/Roaming" "$SE/aidtab/AppData/Local/Temp"
+printf '> export GROQ_API_KEY=%s\n' "gs""k_$(rnd 52)" > "$SE/aidtab/code/a${_tab}b/.aider.chat.history.md"
+psrun "$SE/aidtab" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/aidtab.txt" 2>&1
+has    "a tab in an Aider history's folder name keeps the key with Aider" 'Aider +1 file: Groq' "$SE/aidtab.txt"
+# No temporary folder (the ripgrep engine writes its pattern to one; .NET reads TMPDIR on Linux
+# and TEMP on Windows): the check can't start, and the report says so.
+SKIPPING=$NORG
+psrun "$SE/pos" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg TMPDIR=/nonexistent/blindspot TEMP=/nonexistent/blindspot -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/nostart.txt"
+has    "when the check cannot start the sessions are named as not checked" '12 agent session files were not checked: the check could not start' "$SE/nostart.txt"
+hasnot "and are not called clean"                 'No keys in' "$SE/nostart.txt"
+SKIPPING=""
+# The summary row counts session files, and the details name where they are, not the files: a
+# Claude Code session's path spells out the project folder it belongs to, username included.
+psrun "$SE/pos" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_COMPACT=1 -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/pos-sum.txt"
+has    "the summary row counts session files"    'Keys in plain text keys in 12 agent session files: Claude Code' "$SE/pos-sum.txt"
+mkdir -p "$SE/priv/.claude/projects/-Users-alice-code-acme" "$SE/priv/AppData/Roaming" "$SE/priv/AppData/Local/Temp"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/priv/.claude/projects/-Users-alice-code-acme/s.jsonl"
+psrun "$SE/priv" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions -Full > "$SE/priv.txt" 2>&1
+has    "the report names where sessions are, not the project folders they are named after" '^ +~/\.claude/projects$' "$SE/priv.txt"
+hasnot "and never the project path or username in a session folder name" 'alice|acme' "$SE/priv.txt"
+# Key formats from the providers' own docs: OpenAI admin keys, AWS temporary key ids, Amazon
+# Bedrock long-term keys (ABSK, then the base64 of BedrockAPIKey) and GitHub app tokens in the
+# format of April 2026 (ghs_, the app id, then a JWT with dots and underscores). One per agent,
+# so each shows on its own row, and all four in a project's .env file.
+mkdir -p "$SE/fmt/.claude/projects/p" "$SE/fmt/.codex/sessions/x" "$SE/fmt/.gemini/tmp/x/chats" "$SE/fmt/.continue/sessions" "$SE/fmt/code/new" "$SE/fmt/AppData/Roaming" "$SE/fmt/AppData/Local/Temp"
+_adm="sk""-admin-$(rnd 130)"; _asia="AS""IA$(upper 16)"; _absk="AB""SKQmVkcm9ja0FQSUtleS$(rnd 100)"; _ghs="gh""s_123456_$(rnd 40).$(rnd 60).$(rnd 43)"
+printf '{"a":"x %s y"}\n' "$_adm" > "$SE/fmt/.claude/projects/p/a.jsonl"
+printf '{"a":"x %s y"}\n' "$_asia" > "$SE/fmt/.codex/sessions/x/r.jsonl"
+printf '{"a":"x %s y"}\n' "$_absk" > "$SE/fmt/.gemini/tmp/x/chats/s.jsonl"
+printf '{"a":"x %s y"}\n' "$_ghs" > "$SE/fmt/.continue/sessions/s.json"
+printf 'AWS_ACCESS_KEY_ID=%s\nAWS_BEARER_TOKEN_BEDROCK=%s\nGITHUB_TOKEN=%s\nOPENAI_ADMIN_KEY=%s\n' "$_asia" "$_absk" "$_ghs" "$_adm" > "$SE/fmt/code/new/.env"
+printf '%s\n' "$_adm" "$_asia" "$_absk" "$_ghs" > "$SE/fmt-keys.txt"
+psrun "$SE/fmt" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/fmt.txt" 2>&1
+has    "an OpenAI admin key is found"                 'Claude Code +1 file: OpenAI' "$SE/fmt.txt"
+has    "an AWS temporary key id is found"             'Codex +1 file: AWS' "$SE/fmt.txt"
+has    "a Bedrock API key is found"                   'Gemini CLI +1 file: AWS' "$SE/fmt.txt"
+has    "a GitHub app token in the new format is found" 'Continue +1 file: GitHub' "$SE/fmt.txt"
+has    "and all four in a project .env file"          '~/code/new/\.env +AWS, GitHub, OpenAI' "$SE/fmt.txt"
+nokeys "and none of them is printed" "$SE/fmt-keys.txt" "$SE/fmt.txt"
 # A held engine is still running when the rest of the check is done: it is stopped.
 : > "$SE/hold"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" -- -Offline > "$SE/held.txt" 2>&1; RC=$?

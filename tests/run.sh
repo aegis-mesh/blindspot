@@ -76,19 +76,30 @@ if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match
 
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE"
-NORG=""; command -v rg >/dev/null 2>&1 || NORG="ripgrep is not installed"
+# Random key pieces, as tests/make-fixture.sh builds them: no key-shaped string is written here.
+rnd()   { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c "$1"; }
+upper() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c "$1"; }
+_tab=$(printf '\t'); _nl=$(printf '\nx'); _nl=${_nl%x}
+# Without ripgrep its engine's tests are skipped. A CI job that installs ripgrep sets
+# GIRD_CHECK_TEST_REQUIRE_RG, so a missing ripgrep fails there instead of skipping.
+NORG=""
+if command -v rg >/dev/null 2>&1; then ok "ripgrep is on PATH"
+elif [ -n "${GIRD_CHECK_TEST_REQUIRE_RG:-}" ]; then bad "ripgrep is on PATH" "GIRD_CHECK_TEST_REQUIRE_RG is set, so the ripgrep engine must be tested here"; NORG="ripgrep is not installed"
+else skip "ripgrep is on PATH" "ripgrep is not installed, so its engine is not tested here"; NORG="ripgrep is not installed"; fi
 for E in perl rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline > "$SE/$E.txt" 2>&1
   sed -n '/Keys in agent sessions/,/^$/p' "$SE/$E.txt" > "$SE/$E.block"
+  tr -s ' \n' '  ' < "$SE/$E.block" > "$SE/$E.flat"   # the notes wrap
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.txt"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.txt"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.txt"
   hasnot "$E: a made-up key is not counted"        'Claude Code .*(Anthropic|AWS|GitHub)' "$SE/$E.block"
+  hasnot "$E: a key of counting digits is made up" 'Claude Code .*Groq' "$SE/$E.block"
   has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
-  has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.txt"
+  has    "$E: names encrypted sessions as not checked" 'Windsurf conversation files are encrypted, so they were not checked' "$SE/$E.flat"
   if grep -aqF -f "$WORK/keys.txt" "$SE/$E.txt"; then bad "$E: never prints a key"; else ok "$E: never prints a key"; fi
 done
 SKIPPING=$NORG
@@ -109,20 +120,31 @@ HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline 2>&1 
 has    "perl: an unreadable session is not counted as checked" 'Checked the newest 1 of 2 agent session files' "$SE/unread-perl.txt"
 HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-sum.txt"
 has    "the summary row is not a check mark after a partial check" 'Keys in plain text none in files; agent sessions partly checked' "$SE/unread-sum.txt"
+# A pipe nobody writes to: the perl workers open it and wait, and with the ripgrep engine the
+# script gives it to ripgrep as one more root (GIRD_CHECK_SESSIONS_HOLD, tests only), which waits
+# on it. Either way the engine is still running when the rest of the check is done.
+mkfifo "$SE/hold"
 SKIPPING=$NORG
 {
   HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
   has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
-  # A session ripgrep never finishes (a pipe nobody writes to) is stopped when the rest is done.
-  mkdir -p "$SE/stuck/.codex"; mkfifo "$SE/stuck/.codex/history.jsonl"
-  HOME="$SE/stuck" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline > "$SE/stuck.txt" 2>&1; RC=$?
+  # A pipe where a session file should be is not given to ripgrep, which would wait on it forever:
+  # with --all-sessions the check would never end, so it gets 60 s and is killed and failed after.
+  mkdir -p "$SE/fifo/.codex" "$SE/fifo/.claude/projects/p"; mkfifo "$SE/fifo/.codex/history.jsonl"; printf '{}\n' > "$SE/fifo/.claude/projects/p/a.jsonl"
+  HOME="$SE/fifo" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline --all-sessions > "$SE/fifo.txt" 2>&1 &
+  BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$BP" 2>/dev/null; then kill -9 "$BP" 2>/dev/null; pkill -f "$SE/fifo/" 2>/dev/null; bad "rg: a pipe where a session file should be is skipped" "the check did not finish in 60 s"
+  else has "rg: a pipe where a session file should be is skipped" 'No keys in 1 agent session file' "$SE/fifo.txt"; fi
+  wait "$BP" 2>/dev/null
+  # A ripgrep that never finishes is stopped when the rest is done.
+  HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_SESSIONS_HOLD="$SE/hold" bash "$SCRIPT" --offline > "$SE/stuck.txt" 2>&1; RC=$?
   if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check" "exit $RC"; fi
-  if pgrep -f 'field-match-separator' >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f 'field-match-separator'; else ok "rg: no ripgrep process is left running"; fi
-  HOME="$SE/stuck" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 &
+  if pgrep -f "$SE/hold" >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f "$SE/hold"; else ok "rg: no ripgrep process is left running"; fi
+  HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 &
   BP=$!
-  for _i in $(seq 1 100); do [ -n "$SKIPPING" ] && break; pgrep -f 'field-match-separator' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+  for _i in $(seq 1 100); do [ -n "$SKIPPING" ] && break; pgrep -f "$SE/hold" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
   kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
-  if pgrep -f 'field-match-separator' >/dev/null 2>&1; then bad "rg: HUP leaves no ripgrep process"; pkill -f 'field-match-separator'; else ok "rg: HUP leaves no ripgrep process"; fi
+  if pgrep -f "$SE/hold" >/dev/null 2>&1; then bad "rg: HUP leaves no ripgrep process"; pkill -f "$SE/hold"; else ok "rg: HUP leaves no ripgrep process"; fi
 }
 SKIPPING=""
 # A long token that crosses a 1 MB piece is not mistaken for a key.
@@ -142,10 +164,95 @@ for E in perl rg; do
   has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
 done
 SKIPPING=""
-# A kill -9 of the script stops the perl workers within one piece of a file.
-mkdir -p "$SE/k9/.claude/projects/p"
+# Keys at the start of a line (after a newline, not only at the start of a file), in the middle
+# of one and after an escaped newline, for every format that needs a boundary in front of it:
+# legacy OpenAI sk-, Google AQ., Hugging Face hf_ and AWS AKIA. One file per key and place.
+mkdir -p "$SE/pos/.claude/projects/p"
+_n=0
+for _k in "sk""-$(rnd 48)" "AQ"".$(rnd 40)" "h""f_$(rnd 36)" "AK""IA$(upper 16)"; do
+  _n=$((_n + 1))
+  printf '{"a":1}\n%s was pasted\n' "$_k" > "$SE/pos/.claude/projects/p/start-$_n.jsonl"
+  printf '{"a":"x %s y"}\n' "$_k" > "$SE/pos/.claude/projects/p/mid-$_n.jsonl"
+  printf '{"a":"text\\n%s\\nmore"}\n' "$_k" > "$SE/pos/.claude/projects/p/esc-$_n.jsonl"
+done
+# A folder name with a tab or a newline in it under a session root; a 2 MB run of key characters
+# (data, not a key: the longest format is under 100 characters) in a session and in an Aider
+# history, which used to keep the filter busy for minutes on macOS's awk; and a folder under a
+# session root that can't be read, whose files are unknown, so the check is not complete.
+mkdir -p "$SE/tabdir/.claude/projects/p${_tab}q" "$SE/nldir/.claude/projects/p${_nl}q" "$SE/long/.claude/projects/p" "$SE/long/code/big"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/tabdir/.claude/projects/p${_tab}q/a.jsonl"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/nldir/.claude/projects/p${_nl}q/a.jsonl"
+python3 -c "
+import sys, random
+random.seed(7); cs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'
+run = 'sk-' + 'proj-' + ''.join(random.choice(cs) for _ in range(2 * 1024 * 1024))
+open(sys.argv[1], 'w').write('{\"x\":\"' + run + '\"}\n'); open(sys.argv[2], 'w').write('#### output\n' + run + '\n')" "$SE/long/.claude/projects/p/a.jsonl" "$SE/long/code/big/.aider.chat.history.md"
+mkdir -p "$SE/urdir/.claude/projects/p" "$SE/urdir/.claude/projects/locked"; printf '{}\n' > "$SE/urdir/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/urdir/.claude/projects/locked/b.jsonl"; chmod 000 "$SE/urdir/.claude/projects/locked"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$SE/pos" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/pos-$E.block"
+  has    "$E: keys at a line start, mid-line and after an escaped newline are all found" 'Claude Code +12 files: ' "$SE/pos-$E.block"
+  has    "$E: and each format among them"          'Claude Code +12 files: (AWS|Google|Hugging Face|OpenAI)(, (AWS|Google|Hugging Face|OpenAI)){3}$' "$SE/pos-$E.block"
+  HOME="$SE/tabdir" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/tabdir-$E.txt" 2>&1
+  has    "$E: a session folder name with a tab keeps the key with its agent" 'Claude Code +1 file: AWS' "$SE/tabdir-$E.txt"
+  HOME="$SE/nldir" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/nldir-$E.txt" 2>&1
+  has    "$E: a session folder name with a newline keeps the key with its agent" 'Claude Code +1 file: AWS' "$SE/nldir-$E.txt"
+  # The quadratic filter took ten minutes here: the check gets 120 s and is killed and failed after.
+  _t0=$SECONDS
+  HOME="$SE/long" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/long-$E.txt" 2>&1 &
+  BP=$!; for _i in $(seq 1 1200); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$BP" 2>/dev/null; then kill -9 "$BP" 2>/dev/null; pkill -f "$SE/long/" 2>/dev/null; fi
+  wait "$BP" 2>/dev/null; _dt=$((SECONDS - _t0))
+  if grep -aq 'No keys in 2 agent session files' "$SE/long-$E.txt" && [ "$_dt" -lt 120 ]; then ok "$E: a key-shaped run of 2 MB is not a key and does not slow the check" "${_dt}s"
+  else bad "$E: a key-shaped run of 2 MB is not a key and does not slow the check" "${_dt}s: $(grep -a 'agent session' "$SE/long-$E.txt" | head -n 2 | tr -s ' \n' '  ')"; fi
+  HOME="$SE/urdir" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/urdir-$E.txt"
+  has    "$E: a session folder that cannot be read is named" 'Agent sessions were partly checked: (1 folder|some files or folders) could not be read' "$SE/urdir-$E.txt"
+  hasnot "$E: and the sessions are not called clean" 'No keys in' "$SE/urdir-$E.txt"
+done
+SKIPPING=""
+chmod 755 "$SE/urdir/.claude/projects/locked"
+# A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
+mkdir -p "$SE/aidtab/code/a${_tab}b"
+printf '> export GROQ_API_KEY=%s\n' "gs""k_$(rnd 52)" > "$SE/aidtab/code/a${_tab}b/.aider.chat.history.md"
+HOME="$SE/aidtab" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/aidtab.txt" 2>&1
+has    "a tab in an Aider history's folder name keeps the key with Aider" 'Aider +1 file: Groq' "$SE/aidtab.txt"
+# No temporary folder (TMPDIR can't be written): the check can't start, and the report says so.
+HOME="$SE/pos" TMPDIR=/nonexistent/blindspot GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/nostart.txt"
+has    "when the check cannot start the sessions are named as not checked" '12 agent session files were not checked: the check could not start' "$SE/nostart.txt"
+hasnot "and are not called clean"                 'No keys in' "$SE/nostart.txt"
+# The summary row counts session files, and the details name where they are, not the files: a
+# Claude Code session's path spells out the project folder it belongs to, username included.
+HOME="$SE/pos" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/pos-sum.txt"
+has    "the summary row counts session files"    'Keys in plain text keys in 12 agent session files: Claude Code' "$SE/pos-sum.txt"
+mkdir -p "$SE/priv/.claude/projects/-Users-alice-code-acme"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/priv/.claude/projects/-Users-alice-code-acme/s.jsonl"
+HOME="$SE/priv" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions --full > "$SE/priv.txt" 2>&1
+has    "the report names where sessions are, not the project folders they are named after" '^ +~/\.claude/projects$' "$SE/priv.txt"
+hasnot "and never the project path or username in a session folder name" 'alice|acme' "$SE/priv.txt"
+# Key formats from the providers' own docs: OpenAI admin keys, AWS temporary key ids, Amazon
+# Bedrock long-term keys (ABSK, then the base64 of BedrockAPIKey) and GitHub app tokens in the
+# format of April 2026 (ghs_, the app id, then a JWT with dots and underscores). One per agent,
+# so each shows on its own row, and all four in a project's .env file.
+mkdir -p "$SE/fmt/.claude/projects/p" "$SE/fmt/.codex/sessions/x" "$SE/fmt/.gemini/tmp/x/chats" "$SE/fmt/.continue/sessions" "$SE/fmt/code/new"
+_adm="sk""-admin-$(rnd 130)"; _asia="AS""IA$(upper 16)"; _absk="AB""SKQmVkcm9ja0FQSUtleS$(rnd 100)"; _ghs="gh""s_123456_$(rnd 40).$(rnd 60).$(rnd 43)"
+printf '{"a":"x %s y"}\n' "$_adm" > "$SE/fmt/.claude/projects/p/a.jsonl"
+printf '{"a":"x %s y"}\n' "$_asia" > "$SE/fmt/.codex/sessions/x/r.jsonl"
+printf '{"a":"x %s y"}\n' "$_absk" > "$SE/fmt/.gemini/tmp/x/chats/s.jsonl"
+printf '{"a":"x %s y"}\n' "$_ghs" > "$SE/fmt/.continue/sessions/s.json"
+printf 'AWS_ACCESS_KEY_ID=%s\nAWS_BEARER_TOKEN_BEDROCK=%s\nGITHUB_TOKEN=%s\nOPENAI_ADMIN_KEY=%s\n' "$_asia" "$_absk" "$_ghs" "$_adm" > "$SE/fmt/code/new/.env"
+printf '%s\n' "$_adm" "$_asia" "$_absk" "$_ghs" > "$SE/fmt-keys.txt"
+HOME="$SE/fmt" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/fmt.txt" 2>&1
+has    "an OpenAI admin key is found"                 'Claude Code +1 file: OpenAI' "$SE/fmt.txt"
+has    "an AWS temporary key id is found"             'Codex +1 file: AWS' "$SE/fmt.txt"
+has    "a Bedrock API key is found"                   'Gemini CLI +1 file: AWS' "$SE/fmt.txt"
+has    "a GitHub app token in the new format is found" 'Continue +1 file: GitHub' "$SE/fmt.txt"
+has    "and all four in a project .env file"          '~/code/new/\.env +AWS, GitHub, OpenAI' "$SE/fmt.txt"
+if grep -aqF -f "$SE/fmt-keys.txt" "$SE/fmt.txt"; then bad "and none of them is printed"; else ok "and none of them is printed"; fi
+# A kill -9 of the script stops the perl workers within one piece of a file. What a kill -9
+# leaves behind, as documented, lands in this test's own TMPDIR.
+mkdir -p "$SE/k9/.claude/projects/p" "$SE/tmp9"
 python3 -c "import sys; open(sys.argv[1], 'w').write(('x ' * 524288 + '\n') * 32)" "$SE/k9/.claude/projects/p/a.jsonl"
-HOME="$SE/k9" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_SLOW=1 bash "$SCRIPT" --offline --all-sessions > /dev/null 2>&1 &
+HOME="$SE/k9" TMPDIR="$SE/tmp9" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_SLOW=1 bash "$SCRIPT" --offline --all-sessions > /dev/null 2>&1 &
 BP=$!
 K9="$SE/k9/.claude/projects"
 for _i in $(seq 1 100); do pgrep -f "$K9" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
@@ -154,30 +261,66 @@ kill -9 "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
 for _i in $(seq 1 10); do pgrep -f "$K9" >/dev/null 2>&1 || break; sleep 0.1; done      # one piece takes 0.3 s here; the file has 32
 if [ "$K9UP" -eq 0 ]; then bad "kill -9 of the script stops the workers" "they never started"
 elif pgrep -f "$K9" >/dev/null 2>&1; then bad "kill -9 of the script stops the workers"; pkill -f "$K9"; else ok "kill -9 of the script stops the workers"; fi
-pkill -f "$SE/k9" 2>/dev/null; rm -f "${TMPDIR:-/tmp}"/blindspot.?????? "${TMPDIR:-/tmp}"/blindspot.??????.fifo 2>/dev/null   # a kill -9 leaves these, as documented
+pkill -f "$SE/k9" 2>/dev/null
 
 # A held engine is still running when the rest of the check is done: it is stopped, and nothing is left behind.
-mkfifo "$SE/hold"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" bash "$SCRIPT" --offline > "$SE/held.txt" 2>&1; RC=$?
 if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad "a held engine does not hold up the check" "exit $RC"; fi
 has    "and the report says the sessions were not all checked" 'Checked the newest 0 of 2' "$SE/held.txt"
-if pgrep -f GIRD_CHECK_SESSIONS_HOLD >/dev/null 2>&1 || pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "no engine process is left running"; else ok "no engine process is left running"; fi
-# Closing the terminal (HUP) mid-check stops the engine too.
-HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 &
+if pgrep -f "SESS_PRE.*$WORK/clean" >/dev/null 2>&1; then bad "no engine process is left running"; else ok "no engine process is left running"; fi
+# Closing the terminal (HUP) mid-check stops the engine too, and leaves no pipe behind.
+mkdir -p "$SE/tmph"
+HOME="$WORK/clean" TMPDIR="$SE/tmph" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 &
 BP=$!
-for _i in $(seq 1 100); do pgrep -f 'SESS_PRE' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+for _i in $(seq 1 100); do pgrep -f "SESS_PRE.*$WORK/clean" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
 kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
-if pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "HUP leaves no engine process"; pkill -f 'SESS_PRE'; else ok "HUP leaves no engine process"; fi
-if ls "${TMPDIR:-/tmp}"/blindspot.* >/dev/null 2>&1 && ls -l "${TMPDIR:-/tmp}"/blindspot.*.fifo >/dev/null 2>&1; then bad "no fifo is left behind"; else ok "no fifo is left behind"; fi
+if pgrep -f "SESS_PRE.*$WORK/clean" >/dev/null 2>&1; then bad "HUP leaves no engine process"; pkill -f "SESS_PRE.*$WORK/clean"; else ok "HUP leaves no engine process"; fi
+if ls -d "$SE/tmph"/blindspot.*/pipe >/dev/null 2>&1; then bad "no fifo is left behind"; else ok "no fifo is left behind"; fi
+# HUP and INT (Ctrl-C) stop the engine and the filter the keys pass through, with either engine:
+# none of the script's children (the engine, the filter, ripgrep's tr) outlives it. signal_check
+# runs the script with a held engine and --all-sessions, so it is waiting on that engine when
+# the signal comes, signals it, and leaves the children it had in KIDS and whatever is still
+# alive in LEFT; the caller reports. A background job of a non-interactive shell has SIGINT
+# ignored, and a shell can't trap a signal it inherited ignored, so the launcher gives INT its
+# default back before exec, as a terminal's Ctrl-C would find it. A script still alive 10 s after
+# the signal is killed and counted in LEFT: a test never waits on it.
+signal_check() { # engine signal
+  HOME="$WORK/clean" TMPDIR="$SE/tmph" GIRD_CHECK_SESSIONS_ENGINE=$1 GIRD_CHECK_SESSIONS_HOLD="$SE/hold" \
+    python3 -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp(sys.argv[1], sys.argv[1:])' bash "$SCRIPT" --offline --all-sessions > /dev/null 2>&1 &
+  BP=$!
+  if [ "$1" = rg ]; then _up="$SE/hold"; else _up="SESS_PRE.*$WORK/clean"; fi
+  for _i in $(seq 1 100); do pgrep -f "$_up" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+  sleep 0.5   # the filter is started with the engine; the rest of the check runs on meanwhile
+  KIDS=""; for _k in $(pgrep -P "$BP" 2>/dev/null); do case "$(ps -o comm= -p "$_k" 2>/dev/null)" in *sleep*) ;; *) KIDS="$KIDS $_k" ;; esac; done
+  kill -"$2" "$BP" 2>/dev/null
+  for _i in $(seq 1 100); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+  LEFT=""; if kill -0 "$BP" 2>/dev/null; then LEFT=" the script"; kill -9 "$BP" 2>/dev/null; fi
+  wait "$BP" 2>/dev/null
+  for _i in $(seq 1 20); do _l=""; for _k in $KIDS; do kill -0 "$_k" 2>/dev/null && _l="$_l $_k"; done; [ -z "$_l" ] && break; sleep 0.1; done
+  LEFT="$LEFT$_l"; for _k in $_l; do kill -9 "$_k" 2>/dev/null; done
+  pgrep -f "SESS_PRE.*$WORK/clean" >/dev/null 2>&1 && { LEFT="$LEFT perl-worker"; pkill -f "SESS_PRE.*$WORK/clean"; }
+  pgrep -f "$SE/hold" >/dev/null 2>&1 && { LEFT="$LEFT ripgrep"; pkill -f "$SE/hold"; }
+}
+for _sig in HUP INT; do
+  signal_check perl "$_sig"
+  if [ -z "$LEFT" ] && [ -n "$KIDS" ]; then ok "$_sig leaves no engine or filter process" "children:$KIDS"; else bad "$_sig leaves no engine or filter process" "left:${LEFT:- none}, children seen:${KIDS:- none}"; fi
+  SKIPPING=$NORG
+  [ -n "$SKIPPING" ] || signal_check rg "$_sig"
+  if [ -z "$LEFT" ] && [ -n "$KIDS" ]; then ok "$_sig leaves no ripgrep, tr or filter process" "children:$KIDS"; else bad "$_sig leaves no ripgrep, tr or filter process" "left:${LEFT:- none}, children seen:${KIDS:- none}"; fi
+  SKIPPING=""
+done
 
-# Keys pass through the fifo, so only the person running the check can open it, whatever the umask.
+# Keys pass through the fifo, in a folder of its own: only the person running the check can open
+# either, whatever the umask.
 mkdir -p "$SE/tmpd"
 ( umask 022; HOME="$WORK/clean" TMPDIR="$SE/tmpd" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 ) &
 BP=$!
-for _i in $(seq 1 100); do ls "$SE/tmpd"/blindspot.*.fifo >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
-_fm=$(ls -l "$SE/tmpd"/blindspot.*.fifo 2>/dev/null | cut -c1-10)
+for _i in $(seq 1 100); do ls "$SE/tmpd"/blindspot.*/pipe >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+_fm=$(ls -l "$SE/tmpd"/blindspot.*/pipe 2>/dev/null | cut -c1-10)
 if [ "$_fm" = "prw-------" ]; then ok "the fifo keys pass through is the owner's only"; else bad "the fifo keys pass through is the owner's only" "${_fm:-no fifo}"; fi
-kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null; pkill -f 'SESS_PRE' 2>/dev/null
+_dm=$(ls -ld "$SE/tmpd"/blindspot.*/ 2>/dev/null | cut -c1-10)   # the folder: the progress file shares the prefix
+if [ "$_dm" = "drwx------" ]; then ok "and so is the folder it is in"; else bad "and so is the folder it is in" "${_dm:-no folder}"; fi
+kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null; pkill -f "SESS_PRE.*$WORK/clean" 2>/dev/null
 
 echo "review fixes: npm, project settings and the wiper"
 RV=$WORK/rv; cp -R "$WORK/clean" "$RV"
@@ -813,6 +956,8 @@ gen_refuses "an extension version that is not a version" bad-extensions.tsv "pub
 gen_refuses "an extension listed twice, in another case" bad-extensions.tsv "OORZC.ssh-tools${T}0.5.1${T}glassworm${T}openvsx"
 gen_refuses "an extension registry that is not openvsx or any" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}marketplace"
 gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
+gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}"
+gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}"
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

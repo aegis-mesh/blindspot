@@ -8,32 +8,52 @@
 #           environment variable with a fallback
 #   source  how the location was established: measured, source code, docs or third party
 # os	kind	agent	path	source
-all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/projects	measured
-mac	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	measured
-win	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	unverified
-all	read	Codex	{ENV:CODEX_HOME:~/.codex}/sessions	measured
-all	read	Codex	{ENV:CODEX_HOME:~/.codex}/history.jsonl	measured
-all	read	Gemini CLI	{ENV:GEMINI_CLI_HOME:~}/.gemini/tmp	source code
+all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/projects	docs
+all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/history.jsonl	docs
+all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/paste-cache	docs
+mac	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	docs
+win	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	docs
+win	read	Claude Desktop	{LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions	docs
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/sessions	source code
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/archived_sessions	source code
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/history.jsonl	source code
+all	read	Gemini CLI	{ENV:GEMINI_CLI_HOME:~}/.gemini/tmp	docs
+mac	read	Gemini CLI	~/.cache/.gemini/tmp	source code
 all	read	Qwen Code	{ENV:QWEN_HOME:~/.qwen}/projects	source code
-all	read	OpenCode	{XDG_DATA}/opencode/opencode.db	source code
+all	read	Qwen Code	{ENV:QWEN_HOME:~/.qwen}/tmp	source code
+all	read	OpenCode	{XDG_DATA}/opencode/opencode.db	docs
+all	read	OpenCode	{XDG_DATA}/opencode/opencode.db-wal	source code
 all	read	OpenCode	{XDG_DATA}/opencode/storage	source code
 all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-state	docs
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/history-session-state	docs
 all	read	Roo Code	{AS}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
 all	read	Roo Code	{AS}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
-all	read	Cline	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks	unverified
-all	read	Cline	{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	unverified
-all	read	Cline	~/.cline/data/sessions	docs
+all	read	Cline	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
+all	read	Cline	{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
+all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/sessions	docs
+all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/tasks	docs
 all	read	Continue	{ENV:CONTINUE_GLOBAL_DIR:~/.continue}/sessions	source code
-all	read	Goose	{GOOSE_DATA}/sessions	source code
-all	read	Kiro CLI	~/.kiro/sessions	docs
-mac	read	Kiro CLI	{AS}/kiro-cli	docs
-linux	read	Kiro CLI	{XDG_DATA}/kiro-cli	docs
-win	read	Kiro CLI	{LOCALAPPDATA}/kiro-cli	docs
+all	read	Goose	{GOOSE_DATA}/sessions	docs
+mac	read	Goose	~/.local/state/goose/logs	docs
+linux	read	Goose	~/.local/state/goose/logs	docs
+win	read	Goose	{GOOSE_DATA}/logs	docs
+all	read	Kiro CLI	{ENV:KIRO_HOME:~/.kiro}/sessions	docs
+mac	read	Kiro CLI	{AS}/kiro-cli	third party
+linux	read	Kiro CLI	{XDG_DATA}/kiro-cli	third party
+win	read	Kiro CLI	{LOCALAPPDATA}/kiro-cli	third party
 mac	read	Amazon Q	{AS}/amazon-q	source code
 linux	read	Amazon Q	{XDG_DATA}/amazon-q	source code
 win	read	Amazon Q	{LOCALAPPDATA}/amazon-q	source code
-all	read	Factory Droid	~/.factory/sessions	third party
+all	read	Factory Droid	~/.factory/sessions	docs
+all	read	Factory Droid	~/.factory/projects	docs
 all	read	Cursor	{AS}/Cursor/User/globalStorage/state.vscdb	third party
-all	read	Cursor	~/.cursor/projects	third party
+all	read	Cursor	~/.cursor/projects	docs
+all	read	Cursor	~/.cursor/chats	third party
+all	read	Windsurf	~/.windsurf/transcripts	docs
+all	read	Antigravity	~/.gemini/antigravity/brain	docs
+all	read	Antigravity	~/.gemini/antigravity-cli/brain	docs
+all	read	Antigravity	~/.gemini/antigravity-ide/brain	docs
 all	sealed	Windsurf	~/.codeium/windsurf/cascade	third party
 all	sealed	Antigravity	~/.gemini/antigravity/conversations	third party
+all	sealed	Antigravity	~/.gemini/antigravity-cli/conversations	third party
+all	sealed	Antigravity	~/.gemini/antigravity-ide/conversations	third party
