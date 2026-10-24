@@ -37,12 +37,30 @@ jobs:
     name: tests (pwsh, ubuntu-latest)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # With ripgrep installed, both suites test the ripgrep session engine too; the variable makes a
+    # missing ripgrep fail those tests instead of skipping them.
+    env:
+      GIRD_CHECK_TEST_REQUIRE_RG: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep && rg --version
       # Both suites, each recording its test names, then tests/parity.sh on the two lists.
       - run: bash tests/parity-run.sh
+
+  ripgrep-macos:
+    name: tests with ripgrep (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      GIRD_CHECK_TEST_REQUIRE_RG: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: brew install ripgrep && rg --version
+      - run: bash tests/run.sh
 
   interactive:
     name: game and menu (macOS)
