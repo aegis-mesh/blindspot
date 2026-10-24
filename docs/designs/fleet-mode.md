@@ -23,7 +23,9 @@ Nothing new leaves the machine.
    prints a one-line summary, for an MDM that keeps only a little output.
 4. `--exit-zero`: exits 0 whenever the run finished, for an MDM that treats any other code as a
    failure. The outcome is then in the summary and the file.
-5. One page per MDM in `docs/mdm/`.
+5. `--list`: with `--all-users`, prints which accounts would be checked and why any are skipped,
+   and checks nothing, so an admin can see what a run will do before rolling it out.
+6. A guide for admins, `docs/fleet.md`, and one page per MDM in `docs/mdm/`.
 
 `--all-users` turns off everything a run with nobody watching must not do: the game, the menu, the
 browser, colours, saving a report, and every network request (as `--offline`). It refuses `--all`,
@@ -38,7 +40,8 @@ calls every tool by its full path, so a tool a person can replace (`/usr/local/b
 
 ## Each account is checked as that account
 
-For each account, root starts the checks as that account, with that account's home and a fixed
+Accounts are checked one after another, never at once, so a run does not load a Mac someone is
+working on, and one stuck account only spends its own time limit. For each account, root starts the checks as that account, with that account's home and a fixed
 environment:
 
 ```
@@ -131,7 +134,16 @@ today, and no file paths, file names or key values:
   replaces it with a keyed hash; a plain hash of a name is easy to reverse.
 - `outcome` is the worst of `failed`, `act`, `not_checked`, `update`, `clear`, in that order, so a
   finding to act on is never hidden by a partial check, and a partial check never reads as clear.
-- The summary line is `blindspot <outcome> accounts=<n> act=<n> update=<n> not_checked=<n>`.
+- The summary line is `blindspot <outcome> accounts=<n> act=<n> update=<n> not_checked=<n>
+  v=<script version> at=<UTC time>`.
+- The inventory value is a compact form of the whole result, one line, short enough for an MDM's
+  inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
+  `v1 act 2026-10-25T09:12Z | asha: act tanstack; run-without-asking claude-code; keys 2
+  anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. If it would not fit, it keeps the
+  outcome and the accounts' outcomes and ends with `+more`; the full result is in the saved file.
+- The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
+  `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
+  stopped running never shows an old `clear`.
 - The saved file is `/var/db/blindspot/last.json`. The folder must be a real folder owned by root,
   mode 0700, or root recreates it; the file is written to a temporary name and renamed into place.
 
@@ -142,6 +154,53 @@ not need; 2 for an unknown option; 130 when interrupted): 0 `clear`, 10 `act`, 1
 `not_checked`, 13 `failed`. With `--exit-zero`, a finished run exits 0 and only `failed` exits 13. An
 MDM that stops the script on its own timeout gets no code, so each page treats a missing summary, or
 any code it does not expect, as not checked.
+
+## A person checking it in Terminal
+
+An admin trying it on one Mac (`sudo bash gird-check.sh --all-users`, with a terminal) gets a
+readable report per account, in Blindspot's usual style, then where the result was saved:
+
+```
+  This Mac: 2 accounts checked
+
+  asha                                        act now
+    x  TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials
+    !  Claude Code set to run commands without asking
+    x  Keys in plain text: 2 files (Anthropic, AWS)
+    x  Keys in agent sessions: 3 files
+    !  1 SSH key without a passphrase
+
+  itadmin                                     nothing found
+
+  Saved: /var/db/blindspot/last.json
+```
+
+No path or file name: to see which files, the person runs Blindspot on their own account. After the
+report, once, a short note on Argus, using only what gird.ai/argus says:
+
+```
+  This is one Mac, checked once. Argus shows every AI agent on every Mac as it
+  runs, who owns it and what it may reach. Roll it out through the MDM you
+  already use: gird.ai/argus
+```
+
+(after a clean run the first sentence is "Nothing found on this Mac today."). Nothing about Argus is
+printed in a run without a terminal, or in the summary line or inventory value an MDM reads. The
+saved JSON has one `learn_more` field with the link.
+
+## The admin guide
+
+`docs/fleet.md` is steps in order, each short:
+
+1. Try it on your own Mac: download, check the SHA-256, run it with `sudo`, read the report.
+2. Grant Full Disk Access to your MDM's agent (the page for your MDM has the profile settings).
+3. Add it to your MDM: the script, a schedule (daily suggested), and the inventory field.
+4. Read the results: what `act`, `update`, `not_checked`, `stale` and `clear` mean, and how to list
+   the Macs to deal with first.
+5. Act on a finding: what to ask the person to do, finding by finding.
+6. Update or remove it.
+
+Each MDM page ends with a short "Seeing all your Macs, all the time" section about Argus.
 
 ## MDM pages
 
