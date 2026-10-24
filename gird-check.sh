@@ -2050,16 +2050,27 @@ N_OLD=$(count_lines "$OLD_LIST")
 [ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
-# A folder or file that can't be read leaves the cache not fully checked, never clean: find's and
-# cat's errors come back unmarked next to the hits, which are marked with H.
-for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
-  [ -n "$c" ] && [ -d "$c" ] || continue
-  _r=$( { find "$c" -type f -print0 2>&9 | xargs -0 cat 2>&9 | npm_hits | awk -F '\t' -v OFS='\t' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u | sed 's/^/H/'; } 9>&1)
+# A folder or file that can't be read leaves the cache not fully checked, never clean: a cache
+# folder on the way that exists but can't be read or entered counts, and so do find's and cat's
+# errors, which come back unmarked next to the hits, which are marked with H.
+_caches="$H/.npm"; [ "$WIN" -eq 1 ] && _caches="$_caches
+$WLAPP/npm-cache"
+while IFS= read -r _nc; do
+  [ -n "$_nc" ] && [ -d "$_nc" ] || continue
+  c=$_nc; _ok=1
+  for _part in _cacache index-v5; do
+    if [ ! -r "$c" ] || [ ! -x "$c" ]; then NPM_UNREAD=$((NPM_UNREAD + 1)); _ok=0; break; fi
+    c="$c/$_part"; [ -d "$c" ] || { _ok=0; break; }
+  done
+  [ "$_ok" -eq 1 ] || continue
+  _r=$( { find "$c" -type f -print0 2>&9 | xargs -0 cat 2>&9 | npm_hits | awk -F '\t' -v OFS='\t' -v p="$_nc (npm's download cache)" '{ $1 = p; print }' | sort -u | sed 's/^/H/'; } 9>&1)
   _h=$(printf '%s\n' "$_r" | sed -n 's/^H//p')
   NPM_UNREAD=$((NPM_UNREAD + $(printf '%s\n' "$_r" | grep -c '^[^H]')))
   [ -n "$_h" ] && NPM_ROWS="$NPM_ROWS
 $_h"
-done
+done <<EOF
+$_caches
+EOF
 NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
@@ -2671,6 +2682,10 @@ elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm malware" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
 fi
+# With findings above, a part of the cache that could not be read still has to be said.
+if [ "$NPM_UNREAD" -gt 0 ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
+  wrap "Part of npm's cache could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+fi
 if [ "$EXT_HIT" -eq 1 ]; then
   pair "${RED}✗${RST}" "Editor extensions" 16 "${RED}signs of the malware found${RST}"
   while IFS="$TAB" read -r f p t; do
@@ -2806,7 +2821,6 @@ if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop
 elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
 elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
-elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
 elif [ "$N_PLAT_FOUND" -ge 2 ]; then
@@ -2823,6 +2837,8 @@ elif [ "$N_PLAT_FOUND" -eq 1 ]; then
   while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do [ "$(plat_hit "$_pid")" = 1 ] && D5=$_psum; done <<EOF
 $PLATFORMS
 EOF
+# A partial check comes after every finding someone has to act on, and before the green line.
+elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"

@@ -1575,9 +1575,22 @@ $N_OLD = $OldList.Count
 if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldList[0].Name)" }
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
-# A folder or file that can't be read leaves the cache not fully checked, never clean.
+# A folder or file that can't be read leaves the cache not fully checked, never clean: a cache
+# folder on the way that exists but can't be listed counts too.
+function Npm-Cache-Index([string]$c) { # the index folder; '' when the cache has none, $null when a folder on the way can't be read
+  $p = $c
+  foreach ($part in @('_cacache', 'index-v5')) {
+    if (-not (Is-Dir $p)) { return '' }
+    try { $kids = @(([IO.DirectoryInfo]$p).GetDirectories() | ForEach-Object { $_.Name }) } catch { return $null }
+    if (@($kids | Where-Object { $_.Equals($part, $PathCmp) }).Count -eq 0) { return '' }
+    $p = J $p $part
+  }
+  $p
+}
 foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
-  $ix = J $c '_cacache/index-v5'; if (-not (Is-Dir $ix)) { continue }
+  $ix = Npm-Cache-Index $c
+  if ($null -eq $ix) { $NpmUnread++; continue }
+  if (-not $ix) { continue }
   $q = New-Object System.Collections.Generic.Queue[string]; $q.Enqueue($ix)
   while ($q.Count -gt 0) {
     $dd = $q.Dequeue()
@@ -2028,6 +2041,11 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   Pair "$cGrn$gOk$cRst" 'npm malware' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
   Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
 }
+# With findings above, a part of the check that did not finish still has to be said.
+if (($NpmSlow -gt 0 -or $NpmUnread -gt 0) -and ($WIPER_HIT -eq 1 -or $NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1)) {
+  if ($NpmSlow -gt 0) { Wrap "$(Plural $NpmSlow 'file' 'files') took too long to check, so this is not the full list." 8 '        ' '        ' $cYel }
+  if ($NpmUnread -gt 0) { Wrap "Part of npm's cache could not be read, so this is not the full list." 8 '        ' '        ' $cYel }
+}
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
@@ -2104,8 +2122,6 @@ if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it 
 elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
 elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
-elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
-elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
 elseif ($leaks.Count -ge 2) {
@@ -2115,6 +2131,9 @@ elseif ($leaks.Count -ge 2) {
   if ($leaks.Count -ge 3) { $D5 = "$l found: rotate keys" } else { $D5 = "$l found: rotate their keys" }
 }
 elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
+# A partial check comes after every finding someone has to act on, and before the green line.
+elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
+elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1

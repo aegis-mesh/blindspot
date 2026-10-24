@@ -282,13 +282,23 @@ has    "a huge one-line tasks.json is read whole"      'p/\.vscode/tasks\.json' 
 if [ "$T" -le 30 ]; then ok "and in reasonable time" "${T}s"; else bad "and in reasonable time" "took ${T}s"; fi
 HOME="$WORK/clean" bash "$SCRIPT" --offline > "$WORK/clean-npm.txt" 2>&1
 has    "the clean line counts versions and packages apart" 'none of [0-9]+ bad versions or [0-9]+ bad packages' "$WORK/clean-npm.txt"
-# A folder of npm's cache that can't be read.
-cp -R "$WORK/clean" "$WORK/npmno"; mkdir -p "$WORK/npmno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/npmno/.npm/_cacache/index-v5/aa"
-HOME="$WORK/npmno" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno.txt"
-HOME="$WORK/npmno" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno-c.txt"
+# npm's cache that can't be read in full: a folder inside it, _cacache itself, or an index file. Nothing
+# else is found in this home (no platform, no cook.pyc), so the cache alone decides row 05.
+cp -R "$WORK/clean" "$WORK/npmno"; rm -rf "$WORK/npmno/.config/opencode" "$WORK/npmno/.local/share/opencode"
+mkdir -p "$WORK/npmno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/npmno/.npm/_cacache/index-v5/aa"
+HOME="$WORK/npmno" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno.txt"
+HOME="$WORK/npmno" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno-c.txt"
 chmod 755 "$WORK/npmno/.npm/_cacache/index-v5/aa"
 has    "an unreadable cache folder is not called clean" "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno.txt"
 has    "and the summary row is not green either"       'Recent leaks npm packages not fully checked: cache unreadable' "$WORK/npmno-c.txt"
+chmod 000 "$WORK/npmno/.npm/_cacache"
+HOME="$WORK/npmno" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno2.txt"
+chmod 755 "$WORK/npmno/.npm/_cacache"
+has    "an unreadable _cacache folder is not called clean" "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno2.txt"
+printf 'x\n' > "$WORK/npmno/.npm/_cacache/index-v5/aa/0e9"; chmod 000 "$WORK/npmno/.npm/_cacache/index-v5/aa/0e9"
+HOME="$WORK/npmno" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno3.txt"
+chmod 644 "$WORK/npmno/.npm/_cacache/index-v5/aa/0e9"
+has    "an unreadable index file is not called clean"  "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno3.txt"
 awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
 if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
 # Wiper: Linux steps, and every other rotate waits for it.
@@ -345,6 +355,13 @@ has    "the summary row says so in yellow"           'Recent leaks an npm packag
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
+# A version to update outranks an unreadable cache in row 05: a partial check never hides a finding to act on.
+cp -R "$WORK/mis" "$WORK/misno"; mkdir -p "$WORK/misno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/misno/.npm/_cacache/index-v5/aa"
+HOME="$WORK/misno" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/misno.txt"
+HOME="$WORK/misno" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/misno-c.txt"
+chmod 755 "$WORK/misno/.npm/_cacache/index-v5/aa"
+has    "an npm package to update outranks an unreadable cache in row 05" 'Recent leaks an npm package to update' "$WORK/misno-c.txt"
+has    "and the hits say the cache was not read in full" "npm malware a bad version to update .*Part of npm's cache could not be read, so this is not the full list" "$WORK/misno.txt"
 cp -R "$WORK/clean" "$WORK/mpy"; mkdir -p "$WORK/mpy/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"
 HOME="$WORK/mpy" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy.txt"
 has    "mistralai 2.4.6 from PyPI is its own act-now row" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
