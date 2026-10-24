@@ -1578,6 +1578,7 @@ $byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x
 $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
 # with a platform suffix such as -darwin-arm64, the id compared without case.
+$ExtRows = New-Object System.Collections.Generic.List[object]
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 3 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
   foreach ($e in (Entries (J $HomeDir $er))) {
@@ -1587,7 +1588,7 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
       if (-not $e.Name.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) { continue }
       $m = [regex]::Match($e.Name.Substring($pre.Length), '^([0-9]+(?:\.[0-9]+)*)(-.*)?$')
       if (-not $m.Success) { continue }
-      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[1].Value) { $NpmRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])); break }
+      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[1].Value) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])); break }
     }
   }
 }
@@ -1601,6 +1602,9 @@ foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } e
 # is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
+# The incidents with an extension line: their startup files are extension findings too.
+$ExtInc = @($BadExtRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
+$ExtPersist = New-Object System.Collections.Generic.List[object]
 foreach ($r in $IndOn) {
   if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
@@ -1609,7 +1613,7 @@ foreach ($r in $IndOn) {
     $owner = ''; try { $owner = [string](Get-Item -LiteralPath $m -Force -ErrorAction Stop).User } catch { }
     if (-not ($owner -and $owner -ceq [Environment]::UserName)) { continue }
   }
-  if ($r[2] -eq 'wiper') { $Wiper.Add($m) } else { $Persist.Add(@($m, $r[5])) }
+  if ($r[2] -eq 'wiper') { $Wiper.Add($m) } elseif ($ExtInc -contains $r[0]) { $ExtPersist.Add(@($m, $r[5], $r[0])) } else { $Persist.Add(@($m, $r[5])) }
 }
 # A registry value is not a file, so the Mastra worm's Run key stays code.
 if ($OnWindows) {
@@ -1622,8 +1626,15 @@ foreach ($f in $WormFiles) { $Persist.Add(@($f, (Planted-Note ([IO.Path]::GetFil
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
+# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
+$EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
+$ExtTags = @(@(foreach ($r in $ExtRows) { $r[2] }; foreach ($r in $ExtPersist) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
+$ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
+if ($MAL_HIT -eq 1 -and $EXT_HIT -eq 1) { $MalWhat = 'npm and editor extension malware'; $MalShort = 'npm and editor extension' }
+elseif ($EXT_HIT -eq 1) { $MalWhat = 'malware in an editor extension'; $MalShort = 'editor extension' }
+else { $MalWhat = 'npm malware'; $MalShort = 'npm' }
 if ($WIPER_HIT -eq 1) { Progress 'A wiper waits for a GitHub token to be revoked: gh-token-monitor' }
-elseif ($MAL_HIT -eq 1) { Progress 'Signs of npm malware found' }
+elseif ($ANY_MAL -eq 1) { Progress "Signs of $MalWhat found" }
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH, a
 # file or a folder.
 # >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1695,6 +1706,7 @@ function Add-Todo([int]$sec, [string]$text) {
 }
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
 if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
+if ($EXT_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Uninstall the extensions listed in section 5, delete the files listed there, and rotate every key this machine could reach.' }
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
@@ -1720,7 +1732,7 @@ $ISSUES = $Todo.Count
 
 $SCORE = 100
 if ($PY_HIT -eq 1) { $SCORE -= 40 }
-if ($MAL_HIT -eq 1) { $SCORE -= 40 }
+if ($ANY_MAL -eq 1) { $SCORE -= 40 }
 $SCORE -= [Math]::Min($KEY_FILES * 8, 32)
 $SCORE -= [Math]::Min($HIST_KEYS * 6, 12)
 $SCORE -= [Math]::Min($N_ALLOW * 10, 20)
@@ -1827,7 +1839,7 @@ if (-not $OptOffline) {
 # every detail with -Full or when the output is redirected. A saved report always
 # has every detail.
 # ===========================================================================
-if ($PY_HIT -eq 1 -or $MAL_HIT -eq 1) { $Sev = $cRed }
+if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
 if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
@@ -1841,7 +1853,7 @@ if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
 }
 $Act = ''
 if ($WIPER_HIT -eq 1) { $Act = 'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' }
-elseif ($MAL_HIT -eq 1) { $Act = 'ACT NOW: SIGNS OF NPM MALWARE' }
+elseif ($ANY_MAL -eq 1) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
 elseif ($PY_HIT -eq 1) { $Act = "ACT NOW: SIGNS OF THE $((@($PyHits | ForEach-Object { Incident-Name $_ }) -join ' AND ').ToUpperInvariant()) MALWARE" }
 if ($Act) {
   Emit "  $Sev$gBar$cRst $cBold$Act$cRst"
@@ -1999,7 +2011,13 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
 } elseif ($WIPER_HIT -eq 0) {
   Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
-  Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs, npm's cache and editor extensions$cRst"
+  Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
+}
+if ($EXT_HIT -eq 1) {
+  Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
+  foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
+  foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
+  foreach ($t in $ExtTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 }
 foreach ($p in $Platforms) {
   if ($PlatFound -contains $p.Id) {
@@ -2069,8 +2087,8 @@ elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $
 else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
 $leaks = @($Platforms | Where-Object { $PlatFound -contains $_.Id })
 if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it before revoking tokens' }
-elseif ($MAL_HIT -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "npm and $PyShort malware found. Act now" }
-elseif ($MAL_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of npm malware. Act now' }
+elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
+elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
@@ -2107,12 +2125,12 @@ if ($Compact) { Out-Text ($HeadShort + $Summary) } else { Out-Text $FullText }
 # ---------------------------------------------------------------------------
 # What next: the result link first, then details and save. One key each, nothing
 # happens unasked. u is the run ID, r the early rank, sk the SSH private keys,
-# hk the shell history files with keys, nm npm malware and wp gh-token-monitor, so the
-# page never says to rotate a token while it is there.
+# hk the shell history files with keys, nm npm malware, ex malware in an editor extension
+# and wp gh-token-monitor, so the page never says to rotate a token while it is there.
 # ---------------------------------------------------------------------------
 function Card-Url {
   $d = (Get-Date).ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
-  "$Web/blindspot/card/#v=2&s=$SCORE&g=$GRADE&a=$N_AG&i=$N_IDLE&m=$N_MCP&mt=$N_MCP_TOKEN&k=$KEY_FILES&p=$($ProvIds -join '.')&al=$N_ALLOW&an=$N_ALLOW_NPM&ll=$LITELLM_HIT&lf=$N_LOGIN&sp=$N_SSH_OPEN&d=$d&pc=$PCT&pn=$PCT_N&u=$LinkRunId&r=$RANK&sk=$N_SSH&hk=$HIST_KEYS&ag=$($AgentIds -join '.')&nm=$MAL_HIT&py=$PY_OTHER&wp=$WIPER_HIT"
+  "$Web/blindspot/card/#v=2&s=$SCORE&g=$GRADE&a=$N_AG&i=$N_IDLE&m=$N_MCP&mt=$N_MCP_TOKEN&k=$KEY_FILES&p=$($ProvIds -join '.')&al=$N_ALLOW&an=$N_ALLOW_NPM&ll=$LITELLM_HIT&lf=$N_LOGIN&sp=$N_SSH_OPEN&d=$d&pc=$PCT&pn=$PCT_N&u=$LinkRunId&r=$RANK&sk=$N_SSH&hk=$HIST_KEYS&ag=$($AgentIds -join '.')&nm=$MAL_HIT&py=$PY_OTHER&ex=$EXT_HIT&wp=$WIPER_HIT"
 }
 $ActSaved = 0; $ActCard = 0
 function Do-Save {
