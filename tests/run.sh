@@ -1174,6 +1174,9 @@ PY
   has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
   HOME="$WORK/fcount" bash "$SCRIPT" --offline > "$WORK/fcount.txt" 2>&1
   has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
+  # --all reaches the report as all_folders 1.
+  report_of "$WORK/report-all.json" env HOME="$WORK/fcount" GIRD_CHECK_API="$API" bash "$SCRIPT" --all
+  has    "--all is all_folders 1 in the report" '"all_folders":1,' "$WORK/report-all.json"
   # The dossier checks share nothing: the same report, link and score with or without them.
   rm -rf "$WORK/pl-base" "$WORK/pl-dz"; cp -R "$WORK/clean" "$WORK/pl-base"; cp -R "$WORK/clean" "$WORK/pl-dz"
   bash tests/make-dossier.sh "$WORK/pl-dz" "$WORK/pl-dz/$DAS" calm

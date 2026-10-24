@@ -1273,10 +1273,11 @@ foreach ($t in $TempDirs) {
   if (-not (Is-Dir $t)) { continue }
   foreach ($r in $IndOn) {
     if ($r[2] -ne 'temp') { continue }
-    $found = @()
-    if ($r[4].EndsWith('*')) { try { $found = @([IO.Directory]::GetFileSystemEntries($t, $r[4]) | Sort-Object) } catch { } }
-    elseif (Exists (J $t $r[4])) { $found = @((J $t $r[4])) }
-    foreach ($m in $found) {
+    # Not $found: variable names ignore case, and $Found is the home scan's list of files.
+    $tempHits = @()
+    if ($r[4].EndsWith('*')) { try { $tempHits = @([IO.Directory]::GetFileSystemEntries($t, $r[4]) | Sort-Object) } catch { } }
+    elseif (Exists (J $t $r[4])) { $tempHits = @((J $t $r[4])) }
+    foreach ($m in $tempHits) {
       # Another user's file in the shared /tmp is not this person's sign (owner yes in
       # data/indicators.tsv); %TEMP% on Windows is the person's own folder.
       if ($r[3] -eq 'yes' -and -not $OnWindows -and -not (Owns-File $m)) { continue }
@@ -2005,8 +2006,9 @@ $mm = Mcp-Match $McpNames
 $J_MCPC = Json-Tally $MCP_CLIENT_IDS $McpTally
 $J_PLACES = Json-Tally $KEY_PLACE_IDS (Count-Of $KeyPlaces)
 $J_PROVF = Json-Tally $PROVIDER_IDS (Count-Of $ProvTally)
-$OPTALL = 0; if ($OptAll) { $OPTALL = 1 }
-$PAYLOAD = "{""v"":""1"",""kind"":""report"",""run_id"":""$RUN_ID"",""device_id"":""$DEVICE_ID"",""script"":""$ScriptVersion"",""os"":""$OSV"",""arch"":""$ARCH_ID"",""model"":""$MODEL"",""terminal"":""$TERMAPP"",""tmux"":$TMUXED,""shell"":""$SHELLNAME"",""bash"":0,""lang"":""$LANGCODE"",""via"":""$VIA"",""grade"":""$GRADE"",""score"":$SCORE,""agents"":$(Json-List $AgentIds),""agents_idle"":$N_IDLE,""agents_idle_ids"":$(Json-List $IdleIds),""mcp_servers"":$N_MCP,""mcp_configs"":$N_MCPF,""mcp_token_files"":$N_MCP_TOKEN,""mcp_clients"":$J_MCPC,""mcp_token_clients"":$(Json-List $McpTokIds),""mcp_known"":$(Json-List $mm.Known),""mcp_other"":$($mm.Other),""key_files"":$KEY_FILES,""key_places"":$J_PLACES,""key_providers"":$(Json-List $ProvIds),""provider_files"":$J_PROVF,""history_keys"":$HIST_KEYS,""env_files"":$N_ENVF,""allow_list_files"":$N_ALLOWF,""allow_list_keys"":$N_ALLOW,""allow_list_npm"":$N_ALLOW_NPM,""login_files"":$(Json-List $LoginIds),""ssh_keys"":$N_SSH,""ssh_no_passphrase"":$N_SSH_OPEN,""python_envs"":$N_PY,""litellm_installed"":$N_LITE,""litellm_found"":$LITELLM_HIT,""opencode"":$OC,""railway"":$RW,""files_found"":$N_FOUND,""scan_seconds"":$SCAN_SECS,""all_folders"":$OPTALL,""game_played"":0,""game_best"":0,""results_wait_seconds"":0}"
+# Not $OPTALL: variable names ignore case, so it would be $OptAll itself, reset to 0 before the test.
+$AllFolders = 0; if ($OptAll) { $AllFolders = 1 }
+$PAYLOAD = "{""v"":""1"",""kind"":""report"",""run_id"":""$RUN_ID"",""device_id"":""$DEVICE_ID"",""script"":""$ScriptVersion"",""os"":""$OSV"",""arch"":""$ARCH_ID"",""model"":""$MODEL"",""terminal"":""$TERMAPP"",""tmux"":$TMUXED,""shell"":""$SHELLNAME"",""bash"":0,""lang"":""$LANGCODE"",""via"":""$VIA"",""grade"":""$GRADE"",""score"":$SCORE,""agents"":$(Json-List $AgentIds),""agents_idle"":$N_IDLE,""agents_idle_ids"":$(Json-List $IdleIds),""mcp_servers"":$N_MCP,""mcp_configs"":$N_MCPF,""mcp_token_files"":$N_MCP_TOKEN,""mcp_clients"":$J_MCPC,""mcp_token_clients"":$(Json-List $McpTokIds),""mcp_known"":$(Json-List $mm.Known),""mcp_other"":$($mm.Other),""key_files"":$KEY_FILES,""key_places"":$J_PLACES,""key_providers"":$(Json-List $ProvIds),""provider_files"":$J_PROVF,""history_keys"":$HIST_KEYS,""env_files"":$N_ENVF,""allow_list_files"":$N_ALLOWF,""allow_list_keys"":$N_ALLOW,""allow_list_npm"":$N_ALLOW_NPM,""login_files"":$(Json-List $LoginIds),""ssh_keys"":$N_SSH,""ssh_no_passphrase"":$N_SSH_OPEN,""python_envs"":$N_PY,""litellm_installed"":$N_LITE,""litellm_found"":$LITELLM_HIT,""opencode"":$OC,""railway"":$RW,""files_found"":$N_FOUND,""scan_seconds"":$SCAN_SECS,""all_folders"":$AllFolders,""game_played"":0,""game_best"":0,""results_wait_seconds"":0}"
 # The reply holds p, the share of people whose latest run scored lower, n, how many
 # people that is, and r, this device's place in line. Only digits are read from it.
 $PCT = ''; $PCT_N = ''; $RANK = ''; $LinkRunId = ''

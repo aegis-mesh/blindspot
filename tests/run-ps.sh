@@ -1103,6 +1103,9 @@ report_of "$WORK/report-fcount.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" 
 has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
 psrun "$WORK/fcount" -- -Offline > "$WORK/fcount.txt" 2>&1
 has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
+# -All reaches the report as all_folders 1.
+report_of "$WORK/report-all.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" -- -All
+has    "--all is all_folders 1 in the report" '"all_folders":1,' "$WORK/report-all.json"
 hasnot "no report holds a name you gave an MCP server" 'acme|my notes|web.search' "$WORK/received.log"
 hasnot "no report holds a server label as written"     '@modelcontextprotocol|MCP_DOCKER|Figma Dev Mode|upstash|Playwright|"gh"|"fs"' "$WORK/received.log"
 hasnot "no report holds a file name" '\.zshrc|zsh_history|python_history|bash_profile|\.env|\.mcp|mcp\.json|config\.(toml|yaml)|cline_mcp|claude_desktop|settings(\.local)?\.json|\.aider|PSReadLine|ConsoleHost' "$WORK/received.log"
