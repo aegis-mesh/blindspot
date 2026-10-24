@@ -1,0 +1,19 @@
+# Agents set to run commands without asking. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   agent     as the report shows it
+#   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
+#   path      the settings file, with the path tokens data/sessions.tsv uses, or {PROJECT}/folder/file
+#             for that file in every project folder the home scan finds
+#   setting   as the report shows it
+#   pattern   one or more, each in its own field, and every one must match a line of the file.
+#             Spaces are ignored, a line starting with // or # is skipped, a match must start and
+#             end at a JSON or TOML boundary, and in a .toml file only the lines before the first
+#             [table] count (a setting under [profiles.x] applies only when that profile is used)
+# Claude Code: code.claude.com/docs/en/permission-modes. Codex: its configuration reference. VS Code:
+# the Copilot settings reference; CVE-2025-53773 wrote chat.tools.autoApprove into a workspace file.
+# agent	os	path	setting	pattern...
+Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"defaultMode": "bypassPermissions"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.autoApprove	"chat.tools.autoApprove": true
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
+VS Code Copilot	all	{PROJECT}/.vscode/settings.json	chat.tools.autoApprove	"chat.tools.autoApprove": true
+VS Code Copilot	all	{PROJECT}/.vscode/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true

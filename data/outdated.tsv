@@ -1,0 +1,24 @@
+# Agent versions with a published security fix. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id        what lines of the same tool share: they make one row in the report
+#   name      as the report shows it
+#   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
+#   kind      plist   an Info.plist's CFBundleShortVersionString (an XML plist; a binary one is not read)
+#             folder  the highest version-named folder in a folder
+#             npm     a package's package.json in the global npm installs and npx's cache
+#             mcparg  name@version in the MCP configs section 2 reads
+#   where     plist and folder: a path, with the path tokens of data/sessions.tsv or an absolute path.
+#             npm and mcparg: the package name
+#   affected  <fixed, or >=first <fixed. The fixed version is what the report says to update to
+#   hole      what the hole allows, a few words from the advisory
+#   advisory  the advisory's https link
+# Versions compare part by part as numbers. A version that is not numbers and dots is not reported.
+# Cursor is read on macOS only: its version file on the other systems was not verified.
+# id	name	os	kind	where	affected	hole	advisory
+cursor	Cursor	mac	plist	/Applications/Cursor.app/Contents/Info.plist	<3.0	a prompt injection could escape the sandbox	https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
+cursor	Cursor	mac	plist	~/Applications/Cursor.app/Contents/Info.plist	<3.0	a prompt injection could escape the sandbox	https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
+amazonq	Amazon Q	mac	folder	~/Library/Caches/aws/toolkits/language-servers/AmazonQ	<1.69.0	opening a hostile workspace can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq	Amazon Q	linux	folder	~/.cache/aws/toolkits/language-servers/AmazonQ	<1.69.0	opening a hostile workspace can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq	Amazon Q	win	folder	{LOCALAPPDATA}/aws/toolkits/language-servers/AmazonQ	<1.69.0	opening a hostile workspace can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
+claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=0.2.116 <1.0.24	a web page could reach the editor connection	https://github.com/advisories/GHSA-9f65-56v6-gxw7
+mcpremote	mcp-remote	all	npm	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p
+mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p

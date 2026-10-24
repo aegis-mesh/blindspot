@@ -160,3 +160,4 @@ iru-caches	*	sandworm
 iruchache	*	sandworm
 node-native-bridge	*	sandworm
 secp256	*	sandworm
+@injectivelabs/sdk-ts	1.20.21	injective

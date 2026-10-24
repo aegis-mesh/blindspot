@@ -1,0 +1,25 @@
+# VS Code extensions that shipped malware, as Open VSX and the VS Code marketplace published them.
+# One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id        publisher.name, as the extension's folder spells it (compared without case)
+#   version   the exact version, or * when every version is malware
+#   incident  an id from data/incidents.tsv, whose level must be act
+# Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow) in the
+# extension folders of VS Code, Cursor, Windsurf, VSCodium and Kiro. GlassWorm: Socket, January 2026.
+# id	version	incident
+oorzc.ssh-tools	0.5.1	glassworm
+oorzc.i18n-tools-plus	1.6.8	glassworm
+oorzc.mind-map	1.0.61	glassworm
+oorzc.scss-to-css-compile	1.3.4	glassworm
+Angular-studio.ng-angular-extension	*	glassworm
+awesome-codebase.codebase-dart-pro	*	glassworm
+cudra-production.vsce-prettier-pro	*	glassworm
+dev-studio-sense.php-comp-tools-vscode	*	glassworm
+ko-zu-gun-studio.synchronization-settings-vscode	*	glassworm
+littensy-studio.magical-icons	*	glassworm
+pretty-studio-advisor.prettyxml-formatter	*	glassworm
+sol-studio.solidity-extension	*	glassworm
+studio-jjalaire-team.professional-quarto-extension	*	glassworm
+studio-velte-distributor.pro-svelte-extension	*	glassworm
+sun-shine-studio.shiny-extension-for-vscode	*	glassworm
+tucyzirille-studio.angular-pro-tools-extension	*	glassworm
+vce-brendan-studio-eich.js-debuger-vscode	*	glassworm
