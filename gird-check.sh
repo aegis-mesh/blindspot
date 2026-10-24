@@ -2011,6 +2011,8 @@ while IFS='|' read -r _oid _onm _oos _okind _ow _olo _ohi _ohole _osrc; do
   esac
   while IFS= read -r _v; do
     ver_ok "$_v" || continue
+    # name@0.1 in an MCP config is a range npx resolves when it runs, not a version: not reported.
+    case "$_okind:$_v" in mcparg:*.*.*) ;; mcparg:*) continue ;; esac
     if [ "$_olo" != - ] && [ "$(ver_cmp "$_v" "$_olo")" = -1 ]; then continue; fi
     [ "$(ver_cmp "$_v" "$_ohi")" = -1 ] || continue
     OLD_ROWS="$OLD_ROWS$_oid$TAB$_onm$TAB$_v$TAB$_ohi$TAB$_ohole$TAB$_osrc

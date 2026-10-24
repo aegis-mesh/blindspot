@@ -1586,6 +1586,8 @@ foreach ($r in $OutTable) {
   }
   foreach ($v in $vs) {
     if (-not (Ver-Ok $v)) { continue }
+    # name@0.1 in an MCP config is a range npx resolves when it runs, not a version: not reported.
+    if ($r[3] -eq 'mcparg' -and $v.Split('.').Count -lt 3) { continue }
     if ($r[5] -ne '-' -and (Ver-Cmp $v $r[5]) -lt 0) { continue }
     if ((Ver-Cmp $v $r[6]) -ge 0) { continue }
     if ($oldSeen.ContainsKey($r[0])) { $o = $oldSeen[$r[0]]; if (-not $o.Vers.Contains($v)) { $o.Vers.Add($v) } }
