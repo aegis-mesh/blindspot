@@ -229,7 +229,9 @@ if diff -q "$WORK/bad-sh-raw.txt" "$WORK/bad-sh.txt" >/dev/null && diff -q "$WOR
 else bad "every line of both lists is an entry"; diff "$WORK/bad-sh-raw.txt" "$WORK/bad-sh.txt" | head -n 3; diff "$WORK/bad-ps-raw.txt" "$WORK/bad-ps.txt" | head -n 3; fi
 # gird-check.sh, on the same home with its Mac paths, must find the same files.
 bash tests/make-fixture.sh "$WORK/bhome" "$WORK/keys-b.txt" >/dev/null
-HOME="$WORK/bhome" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline > "$WORK/bash.txt" 2>&1
+# Its Mac paths whatever this host is: on Linux it would look for Claude Desktop under ~/.config.
+mkdir -p "$WORK/macbin"; printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else exec /usr/bin/uname "$@"; fi\n' > "$WORK/macbin/uname"; chmod +x "$WORK/macbin/uname"
+HOME="$WORK/bhome" PATH="$WORK/macbin:/usr/bin:/bin" bash "$BASH_SCRIPT" --offline > "$WORK/bash.txt" 2>&1
 for sec in 'MCP SERVERS' 'KEYS IN CLAUDE CODE ALLOW LISTS'; do
   b=$(grep -aoE "$sec +[0-9]+ [a-z]+" "$WORK/bash.txt"); p=$(grep -aoE "$sec +[0-9]+ [a-z]+" "$OUT")
   if [ -n "$b" ] && [ "$b" = "$p" ]; then ok "$sec agrees ($p)"; else bad "$sec agrees: bash '$b', pwsh '$p'"; fi

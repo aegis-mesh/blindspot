@@ -309,7 +309,8 @@ has    "the link flags a Python incident, not LiteLLM" '&ll=0&.*&py=1&' "$WORK/m
 cp -R "$WORK/clean" "$WORK/mpyt"; mkdir -p "$WORK/mpyt/tmp" "$WORK/linbin"; : > "$WORK/mpyt/tmp/transformers.pyz"
 printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Linux; else exec /usr/bin/uname "$@"; fi\n' > "$WORK/linbin/uname"; chmod +x "$WORK/linbin/uname"
 HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-linux.txt"
-HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-mac.txt"
+mkdir -p "$WORK/macbin2"; printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else exec /usr/bin/uname "$@"; fi\n' > "$WORK/macbin2/uname"; chmod +x "$WORK/macbin2/uname"
+HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" PATH="$WORK/macbin2:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-mac.txt"
 has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/tmp/transformers\.pyz' "$WORK/mpyt-linux.txt"
 has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt-linux.txt"
 has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt-mac.txt"
@@ -498,12 +499,14 @@ hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS 
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "checks from the incident dossier"
-if [ "$(uname -s)" = Darwin ]; then DAS="Library/Application Support"; else DAS=".config"; fi
+# As macOS on any host: the Cursor check reads a macOS app, and the paths below are the Mac's.
+DAS="Library/Application Support"
+mkdir -p "$WORK/dzbin"; printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else exec /usr/bin/uname "$@"; fi\n' > "$WORK/dzbin/uname"; chmod +x "$WORK/dzbin/uname"
 for M in hit miss; do
   rm -rf "$WORK/dz-$M"; cp -R "$WORK/clean" "$WORK/dz-$M"; bash tests/make-dossier.sh "$WORK/dz-$M" "$WORK/dz-$M/$DAS" "$M"
-  HOME="$WORK/dz-$M" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/dz-$M.txt" 2>&1
+  HOME="$WORK/dz-$M" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline > "$WORK/dz-$M.txt" 2>&1
   tr -s ' \n' '  ' < "$WORK/dz-$M.txt" > "$WORK/dz-$M-flat.txt"
-  HOME="$WORK/dz-$M" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-$M-sum.txt"
+  HOME="$WORK/dz-$M" PATH="$WORK/dzbin:/usr/bin:/bin" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-$M-sum.txt"
 done
 D=$WORK/dz-hit-flat.txt
 has    "Claude Code set to bypass permissions"        '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$D"
@@ -526,7 +529,7 @@ has    "with GlassWorm's sourced line"                'GlassWorm extensions, Jan
 has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
 has    "with its sourced line"                        'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it\. github\.com' "$D"
-dzrun() { _h=$1; shift; env HOME="$_h" PATH=/usr/bin:/bin "$@" bash "$SCRIPT" --offline 2>&1; }
+dzrun() { _h=$1; shift; env HOME="$_h" PATH="$WORK/dzbin:/usr/bin:/bin" "$@" bash "$SCRIPT" --offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
 # Editor extensions: a row, headline and fix of their own, never called npm malware.
 rm -rf "$WORK/dz-ext"; cp -R "$WORK/clean" "$WORK/dz-ext"; mkdir -p "$WORK/dz-ext/.vscode/extensions/oorzc.mind-map-1.0.61"
@@ -566,7 +569,7 @@ hasnot "known limit: Codex values in single quotes are not read" '! Codex ' "$WO
 hasnot "known limit: a profile made the default with profile = is not read" '! Codex ' "$WORK/dz-lim2.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
-HOME="$WORK/dz-calm" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
+HOME="$WORK/dz-calm" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
 has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
 
 echo "a new incident of each kind is data lines only"
