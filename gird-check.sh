@@ -50,7 +50,7 @@ for arg in "$@"; do
     --all-sessions) ALLSESS=1 ;;
     --offline) OFFLINE=1 ;;
     --no-color) NO_COLOR=1 ;;
-    -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^$/p' "$0" | sed -n 's/^# \{0,1\}//p'; exit 0 ;;
     *) printf 'Unknown option: %s (try --help)\n' "$arg"; exit 2 ;;
   esac
 done
@@ -85,6 +85,9 @@ if [ "$FLEET" -eq 1 ]; then
   PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
   unset BASH_ENV ENV CDPATH GLOBIGNORE TMPDIR
   IFS=$' \t\n'; umask 077
+  # Each account runs a copy of this file, so --all-users needs the file itself, found before cd /.
+  FL_SELF=${BASH_SOURCE[0]:-}
+  case "$FL_SELF" in ''|/*) ;; *) FL_SELF="$PWD/$FL_SELF" ;; esac
   cd / || exit 13
   _fos=$(/usr/bin/uname -s 2>/dev/null)
   [ "$FLEET_REAL" -eq 0 ] && [ -n "${GIRD_CHECK_FLEET_OS:-}" ] && _fos=$GIRD_CHECK_FLEET_OS   # tests only
@@ -96,6 +99,9 @@ if [ "$FLEET" -eq 1 ]; then
   [ "$ALL" -eq 1 ] && fleet_usage "--all is refused with --all-users: Desktop and Documents can hold cloud files that download when read" 13
   if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
     fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13
+  fi
+  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || [ ! -f "$FL_SELF" ] || [ ! -r "$FL_SELF" ]; }; then
+    fleet_usage "run it from a file: the script must be able to copy itself for each account" 13
   fi
   # No game, menu, browser, colours, saved report or network request: nobody is watching.
   OFFLINE=1; NOGAME=1; SAVE=0; NO_COLOR=1; ALLSESS=0
@@ -168,9 +174,10 @@ if [ "$ACCTRUN" -eq 1 ]; then
   APP_CLAUDE=""; APP_CURSOR=""; APP_WINDSURF=""; APP_ANTIGRAVITY=""
   case "${GIRD_CHECK_FLEET_MAX_BYTES:-}" in ''|*[!0-9]*) ;; *) FLEET_MAX=$GIRD_CHECK_FLEET_MAX_BYTES ;; esac
   FLEET_NR=$(/usr/bin/mktemp /tmp/blindspot.XXXXXX) || exit 13
-  # Full Disk Access: a folder macOS protects is tried first. Refused, or none to try, means the
-  # protected folders are not checked for this account, never that they are clear.
-  FLEET_PROT=unknown
+  # Full Disk Access: a folder macOS protects is tried first. Refused means the protected folders
+  # are not checked for this account, never that they are clear. With none of them there, there is
+  # nothing protected to miss.
+  FLEET_PROT=ok
   if [ -n "${GIRD_CHECK_FLEET_PROTECTED:-}" ]; then set -- "$GIRD_CHECK_FLEET_PROTECTED"
   else set -- "$H/Library/Safari" "$H/Library/Mail" "$H/Library/Messages"; fi
   for _fp in "$@"; do
@@ -1193,7 +1200,7 @@ FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo update mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms not_read protected end"
+FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms not_read protected end"
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -1227,7 +1234,7 @@ fl_parse() {
       v|end) [ "$_v" = 1 ] || return 1 ;;
       agents) fl_ids_ok "$_v" "$FL_AGENT_IDS" || return 1 ;;
       yolo) fl_ids_ok "$_v" "$FL_YOLO_IDS" || return 1 ;;
-      update) fl_ids_ok "$_v" "$FL_OUT_IDS" || return 1 ;;
+      tools) fl_ids_ok "$_v" "$FL_OUT_IDS" || return 1 ;;
       key_providers) fl_ids_ok "$_v" "$PROVIDER_IDS" || return 1 ;;
       platforms) fl_ids_ok "$_v" "$FL_PLAT_IDS" || return 1 ;;
       incidents) fl_incidents_ok "$_v" || return 1 ;;
@@ -1236,7 +1243,7 @@ fl_parse() {
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
     case "$_k" in
-      agents) FA_agents=$_v ;; yolo) FA_yolo=$_v ;; update) FA_update=$_v ;; mcp_servers) FA_mcp_servers=$_v ;;
+      agents) FA_agents=$_v ;; yolo) FA_yolo=$_v ;; tools) FA_update=$_v ;; mcp_servers) FA_mcp_servers=$_v ;;
       mcp_token_files) FA_mcp_token_files=$_v ;; key_files) FA_key_files=$_v ;; key_providers) FA_key_providers=$_v ;;
       history_keys) FA_history_keys=$_v ;; session_files) FA_session_files=$_v ;; sessions_partial) FA_sessions_partial=$_v ;;
       allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;;
@@ -1254,8 +1261,8 @@ fl_copy_ok() { # the copy each account runs: owned by root, nobody else can chan
 }
 fl_json_list() { _o=""; for _x in $1; do _o="${_o:+$_o,}\"$_x\""; done; printf '[%s]' "$_o"; }
 fl_json_incidents() { _o=""; for _x in $1; do _o="${_o:+$_o,}{\"id\":\"$_x\",\"level\":\"$(incident_level "$_x")\"}"; done; printf '[%s]' "$_o"; }
-fl_worst() { # outcomes on stdin: the worst, in the order failed, act, not_checked, update, clear
-  /usr/bin/awk 'BEGIN { r["failed"] = 5; r["act"] = 4; r["not_checked"] = 3; r["update"] = 2; r["clear"] = 1; w = "clear" }
+fl_worst() { # outcomes on stdin: the worst, in the order failed, act, not_checked, review, clear
+  /usr/bin/awk 'BEGIN { r["failed"] = 5; r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1; w = "clear" }
     ($1 in r) && r[$1] > r[w] { w = $1 } END { print w }'
 }
 fl_name() { # the account as the result shows it: its name, or a keyed hash with --hash-accounts
@@ -1363,13 +1370,16 @@ fleet_main() {
   fi
   _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 10 ] && _rs=10
   FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""
+  FL_REL=$(/usr/bin/sed -n '2s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p' "$FL_SELF")   # the header's release
+  [ -n "$FL_REL" ] || FL_REL=unknown
   FL_AT=$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ); FL_EPOCH=$(/bin/date -u +%s)
   FL_OS="macOS $(/usr/bin/sw_vers -productVersion 2>/dev/null | /usr/bin/tr -cd '0-9.' | /usr/bin/cut -d. -f1-2)"; FL_OS=${FL_OS% }
   # The copy each account runs, made once, in a new folder only root can change.
-  _src=${BASH_SOURCE[0]}
+  # An MDM's options line (docs/fleet.md) is left out of the copy: it can carry --hash-accounts' secret.
+  _src=$FL_SELF
   if [ -f "$_src" ] && [ -r "$_src" ] && FL_COPYDIR=$(/usr/bin/mktemp -d /tmp/blindspot-copy.XXXXXXXX); then
     FL_COPY="$FL_COPYDIR/gird-check.sh"
-    { /bin/cp -- "$_src" "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
+    { /usr/bin/grep -vF '[ "${1:-}" = --account-run ] || set -- ' -- "$_src" > "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
   else FL_FAILED=copy; fi
   fl_accounts > "$FL_TMP/accounts"
   _left=$(/usr/bin/grep -c "${FL_TAB}ok\$" "$FL_TMP/accounts")
@@ -1410,7 +1420,7 @@ fleet_main() {
       for _x in $_ia; do _lines="$_lines$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
       [ -n "$_ia" ] && _inv="$_inv; act$(printf ' %s' $_ia | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
       for _x in $_iu; do _upd=1; _lines="$_lines$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
-      [ -n "$_iu" ] && _inv="$_inv; update$(printf ' %s' $_iu | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
+      [ -n "$_iu" ] && _inv="$_inv; review$(printf ' %s' $_iu | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
       if [ "$FA_planted" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Files a worm plants in a project, or settings that run one: $FA_planted"; _inv="$_inv; planted $FA_planted"; fi
       if [ -n "$FA_yolo" ]; then _upd=1; for _x in $FA_yolo; do _lines="$_lines$NL    !  $(fl_agent_name "$_x") set to run commands without asking"; done; _inv="$_inv; run-without-asking $(printf '%s' "$FA_yolo" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_key_files" -gt 0 ]; then
@@ -1433,12 +1443,12 @@ fleet_main() {
       [ "$FA_protected" != ok ] && _why="${_why:+$_why, }folders macOS protects were not checked (Full Disk Access)"
       [ -n "$FA_stop" ] && _why="${_why:+$_why, }its check ran out of time"
       [ -n "$_why" ] && _complete=false
-      if [ "$_act" -eq 1 ]; then _out=act; elif [ "$_complete" = false ]; then _out=not_checked; elif [ "$_upd" -eq 1 ]; then _out=update; else _out=clear; fi
-      case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; update) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
+      if [ "$_act" -eq 1 ]; then _out=act; elif [ "$_complete" = false ]; then _out=not_checked; elif [ "$_upd" -eq 1 ]; then _out=review; else _out=clear; fi
+      case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
       _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$FA_possible,\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
-      case "$_out" in act) _word="act now" ;; update) _word="update" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
+      case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
     fi
@@ -1449,7 +1459,7 @@ fleet_main() {
   FM_OUT=clear; _ml=""
   for _x in $FM_INC; do
     if [ "$(incident_level "$_x")" = act ]; then FM_OUT=act; _ml="$_ml$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"
-    else [ "$FM_OUT" = act ] || FM_OUT=update; _ml="$_ml$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; fi
+    else [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; fi
   done
   [ -n "$_ml" ] && _ml="$_ml$NL    Found in the shared temp folder or a shared startup folder: any account can put files there."
   MACHINE="{\"complete\":true,\"outcome\":\"$FM_OUT\",\"agents\":$(fl_json_list "$FM_AGENTS"),\"incidents\":$(fl_json_incidents "$FM_INC")}"
@@ -1459,7 +1469,7 @@ fleet_main() {
   [ -n "$FL_FAILED" ] && OUTS="${OUTS}failed$NL"
   OUTCOME=$(printf '%s' "$OUTS" | fl_worst)
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
-  SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT update=$N_UPD not_checked=$N_NC v=$VERSION at=$FL_AT"
+  SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
   # The inventory value: one line for an MDM's inventory field, no path, file name or key. Too
   # long, it keeps each account's outcome and ends with +more; the saved file has the rest.
   INVENTORY_V="v1 $OUTCOME $_short$INV"; [ "$N_ACC" -eq 0 ] && INVENTORY_V="$INVENTORY_V | no accounts"
@@ -1470,7 +1480,7 @@ fleet_main() {
   fi
   JSON_DOC="{
   \"blindspot\": \"1\",
-  \"script\": \"$VERSION\",
+  \"script\": \"$FL_REL\",
   \"checked_at\": \"$FL_AT\",
   \"checked_epoch\": $FL_EPOCH,
   \"os\": \"$FL_OS\",
@@ -1484,7 +1494,7 @@ fleet_main() {
 }"
   FL_SAVED=1; fl_save "$JSON_DOC" || { FL_SAVED=0; OUTCOME=failed; }
   if [ "$FL_SAVED" -eq 0 ]; then
-    SUMMARY="blindspot failed accounts=$N_ACC act=$N_ACT update=$N_UPD not_checked=$N_NC v=$VERSION at=$FL_AT"
+    SUMMARY="blindspot failed accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
     JSON_DOC=$(printf '%s\n' "$JSON_DOC" | /usr/bin/sed 's/^  "outcome": "[a-z_]*",$/  "outcome": "failed",/')
   fi
   if [ "$JSON" -eq 1 ]; then printf '%s\n' "$JSON_DOC"
@@ -1494,7 +1504,7 @@ fleet_main() {
     if [ "$_nck" -eq "$N_ACC" ]; then printf '\n  This Mac: %s checked\n' "$(fl_plural "$N_ACC" "account" "accounts")"
     else printf '\n  This Mac: %s of %s checked\n' "$_nck" "$(fl_plural "$N_ACC" "account" "accounts")"; fi
     printf '%s\n' "$TERM_VIEW"
-    if [ -n "$_ml" ]; then printf '\n  %-44s%s%s\n' "This Mac" "$( [ "$FM_OUT" = act ] && echo "act now" || echo "update")" "$_ml"; fi
+    if [ -n "$_ml" ]; then printf '\n  %-44s%s%s\n' "This Mac" "$( [ "$FM_OUT" = act ] && echo "act now" || echo "review")" "$_ml"; fi
     [ -n "$FL_FAILED" ] && printf '\n  The run stopped: the script copy each account runs was changed.\n'
     if [ "$FL_SAVED" -eq 1 ]; then printf '\n  Saved: %s/last.json\n' "$FL_STATE"; else printf '\n  Not saved: %s could not be written safely.\n' "$FL_STATE"; fi
     if [ "$TTY" -eq 1 ]; then
@@ -1504,7 +1514,7 @@ fleet_main() {
   fi
   if [ "$OUTCOME" = failed ]; then return 13; fi
   [ "$EXITZERO" -eq 1 ] && return 0
-  case "$OUTCOME" in clear) return 0 ;; act) return 10 ;; update) return 11 ;; *) return 12 ;; esac
+  case "$OUTCOME" in clear) return 0 ;; act) return 10 ;; review) return 11 ;; *) return 12 ;; esac
 }
 if [ "$FLEET" -eq 1 ]; then fleet_main; exit $?; fi
 
@@ -2809,7 +2819,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
     echo "v=1"
     echo "agents=$(printf '%s' "$AGENT_IDS" | fleet_ids)"
     echo "yolo=$_yolo"
-    echo "update=$(printf '%s' "$OLD_ROWS" | cut -f1 | fleet_ids)"
+    echo "tools=$(printf '%s' "$OLD_ROWS" | cut -f1 | fleet_ids)"
     echo "mcp_servers=$N_MCP"
     echo "mcp_token_files=$N_MCP_TOKEN"
     echo "key_files=$KEY_FILES"

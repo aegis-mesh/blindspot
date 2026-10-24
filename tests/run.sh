@@ -926,6 +926,7 @@ sys.exit(0 if a == b and a else 1)' "$WORK/report-pl-base.json" "$WORK/report-pl
 
 echo "help"
 if bash "$SCRIPT" --help | grep -q -- '--offline'; then ok "--help lists the options"; else bad "--help lists the options"; fi
+if bash "$SCRIPT" --help | grep -q -- 'gird-check.sh --all-users'; then ok "--help shows the whole header, --all-users included"; else bad "--help shows the whole header, --all-users included"; fi
 
 echo "fleet mode (--all-users)"
 # The suites never run as root. GIRD_CHECK_FLEET_ROOT stands in for root, GIRD_CHECK_FLEET_USERS
@@ -938,7 +939,7 @@ U=$(id -u); FLL=$PWD/tests/fleet-launch.sh
 fl_home() { mkdir -p "$FL/$1/Library/Safari"; }
 for h in asha itadmin clean upd linker odd shared; do fl_home "$h"; done
 bash tests/make-fixture.sh "$FL/asha" "$FL/keys-asha.txt" > /dev/null; mkdir -p "$FL/asha/Library/Safari"
-# itadmin: one SSH key with no passphrase and nothing else; upd: the same, so it needs an update only.
+# itadmin: one SSH key with no passphrase and nothing else; upd: the same, so it has something to review only.
 for h in itadmin upd; do
   mkdir -p "$FL/$h/.ssh"; printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH PRIVATE KEY-----\n' > "$FL/$h/.ssh/id_ed25519"
 done
@@ -986,7 +987,7 @@ then ok "fleet: the saved file is the JSON printed"; else bad "fleet: the saved 
 has    "fleet: the JSON names where to learn more" '^learn_more=https://gird.ai/argus$' "$FL/two.flat"
 fl_run twoz --exit-zero --summary-to-stdout
 has    "fleet: --exit-zero exits 0 on act" '^0$' "$FL/twoz.rc"
-if [ "$(grep -c '' "$FL/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=2 act=1 update=1 not_checked=0 v=[0-9.]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FL/twoz.out"
+if [ "$(grep -c '' "$FL/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=2 act=1 review=1 not_checked=0 v=[0-9]+\.[0-9]+\.[0-9]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FL/twoz.out"
 then ok "fleet: --summary-to-stdout prints the one summary line"; else bad "fleet: --summary-to-stdout prints the one summary line" "$(cat "$FL/twoz.out")"; fi
 fl_run term
 has    "fleet: the readable report lists each account" '^  asha +act now$' "$FL/term.out"
@@ -1052,7 +1053,7 @@ python3 tests/fleet-flat.py "$FL/state/last.json" > "$FL/hold.flat" 2>/dev/null
 if [ "$T1" -lt 40 ] && grep -q '^rc=12$' "$FL/hold.out"; then ok "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s"; else bad "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s, $(cat "$FL/hold.out")"; fi
 has    "fleet: that account is partly checked" '^asha\.not_checked=time_limit$' "$FL/hold.flat"
 has    "fleet: a process that outlives the stop is reported" '^asha\.processes_left=true$' "$FL/hold.flat"
-has    "fleet: the other account is still checked" '^itadmin\.outcome=update$' "$FL/hold.flat"
+has    "fleet: the other account is still checked" '^itadmin\.outcome=review$' "$FL/hold.flat"
 pkill -f 'fleet-hold-escapee' 2>/dev/null; rm -f "$FL/mode-asha"
 users "asha:$U:$FL/asha:/bin/zsh"
 fl_run late --deadline=1
@@ -1074,13 +1075,17 @@ printf 'noprot\n' > "$FL/mode-clean"; fl_run prot
 if grep -q '^clean\.protected_folders=not_checked$' "$FL/prot.flat" && grep -q '^clean\.outcome=not_checked$' "$FL/prot.flat"; then ok "fleet: a refused protected folder is not checked, never clear"; else bad "fleet: a refused protected folder is not checked, never clear" "$(grep '^clean' "$FL/prot.flat" | tr '\n' ' ')"; fi
 rm -f "$FL/mode-clean"
 fl_run clear
+mkdir -p "$FL/noprotdirs"; users "bare:$U:$FL/noprotdirs:/bin/zsh"
+fl_run bare
+if grep -q '^bare\.protected_folders=checked$' "$FL/bare.flat" && grep -q '^bare\.outcome=clear$' "$FL/bare.flat"; then ok "fleet: with no protected folder in the home, there is nothing protected to miss"; else bad "fleet: with no protected folder in the home, there is nothing protected to miss" "$(grep '^bare' "$FL/bare.flat" | tr '\n' ' ')"; fi
+users "clean:$U:$FL/clean:/bin/zsh"
 if grep -q '^outcome=clear$' "$FL/clear.flat" && grep -q '^0$' "$FL/clear.rc" && grep -q '^clean\.protected_folders=checked$' "$FL/clear.flat"; then ok "fleet: clear exits 0"; else bad "fleet: clear exits 0" "$(cat "$FL/clear.rc"; head -n 4 "$FL/clear.flat")"; fi
 users "upd:$U:$FL/upd:/bin/zsh"
 fl_run upd
-if grep -q '^outcome=update$' "$FL/upd.flat" && grep -q '^11$' "$FL/upd.rc"; then ok "fleet: update exits 11"; else bad "fleet: update exits 11" "$(cat "$FL/upd.rc")"; fi
+if grep -q '^outcome=review$' "$FL/upd.flat" && grep -q '^11$' "$FL/upd.rc"; then ok "fleet: review exits 11"; else bad "fleet: review exits 11" "$(cat "$FL/upd.rc")"; fi
 users "upd:$U:$FL/upd:/bin/zsh" "gone:$U:$FL/nothere:/bin/zsh"
 fl_run order1
-has    "fleet: not_checked comes before update" '^outcome=not_checked$' "$FL/order1.flat"
+has    "fleet: not_checked comes before review" '^outcome=not_checked$' "$FL/order1.flat"
 users "asha:$U:$FL/asha:/bin/zsh" "gone:$U:$FL/nothere:/bin/zsh"
 fl_run order2
 has    "fleet: act comes before not_checked" '^outcome=act$' "$FL/order2.flat"
@@ -1107,7 +1112,19 @@ has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspo
 python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\n[ \"\${1:-}\" = --account-run ] || set -- --all-users --summary-to-stdout --deadline=600\n' + l[1])" "$SCRIPT" "$FL/mdm-item.sh"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$FL/mdm-item.sh" / "$(hostname)" root < /dev/null > "$FL/mdm-item.out" 2>&1
-has    "fleet: an MDM item's options line works whatever arguments the MDM adds" '^blindspot act accounts=2 act=1 update=1 not_checked=0 ' "$FL/mdm-item.out"
+has    "fleet: an MDM item's options line works whatever arguments the MDM adds" '^blindspot act accounts=2 act=1 review=1 not_checked=0 ' "$FL/mdm-item.out"
+python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\n[ \"\${1:-}\" = --account-run ] || set -- --all-users --summary-to-stdout --hash-accounts=fleet-test-secret-42\n' + l[1])" "$SCRIPT" "$FL/mdm-secret.sh"
+rm -f "$FL/copycheck"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" FLL_COPYCHECK=fleet-test-secret-42 bash "$FL/mdm-secret.sh" < /dev/null > "$FL/mdm-secret.out" 2>&1
+if [ "$(tr -d '\n' < "$FL/copycheck" 2>/dev/null)" = 00 ] && grep -q '^blindspot act ' "$FL/mdm-secret.out"; then ok "fleet: the copy each account runs leaves out the options line and its secret"; else bad "fleet: the copy each account runs leaves out the options line and its secret" "$(cat "$FL/copycheck" 2>/dev/null)"; fi
+# Run by a relative path from the script's folder, as the guide shows; from standard input it can't copy itself.
+( cd "$(dirname "$SCRIPT")" && GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash gird-check.sh --all-users --summary-to-stdout < /dev/null > "$FL/rel.out" 2>&1 )
+has    "fleet: runs by a relative path from the script's folder" '^blindspot act accounts=2 act=1 review=1 not_checked=0 ' "$FL/rel.out"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  FLL_DIR="$FL" bash -s -- --all-users < "$SCRIPT" > "$FL/stdin.out" 2> "$FL/stdin.err"; RC=$?
+if [ "$RC" -eq 13 ] && grep -q 'run it from a file: the script must be able to copy itself' "$FL/stdin.err"; then ok "fleet: from standard input it fails, and says why"; else bad "fleet: from standard input it fails, and says why" "exit $RC $(cat "$FL/stdin.err")"; fi
 
 # The Mac's shared places.
 : > "$FL/sharedtmp/.pc_once_x"; : > "/tmp/.pc_once_blindspot-fleet-test-$$"
