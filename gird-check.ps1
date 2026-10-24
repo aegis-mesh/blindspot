@@ -873,7 +873,11 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 # servers, as soon as the folder is opened. A cloned repo brings them along (Check Point,
 # CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks). Both
 # settings.json and settings.local.json are read, since repos commit either. Each file is read as
-# one line, so pretty-printed JSON matches too; only tasks.json (JSONC) has comments removed first.
+# one line, so pretty-printed JSON matches too, with comments removed first: // to the end of the
+# line and /* */, outside strings only (a \" does not end a string; a line break does, unless a \
+# escapes it, as VS Code's JSONC parser reads it). tasks.json and VS Code's settings.json are
+# JSONC, and a commented-out setting in any other file is not active either. One regex pass keeps
+# each string and drops each comment, so the time is linear whatever the input.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
 $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
 # Worms plant a file in the folder ($WormName, from data/planted.tsv) and run it from a hook or a task.
@@ -886,12 +890,11 @@ $RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsA
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
 $RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
-$RxLineComment = New-Object regex('(^|[\s,{\[])//[^\n]*', $RxOpt, $RxTimeout)
-$RxBlockComment = New-Object regex('/\*(?:[^*]|\*+[^*/])*\*+/', $RxOpt, $RxTimeout)
+# A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
+$RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
 function Flat-Text([string]$f) {
   $t = Read-Text $f; if ($null -eq $t) { return $null }
-  if (-not $f.EndsWith('tasks.json')) { return ($t -replace '[\r\n\t]', ' ') }
-  try { $RxBlockComment.Replace(($RxLineComment.Replace($t, '$1') -replace '[\r\n\t]', ' '), '') } catch { Mark-Slow $f; $null }
+  try { $RxJsonc.Replace($t, '$1') -replace '[\r\n\t]', ' ' } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 function Auto-Row([string]$f, [string]$what, [string]$t) {

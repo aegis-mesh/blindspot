@@ -1256,12 +1256,45 @@ AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN="|"
 # A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
 WORM_CMD='"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*([^A-Za-z0-9_"\\]|\\"))?(node|bun|deno|tsx)(\.exe)?[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
 TAB=$(printf '\t')
-# One line of text. Claude Code's settings are strict JSON; only tasks.json (JSONC) has comments to drop.
+# One line of text, with comments removed first: // to the end of the line and /* */, outside
+# strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
+# JSONC parser reads it). tasks.json and VS Code's settings.json are JSONC, and a commented-out
+# setting in any other file is not active either. Each line is split on its quotes, and each piece
+# outside a string on its slashes, both with a one-character separator, and every chunk is looked at
+# a bounded number of times: linear whatever the input, where a loop over single characters, or a
+# regex split or gsub with many matches, is quadratic on macOS's awk for a long minified line.
 flat() {
-  case "$1" in
-    */tasks.json) sed -E 's#(^|[[:space:],{[])//.*$#\1#' "$1" 2>/dev/null | tr '\n\r\t' '   ' | sed -E 's#/\*([^*]|\*+[^*/])*\*+/##g' ;;
-    *) tr '\n\r\t' '   ' < "$1" 2>/dev/null ;;
-  esac
+  tr '\r\t' '\n ' < "$1" 2>/dev/null | awk '
+    # A piece between two quotes, in code (st 0) or inside a block comment (st 2). Split on /,
+    # // is an empty chunk between two slashes, /* a chunk starting with *, and */ a chunk ending
+    # in * before a slash; the * that opened the comment (a /*/) closes nothing. Returns 1 on a // comment.
+    function piece(s,   nc, c, j, op) {
+      nc = split(s, c, "/"); op = 0
+      for (j = 1; j <= nc; j++) {
+        if (st == 2) { if (j < nc && c[j] ~ /\*$/ && !(j == op && length(c[j]) == 1)) st = 0; continue }
+        printf "%s", c[j]
+        if (j == nc) break
+        if (c[j + 1] == "") { if (j + 1 < nc) return 1; printf "/"; continue }
+        if (substr(c[j + 1], 1, 1) == "*") { st = 2; op = j + 1; continue }
+        printf "/"
+      }
+      return 0
+    }
+    BEGIN { st = 0 }   # 0 code, 1 string, 2 block comment
+    { nq = split($0, q, "\"")
+      for (i = 1; i <= nq; i++) {
+        if (st == 1) {            # in a string: kept as it is; an odd run of \ escapes the quote or the line break
+          printf "%s", q[i]; esc = (match(q[i], /\\+$/) && RLENGTH % 2 == 1)
+          if (i < nq) printf "\""
+          if (!esc) st = 0
+          continue
+        }
+        if (piece(q[i])) break    # a // comment: the rest of the line goes
+        if (st == 2) continue     # inside a block comment: so is the quote after this piece
+        if (i < nq) { printf "\""; st = 1 }
+      }
+      printf " "
+    }'
 }
 auto_row() { # file what flattened-text
   # A worm file counts only when a command runs it, not when a rule or a guard merely names it.

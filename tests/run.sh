@@ -211,6 +211,12 @@ printf '{"permissions":{"allow":["Bash(ls /tmp/*)"]},"hooks":{"Stop":[{"hooks":[
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$RV/code/x|y/package-lock.json"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make fmt"}]}]}}\n' | tee "$RV/p/r1/.claude/settings.json" > "$RV/p/r2/.claude/settings.json"
 printf '{\n  "overrides": {\n    "axios@1.14.1": "1.14.2"\n  },\n  "packages": {\n    "axios": ["axios@1.14.2", ""]\n  }\n}\n' > "$RV/code/bunpin/bun.lock"
+# Comments: a // inside a string (a label, a URL) is text; only a comment outside strings is dropped, in every settings file.
+mkdir -p "$RV/p/hide/.vscode" "$RV/p/url/.vscode" "$RV/p/unhide/.vscode" "$RV/p/chook/.claude"
+printf '{"tasks":[{"label":"x //","runOptions":{"runOn":"folderOpen"},"command":"make"}]}\n' > "$RV/p/hide/.vscode/tasks.json"
+printf '{"tasks":[{"label":"docs","detail":"docs: //example.com/docs","runOptions":{"runOn":"folderOpen"},"command":"make"}]}\n' > "$RV/p/url/.vscode/tasks.json"
+printf '{"tasks":[{"label":"x //", /*\n  "runOptions":{"runOn":"folderOpen"},\n  */ "command":"make"}]}\n' > "$RV/p/unhide/.vscode/tasks.json"
+printf '{\n  // "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x"}]}]},\n  "permissions": {"allow": ["Bash(ls)"]}\n}\n' > "$RV/p/chook/.claude/settings.json"
 HOME="$RV" bash "$SCRIPT" --offline > "$WORK/rv.txt" 2>&1
 tr -s ' \n' '  ' < "$WORK/rv.txt" > "$WORK/rv-flat.txt"
 hasnot "a pnpm override pinning away is not a hit"     'code/pin/' "$WORK/rv.txt"
@@ -229,6 +235,10 @@ has    "a symlinked settings file is checked"          'p/link/\.claude/settings
 hasnot "a deny rule naming a worm file is not malware" 'runs a file the TanStack and keyv worms plant' "$WORK/rv.txt"
 hasnot "plugin marketplace clones are not projects"    'plugins/marketplaces' "$WORK/rv.txt"
 hasnot "a commented-out folderOpen task is not flagged" 'p/comment/' "$WORK/rv.txt"
+has    "a // inside a task label does not hide a folderOpen task" 'p/hide/\.vscode/tasks\.json' "$WORK/rv.txt"
+has    "a // in a URL inside a task does not hide one either" 'p/url/\.vscode/tasks\.json' "$WORK/rv.txt"
+hasnot "a // inside a string does not unhide a commented-out one" 'p/unhide/' "$WORK/rv.txt"
+hasnot "a commented-out hooks block in a settings file is not flagged" 'p/chook/' "$WORK/rv.txt"
 has    "a | in a folder name keeps its row intact"     'p/a\|b/\.claude/settings\.json' "$WORK/rv.txt"
 sed -n '/05  RECENT KEY LEAKS/,/WHAT TO DO/p' "$WORK/rv.txt" > "$WORK/rv-05.txt"
 hasnot "a guard hook naming a worm file is not malware" 'p/guard/' "$WORK/rv-05.txt"
@@ -250,6 +260,16 @@ has    "a Windows backslash path counts"               '~/w/\.claude/settings\.j
 printf 'x\n' > "$WORK/vsp/p/.vscode/setup.mjs"
 HOME="$WORK/vsp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.txt"
 has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack and keyv worms plant' "$WORK/vsp.txt"
+# One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
+mkdir -p "$WORK/bigjs/p/.vscode"
+python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'
+import sys
+tasks = ','.join('{"label":"t%d // x","command":"make"}' % i for i in range(20000))
+open(sys.argv[1], 'w').write('{"tasks":[' + tasks + ',{"label":"last","runOptions":{"runOn":"folderOpen"},"command":"make"}]}')
+PY3
+T0=$(date +%s); HOME="$WORK/bigjs" bash "$SCRIPT" --offline > "$WORK/bigjs.txt" 2>&1; T=$(( $(date +%s) - T0 ))
+has    "a huge one-line tasks.json is read whole"      'p/\.vscode/tasks\.json' "$WORK/bigjs.txt"
+if [ "$T" -le 30 ]; then ok "and in reasonable time" "${T}s"; else bad "and in reasonable time" "took ${T}s"; fi
 HOME="$WORK/clean" bash "$SCRIPT" --offline > "$WORK/clean-npm.txt" 2>&1
 has    "the clean line counts versions and packages apart" 'none of [0-9]+ bad versions or [0-9]+ bad packages' "$WORK/clean-npm.txt"
 # A folder of npm's cache that can't be read.
