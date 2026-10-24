@@ -411,6 +411,14 @@ printf 'machine example.com login me password x\n' > "$WP/_netrc"
 printf 'import cook\n' > "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages/cook.pth"
 : > "$WR/Temp/.pc_once_1"
 printf 'export GROQ_API_KEY=%s\n' "$K_GROQ" > "$WR/msyshome/.bash_history"
+# Global installs in the Windows places: npm's own folder, nvm-windows, fnm, Volta, mise, pnpm and npx's cache.
+for d in AppData/Roaming/npm/node_modules/opencraw AppData/Roaming/nvm/v20.1.0/node_modules/claud-code \
+         AppData/Roaming/fnm/node-versions/v22.0.0/installation/node_modules/cloude-code \
+         AppData/Local/Volta/tools/image/node/20.1.0/node_modules/rimarf AppData/Local/Volta/tools/image/packages/tool/lib/node_modules/naniod \
+         AppData/Local/mise/installs/node/22.0.0/node_modules/suport-color AppData/Local/pnpm/global/5/node_modules/cloude \
+         AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache; do
+  mkdir -p "$WP/$d"; printf '{"name":"%s","version":"1.0.0"}\n' "${d##*/}" > "$WP/$d/package.json"
+done
 printf '#!/bin/sh\n[ "$1" = -s ] && { echo "${FAKE_UNAME:-MINGW64_NT-10.0}"; exit 0; }\nexec /usr/bin/uname "$@"\n' > "$WB/uname"
 # reg query KEY /v NAME [/reg:64], printed the way reg.exe prints, with CRLF line ends.
 cat > "$WB/reg" <<'SH'
@@ -454,6 +462,14 @@ has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WOR
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
+has    "Windows: a bad package in npm's AppData folder"  'AppData/Roaming/npm/node_modules/opencraw' "$WORK/win1.txt"
+has    "Windows: a bad package under nvm-windows"        'AppData/Roaming/nvm/v20\.1\.0/node_modules/claud-code' "$WORK/win1.txt"
+has    "Windows: a bad package under fnm"                'AppData/Roaming/fnm/node-versions/v22\.0\.0/installation/node_modules/cloude-code' "$WORK/win1.txt"
+has    "Windows: a bad package under Volta"              'AppData/Local/Volta/tools/image/node/20\.1\.0/node_modules/rimarf' "$WORK/win1.txt"
+has    "Windows: a bad dependency of a Volta tool"       'AppData/Local/Volta/tools/image/packages/tool/lib/node_modules/naniod' "$WORK/win1.txt"
+has    "Windows: a bad package under mise"               'AppData/Local/mise/installs/node/22\.0\.0/node_modules/suport-color' "$WORK/win1.txt"
+has    "Windows: a bad package in pnpm's global folder"  'AppData/Local/pnpm/global/5/node_modules/cloude ' "$WORK/win1.txt"
+has    "Windows: a bad package in npx's cache"           'AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache' "$WORK/win1.txt"
 if grep -aqF -f "$WORK/keys.txt" "$WORK/win.txt"; then bad "Windows: never prints a planted key"; else ok "Windows: never prints a planted key"; fi
 
 echo "WSL"

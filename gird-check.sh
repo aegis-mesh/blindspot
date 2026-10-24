@@ -1896,8 +1896,17 @@ NPM_ROOTS=$(
     [ -d "$r" ] && printf '%s\n' "$r"
   done
   if [ "$WIN" -eq 1 ]; then
-    for r in "$WAPP/npm/node_modules" "$WLAPP"/npm-cache/_npx/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done
+    # The Windows places gird-check.ps1 reads: npm's own folder, nvm-windows (NVM_HOME), fnm (FNM_DIR), Volta, mise, pnpm and npx's cache.
+    _nvm=$(winpath "${NVM_HOME:-}"); _nvm=${_nvm%/}; [ -n "$_nvm" ] || _nvm="$WAPP/nvm"
+    _fnm=$(winpath "${FNM_DIR:-}"); _fnm=${_fnm%/}; [ -n "$_fnm" ] || _fnm="$WAPP/fnm"
+    for r in "$WAPP/npm/node_modules" "$_nvm"/*/node_modules "$_fnm"/node-versions/*/installation/node_modules \
+             "$WLAPP"/Volta/tools/image/node/*/node_modules "$WLAPP"/Volta/tools/image/packages/*/node_modules \
+             "$WLAPP"/Volta/tools/image/packages/*/lib/node_modules "$WLAPP"/mise/installs/node/*/node_modules \
+             "$WLAPP"/pnpm/global/*/node_modules "$WLAPP"/npm-cache/_npx/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done
   fi
+  # pnpm's own folder, where its setup points PNPM_HOME.
+  _ph=$(winpath "${PNPM_HOME:-}"); _ph=${_ph%/}
+  if [ -n "$_ph" ]; then for r in "$_ph"/global/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done; fi
 )
 npm_global_hits() { # package.json paths on stdin; prints folder|name version|tag for each bad package
   BAD_NPM_LIST=$BAD_NPM awk '
