@@ -1994,7 +1994,7 @@ NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" |
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
 # with a platform suffix such as -darwin-arm64, the id compared without case.
-_x=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; do
+EXT_ROWS=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; do
     [ -d "$r" ] || continue
     for d in "$r"/*; do [ -d "$d" ] && printf '%s\n' "$d"; done
   done | BAD_EXT_LIST=$BAD_EXT awk '
@@ -2008,8 +2008,8 @@ _x=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/exte
       if (rest != "" && rest !~ /^-/) continue
       if (v[i] == "*" || v[i] == ver) { print $0 "\t" sp[i] " " ver "\t" t[i]; break }
     } }')
-[ -n "$_x" ] && NPM_ROWS="${NPM_ROWS:+$NPM_ROWS
-}$_x"
+# The incidents with an extension line: their startup files are extension findings too.
+EXT_INC=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 # Incidents that leave the machine itself uncompromised only need the version updated; the rest mean a compromised machine.
 NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
 for _t in $NPM_TAGS; do
@@ -2019,15 +2019,17 @@ done
 # when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
 # the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
 # is revoked. A file in the shared /tmp counts only if this person owns it.
-WIPER=""; PERSIST=""
+WIPER=""; PERSIST=""; EXT_PERSIST=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
   if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
-"; else PERSIST="$PERSIST$_ip$TAB$_in
-"; fi
+"
+  else case "$EXT_INC" in *" $_ii "*) EXT_PERSIST="$EXT_PERSIST$_ip$TAB$_in$TAB$_ii
+" ;; *) PERSIST="$PERSIST$_ip$TAB$_in
+" ;; esac; fi
 done <<EOF
 $IND_TABLE
 EOF
@@ -2042,8 +2044,15 @@ fi
 "
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
+# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
+EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
+EXT_TAGS=$(printf '%s\n%s\n' "$EXT_ROWS" "$EXT_PERSIST" | cut -f3 | grep -v '^$' | sort -u)
+ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
+if [ "$MAL_HIT" -eq 1 ] && [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="npm and editor extension malware"; MAL_SHORT="npm and editor extension"
+elif [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="malware in an editor extension"; MAL_SHORT="editor extension"
+else MAL_WHAT="npm malware"; MAL_SHORT="npm"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "A wiper waits for a GitHub token to be revoked: gh-token-monitor"
-elif [ "$MAL_HIT" -eq 1 ]; then progress x "Signs of npm malware found"
+elif [ "$ANY_MAL" -eq 1 ]; then progress x "Signs of $MAL_WHAT found"
 else progress o "No npm malware in $(plural "$N_LOCK" lockfile lockfiles), global installs or npm's cache"; fi
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
 # file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
@@ -2165,6 +2174,7 @@ todo() { # section text
 }
 [ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."
 [ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
+[ "$EXT_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Uninstall the extensions listed in section 5, delete the files listed there, and rotate every key this machine could reach."
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
@@ -2195,7 +2205,7 @@ N_AK=$(count_lines "$AK_LINKS")
 
 SCORE=100
 [ "$PY_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
-[ "$MAL_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
+[ "$ANY_MAL" -eq 1 ] && SCORE=$((SCORE - 40))
 _d=$((KEY_FILES * 8)); [ "$_d" -gt 32 ] && _d=32; SCORE=$((SCORE - _d))
 _d=$((HIST_KEYS * 6)); [ "$_d" -gt 12 ] && _d=12; SCORE=$((SCORE - _d))
 _d=$((N_ALLOW * 10)); [ "$_d" -gt 20 ] && _d=20; SCORE=$((SCORE - _d))
@@ -2207,7 +2217,7 @@ if [ "$SCORE" -ge 90 ]; then GRADE=A; elif [ "$SCORE" -ge 78 ]; then GRADE=B
 elif [ "$SCORE" -ge 64 ]; then GRADE=C; elif [ "$SCORE" -ge 50 ]; then GRADE=D; else GRADE=F; fi
 # GRADE only goes in the research counts. People see how they compare instead.
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "Scan done. Don't revoke GitHub tokens yet: act now"
-elif [ "$MAL_HIT" -eq 1 ]; then progress x "Scan done. Signs of npm malware: act now"
+elif [ "$ANY_MAL" -eq 1 ]; then progress x "Scan done. Signs of $MAL_WHAT: act now"
 elif [ "$PY_HIT" -eq 1 ]; then progress x "Scan done. Signs of the $PY_SHORT malware: act now"
 elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
 else progress o "Scan done: no findings"; fi
@@ -2337,7 +2347,7 @@ fi
 # with each section's details a key press away, or every detail with --full or
 # when the output isn't a terminal. A saved report always has every detail.
 # ===========================================================================
-if [ "$PY_HIT" -eq 1 ] || [ "$MAL_HIT" -eq 1 ]; then SEV=$RED
+if [ "$PY_HIT" -eq 1 ] || [ "$ANY_MAL" -eq 1 ]; then SEV=$RED
 elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ] || [ "$N_AK" -gt 0 ]; then SEV=$RED
 elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
 else SEV=$GRN; fi
@@ -2352,7 +2362,7 @@ if { [ -n "$RANK" ] && [ "$RANK" -le 1000 ]; } || { [ -z "$RANK" ] && [ "$EARLY"
 fi
 _act=""
 if [ "$WIPER_HIT" -eq 1 ]; then _act="ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN"
-elif [ "$MAL_HIT" -eq 1 ]; then _act="ACT NOW: SIGNS OF NPM MALWARE"
+elif [ "$ANY_MAL" -eq 1 ]; then _act="ACT NOW: SIGNS OF $(upper "$MAL_WHAT")"
 elif [ "$PY_HIT" -eq 1 ]; then
   _act=""; for _pi in $PY_HITS; do _act="${_act:+$_act AND }$(incident_name "$_pi")"; done
   _act="ACT NOW: SIGNS OF THE $(upper "$_act") MALWARE"
@@ -2589,7 +2599,25 @@ EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
-  emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs, npm's cache and editor extensions${RST}"
+  emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
+fi
+if [ "$EXT_HIT" -eq 1 ]; then
+  pair "${RED}✗${RST}" "Editor extensions" 16 "${RED}signs of the malware found${RST}"
+  while IFS="$TAB" read -r f p t; do
+    [ -n "$f" ] || continue
+    emit "        $(short "$f")"
+    emit "          ${p} ${DIM}($(npm_label "$t")), installed${RST}"
+  done <<EOF
+$EXT_ROWS
+EOF
+  while IFS="$TAB" read -r f p t; do
+    [ -n "$f" ] || continue
+    emit "        $(short "$f")"
+    emit "          ${p}"
+  done <<EOF
+$EXT_PERSIST
+EOF
+  for _t in $EXT_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 fi
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
@@ -2627,9 +2655,9 @@ if [ "$OS" = Darwin ]; then
   if [ "$KEY_FILES" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
-  elif [ "$MAL_HIT" -eq 1 ]; then
+  elif [ "$ANY_MAL" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found signs of npm malware. It can't tell you what the malware already took, or what your agents do after you close this window."
+    _p1="It found signs of $MAL_WHAT. It can't tell you what the malware already took, or what your agents do after you close this window."
   elif [ "$PY_HIT" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found signs of the $PY_SHORT malware. It can't tell you what the malware already took, or what your agents do after you close this window."
@@ -2712,8 +2740,8 @@ elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved key
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop it before revoking tokens"
-elif [ "$MAL_HIT" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="npm and $PY_SHORT malware found. Act now"
-elif [ "$MAL_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of npm malware. Act now"
+elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
+elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
@@ -2746,7 +2774,7 @@ fi
 if [ "$OS" = Darwin ]; then
   if [ "$ARCH" = arm64 ]; then _how="Free for individuals: gird.ai/argus/download"
   else _how="It runs on Apple Silicon Macs today: gird.ai/argus/download"; fi
-  if [ "$PY_HIT" -eq 1 ] || [ "$MAL_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then _lead="This scan is a snapshot."
+  if [ "$PY_HIT" -eq 1 ] || [ "$ANY_MAL" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then _lead="This scan is a snapshot."
   elif [ "$N_IDLE" -gt 0 ]; then _lead="A poisoned package can drive an agent you no longer use."
   elif [ "$ISSUES" -gt 0 ]; then _lead="This scan is a snapshot."
   else _lead="The next leak won't wait for a scan."; fi
@@ -2773,13 +2801,13 @@ else printf '%s' "$HEAD_FULL$SEC1$SEC2$SEC3$SEC4$SEC5$SEC_TODO$SEC_ARGUS$SEC_FOO
 # ---------------------------------------------------------------------------
 # u is the run ID, so a share from the certificate can be matched to its run, r the
 # early rank, sk the SSH private keys and hk the shell history files with keys, nm npm malware,
-# py a Python incident other than LiteLLM and wp gh-token-monitor, so the page never says to rotate
-# a token while it is there.
+# py a Python incident other than LiteLLM, ex malware in an editor extension and wp
+# gh-token-monitor, so the page never says to rotate a token while it is there.
 card_url() {
-  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s&nm=%s&py=%s&wp=%s' \
+  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s&nm=%s&py=%s&ex=%s&wp=%s' \
     "$WEB" "$SCORE" "$GRADE" "$N_AG" "$N_IDLE" "$N_MCP" "$N_MCP_TOKEN" "$KEY_FILES" "$(printf '%s' "$PROV_IDS" | tr ' ' '.')" \
     "$N_ALLOW" "$N_ALLOW_NPM" "$LITELLM_HIT" "$N_LOGIN" "$N_SSH_OPEN" "$(date +%Y-%m-%d)" "$PCT" "$PCT_N" \
-    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')" "$MAL_HIT" "$PY_OTHER" "$WIPER_HIT"
+    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')" "$MAL_HIT" "$PY_OTHER" "$EXT_HIT" "$WIPER_HIT"
 }
 # Windows' default browser, from Git Bash or WSL. cmd.exe would read each & in the
 # link as a new command, so they are escaped as ^&. explorer.exe reports failure
