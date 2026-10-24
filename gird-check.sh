@@ -1031,7 +1031,8 @@ sess_start() {
   [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" != none ] || return 0
   SESS_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || return 0
   SESS_FIFO="$SESS_FILE.fifo"
-  mkfifo "$SESS_FIFO" 2>/dev/null || { rm -f "$SESS_FILE"; SESS_FILE=""; SESS_FIFO=""; return 0; }
+  # Keys pass through the fifo: only the owner may open it, whatever the umask (/tmp is shared on Linux).
+  mkfifo -m 600 "$SESS_FIFO" 2>/dev/null || { rm -f "$SESS_FILE"; SESS_FILE=""; SESS_FIFO=""; return 0; }
   sess_filter < "$SESS_FIFO" > "$SESS_FILE" &
   SESS_FILTER_PID=$!
   _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
