@@ -90,6 +90,7 @@ for E in perl rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline > "$SE/$E.txt" 2>&1
   sed -n '/Keys in agent sessions/,/^$/p' "$SE/$E.txt" > "$SE/$E.block"
+  tr -s ' \n' '  ' < "$SE/$E.block" > "$SE/$E.flat"   # the notes wrap
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.txt"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.txt"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.txt"
@@ -98,7 +99,7 @@ for E in perl rg; do
   has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
-  has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.txt"
+  has    "$E: names encrypted sessions as not checked" 'Windsurf conversation files are encrypted, so they were not checked' "$SE/$E.flat"
   if grep -aqF -f "$WORK/keys.txt" "$SE/$E.txt"; then bad "$E: never prints a key"; else ok "$E: never prints a key"; fi
 done
 SKIPPING=$NORG
@@ -221,6 +222,25 @@ printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/priv/.claude/projects/-User
 HOME="$SE/priv" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions --full > "$SE/priv.txt" 2>&1
 has    "the report names where sessions are, not the project folders they are named after" '^ +~/\.claude/projects$' "$SE/priv.txt"
 hasnot "and never the project path or username in a session folder name" 'alice|acme' "$SE/priv.txt"
+# Key formats from the providers' own docs: OpenAI admin keys, AWS temporary key ids, Amazon
+# Bedrock long-term keys (ABSK, then the base64 of BedrockAPIKey) and GitHub app tokens in the
+# format of April 2026 (ghs_, the app id, then a JWT with dots and underscores). One per agent,
+# so each shows on its own row, and all four in a project's .env file.
+mkdir -p "$SE/fmt/.claude/projects/p" "$SE/fmt/.codex/sessions/x" "$SE/fmt/.gemini/tmp/x/chats" "$SE/fmt/.continue/sessions" "$SE/fmt/code/new"
+_adm="sk""-admin-$(rnd 130)"; _asia="AS""IA$(upper 16)"; _absk="AB""SKQmVkcm9ja0FQSUtleS$(rnd 100)"; _ghs="gh""s_123456_$(rnd 40).$(rnd 60).$(rnd 43)"
+printf '{"a":"x %s y"}\n' "$_adm" > "$SE/fmt/.claude/projects/p/a.jsonl"
+printf '{"a":"x %s y"}\n' "$_asia" > "$SE/fmt/.codex/sessions/x/r.jsonl"
+printf '{"a":"x %s y"}\n' "$_absk" > "$SE/fmt/.gemini/tmp/x/chats/s.jsonl"
+printf '{"a":"x %s y"}\n' "$_ghs" > "$SE/fmt/.continue/sessions/s.json"
+printf 'AWS_ACCESS_KEY_ID=%s\nAWS_BEARER_TOKEN_BEDROCK=%s\nGITHUB_TOKEN=%s\nOPENAI_ADMIN_KEY=%s\n' "$_asia" "$_absk" "$_ghs" "$_adm" > "$SE/fmt/code/new/.env"
+printf '%s\n' "$_adm" "$_asia" "$_absk" "$_ghs" > "$SE/fmt-keys.txt"
+HOME="$SE/fmt" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/fmt.txt" 2>&1
+has    "an OpenAI admin key is found"                 'Claude Code +1 file: OpenAI' "$SE/fmt.txt"
+has    "an AWS temporary key id is found"             'Codex +1 file: AWS' "$SE/fmt.txt"
+has    "a Bedrock API key is found"                   'Gemini CLI +1 file: AWS' "$SE/fmt.txt"
+has    "a GitHub app token in the new format is found" 'Continue +1 file: GitHub' "$SE/fmt.txt"
+has    "and all four in a project .env file"          '~/code/new/\.env +AWS, GitHub, OpenAI' "$SE/fmt.txt"
+if grep -aqF -f "$SE/fmt-keys.txt" "$SE/fmt.txt"; then bad "and none of them is printed"; else ok "and none of them is printed"; fi
 # A kill -9 of the script stops the perl workers within one piece of a file. What a kill -9
 # leaves behind, as documented, lands in this test's own TMPDIR.
 mkdir -p "$SE/k9/.claude/projects/p" "$SE/tmp9"

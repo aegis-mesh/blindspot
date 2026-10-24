@@ -630,9 +630,9 @@ trap 'cleanup; exit 129' HUP
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])AKIA[0-9A-Z]{16}([^A-Z0-9]|$)|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
-KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
 function prov(s) {
   sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s)
@@ -645,7 +645,7 @@ function prov(s) {
   if (s ~ /^(hf_)/) return "Hugging Face"
   if (s ~ /^(pplx-)/) return "Perplexity"
   if (s ~ /^(r8_)/) return "Replicate"
-  if (s ~ /^(AKIA|bedrock-api-key)/) return "AWS"
+  if (s ~ /^(AKIA|ASIA|ABSK|bedrock-api-key)/) return "AWS"
   if (s ~ /^(gh[pousr]_|github_pat_)/) return "GitHub"
   if (s ~ /^(npm_)/) return "npm"
   return ""
@@ -917,23 +917,35 @@ SCAN_T0=$SECONDS
 # Kept apart from AGENTS, whose ids go into the report.
 # >>> sessions: generated from data/sessions.tsv by tools/gen.sh. Edit that file, then run it.
 SESS_TABLE="all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/projects
+all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/history.jsonl
+all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/paste-cache
 mac|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
 win|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
+win|read|Claude Desktop|$WLAPP/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions
 all|read|Codex|${CODEX_HOME:-$H/.codex}/sessions
+all|read|Codex|${CODEX_HOME:-$H/.codex}/archived_sessions
 all|read|Codex|${CODEX_HOME:-$H/.codex}/history.jsonl
 all|read|Gemini CLI|${GEMINI_CLI_HOME:-$H}/.gemini/tmp
+mac|read|Gemini CLI|$H/.cache/.gemini/tmp
 all|read|Qwen Code|${QWEN_HOME:-$H/.qwen}/projects
+all|read|Qwen Code|${QWEN_HOME:-$H/.qwen}/tmp
 all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/opencode.db
+all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/opencode.db-wal
 all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/storage
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-state
+all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/history-session-state
 all|read|Roo Code|$AS/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 all|read|Roo Code|$AS/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 all|read|Cline|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks
 all|read|Cline|$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks
-all|read|Cline|$H/.cline/data/sessions
+all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/sessions
+all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/tasks
 all|read|Continue|${CONTINUE_GLOBAL_DIR:-$H/.continue}/sessions
 all|read|Goose|$GOOSE_DATA/sessions
-all|read|Kiro CLI|$H/.kiro/sessions
+mac|read|Goose|$H/.local/state/goose/logs
+linux|read|Goose|$H/.local/state/goose/logs
+win|read|Goose|$GOOSE_DATA/logs
+all|read|Kiro CLI|${KIRO_HOME:-$H/.kiro}/sessions
 mac|read|Kiro CLI|$AS/kiro-cli
 linux|read|Kiro CLI|${XDG_DATA_HOME:-$H/.local/share}/kiro-cli
 win|read|Kiro CLI|$WLAPP/kiro-cli
@@ -941,10 +953,18 @@ mac|read|Amazon Q|$AS/amazon-q
 linux|read|Amazon Q|${XDG_DATA_HOME:-$H/.local/share}/amazon-q
 win|read|Amazon Q|$WLAPP/amazon-q
 all|read|Factory Droid|$H/.factory/sessions
+all|read|Factory Droid|$H/.factory/projects
 all|read|Cursor|$AS/Cursor/User/globalStorage/state.vscdb
 all|read|Cursor|$H/.cursor/projects
+all|read|Cursor|$H/.cursor/chats
+all|read|Windsurf|$H/.windsurf/transcripts
+all|read|Antigravity|$H/.gemini/antigravity/brain
+all|read|Antigravity|$H/.gemini/antigravity-cli/brain
+all|read|Antigravity|$H/.gemini/antigravity-ide/brain
 all|sealed|Windsurf|$H/.codeium/windsurf/cascade
-all|sealed|Antigravity|$H/.gemini/antigravity/conversations"
+all|sealed|Antigravity|$H/.gemini/antigravity/conversations
+all|sealed|Antigravity|$H/.gemini/antigravity-cli/conversations
+all|sealed|Antigravity|$H/.gemini/antigravity-ide/conversations"
 # <<< sessions
 case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
 SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "read" { print $3 "|" $4 }')
@@ -2199,7 +2219,7 @@ if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
 fi
 SESS_PARTIAL=0
 if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt 0 ] || [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; }; }; then SESS_PARTIAL=1; fi
-SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done)
+SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done | awk '!seen[$0]++')
 if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent session file" "agent session files")"; fi
 
 # --- What to do, and the score -----------------------------------------------
@@ -2564,7 +2584,7 @@ EOF
     wrap "Agent sessions were partly checked: some files or folders could not be read." 8 "     ${YEL}!${RST}  " "        "
   fi
   [ "$SESS_ZST" -gt 0 ] && wrap "$(plural "$SESS_ZST" "compressed session file was" "compressed session files were") not checked." 8 "        " "        " "$DIM"
-  [ -n "$SESS_SEALED_FOUND" ] && wrap "$(printf '%s' "$SESS_SEALED_FOUND" | tr '\n' ',' | sed -e 's/,$//' -e 's/,/ and /g') sessions are stored encrypted, so they were not checked." 8 "        " "        " "$DIM"
+  [ -n "$SESS_SEALED_FOUND" ] && wrap "$(printf '%s' "$SESS_SEALED_FOUND" | tr '\n' ',' | sed -e 's/,$//' -e 's/,/ and /g') conversation files are encrypted, so they were not checked." 8 "        " "        " "$DIM"
 fi
 
 SEC3=$CAP; CAP=""
