@@ -41,7 +41,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: bash tests/run-ps.sh
+      # Both suites, each recording its test names, then tests/parity.sh on the two lists.
+      - run: bash tests/parity-run.sh
 
   interactive:
     name: game and menu (macOS)

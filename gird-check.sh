@@ -1836,7 +1836,7 @@ npm_hits() {
       }
     }' "$@" 2>/dev/null
 }
-NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0
+NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0; NPM_UNREAD=0
 while IFS= read -r f; do [ -n "$f" ] && [ -r "$f" ] && N_LOCK=$((N_LOCK + 1)); done <<EOF
 $LOCKFILES
 EOF
@@ -1984,9 +1984,13 @@ N_OLD=$(count_lines "$OLD_LIST")
 [ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
+# A folder or file that can't be read leaves the cache not fully checked, never clean: find's and
+# cat's errors come back unmarked next to the hits, which are marked with H.
 for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
   [ -n "$c" ] && [ -d "$c" ] || continue
-  _h=$(find "$c" -type f -print0 2>/dev/null | xargs -0 cat 2>/dev/null | npm_hits | awk -F '\t' -v OFS='\t' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u)
+  _r=$( { find "$c" -type f -print0 2>&9 | xargs -0 cat 2>&9 | npm_hits | awk -F '\t' -v OFS='\t' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u | sed 's/^/H/'; } 9>&1)
+  _h=$(printf '%s\n' "$_r" | sed -n 's/^H//p')
+  NPM_UNREAD=$((NPM_UNREAD + $(printf '%s\n' "$_r" | grep -c '^[^H]')))
   [ -n "$_h" ] && NPM_ROWS="$NPM_ROWS
 $_h"
 done
@@ -2595,6 +2599,8 @@ EOF
 $PERSIST
 EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
+elif [ "$WIPER_HIT" -eq 0 ] && [ "$NPM_UNREAD" -gt 0 ]; then
+  pair "${YEL}!${RST}" "npm worms" 16 "${YEL}not fully checked: part of npm's cache could not be read${RST}"
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
@@ -2734,6 +2740,7 @@ if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop
 elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
 elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
+elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
 elif [ "$N_PLAT_FOUND" -ge 2 ]; then

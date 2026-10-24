@@ -5,8 +5,8 @@
 #
 #   PWSH=/path/to/pwsh bash tests/run-ps.sh
 #
-# PWSH defaults to pwsh on PATH. Set GIRD_CHECK_WORKER to gird-website's
-# worker/check-stats.js to check the report against the Worker's validation too.
+# PWSH defaults to pwsh on PATH. When GIRD_CHECK_WORKER points at the site's report validation
+# (worker/check-stats.js), the report is checked against it too.
 # Windows PowerShell 5.1 can't run here; the 5.1 syntax checks below are textual.
 # shellcheck disable=SC2088  # the patterns match the literal ~ the script prints for home paths
 set -u
@@ -18,12 +18,8 @@ if [ -z "$PWSH" ] || [ ! -x "$PWSH" ]; then echo "pwsh not found: set PWSH"; exi
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && { kill "$MOCK_PID"; wait "$MOCK_PID"; } 2>/dev/null; rm -rf "$WORK"' EXIT
-PASS=0; FAIL=0
-ok()  { PASS=$((PASS + 1)); printf '  ok    %s\n' "$1"; }
-bad() { FAIL=$((FAIL + 1)); printf '  FAIL  %s\n' "$1"; }
-has()    { if grep -aqE -- "$2" "$3"; then ok "$1"; else bad "$1"; printf '        wanted: %s\n' "$2"; fi; }
-hasnot() { if grep -aqE -- "$2" "$3"; then bad "$1"; printf '        found: %s\n' "$2"; else ok "$1"; fi; }
-nokeys() { if grep -aqF -f "$2" "$3"; then bad "$1"; else ok "$1"; fi; }
+. tests/lib.sh
+command -v python3 >/dev/null 2>&1 || { echo "tests/run-ps.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 # A Windows-shaped copy of tests/make-fixture.sh's home: the same planted keys, with
 # the files that live under AppData on Windows moved there, and a key typed into
@@ -57,22 +53,24 @@ hasnot "no ?? or ?. operators (PowerShell 7 only)"     '\?\?|\?\.' "$WORK/code.t
 hasnot "no ternary a ? b : c (PowerShell 7 only)"      ' \? [^ ]+ : ' "$WORK/code.txt"
 hasnot "no && or || pipeline chains (PowerShell 7 only)" '&&|\|\|' "$WORK/code.txt"
 hasnot "no -Parallel, -AsHashtable or \$IsWindows"     '-Parallel|-AsHashtable|\$Is(Windows|MacOS|Linux)\b' "$WORK/code.txt"
+if "$PWSH" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$SCRIPT', [ref]\$null, [ref]\$e); if (\$e.Count) { \$e | ForEach-Object { \$_.Message }; exit 1 }" > "$WORK/parse.txt" 2>&1
+then ok "parses"; else bad "parses"; sed 's/^/        /' "$WORK/parse.txt" | head -n 5; fi
 
 echo "pwsh $("$PWSH" -NoProfile -Command '$PSVersionTable.PSVersion.ToString()')"
 if psrun "$WORK/home" -- -Help > "$WORK/help.txt" 2>&1 && grep -q -- '-Offline' "$WORK/help.txt"; then ok "-Help lists the options"; else bad "-Help lists the options"; fi
 psrun "$WORK/home" -- --bogus > "$WORK/bogus.txt" 2>&1; RC=$?
-if [ "$RC" -eq 2 ] && grep -q 'Unknown option' "$WORK/bogus.txt"; then ok "an unknown option exits 2"; else bad "an unknown option exits 2, got $RC"; fi
+if [ "$RC" -eq 2 ] && grep -q 'Unknown option' "$WORK/bogus.txt"; then ok "an unknown option exits 2"; else bad "an unknown option exits 2" "got $RC"; fi
 
 OUT=$WORK/out.txt
 psrun "$WORK/home" -- -Offline > "$OUT" 2> "$WORK/err.txt"; RC=$?
-if [ "$RC" -eq 0 ]; then ok "exits 0"; else bad "exits 0, got $RC"; fi
+if [ "$RC" -eq 0 ]; then ok "exits 0"; else bad "exits 0" "got $RC"; fi
 if [ -s "$WORK/err.txt" ]; then bad "writes nothing to stderr"; sed 's/^/        /' "$WORK/err.txt" | head -n 5; else ok "writes nothing to stderr"; fi
 has    "finds keys in the shell profile"       '~/\.zshrc +Anthropic, OpenAI' "$OUT"
 has    "finds keys in shell history"           '~/\.zsh_history +GitHub' "$OUT"
 has    "flags a key in PowerShell's history"   'PSReadLine/ConsoleHost_history\.txt' "$OUT"
 has    "names the provider of that key"        '^ {54}GitHub$' "$OUT"
 has    "finds keys in a project .env file"     '~/code/app/\.env +AWS, Groq' "$OUT"
-has    "finds a key in an MCP config"          '~/\.cursor/mcp\.json +GitHub' "$OUT"
+has    "full output lists every key file"      '~/\.cursor/mcp\.json +GitHub' "$OUT"
 hasnot "ignores placeholders in .env.example"  'env\.example' "$OUT"
 has    "counts Claude Code MCP servers"        'Claude Code +~/\.claude\.json +3 servers' "$OUT"
 has    "counts Codex MCP servers"              '~/\.codex/config\.toml +2 servers' "$OUT"
@@ -111,7 +109,8 @@ has    "puts the wiper first"                  'ACT NOW: REMOVE GH-TOKEN-MONITOR
 has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
 has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
 tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat.txt"   # the advice wraps, so it is matched on one line
-has    "points other systems at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/out-flat.txt"
+has    "off Windows it points at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/out-flat.txt"
+hasnot "off Windows it never points at the Keychain" 'macOS Keychain' "$WORK/out-flat.txt"
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
 has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
 hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/out-flat.txt"
@@ -121,13 +120,14 @@ hasnot "never offers the Argus download off a Mac" 'argus/download' "$OUT"
 hasnot "never shows a letter grade"            'GRADE [ABCDF]|[Gg]rade [ABCDF]\b' "$OUT"
 has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=2&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]$' "$OUT"
 nokeys "never prints a planted key" "$WORK/keys.txt" "$OUT"
-if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "redirected output has no escape codes"; else ok "redirected output has no escape codes"; fi
+if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE/rgbin"
 RG=$(command -v rg 2>/dev/null); [ -n "$RG" ] && ln -s "$RG" "$SE/rgbin/rg"
+NORG=""; [ -n "$RG" ] || NORG="ripgrep is not installed"
 for E in net rg; do
-  if [ "$E" = rg ] && [ -z "$RG" ]; then echo "  skip  ripgrep is not installed"; continue; fi
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   psrun "$WORK/home" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline > "$SE/$E.txt" 2>&1
   sed -n '/Keys in agent sessions/,/^$/p' "$SE/$E.txt" > "$SE/$E.block"
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.block"
@@ -136,12 +136,13 @@ for E in net rg; do
   hasnot "$E: a made-up key is not counted"        'Claude Code .*(Anthropic|AWS|GitHub)' "$SE/$E.block"
   has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
+  has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
   has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.block"
   nokeys "$E: never prints a key" "$WORK/keys.txt" "$SE/$E.txt"
 done
-if [ -s "$SE/rg.block" ]; then
-  if diff -q "$SE/net.block" "$SE/rg.block" >/dev/null; then ok ".NET and ripgrep report the same"; else bad ".NET and ripgrep report the same"; diff "$SE/net.block" "$SE/rg.block" | head -n 6; fi
-fi
+SKIPPING=$NORG
+if diff -q "$SE/net.block" "$SE/rg.block" >/dev/null; then ok ".NET and ripgrep report the same"; else bad ".NET and ripgrep report the same" "$(diff "$SE/net.block" "$SE/rg.block" | head -n 6)"; fi
+SKIPPING=""
 bash tests/make-fixture.sh "$SE/bh" "$SE/bk" >/dev/null
 # --all-sessions: without it a fast machine can finish the rest first, stop the session check
 # part-way and list nothing, which is the script working as designed but not a comparison.
@@ -151,23 +152,68 @@ psrun "$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER
 has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > "$SE/clean.txt" 2>&1
 has    "a full check with nothing found says so" 'No keys in 2 agent session files\.' "$SE/clean.txt"
-mkdir -p "$SE/piece/.claude/projects/p" "$SE/piece/AppData/Roaming" "$SE/piece/AppData/Local/Temp"
+psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER=0 -- -Offline > "$SE/clean-part.txt" 2>&1
+hasnot "a partial check with nothing found never says no keys" 'No keys in .*agent session' "$SE/clean-part.txt"
+has    "and says it was partial"                 'Checked the newest 0 of 2 agent session files' "$SE/clean-part.txt"
+psrun "$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=none -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/none.txt"
+has    "with no engine the sessions are named as not checked" 'agent session files were not checked\.' "$SE/none.txt"
+# A file that can't be read is not counted as checked.
+mkdir -p "$SE/unread/.claude/projects/p" "$SE/unread/AppData/Roaming" "$SE/unread/AppData/Local/Temp"
+printf '{}\n' > "$SE/unread/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/unread/.claude/projects/p/b.jsonl"; chmod 000 "$SE/unread/.claude/projects/p/b.jsonl"
+psrun "$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-net.txt"
+has    "net: an unreadable session is not counted as checked" 'Checked the newest 1 of 2 agent session files' "$SE/unread-net.txt"
+SKIPPING=$NORG
+psrun "$SE/unread" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
+has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
+SKIPPING=""
+# A long token that crosses a 1 MB piece is not mistaken for a key.
+for D in piece esc esc2; do mkdir -p "$SE/$D/.claude/projects/p" "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
-psrun "$SE/piece" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/piece.txt" 2>&1
-has    "a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece.txt"
-mkdir -p "$SE/esc/.claude/projects/p" "$SE/esc/AppData/Roaming" "$SE/esc/AppData/Local/Temp"
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 2) + '\\\\n' + 'hf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc/.claude/projects/p/a.jsonl"
-psrun "$SE/esc" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/esc.txt" 2>&1
-has    "a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc.txt"
-mkdir -p "$SE/esc2/.claude/projects/p" "$SE/esc2/AppData/Roaming" "$SE/esc2/AppData/Local/Temp"
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 1) + '\\\\' + 'nhf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc2/.claude/projects/p/a.jsonl"
 psrun "$SE/esc2" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/esc2.txt" 2>&1
-has    "a key after a backslash that ends a read is found" 'Claude Code +1 file: Hugging Face' "$SE/esc2.txt"
+has    "net: a key after a backslash that ends a read is found" 'Claude Code +1 file: Hugging Face' "$SE/esc2.txt"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$SE/piece" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/piece-$E.txt" 2>&1
+  has    "$E: a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece-$E.txt"
+  psrun "$SE/esc" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/esc-$E.txt" 2>&1
+  has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
+done
+SKIPPING=""
+# A held engine is still running when the rest of the check is done: it is stopped.
 : > "$SE/hold"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" -- -Offline > "$SE/held.txt" 2>&1; RC=$?
-if [ "$RC" -eq 0 ]; then ok "a held check does not hold up the report"; else bad "a held check does not hold up the report, exit $RC"; fi
-hasnot "a partial check with nothing found never says no keys" 'No keys in .*agent session' "$SE/held.txt"
-has    "and says it was partial"                 'Checked the newest 0 of 2 agent session files' "$SE/held.txt"
+if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad "a held engine does not hold up the check" "exit $RC"; fi
+has    "and the report says the sessions were not all checked" 'Checked the newest 0 of 2' "$SE/held.txt"
+SKIPPING=$NORG
+{
+  # A session ripgrep never finishes (a pipe nobody writes to) is stopped when the rest is done.
+  mkdir -p "$SE/stuck/.codex" "$SE/stuck/AppData/Roaming" "$SE/stuck/AppData/Local/Temp"; mkfifo "$SE/stuck/.codex/history.jsonl"
+  psrun "$SE/stuck" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline > "$SE/stuck.txt" 2>&1; RC=$?
+  if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check" "exit $RC"; fi
+  if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f "with-filename.*$SE/stuck/"; else ok "rg: no ripgrep process is left running"; fi
+  # Closing the terminal sends HUP to the process group, ripgrep included. Many folders keep the
+  # scan going long enough to send it while ripgrep is stuck. (gird-check.ps1 has no HUP handler:
+  # a HUP to the pwsh process alone leaves ripgrep running.)
+  python3 -c "
+import os, sys
+for d in range(300):
+    p = os.path.join(sys.argv[1], 'code', 'p%d' % d); os.makedirs(p)
+    for f in range(200): open(os.path.join(p, 'f%d' % f), 'w').close()" "$SE/stuck"
+  # Its own session, so the HUP goes to its group and not this script's.
+  "$(command -v python3)" -c 'import os, sys; os.setsid(); os.execv(sys.argv[1], sys.argv[1:])' /usr/bin/env -i PATH="$WORK/bin:$SE/rgbin" \
+    HOME="$WORK/pshome" USERPROFILE="$SE/stuck" APPDATA="$SE/stuck/AppData/Roaming" LOCALAPPDATA="$SE/stuck/AppData/Local" \
+    TEMP="$SE/stuck/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=rg "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline > /dev/null 2>&1 &
+  BP=$!
+  for _i in $(seq 1 100); do [ -n "$SKIPPING" ] && break; pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+  if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then RGUP=1; else RGUP=0; fi
+  kill -HUP -- "-$BP" 2>/dev/null; wait "$BP" 2>/dev/null
+  for _i in $(seq 1 10); do pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1 || break; sleep 0.1; done
+  if [ "$RGUP" -eq 0 ]; then bad "rg: HUP leaves no ripgrep process" "ripgrep never started"
+  elif pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then bad "rg: HUP leaves no ripgrep process"; pkill -f "with-filename.*$SE/stuck/"; else ok "rg: HUP leaves no ripgrep process"; fi
+}
+SKIPPING=""
 mkdir -p "$SE/min/.claude/projects/p" "$SE/min/AppData/Roaming" "$SE/min/AppData/Local/Temp"; printf '{}\n' > "$SE/min/.claude/projects/p/a.jsonl"
 psrun "$SE/min" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/held-sum.txt"
 has    "the summary row is not a check mark after a partial check" 'Keys in plain text none in files; agent sessions partly checked' "$SE/held-sum.txt"
@@ -178,7 +224,7 @@ entries() { grep -E '^[@a-z0-9][^ ]* (\*|[0-9][^ ]*) [a-z]+$'; }
 sed -n '/^BAD_NPM="/,/"$/p' "$BASH_SCRIPT" | sed -e 's/^BAD_NPM="//' -e 's/"$//' > "$WORK/bad-sh-raw.txt"
 sed -n "/^\$BadNpm = @'/,/^'@/p" "$SCRIPT" | sed -e '1d' -e '$d' > "$WORK/bad-ps-raw.txt"
 entries < "$WORK/bad-sh-raw.txt" > "$WORK/bad-sh.txt"; entries < "$WORK/bad-ps-raw.txt" > "$WORK/bad-ps.txt"
-if [ -s "$WORK/bad-sh.txt" ] && diff -q "$WORK/bad-sh.txt" "$WORK/bad-ps.txt" >/dev/null; then ok "the same bad npm package list ($(wc -l < "$WORK/bad-ps.txt" | tr -d ' ') entries)"
+if [ -s "$WORK/bad-sh.txt" ] && diff -q "$WORK/bad-sh.txt" "$WORK/bad-ps.txt" >/dev/null; then ok "the same bad npm package list" "$(wc -l < "$WORK/bad-ps.txt" | tr -d ' ') entries"
 else bad "the same bad npm package list"; diff "$WORK/bad-sh.txt" "$WORK/bad-ps.txt" | head -n 6; fi
 if diff -q "$WORK/bad-sh-raw.txt" "$WORK/bad-sh.txt" >/dev/null && diff -q "$WORK/bad-ps-raw.txt" "$WORK/bad-ps.txt" >/dev/null; then ok "every line of both lists is an entry"
 else bad "every line of both lists is an entry"; diff "$WORK/bad-sh-raw.txt" "$WORK/bad-sh.txt" | head -n 3; diff "$WORK/bad-ps-raw.txt" "$WORK/bad-ps.txt" | head -n 3; fi
@@ -187,10 +233,10 @@ bash tests/make-fixture.sh "$WORK/bhome" "$WORK/keys-b.txt" >/dev/null
 HOME="$WORK/bhome" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline > "$WORK/bash.txt" 2>&1
 for sec in 'MCP SERVERS' 'KEYS IN CLAUDE CODE ALLOW LISTS'; do
   b=$(grep -aoE "$sec +[0-9]+ [a-z]+" "$WORK/bash.txt"); p=$(grep -aoE "$sec +[0-9]+ [a-z]+" "$OUT")
-  if [ -n "$b" ] && [ "$b" = "$p" ]; then ok "$sec agrees ($p)"; else bad "$sec agrees: bash '$b', pwsh '$p'"; fi
+  if [ -n "$b" ] && [ "$b" = "$p" ]; then ok "$sec agrees" "$p"; else bad "$sec agrees" "bash '$b', pwsh '$p'"; fi
 done
 b=$(grep -aoE 'KEYS IN PLAIN TEXT +[0-9]+' "$WORK/bash.txt" | grep -oE '[0-9]+$'); p=$(grep -aoE 'KEYS IN PLAIN TEXT +[0-9]+' "$OUT" | grep -oE '[0-9]+$')
-if [ -n "$b" ] && [ "$p" = $((b + 1)) ]; then ok "key files agree, plus PowerShell's history ($p)"; else bad "key files agree: bash $b, pwsh $p"; fi
+if [ -n "$b" ] && [ "$p" = $((b + 1)) ]; then ok "key files agree, plus PowerShell's history" "$p"; else bad "key files agree, plus PowerShell's history" "bash $b, pwsh $p"; fi
 # Only where keys go differs: the macOS Keychain there, a secrets manager here.
 # gird-check.sh finds Claude Desktop in this machine's own /Applications, which a test home can't
 # plant, so whether it is listed differs by machine: it is left out of both lists.
@@ -259,6 +305,7 @@ sed -n '/05  RECENT KEY LEAKS/,/WHAT TO DO/p' "$WORK/rv.txt" > "$WORK/rv-05.txt"
 hasnot "a guard hook naming a worm file is not malware" 'p/guard/' "$WORK/rv-05.txt"
 has    "a /* inside a settings string does not hide its hooks" 'p/glob/\.claude/settings\.json' "$WORK/rv.txt"
 has    "a | in a lockfile's folder keeps its row intact" '~/code/x\|y/package-lock\.json$' "$WORK/rv.txt"
+has    "and its package"                               'axios 1\.14\.1 \(Axios takeover' "$WORK/rv.txt"
 has    "two unrelated repos with the same settings are both listed (1)" 'p/r1/\.claude/settings\.json' "$WORK/rv.txt"
 has    "two unrelated repos with the same settings are both listed (2)" 'p/r2/\.claude/settings\.json' "$WORK/rv.txt"
 hasnot "a bun override pinning away is not a hit"      'code/bunpin/' "$WORK/rv.txt"
@@ -279,7 +326,7 @@ if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, 
 # The clean line, against gird-check.sh's count, and a folder of npm's cache that can't be read.
 cp -R "$WORK/clean" "$WORK/npmok"; mkdir -p "$WORK/npmok/.npm/_cacache/index-v5/aa"
 psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmok.txt"
-has    "the clean line counts versions and packages apart, as gird-check.sh's list" "npm worms none of $(awk '$2 != "*"' "$WORK/bad-sh.txt" | grep -c .) bad versions or $(awk '$2 == "*"' "$WORK/bad-sh.txt" | grep -c .) bad packages" "$WORK/npmok.txt"
+has    "the clean line counts versions and packages apart" "npm worms none of $(awk '$2 != "*"' "$WORK/bad-sh.txt" | grep -c .) bad versions or $(awk '$2 == "*"' "$WORK/bad-sh.txt" | grep -c .) bad packages" "$WORK/npmok.txt"
 chmod 000 "$WORK/npmok/.npm/_cacache/index-v5/aa"
 psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno.txt"
 psrun "$WORK/npmok" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno-c.txt"
@@ -290,6 +337,11 @@ has    "and the summary row is not green either"       'Recent leaks npm package
 psrun "$WORK/home" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
 has    "Windows is told how to stop the wiper"         'Stop it with Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate, then delete the files above' "$WORK/wwin.txt"
 hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl' "$WORK/wwin.txt"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
+psrun "$WORK/home" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wl.txt"
+has    "Linux is told how to stop the wiper"         'systemctl --user disable --now gh-token-monitor\.service' "$WORK/wl.txt"
+hasnot "Linux is not given the Mac command"          'launchctl bootout' "$WORK/wl.txt"
+SKIPPING=""
 # Where a hit was found, and npm's placeholder for a removed package.
 has    "a lockfile hit says it is listed there"      'axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile' "$WORK/out-flat.txt"
 has    "an install hit says it is installed"         'claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed' "$WORK/out-flat.txt"
@@ -307,7 +359,9 @@ psrun "$WORK/mis" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$W
 hasnot "a version whose malware could not run is not 'compromised'" 'ACT NOW|Treat this machine as compromised' "$WORK/mis.txt"
 has    "it is a version to update instead"           'npm worms a bad version to update' "$WORK/mis.txt"
 has    "with the vendor's own explanation"           'Mistral AI packages, May 2026: published with malware that Mistral says could not run\. docs\.mistral\.ai' "$WORK/mis.txt"
+has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
+hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
 cp -R "$WORK/clean" "$WORK/mpy"; mkdir -p "$WORK/mpy/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"
@@ -315,6 +369,20 @@ psrun "$WORK/mpy" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy.txt"
 has    "mistralai 2.4.6 from PyPI is its own act-now row" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
 has    "with its fix"                                "Treat this machine as compromised\. Don't run Python in the affected environments, follow mistralai's advisory" "$WORK/mpy.txt"
 has    "the link flags a Python incident, not LiteLLM" '&ll=0&.*&py=1&' "$WORK/mpy.txt"
+# transformers.pyz in the temp folder is a Linux-only sign of mistralai 2.4.6.
+cp -R "$WORK/clean" "$WORK/mpyt"; : > "$WORK/mpyt/AppData/Local/Temp/transformers.pyz"
+psrun "$WORK/mpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt.txt"
+[ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
+has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt.txt"
+SKIPPING=""; [ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
+has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt.txt"
+has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt.txt"
+SKIPPING=""
+# A version read from a folder name is printed with control characters replaced.
+cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"
+psrun "$WORK/esc" -- -Offline -Full > "$WORK/esc.txt" 2>&1
+if grep -q "1\.0$(printf '\033')\[31m" "$WORK/esc.txt"; then bad "a hostile LiteLLM folder name sends no escape code"; else ok "a hostile LiteLLM folder name sends no escape code"; fi
+has    "it is shown with a ? instead"                 'installed: 1\.0\?\[31m' "$WORK/esc.txt"
 # uv's cache: the exact version only.
 cp -R "$WORK/clean" "$WORK/uvn"; mkdir -p "$WORK/uvn/.cache/uv/wheels-v5/mistralai-2.4.60-py3-none-any" "$WORK/uvn/.cache/uv/archive-v0/x/mistralai-2.4.6.post1.dist-info"
 psrun "$WORK/uvn" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvn.txt"
@@ -339,9 +407,33 @@ for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' 'R
 done
 has    "the keys line names the first file"    'Keys in plain text +5 files, like ~/\.zshrc \(Anthropic, OpenAI\)' "$OUT"
 has    "the summary leads with the first fix"  'First fix: Don.t revoke any GitHub token yet' "$OUT"
+hasnot "the summary leaves out the other key files" '~/\.zsh_history +GitHub' "$OUT"
 hasnot "the summary has no section tables"     'KEYS IN PLAIN TEXT' "$OUT"
+hasnot "the summary shows no letter grade"     'GRADE [ABCDF]|[Gg]rade [ABCDF]\b' "$OUT"
+nokeys "the summary never prints a planted key" "$WORK/keys.txt" "$OUT"
 psrun "$WORK/home" GIRD_CHECK_COMPACT=1 -- -Offline -Full > "$WORK/full.txt" 2>&1
-has    "-Full shows every detail"              'KEYS IN PLAIN TEXT' "$WORK/full.txt"
+has    "-Full prints every section in full"    'KEYS IN PLAIN TEXT' "$WORK/full.txt"
+has    "-Full lists every key file"            '~/\.zsh_history +GitHub' "$WORK/full.txt"
+
+echo "the spend limit tip"
+psrun "$WORK/home" -- -Offline > "$WORK/tip.txt" 2>&1
+has    "the spend limit tip is a plain line"      '^     Also: set a monthly spend limit on every AI provider key' "$WORK/tip.txt"
+hasnot "the spend limit tip is not numbered"      '^ *[0-9]+\. +.*spend limit' "$WORK/tip.txt"
+LAST=$(grep -aE '^ +[0-9]+\.  ' "$WORK/tip.txt" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr -d ' ')
+ISS=$(grep -aoE '[0-9]+ things? to fix' "$WORK/tip.txt" | head -n 1 | grep -aoE '^[0-9]+')
+if [ -n "$LAST" ] && [ "$LAST" = "$ISS" ]; then ok "the numbered list matches the fix count" "$ISS"; else bad "the numbered list matches the fix count" "list ends at $LAST, header says $ISS"; fi
+rm -rf "$WORK/tip-empty"; mkdir -p "$WORK/tip-empty"
+psrun "$WORK/tip-empty" -- -Offline > "$WORK/tip-empty.txt" 2>&1
+has    "on a near-empty home the tip is still a plain line" '^     Also: set a monthly spend limit' "$WORK/tip-empty.txt"
+
+echo "hostile file names"
+EVIL="$WORK/home/code/evil$(printf '\033[2J\033]0;pwned\007\302\233')31m"
+mkdir -p "$EVIL"
+printf 'AWS_ACCESS_KEY_ID=AK%s\n' "IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)" > "$EVIL/.env"
+psrun "$WORK/home" -- -Offline > "$WORK/evil.txt" 2>&1
+if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')\|$(printf '\302\233')" "$WORK/evil.txt"; then bad "control characters in file names never reach the terminal"; else ok "control characters in file names never reach the terminal"; fi
+has "the hostile folder is still reported" 'code/evil\?' "$WORK/evil.txt"
+rm -rf "$EVIL"
 
 echo "placeholders and the LiteLLM leftovers"
 mkdir -p "$WORK/ph/code/ph" "$WORK/ph/AppData/Local/Temp"
@@ -352,7 +444,37 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no malware in a clean home"            'none of the 6 recent leaks it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 6 recent leaks it checks' "$WORK/ph.txt"
+
+echo "Zeabur and the LiteLLM leftovers"
+lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
+lpf() { psrun "$1" -- -Offline 2>&1 | tr -s ' \n' '  '; }
+cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
+lp "$WORK/zb-none" > "$WORK/zb-none.txt"
+hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftover' "$WORK/zb-none.txt"
+cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
+lp "$WORK/zb-one" > "$WORK/zb-one.txt"
+lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
+has    "Zeabur alone is flagged"               'Zeabur CLI found: rotate secrets stored there' "$WORK/zb-one.txt"
+has    "Zeabur adds a fix naming only what was found" 'If you used Zeabur, rotate the keys stored there' "$WORK/zb-one-full.txt"
+has    "Zeabur has its own detail line"        'Zeabur CLI found' "$WORK/zb-one-full.txt"
+cp -R "$WORK/zb-one" "$WORK/zb-two"; mkdir -p "$WORK/zb-two/.railway"; printf '{}\n' > "$WORK/zb-two/.railway/config.json"
+lp "$WORK/zb-two" > "$WORK/zb-two.txt"
+has    "Railway and Zeabur are named together" 'Railway and Zeabur found: rotate their keys' "$WORK/zb-two.txt"
+cp -R "$WORK/zb-two" "$WORK/zb-three"; mkdir -p "$WORK/zb-three/.config/opencode"
+lp "$WORK/zb-three" > "$WORK/zb-three.txt"
+has    "all three are named in order"          'OpenCode, Railway and Zeabur found: rotate keys' "$WORK/zb-three.txt"
+# No agent and nothing found. A minimal PATH and no AppData hide every agent, so nothing is idle.
+rm -rf "$WORK/ni-empty"; mkdir -p "$WORK/ni-empty"
+lpf "$WORK/ni-empty" > "$WORK/ni-empty.txt"
+has    "nothing found: the header says no findings"        'NO FINDINGS IN THIS SCAN' "$WORK/ni-empty.txt"
+has    "nothing found: it says this is not a guarantee"    'does not prove nothing leaked' "$WORK/ni-empty.txt"
+hasnot "nothing found: no old clean-today wording"         'CLEAN TODAY|needs fixing|Nothing to fix' "$WORK/ni-empty.txt"
+rm -rf "$WORK/ni-pyc"; mkdir -p "$WORK/ni-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__"; : > "$WORK/ni-pyc/code/py/.venv/lib/python3.12/site-packages/__pycache__/cook.cpython-312.pyc"
+lpf "$WORK/ni-pyc" > "$WORK/ni-pyc.txt"
+has    "a pyc-only run counts its things to fix"           '[0-9]+ THINGS? TO FIX' "$WORK/ni-pyc.txt"
+has    "a pyc-only run keeps the no-guarantee line"        'does not prove nothing leaked' "$WORK/ni-pyc.txt"
+hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS SCAN' "$WORK/ni-pyc.txt"
 
 echo "checks from the incident dossier"
 for M in hit miss; do
@@ -368,20 +490,21 @@ has    "a workspace .vscode/settings.json the home scan finds" '! VS Code Copilo
 hasnot "a workspace set to false is not listed"       'p/calm/' "$D"
 has    "with the advice"                              'A prompt injection in anything the agent reads can then run commands on this computer\. Turn it off unless the agent runs in a sandbox\.' "$D"
 has    "and the fix"                                  'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox\.' "$D"
-if [ "$(uname -s)" = Darwin ]; then
-  has  "Cursor below the fixed version (read on a Mac only)" '! Cursor 2\.9\.1, update to 3\.0 or later A prompt injection could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw' "$D"
-fi
+[ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS: Cursor's version is read from its app bundle"
+has    "Cursor below the fixed version" '! Cursor 2\.9\.1, update to 3\.0 or later A prompt injection could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw' "$D"
+SKIPPING=""
 has    "Amazon Q: the highest version folder, compared as numbers" '! Amazon Q 1\.68\.0, update to 1\.69\.0 or later Opening a hostile workspace' "$D"
 has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 1\.0\.24 or later A web page could reach the editor connection\.' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
-has    "with the fix"                                 'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
+has    "with the fix to delete the link"              'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
 has    "a GlassWorm extension at its bad version, with a platform suffix" '~/\.vscode/extensions/oorzc\.ssh-tools-0\.5\.1-darwin-arm64 oorzc\.ssh-tools 0\.5\.1 \(GlassWorm extensions, January 2026\), installed' "$D"
 has    "a GlassWorm extension at any version, its id in another case" '~/\.cursor/extensions/Sol-Studio\.Solidity-Extension-2\.0\.0 sol-studio\.solidity-extension 2\.0\.0 \(GlassWorm' "$D"
 has    "with GlassWorm's sourced line"                'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs\. socket\.dev' "$D"
 has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
+has    "with its sourced line"                        'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it\. github\.com' "$D"
 dzrun() { _h=$1; shift; psrun "$_h" "$@" -- -Offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
 # Editor extensions: a row, headline and fix of their own, never called npm malware.
@@ -420,6 +543,10 @@ dzrun "$WORK/dz-lim1" | tr -s ' \n' '  ' > "$WORK/dz-lim1.txt"; dzrun "$WORK/dz-
 has    "known limit: a setting in a /* */ block comment is still read" '! VS Code Copilot ~/.*Code/User/settings\.json chat\.tools\.autoApprove' "$WORK/dz-lim1.txt"
 hasnot "known limit: Codex values in single quotes are not read" '! Codex ' "$WORK/dz-lim1.txt"
 hasnot "known limit: a profile made the default with profile = is not read" '! Codex ' "$WORK/dz-lim2.txt"
+cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
+printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
+dzrun "$WORK/dz-calm" | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
+has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
 # gird-check.sh, on the same home with its Mac paths, must find the same things in the same order.
 rm -rf "$WORK/dz-b"; bash tests/make-fixture.sh "$WORK/dz-b" "$WORK/keys-dz.txt" clean > /dev/null
 if [ "$(uname -s)" = Darwin ]; then DAS="Library/Application Support"; else DAS=".config"; fi
@@ -486,6 +613,31 @@ has    "a temp file alone: stop and delete, in section 5" 'Stop any process star
 has    "and in the fix"                               "Stop any process started from the files listed in section 5, delete them, follow Madepkg's advisory" "$WORK/mu-tmp.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mu-tmp.txt"
 
+echo "MCP configs in plugin folders"
+cp -R "$WORK/clean" "$WORK/mcp-pl"
+mkdir -p "$WORK/mcp-pl/.codex/.tmp/plugins/plugins/a" "$WORK/mcp-pl/.claude/plugins/synced/b"
+printf '{"mcpServers":{"one":{"command":"x"},"two":{"command":"y"}}}\n' > "$WORK/mcp-pl/.codex/.tmp/plugins/plugins/a/.mcp.json"
+printf '{"mcpServers":{"three":{"command":"z"}}}\n' > "$WORK/mcp-pl/.claude/plugins/synced/b/.mcp.json"
+psrun "$WORK/clean" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-base.txt"
+psrun "$WORK/mcp-pl" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-pl.txt"
+psrun "$WORK/mcp-pl" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-pl-full.txt"
+BASE=$(grep -aoE '02 . MCP servers +[0-9]+ servers' "$WORK/mcp-base.txt" | grep -aoE '[0-9]+ servers')
+if [ -n "$BASE" ]; then ok "the baseline has a server count" "$BASE"; else bad "the baseline has a server count"; fi
+has    "plugin-folder servers are counted apart" "02 . MCP servers +$BASE, 3 more in plugin folders" "$WORK/mcp-pl.txt"
+hasnot "the baseline mentions no plugin folders" 'plugin folders' "$WORK/mcp-base.txt"
+has    "the details total only the servers set up" "MCP SERVERS +$BASE " "$WORK/mcp-pl-full.txt"
+has    "the details give one plugin-folders line" 'Plugin folders +3 servers in 2 files, not counted above' "$WORK/mcp-pl-full.txt"
+hasnot "plugin-folder files are not listed one by one" 'plugins/a/\.mcp\.json' "$WORK/mcp-pl-full.txt"
+cp -R "$WORK/mcp-pl" "$WORK/mcp-tok"; KEY1=$(head -n 1 "$WORK/keys.txt")
+printf '{"mcpServers":{"t":{"command":"x","env":{"ANTHROPIC_API_KEY":"%s"}}}}\n' "$KEY1" > "$WORK/mcp-tok/.claude/plugins/synced/b/.mcp.json"
+psrun "$WORK/mcp-tok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-tok.txt"
+has    "a token in a plugin-folder config is still flagged" 'plugins/synced/b/\.mcp\.json.*token in the file' "$WORK/mcp-tok.txt"
+has    "and it still counts as a thing to fix"             'Replace tokens written into MCP configs' "$WORK/mcp-tok.txt"
+rm -rf "$WORK/mcp-only"; mkdir -p "$WORK/mcp-only/.codex/.tmp/plugins/plugins/a"
+cp "$WORK/mcp-pl/.codex/.tmp/plugins/plugins/a/.mcp.json" "$WORK/mcp-only/.codex/.tmp/plugins/plugins/a/.mcp.json"
+psrun "$WORK/mcp-only" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-only.txt"
+has    "with only plugin-folder configs the row says none set up" '02 . MCP servers +none set up, 2 in plugin folders' "$WORK/mcp-only.txt"
+
 echo "files built to make a pattern backtrack"
 # Long runs of capitals and of KEY, with and without the = or quote a match needs,
 # next to a real key. gird-check.sh's patterns, run as they are in .NET, took
@@ -503,7 +655,7 @@ PY2
 T0=$(date +%s)
 psrun "$WORK/slow" -- -Offline > "$WORK/slow.txt" 2>&1
 T=$(( $(date +%s) - T0 ))
-if [ "$T" -le 20 ]; then ok "it finishes quickly (${T}s)"; else bad "it finishes quickly, took ${T}s"; fi
+if [ "$T" -le 20 ]; then ok "it finishes quickly" "${T}s"; else bad "it finishes quickly" "took ${T}s"; fi
 hasnot "no file is skipped"                    'skipped: took too long' "$WORK/slow.txt"
 has    "the real key next to them is found"    '~/code/s/\.env +Groq' "$WORK/slow.txt"
 # With a limit too short for a large file, the file is listed, not taken as clean.
@@ -522,12 +674,16 @@ SP="$WORK/pyc/code/winpy/.venv/Lib/site-packages"; mkdir -p "$SP/__pycache__"; p
 : > "$SP/__pycache__/cook.cpython-312.pyc"
 psrun "$WORK/pyc" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyc.txt"
 psrun "$WORK/pyc" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyc-full.txt"
-has    "a cook.pyc in a Windows venv is a possible leftover" 'possible LiteLLM leftover: check cook\.pyc' "$WORK/pyc.txt"
-has    "and is listed with its folder"         'possible leftover ~/code/winpy/\.venv/Lib/site-packages: cook\.pyc' "$WORK/pyc-full.txt"
+has    "and row 05 asks to check it"           'possible LiteLLM leftover: check cook\.pyc' "$WORK/pyc.txt"
+has    "a leftover cook.pyc is listed as a possible leftover" 'possible leftover ~/code/winpy/\.venv/Lib/site-packages: cook\.pyc' "$WORK/pyc-full.txt"
 hasnot "but it is not an act-now hit"          'Act now|ACT NOW' "$WORK/pyc-full.txt"
+cp -R "$WORK/pyc" "$WORK/pyc-oc"; mkdir -p "$WORK/pyc-oc/.config/opencode"
+psrun "$WORK/pyc-oc" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyc-oc.txt"
+has    "a weak pyc and OpenCode both show in the details"  'possible leftover.*OpenCode +installed' "$WORK/pyc-oc.txt"
+has    "a weak pyc shows in row 05 and the fix list"       'A leftover cook\.pyc can come from the LiteLLM 1\.107\.0 malware' "$WORK/pyc-oc.txt"
 printf 'import cook\n' > "$SP/cook.pth"
 psrun "$WORK/pyc" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pth.txt"
-has    "cook.pth next to it is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/pth.txt"
+has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/pth.txt"
 rm -rf "$WORK/conda"; cp -R "$WORK/clean" "$WORK/conda"
 mkdir -p "$WORK/conda/tools/miniconda3/Lib/site-packages/litellm-1.107.0.dist-info"
 psrun "$WORK/conda" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/conda.txt"
@@ -544,7 +700,15 @@ mkdir -p "$WORK/cwd"
 (cd "$WORK/cwd" && psrun "$WORK/home" -- -Offline -Save > "$WORK/save.txt" 2>&1)
 SAVED=$(find "$WORK/cwd" -name 'gird-ai-key-check-*.txt' | head -n 1)
 if [ -n "$SAVED" ]; then ok "-Save writes a report"; else bad "-Save writes a report"; fi
-if [ -n "$SAVED" ] && grep -q 'KEYS IN PLAIN TEXT' "$SAVED" && ! grep -aqF -f "$WORK/keys.txt" "$SAVED"; then ok "the report has every detail and no planted key"; else bad "the report has every detail and no planted key"; fi
+if [ -n "$SAVED" ] && [ -n "$(find "$SAVED" -perm 600)" ]; then ok "the report is readable only by you"; else bad "the report is readable only by you"; fi
+if [ -n "$SAVED" ] && grep -q 'KEYS IN PLAIN TEXT' "$SAVED"; then ok "the report has every detail"; else bad "the report has every detail"; fi
+if [ -n "$SAVED" ] && ! grep -aqF -f "$WORK/keys.txt" "$SAVED"; then ok "the saved report holds no planted key"; else bad "the saved report holds no planted key"; fi
+# PowerShell before 7.3 has no UnixCreateMode; the test switch takes the path it uses.
+mkdir -p "$WORK/cwd72"
+(cd "$WORK/cwd72" && psrun "$WORK/home" GIRD_CHECK_TEST_NO_UNIXMODE=1 -- -Offline -Save > /dev/null 2>&1)
+SAVED=$(find "$WORK/cwd72" -name 'gird-ai-key-check-*.txt' | head -n 1)
+if [ -n "$SAVED" ] && [ -n "$(find "$SAVED" -perm 600)" ] && grep -q 'KEYS IN PLAIN TEXT' "$SAVED"; then ok "before PowerShell 7.3 the report is readable only by you too"
+else bad "before PowerShell 7.3 the report is readable only by you too"; fi
 
 echo "shared counts and how you compare"
 printf '%s' '{"devices":1234,"runs":2345,"devices_7d":456,"key_files":3412,"agents":5678,"clean":0.31}' > "$WORK/stats.json"
@@ -596,13 +760,65 @@ has    "shell is pwsh under PowerShell 7"      '"shell":"pwsh"' "$WORK/report-ps
 hasnot "the report holds no path"              '/(Users|home|private|tmp|var)/|~/|AppData' "$WORK/report-ps.json"
 nokeys "the report holds no planted key" "$WORK/keys.txt" "$WORK/report-ps.json"
 has    "shows one real total under the banner" '(1,234 AI builders have run Blindspot|456 AI builders ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of AI builders had no keys in plain text)' "$OUT"
-has    "shows how this computer compares"      'Better than 72% of AI builders who ran Blindspot' "$OUT"
-has    "says one of the first 1,000"           "You're one of the first 1,000 AI builders to run Blindspot\." "$OUT"
-hasnot "never shows the place in line"         "AI builder #|#142" "$OUT"
+hasi   "shows how this machine compares"       'better than 72% of AI builders who ran Blindspot' "$OUT"
+hasnot "the percentile line carries no count"  'of 1,234 AI builders' "$OUT"
+if python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1]) if l.strip()]' "$WORK/received.log" 2>/dev/null; then ok "the report is valid JSON"; else bad "the report is valid JSON"; fi
+has    "the device ID is a 64-character hash or empty" '"device_id":"([0-9a-f]{64})?"' "$WORK/report-ps.json"
+if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
 RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/report-ps.json" | cut -d'"' -f4)
-has    "the link carries the percentile, run ID, rank and key counts" "blindspot/card/#v=2&s=[0-9]+&g=[ABCDF]&.*&pc=72&pn=1234&u=${RID:-no-run-id}&r=142&sk=2&hk=2&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]\$" "$OUT"
+has    "the result link carries the percentile" 'blindspot/card/#v=2&s=[0-9]+&g=[ABCDF]&.*&pc=72&pn=1234' "$OUT"
+has    "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=2&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]\$" "$OUT"
 psrun "$WORK/home" GIRD_CHECK_API="$API" -- > /dev/null 2>&1
 if grep -q '"device_id":""' "$(printf '%s' "$WORK/received.log")" && [ "$(grep -c . "$WORK/received.log")" -eq 2 ]; then ok "with no MachineGuid the device ID is empty"; else bad "with no MachineGuid the device ID is empty"; fi
+psrun "$WORK/clean" GIRD_CHECK_API="$API" -- > "$WORK/clean-online.txt" 2>&1
+has    "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
+PROUD="^  ★ You're one of the first 1,000 AI builders to run Blindspot\."
+cp "$WORK/stats.json" "$WORK/stats-0.json"
+printf '%s' '{"devices":1234567,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/online-big.txt" 2>&1
+has    "the total gets thousands separators"  '★ 1,234,567 AI builders have run Blindspot\.' "$WORK/online-big.txt"
+has    "the full report shows the rank"       "$PROUD" "$WORK/online-big.txt"
+psrun "$WORK/home" GIRD_CHECK_API="$API" GIRD_CHECK_COMPACT=1 -- > "$WORK/compact-online.txt" 2>&1
+has    "the summary shows the rank"           "$PROUD" "$WORK/compact-online.txt"
+printf '%s' '{"p":72,"n":1234}' > "$WORK/reply.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/no-rank.txt" 2>&1
+hasnot "the place in line is never shown"     "AI builder #|#142" "$WORK/no-rank.txt"
+has    "a reply without r leaves r empty in the link" '&pn=1234&u=[0-9a-f]{16}&r=&sk=2' "$WORK/no-rank.txt"
+SHOWN=""
+for R in null 0 '"142"' 14.2 0142 1234567890; do
+  printf '{"p":72,"n":1234,"r":%s}' "$R" > "$WORK/reply.json"
+  psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/bad-rank.txt" 2>&1
+  if grep -aqE '&r=[^&]' "$WORK/bad-rank.txt"; then SHOWN="$SHOWN $R"; fi
+done
+if [ -z "$SHOWN" ]; then ok "a rank that isn't a whole number from 1 shows nothing"; else bad "a rank that isn't a whole number from 1 shows nothing"; printf '        shown for:%s\n' "$SHOWN"; fi
+printf '%s' '{"p":72,"n":1234,"r":1000}' > "$WORK/reply.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/rank-1000.txt" 2>&1
+has    "rank 1000 is one of the first 1,000"  "★ You're one of the first 1,000 AI builders to run Blindspot\." "$WORK/rank-1000.txt"
+printf '%s' '{"p":72,"n":1234,"r":1001}' > "$WORK/reply.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/rank-1001.txt" 2>&1
+hasnot "rank 1001 shows no early line"        "first 1,000" "$WORK/rank-1001.txt"
+hasnot "rank 1001 never shows the number"     "1,001|AI builder #" "$WORK/rank-1001.txt"
+has    "rank 1001 goes in the result link"    '&r=1001&' "$WORK/rank-1001.txt"
+hasnot "rank 1000 never shows the number"     "AI builder #|#1,000" "$WORK/rank-1000.txt"
+printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
+printf '%s' '{"devices":999,"devices_7d":120,"key_files":300,"clean":0.4}' > "$WORK/stats.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/early.txt" 2>&1
+has    "under 1,000 the early line sits above the header" "^  ★ You're one of the first 1,000 AI builders to run Blindspot\." "$WORK/early.txt"
+if [ "$(grep -c 'first 1,000' "$WORK/early.txt")" -eq 1 ]; then ok "under 1,000 the first 1,000 are named once"; else bad "under 1,000 the first 1,000 are named once"; fi
+if grep -aA2 "one of the first 1,000 AI builders" "$WORK/early.txt" | grep -aqE '▌ .*(THINGS TO FIX|BETTER THAN|ACT NOW)'; then ok "the header follows the rank line"; else bad "the header follows the rank line"; fi
+hasnot "never shows a total under 1,000"      '★ (999 AI builders|120 AI builders|Blindspot has found|40% of AI builders)' "$WORK/early.txt"
+printf '%s' '{"p":72,"n":1234}' > "$WORK/reply.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/early-no-rank.txt" 2>&1
+has    "says early adopter when the reply has no rank" "^  ★ You're one of the first 1,000 AI builders to run Blindspot\." "$WORK/early-no-rank.txt"
+printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
+printf '%s' '{"devices":1000,"devices_7d":10,"key_files":20,"clean":0}' > "$WORK/stats.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/at-1000.txt" 2>&1
+has    "shows the total from 1,000 people"    '★ 1,000 AI builders have run Blindspot\.' "$WORK/at-1000.txt"
+printf '{"devices":"\033[2J\033]0;pwned\007","key_files":99999999999999999999}' > "$WORK/stats.json"
+psrun "$WORK/home" GIRD_CHECK_API="$API" -- > "$WORK/hostile.txt" 2>&1
+if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')" "$WORK/hostile.txt"; then bad "a hostile totals reply can't reach the terminal"; else ok "a hostile totals reply can't reach the terminal"; fi
+hasnot "a bad totals reply shows no total"    '^  ★ ([0-9]|Blindspot has found)' "$WORK/hostile.txt"
+cp "$WORK/stats-0.json" "$WORK/stats.json"
 
 # The same fields as gird-check.sh's report, in the same order.
 : > "$WORK/received.log"
@@ -628,7 +844,7 @@ has    "key_places counts PowerShell's history as shell history" '"key_places":\
 has    "history_keys counts it too"            '"history_keys":2,' "$WORK/report-ps.json"
 B_LINK=$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/bash-online.txt" | tail -n 1 | tr '&' '\n' | sed 's/=.*//' | tr '\n' ' ')
 P_LINK=$(grep -aoE 'blindspot/card/#[^ ]*' "$OUT" | tail -n 1 | tr '&' '\n' | sed 's/=.*//' | tr '\n' ' ')
-if [ -n "$B_LINK" ] && [ "$B_LINK" = "$P_LINK" ]; then ok "the result link has gird-check.sh's parameters in its order"; else bad "the result link has gird-check.sh's parameters"; printf '        bash: %s\n        pwsh: %s\n' "$B_LINK" "$P_LINK"; fi
+if [ -n "$B_LINK" ] && [ "$B_LINK" = "$P_LINK" ]; then ok "the result link has gird-check.sh's parameters in its order"; else bad "the result link has gird-check.sh's parameters in its order"; printf '        bash: %s\n        pwsh: %s\n' "$B_LINK" "$P_LINK"; fi
 
 # The dossier checks share nothing: the same report, link and score with or without them.
 rm -rf "$WORK/pl-base" "$WORK/pl-dz"; cp -R "$WORK/clean" "$WORK/pl-base"; cp -R "$WORK/clean" "$WORK/pl-dz"
@@ -646,6 +862,90 @@ has    "and they were found"                         'Tools with a security fix 
 if [ "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-dz.txt" | sed 's/&u=[0-9a-f]*&/\&u=\&/')" = "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-base.txt" | sed 's/&u=[0-9a-f]*&/\&u=\&/')" ]; then ok "and the result link, score included, is the same"
 else bad "and the result link, score included, is the same"; fi
 
+echo "case-study counts in the report"
+payload_checks() { # mode report
+  python3 tests/payload.py "$SCRIPT" "$@" > "$WORK/checks.txt" 2>&1
+  while IFS='|' read -r st label detail; do
+    case "$st" in
+      ok)  ok "$label" ;;
+      bad) bad "$label" "$detail" ;;
+      *)   bad "the case-study checks ran" "$st$label" ;;
+    esac
+  done < "$WORK/checks.txt"
+}
+report_of() { # file command...: runs the command and keeps the one report it sent
+  _n0=$(grep -c . "$WORK/received.log"); _rf=$1; shift
+  "$@" > /dev/null 2>&1
+  sed -n "$((_n0 + 1))p" "$WORK/received.log" > "$_rf"
+}
+: > "$WORK/received.log"
+payload_checks home "$WORK/report-ps.json"
+# One more key file in a shell config, a history file and an .env file, and one in agent settings.
+bash tests/make-fixture.sh "$WORK/places" "$WORK/keys-places.txt"; winify "$WORK/places" "$WORK/keys-places.txt"
+printf 'export OPENAI_API_KEY=%s\n' "$(sed -n 2p "$WORK/keys-places.txt")" > "$WORK/places/.bash_profile"
+printf 'client = Anthropic(api_key="%s")\n' "$(sed -n 1p "$WORK/keys-places.txt")" > "$WORK/places/.python_history"
+printf 'GROQ_API_KEY=%s\n' "$(sed -n 5p "$WORK/keys-places.txt")" > "$WORK/places/.gemini/.env"
+printf 'anthropic-api-key: %s\n' "$(sed -n 1p "$WORK/keys-places.txt")" > "$WORK/places/.aider.conf.yml"
+report_of "$WORK/report-places.json" psrun "$WORK/places" GIRD_CHECK_API="$API" --
+payload_checks places "$WORK/report-places.json"
+mkdir -p "$WORK/empty"
+report_of "$WORK/report-empty.json" psrun "$WORK/empty" GIRD_CHECK_API="$API" --
+payload_checks empty "$WORK/report-empty.json"
+hasnot "no report holds a name you gave an MCP server" 'acme|my notes|web.search' "$WORK/received.log"
+hasnot "no report holds a server label as written"     '@modelcontextprotocol|MCP_DOCKER|Figma Dev Mode|upstash|Playwright|"gh"|"fs"' "$WORK/received.log"
+hasnot "no report holds a file name" '\.zshrc|zsh_history|python_history|bash_profile|\.env|\.mcp|mcp\.json|config\.(toml|yaml)|cline_mcp|claude_desktop|settings(\.local)?\.json|\.aider|PSReadLine|ConsoleHost' "$WORK/received.log"
+hasnot "no report holds a path"                        '/(Users|home|private|tmp|var)/|~/|AppData' "$WORK/received.log"
+nokeys "no report holds the extra planted keys" "$WORK/keys-places.txt" "$WORK/received.log"
+
+echo "a Windows profile"
+# The profile tests/run.sh builds for Git Bash, with OS=Windows_NT so gird-check.ps1 takes the
+# Windows paths. The Windows version can't be faked here: gird-check.ps1 reads it from .NET.
+WP=$WORK/winp
+K_ANT=$(sed -n 1p "$WORK/keys.txt"); K_AWS=$(sed -n 4p "$WORK/keys.txt")
+mkdir -p "$WP/.claude/projects/p" "$WP/AppData/Roaming/Claude" "$WP/AppData/Roaming/Code/User" "$WP/AppData/Local/Programs/cursor" \
+  "$WP/AppData/Roaming/Block/goose/config" "$WP/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine" \
+  "$WP/AppData/Roaming/GitHub CLI" "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages" \
+  "$WP/AppData/Local/uv/cache/wheels-v5/pypi/litellm/litellm-1.107.0-py3-none-any" "$WP/AppData/Local/Temp"
+printf '{}\n' > "$WP/.claude/projects/p/s.jsonl"
+mkdir -p "$WP/AppData/Roaming/Cursor/User/workspaceStorage/w"; printf '{}\n' > "$WP/AppData/Roaming/Cursor/User/workspaceStorage/w/state.json"
+printf '{"mcpServers":{"github":{"command":"npx"}}}\n' > "$WP/.claude.json"
+printf '{"mcpServers":{"slack":{"command":"npx","env":{"SLACK_BOT_TOKEN":"%s"}}}}\n' "$K_ANT" > "$WP/AppData/Roaming/Claude/claude_desktop_config.json"
+printf '{"servers":{"playwright":{"command":"npx"},"memory":{"command":"npx"}}}\n' > "$WP/AppData/Roaming/Code/User/mcp.json"
+printf 'extensions:\n  github:\n    enabled: true\n' > "$WP/AppData/Roaming/Block/goose/config/config.yaml"
+printf 'git status\n$env:AWS_ACCESS_KEY_ID = "%s"\n' "$K_AWS" > "$WP/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt"
+printf 'github.com:\n    oauth_token: x\n' > "$WP/AppData/Roaming/GitHub CLI/hosts.yml"
+printf 'machine example.com login me password x\n' > "$WP/_netrc"
+printf 'import cook\n' > "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages/cook.pth"
+: > "$WP/AppData/Local/Temp/.pc_once_1"
+WGUID='3F2504E0-4f89-11D3-9A0C-0305E82C3301'
+winps() { psrun "$WP" OS=Windows_NT PROCESSOR_ARCHITECTURE=AMD64 WT_SESSION=1 GIRD_CHECK_TEST_MACHINEGUID="$WGUID" "$@"; }
+winps -- -Offline > "$WORK/win.txt" 2>&1
+tr -s ' \n' '  ' < "$WORK/win.txt" > "$WORK/win1.txt"
+has    "Windows: finds Claude Desktop in AppData"       'Claude Desktop +used in the last 30 days' "$WORK/win.txt"
+has    "Windows: finds Cursor and its use in AppData"   'Cursor +used in the last 30 days' "$WORK/win.txt"
+has    "Windows: finds Goose in its Windows config"     'Goose +installed' "$WORK/win.txt"
+has    "Windows: Claude Code in the Windows profile"    'Claude Code +used in the last 30 days' "$WORK/win.txt"
+has    "Windows: reads Claude Desktop's MCP config"     'Claude Desktop +~/AppData/Roaming/Claude/claude_desktop_config\.json.*token in the file' "$WORK/win1.txt"
+has    "Windows: reads VS Code's MCP config"            'VS Code +~/AppData/Roaming/Code/User/mcp\.json' "$WORK/win1.txt"
+has    "Windows: reads Goose's MCP config"              'Goose +~/AppData/Roaming/Block/goose/config/config\.yaml' "$WORK/win1.txt"
+has    "Windows: flags a key in PowerShell history"     '~/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history\.txt +AWS' "$WORK/win1.txt"
+has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
+has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
+has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
+has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
+has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
+has    "Windows is pointed at Credential Manager"       'into Windows Credential Manager or a secrets manager' "$WORK/win1.txt"
+nokeys "Windows: never prints a planted key" "$WORK/keys.txt" "$WORK/win.txt"
+report_of "$WORK/report-win.json" winps GIRD_CHECK_API="$API" --
+WANT_ID=$(printf 'gird-check-v1:%s' "$WGUID" | shasum -a 256 | cut -c1-64)
+has    "Windows: device_id is sha256 of the salt and MachineGuid as stored" "\"device_id\":\"$WANT_ID\"" "$WORK/report-win.json"
+has    "Windows: arch from PROCESSOR_ARCHITECTURE"      '"arch":"x86_64"' "$WORK/report-win.json"
+has    "Windows: terminal is windows-terminal with WT_SESSION" '"terminal":"windows-terminal"' "$WORK/report-win.json"
+has    "Windows: the agents found in Windows places are reported" '"agents":\["claude-code","claude-desktop","cursor",.*"goose"' "$WORK/report-win.json"
+has    "Windows: PowerShell history counts as shell history" '"history_keys":1,' "$WORK/report-win.json"
+has    "Windows: key_places puts PSReadLine history in shell_history" '"shell_history":1' "$WORK/report-win.json"
+hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|winp|_netrc' "$WORK/report-win.json"
+
 # The Worker's own validation. It must keep the Windows values as sent, not turn
 # them into 'other', and they must be the plan's values.
 WORKER=${GIRD_CHECK_WORKER:-}
@@ -661,11 +961,9 @@ const v = validateEvent(r)
 const dropped = v.ok ? Object.keys(r).filter((k) => JSON.stringify(v.event[k]) !== JSON.stringify(r[k])) : []
 console.log(v.ok && !bad.length && !dropped.length ? 'valid' : `invalid: ${v.why || ''} plan: ${bad} dropped: ${dropped}`)
 JS
-  if grep -qx valid "$WORK/worker.txt"; then ok "the Worker accepts the report and keeps every field"; else bad "the Worker accepts the report"; sed 's/^/        /' "$WORK/worker.txt"; fi
+  if grep -qx valid "$WORK/worker.txt"; then ok "the Worker accepts the report and keeps every field"; else bad "the Worker accepts the report and keeps every field" "$(cat "$WORK/worker.txt")"; fi
 else
-  echo "  skip  the Worker check (set GIRD_CHECK_WORKER to gird-website's worker/check-stats.js)"
+  skip "the Worker accepts the report and keeps every field" "needs GIRD_CHECK_WORKER pointing at the site's report validation (worker/check-stats.js), and node"
 fi
 
-echo
-echo "$PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+finish

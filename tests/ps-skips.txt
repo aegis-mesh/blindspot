@@ -1,0 +1,27 @@
+# Tests in tests/run-ps.sh that skip on some machines, one per line: the test's name as run-ps.sh
+# records it, a tab, and why gird-check.ps1's test can't run there. tests/parity.sh fails when
+# PowerShell skips a test that bash ran and the test is not listed here. "Not written yet" is
+# not a reason.
+rg: a key after an escaped newline in a Claude Code session	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key in a Codex session	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key in an Aider history	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a made-up key is not counted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a real key with few different characters counts	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a compressed session is named as not checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: says to rotate them	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: names encrypted sessions as not checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: never prints a key	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+.NET and ripgrep report the same	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: an unreadable session means partly checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a token across a piece boundary is not a key	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key after an escaped newline at a piece boundary is found	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a stuck ripgrep does not hold up the check	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: no ripgrep process is left running	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: HUP leaves no ripgrep process	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+Linux is told how to stop the wiper	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+Linux is not given the Mac command	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on Linux, transformers.pyz is the mistralai hit	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and the link flags it	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on a Mac it is not looked for	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+Cursor below the fixed version	gird-check.ps1 reads Cursor's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
+the Worker accepts the report and keeps every field	needs the site's report validation (worker/check-stats.js), named by GIRD_CHECK_WORKER, and node

@@ -10,12 +10,8 @@ SCRIPT=$PWD/gird-check.sh
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
-PASS=0; FAIL=0
-ok()  { PASS=$((PASS + 1)); printf '  ok    %s\n' "$1"; }
-bad() { FAIL=$((FAIL + 1)); printf '  FAIL  %s\n' "$1"; }
-has()    { if grep -aqE -- "$2" "$3"; then ok "$1"; else bad "$1"; printf '        wanted: %s\n' "$2"; fi; }
-hasnot() { if grep -aqE -- "$2" "$3"; then bad "$1"; printf '        found: %s\n' "$2"; else ok "$1"; fi; }
-hasi()   { if grep -aqiE -- "$2" "$3"; then ok "$1"; else bad "$1"; printf '        wanted: %s\n' "$2"; fi; }
+. tests/lib.sh
+command -v python3 >/dev/null 2>&1 || { echo "tests/run.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt"
 bash tests/make-fixture.sh "$WORK/clean" "$WORK/keys-clean.txt" clean
@@ -27,10 +23,11 @@ if [ -n "$OTHER" ] && [ "$("$OTHER" -c 'echo "$BASH_VERSION"')" != "$(/bin/bash 
 for B in $BASHES; do
   V=$("$B" -c 'echo "${BASH_VERSINFO[0]}"')
   echo "bash $V ($B)"
+  PFX="bash $V: "
   if "$B" -n "$SCRIPT"; then ok "parses"; else bad "parses"; fi
   OUT=$WORK/out-$V.txt
   HOME="$WORK/home" "$B" "$SCRIPT" --offline > "$OUT" 2>&1; RC=$?
-  if [ "$RC" -eq 0 ]; then ok "exits 0"; else bad "exits 0, got $RC"; fi
+  if [ "$RC" -eq 0 ]; then ok "exits 0"; else bad "exits 0" "got $RC"; fi
   has    "finds keys in the shell profile"       '~/\.zshrc +Anthropic, OpenAI' "$OUT"
   has    "finds keys in shell history"           '~/\.zsh_history +GitHub' "$OUT"
   has    "finds keys in a project .env file"     '~/code/app/\.env +AWS, Groq' "$OUT"
@@ -72,14 +69,16 @@ for B in $BASHES; do
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
   tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat-incidents.txt"
 done
+PFX=""
 
 echo "data files"
 if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
 
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE"
+NORG=""; command -v rg >/dev/null 2>&1 || NORG="ripgrep is not installed"
 for E in perl rg; do
-  if [ "$E" = rg ] && ! command -v rg >/dev/null 2>&1; then echo "  skip  ripgrep is not installed"; continue; fi
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline > "$SE/$E.txt" 2>&1
   sed -n '/Keys in agent sessions/,/^$/p' "$SE/$E.txt" > "$SE/$E.block"
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.txt"
@@ -92,9 +91,9 @@ for E in perl rg; do
   has    "$E: names encrypted sessions as not checked" 'Windsurf sessions are stored encrypted, so they were not checked' "$SE/$E.txt"
   if grep -aqF -f "$WORK/keys.txt" "$SE/$E.txt"; then bad "$E: never prints a key"; else ok "$E: never prints a key"; fi
 done
-if [ -s "$SE/rg.block" ]; then
-  if diff -q "$SE/perl.block" "$SE/rg.block" >/dev/null; then ok "perl and ripgrep report the same"; else bad "perl and ripgrep report the same"; diff "$SE/perl.block" "$SE/rg.block" | head -n 6; fi
-fi
+SKIPPING=$NORG
+if diff -q "$SE/perl.block" "$SE/rg.block" >/dev/null; then ok "perl and ripgrep report the same"; else bad "perl and ripgrep report the same" "$(diff "$SE/perl.block" "$SE/rg.block" | head -n 6)"; fi
+SKIPPING=""
 HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_STOP_AFTER=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
 has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$SE/clean.txt" 2>&1
@@ -110,20 +109,22 @@ HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline 2>&1 
 has    "perl: an unreadable session is not counted as checked" 'Checked the newest 1 of 2 agent session files' "$SE/unread-perl.txt"
 HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-sum.txt"
 has    "the summary row is not a check mark after a partial check" 'Keys in plain text none in files; agent sessions partly checked' "$SE/unread-sum.txt"
-if command -v rg >/dev/null 2>&1; then
+SKIPPING=$NORG
+{
   HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
   has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
   # A session ripgrep never finishes (a pipe nobody writes to) is stopped when the rest is done.
   mkdir -p "$SE/stuck/.codex"; mkfifo "$SE/stuck/.codex/history.jsonl"
   HOME="$SE/stuck" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline > "$SE/stuck.txt" 2>&1; RC=$?
-  if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check, exit $RC"; fi
+  if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check" "exit $RC"; fi
   if pgrep -f 'field-match-separator' >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f 'field-match-separator'; else ok "rg: no ripgrep process is left running"; fi
   HOME="$SE/stuck" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 &
   BP=$!
-  for _i in $(seq 1 100); do pgrep -f 'field-match-separator' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+  for _i in $(seq 1 100); do [ -n "$SKIPPING" ] && break; pgrep -f 'field-match-separator' >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
   kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
   if pgrep -f 'field-match-separator' >/dev/null 2>&1; then bad "rg: HUP leaves no ripgrep process"; pkill -f 'field-match-separator'; else ok "rg: HUP leaves no ripgrep process"; fi
-fi
+}
+SKIPPING=""
 # A long token that crosses a 1 MB piece is not mistaken for a key.
 mkdir -p "$SE/piece/.claude/projects/p"
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
@@ -134,12 +135,13 @@ python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 1) + '\\\\
 HOME="$SE/esc2" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/esc2.txt" 2>&1
 has    "perl: a key after a backslash that ends a read is found" 'Claude Code +1 file: Hugging Face' "$SE/esc2.txt"
 for E in perl rg; do
-  if [ "$E" = rg ] && ! command -v rg >/dev/null 2>&1; then continue; fi
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   HOME="$SE/piece" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/piece-$E.txt" 2>&1
   has    "$E: a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece-$E.txt"
   HOME="$SE/esc" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/esc-$E.txt" 2>&1
   has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
 done
+SKIPPING=""
 # A kill -9 of the script stops the perl workers within one piece of a file.
 mkdir -p "$SE/k9/.claude/projects/p"
 python3 -c "import sys; open(sys.argv[1], 'w').write(('x ' * 524288 + '\n') * 32)" "$SE/k9/.claude/projects/p/a.jsonl"
@@ -150,14 +152,14 @@ for _i in $(seq 1 100); do pgrep -f "$K9" >/dev/null 2>&1 && break; sleep 0.1; d
 if pgrep -f "$K9" >/dev/null 2>&1; then K9UP=1; else K9UP=0; fi
 kill -9 "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
 for _i in $(seq 1 10); do pgrep -f "$K9" >/dev/null 2>&1 || break; sleep 0.1; done      # one piece takes 0.3 s here; the file has 32
-if [ "$K9UP" -eq 0 ]; then bad "kill -9 of the script stops the workers: they never started"
+if [ "$K9UP" -eq 0 ]; then bad "kill -9 of the script stops the workers" "they never started"
 elif pgrep -f "$K9" >/dev/null 2>&1; then bad "kill -9 of the script stops the workers"; pkill -f "$K9"; else ok "kill -9 of the script stops the workers"; fi
 pkill -f "$SE/k9" 2>/dev/null; rm -f "${TMPDIR:-/tmp}"/blindspot.?????? "${TMPDIR:-/tmp}"/blindspot.??????.fifo 2>/dev/null   # a kill -9 leaves these, as documented
 
 # A held engine is still running when the rest of the check is done: it is stopped, and nothing is left behind.
 mkfifo "$SE/hold"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" bash "$SCRIPT" --offline > "$SE/held.txt" 2>&1; RC=$?
-if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad "a held engine does not hold up the check, exit $RC"; fi
+if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad "a held engine does not hold up the check" "exit $RC"; fi
 has    "and the report says the sessions were not all checked" 'Checked the newest 0 of 2' "$SE/held.txt"
 if pgrep -f GIRD_CHECK_SESSIONS_HOLD >/dev/null 2>&1 || pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "no engine process is left running"; else ok "no engine process is left running"; fi
 # Closing the terminal (HUP) mid-check stops the engine too.
@@ -174,7 +176,7 @@ mkdir -p "$SE/tmpd"
 BP=$!
 for _i in $(seq 1 100); do ls "$SE/tmpd"/blindspot.*.fifo >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
 _fm=$(ls -l "$SE/tmpd"/blindspot.*.fifo 2>/dev/null | cut -c1-10)
-if [ "$_fm" = "prw-------" ]; then ok "the fifo keys pass through is the owner's only"; else bad "the fifo keys pass through is the owner's only (${_fm:-no fifo})"; fi
+if [ "$_fm" = "prw-------" ]; then ok "the fifo keys pass through is the owner's only"; else bad "the fifo keys pass through is the owner's only" "${_fm:-no fifo}"; fi
 kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null; pkill -f 'SESS_PRE' 2>/dev/null
 
 echo "review fixes: npm, project settings and the wiper"
@@ -250,6 +252,13 @@ HOME="$WORK/vsp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.t
 has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack and keyv worms plant' "$WORK/vsp.txt"
 HOME="$WORK/clean" bash "$SCRIPT" --offline > "$WORK/clean-npm.txt" 2>&1
 has    "the clean line counts versions and packages apart" 'none of [0-9]+ bad versions or [0-9]+ bad packages' "$WORK/clean-npm.txt"
+# A folder of npm's cache that can't be read.
+cp -R "$WORK/clean" "$WORK/npmno"; mkdir -p "$WORK/npmno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/npmno/.npm/_cacache/index-v5/aa"
+HOME="$WORK/npmno" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno.txt"
+HOME="$WORK/npmno" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno-c.txt"
+chmod 755 "$WORK/npmno/.npm/_cacache/index-v5/aa"
+has    "an unreadable cache folder is not called clean" "npm worms not fully checked: part of npm's cache could not be read" "$WORK/npmno.txt"
+has    "and the summary row is not green either"       'Recent leaks npm packages not fully checked: cache unreadable' "$WORK/npmno-c.txt"
 awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
 if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
 # Wiper: Linux steps, and every other rotate waits for it.
@@ -421,6 +430,16 @@ if grep -q 'inside WSL' "$WORK/wsl.txt" && ! grep -q 'inside WSL' "$WORK/notwsl.
   ok "only WSL, not plain Linux, gets the WSL note and loses the keyring advice"
 else bad "only WSL, not plain Linux, gets the WSL note and loses the keyring advice"; fi
 
+echo "placeholders"
+mkdir -p "$WORK/ph/code/ph/.claude"
+printf '{"mcpServers":{"x":{"command":"npx","env":{"API_KEY":"your-api-key-goes-here"}}}}\n' > "$WORK/ph/code/ph/.mcp.json"
+# A placeholder shaped like a real command key, which only the placeholder screen stops.
+printf '{"name":"ph","private":true}\n' > "$WORK/ph/code/ph/package.json"
+printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here npm test)"]}}\n' > "$WORK/ph/code/ph/.claude/settings.local.json"
+HOME="$WORK/ph" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
+has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
+has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
+
 echo "Zeabur and the LiteLLM leftovers"
 # A minimal PATH hides any opencode, railway or zeabur command on this machine, so
 # only the files in the fake home decide.
@@ -474,7 +493,9 @@ HOME="$WORK/ni-pyc" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | 
 if [ "$(uname -s)" = Darwin ]; then
   has  "a pyc-only run counts its things to fix"           'It found [0-9]+ things?.*to fix' "$WORK/ni-pyc.txt"
   has  "a pyc-only run still says the scan is a snapshot"  'THIS SCAN IS A SNAPSHOT' "$WORK/ni-pyc.txt"
+  skip "a pyc-only run keeps the no-guarantee line"        "needs a system other than macOS"
 else
+  skip "a pyc-only run still says the scan is a snapshot"  "needs macOS"
   has  "a pyc-only run counts its things to fix"           '[0-9]+ THINGS? TO FIX' "$WORK/ni-pyc.txt"
   has  "a pyc-only run keeps the no-guarantee line"        'does not prove nothing leaked' "$WORK/ni-pyc.txt"
 fi
@@ -505,7 +526,7 @@ has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, up
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
-has    "with the fix"                                 'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
+has    "with the fix to delete the link"              'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
 has    "a GlassWorm extension at its bad version, with a platform suffix" '~/\.vscode/extensions/oorzc\.ssh-tools-0\.5\.1-darwin-arm64 oorzc\.ssh-tools 0\.5\.1 \(GlassWorm extensions, January 2026\), installed' "$D"
 has    "a GlassWorm extension at any version, its id in another case" '~/\.cursor/extensions/Sol-Studio\.Solidity-Extension-2\.0\.0 sol-studio\.solidity-extension 2\.0\.0 \(GlassWorm' "$D"
 has    "with GlassWorm's sourced line"                'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs\. socket\.dev' "$D"
@@ -608,7 +629,7 @@ gen_refuses() { # what file line
   rm -rf "$WORK/gr"; mkdir -p "$WORK/gr"; cp -R gird-check.sh gird-check.ps1 tools data "$WORK/gr/"
   printf '%s\n' "$3" >> "$WORK/gr/data/$2"
   bash "$WORK/gr/tools/gen.sh" > "$WORK/gr.txt" 2>&1; _rc=$?
-  if [ "$_rc" -eq 2 ] && grep -q "data/$2" "$WORK/gr.txt"; then ok "$1"; else bad "$1 (exit $_rc)"; fi
+  if [ "$_rc" -eq 2 ] && grep -q "data/$2" "$WORK/gr.txt"; then ok "$1"; else bad "$1" "exit $_rc"; fi
 }
 T=$(printf '\t')
 gen_refuses "a platform with an unknown incident"       platforms.tsv "nosuch${T}X${T}x${T}~/.x/${T}CLI found${T}advice${T}summary"
@@ -657,7 +678,7 @@ HOME="$WORK/clean" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' 
 HOME="$WORK/mcp-pl" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-pl.txt"
 HOME="$WORK/mcp-pl" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mcp-pl-full.txt"
 BASE=$(grep -aoE '02 . MCP servers +[0-9]+ servers' "$WORK/mcp-base.txt" | grep -aoE '[0-9]+ servers')
-if [ -n "$BASE" ]; then ok "the baseline has a server count ($BASE)"; else bad "the baseline has a server count"; fi
+if [ -n "$BASE" ]; then ok "the baseline has a server count" "$BASE"; else bad "the baseline has a server count"; fi
 has    "plugin-folder servers are counted apart" "02 . MCP servers +$BASE, 3 more in plugin folders" "$WORK/mcp-pl.txt"
 hasnot "the baseline mentions no plugin folders" 'plugin folders' "$WORK/mcp-base.txt"
 has    "the details total only the servers set up" "MCP SERVERS +$BASE " "$WORK/mcp-pl-full.txt"
@@ -680,7 +701,7 @@ has    "the spend limit tip is a plain line"      '^     Also: set a monthly spe
 hasnot "the spend limit tip is not numbered"      '^ *[0-9]+\. +.*spend limit' "$OUT"
 LAST=$(grep -aE '^ +[0-9]+\.  ' "$OUT" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr -d ' ')
 ISS=$(grep -aoE '[0-9]+ things? to fix' "$OUT" | head -n 1 | grep -aoE '^[0-9]+')
-if [ -n "$LAST" ] && [ "$LAST" = "$ISS" ]; then ok "the numbered list matches the fix count ($ISS)"; else bad "the numbered list matches the fix count"; printf '        list ends at %s, header says %s\n' "$LAST" "$ISS"; fi
+if [ -n "$LAST" ] && [ "$LAST" = "$ISS" ]; then ok "the numbered list matches the fix count" "$ISS"; else bad "the numbered list matches the fix count" "list ends at $LAST, header says $ISS"; fi
 
 rm -rf "$WORK/tip-empty"; mkdir -p "$WORK/tip-empty"
 HOME="$WORK/tip-empty" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/tip-empty.txt" 2>&1
@@ -717,10 +738,10 @@ mkdir -p "$WORK/cwd"
 SAVED=$(ls "$WORK"/cwd/gird-ai-key-check-*.txt 2>/dev/null | head -n 1)
 if [ -n "$SAVED" ]; then ok "--save writes a report"; else bad "--save writes a report"; fi
 if [ -n "$SAVED" ] && [ -n "$(find "$SAVED" -perm 600)" ]; then ok "the report is readable only by you"; else bad "the report is readable only by you"; fi
-if [ -n "$SAVED" ] && ! grep -aqF -f "$WORK/keys.txt" "$SAVED"; then ok "the report holds no planted key"; else bad "the report holds no planted key"; fi
+if [ -n "$SAVED" ] && ! grep -aqF -f "$WORK/keys.txt" "$SAVED"; then ok "the saved report holds no planted key"; else bad "the saved report holds no planted key"; fi
 
 echo "shared counts and how you compare"
-if command -v python3 >/dev/null 2>&1; then
+{
   printf '%s' '{"devices":1234,"runs":2345,"devices_7d":456,"key_files":3412,"agents":5678,"clean":0.31,"hist":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"min_n":25,"updated":1792680000000}' > "$WORK/stats.json"
   printf '%s' '{"p":72,"n":1234,"r":142}' > "$WORK/reply.json"
   python3 - "$WORK/received.log" "$WORK/gets.log" "$WORK/port" "$WORK/stats.json" "$WORK/reply.json" <<'PY' &
@@ -826,81 +847,14 @@ PY
   hasnot "a bad totals reply shows no total"     '^  ★ ([0-9]|Blindspot has found)' "$WORK/hostile.txt"
 
   echo "case-study counts in the report"
-  # Checks one report against the fixed lists in the script and what the
-  # fixture holds. Prints ok|label or bad|label|detail per check.
-  cat > "$WORK/payload.py" <<'PY'
-import json, re, sys
-script, mode, files = sys.argv[1], sys.argv[2], sys.argv[3:]
-src = open(script, encoding='utf-8', errors='replace').read()
-def fixed(name):
-    m = re.search('^' + name + '="([^"]*)"', src, re.M)
-    return m.group(1).split() if m else []
-CLIENTS, KNOWN, PLACES, PROVIDERS = [fixed(n) for n in ('MCP_CLIENT_IDS', 'MCP_KNOWN_IDS', 'KEY_PLACE_IDS', 'PROVIDER_IDS')]
-FIELDS = ['agents_idle_ids', 'mcp_clients', 'mcp_token_clients', 'mcp_known', 'mcp_other', 'key_places', 'provider_files']
-def load(path):
-    try:
-        with open(path) as f:
-            r = json.loads(f.readline())
-        return r if isinstance(r, dict) else {}
-    except (OSError, ValueError):
-        return {}
-def check(label, cond, detail=''):
-    print('%s|%s|%s' % ('ok' if cond else 'bad', label, '' if cond else detail))
-def count(v): return type(v) is int and 0 <= v <= 100000
-def id_list(v, allowed): return isinstance(v, list) and all(isinstance(x, str) and x in allowed for x in v) and len(set(v)) == len(v)
-def counts(v, allowed): return isinstance(v, dict) and all(k in allowed and count(n) for k, n in v.items())
-def obj(r, k):
-    v = r.get(k)
-    return v if isinstance(v, dict) else {}
-def show(r, *keys): return json.dumps({k: r.get(k) for k in keys})
-def common(r, tag):
-    shaped = (id_list(r.get('agents_idle_ids'), r.get('agents') or []) and len(r['agents_idle_ids']) == r.get('agents_idle')
-              and counts(r.get('mcp_clients'), CLIENTS) and id_list(r.get('mcp_token_clients'), CLIENTS)
-              and id_list(r.get('mcp_known'), KNOWN) and count(r.get('mcp_other'))
-              and counts(r.get('key_places'), PLACES) and counts(r.get('provider_files'), PROVIDERS))
-    check(tag + 'every case-study field holds fixed-list ids and whole numbers', shaped, show(r, *FIELDS))
-    check(tag + 'mcp_clients adds up to mcp_servers', sum(obj(r, 'mcp_clients').values()) == r.get('mcp_servers'), show(r, 'mcp_clients', 'mcp_servers'))
-    check(tag + 'key_places adds up to key_files', sum(obj(r, 'key_places').values()) == r.get('key_files'), show(r, 'key_places', 'key_files'))
-    check(tag + 'key_places counts the history files history_keys counts', obj(r, 'key_places').get('shell_history', 0) == r.get('history_keys'), show(r, 'key_places', 'history_keys'))
-    check(tag + 'provider_files has the providers in key_providers', sorted(obj(r, 'provider_files')) == sorted(r.get('key_providers') or []), show(r, 'provider_files', 'key_providers'))
-r = load(files[0])
-if mode == 'home':
-    check('the fixed lists are in the script', [len(CLIENTS), len(PLACES), len(PROVIDERS)] == [12, 7, 12] and len(KNOWN) >= 49,
-          'clients %d, known %d, places %d, providers %d' % tuple(map(len, (CLIENTS, KNOWN, PLACES, PROVIDERS))))
-    check('the report has every case-study field', all(k in r for k in FIELDS), 'missing: ' + ' '.join(k for k in FIELDS if k not in r))
-    common(r, '')
-    check('mcp_clients counts the servers in each app', r.get('mcp_clients') == {'claude-code': 6, 'cursor': 1, 'codex': 2, 'vscode': 2, 'cline': 3}, show(r, 'mcp_clients'))
-    check('mcp_token_clients names the app with a token in its config', r.get('mcp_token_clients') == ['cursor'], show(r, 'mcp_token_clients'))
-    check('mcp_known lists each well-known server once', sorted(r.get('mcp_known') or []) == sorted(['github', 'filesystem', 'postgres', 'playwright', 'linear', 'figma', 'context7', 'docker']), show(r, 'mcp_known'))
-    check('mcp_other counts the servers with names of their own', r.get('mcp_other') == 3, show(r, 'mcp_other'))
-    # 11 fixture servers have well-known labels: github 3 times (once as gh), fs twice,
-    # and linear, postgres, docker, playwright, context7 and figma once each.
-    check('well-known and other servers add up to mcp_servers', 11 + (r.get('mcp_other') or 0) == r.get('mcp_servers'), show(r, 'mcp_other', 'mcp_servers'))
-    check('key_places puts each key file in its place', r.get('key_places') == {'shell_rc': 1, 'shell_history': 1, 'env_file': 1, 'mcp_config': 1}, show(r, 'key_places'))
-    check("provider_files counts the files with each provider's keys", r.get('provider_files') == {'anthropic': 1, 'openai': 1, 'groq': 1, 'aws': 1, 'github': 2}, show(r, 'provider_files'))
-    idle = set(r.get('agents_idle_ids') or [])
-    check('agents_idle_ids holds the idle agents, not the active ones', {'codex', 'gemini-cli', 'cursor', 'cline', 'goose'} <= idle and not idle & {'claude-code', 'opencode'}, show(r, 'agents_idle_ids'))
-elif mode == 'places':
-    common(r, 'more key files: ')
-    check('more key files: key_places counts each kind of file', r.get('key_places') == {'shell_rc': 2, 'shell_history': 2, 'env_file': 2, 'mcp_config': 1, 'agent_config': 1}, show(r, 'key_places'))
-    check('more key files: provider_files counts each file once per provider', r.get('provider_files') == {'anthropic': 3, 'openai': 2, 'groq': 2, 'aws': 1, 'github': 2}, show(r, 'provider_files'))
-elif mode == 'empty':
-    common(r, 'an empty home: ')
-    check('an empty home: empty lists and objects, and no other servers', [r.get(k) for k in FIELDS[1:]] == [{}, [], [], 0, {}, {}] and isinstance(r.get('agents_idle_ids'), list), show(r, *FIELDS))
-elif mode == 'nojq':
-    b = load(files[1])
-    keys = ['mcp_servers', 'mcp_configs', 'mcp_token_files', 'mcp_clients', 'mcp_token_clients', 'mcp_other', 'key_places', 'provider_files']
-    diff = [k for k in keys if r.get(k) != b.get(k)]
-    if sorted(r.get('mcp_known') or []) != sorted(b.get('mcp_known') or []): diff.append('mcp_known')
-    check("without jq, macOS's JavaScript finds the same MCP servers as jq", bool(b) and not diff, 'differs: ' + ' '.join(diff) + ' ' + show(b, *diff))
-PY
+  # tests/payload.py checks one report against the script's fixed lists and the fixture.
   payload_checks() { # mode report [report]
-    python3 "$WORK/payload.py" "$SCRIPT" "$@" > "$WORK/checks.txt" 2>&1
+    python3 tests/payload.py "$SCRIPT" "$@" > "$WORK/checks.txt" 2>&1
     while IFS='|' read -r st label detail; do
       case "$st" in
         ok)  ok "$label" ;;
-        bad) bad "$label"; [ -n "$detail" ] && printf '        %s\n' "$detail" ;;
-        *)   bad "the case-study checks ran: $st$label" ;;
+        bad) bad "$label" "$detail" ;;
+        *)   bad "the case-study checks ran" "$st$label" ;;
       esac
     done < "$WORK/checks.txt"
   }
@@ -943,6 +897,8 @@ sys.exit(0 if a == b and a else 1)' "$WORK/report-pl-base.json" "$WORK/report-pl
     mkdir -p "$WORK/nojq"; ln -s /usr/bin/* /bin/* /usr/sbin/* /sbin/* "$WORK/nojq/" 2>/dev/null; rm -f "$WORK/nojq/jq"
     report_of "$WORK/report-nojq.json" env PATH="$WORK/nojq" HOME="$WORK/home" GIRD_CHECK_API="$API" /bin/bash "$SCRIPT"
     payload_checks nojq "$WORK/report-home.json" "$WORK/report-nojq.json"
+  else
+    skip "without jq, macOS's JavaScript finds the same MCP servers as jq" "needs macOS's osascript"
   fi
   hasnot "no report holds a name you gave an MCP server" 'acme|my notes|web.search' "$WORK/received.log"
   hasnot "no report holds a server label as written"     '@modelcontextprotocol|MCP_DOCKER|Figma Dev Mode|upstash|Playwright|"gh"|"fs"' "$WORK/received.log"
@@ -966,13 +922,107 @@ sys.exit(0 if a == b and a else 1)' "$WORK/report-pl-base.json" "$WORK/report-pl
   if grep -q '"os":"Linux"' "$WORK/report-wsl.json" && [ -s "$WORK/wsl.txt" ] && grep -q 'files into a secrets manager' "$WORK/wsl.txt"; then
     ok "WSL reports os Linux while giving the WSL advice"
   else bad "WSL reports os Linux while giving the WSL advice"; fi
-else
-  echo "  skip  python3 not installed"
-fi
+}
 
 echo "help"
 if bash "$SCRIPT" --help | grep -q -- '--offline'; then ok "--help lists the options"; else bad "--help lists the options"; fi
 
-echo
-echo "$PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+echo "the text backstop to tests/parity.sh"
+# Each case is a copy of a suite with lines added through a heredoc, which the backstop skips here.
+pcase() { # run.sh-copy run-ps.sh-copy
+  bash tests/parity-text.sh "$1" "$2" tests/bash-only.txt > "$WORK/pcase.txt" 2>&1
+}
+cp tests/run.sh "$WORK/pr1.sh"; cat >> "$WORK/pr1.sh" <<'EOF'
+ok 'a single-quoted name'
+EOF
+if ! pcase "$WORK/pr1.sh" tests/run-ps.sh && grep -q 'ok with a name that is not a double-quoted literal' "$WORK/pcase.txt"; then ok "the text backstop fails on a single-quoted name"; else bad "the text backstop fails on a single-quoted name"; fi
+cp tests/run.sh "$WORK/pr2.sh"; cat >> "$WORK/pr2.sh" <<'EOF'
+myhas() { if grep -q "$2" "$3"; then ok "$1"; else bad "$1"; fi; }
+myhas "a name in a new helper" x y
+EOF
+if ! pcase "$WORK/pr2.sh" tests/run-ps.sh && grep -q 'function myhas calls ok' "$WORK/pcase.txt"; then ok "the text backstop fails on a new helper that calls ok"; else bad "the text backstop fails on a new helper that calls ok"; fi
+cp tests/run.sh "$WORK/pr3.sh"; cat >> "$WORK/pr3.sh" <<'EOF'
+while read -r label; do ok "$label"; done < /dev/null
+EOF
+if ! pcase "$WORK/pr3.sh" tests/run-ps.sh && grep -q 'not a loop value: \$label' "$WORK/pcase.txt"; then ok "the text backstop fails on a variable name outside the helpers"; else bad "the text backstop fails on a variable name outside the helpers"; fi
+cp tests/run.sh "$WORK/pr4.sh"; cat >> "$WORK/pr4.sh" <<'EOF'
+for M in a b; do has "one loop $M" x y; done
+for M in c d; do has "two loop $M" x y; done
+EOF
+cp tests/run-ps.sh "$WORK/pp4.sh"; cat >> "$WORK/pp4.sh" <<'EOF'
+has "one loop a" x y; has "one loop b" x y; has "two loop c" x y; has "two loop d" x y
+EOF
+if pcase "$WORK/pr4.sh" "$WORK/pp4.sh"; then ok "the text backstop fills in each loop's own values"; else bad "the text backstop fills in each loop's own values"; sed 's/^/        /' "$WORK/pcase.txt" | head -n 4; fi
+cp tests/run-ps.sh "$WORK/pp4b.sh"; cat >> "$WORK/pp4b.sh" <<'EOF'
+has "one loop a" x y; has "one loop b" x y; has "two loop c" x y
+EOF
+if ! pcase "$WORK/pr4.sh" "$WORK/pp4b.sh" && grep -q 'no PowerShell twin: two loop d$' "$WORK/pcase.txt"; then ok "the text backstop fails on a twin missing from the second loop"; else bad "the text backstop fails on a twin missing from the second loop"; fi
+cp tests/run.sh "$WORK/pr5.sh"; cat >> "$WORK/pr5.sh" <<'EOF'
+if false; then bad "a test that only says when it fails"; fi
+EOF
+if ! pcase "$WORK/pr5.sh" tests/run-ps.sh && grep -q 'a test that only fails is not counted' "$WORK/pcase.txt"; then ok "the text backstop fails on a test that only fails"; else bad "the text backstop fails on a test that only fails"; fi
+cp tests/run.sh "$WORK/pr6.sh"; cat >> "$WORK/pr6.sh" <<'EOF'
+has "a new bash test with no twin" x y
+EOF
+if ! pcase "$WORK/pr6.sh" tests/run-ps.sh && grep -q 'no PowerShell twin: a new bash test with no twin$' "$WORK/pcase.txt"; then ok "the text backstop fails on a bash test with no twin"; else bad "the text backstop fails on a bash test with no twin"; fi
+grep -v '"Windows: finds _netrc"' tests/run-ps.sh > "$WORK/pp7.sh"
+if ! pcase tests/run.sh "$WORK/pp7.sh" && grep -q 'no PowerShell twin: Windows: finds _netrc$' "$WORK/pcase.txt"; then ok "the text backstop fails on a deleted twin"; else bad "the text backstop fails on a deleted twin"; fi
+
+cp tests/run.sh "$WORK/pr8.sh"; printf '%s\n' 'echo "a quote left open' >> "$WORK/pr8.sh"
+if ! pcase "$WORK/pr8.sh" tests/run-ps.sh && grep -q 'the file ends inside a quote' "$WORK/pcase.txt"; then ok "the text backstop fails on a file that ends inside a quote"; else bad "the text backstop fails on a file that ends inside a quote"; fi
+if bash tests/parity-text.sh > "$WORK/parity.txt" 2>&1; then ok "the text backstop finds a twin for every test"
+else bad "the text backstop finds a twin for every test" "$(grep -v '^    ' "$WORK/parity.txt")"; fi
+
+echo "tests/parity.sh, on the names the suites record"
+# The rule: tests/parity-run.sh runs both suites with PARITY_LOG set and compares the lists.
+PR=$WORK/prt; mkdir -p "$PR"; : > "$PR/only.txt"; : > "$PR/psk.txt"
+printf '%s\n' 'a test' 'bash 3: a per-bash test' 'perl: an engine test' > "$PR/b.txt"
+printf '%s\n' 'a test' 'a per-bash test' 'net: an engine test' 'a PowerShell test' > "$PR/p.txt"
+if bash tests/parity.sh "$PR/b.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1; then ok "parity.sh passes two lists that agree"; else bad "parity.sh passes two lists that agree" "$(cat "$PR/out.txt")"; fi
+{ cat "$PR/b.txt"; echo 'a new bash test'; } > "$PR/b2.txt"
+if ! bash tests/parity.sh "$PR/b2.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a new bash test$' "$PR/out.txt"; then ok "parity.sh fails on a bash test with no twin"; else bad "parity.sh fails on a bash test with no twin"; fi
+grep -v '^a test$' "$PR/p.txt" > "$PR/p2.txt"
+if ! bash tests/parity.sh "$PR/b.txt" "$PR/p2.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a test$' "$PR/out.txt"; then ok "parity.sh fails on a deleted twin"; else bad "parity.sh fails on a deleted twin"; fi
+{ cat "$PR/b.txt"; echo 'a test'; } > "$PR/b3.txt"
+if ! bash tests/parity.sh "$PR/b3.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'reported twice in the bash run: a test$' "$PR/out.txt"; then ok "parity.sh fails on a test reported twice"; else bad "parity.sh fails on a test reported twice"; fi
+: > "$PR/empty.txt"
+if ! bash tests/parity.sh "$PR/empty.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'list of test names is empty' "$PR/out.txt"; then ok "parity.sh fails on an empty list"; else bad "parity.sh fails on an empty list"; fi
+if ! bash tests/parity.sh "$PR/b.txt" "$PR/none.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no list of test names' "$PR/out.txt"; then ok "parity.sh fails on a missing list"; else bad "parity.sh fails on a missing list"; fi
+printf 'a new bash test\n' > "$PR/only2.txt"
+if ! bash tests/parity.sh "$PR/b2.txt" "$PR/p.txt" "$PR/only2.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'needs the name, a tab and the reason' "$PR/out.txt"; then ok "parity.sh fails on a bash-only line with no reason"; else bad "parity.sh fails on a bash-only line with no reason"; fi
+# A skipped test records its name like any other, so it still needs a twin.
+cat > "$PR/skipped.sh" <<'EOF'
+. tests/lib.sh
+SKIPPING="not on this machine"
+has "a skipped test" 'x' /nonexistent
+SKIPPING=""
+skip "a test skipped by name" "not on this machine"
+EOF
+PARITY_LOG="$PR/sk.txt" bash "$PR/skipped.sh" > /dev/null 2>&1
+printf '%s\n' 'a skipped test' > "$PR/p3.txt"
+if [ "$(cat "$PR/sk.txt" 2>/dev/null)" = "$(printf 'S\ta skipped test\nS\ta test skipped by name')" ] && ! bash tests/parity.sh "$PR/sk.txt" "$PR/p3.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a test skipped by name$' "$PR/out.txt"
+then ok "parity.sh counts a skipped test"; else bad "parity.sh counts a skipped test"; fi
+# A PowerShell skip is a twin only where bash did not run the test either, or with a reason.
+printf '%s\n' 'a test' 'a second test' > "$PR/b4.txt"
+printf 'a test\nS\ta second test\n' > "$PR/p4.txt"
+if ! bash tests/parity.sh "$PR/b4.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'PowerShell skipped a test bash ran, and ps-skips.txt does not say why: a second test$' "$PR/out.txt"; then ok "parity.sh fails on a PowerShell skip with no reason"; else bad "parity.sh fails on a PowerShell skip with no reason"; fi
+printf 'a second test\tit needs what this machine lacks\n' > "$PR/psk2.txt"
+if bash tests/parity.sh "$PR/b4.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk2.txt" > "$PR/out.txt" 2>&1; then ok "parity.sh passes a PowerShell skip that ps-skips.txt explains"; else bad "parity.sh passes a PowerShell skip that ps-skips.txt explains" "$(cat "$PR/out.txt")"; fi
+printf 'a second test\tit needs what this machine lacks\nno such test\ta reason\n' > "$PR/psk3.txt"
+if ! bash tests/parity.sh "$PR/b4.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk3.txt" > "$PR/out.txt" 2>&1 && grep -q 'ps-skips.txt names a test run-ps.sh does not have: no such test$' "$PR/out.txt"; then ok "parity.sh fails on a stale ps-skips line"; else bad "parity.sh fails on a stale ps-skips line"; fi
+printf 'S\ta second test\n' > "$PR/b5.txt"; printf 'a test\n' >> "$PR/b5.txt"
+if bash tests/parity.sh "$PR/b5.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1; then ok "parity.sh passes a test both suites skipped"; else bad "parity.sh passes a test both suites skipped" "$(cat "$PR/out.txt")"; fi
+# A child that sources tests/lib.sh with the parent's PARITY_LOG exported can't wipe that list.
+printf 'a parent test\n' > "$PR/parent.txt"
+PARITY_LOG="$PR/parent.txt" bash -c '. tests/lib.sh; ok "a child test"' > /dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ] && [ "$(cat "$PR/parent.txt")" = "a parent test" ]; then ok "a child that sources tests/lib.sh keeps the parent's list"; else bad "a child that sources tests/lib.sh keeps the parent's list" "exit $RC, list: $(tr '\n' ';' < "$PR/parent.txt")"; fi
+# A result reported where tests/lib.sh's counts can't see it fails the suite.
+cat > "$PR/sub.sh" <<'EOF'
+. tests/lib.sh
+echo x | while read -r _; do ok "a test in a pipe"; done
+finish
+EOF
+if ! PARITY_LOG="$PR/sub.txt" bash "$PR/sub.sh" > "$PR/out.txt" 2>&1 && grep -q 'reported outside tests/lib.sh' "$PR/out.txt"; then ok "a result reported in a subshell fails the suite"; else bad "a result reported in a subshell fails the suite"; fi
+
+
+finish

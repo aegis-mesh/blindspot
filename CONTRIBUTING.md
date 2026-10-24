@@ -42,7 +42,7 @@ The key types, the agents' session folders, the incidents, the bad npm and Pytho
 1. Add a line to the `AGENTS` table in `gird-check.sh`: name, commands, install paths, folders that change when it's used, and an id.
 2. If it has an MCP config, add it to `MCP_FILES`. If it keeps keys in a config, add it to the candidate list in section 3.
 3. If it keeps session transcripts, add a line to `data/sessions.tsv` and run `bash tools/gen.sh`.
-4. Add a fake install to `tests/make-fixture.sh` and an assertion to `tests/run.sh`.
+4. Add a fake install to `tests/make-fixture.sh`, an assertion to `tests/run.sh` and its twin to `tests/run-ps.sh` (see [Test](#test)).
 
 ## Add a key format
 
@@ -85,10 +85,13 @@ A reviewer starts from the person who acts on the report, not from the diff:
 bash tests/run.sh            # builds a fake home folder and checks what the script finds and never prints
 bash tests/interactive.sh    # macOS: drives the game and the menu with expect
 shellcheck -s bash -S warning gird-check.sh tests/*.sh
-PWSH=/path/to/pwsh bash tests/run-ps.sh   # if you changed gird-check.ps1
+PWSH=/path/to/pwsh bash tests/run-ps.sh   # the same checks for gird-check.ps1, under PowerShell 7
+PWSH=/path/to/pwsh bash tests/parity-run.sh   # both suites, then checks every bash test has a twin
 ```
 
-Run them before you open a pull request. `tests/run.sh` and `tests/interactive.sh` each run on the bash that ships with macOS (3.2) and on a newer bash from your PATH if you have one. Maintainers run them again before merging.
+Run them before you open a pull request, one at a time, never two at once. They run the scripts with `--offline` or against a local stand-in for gird.ai, so a test run never reaches the live counts. `tests/run.sh` and `tests/interactive.sh` each run on the bash that ships with macOS (3.2) and on a newer bash from your PATH if you have one. Maintainers run them again before merging.
+
+Every test in `tests/run.sh` needs a twin in `tests/run-ps.sh`: a test with the same name that checks the same thing for `gird-check.ps1`, on the Windows-shaped home. A test that can't or need not run for PowerShell gets a line in `tests/bash-only.txt` instead: its name, a tab, and the reason. A reason names a feature only `gird-check.sh` has (the game and the menu, the perl session engine, Git Bash and WSL, `tools/gen.sh`), or something PowerShell can't fake on the test machine, such as the OS. "Not written yet" is not a reason. Each test records its name as it runs, skipped ones too (`tests/lib.sh`: report through `ok`, `bad` and `skip` only, and a test that can't run on a machine calls `skip`). Every check reports through `ok` or `bad` on both outcomes: one that reports only when it fails (`[ ... ] && bad "x"`) or ends with `exit` never reaches the list on a passing run. The text backstop catches the first shape, not the second. A PowerShell test that skips where bash runs its twin needs a line in `tests/ps-skips.txt`, the name, a tab and why `gird-check.ps1`'s test can't run there. `tests/parity-run.sh` runs both suites and `tests/parity.sh` compares the two lists; run it before you open a pull request. CI runs it in the PowerShell job, so a bash test with neither fails CI. `tests/run.sh` also runs `tests/parity-text.sh`, a backstop that reads both suites as text; the runtime check is the rule. When a twin fails because the scripts behave differently, fix the script that is wrong, never the test.
 
 ## Sign your commits
 

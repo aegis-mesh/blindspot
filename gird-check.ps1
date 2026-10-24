@@ -997,7 +997,8 @@ Login (J $HomeDir '.azure/msal_token_cache.json') 'Azure login' 'azure'
 Login (J $HomeDir '.kube/config') 'Kubernetes logins' 'kube'
 Login (J $HomeDir '.docker/config.json') 'Docker registry logins' 'docker' '"auth"\s*:\s*"[A-Za-z0-9+/=]{8,}'
 Login (J $HomeDir '.npmrc') 'npm token' 'npm' '_authToken'
-Login @((J $HomeDir '_netrc'), (J $HomeDir '.netrc')) 'saved passwords in .netrc' 'netrc'
+Login (J $HomeDir '.netrc') 'saved passwords in .netrc' 'netrc'
+if (-not $LoginIds.Contains('netrc')) { Login (J $HomeDir '_netrc') 'saved passwords in _netrc' 'netrc' }
 Login (J $HomeDir '.git-credentials') 'saved Git passwords' 'git-credentials'
 Login @((J $AppData 'GitHub CLI/hosts.yml'), (J $HomeDir '.config/gh/hosts.yml')) 'GitHub CLI token' 'gh' 'oauth_token'
 Login (J $HomeDir '.pypirc') 'PyPI token' 'pypi' 'password'
@@ -2139,7 +2140,21 @@ function Do-Save {
     if (-not $cand) { continue }
     try {
       $path = J $cand $name
-      $fs = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      # Readable only by you, as gird-check.sh's umask 077. On Windows the folder's permissions apply.
+      # Before PowerShell 7.3 there is no UnixCreateMode: the empty file is made owner-only first
+      # (GIRD_CHECK_TEST_NO_UNIXMODE takes that path in the tests).
+      $unix = [Environment]::OSVersion.Platform -eq [PlatformID]::Unix
+      if ($unix -and ('IO.UnixFileMode' -as [type]) -and -not $env:GIRD_CHECK_TEST_NO_UNIXMODE) {
+        $fo = New-Object IO.FileStreamOptions; $fo.Mode = [IO.FileMode]::CreateNew; $fo.Access = [IO.FileAccess]::Write
+        $fo.UnixCreateMode = [IO.UnixFileMode]'UserRead, UserWrite'
+        $fs = New-Object IO.FileStream($path, $fo)
+      } else {
+        $fs = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+        if ($unix) {
+          & /bin/chmod 600 $path 2>$null
+          if ($LASTEXITCODE -ne 0) { $fs.Close(); Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue; throw 'chmod' }
+        }
+      }
       $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(([regex]::Replace($Report.ToString(), "$Esc\[[0-9;]*m", '')).Replace("`n", $NL))
       $fs.Write($bytes, 0, $bytes.Length); $fs.Close(); $out = $path; break
     } catch { $out = $null }
