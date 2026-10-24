@@ -506,7 +506,7 @@ has    "with the fix"                                 'Delete the links to ~/\.s
 has    "a GlassWorm extension at its bad version, with a platform suffix" '~/\.vscode/extensions/oorzc\.ssh-tools-0\.5\.1-darwin-arm64 oorzc\.ssh-tools 0\.5\.1 \(GlassWorm extensions, January 2026\), installed' "$D"
 has    "a GlassWorm extension at any version, its id in another case" '~/\.cursor/extensions/Sol-Studio\.Solidity-Extension-2\.0\.0 sol-studio\.solidity-extension 2\.0\.0 \(GlassWorm' "$D"
 has    "with GlassWorm's sourced line"                'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs\. socket\.dev' "$D"
-has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with the Injective SDK, into a new wallet\.' "$D"
+has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
 has    "with its sourced line"                        'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it\. github\.com' "$D"
 dzrun() { _h=$1; shift; env HOME="$_h" PATH=/usr/bin:/bin "$@" bash "$SCRIPT" --offline 2>&1; }
@@ -627,6 +627,7 @@ gen_refuses "an incident with an empty advice"         incidents.tsv "newone${T}
 gen_refuses "an incident with another level"            incidents.tsv "newone${T}X${T}October 2026${T}x${T}https://example.com${T}remove"
 gen_refuses "an incident with no month"                 incidents.tsv "newone${T}X${T}2026${T}x${T}https://example.com${T}act"
 gen_refuses "an incident source that is not https"      incidents.tsv "newone${T}X${T}October 2026${T}x${T}http://example.com${T}act"
+gen_refuses "advice on an incident with no package to show it" incidents.tsv "newone${T}X${T}October 2026${T}x${T}https://example.com${T}act${T}Do this."
 gen_refuses "a wiper file that is not gh-token-monitor" indicators.tsv "tanstack${T}all${T}wiper${T}no${T}~/.config/otherwiper${T}-"
 gen_refuses "npm's -security placeholder"               bad-npm.tsv "left-pad${T}0.0.1-security${T}axios"
 gen_refuses "an auto-approve line with another os"    auto-approve.tsv "X${T}mac os${T}~/.x/settings.json${T}s${T}\"a\": true"

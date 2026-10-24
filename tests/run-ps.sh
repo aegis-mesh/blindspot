@@ -369,7 +369,7 @@ has    "with the fix"                                 'Delete the links to ~/\.s
 has    "a GlassWorm extension at its bad version, with a platform suffix" '~/\.vscode/extensions/oorzc\.ssh-tools-0\.5\.1-darwin-arm64 oorzc\.ssh-tools 0\.5\.1 \(GlassWorm extensions, January 2026\), installed' "$D"
 has    "a GlassWorm extension at any version, its id in another case" '~/\.cursor/extensions/Sol-Studio\.Solidity-Extension-2\.0\.0 sol-studio\.solidity-extension 2\.0\.0 \(GlassWorm' "$D"
 has    "with GlassWorm's sourced line"                'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs\. socket\.dev' "$D"
-has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with the Injective SDK, into a new wallet\.' "$D"
+has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
 dzrun() { _h=$1; shift; psrun "$_h" "$@" -- -Offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"

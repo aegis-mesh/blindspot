@@ -5,7 +5,8 @@
 #   impact  what it did, at most about 14 words, every word supported by the source
 #   source  the primary source (vendor advisory, GitHub advisory, CISA or a named research post)
 #   level   act: treat the machine as compromised. update: update the version; the machine itself is not compromised
-#   advice  optional: one more fix, shown in What to do when the incident is found
+#   advice  optional: one more fix, shown in What to do when a package or extension of the incident
+#           is found (bad-npm, bad-pypi, bad-extensions; gen.sh refuses it on any other incident)
 # id	name	when	impact	source	level	advice
 axios	Axios takeover	March 2026	downloaded payloads, including a remote access trojan, onto machines that installed it	https://www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager	act
 tanstack	TanStack worm	May 2026	stole cloud, GitHub, npm and SSH credentials on install, then republished itself	https://github.com/advisories/GHSA-g7cv-rxg3-hmpx	act
@@ -22,4 +23,4 @@ opencode	OpenCode Console	October 2026	exposed AI provider keys saved in Console
 railway	Railway	October 2026	an attacker accessed stored environment variables and decrypted some of them	https://blog.railway.com/p/security-disclosure-wednesday-october-21st	act
 zeabur	Zeabur	October 2026	an attacker read environment variables and secrets stored on the platform	https://zeabur.com/blogs/october-2026-security-incident	act
 glassworm	GlassWorm extensions	January 2026	stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs	https://socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise	act
-injective	Injective SDK	July 2026	sent the seed phrase or private key of any wallet an app created or imported with it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update	Move the funds out of any wallet created or imported with the Injective SDK, into a new wallet.
+injective	Injective SDK	July 2026	sent the seed phrase or private key of any wallet an app created or imported with it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update	Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.

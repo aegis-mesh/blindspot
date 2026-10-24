@@ -18,6 +18,9 @@ WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 rows() { grep -v '^#' "$1" | grep -v '^[[:space:]]*$'; }
 IDS=" $(rows data/incidents.tsv | cut -f1 | tr '\n' ' ')"
 ACT_IDS=" $(rows data/incidents.tsv | awk -F '\t' '$6 == "act" { printf "%s ", $1 }')"
+# What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
+# bad-extensions), so advice on any other incident would never be shown: it is refused.
+PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
 # A path for a file check: a token or an absolute path first, at least one folder or file after
 # it, and nothing a shell or PowerShell string would read as code, a glob or a separator.
 PATH_OK='function path_ok(p,   r) {
@@ -27,7 +30,7 @@ PATH_OK='function path_ok(p,   r) {
 # Characters that would break the generated bash, awk or PowerShell are refused, and so is an
 # incident id no line of data/incidents.tsv has.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
-      rows data/incidents.tsv | awk -F '\t' '(NF != 6 && NF != 7) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9]{4}$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
+      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" '(NF != 6 && NF != 7) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9]{4}$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /-security$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' 'NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || $4 ~ /[\047"`$|\\]/ || $4 ~ /\{ENV:[^}]*\{/ { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused.
