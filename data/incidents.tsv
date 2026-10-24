@@ -4,7 +4,7 @@
 #   when    month and year
 #   impact  what it did, at most about 14 words, every word supported by the source
 #   source  the primary source (vendor advisory, GitHub advisory, CISA or a named research post)
-#   level   act: treat the machine as compromised. update: remove the version, nothing ran
+#   level   act: treat the machine as compromised. update: update the version; the machine itself is not compromised
 # id	name	when	impact	source	level
 axios	Axios takeover	March 2026	downloaded payloads, including a remote access trojan, onto machines that installed it	https://www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager	act
 tanstack	TanStack worm	May 2026	stole cloud, GitHub, npm and SSH credentials on install, then republished itself	https://github.com/advisories/GHSA-g7cv-rxg3-hmpx	act
@@ -20,3 +20,5 @@ litellm	LiteLLM 1.107.0	October 2026	stole credentials and loaded remote-code ex
 opencode	OpenCode Console	October 2026	exposed AI provider keys saved in Console workspaces; users reported charges on them	https://techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/	act
 railway	Railway	October 2026	an attacker accessed stored environment variables and decrypted some of them	https://blog.railway.com/p/security-disclosure-wednesday-october-21st	act
 zeabur	Zeabur	October 2026	an attacker read environment variables and secrets stored on the platform	https://zeabur.com/blogs/october-2026-security-incident	act
+glassworm	GlassWorm extensions	January 2026	stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs	https://socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise	act
+injective	Injective SDK	July 2026	sent the seed phrase or private key of any wallet an app created or imported with it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update
