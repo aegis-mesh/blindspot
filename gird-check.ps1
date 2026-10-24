@@ -1100,7 +1100,6 @@ $IndTable = @(
   ,@('litellm', 'all', 'temp', 'no', '.pc_sq_*', '-')
   ,@('litellm', 'all', 'temp', 'no', '.pc_e_*', '-')
   ,@('mistralpy', 'linux', 'temp', 'no', 'transformers.pyz', '-')
-  ,@('glassworm', 'mac', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.nodestart.plist'), 'starts the GlassWorm loader at login')
 )
 # <<< indicators
 if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
@@ -1602,9 +1601,6 @@ foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } e
 # is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
-# The incidents with an extension line: their startup files are extension findings too.
-$ExtInc = @($BadExtRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
-$ExtPersist = New-Object System.Collections.Generic.List[object]
 foreach ($r in $IndOn) {
   if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
@@ -1613,7 +1609,7 @@ foreach ($r in $IndOn) {
     $owner = ''; try { $owner = [string](Get-Item -LiteralPath $m -Force -ErrorAction Stop).User } catch { }
     if (-not ($owner -and $owner -ceq [Environment]::UserName)) { continue }
   }
-  if ($r[2] -eq 'wiper') { $Wiper.Add($m) } elseif ($ExtInc -contains $r[0]) { $ExtPersist.Add(@($m, $r[5], $r[0])) } else { $Persist.Add(@($m, $r[5])) }
+  if ($r[2] -eq 'wiper') { $Wiper.Add($m) } else { $Persist.Add(@($m, $r[5])) }
 }
 # A registry value is not a file, so the Mastra worm's Run key stays code.
 if ($OnWindows) {
@@ -1627,8 +1623,8 @@ foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
-$EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
-$ExtTags = @(@(foreach ($r in $ExtRows) { $r[2] }; foreach ($r in $ExtPersist) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
+$EXT_HIT = 0; if ($ExtRows.Count -gt 0) { $EXT_HIT = 1 }
+$ExtTags = @(@(foreach ($r in $ExtRows) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
 $ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
 if ($MAL_HIT -eq 1 -and $EXT_HIT -eq 1) { $MalWhat = 'npm and editor extension malware'; $MalShort = 'npm and editor extension' }
 elseif ($EXT_HIT -eq 1) { $MalWhat = 'malware in an editor extension'; $MalShort = 'editor extension' }
@@ -2016,7 +2012,6 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
-  foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   foreach ($t in $ExtTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 }
 foreach ($p in $Platforms) {

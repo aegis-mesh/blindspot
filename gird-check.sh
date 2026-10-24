@@ -1501,8 +1501,7 @@ litellm|all|temp|no|remote_code_loader.lock|-
 litellm|all|temp|no|.pc_once_*|-
 litellm|all|temp|no|.pc_sq_*|-
 litellm|all|temp|no|.pc_e_*|-
-mistralpy|linux|temp|no|transformers.pyz|-
-glassworm|mac|startup|no|$H/Library/LaunchAgents/com.user.nodestart.plist|starts the GlassWorm loader at login"
+mistralpy|linux|temp|no|transformers.pyz|-"
 # <<< indicators
 SITES_ALL=$(
   {
@@ -2008,8 +2007,6 @@ EXT_ROWS=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsur
       if (rest != "" && rest !~ /^-/) continue
       if (v[i] == "*" || v[i] == ver) { print $0 "\t" sp[i] " " ver "\t" t[i]; break }
     } }')
-# The incidents with an extension line: their startup files are extension findings too.
-EXT_INC=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 # Incidents that leave the machine itself uncompromised only need the version updated; the rest mean a compromised machine.
 NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
 for _t in $NPM_TAGS; do
@@ -2019,17 +2016,15 @@ done
 # when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
 # the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
 # is revoked. A file in the shared /tmp counts only if this person owns it.
-WIPER=""; PERSIST=""; EXT_PERSIST=""
+WIPER=""; PERSIST=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
   if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
-"
-  else case "$EXT_INC" in *" $_ii "*) EXT_PERSIST="$EXT_PERSIST$_ip$TAB$_in$TAB$_ii
-" ;; *) PERSIST="$PERSIST$_ip$TAB$_in
-" ;; esac; fi
+"; else PERSIST="$PERSIST$_ip$TAB$_in
+"; fi
 done <<EOF
 $IND_TABLE
 EOF
@@ -2045,8 +2040,8 @@ fi
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
-EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
-EXT_TAGS=$(printf '%s\n%s\n' "$EXT_ROWS" "$EXT_PERSIST" | cut -f3 | grep -v '^$' | sort -u)
+EXT_HIT=0; [ -n "$EXT_ROWS" ] && EXT_HIT=1
+EXT_TAGS=$(printf '%s\n' "$EXT_ROWS" | cut -f3 | grep -v '^$' | sort -u)
 ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
 if [ "$MAL_HIT" -eq 1 ] && [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="npm and editor extension malware"; MAL_SHORT="npm and editor extension"
 elif [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="malware in an editor extension"; MAL_SHORT="editor extension"
@@ -2609,13 +2604,6 @@ if [ "$EXT_HIT" -eq 1 ]; then
     emit "          ${p} ${DIM}($(npm_label "$t")), installed${RST}"
   done <<EOF
 $EXT_ROWS
-EOF
-  while IFS="$TAB" read -r f p t; do
-    [ -n "$f" ] || continue
-    emit "        $(short "$f")"
-    emit "          ${p}"
-  done <<EOF
-$EXT_PERSIST
 EOF
   for _t in $EXT_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 fi

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Adds the checks from the incident dossier (docs/designs/dossier-checks.md) to a fixture home:
 #   hit   agents set to run without asking, agent versions with a published fix, a link to
-#         ~/.ssh/authorized_keys, GlassWorm extensions and its startup file, the Injective SDK
+#         ~/.ssh/authorized_keys, GlassWorm extensions, the Injective SDK
 #   calm  the hits that change no shared count: no MCP config, no malware
 #   miss  near misses that must not be reported
 # APPDATA is the folder VS Code's user settings live under (Application Support, ~/.config or
@@ -47,7 +47,6 @@ pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/cl
 pkg "$F/.npm-global/lib/node_modules/mcp-remote" mcp-remote 0.0.5
 ln -s ../../.ssh/authorized_keys "$F/code/links/notes.txt"
 [ "$MODE" = calm ] && exit 0
-mkdir -p "$F/code/mr" "$F/code/inj" "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1-darwin-arm64" "$F/.cursor/extensions/Sol-Studio.Solidity-Extension-2.0.0" "$F/Library/LaunchAgents"
+mkdir -p "$F/code/mr" "$F/code/inj" "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1-darwin-arm64" "$F/.cursor/extensions/Sol-Studio.Solidity-Extension-2.0.0"
 printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.10","https://example.com/sse"]}}}\n' > "$F/code/mr/.mcp.json"
 printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$F/code/inj/package-lock.json"
-: > "$F/Library/LaunchAgents/com.user.nodestart.plist"

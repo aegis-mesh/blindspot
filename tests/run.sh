@@ -527,17 +527,6 @@ has    "npm and extensions: both rows, each with its own findings" 'npm worms si
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
 has    "npm and extensions: both fixes"               'Delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
 has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
-if [ "$(uname -s)" = Darwin ]; then
-  rm -rf "$WORK/dz-st"; cp -R "$WORK/clean" "$WORK/dz-st"; mkdir -p "$WORK/dz-st/Library/LaunchAgents"; : > "$WORK/dz-st/Library/LaunchAgents/com.user.nodestart.plist"
-  dzrun "$WORK/dz-st" | tr -s ' \n' '  ' > "$WORK/dz-st.txt"
-  has  "GlassWorm's startup file alone is an extension finding" 'Editor extensions signs of the malware found ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm loader' "$WORK/dz-st.txt"
-  has  "and its link says ex, not nm"                 '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-st.txt"
-fi
-if [ "$(uname -s)" = Darwin ]; then
-  has  "GlassWorm's startup file on a Mac"            '~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm loader at login' "$D"
-else
-  hasnot "GlassWorm's startup file is looked for on a Mac only" 'nodestart' "$D"
-fi
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, 4 security fixes to install' "$WORK/dz-hit-sum.txt"
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt

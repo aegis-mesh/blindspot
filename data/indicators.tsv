@@ -30,4 +30,3 @@ litellm	all	temp	no	.pc_once_*	-
 litellm	all	temp	no	.pc_sq_*	-
 litellm	all	temp	no	.pc_e_*	-
 mistralpy	linux	temp	no	transformers.pyz	-
-glassworm	mac	startup	no	~/Library/LaunchAgents/com.user.nodestart.plist	starts the GlassWorm loader at login

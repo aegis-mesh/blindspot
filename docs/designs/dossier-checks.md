@@ -85,10 +85,10 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   `~/.vscode-oss/extensions` and `~/.kiro/extensions`. A hit is its own section 5 row, "Editor
   extensions", with the incident line, level `act`, its own headline and fix, never called npm malware.
 - GlassWorm (Socket, January 2026): the four `oorzc` extensions at their malicious versions, and
-  the thirteen earlier extensions Socket names, at every version. Plus the startup file
-  `~/Library/LaunchAgents/com.user.nodestart.plist` (`data/indicators.tsv`, macOS), shown in the
-  extensions row: a startup file of an incident with a line in `data/bad-extensions.tsv` is an
-  extension finding.
+  the thirteen earlier extensions Socket names, at every version. Its startup file,
+  `~/Library/LaunchAgents/com.user.nodestart.plist`, is not looked for: `com.user.` is the usual
+  placeholder for a person's own LaunchAgent, so a match on the name alone could call a clean Mac
+  compromised.
 - Injective: `@injectivelabs/sdk-ts 1.20.21` in `data/bad-npm.tsv`. Only that package carries the
   code (the advisory); the others at 1.20.21 depend on it, so a lockfile with them lists it too.
   Level `update`: the machine is not compromised, but a wallet used with it is, and the incident
