@@ -1159,21 +1159,22 @@ $LOADER = 0
 $UvBad = New-Object System.Collections.Generic.List[object]
 foreach ($r in $BadPypiRows) {
   # The exact version: 2.4.6 is not 2.4.60 or 2.4.6.post1.
-  $want = '^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$'; $found = $false
+  # Not $found: variable names ignore case, and $Found is the home scan's list of files.
+  $want = '^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$'; $uvHit = $false
   foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
-    if ($found -or -not (Is-Dir $uv)) { continue }
+    if ($uvHit -or -not (Is-Dir $uv)) { continue }
     try {
       $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
-      while ($q.Count -gt 0 -and -not $found) {
+      while ($q.Count -gt 0 -and -not $uvHit) {
         $it = $q.Dequeue()
         foreach ($e in (Entries $it[0])) {
-          if ($e.Name -cmatch $want) { $found = $true; break }
+          if ($e.Name -cmatch $want) { $uvHit = $true; break }
           if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
         }
       }
     } catch { }
   }
-  if ($found) { $UvBad.Add($r) }
+  if ($uvHit) { $UvBad.Add($r) }
 }
 $PyHits = New-Object System.Collections.Generic.List[string]
 foreach ($pi in $PyIncidents) {
