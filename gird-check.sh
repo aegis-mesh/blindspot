@@ -840,6 +840,12 @@ EOF
   _aa=(); while IFS= read -r _pp; do [ -n "$_pp" ] && _aa+=(-o -path "*/$_pp"); done <<EOF
 $AA_PROJECT
 EOF
+  # Links are printed as "L path", candidates for the ~/.ssh/authorized_keys check that ak_link
+  # settles in the shell. A find with -lname (GNU, BSD) keeps only links whose text names
+  # authorized_keys. BusyBox's find has no -lname and rejects the whole expression over it, and its
+  # -exec ... + drops links, so there every link is printed, one -exec each.
+  if find /dev/null -maxdepth 0 -lname x >/dev/null 2>&1; then _lk=(-lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -1087,12 +1093,27 @@ TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv.
 WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($PLANTED_ERE)\$")
 AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
-# Links to ~/.ssh/authorized_keys (the scan prints them as "L path"), outside ~/.ssh itself, and the
-# project files of data/auto-approve.tsv.
-AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) printf '%s\n' "$_f" ;; esac; done)
-AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
-AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
-FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ' | grep -vE "/($AA_ERE)\$")
+# Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
+# outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
+# .ssh/authorized_keys fixture does not count. Before the file exists, a link that resolves to its
+# place counts all the same: an agent writing through it creates the file.
+ak_link() { # link
+  if [ -e "$H/.ssh/authorized_keys" ]; then [ "$1" -ef "$H/.ssh/authorized_keys" ]; return; fi
+  _t=$(readlink "$1" 2>/dev/null) || return 1
+  [ "${_t##*/}" = authorized_keys ] || return 1
+  case "$_t" in /*) ;; *) _t="${1%/*}/$_t" ;; esac
+  _d=$(cd "${_t%/*}" 2>/dev/null && pwd -P) || return 1
+  [ "$_d" = "$(cd "$H/.ssh" 2>/dev/null && pwd -P)" ]
+}
+AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) ak_link "$_f" && printf '%s\n' "$_f" ;; esac; done)
+# The project files of data/auto-approve.tsv, and every project's .vscode/settings.json (section 2).
+AA_FILES=""; AA_ERE=""
+if [ -n "$AA_PROJECT" ]; then
+  AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
+  AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
+fi
+FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ')
+[ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')

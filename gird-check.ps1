@@ -475,8 +475,10 @@ $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
 $AiderFiles = New-Object System.Collections.Generic.List[string]
-# The project files of data/auto-approve.tsv, and links to ~/.ssh/authorized_keys outside ~/.ssh.
+# The project files of data/auto-approve.tsv, every project's .vscode/settings.json (section 2), and
+# links to this user's ~/.ssh/authorized_keys outside ~/.ssh.
 $AaFiles = New-Object System.Collections.Generic.List[string]
+$VscSettings = New-Object System.Collections.Generic.List[string]
 $AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
@@ -516,6 +518,17 @@ function Link-Target($info) {
   if (-not $t) { try { $t = @((Get-Item -LiteralPath $info.FullName -Force -ErrorAction Stop).Target)[0] } catch { } }
   [string]$t
 }
+# Does a link in $dir with this target resolve to this user's own ~/.ssh/authorized_keys? The paths
+# are compared resolved, so a link into a repo's own .ssh/authorized_keys fixture does not count,
+# and a link to the file's place counts before the file exists: an agent writing through it creates it.
+$AkPath = $null; try { $AkPath = [IO.Path]::GetFullPath((J $HomeDir '.ssh/authorized_keys')) } catch { }
+function Is-AkLink([string]$dir, [string]$target) {
+  if (-not $target -or -not $AkPath) { return $false }
+  try {
+    $t = $target; if (-not [IO.Path]::IsPathRooted($t)) { $t = J $dir $t }
+    return [IO.Path]::GetFullPath($t).Equals($AkPath, $PathCmp)
+  } catch { return $false }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   foreach ($e in (Entries $dir)) {
     $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
@@ -532,7 +545,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       if ($isSettings) { $Found.Add($path) }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
       elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
-      if ((Link-Target $e) -match '\.ssh[\\/]authorized_keys$' -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
+      if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
     if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or $isSettings -or
@@ -544,7 +557,10 @@ function Scan-Home([string]$dir, [int]$depth) {
     elseif ($name -ceq '.aider.chat.history.md') { $AiderFiles.Add($path) }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
     elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
-    elseif (Is-AaProject $path) { $AaFiles.Add($path) }
+    else {
+      if ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { $VscSettings.Add($path) }
+      if (Is-AaProject $path) { $AaFiles.Add($path) }
+    }
   }
 }
 # Whether a folder holds any file within three levels, and any changed in 30 days.
