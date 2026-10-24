@@ -1109,12 +1109,14 @@ if [ ! -e "$FL/fake-ran" ] && [ -z "$(ls "$FL/cwd")" ]; then ok "fleet: opens no
     GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" /bin/bash "$SCRIPT" --all-users --summary-to-stdout < /dev/null > "$FL/mdm.out" 2>&1 )
 has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspot act accounts=2 ' "$FL/mdm.out"
 # An MDM item passes its options in one line under the first line (docs/fleet.md), whatever arguments the MDM adds.
-python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\n[ \"\${1:-}\" = --account-run ] || set -- --all-users --summary-to-stdout --deadline=600\n' + l[1])" "$SCRIPT" "$FL/mdm-item.sh"
+python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\ncase \"\${1:-}\" in --account-run|--inventory) ;; *) set -- --all-users --summary-to-stdout --deadline=600 ;; esac\n' + l[1])" "$SCRIPT" "$FL/mdm-item.sh"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$FL/mdm-item.sh" / "$(hostname)" root < /dev/null > "$FL/mdm-item.out" 2>&1
 FLVER=$(sed -n '2s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p' "$SCRIPT")
 has    "fleet: an MDM item's options line works whatever arguments the MDM adds" "^blindspot act accounts=2 act=1 review=1 not_checked=0 v=${FLVER:-no-version} at=" "$FL/mdm-item.out"
-python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\n[ \"\${1:-}\" = --account-run ] || set -- --all-users --summary-to-stdout --hash-accounts=fleet-test-secret-42\n' + l[1])" "$SCRIPT" "$FL/mdm-secret.sh"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FL/mdm-item.sh" --inventory < /dev/null > "$FL/mdm-inv.out" 2>&1
+has    "fleet: with the options line in the file, --inventory still only reads the result" '^v1 act ' "$FL/mdm-inv.out"
+python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\ncase \"\${1:-}\" in --account-run|--inventory) ;; *) set -- --all-users --summary-to-stdout --hash-accounts=fleet-test-secret-42 ;; esac\n' + l[1])" "$SCRIPT" "$FL/mdm-secret.sh"
 rm -f "$FL/copycheck"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" FLL_COPYCHECK=fleet-test-secret-42 bash "$FL/mdm-secret.sh" < /dev/null > "$FL/mdm-secret.out" 2>&1

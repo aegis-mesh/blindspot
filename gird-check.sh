@@ -1403,7 +1403,7 @@ fleet_main() {
   _src=$FL_SELF
   if [ -f "$_src" ] && [ -r "$_src" ] && FL_COPYDIR=$(/usr/bin/mktemp -d /tmp/blindspot-copy.XXXXXXXX); then
     FL_COPY="$FL_COPYDIR/gird-check.sh"
-    { /usr/bin/grep -v '^\[ "\${1:-}" = --account-run \] || set -- ' -- "$_src" > "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
+    { /usr/bin/grep -v '^case "\${1:-}" in --account-run|--inventory) ;; \*) set -- ' -- "$_src" > "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
   else FL_FAILED=copy; fi
   fl_accounts > "$FL_TMP/accounts"
   _left=$(/usr/bin/grep -c "${FL_TAB}ok\$" "$FL_TMP/accounts")
