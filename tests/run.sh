@@ -67,7 +67,7 @@ for B in $BASHES; do
   has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
   has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
   has    "full output lists every key file"      '~/\.cursor/mcp\.json +GitHub' "$OUT"
-  has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&wp=[01]$' "$OUT"
+  has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]$' "$OUT"
   if grep -aqF -f "$WORK/keys.txt" "$OUT"; then bad "never prints a planted key"; else ok "never prints a planted key"; fi
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
   tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat-incidents.txt"
@@ -261,7 +261,7 @@ hasnot "Linux is not given the Mac command"            'launchctl bootout' "$WOR
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/wl.txt"
-has    "the link flags npm malware and the wiper"      'nm=1&py=0&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
+has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 HOME="$WORK/both" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
@@ -291,7 +291,7 @@ has    "with the vendor's own explanation"           'Mistral AI packages, May 2
 has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
-has    "the link does not call it npm malware"       '&nm=0&py=0&wp=0( |$)' "$WORK/mis.txt"
+has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 cp -R "$WORK/clean" "$WORK/mpy"; mkdir -p "$WORK/mpy/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"
 HOME="$WORK/mpy" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy.txt"
 has    "mistralai 2.4.6 from PyPI is its own act-now row" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
@@ -507,7 +507,32 @@ has    "a GlassWorm extension at any version, its id in another case" '~/\.curso
 has    "with GlassWorm's sourced line"                'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs\. socket\.dev' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
 has    "with its sourced line"                        'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it\. github\.com' "$D"
-has    "a GlassWorm extension is npm-style malware in the link" '&nm=1&py=0&wp=0' "$D"
+dzrun() { _h=$1; shift; env HOME="$_h" PATH=/usr/bin:/bin "$@" bash "$SCRIPT" --offline 2>&1; }
+has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
+# Editor extensions: a row, headline and fix of their own, never called npm malware.
+rm -rf "$WORK/dz-ext"; cp -R "$WORK/clean" "$WORK/dz-ext"; mkdir -p "$WORK/dz-ext/.vscode/extensions/oorzc.mind-map-1.0.61"
+dzrun "$WORK/dz-ext" > "$WORK/dz-ext.txt"; tr -s ' \n' '  ' < "$WORK/dz-ext.txt" > "$WORK/dz-ext-flat.txt"
+dzrun "$WORK/dz-ext" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-ext-sum.txt"
+has    "extensions alone: their own row"              'Editor extensions signs of the malware found ~/\.vscode/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm' "$WORK/dz-ext-flat.txt"
+has    "extensions alone: their own headline"         'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-ext.txt"
+hasnot "extensions alone: no npm in the headline"     'ACT NOW.*NPM' "$WORK/dz-ext.txt"
+hasnot "extensions alone: no npm malware row or fix"  'npm worms +signs of the malware|Delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
+has    "extensions alone: their own fix"              'Treat this machine as compromised\. Uninstall the extensions listed in section 5, delete the files listed there, and rotate every key this machine could reach\.' "$WORK/dz-ext-flat.txt"
+has    "extensions alone: their own summary row"      'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-ext-sum.txt"
+has    "extensions alone: the link says ex, not nm"   '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-ext.txt"
+cp -R "$WORK/dz-ext" "$WORK/dz-both"; mkdir -p "$WORK/dz-both/code/ax"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/dz-both/code/ax/package-lock.json"
+dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"
+has    "npm and extensions: both rows, each with its own findings" 'npm worms signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.vscode/extensions/oorzc\.mind-map' "$WORK/dz-both.txt"
+has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
+has    "npm and extensions: both fixes"               'Delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
+has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
+if [ "$(uname -s)" = Darwin ]; then
+  rm -rf "$WORK/dz-st"; cp -R "$WORK/clean" "$WORK/dz-st"; mkdir -p "$WORK/dz-st/Library/LaunchAgents"; : > "$WORK/dz-st/Library/LaunchAgents/com.user.nodestart.plist"
+  dzrun "$WORK/dz-st" | tr -s ' \n' '  ' > "$WORK/dz-st.txt"
+  has  "GlassWorm's startup file alone is an extension finding" 'Editor extensions signs of the malware found ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm loader' "$WORK/dz-st.txt"
+  has  "and its link says ex, not nm"                 '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-st.txt"
+fi
 if [ "$(uname -s)" = Darwin ]; then
   has  "GlassWorm's startup file on a Mac"            '~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm loader at login' "$D"
 else
@@ -568,10 +593,10 @@ rm -rf "$WORK/mu-act"; cp -R "$WORK/clean" "$WORK/mu-act"; mkdir -p "$WORK/mu-ac
 printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":"1.2.3","resolved":"https://registry.npmjs.org/made-npm-pkg/-/made-npm-pkg-1.2.3.tgz"}}}\n' > "$WORK/mu-act/code/a/package-lock.json"
 mu "$WORK/mu-act" "$WORK/mu-act.txt"
 has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
-has    "and the link says npm malware"                '&nm=1&py=0&wp=0' "$WORK/mu-act.txt"
+has    "and the link says npm malware"                '&nm=1&py=0&ex=0&wp=0' "$WORK/mu-act.txt"
 has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagent/config\.json madeMode' "$WORK/mu.txt"
 has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 2\.0\.0 or later A made-up hole for the tests\. example\.com/madetool' "$WORK/mu.txt"
-has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made worm, October 2026\), installed' "$WORK/mu.txt"
+has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
 
 echo "gen.sh refuses what it cannot write safely"
 gen_refuses() { # what file line
@@ -738,7 +763,7 @@ PY
   hasnot "the percentile line carries no count" 'of 1,234 AI builders' "$OUT"
   has  "the result link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
-  has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&wp=[01]\$" "$OUT"
+  has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
   has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"

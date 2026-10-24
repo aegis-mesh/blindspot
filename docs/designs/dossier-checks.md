@@ -1,7 +1,8 @@
 # Checks from the incident dossier
 
-Status: built (gird-check.sh, gird-check.ps1, data/auto-approve.tsv, data/outdated.tsv, data/bad-extensions.tsv). Builds on `data/` (PR #17). Nothing new is shared: the payload, the
-result link and the score do not change.
+Status: built (gird-check.sh, gird-check.ps1, data/auto-approve.tsv, data/outdated.tsv, data/bad-extensions.tsv). Builds on `data/` (PR #17). The payload does not change. The score
+drops for a GlassWorm hit as for other act incidents, and the result link gains `ex` (malware in an
+editor extension, after `py`); the other checks change neither.
 
 ## Why
 

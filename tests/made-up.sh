@@ -16,6 +16,7 @@ madeplat${T}Made Platform${T}October 2026${T}a made-up platform leak for the tes
 madeworm${T}Made worm${T}October 2026${T}a made-up worm for the tests${T}https://example.com/madeworm${T}act
 madepy${T}Madepkg 9.9.9${T}October 2026${T}a made-up Python package for the tests${T}https://example.com/madepy/advisory${T}act
 madenpm${T}Made npm worm${T}October 2026${T}a made-up npm worm for the tests${T}https://example.com/madenpm${T}act
+madeext${T}Made extension${T}October 2026${T}a made-up extension for the tests${T}https://example.com/madeext${T}act
 madeupd${T}Made npm slip${T}October 2026${T}a made-up npm version whose malware could not run${T}https://example.com/madeupd${T}update
 EOF
 printf 'made-npm-pkg\t1.2.3\tmadenpm\nmade-upd-pkg\t4.5.6\tmadeupd\n' >> "$R/data/bad-npm.tsv"
@@ -30,7 +31,7 @@ printf '.vscode\tmadeplant.js\tmadeworm\ta file the Made worm plants\n' >> "$R/d
 printf 'madepkg\t9.9.9\tmadepy\n' >> "$R/data/bad-pypi.tsv"
 printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >> "$R/data/auto-approve.tsv"
 printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\n' >> "$R/data/outdated.tsv"
-printf 'made.ext\t1.0.0\tmadeworm\n' >> "$R/data/bad-extensions.tsv"
+printf 'made.ext\t1.0.0\tmadeext\n' >> "$R/data/bad-extensions.tsv"
 bash "$R/tools/gen.sh" > /dev/null
 # Outside the generated blocks, both scripts are unchanged.
 for s in gird-check.sh gird-check.ps1; do
