@@ -5,8 +5,8 @@
 #
 #   PWSH=/path/to/pwsh bash tests/run-ps.sh
 #
-# PWSH defaults to pwsh on PATH. Set GIRD_CHECK_WORKER to gird-website's
-# worker/check-stats.js to check the report against the Worker's validation too.
+# PWSH defaults to pwsh on PATH. When GIRD_CHECK_WORKER points at the site's report validation
+# (worker/check-stats.js), the report is checked against it too.
 # Windows PowerShell 5.1 can't run here; the 5.1 syntax checks below are textual.
 # shellcheck disable=SC2088  # the patterns match the literal ~ the script prints for home paths
 set -u
@@ -963,7 +963,7 @@ console.log(v.ok && !bad.length && !dropped.length ? 'valid' : `invalid: ${v.why
 JS
   if grep -qx valid "$WORK/worker.txt"; then ok "the Worker accepts the report and keeps every field"; else bad "the Worker accepts the report and keeps every field" "$(cat "$WORK/worker.txt")"; fi
 else
-  skip "the Worker accepts the report and keeps every field" "set GIRD_CHECK_WORKER to gird-website's worker/check-stats.js, and install node"
+  skip "the Worker accepts the report and keeps every field" "needs GIRD_CHECK_WORKER pointing at the site's report validation (worker/check-stats.js), and node"
 fi
 
 finish

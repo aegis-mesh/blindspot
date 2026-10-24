@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # A BACKSTOP for tests/parity.sh, which is the rule: that one compares the names the suites
 # record as they run (tests/parity-run.sh). This one reads tests/run.sh and tests/run-ps.sh as
-# text, so it can run in tests/run.sh without pwsh, until the PowerShell job is a required check.
+# text, so it can run in tests/run.sh without pwsh.
 # It reads plain shell only. It fails, rather than guess, on what it can't follow: a test call
 # whose name is not a double-quoted literal, a function other than the helpers that calls them,
 # a variable name it can't fill in, a bad with no counted test of that name, backticks, eval, a
