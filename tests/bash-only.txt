@@ -51,22 +51,36 @@ another OS is not told to use the Keychain	the OS is faked as FreeBSD with a una
 macOS is pointed at the Keychain	macOS advice: gird-check.sh is the script for macOS, and gird-check.ps1 never points at the Keychain
 Windows bash is pointed at Credential Manager	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
 Windows: keys in the shell's own home too	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
-Windows: os is Windows 11 for build 22000 and up	Git Bash reads the Windows version from reg and uname, faked here; gird-check.ps1 reads it from .NET, which can't be faked on this Mac
-Windows: os is Windows 10 from uname's build when reg has none	Git Bash reads the Windows version from reg and uname, faked here; gird-check.ps1 reads it from .NET, which can't be faked on this Mac
+Windows: os is Windows 11 for build 22000 and up	Git Bash reads the Windows version from reg and uname, which the tests fake; gird-check.ps1 reads it from .NET's OSVersion, which a test can't set
+Windows: os is Windows 10 from uname's build when reg has none	Git Bash reads the Windows version from reg and uname, which the tests fake; gird-check.ps1 reads it from .NET's OSVersion, which a test can't set
 WSL is pointed at a secrets manager	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 WSL is not told to use a desktop keyring	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 WSL says Windows-side files were not checked	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 only WSL, not plain Linux, gets the WSL note and loses the keyring advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 WSL reports os Linux while giving the WSL advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
-nothing found: it says this is not a guarantee	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never does; its twin checks the line every other system gets
-a pyc-only run counts its things to fix	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never does; its twin checks the line every other system gets
-a pyc-only run still says the scan is a snapshot	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never does; its twin checks the line every other system gets
+a pyc-only run still says the scan is a snapshot	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never shows it
 without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with ConvertFrom-Json
-parity.sh fails on a single-quoted name	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
-parity.sh fails on a new helper that calls ok	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
-parity.sh fails on a variable name outside the helpers	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
-parity.sh fills in each loop's own values	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
-parity.sh fails on a twin missing from the second loop	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
-parity.sh fails on a test that only fails	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
-parity.sh fails on a bash test with no twin	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
-parity.sh fails on a deleted twin	tests parity.sh itself, the one bash tool that reads both suites, so it runs once
+the text backstop fails on a single-quoted name	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a new helper that calls ok	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a variable name outside the helpers	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fills in each loop's own values	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a twin missing from the second loop	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a test that only fails	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a bash test with no twin	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a deleted twin	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a file that ends inside a quote	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop finds a twin for every test	tests/parity-text.sh is a bash backstop to tests/parity.sh, which the PowerShell job runs on both suites' names
+parity.sh passes two lists that agree	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a bash test with no twin	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a deleted twin	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a test reported twice	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on an empty list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a missing list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a bash-only line with no reason	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh counts a skipped test	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+a result reported in a subshell fails the suite	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a PowerShell skip with no reason	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh passes a PowerShell skip that ps-skips.txt explains	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a stale ps-skips line	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh passes a test both suites skipped	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
