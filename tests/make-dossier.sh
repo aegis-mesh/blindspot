@@ -33,7 +33,12 @@ if [ "$MODE" = miss ]; then
   printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.16"]},"s":{"command":"npx","args":["my-mcp-remote@0.0.9"]}}}\n' > "$F/code/mr/.mcp.json"
   ln -s authorized_keys "$F/.ssh/keys-link"
   ln -s ../../.ssh/known_hosts "$F/code/links/hosts"
-  mkdir -p "$F/.vscode/extensions/oorzc.ssh-tools-0.5.2" "$F/.vscode/extensions/oorzc.ssh-tools-0.5.10" "$F/.vscode/extensions/oorzc.ssh-tools-pro-0.5.1"
+  # A repo's own .ssh/authorized_keys fixture and a link to it: not this user's file.
+  mkdir -p "$F/code/repo/fixtures/.ssh"; : > "$F/code/repo/fixtures/.ssh/authorized_keys"
+  ln -s fixtures/.ssh/authorized_keys "$F/code/repo/sample"
+  # VS Code's own folder holds the Marketplace's clean 0.5.1; the near-miss versions and name sit in an
+  # Open VSX editor's folder, where the bad build is looked for.
+  mkdir -p "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1" "$F/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$F/.cursor/extensions/oorzc.ssh-tools-0.5.10" "$F/.cursor/extensions/oorzc.ssh-tools-pro-0.5.1"
   exit 0
 fi
 printf '{\n  "permissions": {\n    "defaultMode": "bypassPermissions"\n  }\n}\n' > "$F/.claude/settings.json"
@@ -47,6 +52,7 @@ pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/cl
 pkg "$F/.npm-global/lib/node_modules/mcp-remote" mcp-remote 0.0.5
 ln -s ../../.ssh/authorized_keys "$F/code/links/notes.txt"
 [ "$MODE" = calm ] && exit 0
-mkdir -p "$F/code/mr" "$F/code/inj" "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1-darwin-arm64" "$F/.cursor/extensions/Sol-Studio.Solidity-Extension-2.0.0"
+# The oorzc build is looked for in the Open VSX editors' folders (VSCodium's here), not VS Code's.
+mkdir -p "$F/code/mr" "$F/code/inj" "$F/.vscode-oss/extensions/oorzc.ssh-tools-0.5.1-darwin-arm64" "$F/.cursor/extensions/Sol-Studio.Solidity-Extension-2.0.0"
 printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.10","https://example.com/sse"]}}}\n' > "$F/code/mr/.mcp.json"
 printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$F/code/inj/package-lock.json"

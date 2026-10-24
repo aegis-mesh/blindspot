@@ -60,7 +60,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[
           k = $2 "\t" $6 "\t" $7 "\t" $8; if (($1 in same) && same[$1] != k) ok = 0; same[$1] = k
           if (!ok) print "data/outdated.tsv: " $0 }'
       # An extension that shipped malware means a compromised machine: an update-level incident is refused.
-      rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 3 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+      rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
@@ -310,13 +310,14 @@ rows data/outdated.tsv | awk -F '\t' "$PATH_PS"'
   END { print ")"; print "# <<< outdated" }' > "$WORK/outdated.ps1"
 
 # --- extensions that shipped malware ------------------------------------------------
+# Rows are "id version incident registry", registry openvsx or any (see the data file).
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; printf "BAD_EXT=\"" }
-  { printf "%s%s %s %s", (NR > 1 ? "\n" : ""), $1, $2, $3 }
+  { printf "%s%s %s %s %s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4 }
   END { print "\""; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.sh"
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; print "$BadExt = @\047" }
-  { print $1 " " $2 " " $3 }
+  { print $1 " " $2 " " $3 " " $4 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
 # --- splice -----------------------------------------------------------------

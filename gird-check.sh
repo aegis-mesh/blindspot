@@ -1768,23 +1768,23 @@ secp256 * sandworm
 @injectivelabs/sdk-ts 1.20.21 injective"
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
-BAD_EXT="oorzc.ssh-tools 0.5.1 glassworm
-oorzc.i18n-tools-plus 1.6.8 glassworm
-oorzc.mind-map 1.0.61 glassworm
-oorzc.scss-to-css-compile 1.3.4 glassworm
-Angular-studio.ng-angular-extension * glassworm
-awesome-codebase.codebase-dart-pro * glassworm
-cudra-production.vsce-prettier-pro * glassworm
-dev-studio-sense.php-comp-tools-vscode * glassworm
-ko-zu-gun-studio.synchronization-settings-vscode * glassworm
-littensy-studio.magical-icons * glassworm
-pretty-studio-advisor.prettyxml-formatter * glassworm
-sol-studio.solidity-extension * glassworm
-studio-jjalaire-team.professional-quarto-extension * glassworm
-studio-velte-distributor.pro-svelte-extension * glassworm
-sun-shine-studio.shiny-extension-for-vscode * glassworm
-tucyzirille-studio.angular-pro-tools-extension * glassworm
-vce-brendan-studio-eich.js-debuger-vscode * glassworm"
+BAD_EXT="oorzc.ssh-tools 0.5.1 glassworm openvsx
+oorzc.i18n-tools-plus 1.6.8 glassworm openvsx
+oorzc.mind-map 1.0.61 glassworm openvsx
+oorzc.scss-to-css-compile 1.3.4 glassworm openvsx
+Angular-studio.ng-angular-extension * glassworm openvsx
+awesome-codebase.codebase-dart-pro * glassworm openvsx
+cudra-production.vsce-prettier-pro * glassworm openvsx
+dev-studio-sense.php-comp-tools-vscode * glassworm openvsx
+ko-zu-gun-studio.synchronization-settings-vscode * glassworm openvsx
+littensy-studio.magical-icons * glassworm openvsx
+pretty-studio-advisor.prettyxml-formatter * glassworm openvsx
+sol-studio.solidity-extension * glassworm openvsx
+studio-jjalaire-team.professional-quarto-extension * glassworm openvsx
+studio-velte-distributor.pro-svelte-extension * glassworm openvsx
+sun-shine-studio.shiny-extension-for-vscode * glassworm openvsx
+tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx
+vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx"
 # <<< bad-extensions
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
@@ -1998,20 +1998,25 @@ done
 NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
-# with a platform suffix such as -darwin-arm64, the id compared without case.
+# with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
+# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. A line whose bad build
+# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
+# same version is the Marketplace's clean build.
 EXT_ROWS=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; do
     [ -d "$r" ] || continue
-    for d in "$r"/*; do [ -d "$d" ] && printf '%s\n' "$d"; done
-  done | BAD_EXT_LIST=$BAD_EXT awk '
-  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3] } }
-  { b = $0; sub(/.*\//, "", b); lb = tolower(b)
+    case "$r" in ("$H/.vscode/extensions") _rg=marketplace ;; (*) _rg=openvsx ;; esac
+    for d in "$r"/*; do [ -d "$d" ] && printf '%s\t%s\n' "$_rg" "$d"; done
+  done | BAD_EXT_LIST=$BAD_EXT awk -F '\t' '
+  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4] } }
+  { reg = $1; d = $2; b = d; sub(/.*\//, "", b); lb = tolower(b)
     for (i = 1; i <= n; i++) {
+      if (rg[i] != "any" && rg[i] != reg) continue
       if (substr(lb, 1, length(id[i]) + 1) != id[i] "-") continue
       r = substr(b, length(id[i]) + 2)
       if (!match(r, /^[0-9]+(\.[0-9]+)*/)) continue
       ver = substr(r, 1, RLENGTH); rest = substr(r, RLENGTH + 1)
       if (rest != "" && rest !~ /^-/) continue
-      if (v[i] == "*" || v[i] == ver) { print $0 "\t" sp[i] " " ver "\t" t[i]; break }
+      if (v[i] == "*" || v[i] == ver) { print d "\t" sp[i] " " ver "\t" t[i]; break }
     } }')
 # Incidents that leave the machine itself uncompromised only need the version updated; the rest mean a compromised machine.
 NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)

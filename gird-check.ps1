@@ -1337,23 +1337,23 @@ secp256 * sandworm
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
 $BadExt = @'
-oorzc.ssh-tools 0.5.1 glassworm
-oorzc.i18n-tools-plus 1.6.8 glassworm
-oorzc.mind-map 1.0.61 glassworm
-oorzc.scss-to-css-compile 1.3.4 glassworm
-Angular-studio.ng-angular-extension * glassworm
-awesome-codebase.codebase-dart-pro * glassworm
-cudra-production.vsce-prettier-pro * glassworm
-dev-studio-sense.php-comp-tools-vscode * glassworm
-ko-zu-gun-studio.synchronization-settings-vscode * glassworm
-littensy-studio.magical-icons * glassworm
-pretty-studio-advisor.prettyxml-formatter * glassworm
-sol-studio.solidity-extension * glassworm
-studio-jjalaire-team.professional-quarto-extension * glassworm
-studio-velte-distributor.pro-svelte-extension * glassworm
-sun-shine-studio.shiny-extension-for-vscode * glassworm
-tucyzirille-studio.angular-pro-tools-extension * glassworm
-vce-brendan-studio-eich.js-debuger-vscode * glassworm
+oorzc.ssh-tools 0.5.1 glassworm openvsx
+oorzc.i18n-tools-plus 1.6.8 glassworm openvsx
+oorzc.mind-map 1.0.61 glassworm openvsx
+oorzc.scss-to-css-compile 1.3.4 glassworm openvsx
+Angular-studio.ng-angular-extension * glassworm openvsx
+awesome-codebase.codebase-dart-pro * glassworm openvsx
+cudra-production.vsce-prettier-pro * glassworm openvsx
+dev-studio-sense.php-comp-tools-vscode * glassworm openvsx
+ko-zu-gun-studio.synchronization-settings-vscode * glassworm openvsx
+littensy-studio.magical-icons * glassworm openvsx
+pretty-studio-advisor.prettyxml-formatter * glassworm openvsx
+sol-studio.solidity-extension * glassworm openvsx
+studio-jjalaire-team.professional-quarto-extension * glassworm openvsx
+studio-velte-distributor.pro-svelte-extension * glassworm openvsx
+sun-shine-studio.shiny-extension-for-vscode * glassworm openvsx
+tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx
+vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx
 '@
 # <<< bad-extensions
 $NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]; $N_BAD_NPM = 0
@@ -1579,13 +1579,18 @@ foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
 $byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x[0], $y[0]); if ($o -eq 0) { $o = [string]::CompareOrdinal($x[1], $y[1]) }; $o }
 $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
-# with a platform suffix such as -darwin-arm64, the id compared without case.
+# with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
+# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. A line whose bad build
+# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
+# same version is the Marketplace's clean build.
 $ExtRows = New-Object System.Collections.Generic.List[object]
-$BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 3 })
+$BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 4 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
+  $reg = 'openvsx'; if ($er -eq '.vscode/extensions') { $reg = 'marketplace' }
   foreach ($e in (Entries (J $HomeDir $er))) {
     if (-not (Is-DirInfo $e)) { continue }
     foreach ($x in $BadExtRows) {
+      if ($x[3] -ne 'any' -and $x[3] -ne $reg) { continue }
       $pre = $x[0] + '-'
       if (-not $e.Name.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) { continue }
       $m = [regex]::Match($e.Name.Substring($pre.Length), '^([0-9]+(?:\.[0-9]+)*)(-.*)?$')

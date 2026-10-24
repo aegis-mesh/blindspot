@@ -22,6 +22,7 @@ an auto-approve path with a glob	tools/gen.sh is one bash tool that writes the d
 an auto-approve pattern with a quote	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an auto-approve project path that climbs	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension listed twice, in another case	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension registry that is not openvsx or any	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension version that is not a version	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension whose incident is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
