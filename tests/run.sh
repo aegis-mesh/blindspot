@@ -927,6 +927,248 @@ sys.exit(0 if a == b and a else 1)' "$WORK/report-pl-base.json" "$WORK/report-pl
 echo "help"
 if bash "$SCRIPT" --help | grep -q -- '--offline'; then ok "--help lists the options"; else bad "--help lists the options"; fi
 
+echo "fleet mode (--all-users)"
+# The suites never run as root. GIRD_CHECK_FLEET_ROOT stands in for root, GIRD_CHECK_FLEET_USERS
+# for dscl's account list, GIRD_CHECK_FLEET_LAUNCH for sudo (tests/fleet-launch.sh records what
+# root would run, then runs what follows sudo's -H), and GIRD_CHECK_FLEET_STATE for
+# /var/db/blindspot. The script reads them only when it is not running as root.
+FL=$WORK/fleet; mkdir -p "$FL"
+FSKIP=""; [ "$(uname -s)" = Darwin ] || FSKIP="fleet mode is built for macOS only so far: its root side reads dscl and BSD stat"
+U=$(id -u); FLL=$PWD/tests/fleet-launch.sh
+fl_home() { mkdir -p "$FL/$1/Library/Safari"; }
+for h in asha itadmin clean upd linker odd shared; do fl_home "$h"; done
+bash tests/make-fixture.sh "$FL/asha" "$FL/keys-asha.txt" > /dev/null; mkdir -p "$FL/asha/Library/Safari"
+# itadmin: one SSH key with no passphrase and nothing else; upd: the same, so it needs an update only.
+for h in itadmin upd; do
+  mkdir -p "$FL/$h/.ssh"; printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH PRIVATE KEY-----\n' > "$FL/$h/.ssh/id_ed25519"
+done
+# A key in a file the linking account can't read, and links to it, to a system file and through a linked folder.
+KEYX="AK""IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)"; printf '%s\n' "$KEYX" >> "$FL/keys-asha.txt"
+mkdir -p "$FL/itadmin/private"; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FL/itadmin/private/zshrc"; chmod 000 "$FL/itadmin/private"
+ln -s "$FL/itadmin/private/zshrc" "$FL/linker/.zshrc"; ln -s /etc/master.passwd "$FL/linker/.bash_profile"
+ln -s "$FL/itadmin/private" "$FL/linker/.config"
+# odd: a fifo in place of a history file, a link to a device, and a file over the size limit.
+mkfifo "$FL/odd/.zsh_history"; ln -s /dev/zero "$FL/odd/.bash_history"
+python3 -c "import sys; open(sys.argv[1], 'w').write('export OPENAI_API_KEY=x\n' + '#' * 5000 + '\n')" "$FL/odd/.zshrc"
+ln -s "$FL/clean" "$FL/homelink"; mkdir -p "$FL/notmine"
+mkdir -p "$FL/noprot"; chmod 000 "$FL/noprot"; mkdir -p "$FL/prot"
+users() { # name:home:uid:shell ... -> the users file
+  : > "$FL/users.tsv"; for _e in "$@"; do printf '%s\n' "$_e" | tr ':' '\t' >> "$FL/users.tsv"; done
+}
+fl_run() { # out-prefix args...: a simulated root run; stdout, stderr, exit code, flat JSON
+  _p=$1; shift; : > "$FL/argv.log"
+  GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
+    GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" \
+    bash "$SCRIPT" --all-users "$@" > "$FL/$_p.out" 2> "$FL/$_p.err" < /dev/null
+  echo "$?" > "$FL/$_p.rc"
+  python3 tests/fleet-flat.py "$FL/state/last.json" > "$FL/$_p.flat" 2>/dev/null || : > "$FL/$_p.flat"
+}
+mkdir -p "$FL/sharedtmp"
+SKIPPING=$FSKIP
+{
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh" "_spotlight:$U:$FL/clean:/bin/zsh" "daemon2:2:$FL/clean:/bin/sh"
+fl_run two --json
+has    "fleet: system accounts are left out" '^accounts=2$' "$FL/two.flat"
+hasnot "fleet: and are not in the result" '_spotlight|daemon2' "$FL/two.flat"
+has    "fleet: each account's row holds its own findings" '^asha\.key_files=4$' "$FL/two.flat"
+if grep -q '^itadmin\.key_files=0$' "$FL/two.flat" && grep -q '^itadmin\.incidents=$' "$FL/two.flat" && grep -q '^itadmin\.ssh_keys_no_passphrase=1$' "$FL/two.flat"; then ok "fleet: and only its own"; else bad "fleet: and only its own" "$(grep '^itadmin' "$FL/two.flat" | tr '\n' ' ')"; fi
+if [ "$(grep -c . "$FL/argv.log")" -eq 2 ] && grep -qE "^/usr/bin/sudo -n -u asha -H /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=$FL/asha /bin/bash /tmp/blindspot-copy\.[A-Za-z0-9]+/gird-check\.sh --account-run\$" "$FL/argv.log" \
+   && grep -qE "^/usr/bin/sudo -n -u itadmin -H /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=$FL/itadmin /bin/bash " "$FL/argv.log"
+then ok "fleet: each account is checked through sudo -n as itself, with a clean environment"
+else bad "fleet: each account is checked through sudo -n as itself, with a clean environment" "$(cat "$FL/argv.log")"; fi
+if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$FL/two.out" 2>/dev/null; then ok "fleet: --json prints one JSON document and nothing else"; else bad "fleet: --json prints one JSON document and nothing else" "$(head -c 300 "$FL/two.out")"; fi
+hasnot "fleet: the JSON holds no path or file name" '/(Users|home|private|tmp|var)/|~/|\.zshrc|zsh_history|\.env|settings(\.local)?\.json|mcp\.json' "$FL/two.out"
+nokeys "fleet: the JSON holds no planted key" "$FL/keys-asha.txt" "$FL/two.out"
+has    "fleet: act exits 10" '^10$' "$FL/two.rc"
+if [ -d "$FL/state" ] && [ "$(stat -f '%u %Lp' "$FL/state")" = "$U 700" ] && [ "$(stat -f '%Lp' "$FL/state/last.json")" = 600 ]; then ok "fleet: the result is saved for its owner only"; else bad "fleet: the result is saved for its owner only" "$(ls -la "$FL/state" 2>&1 | head -n 3)"; fi
+if diff -q <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FL/two.out") <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FL/state/last.json") > /dev/null 2>&1
+then ok "fleet: the saved file is the JSON printed"; else bad "fleet: the saved file is the JSON printed"; fi
+has    "fleet: the JSON names where to learn more" '^learn_more=https://gird.ai/argus$' "$FL/two.flat"
+fl_run twoz --exit-zero --summary-to-stdout
+has    "fleet: --exit-zero exits 0 on act" '^0$' "$FL/twoz.rc"
+if [ "$(grep -c '' "$FL/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=2 act=1 update=1 not_checked=0 v=[0-9.]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FL/twoz.out"
+then ok "fleet: --summary-to-stdout prints the one summary line"; else bad "fleet: --summary-to-stdout prints the one summary line" "$(cat "$FL/twoz.out")"; fi
+fl_run term
+has    "fleet: the readable report lists each account" '^  asha +act now$' "$FL/term.out"
+has    "fleet: and where the result was saved" "^  Saved: $FL/state/last.json\$" "$FL/term.out"
+hasnot "fleet: no Argus note without a terminal" 'gird\.ai/argus|Argus' "$FL/term.out"
+if command -v script > /dev/null 2>&1; then
+  GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+    GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" script -q /dev/null bash "$SCRIPT" --all-users < /dev/null > "$FL/tty.out" 2>&1
+  has  "fleet: the Argus note once, with a terminal" 'Roll it out through the MDM you' "$FL/tty.out"
+else skip "fleet: the Argus note once, with a terminal" "needs script(1) for a terminal"; fi
+grep -v '^  Saved: ' "$FL/term.out" > "$FL/term-nosave.out"
+hasnot "fleet: the readable report has no path or file name" '/|~|\.zshrc|\.env' "$FL/term-nosave.out"
+
+# Which accounts: from fixtures.
+users "gone:$U:$FL/nothere:/bin/zsh" "linked:$U:$FL/homelink:/bin/zsh" "other:$((U + 1)):$FL/notmine:/bin/zsh" \
+      "first:$U:$FL/clean:/bin/zsh" "second:$U:$FL/clean:/bin/zsh" "noshell:$U:$FL/upd:/usr/bin/false" "sys:$U:/System:/bin/zsh"
+fl_run list --list
+if grep -q '^first  *will be checked$' "$FL/list.out" && [ ! -s "$FL/argv.log" ]; then ok "fleet: --list says who will be checked, and checks nothing"; else bad "fleet: --list says who will be checked, and checks nothing" "$(cat "$FL/list.out" "$FL/argv.log")"; fi
+fl_run homes
+has    "fleet: a missing home is not checked" '^gone\.not_checked=home_missing$' "$FL/homes.flat"
+has    "fleet: a home that is a link is not checked" '^linked\.not_checked=home_link$' "$FL/homes.flat"
+has    "fleet: a home owned by another account is not checked" '^other\.not_checked=home_owner$' "$FL/homes.flat"
+has    "fleet: a home shared with an account above is not checked" '^second\.not_checked=home_shared$' "$FL/homes.flat"
+has    "fleet: an account with no login shell is not checked" '^noshell\.not_checked=no_login_shell$' "$FL/homes.flat"
+has    "fleet: a system folder as a home is not checked" '^sys\.not_checked=home_system$' "$FL/homes.flat"
+has    "fleet: the one good account is checked" '^first\.outcome=clear$' "$FL/homes.flat"
+if [ "$(grep -c . "$FL/argv.log")" -eq 1 ]; then ok "fleet: and only it is started"; else bad "fleet: and only it is started" "$(cat "$FL/argv.log")"; fi
+has    "fleet: accounts not checked make the run not_checked" '^outcome=not_checked$' "$FL/homes.flat"
+has    "fleet: not_checked exits 12" '^12$' "$FL/homes.rc"
+users "_only:$U:$FL/clean:/bin/zsh"
+fl_run none
+if grep -q '^outcome=not_checked$' "$FL/none.flat" && grep -q '^accounts=0$' "$FL/none.flat" && grep -q '^12$' "$FL/none.rc"; then ok "fleet: no accounts is not_checked, never clear"; else bad "fleet: no accounts is not_checked, never clear" "$(cat "$FL/none.flat" "$FL/none.rc")"; fi
+
+# An account run cannot speak for anyone else: any line out of place refuses its whole output.
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+grep '^itadmin\.' "$FL/two.flat" > "$FL/it-ok.txt"
+for M in other-row machine oversize malformed; do
+  printf '%s\n' "$M" > "$FL/mode-asha"
+  fl_run "forge-$M"
+  grep '^itadmin\.' "$FL/forge-$M.flat" > "$FL/it-$M.txt"
+  has "fleet: $M output makes that account not checked" '^asha\.not_checked=bad_output$' "$FL/forge-$M.flat"
+  if diff -q "$FL/it-ok.txt" "$FL/it-$M.txt" > /dev/null; then ok "fleet: $M output changes no other row"; else bad "fleet: $M output changes no other row" "$(diff "$FL/it-ok.txt" "$FL/it-$M.txt" | head -n 4)"; fi
+done
+rm -f "$FL/mode-asha"
+hasnot "fleet: nothing an account run sent reaches the result" 'forged|99999' "$FL/forge-malformed.flat"
+printf 'fail\n' > "$FL/mode-asha"; fl_run sudofail
+has    "fleet: sudo failing means not checked" '^asha\.not_checked=sudo$' "$FL/sudofail.flat"
+printf 'chmod\n' > "$FL/mode-asha"; fl_run copy
+if grep -q '^13$' "$FL/copy.rc" && grep -q '^outcome=failed$' "$FL/copy.flat" && grep -q '^itadmin\.not_checked=copy_changed$' "$FL/copy.flat"; then ok "fleet: a script copy an account could write stops the run"; else bad "fleet: a script copy an account could write stops the run" "$(cat "$FL/copy.rc"; grep -E '^(outcome|itadmin\.not)' "$FL/copy.flat")"; fi
+rm -f "$FL/mode-asha"
+
+# A run that holds its output open past its limit, and a process that leaves its group.
+printf 'hold\n' > "$FL/mode-asha"
+T0=$SECONDS
+( GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+    GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$SCRIPT" --all-users --deadline=40 --summary-to-stdout < /dev/null 2>&1; echo "rc=$?" ) | cat > "$FL/hold.out"
+T1=$((SECONDS - T0))
+python3 tests/fleet-flat.py "$FL/state/last.json" > "$FL/hold.flat" 2>/dev/null
+if [ "$T1" -lt 40 ] && grep -q '^rc=12$' "$FL/hold.out"; then ok "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s"; else bad "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s, $(cat "$FL/hold.out")"; fi
+has    "fleet: that account is partly checked" '^asha\.not_checked=time_limit$' "$FL/hold.flat"
+has    "fleet: a process that outlives the stop is reported" '^asha\.processes_left=true$' "$FL/hold.flat"
+has    "fleet: the other account is still checked" '^itadmin\.outcome=update$' "$FL/hold.flat"
+pkill -f 'fleet-hold-escapee' 2>/dev/null; rm -f "$FL/mode-asha"
+users "asha:$U:$FL/asha:/bin/zsh"
+fl_run late --deadline=1
+if grep -q '^asha\.not_checked=deadline$' "$FL/late.flat" && grep -q '^deadline_reached=true$' "$FL/late.flat" && grep -q '^12$' "$FL/late.rc"; then ok "fleet: a run stopped by its deadline is not_checked"; else bad "fleet: a run stopped by its deadline is not_checked" "$(cat "$FL/late.flat" | head -n 5)"; fi
+
+# What an account run reads.
+users "linker:$U:$FL/linker:/bin/zsh"
+fl_run links
+if grep -q '^linker\.key_files=0$' "$FL/links.flat" && grep -q '^linker\.history_keys=0$' "$FL/links.flat"; then ok "fleet: links to another home or a system file are read with the account's own rights"; else bad "fleet: links to another home or a system file are read with the account's own rights" "$(grep '^linker' "$FL/links.flat" | tr '\n' ' ')"; fi
+nokeys "fleet: and the key behind them is never in the result" "$FL/keys-asha.txt" "$FL/state/last.json"
+users "odd:$U:$FL/odd:/bin/zsh"
+printf 'maxbytes\n' > "$FL/mode-odd"
+T0=$SECONDS; fl_run odd --deadline=60; T1=$((SECONDS - T0))
+if grep -q '^odd\.files_not_checked=3$' "$FL/odd.flat" && grep -q '^odd\.key_files=0$' "$FL/odd.flat" && [ "$T1" -lt 30 ]; then ok "fleet: a fifo, a link to a device and an oversized file are not read, and are counted"; else bad "fleet: a fifo, a link to a device and an oversized file are not read, and are counted" "${T1}s $(grep '^odd' "$FL/odd.flat" | tr '\n' ' ')"; fi
+has    "fleet: so the account is not_checked, never clear" '^odd\.outcome=not_checked$' "$FL/odd.flat"
+rm -f "$FL/mode-odd"
+users "clean:$U:$FL/clean:/bin/zsh"
+printf 'noprot\n' > "$FL/mode-clean"; fl_run prot
+if grep -q '^clean\.protected_folders=not_checked$' "$FL/prot.flat" && grep -q '^clean\.outcome=not_checked$' "$FL/prot.flat"; then ok "fleet: a refused protected folder is not checked, never clear"; else bad "fleet: a refused protected folder is not checked, never clear" "$(grep '^clean' "$FL/prot.flat" | tr '\n' ' ')"; fi
+rm -f "$FL/mode-clean"
+fl_run clear
+if grep -q '^outcome=clear$' "$FL/clear.flat" && grep -q '^0$' "$FL/clear.rc" && grep -q '^clean\.protected_folders=checked$' "$FL/clear.flat"; then ok "fleet: clear exits 0"; else bad "fleet: clear exits 0" "$(cat "$FL/clear.rc"; head -n 4 "$FL/clear.flat")"; fi
+users "upd:$U:$FL/upd:/bin/zsh"
+fl_run upd
+if grep -q '^outcome=update$' "$FL/upd.flat" && grep -q '^11$' "$FL/upd.rc"; then ok "fleet: update exits 11"; else bad "fleet: update exits 11" "$(cat "$FL/upd.rc")"; fi
+users "upd:$U:$FL/upd:/bin/zsh" "gone:$U:$FL/nothere:/bin/zsh"
+fl_run order1
+has    "fleet: not_checked comes before update" '^outcome=not_checked$' "$FL/order1.flat"
+users "asha:$U:$FL/asha:/bin/zsh" "gone:$U:$FL/nothere:/bin/zsh"
+fl_run order2
+has    "fleet: act comes before not_checked" '^outcome=act$' "$FL/order2.flat"
+
+# Root runs nothing a person can replace.
+FAKE=$FL/fakebin; mkdir -p "$FAKE"
+for t in jq rg grep sudo dscl stat perl find awk sed cat head mktemp open curl; do
+  printf '#!/bin/sh\necho %s >> "%s/fake-ran"\nexit 1\n' "$t" "$FL" > "$FAKE/$t"; chmod +x "$FAKE/$t"
+done
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+rm -f "$FL/fake-ran"
+PATH="$FAKE:$PATH" fl_run fakes
+if [ ! -e "$FL/fake-ran" ] && grep -q '^asha\.key_files=4$' "$FL/fakes.flat"; then ok "fleet: a replaced jq, grep or sudo earlier in PATH is never run"; else bad "fleet: a replaced jq, grep or sudo earlier in PATH is never run" "$(cat "$FL/fake-ran" 2>/dev/null | tr '\n' ' ')"; fi
+# No network request, no browser, no saved report.
+mkdir -p "$FL/cwd"; : > "$WORK/received.log"; : > "$WORK/gets.log"
+( cd "$FL/cwd" && GIRD_CHECK_API="$API" FLL_API="$API" PATH="$FAKE:$PATH" fl_run net --save )
+if [ ! -s "$WORK/received.log" ] && [ ! -s "$WORK/gets.log" ]; then ok "fleet: makes no network request"; else bad "fleet: makes no network request"; fi
+if [ ! -e "$FL/fake-ran" ] && [ -z "$(ls "$FL/cwd")" ]; then ok "fleet: opens no browser and saves no report"; else bad "fleet: opens no browser and saves no report" "$(ls "$FL/cwd"; cat "$FL/fake-ran" 2>/dev/null)"; fi
+# An MDM-like run: no HOME, a minimal PATH, / as the working folder, no terminal.
+( cd / && env -i PATH=/usr/bin:/bin GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
+    GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" /bin/bash "$SCRIPT" --all-users --summary-to-stdout < /dev/null > "$FL/mdm.out" 2>&1 )
+has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspot act accounts=2 ' "$FL/mdm.out"
+
+# The Mac's shared places.
+: > "$FL/sharedtmp/.pc_once_x"; : > "/tmp/.pc_once_blindspot-fleet-test-$$"
+fl_run machine
+rm -f "$FL/sharedtmp/.pc_once_x" "/tmp/.pc_once_blindspot-fleet-test-$$"
+has    "fleet: a malware marker in the shared temp folder is a machine finding" '^machine\.incidents=litellm$' "$FL/machine.flat"
+hasnot "fleet: and never an account's" '^itadmin\.incidents=.*litellm' "$FL/machine.flat"
+
+# The saved result's folder.
+users "itadmin:$U:$FL/itadmin:/bin/zsh"
+rm -rf "$FL/state" "$FL/elsewhere"; mkdir -p "$FL/elsewhere"; ln -s "$FL/elsewhere" "$FL/state"
+fl_run slink
+if [ -d "$FL/state" ] && [ ! -L "$FL/state" ] && [ "$(stat -f %Lp "$FL/state")" = 700 ] && [ -f "$FL/state/last.json" ] && [ -z "$(ls "$FL/elsewhere")" ]; then ok "fleet: a saved-result folder that is a link is made again"; else bad "fleet: a saved-result folder that is a link is made again" "$(ls -la "$FL/state" "$FL/elsewhere" 2>&1 | head -n 6)"; fi
+rm -rf "$FL"/state*; mkdir -m 755 "$FL/state"
+fl_run smode
+if [ "$(stat -f %Lp "$FL/state")" = 700 ] && [ -f "$FL/state/last.json" ]; then ok "fleet: a saved-result folder anyone can read is made again"; else bad "fleet: a saved-result folder anyone can read is made again"; fi
+: > "$FL/argv.log"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE=/var/empty \
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$SCRIPT" --all-users --summary-to-stdout < /dev/null > "$FL/sother.out" 2>&1; RC=$?
+if [ "$RC" -eq 13 ] && grep -q '^blindspot failed ' "$FL/sother.out" && [ ! -e /var/empty/last.json ]; then ok "fleet: a saved-result folder owned by someone else is never written to"; else bad "fleet: a saved-result folder owned by someone else is never written to" "exit $RC $(cat "$FL/sother.out")"; fi
+
+# The inventory value and the reader an MDM runs at check-in.
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+rm -rf "$FL/state"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$SCRIPT" --inventory > "$FL/inv0.out" 2>&1
+has    "fleet: --inventory says none before the first run" '^none$' "$FL/inv0.out"
+fl_run inv
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$SCRIPT" --inventory > "$FL/inv1.out" 2>&1
+if [ "$(cat "$FL/inv1.out")" = "$(sed -n 's/^inventory=//p' "$FL/inv.flat")" ] && grep -qE '^v1 act 20[0-9-]{8}T[0-9]{2}:[0-9]{2}Z \| asha: act ' "$FL/inv1.out"; then ok "fleet: --inventory prints the saved inventory value"; else bad "fleet: --inventory prints the saved inventory value" "$(cat "$FL/inv1.out")"; fi
+if [ "$(wc -c < "$FL/inv1.out")" -le 256 ] && ! grep -qE '/|\.zshrc|\.env' "$FL/inv1.out"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
+python3 - "$FL/state/last.json" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+open(p, 'w').write(re.sub(r'"checked_epoch": \d+', '"checked_epoch": 1000000000', s))
+PY
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$SCRIPT" --inventory --stale-days=3 > "$FL/inv2.out" 2>&1
+has    "fleet: --inventory says stale when the last run is too old" '^stale: last run 2001-09-09T' "$FL/inv2.out"
+FLU=(); for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14; do FLU+=("person$i:$U:$FL/many$i:/bin/zsh"); fl_home "many$i"; done
+users "${FLU[@]}"
+fl_run many --deadline=600
+if grep -qE ' \+more$' "$FL/many.out" 2>/dev/null || grep -qE '^inventory=.* \+more$' "$FL/many.flat"; then ok "fleet: a long inventory value ends with +more"; else bad "fleet: a long inventory value ends with +more" "$(grep '^inventory' "$FL/many.flat")"; fi
+if [ "$(sed -n 's/^inventory=//p' "$FL/many.flat" | wc -c)" -le 256 ]; then ok "fleet: and still fits"; else bad "fleet: and still fits"; fi
+
+# Names: a keyed hash on request.
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+fl_run hash1 --hash-accounts=first-secret
+fl_run hash2 --hash-accounts=other-secret
+if grep -qE '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat" && ! grep -q 'asha' "$FL/state/last.json" && [ "$(grep -cE '^[0-9a-f]{16}\.outcome=' "$FL/hash1.flat")" -eq 2 ] \
+   && [ "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat")" != "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash2.flat")" ]
+then ok "fleet: --hash-accounts shows a keyed hash, never the name"; else bad "fleet: --hash-accounts shows a keyed hash, never the name" "$(grep outcome "$FL/hash1.flat" "$FL/hash2.flat")"; fi
+
+# Refusals.
+bash "$SCRIPT" --all-users > "$FL/noroot.out" 2> "$FL/noroot.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FL/noroot.out" ] && grep -q 'needs root' "$FL/noroot.err"; then ok "fleet: not root exits 13"; else bad "fleet: not root exits 13" "exit $RC"; fi
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" FLL_DIR="$FL" \
+  bash "$SCRIPT" --all-users --all > /dev/null 2> "$FL/all.err"; RC=$?
+if [ "$RC" -eq 13 ] && grep -q -- '--all is refused' "$FL/all.err"; then ok "fleet: --all with --all-users is refused"; else bad "fleet: --all with --all-users is refused" "exit $RC"; fi
+# As root, every test setting is ignored: GIRD_CHECK_FLEET_REAL_ROOT takes the path a real root run takes.
+: > "$FL/argv.log"; rm -rf "$FL/state-root"
+GIRD_CHECK_FLEET_REAL_ROOT=1 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
+  GIRD_CHECK_FLEET_STATE="$FL/state-root" FLL_DIR="$FL" bash "$SCRIPT" --all-users > /dev/null 2> "$FL/realroot.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && [ ! -e "$FL/state-root" ] && grep -q 'needs root' "$FL/realroot.err"; then ok "fleet: run as root, the test settings are ignored"; else bad "fleet: run as root, the test settings are ignored" "exit $RC"; fi
+bash "$SCRIPT" --json > /dev/null 2>&1; RC=$?
+if [ "$RC" -eq 2 ]; then ok "fleet: --json without --all-users is refused"; else bad "fleet: --json without --all-users is refused" "exit $RC"; fi
+}
+SKIPPING=""
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_OS=Linux bash "$SCRIPT" --all-users > "$FL/linux.out" 2> "$FL/linux.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FL/linux.out" ] && grep -q 'macOS only so far; Linux comes next' "$FL/linux.err"; then ok "fleet: on Linux --all-users exits 13 with a message"; else bad "fleet: on Linux --all-users exits 13 with a message" "exit $RC"; fi
+chmod 755 "$FL/itadmin/private" "$FL/noprot" 2>/dev/null
+
 echo "the text backstop to tests/parity.sh"
 # Each case is a copy of a suite with lines added through a heredoc, which the backstop skips here.
 pcase() { # run.sh-copy run-ps.sh-copy

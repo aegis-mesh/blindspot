@@ -1407,7 +1407,7 @@ fleet_main() {
       [ -n "$_ia" ] && _inv="$_inv; act$(printf ' %s' $_ia | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
       for _x in $_iu; do _upd=1; _lines="$_lines$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
       [ -n "$_iu" ] && _inv="$_inv; update$(printf ' %s' $_iu | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
-      if [ "$FA_planted" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  $(fl_plural "$FA_planted" "file" "files") a worm plants in a project, or a setting that runs one"; _inv="$_inv; planted $FA_planted"; fi
+      if [ "$FA_planted" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Files a worm plants in a project, or settings that run one: $FA_planted"; _inv="$_inv; planted $FA_planted"; fi
       if [ -n "$FA_yolo" ]; then _upd=1; for _x in $FA_yolo; do _lines="$_lines$NL    !  $(fl_agent_name "$_x") set to run commands without asking"; done; _inv="$_inv; run-without-asking $(printf '%s' "$FA_yolo" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_key_files" -gt 0 ]; then
         _act=1; _pn=""; for _x in $FA_key_providers; do _pn="${_pn:+$_pn, }$(fl_prov_name "$_x")"; done
@@ -1420,8 +1420,8 @@ fleet_main() {
       if [ "$FA_allow_list_keys" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Keys saved in Claude Code allow lists: $(fl_plural "$FA_allow_list_keys" file files)"; _inv="$_inv; allow-lists $FA_allow_list_keys"; fi
       if [ "$FA_ak_links" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Links to authorized_keys outside .ssh: $FA_ak_links"; _inv="$_inv; ssh-links $FA_ak_links"; fi
       if [ "$FA_ssh_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  $(fl_plural "$FA_ssh_open" "SSH key" "SSH keys") without a passphrase"; _inv="$_inv; ssh-open $FA_ssh_open"; fi
-      if [ -n "$FA_update" ]; then _upd=1; _lines="$_lines$NL    !  A tool with a security fix to install: $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; _inv="$_inv; update-tools $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; fi
-      if [ -n "$FA_platforms" ]; then _upd=1; _lines="$_lines$NL    !  Used a platform that leaked stored secrets: $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
+      if [ -n "$FA_update" ]; then _upd=1; _tn=""; for _x in $FA_update; do _tn="${_tn:+$_tn, }$(printf '%s\n' "$OUT_TABLE" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $2; exit }')"; done; _lines="$_lines$NL    !  Tools with a security fix to install: $_tn"; _inv="$_inv; update-tools $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; fi
+      if [ -n "$FA_platforms" ]; then _upd=1; _tn=""; for _x in $FA_platforms; do _tn="${_tn:+$_tn, }$(incident_name "$_x")"; done; _lines="$_lines$NL    !  Uses a platform that leaked stored secrets: $_tn"; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_possible" -eq 1 ]; then _upd=1; _lines="$_lines$NL    !  A leftover file that can come from the LiteLLM malware"; _inv="$_inv; possible litellm"; fi
       _why=""
       [ "$FA_sessions_partial" -eq 1 ] && _why="${_why:+$_why, }agent sessions partly checked"
