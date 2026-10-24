@@ -171,3 +171,5 @@ fleet: runs by a relative path from the script's folder	gird-check.ps1 has no fl
 fleet: from standard input it fails, and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: with no protected folder in the home, there is nothing protected to miss	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 --help shows the whole header, --all-users included	gird-check.ps1 has no fleet mode, so its help has no --all-users line to check
+fleet: and removes nothing else	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a script in a folder others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

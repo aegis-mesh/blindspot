@@ -1112,12 +1112,20 @@ has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspo
 python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\n[ \"\${1:-}\" = --account-run ] || set -- --all-users --summary-to-stdout --deadline=600\n' + l[1])" "$SCRIPT" "$FL/mdm-item.sh"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$FL/mdm-item.sh" / "$(hostname)" root < /dev/null > "$FL/mdm-item.out" 2>&1
-has    "fleet: an MDM item's options line works whatever arguments the MDM adds" '^blindspot act accounts=2 act=1 review=1 not_checked=0 ' "$FL/mdm-item.out"
+FLVER=$(sed -n '2s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p' "$SCRIPT")
+has    "fleet: an MDM item's options line works whatever arguments the MDM adds" "^blindspot act accounts=2 act=1 review=1 not_checked=0 v=${FLVER:-no-version} at=" "$FL/mdm-item.out"
 python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\n[ \"\${1:-}\" = --account-run ] || set -- --all-users --summary-to-stdout --hash-accounts=fleet-test-secret-42\n' + l[1])" "$SCRIPT" "$FL/mdm-secret.sh"
 rm -f "$FL/copycheck"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" FLL_COPYCHECK=fleet-test-secret-42 bash "$FL/mdm-secret.sh" < /dev/null > "$FL/mdm-secret.out" 2>&1
 if [ "$(tr -d '\n' < "$FL/copycheck" 2>/dev/null)" = 00 ] && grep -q '^blindspot act ' "$FL/mdm-secret.out"; then ok "fleet: the copy each account runs leaves out the options line and its secret"; else bad "fleet: the copy each account runs leaves out the options line and its secret" "$(cat "$FL/copycheck" 2>/dev/null)"; fi
+if cmp -s "$FL/copy-seen.sh" "$SCRIPT"; then ok "fleet: and removes nothing else"; else bad "fleet: and removes nothing else" "$(diff "$SCRIPT" "$FL/copy-seen.sh" 2>&1 | head -n 4)"; fi
+# Root runs for every account only what root alone can change.
+mkdir -p "$FL/gw"; cp "$SCRIPT" "$FL/gw/gird-check.sh"; chmod 775 "$FL/gw"; : > "$FL/argv.log"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  FLL_DIR="$FL" bash "$FL/gw/gird-check.sh" --all-users < /dev/null > "$FL/gw.out" 2> "$FL/gw.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above it must be owned by root and writable by no one else' "$FL/gw.err"; then ok "fleet: a script in a folder others can write to is refused"; else bad "fleet: a script in a folder others can write to is refused" "exit $RC $(cat "$FL/gw.err")"; fi
+chmod 755 "$FL/gw"
 # Run by a relative path from the script's folder, as the guide shows; from standard input it can't copy itself.
 ( cd "$(dirname "$SCRIPT")" && GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash gird-check.sh --all-users --summary-to-stdout < /dev/null > "$FL/rel.out" 2>&1 )

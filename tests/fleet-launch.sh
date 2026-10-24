@@ -15,9 +15,10 @@
 #   noprot     the real run, with the protected folder it tries refusing it
 # FLL_API, when set, is handed to the account run as GIRD_CHECK_API, to show it sends nothing.
 printf '%s\n' "$*" >> "$FLL_DIR/argv.log"
-# FLL_COPYCHECK, when set: whether the script copy the account runs holds that text.
+# FLL_COPYCHECK, when set: whether the script copy the account runs holds that text; the copy is kept
+# as copy-seen.sh.
 if [ -n "${FLL_COPYCHECK:-}" ]; then
-  for a in "$@"; do case "$a" in */gird-check.sh) /usr/bin/grep -cF -- "$FLL_COPYCHECK" "$a" >> "$FLL_DIR/copycheck" ;; esac; done
+  for a in "$@"; do case "$a" in */gird-check.sh) /usr/bin/grep -cF -- "$FLL_COPYCHECK" "$a" >> "$FLL_DIR/copycheck"; /bin/cp "$a" "$FLL_DIR/copy-seen.sh" ;; esac; done
 fi
 acct=""; prev=""
 for a in "$@"; do [ "$prev" = -u ] && acct=$a; prev=$a; done

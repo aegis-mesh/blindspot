@@ -103,6 +103,23 @@ if [ "$FLEET" -eq 1 ]; then
   if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || [ ! -f "$FL_SELF" ] || [ ! -r "$FL_SELF" ]; }; then
     fleet_usage "run it from a file: the script must be able to copy itself for each account" 13
   fi
+  # What root copies and runs for every account must be root's alone: the file and every folder above
+  # it owned by root (the tests' stand-in owns them in a test run) and writable by nobody else.
+  if [ "$ALLUSERS" -eq 1 ]; then
+    _own=0; [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && _own=$EUID
+    _d=$(cd "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
+    _bad=""; [ -n "$_d" ] && [ ! -L "$FL_SELF" ] || _bad=1
+    if [ -z "$_bad" ]; then
+      set -- "$FL_SELF"; _p=$_d
+      while :; do set -- "$@" "$_p"; [ "$_p" = / ] && break; _p=${_p%/*}; [ -n "$_p" ] || _p=/; done
+      for _q in "$@"; do
+        _m=$(/usr/bin/stat -f '%u %Lp' "$_q" 2>/dev/null)
+        case "$_m" in "0 "*|"$_own "*) ;; *) _bad=1 ;; esac
+        case "${_m#* }" in ?[2367]?|??[2367]) _bad=1 ;; esac
+      done
+    fi
+    [ -z "$_bad" ] || fleet_usage "the script and every folder above it must be owned by root and writable by no one else: copy it to such a folder and run it from there" 13
+  fi
   # No game, menu, browser, colours, saved report or network request: nobody is watching.
   OFFLINE=1; NOGAME=1; SAVE=0; NO_COLOR=1; ALLSESS=0
   HOME=/var/empty
@@ -1370,7 +1387,8 @@ fleet_main() {
   fi
   _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 10 ] && _rs=10
   FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""
-  FL_REL=$(/usr/bin/sed -n '2s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p' "$FL_SELF")   # the header's release
+  # The header's release, from the first lines: an MDM's options line can sit above it.
+  FL_REL=$(/usr/bin/sed -n '1,5{s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p;}' "$FL_SELF" | /usr/bin/head -n 1)
   [ -n "$FL_REL" ] || FL_REL=unknown
   FL_AT=$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ); FL_EPOCH=$(/bin/date -u +%s)
   FL_OS="macOS $(/usr/bin/sw_vers -productVersion 2>/dev/null | /usr/bin/tr -cd '0-9.' | /usr/bin/cut -d. -f1-2)"; FL_OS=${FL_OS% }
@@ -1379,7 +1397,7 @@ fleet_main() {
   _src=$FL_SELF
   if [ -f "$_src" ] && [ -r "$_src" ] && FL_COPYDIR=$(/usr/bin/mktemp -d /tmp/blindspot-copy.XXXXXXXX); then
     FL_COPY="$FL_COPYDIR/gird-check.sh"
-    { /usr/bin/grep -vF '[ "${1:-}" = --account-run ] || set -- ' -- "$_src" > "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
+    { /usr/bin/grep -v '^\[ "\${1:-}" = --account-run \] || set -- ' -- "$_src" > "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
   else FL_FAILED=copy; fi
   fl_accounts > "$FL_TMP/accounts"
   _left=$(/usr/bin/grep -c "${FL_TAB}ok\$" "$FL_TMP/accounts")
@@ -1461,7 +1479,7 @@ fleet_main() {
     if [ "$(incident_level "$_x")" = act ]; then FM_OUT=act; _ml="$_ml$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"
     else [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; fi
   done
-  [ -n "$_ml" ] && _ml="$_ml$NL    Found in the shared temp folder or a shared startup folder: any account can put files there."
+  [ -n "$_ml" ] && _ml="$_ml$NL    Found in the shared temp folder, where any account can put files, or a running LiteLLM loader."
   MACHINE="{\"complete\":true,\"outcome\":\"$FM_OUT\",\"agents\":$(fl_json_list "$FM_AGENTS"),\"incidents\":$(fl_json_incidents "$FM_INC")}"
   [ "$FM_OUT" != clear ] && INV="$INV | machine: $FM_OUT $(printf '%s' "$FM_INC" | /usr/bin/tr ' ' ',')"
   OUTS="$OUTS$FM_OUT$NL"
