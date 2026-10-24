@@ -100,25 +100,31 @@ if [ "$FLEET" -eq 1 ]; then
   if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
     fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13
   fi
-  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || [ ! -f "$FL_SELF" ] || [ ! -r "$FL_SELF" ]; }; then
+  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || [ ! -f "$FL_SELF" ]; }; then
     fleet_usage "run it from a file: the script must be able to copy itself for each account" 13
   fi
   # What root copies and runs for every account must be root's alone: the file and every folder above
-  # it owned by root (the tests' stand-in owns them in a test run) and writable by nobody else.
+  # it owned by root (the tests' stand-in owns them in a test run) and writable by nobody else. The
+  # mode is read with three digits, so 002 is not read as 2. Root then copies the path it checked.
   if [ "$ALLUSERS" -eq 1 ]; then
     _own=0; [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && _own=$EUID
     _d=$(cd "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
     _bad=""; [ -n "$_d" ] && [ ! -L "$FL_SELF" ] || _bad=1
     if [ -z "$_bad" ]; then
+      FL_SELF="${_d%/}/${FL_SELF##*/}"
       set -- "$FL_SELF"; _p=$_d
       while :; do set -- "$@" "$_p"; [ "$_p" = / ] && break; _p=${_p%/*}; [ -n "$_p" ] || _p=/; done
+      # tests only: a path whose mode a test run can't give the script or a folder it must reach
+      [ "$_own" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && set -- "$@" "$GIRD_CHECK_FLEET_CHECK_ALSO"
       for _q in "$@"; do
-        _m=$(/usr/bin/stat -f '%u %Lp' "$_q" 2>/dev/null)
+        _m=$(/usr/bin/stat -f '%u %03Lp' "$_q" 2>/dev/null)
         case "$_m" in "0 "*|"$_own "*) ;; *) _bad=1 ;; esac
+        case "${_m#* }" in [0-7][0-7][0-7]) ;; *) _bad=1 ;; esac
         case "${_m#* }" in ?[2367]?|??[2367]) _bad=1 ;; esac
       done
     fi
     [ -z "$_bad" ] || fleet_usage "the script and every folder above it must be owned by root and writable by no one else: copy it to such a folder and run it from there" 13
+    [ -r "$FL_SELF" ] || fleet_usage "run it from a file: the script must be able to copy itself for each account" 13
   fi
   # No game, menu, browser, colours, saved report or network request: nobody is watching.
   OFFLINE=1; NOGAME=1; SAVE=0; NO_COLOR=1; ALLSESS=0

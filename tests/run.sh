@@ -1126,6 +1126,15 @@ GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_
   FLL_DIR="$FL" bash "$FL/gw/gird-check.sh" --all-users < /dev/null > "$FL/gw.out" 2> "$FL/gw.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above it must be owned by root and writable by no one else' "$FL/gw.err"; then ok "fleet: a script in a folder others can write to is refused"; else bad "fleet: a script in a folder others can write to is refused" "exit $RC $(cat "$FL/gw.err")"; fi
 chmod 755 "$FL/gw"
+# Modes with no owner bits, read with three digits: 002 and 020 are writable by others, not "2" and "20".
+# Nobody but root can run a script that sits in or below such a mode, so a test run adds one such path
+# to the paths root checks (GIRD_CHECK_FLEET_CHECK_ALSO, read only when not root).
+for M in 002 020; do
+  : > "$FL/mode$M"; chmod "$M" "$FL/mode$M"
+  GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+    GIRD_CHECK_FLEET_CHECK_ALSO="$FL/mode$M" FLL_DIR="$FL" bash "$SCRIPT" --all-users < /dev/null > "$FL/m$M.out" 2> "$FL/m$M.err"
+  has "fleet: a path with mode $M is refused as writable by others" 'every folder above it must be owned by root and writable by no one else' "$FL/m$M.err"
+done
 # Run by a relative path from the script's folder, as the guide shows; from standard input it can't copy itself.
 ( cd "$(dirname "$SCRIPT")" && GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash gird-check.sh --all-users --summary-to-stdout < /dev/null > "$FL/rel.out" 2>&1 )
