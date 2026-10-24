@@ -27,7 +27,7 @@ PATH_OK='function path_ok(p,   r) {
 # Characters that would break the generated bash, awk or PowerShell are refused, and so is an
 # incident id no line of data/incidents.tsv has.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
-      rows data/incidents.tsv | awk -F '\t' 'NF != 6 || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9]{4}$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
+      rows data/incidents.tsv | awk -F '\t' '(NF != 6 && NF != 7) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9]{4}$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /-security$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' 'NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || $4 ~ /[\047"`$|\\]/ || $4 ~ /\{ENV:[^}]*\{/ { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused.
@@ -157,10 +157,11 @@ rows data/sessions.tsv | awk -F '\t' "$PATH_PS"'
 # --- incidents ---------------------------------------------------------------
 # npm_label gives "name, month year"; incident_line adds what it did and the source's site;
 # incident_level says whether a hit means a compromised machine (act) or a version to update;
-# incident_name is the name alone and incident_source the source without https://.
+# incident_name is the name alone, incident_source the source without https:// and incident_advice
+# the incident's own fix, if it has one.
 rows data/incidents.tsv | awk -F '\t' '
   function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
-  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; n = NR }
+  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; adv[NR] = $7; n = NR }
   END {
     print "# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it."
     printf "npm_label() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], lab[i]; print " esac; }"
@@ -168,11 +169,12 @@ rows data/incidents.tsv | awk -F '\t' '
     printf "incident_level() { case \"$1\" in"; for (i = 1; i <= n; i++) if (lv[i] != "act") printf " %s) printf %s ;;", id[i], lv[i]; print " *) printf act ;; esac; }"
     printf "incident_name() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], nm[i]; print " esac; }"
     printf "incident_source() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], src[i]; print " esac; }"
+    printf "incident_advice() { case \"$1\" in"; for (i = 1; i <= n; i++) if (adv[i] != "") printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], adv[i]; print " esac; }"
     print "# <<< incidents"
   }' > "$WORK/incidents.sh"
 rows data/incidents.tsv | awk -F '\t' '
   function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
-  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; n = NR }
+  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; adv[NR] = $7; n = NR }
   END {
     print "# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it."
     printf "function Npm-Label([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], lab[i]; print " default { $t } } }"
@@ -180,6 +182,7 @@ rows data/incidents.tsv | awk -F '\t' '
     printf "function Incident-Level([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) if (lv[i] != "act") printf " \047%s\047 { \047%s\047 }", id[i], lv[i]; print " default { \047act\047 } } }"
     printf "function Incident-Name([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], nm[i]; print " default { $t } } }"
     printf "function Incident-Source([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], src[i]; print " default { $t } } }"
+    printf "function Incident-Advice([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) if (adv[i] != "") printf " \047%s\047 { \047%s\047 }", id[i], adv[i]; print " default { \047\047 } } }"
     print "# <<< incidents"
   }' > "$WORK/incidents.ps1"
 
