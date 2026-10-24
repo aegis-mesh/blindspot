@@ -299,6 +299,11 @@ has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no sig
 has    "a temp file alone: stop and delete, in section 5" 'Stop any process started from these files, then delete them\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
 has    "and in the fix"                               'Stop any process started from the files listed in section 5, delete them, follow mistralai.s advisory' "$WORK/mpyt-linux.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mpyt-linux.txt"
+# A version read from a folder name is printed with control characters replaced.
+cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"
+HOME="$WORK/esc" bash "$SCRIPT" --offline --full > "$WORK/esc.txt" 2>&1
+if grep -q "1\.0$(printf '\033')\[31m" "$WORK/esc.txt"; then bad "a hostile LiteLLM folder name sends no escape code"; else ok "a hostile LiteLLM folder name sends no escape code"; fi
+has    "it is shown with a ? instead"                 'installed: 1\.0\?\[31m' "$WORK/esc.txt"
 # uv's cache: the exact version only.
 cp -R "$WORK/clean" "$WORK/uvn"; mkdir -p "$WORK/uvn/.cache/uv/wheels-v5/mistralai-2.4.60-py3-none-any" "$WORK/uvn/.cache/uv/archive-v0/x/mistralai-2.4.6.post1.dist-info"
 HOME="$WORK/uvn" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvn.txt"

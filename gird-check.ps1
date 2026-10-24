@@ -1778,7 +1778,7 @@ foreach ($pi in $PyIncidents) {
     Wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(Incident-Source $pi)" 8 '        ' '        '
   } else {
     Pair "$cGrn$gOk$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')"
-    if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $($LiteVers -join ' ')$cRst" }
+    if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $(Short ($LiteVers -join ' '))$cRst" }
   }
   foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
 }

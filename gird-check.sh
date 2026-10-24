@@ -2337,7 +2337,7 @@ EOF
         wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(incident_source "$_pi")" 8 "        " "        "
       else
         pair "${GRN}✓${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"
-        [ "$_pi" = litellm ] && [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $LITE_VERS${RST}"
+        [ "$_pi" = litellm ] && [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $(short "$LITE_VERS")${RST}"
       fi
       ;;
   esac
