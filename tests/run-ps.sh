@@ -148,7 +148,9 @@ if [ -s "$SE/rg.block" ]; then
   if diff -q "$SE/net.block" "$SE/rg.block" >/dev/null; then ok ".NET and ripgrep report the same"; else bad ".NET and ripgrep report the same"; diff "$SE/net.block" "$SE/rg.block" | head -n 6; fi
 fi
 bash tests/make-fixture.sh "$SE/bh" "$SE/bk" >/dev/null
-HOME="$SE/bh" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/bash.block"
+# --all-sessions: without it a fast machine can finish the rest first, stop the session check
+# part-way and list nothing, which is the script working as designed but not a comparison.
+HOME="$SE/bh" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/bash.block"
 if diff -q "$SE/bash.block" "$SE/net.block" >/dev/null; then ok "the same session block as gird-check.sh"; else bad "the same session block as gird-check.sh"; diff "$SE/bash.block" "$SE/net.block" | head -n 6; fi
 psrun "$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
 has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
