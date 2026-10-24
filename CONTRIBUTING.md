@@ -35,7 +35,7 @@ Every change has to keep these true. Reviews check them first.
 
 ## Lists live in `data/`
 
-The key types, the agents' session folders and the bad npm packages each live in one file under `data/`, one line per entry. `bash tools/gen.sh` writes them into both scripts; edit the data file, never the generated block between `# >>> name` and `# <<< name`. `tests/run.sh` fails if a script and its data file disagree.
+The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project and the hosted platforms that leaked stored secrets each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts; edit the data file, never the generated block between `# >>> name` and `# <<< name`. `tests/run.sh` fails if a script and its data file disagree.
 
 ## Add an agent
 
@@ -52,9 +52,17 @@ The key types, the agents' session folders and the bad npm packages each live in
 
 ## Add an incident check
 
-Open an issue with the **New check** template first, with links to the vendor advisory. Checks look for files, versions or markers on disk. They never run the software they check. Add the check to section 5, a fixture to the tests, and a line to "What to do".
+Open an issue with the **New check** template first, with links to the vendor advisory. Checks look for files, versions or markers on disk. They never run the software they check.
 
-A bad npm package is one line in `data/bad-npm.tsv`: the name, the exact version (or `*` when every version is malware) and the incident's id. Take versions from a GitHub malware advisory, and sweep the whole campaign (every advisory published with it) rather than copying the first few names.
+A new incident of a kind Blindspot already checks is data lines only: add its line to `data/incidents.tsv` (a sourced name, impact and link), then the lines below, and run `bash tools/gen.sh`. No code changes, and `tests/made-up.sh` proves it for every kind. Add a fixture and an assertion to the tests all the same.
+
+- **A bad npm package**: one line in `data/bad-npm.tsv`: the name, the exact version (or `*` when every version is malware) and the incident's id. Take versions from a GitHub malware advisory, and sweep the whole campaign (every advisory published with it) rather than copying the first few names.
+- **A bad Python package**: one line in `data/bad-pypi.tsv`: the name as its `.dist-info` folder spells it, the version and the incident's id. It is looked for in every Python environment and in uv's cache, and section 5 gets a row named as `data/incidents.tsv` names the incident.
+- **Files malware leaves on disk**: one line each in `data/indicators.tsv`. `startup` is a file that starts malware at login, shown with its note; `site` a file in site-packages and `temp` an entry in the temp folder, both counted as the Python incident's hit; `wiper` a file of gh-token-monitor, whose stop-it-first advice is written for that wiper only.
+- **A file planted in a project**: one line in `data/planted.tsv`: `.claude` or `.vscode`, the file name, the incident and the note shown. A hook or task that runs it is flagged too.
+- **A hosted platform that leaked stored secrets**: one line in `data/platforms.tsv`: the incident id, the row's name, its commands and paths, its row word and advice, and its summary row. The shared fix names it from `data/incidents.tsv`.
+
+A new kind of check (a new file format, a running process, a registry value) is code: add it to section 5 of both scripts, a fixture to the tests, and a line to "What to do".
 
 ## Review checklist
 

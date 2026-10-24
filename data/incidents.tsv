@@ -1,5 +1,5 @@
 # Incidents Blindspot checks for. One line each, tab separated. After editing, run: bash tools/gen.sh
-#   id      what data/bad-npm.tsv refers to
+#   id      what the other data files refer to
 #   name    as the report shows it
 #   when    month and year
 #   impact  what it did, at most about 14 words, every word supported by the source
@@ -15,3 +15,7 @@ mastra	Mastra worm	June 2026	installed itself at login and sent browser history 
 keyv	keyv worm	August 2026	stole cloud, GitHub and npm credentials, and planted hooks that run when repos open	https://socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain	act
 sandworm	SANDWORM_MODE worm	February 2026	stole credentials and AI provider keys, and added an MCP server to AI assistants	https://socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning	act
 tensorlake	tensorlake package	October 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-rqxj-g25x-4v9v	act
+litellm	LiteLLM 1.107.0	October 2026	stole credentials and loaded remote-code execution tools on machines that installed it	https://docs.litellm.ai/blog/security-incident-oct-21-2026	act
+opencode	OpenCode Console	October 2026	AI provider keys saved in Console workspaces may have been exposed	https://techcrunch.com/2026/10/22/developer-platform-railway-urges-all-users-to-revoke-secret-keys-after-cyberattack/	act
+railway	Railway	October 2026	an attacker accessed stored environment variables and decrypted some of them	https://blog.railway.com/p/security-disclosure-wednesday-october-21st	act
+zeabur	Zeabur	October 2026	an attacker read environment variables and secrets stored on the platform	https://zeabur.com/blogs/october-2026-security-incident	act

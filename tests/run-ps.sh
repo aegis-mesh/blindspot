@@ -321,6 +321,41 @@ has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
 has    "no malware in a clean home"            'no LiteLLM, npm, OpenCode, Railway, Zeabur leaks' "$WORK/ph.txt"
 
+echo "a new incident of each kind is data lines only"
+# tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
+# package to a copy's data files and runs gen.sh there; it fails if any code changed.
+if bash tests/made-up.sh "$WORK/mu" "$WORK/clean" "$WORK/mu-home" 2> "$WORK/mu-err.txt"; then ok "made-up incidents need only data lines and gen.sh"
+else bad "made-up incidents need only data lines and gen.sh"; sed 's/^/        /' "$WORK/mu-err.txt"; fi
+mups() { # home out [compact]
+  env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$1" APPDATA="$1/AppData/Roaming" LOCALAPPDATA="$1/AppData/Local" \
+    TEMP="$1/AppData/Local/Temp" LANG=en_US.UTF-8 ${3:+GIRD_CHECK_COMPACT=1} \
+    "$PWSH" -NoProfile -NonInteractive -File "$WORK/mu/gird-check.ps1" -Offline 2>&1 | tr -s ' \n' '  ' > "$2"
+}
+mups "$WORK/mu-home" "$WORK/mu.txt"
+has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
+has    "made-up platform: named in the shared fix"    'If you used OpenCode Console, Railway, Zeabur or Made Platform, rotate the keys stored there' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +7 checked' "$WORK/mu.txt"
+has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
+has    "made-up wiper file is a waiting wiper"        'a wiper is waiting ~/\.config/madewiper ' "$WORK/mu.txt"
+has    "made-up planted file and its note"            '~/code/made/\.vscode/madeplant\.js a file the Made worm plants' "$WORK/mu.txt"
+has    "a hook that runs it, with the general note"   '~/code/made/\.claude/settings\.json runs a file a worm plants' "$WORK/mu.txt"
+has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/AppData/Local/Temp/\.madepy_1 ' "$WORK/mu.txt"
+has    "made-up Python package: its advisory"         'Advisory: example\.com/madepy/advisory' "$WORK/mu.txt"
+has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.9 package\. Clear it with: uv cache clean madepkg' "$WORK/mu.txt"
+has    "made-up Python package: its fix"              "follow Madepkg's advisory" "$WORK/mu.txt"
+hasnot "LiteLLM is not blamed for it"                 'LITELLM 1\.107\.0 MALWARE|signs of the LiteLLM malware' "$WORK/mu.txt"
+cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/madewiper" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json"
+mups "$WORK/mu-py" "$WORK/mu-py.txt" compact
+has    "made-up Python package leads the summary"     'ACT NOW: SIGNS OF THE MADEPKG 9\.9\.9 MALWARE' "$WORK/mu-py.txt"
+has    "and row 05 names it"                          'signs of the Madepkg malware\. Act now' "$WORK/mu-py.txt"
+rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
+mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
+# The summary row is cut at 80 columns, so only its start is checked.
+has    "a clean home: row 05 names the made-up ones"  'no LiteLLM, Madepkg, npm, OpenCode, Railway, Z' "$WORK/mu-none.txt"
+mkdir -p "$WORK/mu-plat/.config/madeplat"
+mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
+has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
+
 echo "files built to make a pattern backtrack"
 # Long runs of capitals and of KEY, with and without the = or quote a match needs,
 # next to a real key. gird-check.sh's patterns, run as they are in .NET, took

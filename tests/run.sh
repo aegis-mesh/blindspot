@@ -74,7 +74,7 @@ for B in $BASHES; do
 done
 
 echo "data files"
-if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match data/keys.tsv and data/sessions.tsv"; else bad "both scripts match data/keys.tsv and data/sessions.tsv"; head -n 8 "$WORK/gen.txt"; fi
+if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
 
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE"
@@ -385,7 +385,7 @@ cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
 has    "Zeabur alone is flagged"               'Zeabur CLI found: rotate secrets stored there' "$WORK/zb-one.txt"
-has    "Zeabur adds a fix"                     'deploy on Railway or Zeabur, rotate the keys stored there' "$WORK/zb-one-full.txt"
+has    "Zeabur adds a fix"                     'If you used OpenCode Console, Railway or Zeabur, rotate the keys stored there' "$WORK/zb-one-full.txt"
 has    "Zeabur has its own detail line"        'Zeabur CLI found' "$WORK/zb-one-full.txt"
 cp -R "$WORK/zb-one" "$WORK/zb-two"; mkdir -p "$WORK/zb-two/.railway"; printf '{}\n' > "$WORK/zb-two/.railway/config.json"
 lp "$WORK/zb-two" > "$WORK/zb-two.txt"
@@ -432,6 +432,61 @@ else
 fi
 hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS SCAN' "$WORK/ni-pyc.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
+
+echo "a new incident of each kind is data lines only"
+# tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
+# package to a copy's data files and runs gen.sh there; it fails if any code changed.
+if bash tests/made-up.sh "$WORK/mu" "$WORK/clean" "$WORK/mu-home" 2> "$WORK/mu-err.txt"; then ok "made-up incidents need only data lines and gen.sh"
+else bad "made-up incidents need only data lines and gen.sh"; sed 's/^/        /' "$WORK/mu-err.txt"; fi
+mu() { env HOME="$1" TMPDIR="$1/tmp" PATH=/usr/bin:/bin ${3:+GIRD_CHECK_COMPACT=1} bash "$WORK/mu/gird-check.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$2"; }
+mu "$WORK/mu-home" "$WORK/mu.txt"
+has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
+has    "made-up platform: named in the shared fix"    'If you used OpenCode Console, Railway, Zeabur or Made Platform, rotate the keys stored there' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +7 checked' "$WORK/mu.txt"
+has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
+has    "made-up wiper file is a waiting wiper"        'a wiper is waiting ~/\.config/madewiper ' "$WORK/mu.txt"
+has    "made-up planted file and its note"            '~/code/made/\.vscode/madeplant\.js a file the Made worm plants' "$WORK/mu.txt"
+has    "a hook that runs it, with the general note"   '~/code/made/\.claude/settings\.json runs a file a worm plants' "$WORK/mu.txt"
+has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/tmp/\.madepy_1 ' "$WORK/mu.txt"
+has    "made-up Python package: its advisory"         'Advisory: example\.com/madepy/advisory' "$WORK/mu.txt"
+has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.9 package\. Clear it with: uv cache clean madepkg' "$WORK/mu.txt"
+has    "made-up Python package: its fix"              "follow Madepkg's advisory" "$WORK/mu.txt"
+hasnot "LiteLLM is not blamed for it"                 'LITELLM 1\.107\.0 MALWARE|signs of the LiteLLM malware' "$WORK/mu.txt"
+# Without the wiper and the npm files, the Python package leads; with only the platform, it does.
+cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/madewiper" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json"
+mu "$WORK/mu-py" "$WORK/mu-py.txt" compact
+has    "made-up Python package leads the summary"     'ACT NOW: SIGNS OF THE MADEPKG 9\.9\.9 MALWARE' "$WORK/mu-py.txt"
+has    "and row 05 names it"                          'signs of the Madepkg malware\. Act now' "$WORK/mu-py.txt"
+rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.local/share/opencode" "$WORK/mu-plat/.railway"
+mu "$WORK/mu-plat" "$WORK/mu-none.txt" compact
+# The summary row is cut at 80 columns, so only its start is checked.
+has    "a clean home: row 05 names the made-up ones"  'no LiteLLM, Madepkg, npm, OpenCode, Railway, Z' "$WORK/mu-none.txt"
+mkdir -p "$WORK/mu-plat/.config/madeplat"
+mu "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
+has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
+
+echo "gen.sh refuses what it cannot write safely"
+gen_refuses() { # what file line
+  rm -rf "$WORK/gr"; mkdir -p "$WORK/gr"; cp -R gird-check.sh gird-check.ps1 tools data "$WORK/gr/"
+  printf '%s\n' "$3" >> "$WORK/gr/data/$2"
+  bash "$WORK/gr/tools/gen.sh" > "$WORK/gr.txt" 2>&1; _rc=$?
+  if [ "$_rc" -eq 2 ] && grep -q "data/$2" "$WORK/gr.txt"; then ok "$1"; else bad "$1 (exit $_rc)"; fi
+}
+T=$(printf '\t')
+gen_refuses "a platform with an unknown incident"       platforms.tsv "nosuch${T}X${T}x${T}~/.x/${T}CLI found${T}advice${T}summary"
+gen_refuses "a platform advice with a \$"               platforms.tsv "railway${T}X${T}x${T}~/.x/${T}CLI found${T}costs \$5${T}summary"
+gen_refuses "a platform with another found word"        platforms.tsv "railway${T}X${T}x${T}~/.x/${T}present${T}advice${T}summary"
+gen_refuses "a platform path that is only the home"     platforms.tsv "railway${T}X${T}x${T}~${T}CLI found${T}advice${T}summary"
+gen_refuses "a startup path with a glob"                indicators.tsv "mastra${T}all${T}startup${T}no${T}~/.config/*.cjs${T}note"
+gen_refuses "a startup line with no note"               indicators.tsv "mastra${T}all${T}startup${T}no${T}~/.config/x.cjs${T}-"
+gen_refuses "a site file with a slash"                  indicators.tsv "litellm${T}all${T}site${T}no${T}a/cook.pth${T}-"
+gen_refuses "a temp name of dots"                       indicators.tsv "litellm${T}all${T}temp${T}no${T}..${T}-"
+gen_refuses "a Python incident that is only an update"  bad-pypi.tsv "mistralai${T}1.0.0${T}mistral"
+gen_refuses "a Python name with a hyphen"               bad-pypi.tsv "lite-llm${T}1.0.0${T}litellm"
+gen_refuses "a planted file in another folder"          planted.tsv ".git${T}x.js${T}tanstack${T}note"
+gen_refuses "a planted file listed twice"               planted.tsv ".claude${T}setup.mjs${T}keyv${T}note"
+gen_refuses "an npm package with an unknown incident"   bad-npm.tsv "left-pad${T}1.0.0${T}nosuch"
+gen_refuses "an incident listed twice"                  incidents.tsv "litellm${T}X${T}October 2026${T}x${T}https://example.com${T}act"
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

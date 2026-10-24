@@ -482,12 +482,13 @@ function Is-Pruned([string]$path, [string]$name, [int]$depth) {
   foreach ($p in $PrunePaths) { if ($path.Equals($p, $PathCmp)) { return $true } }
   ($depth -eq 1) -and $name.StartsWith('OneDrive', $PathCmp)
 }
-# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs, .claude/math_init.js
-# and .vscode/setup.mjs).
-function Is-WormFile([string]$parent, [string]$name) {
-  (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and ($name -ceq 'router_runtime.js' -or $name -ceq 'tanstack_runner.js')) -or
-  (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and $name -ceq 'setup.mjs') -or ($parent -ceq '.claude' -and $name -ceq 'math_init.js')
-}
+# Files worms plant in a project, from data/planted.tsv.
+# >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it.
+$WormName = '\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack and keyv worms plant' } '.claude/tanstack_runner.js' { 'a file the TanStack and keyv worms plant' } '.vscode/router_runtime.js' { 'a file the TanStack and keyv worms plant' } '.vscode/tanstack_runner.js' { 'a file the TanStack and keyv worms plant' } '.claude/setup.mjs' { 'a file the TanStack and keyv worms plant' } '.claude/math_init.js' { 'a file the TanStack and keyv worms plant' } '.vscode/setup.mjs' { 'a file the TanStack and keyv worms plant' } default { $null } } }
+$WormRefNote = 'runs a file the TanStack and keyv worms plant'
+# <<< planted
+function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
 function Scan-Home([string]$dir, [int]$depth) {
   foreach ($e in (Entries $dir)) {
     $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
@@ -844,10 +845,9 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 # one line, so pretty-printed JSON matches too; only tasks.json (JSONC) has comments removed first.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
 $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
-# The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
+# Worms plant a file in the folder ($WormName, from data/planted.tsv) and run it from a hook or a task.
 # A worm file counts only when a command runs it (an interpreter given its path, the path as the
 # command itself, or a task's argument), not when a rule or a guard merely names it.
-$WormName = '\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
 $RxWormRun = New-Object regex(('"command"\s*:\s*"(?:[^"\\]|\\.)*\b(node|bun|deno|tsx)(\.exe)?\s(?:[^"\\]|\\.)*' + $WormName +
   '|"command"\s*:\s*"\s*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?[/\\]|\.[/\\])?' + $WormName + '|"args"\s*:\s*\[[^\]]*' + $WormName), $RxOpt, $RxTimeout)
 # Keys that make Claude Code run a command: hooks and its helper commands.
@@ -1037,52 +1037,112 @@ $PyRoots = @('.pyenv/pyenv-win/versions', 'miniconda3', 'miniforge3', 'anaconda3
 if ($env:ProgramData) { $PyRoots += @((J $env:ProgramData 'miniconda3'), (J $env:ProgramData 'anaconda3')) }
 foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
-Progress "Checking $(Plural $SitesAll.Count 'Python environment' 'Python environments') for the LiteLLM malware"
+# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
+function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI packages, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } default { $t } } }
+function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI packages, May 2026: published with malware that Mistral says could not run. docs.mistral.ai' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'mastra' { 'Mastra worm, June 2026: installed itself at login and sent browser history to the attackers. socket.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: AI provider keys saved in Console workspaces may have been exposed. techcrunch.com' } 'railway' { 'Railway, October 2026: an attacker accessed stored environment variables and decrypted some of them. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } default { $t } } }
+function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } default { 'act' } } }
+function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI packages' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } default { $t } } }
+function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/22/developer-platform-railway-urges-all-users-to-revoke-secret-keys-after-cyberattack/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } default { $t } } }
+# <<< incidents
+# >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
+$BadPypi = @'
+litellm 1.107.0 litellm
+'@
+$PyIncidents = @('litellm')
+# <<< bad-pypi
+# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
+$IndTable = @(
+  ,@('tanstack', 'all', 'wiper', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.gh-token-monitor.plist'), '-')
+  ,@('tanstack', 'all', 'wiper', 'no', (J $HomeDir '.config/systemd/user/gh-token-monitor.service'), '-')
+  ,@('tanstack', 'all', 'wiper', 'no', (J $HomeDir '.local/bin/gh-token-monitor.sh'), '-')
+  ,@('tanstack', 'all', 'wiper', 'no', (J $HomeDir '.config/gh-token-monitor'), '-')
+  ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.out.log', '-')
+  ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.err.log', '-')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), 'starts the Mastra worm at login')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/NodePackages/protocal.cjs'), 'starts the Mastra worm at login')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/nvmconf.service'), 'starts the Mastra worm at login')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'), 'starts the Mastra worm at login')
+  ,@('mastra', 'win', 'startup', 'no', $(if ($env:ProgramData) { J $env:ProgramData 'NodePackages/protocal.cjs' } else { '' }), 'starts the Mastra worm at login')
+  ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
+  ,@('litellm', 'all', 'site', 'no', 'cook.py', '-')
+  ,@('litellm', 'all', 'temp', 'no', 'remote_code_loader.lock', '-')
+  ,@('litellm', 'all', 'temp', 'no', '.pc_once_*', '-')
+  ,@('litellm', 'all', 'temp', 'no', '.pc_sq_*', '-')
+  ,@('litellm', 'all', 'temp', 'no', '.pc_e_*', '-')
+)
+# <<< indicators
+if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
+$IndOn = @($IndTable | Where-Object { $_[1] -eq 'all' -or $_[1] -eq $IndOs })
+$BadPypiRows = @($BadPypi -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 3 })
+# Python incidents (data/bad-pypi.tsv and the site and temp lines of data/indicators.tsv). $LiteBad
+# and $Marks hold @(incident, what was found). The hit incidents' first words make "the LiteLLM malware".
+function Py-Short($ids) { (@($ids | ForEach-Object { (Incident-Name $_).Split(' ')[0] }) -join ' and ') }
+Progress "Checking $(Plural $SitesAll.Count 'Python environment' 'Python environments') for the $(Py-Short $PyIncidents) malware"
 $N_PY = 0; $N_LITE = 0; $LiteVers = New-Object System.Collections.Generic.List[string]
-$LiteBad = New-Object System.Collections.Generic.List[string]; $LitePyc = New-Object System.Collections.Generic.List[string]
+$LiteBad = New-Object System.Collections.Generic.List[object]; $LitePyc = New-Object System.Collections.Generic.List[string]
 foreach ($sp in $SitesAll) {
   if (-not (Is-Dir $sp)) { continue }
   $N_PY++
+  # The installed LiteLLM versions, shown on a clean row and counted in litellm_installed.
   foreach ($d in (Glob-Dirs $sp 'litellm-*.dist-info')) {
     $v = [regex]::Replace(([IO.Path]::GetFileName($d) -replace '^litellm-', '' -replace '\.dist-info$', ''), '[\x00-\x1f\x7f-\x9f]', '?')
     $N_LITE++; if (-not $LiteVers.Contains($v)) { $LiteVers.Add($v) }
   }
-  $bad = New-Object System.Collections.Generic.List[string]
-  if (Is-Dir (J $sp 'litellm-1.107.0.dist-info')) { $bad.Add('litellm 1.107.0') }
-  if (Is-File (J $sp 'cook.pth')) { $bad.Add('cook.pth') }
-  if (Is-File (J $sp 'cook.py')) { $bad.Add('cook.py') }
+  foreach ($pi in $PyIncidents) {
+    $bad = New-Object System.Collections.Generic.List[string]
+    foreach ($r in $BadPypiRows) { if ($r[2] -ceq $pi -and (Is-Dir (J $sp "$($r[0])-$($r[1]).dist-info"))) { $bad.Add("$($r[0]) $($r[1])") } }
+    foreach ($r in $IndOn) { if ($r[2] -eq 'site' -and $r[0] -ceq $pi -and (Is-File (J $sp $r[4]))) { $bad.Add($r[4]) } }
+    if ($bad.Count -gt 0) { $LiteBad.Add(@($pi, "$(Short $sp): $($bad -join ', ')")) }
+  }
+  # cook.pyc stays code: a compiled leftover is only a possible sign, with its own row and fix.
   $pyc = @(); try { if (Is-Dir (J $sp '__pycache__')) { $pyc = @([IO.Directory]::GetFiles((J $sp '__pycache__'), 'cook.*.pyc')) } } catch { }
   if ($pyc.Count -gt 0) { $LitePyc.Add("$(Short $sp): cook.pyc") }
-  if ($bad.Count -gt 0) { $LiteBad.Add("$(Short $sp): $($bad -join ', ')") }
 }
-$Marks = New-Object System.Collections.Generic.List[string]
+$Marks = New-Object System.Collections.Generic.List[object]
 foreach ($t in $TempDirs) {
   if (-not (Is-Dir $t)) { continue }
-  if (Exists (J $t 'remote_code_loader.lock')) { $Marks.Add((J $t 'remote_code_loader.lock')) }
-  foreach ($pat in @('.pc_once_*', '.pc_sq_*', '.pc_e_*')) {
-    try { foreach ($m in ([IO.Directory]::GetFileSystemEntries($t, $pat) | Sort-Object)) { $Marks.Add($m) } } catch { }
+  foreach ($r in $IndOn) {
+    if ($r[2] -ne 'temp') { continue }
+    if ($r[4].EndsWith('*')) {
+      try { foreach ($m in ([IO.Directory]::GetFileSystemEntries($t, $r[4]) | Sort-Object)) { $Marks.Add(@($r[0], $m)) } } catch { }
+    } elseif (Exists (J $t $r[4])) { $Marks.Add(@($r[0], (J $t $r[4]))) }
   }
 }
-if ($env:PRIVCOLLECT_ACTIVE) { $Marks.Add('PRIVCOLLECT_ACTIVE is set in this shell') }
-# The hourly loader that holds remote_code_loader.lock only runs on macOS and Linux.
+# An environment variable and a running process are not files, so these stay code. The hourly
+# loader that holds remote_code_loader.lock only runs on macOS and Linux.
+if ($env:PRIVCOLLECT_ACTIVE) { $Marks.Add(@('litellm', 'PRIVCOLLECT_ACTIVE is set in this shell')) }
 $LOADER = 0
-$UvBad = $false
-foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
-  if ($UvBad -or -not (Is-Dir $uv)) { continue }
-  try {
-    $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
-    while ($q.Count -gt 0 -and -not $UvBad) {
-      $it = $q.Dequeue()
-      foreach ($e in (Entries $it[0])) {
-        if ($e.Name.StartsWith('litellm-1.107.0')) { $UvBad = $true; break }
-        if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
+# A bad version in uv's cache: @(incident, name, version) for each one found.
+$UvBad = New-Object System.Collections.Generic.List[object]
+foreach ($r in $BadPypiRows) {
+  $want = "$($r[0])-$($r[1])"; $found = $false
+  foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
+    if ($found -or -not (Is-Dir $uv)) { continue }
+    try {
+      $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
+      while ($q.Count -gt 0 -and -not $found) {
+        $it = $q.Dequeue()
+        foreach ($e in (Entries $it[0])) {
+          if ($e.Name.StartsWith($want)) { $found = $true; break }
+          if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
+        }
       }
-    }
-  } catch { }
+    } catch { }
+  }
+  if ($found) { $UvBad.Add($r) }
 }
-$LITELLM_HIT = 0
-if ($LiteBad.Count -gt 0 -or $Marks.Count -gt 0 -or $LOADER -eq 1) { $LITELLM_HIT = 1 }
-if ($LITELLM_HIT -eq 1) { Progress 'Signs of the LiteLLM malware found' }
+$PyHits = New-Object System.Collections.Generic.List[string]
+foreach ($pi in $PyIncidents) {
+  $hit = $pi -eq 'litellm' -and $LOADER -eq 1
+  foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { $hit = $true } }
+  foreach ($l in $Marks) { if ($l[0] -ceq $pi) { $hit = $true } }
+  if ($hit) { $PyHits.Add($pi) }
+}
+$PY_HIT = 0; if ($PyHits.Count -gt 0) { $PY_HIT = 1 }
+# litellm_found and the card's ll stay LiteLLM's own.
+$LITELLM_HIT = 0; if ($PyHits -contains 'litellm') { $LITELLM_HIT = 1 }
+$PyShort = Py-Short $PyHits
+if ($PY_HIT -eq 1) { Progress "Signs of the $PyShort malware found" }
 elseif ($LitePyc.Count -gt 0) { Progress 'A leftover cook.pyc may come from the LiteLLM malware' }
 # >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it.
 $BadNpm = @'
@@ -1245,11 +1305,6 @@ foreach ($l in ($BadNpm -split "`r?`n")) {
   if ($p[1] -ceq '*') { $NpmAny[$p[0]] = $p[2] } else { $NpmBad["$($p[0])@$($p[1])"] = $p[2] }
   if (-not $NpmNames.Contains($p[0])) { $NpmNames.Add($p[0]) }
 }
-# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI packages, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } default { $t } } }
-function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI packages, May 2026: published with malware that Mistral says could not run. docs.mistral.ai' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'mastra' { 'Mastra worm, June 2026: installed itself at login and sent browser history to the attackers. socket.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } default { $t } } }
-function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } default { 'act' } } }
-# <<< incidents
 $NpmRows = New-Object System.Collections.Generic.List[object]; $NpmCacheRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
 $NpmCacheTag = " (npm's download cache)"
 # Versions are shown only if they look like versions, so a package can't put terminal control codes in the report.
@@ -1369,44 +1424,51 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 $NPM_HIT = 0; $NPM_UPD = 0
 $NpmTags = @($NpmRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } else { $NPM_UPD = 1 } }
-# What these worms leave behind. gh-token-monitor runs a destructive command when the stolen GitHub
-# token stops working (it erased the home folder in the TanStack wave, Wiz; in the keyv wave it runs
-# an attacker-supplied command, SANS), so it must be stopped before any token is revoked.
+# What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
+# when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
+# the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
+# is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
-foreach ($m in @((J $HomeDir 'Library/LaunchAgents/com.user.gh-token-monitor.plist'), (J $HomeDir '.config/systemd/user/gh-token-monitor.service'),
-    (J $HomeDir '.local/bin/gh-token-monitor.sh'), (J $HomeDir '.config/gh-token-monitor'))) {
-  if (Exists $m) { $Wiper.Add($m) }
-}
-# Its logs in the shared /tmp count only if this person owns them. Windows has no /tmp.
-if (-not $OnWindows) {
-  foreach ($m in @('/tmp/gh-token-monitor.out.log', '/tmp/gh-token-monitor.err.log')) {
-    if (-not (Exists $m)) { continue }
-    $owner = ''; try { $owner = [string](Get-Item -LiteralPath $m -Force -ErrorAction Stop).User } catch { }
-    if ($owner -and $owner -ceq [Environment]::UserName) { $Wiper.Add($m) }
-  }
-}
-# The Mastra worm's startup files (Socket).
 $Persist = New-Object System.Collections.Generic.List[object]
-foreach ($m in @((J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), (J $HomeDir 'Library/NodePackages/protocal.cjs'),
-    (J $HomeDir '.config/systemd/user/nvmconf.service'), (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'))) {
-  if (Exists $m) { $Persist.Add(@($m, 'starts the Mastra worm at login')) }
+foreach ($r in $IndOn) {
+  if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
+  $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
+  if ($r[3] -eq 'yes') {
+    if ($OnWindows) { continue }
+    $owner = ''; try { $owner = [string](Get-Item -LiteralPath $m -Force -ErrorAction Stop).User } catch { }
+    if (-not ($owner -and $owner -ceq [Environment]::UserName)) { continue }
+  }
+  if ($r[2] -eq 'wiper') { $Wiper.Add($m) } else { $Persist.Add(@($m, $r[5])) }
 }
+# A registry value is not a file, so the Mastra worm's Run key stays code.
 if ($OnWindows) {
-  if ($env:ProgramData -and (Exists (J $env:ProgramData 'NodePackages/protocal.cjs'))) { $Persist.Add(@((J $env:ProgramData 'NodePackages/protocal.cjs'), 'starts the Mastra worm at login')) }
   try {
     $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
     if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra worm at login')) }; $rk.Close() }
   } catch { }
 }
-foreach ($f in $WormFiles) { $Persist.Add(@($f, 'a file the TanStack and keyv worms plant')) }
-foreach ($f in $WormRefs) { $Persist.Add(@($f, 'runs a file the TanStack and keyv worms plant')) }
+foreach ($f in $WormFiles) { $Persist.Add(@($f, (Planted-Note ([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) + '/' + [IO.Path]::GetFileName($f))))) }
+foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
 if ($WIPER_HIT -eq 1) { Progress 'A wiper waits for a GitHub token to be revoked: gh-token-monitor' }
 elseif ($MAL_HIT -eq 1) { Progress 'Signs of npm malware found' }
-$OC = 0; if ((Has-Command 'opencode') -or (Is-Dir (J $HomeDir '.config/opencode')) -or (Is-Dir (J $HomeDir '.local/share/opencode'))) { $OC = 1 }
-$RW = 0; if ((Has-Command 'railway') -or (Is-File (J $HomeDir '.railway/config.json'))) { $RW = 1 }
-$ZB = 0; if ((Has-Command 'zeabur') -or (Is-Dir (J $HomeDir '.config/zeabur'))) { $ZB = 1 }
+# Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH, a
+# file or a folder.
+# >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
+$Platforms = @(
+  @{ Id = 'opencode'; Name = 'OpenCode'; Cmds = @('opencode'); Dirs = @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')); Files = @(); Found = 'installed'; Advice = 'If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.'; Summary = 'OpenCode found: used its Console? Rotate keys' },
+  @{ Id = 'railway'; Name = 'Railway'; Cmds = @('railway'); Dirs = @(); Files = @((J $HomeDir '.railway/config.json')); Found = 'CLI found'; Advice = 'Railway asked every customer to rotate all secrets stored on the platform and to check their logs.'; Summary = 'Railway CLI found: rotate secrets stored there' },
+  @{ Id = 'zeabur'; Name = 'Zeabur'; Cmds = @('zeabur'); Dirs = @((J $HomeDir '.config/zeabur')); Files = @(); Found = 'CLI found'; Advice = 'Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.'; Summary = 'Zeabur CLI found: rotate secrets stored there' })
+# <<< platforms
+$PlatFound = @($Platforms | Where-Object {
+  $p = $_; (@($p.Cmds | Where-Object { Has-Command $_ }).Count -gt 0) -or (@($p.Dirs | Where-Object { Is-Dir $_ }).Count -gt 0) -or (@($p.Files | Where-Object { Is-File $_ }).Count -gt 0)
+} | ForEach-Object { $_.Id })
+function Join-Or($names) { $n = @($names); if ($n.Count -le 1) { $n -join '' } else { ($n[0..($n.Count - 2)] -join ', ') + ' or ' + $n[$n.Count - 1] } }
+$PlatFix = Join-Or @($Platforms | ForEach-Object { Incident-Name $_.Id })
+# The report's fixed fields opencode and railway.
+$OC = 0; if ($PlatFound -contains 'opencode') { $OC = 1 }
+$RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
@@ -1463,7 +1525,8 @@ function Add-Todo([int]$sec, [string]$text) {
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
 if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
-if ($LITELLM_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Don''t run Python in the affected environments, follow LiteLLM''s advisory, and rotate every key the machine could reach.' }
+if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
+if ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
 if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
@@ -1474,11 +1537,11 @@ if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
-if ($OC -eq 1 -or $RW -eq 1 -or $ZB -eq 1) { Add-Todo 5 'If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong.' }
+if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
 $ISSUES = $Todo.Count
 
 $SCORE = 100
-if ($LITELLM_HIT -eq 1) { $SCORE -= 40 }
+if ($PY_HIT -eq 1) { $SCORE -= 40 }
 if ($MAL_HIT -eq 1) { $SCORE -= 40 }
 $SCORE -= [Math]::Min($KEY_FILES * 8, 32)
 $SCORE -= [Math]::Min($HIST_KEYS * 6, 12)
@@ -1586,7 +1649,7 @@ if (-not $OptOffline) {
 # every detail with -Full or when the output is redirected. A saved report always
 # has every detail.
 # ===========================================================================
-if ($LITELLM_HIT -eq 1 -or $MAL_HIT -eq 1) { $Sev = $cRed }
+if ($PY_HIT -eq 1 -or $MAL_HIT -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
 if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
@@ -1601,7 +1664,7 @@ if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
 $Act = ''
 if ($WIPER_HIT -eq 1) { $Act = 'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' }
 elseif ($MAL_HIT -eq 1) { $Act = 'ACT NOW: SIGNS OF NPM MALWARE' }
-elseif ($LITELLM_HIT -eq 1) { $Act = 'ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE' }
+elseif ($PY_HIT -eq 1) { $Act = "ACT NOW: SIGNS OF THE $((@($PyHits | ForEach-Object { Incident-Name $_ }) -join ' AND ').ToUpperInvariant()) MALWARE" }
 if ($Act) {
   Emit "  $Sev$gBar$cRst $cBold$Act$cRst"
   if ($PctTxt) { Emit "  $Sev$gBar$cRst $cBold$PctTxt.$cRst $FixN." } else { Emit "  $Sev$gBar$cRst $FixN." }
@@ -1689,20 +1752,25 @@ foreach ($r in $AllowRows) {
 }
 $Sec4 = Take-Cap
 $ind26 = ' ' * 26
-Section '05' 'RECENT KEY LEAKS' '5 checked'
-if ($LITELLM_HIT -eq 1) {
-  Pair "$cRed$gX$cRst" 'LiteLLM 1.107.0' 16 "${cRed}signs of the malware found$cRst"
-  foreach ($l in (@($LiteBad) + @($Marks))) { Emit "        $(Short $l)" }
-  Wrap "Don't run Python or pip in these environments. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 '        ' '        '
-} elseif ($LitePyc.Count -gt 0) {
-  Pair "$cYel!$cRst" 'LiteLLM 1.107.0' 16 "${cYel}possible leftover$cRst"
-  foreach ($l in $LitePyc) { Emit "        $l" }
-  Wrap 'A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026' 8 '        ' '        '
-} else {
-  Pair "$cGrn$gOk$cRst" 'LiteLLM 1.107.0' 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')"
-  if ($N_LITE -gt 0) { Emit "$ind26${cDim}installed: $($LiteVers -join ' ')$cRst" }
+Section '05' 'RECENT KEY LEAKS' "$(@($PyIncidents).Count + 1 + @($Platforms).Count) checked"
+# One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
+foreach ($pi in $PyIncidents) {
+  $pl = Incident-Name $pi
+  if ($PyHits -contains $pi) {
+    Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
+    foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    Wrap "Don't run Python or pip in these environments. Advisory: $(Incident-Source $pi)" 8 '        ' '        '
+  } elseif ($pi -eq 'litellm' -and $LitePyc.Count -gt 0) {
+    Pair "$cYel!$cRst" $pl 16 "${cYel}possible leftover$cRst"
+    foreach ($l in $LitePyc) { Emit "        $l" }
+    Wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(Incident-Source $pi)" 8 '        ' '        '
+  } else {
+    Pair "$cGrn$gOk$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')"
+    if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $($LiteVers -join ' ')$cRst" }
+  }
+  foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
 }
-if ($UvBad) { Wrap 'Your uv cache holds the 1.107.0 package. Clear it with: uv cache clean litellm' 8 '        ' '        ' $cYel }
 if ($WIPER_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}a wiper is waiting$cRst"
   foreach ($l in $Wiper) { Emit "        $(Short $l)" }
@@ -1728,18 +1796,15 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
   Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
 }
-if ($OC -eq 1) {
-  Pair "$cYel!$cRst" 'OpenCode' 16 'installed'
-  Wrap 'If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.' 26 $ind26 $ind26 $cDim
-} else { Pair "$cDim$gMid$cRst" 'OpenCode' 16 "${cDim}not installed$cRst" }
-if ($RW -eq 1) {
-  Pair "$cYel!$cRst" 'Railway' 16 'CLI found'
-  Wrap 'Railway asked every customer to rotate all secrets stored on the platform and to check their logs.' 26 $ind26 $ind26 $cDim
-} else { Pair "$cDim$gMid$cRst" 'Railway' 16 "${cDim}CLI not found$cRst" }
-if ($ZB -eq 1) {
-  Pair "$cYel!$cRst" 'Zeabur' 16 'CLI found'
-  Wrap 'Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.' 26 $ind26 $ind26 $cDim
-} else { Pair "$cDim$gMid$cRst" 'Zeabur' 16 "${cDim}CLI not found$cRst" }
+foreach ($p in $Platforms) {
+  if ($PlatFound -contains $p.Id) {
+    Pair "$cYel!$cRst" $p.Name 16 $p.Found
+    Wrap $p.Advice 26 $ind26 $ind26 $cDim
+  } else {
+    if ($p.Found.EndsWith(' found')) { $w = $p.Found.Substring(0, $p.Found.Length - 6) + ' not found' } else { $w = 'not ' + $p.Found }
+    Pair "$cDim$gMid$cRst" $p.Name 16 "$cDim$w$cRst"
+  }
+}
 $Sec5 = Take-Cap
 Heading 'WHAT TO DO' 'most urgent first'
 $i = 0
@@ -1794,24 +1859,23 @@ elseif ($N_ALLOW_NPM -gt 0 -and $N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = '
 elseif ($N_ALLOW_NPM -gt 0) { $G4 = "$cRed$gX$cRst"; $D4 = "$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship" }
 elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $AllowFirst)" }
 else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
-$leaks = @(); if ($OC -eq 1) { $leaks += 'OpenCode' }; if ($RW -eq 1) { $leaks += 'Railway' }; if ($ZB -eq 1) { $leaks += 'Zeabur' }
+$leaks = @($Platforms | Where-Object { $PlatFound -contains $_.Id })
 if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it before revoking tokens' }
-elseif ($MAL_HIT -eq 1 -and $LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'npm and LiteLLM malware found. Act now' }
+elseif ($MAL_HIT -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "npm and $PyShort malware found. Act now" }
 elseif ($MAL_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of npm malware. Act now' }
-elseif ($LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of the LiteLLM malware. Act now' }
+elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"
-  $l = ($leaks[0..($leaks.Count - 2)] -join ', ') + ' and ' + $leaks[$leaks.Count - 1]
-  if ($leaks.Count -eq 3) { $D5 = "$l found: rotate keys" } else { $D5 = "$l found: rotate their keys" }
+  $names = @($leaks | ForEach-Object { $_.Name })
+  $l = ($names[0..($names.Count - 2)] -join ', ') + ' and ' + $names[$names.Count - 1]
+  if ($leaks.Count -ge 3) { $D5 = "$l found: rotate keys" } else { $D5 = "$l found: rotate their keys" }
 }
-elseif ($OC -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'OpenCode found: used its Console? Rotate keys' }
-elseif ($RW -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'Railway CLI found: rotate secrets stored there' }
-elseif ($ZB -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'Zeabur CLI found: rotate secrets stored there' }
-else { $G5 = "$cGrn$gOk$cRst"; $D5 = 'no LiteLLM, npm, OpenCode, Railway, Zeabur leaks' }
+elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
+else { $G5 = "$cGrn$gOk$cRst"; $D5 = "no $((Py-Short $PyIncidents) -replace ' and ', ', '), npm, $(@($Platforms | ForEach-Object { $_.Name }) -join ', ') leaks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1
 CLine '02' $G2 'MCP servers' $D2
