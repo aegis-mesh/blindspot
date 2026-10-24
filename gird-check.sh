@@ -2627,7 +2627,7 @@ $UV_BAD
 EOF
 done
 if [ "$WIPER_HIT" -eq 1 ]; then
-  pair "${RED}✗${RST}" "npm worms" 16 "${RED}a wiper is waiting${RST}"
+  pair "${RED}✗${RST}" "npm malware" 16 "${RED}a wiper is waiting${RST}"
   while IFS= read -r l; do [ -n "$l" ] && emit "        $(short "$l")"; done <<EOF
 $WIPER
 EOF
@@ -2641,9 +2641,9 @@ EOF
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
   if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
-    [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
+    [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm malware" 16 "${RED}signs of the malware found${RST}"
   else
-    pair "${YEL}!${RST}" "npm worms" 16 "${YEL}a bad version to update${RST}"
+    pair "${YEL}!${RST}" "npm malware" 16 "${YEL}a bad version to update${RST}"
   fi
   while IFS="$TAB" read -r f p t; do
     [ -n "$f" ] || continue
@@ -2666,9 +2666,9 @@ $PERSIST
 EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$WIPER_HIT" -eq 0 ] && [ "$NPM_UNREAD" -gt 0 ]; then
-  pair "${YEL}!${RST}" "npm worms" 16 "${YEL}not fully checked: part of npm's cache could not be read${RST}"
+  pair "${YEL}!${RST}" "npm malware" 16 "${YEL}not fully checked: part of npm's cache could not be read${RST}"
 elif [ "$WIPER_HIT" -eq 0 ]; then
-  pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
+  pair "${GRN}✓${RST}" "npm malware" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
@@ -2823,7 +2823,7 @@ elif [ "$N_PLAT_FOUND" -eq 1 ]; then
   while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do [ "$(plat_hit "$_pid")" = 1 ] && D5=$_psum; done <<EOF
 $PLATFORMS
 EOF
-else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks it checks"; fi
+else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"
 cline 02 "$G2" "MCP servers" "$D2"

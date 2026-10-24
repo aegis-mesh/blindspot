@@ -1999,7 +1999,7 @@ foreach ($pi in $PyIncidents) {
   foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
 }
 if ($WIPER_HIT -eq 1) {
-  Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}a wiper is waiting$cRst"
+  Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}a wiper is waiting$cRst"
   foreach ($l in $Wiper) { Emit "        $(Short $l)" }
   if ($OnWindows) { $stop = 'Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate, then ' }
   elseif (Is-Dir '/System/Library/CoreServices') { $uidv = ''; try { $uidv = [string](& id -u 2>$null) } catch { }; $stop = "launchctl bootout gui/$uidv/com.user.gh-token-monitor, then pkill -f gh-token-monitor, then " }
@@ -2009,8 +2009,8 @@ if ($WIPER_HIT -eq 1) {
 }
 if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
-    if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}signs of the malware found$cRst" }
-  } else { Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}a bad version to update$cRst" }
+    if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}signs of the malware found$cRst" }
+  } else { Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}a bad version to update$cRst" }
   foreach ($r in $NpmRows) {
     if ($r[0].EndsWith($NpmCacheTag)) { $w = "downloaded into npm's cache" }
     elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') { $w = 'listed in this lockfile' }
@@ -2023,9 +2023,9 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   $why = New-Object System.Collections.Generic.List[string]
   if ($NpmSlow -gt 0) { $why.Add("$(Plural $NpmSlow 'file' 'files') took too long") }
   if ($NpmUnread -gt 0) { $why.Add("part of npm's cache could not be read") }
-  Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
+  Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
 } elseif ($WIPER_HIT -eq 0) {
-  Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
+  Pair "$cGrn$gOk$cRst" 'npm malware' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
   Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
 }
 if ($EXT_HIT -eq 1) {
@@ -2115,7 +2115,7 @@ elseif ($leaks.Count -ge 2) {
   if ($leaks.Count -ge 3) { $D5 = "$l found: rotate keys" } else { $D5 = "$l found: rotate their keys" }
 }
 elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
-else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks it checks" }
+else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1
 CLine '02' $G2 'MCP servers' $D2
