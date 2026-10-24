@@ -475,6 +475,9 @@ $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
 $AiderFiles = New-Object System.Collections.Generic.List[string]
+# The project files of data/auto-approve.tsv, and links to ~/.ssh/authorized_keys outside ~/.ssh.
+$AaFiles = New-Object System.Collections.Generic.List[string]
+$AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
@@ -501,6 +504,18 @@ $AaTable = @(
 $AaProject = @('.vscode/settings.json')
 # <<< auto-approve
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
+function Is-AaProject([string]$path) {
+  $ps = $path -replace '\\', '/'
+  foreach ($r in $AaProject) { if ($ps.EndsWith('/' + $r, [StringComparison]::Ordinal)) { return $true } }
+  $false
+}
+# A link's target, read without following it: LinkTarget on PowerShell 7, Get-Item's Target on 5.1.
+function Link-Target($info) {
+  $t = $null
+  try { $t = $info.LinkTarget } catch { }
+  if (-not $t) { try { $t = @((Get-Item -LiteralPath $info.FullName -Force -ErrorAction Stop).Target)[0] } catch { } }
+  [string]$t
+}
 function Scan-Home([string]$dir, [int]$depth) {
   foreach ($e in (Entries $dir)) {
     $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
@@ -517,6 +532,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       if ($isSettings) { $Found.Add($path) }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
       elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
+      if ((Link-Target $e) -match '\.ssh[\\/]authorized_keys$' -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
     if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or $isSettings -or
@@ -528,6 +544,7 @@ function Scan-Home([string]$dir, [int]$depth) {
     elseif ($name -ceq '.aider.chat.history.md') { $AiderFiles.Add($path) }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
     elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
+    elseif (Is-AaProject $path) { $AaFiles.Add($path) }
   }
 }
 # Whether a folder holds any file within three levels, and any changed in 30 days.
@@ -1454,6 +1471,92 @@ $OutTable = @(
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
 )
 # <<< outdated
+# --- 1. Coding agents: settings and versions -------------------------------------
+# Agents set to run commands without asking (data/auto-approve.tsv), matched as gird-check.sh does:
+# a line with its spaces removed, starting at the line, a { or a , and ending at the line's end, a
+# , } # or /. Lines starting with // or # are skipped; in a .toml file only the lines before the
+# first [table] count.
+function Aa-Hit([string]$f, $pats) {
+  $t = Read-Text $f; if ($null -eq $t) { return $false }
+  $toml = $f.EndsWith('.toml')
+  $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
+  $got = New-Object bool[] $pp.Count
+  foreach ($line in $t.Split("`n")) {
+    $l = $line -replace '\s', ''
+    if ($l.StartsWith('//') -or $l.StartsWith('#')) { continue }
+    if ($toml -and $l.StartsWith('[')) { break }
+    for ($i = 0; $i -lt $pp.Count; $i++) {
+      if ($got[$i]) { continue }
+      $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
+      while ($k -ge 0) {
+        $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
+        $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
+        if (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a))) { $got[$i] = $true; break }
+        $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
+      }
+    }
+  }
+  -not ($got -contains $false)
+}
+$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}
+foreach ($r in $AaTable) {
+  if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
+  if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) }) } else { $files = @($r[2]) }
+  foreach ($f in $files) {
+    if (-not (Is-File $f) -or -not (Aa-Hit $f $r[4])) { continue }
+    if ($aaSeen.ContainsKey($f)) { $aaSeen[$f].Setting += ", $($r[3])" }
+    else { $row = @{ File = $f; Agent = $r[0]; Setting = $r[3] }; $aaSeen[$f] = $row; $AaList.Add($row) }
+  }
+}
+$N_YOLO = $AaList.Count
+if ($N_YOLO -gt 0) { Progress "Agents set to run commands without asking: $($AaList[0].Agent)" }
+# Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
+# compared, part by part as numbers; anything else is not reported.
+function Ver-Ok([string]$v) { $v -cmatch '^[0-9]+(\.[0-9]+)*$' }
+function Ver-Cmp([string]$a, [string]$b) {
+  $x = $a.Split('.'); $y = $b.Split('.'); $n = [Math]::Max($x.Count, $y.Count)
+  for ($i = 0; $i -lt $n; $i++) {
+    $p = '0'; if ($i -lt $x.Count) { $p = $x[$i].TrimStart('0') }; $q = '0'; if ($i -lt $y.Count) { $q = $y[$i].TrimStart('0') }
+    if ($p -eq '') { $p = '0' }; if ($q -eq '') { $q = '0' }
+    if ($p.Length -ne $q.Length) { if ($p.Length -lt $q.Length) { return -1 } else { return 1 } }
+    $c = [string]::CompareOrdinal($p, $q); if ($c -lt 0) { return -1 } elseif ($c -gt 0) { return 1 }
+  }
+  0
+}
+# name@version in a text, where nothing that can be part of a package name comes right before it.
+$RxArgVer = New-Object regex('\G[0-9A-Za-z.+-]+')
+function Pkg-Args([string]$nm, [string]$t) {
+  if (-not $t) { return }
+  $p = "$nm@"; $k = $t.IndexOf($p, [StringComparison]::Ordinal)
+  while ($k -ge 0) {
+    if (-not ($k -gt 0 -and ([string]$t[$k - 1]) -cmatch '[A-Za-z0-9._/@-]')) { $m = $RxArgVer.Match($t, $k + $p.Length); if ($m.Success) { $m.Value } }
+    $k = $t.IndexOf($p, $k + 1, [StringComparison]::Ordinal)
+  }
+}
+$OldList = New-Object System.Collections.Generic.List[object]; $oldSeen = @{}
+foreach ($r in $OutTable) {
+  if ($r[2] -ne 'all' -and $r[2] -ne $IndOs) { continue }
+  $vs = @()
+  switch ($r[3]) {
+    'plist' { $t = Read-Text $r[4]; if ($null -ne $t) { $m = [regex]::Match($t, '<key>CFBundleShortVersionString</key>\s*<string>([^<]*)</string>'); if ($m.Success) { $vs = @($m.Groups[1].Value) } } }
+    'folder' {
+      $best = ''
+      foreach ($d in (Glob-Dirs $r[4] '*')) { $n = [IO.Path]::GetFileName($d); if ((Ver-Ok $n) -and ($best -eq '' -or (Ver-Cmp $n $best) -gt 0)) { $best = $n } }
+      if ($best) { $vs = @($best) }
+    }
+    'npm' { $vs = @(foreach ($nr in $NpmRoots) { $pj = J (J $nr $r[4]) 'package.json'; if (Is-File $pj) { $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"'); if ($m.Success) { $m.Groups[1].Value } } }) }
+    'mcparg' { $vs = @(foreach ($f in $McpList) { if (Is-File $f) { Pkg-Args $r[4] (Read-Text $f) } }) }
+  }
+  foreach ($v in $vs) {
+    if (-not (Ver-Ok $v)) { continue }
+    if ($r[5] -ne '-' -and (Ver-Cmp $v $r[5]) -lt 0) { continue }
+    if ((Ver-Cmp $v $r[6]) -ge 0) { continue }
+    if ($oldSeen.ContainsKey($r[0])) { $o = $oldSeen[$r[0]]; if (-not $o.Vers.Contains($v)) { $o.Vers.Add($v) } }
+    else { $o = @{ Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Hole = $r[7]; Src = $r[8] }; $o.Vers.Add($v); $oldSeen[$r[0]] = $o; $OldList.Add($o) }
+  }
+}
+$N_OLD = $OldList.Count
+if ($N_OLD -gt 0) { Progress "An agent with a security fix to install: $($OldList[0].Name)" }
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
 # A folder or file that can't be read leaves the cache not fully checked, never clean.
@@ -1473,7 +1576,22 @@ foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
 }
 $byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x[0], $y[0]); if ($o -eq 0) { $o = [string]::CompareOrdinal($x[1], $y[1]) }; $o }
 $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
-# Incidents whose malware could not run only need the version updated; the rest mean a compromised machine.
+# Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
+# with a platform suffix such as -darwin-arm64, the id compared without case.
+$BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 3 })
+foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
+  foreach ($e in (Entries (J $HomeDir $er))) {
+    if (-not (Is-DirInfo $e)) { continue }
+    foreach ($x in $BadExtRows) {
+      $pre = $x[0] + '-'
+      if (-not $e.Name.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) { continue }
+      $m = [regex]::Match($e.Name.Substring($pre.Length), '^([0-9]+(?:\.[0-9]+)*)(-.*)?$')
+      if (-not $m.Success) { continue }
+      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[1].Value) { $NpmRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])); break }
+    }
+  }
+}
+# Incidents that leave the machine itself uncompromised only need the version updated; the rest mean a compromised machine.
 $NPM_HIT = 0; $NPM_UPD = 0
 $NpmTags = @($NpmRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } else { $NPM_UPD = 1 } }
@@ -1584,12 +1702,16 @@ $PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
 if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
 elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $adv, and rotate every key the machine could reach." }
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
+$N_AK = $AkLinks.Count
+if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
 if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
 if ($N_SESS -gt 0) { Add-Todo 3 "Keys turned up in $(Plural $N_SESS 'agent session file' 'agent session files'). An agent read or was given them: treat them as exposed and rotate them." }
 if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs with environment variable references, then rotate them.' }
 if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys.' }
 if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
+if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox.' }
+if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
@@ -1706,7 +1828,7 @@ if (-not $OptOffline) {
 # has every detail.
 # ===========================================================================
 if ($PY_HIT -eq 1 -or $MAL_HIT -eq 1) { $Sev = $cRed }
-elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0) { $Sev = $cRed }
+elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
 if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
 $PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of AI builders who ran Blindspot" }
@@ -1744,6 +1866,20 @@ foreach ($r in $AgRows) {
     default { Pair "$cDim$gBul$cRst" $r[0] 20 "${cDim}installed$cRst" }
   }
 }
+if ($N_YOLO -gt 0) {
+  Blank
+  Emit "     ${cBold}Agents set to run commands without asking$cRst"
+  foreach ($r in $AaList) { Pair "$cYel!$cRst" ('{0,-16} {1}' -f $r.Agent, (Short $r.File)) 46 $r.Setting }
+  Wrap 'A prompt injection in anything the agent reads can then run commands on this computer. Turn it off unless the agent runs in a sandbox.' 8 '        ' '        ' $cDim
+}
+if ($N_OLD -gt 0) {
+  Blank
+  Emit "     ${cBold}Agents with a security fix to install$cRst"
+  foreach ($r in $OldList) {
+    Pair "$cYel!$cRst" $r.Name 20 "$($r.Vers -join ', '), update to $($r.Fixed) or later"
+    Wrap "$($r.Hole.Substring(0, 1).ToUpperInvariant())$($r.Hole.Substring(1)). $($r.Src)" 8 '        ' '        ' $cDim
+  }
+}
 $Sec1 = Take-Cap
 Section '02' 'MCP SERVERS' (Plural $N_MCP 'server' 'servers')
 if ($N_MCP -eq 0 -and $N_MCP_TOKEN -eq 0) { Emit '     No MCP servers configured.' }
@@ -1764,6 +1900,12 @@ if ($N_AUTO -gt 0) {
     $more = ''; if ($r.More -gt 0) { $more = " The same settings are in $(Plural $r.More 'more folder' 'more folders'), such as worktrees." }
     Wrap "Set to $($r.What).$more" 8 '        ' '        ' $cDim
   }
+}
+if ($N_AK -gt 0) {
+  Blank
+  Emit "     ${cBold}Files that link to your SSH logins$cRst"
+  foreach ($f in $AkLinks) { Emit "     $cRed$gX$cRst  $(Short $f)" }
+  Wrap 'An agent that edits this file adds a login to this computer. Delete the link.' 8 '        ' '        ' $cRed
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
@@ -1857,7 +1999,7 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
 } elseif ($WIPER_HIT -eq 0) {
   Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
-  Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
+  Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs, npm's cache and editor extensions$cRst"
 }
 foreach ($p in $Platforms) {
   if ($PlatFound -contains $p.Id) {
@@ -1903,10 +2045,13 @@ function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
   if ($detail.Length -gt $room) { $detail = $detail.Substring(0, $room - 3) + '...' }
   Emit "   $cTeal$cBold$num$cRst  $mark  $cBold$($label.PadRight(20))$cRst$detail"
 }
-if ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
+if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
+elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO set to run commands without asking" }
+elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }
-if ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
+if ($N_AK -gt 0) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, $(Plural $N_AK 'file links' 'files link') to your SSH logins" }
+elseif ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
 elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
 elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
