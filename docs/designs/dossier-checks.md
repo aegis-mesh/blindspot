@@ -99,6 +99,10 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
 
 - Settings saved in SQLite or a format that needs a parser (above).
 - GlassWorm's later waves without a primary list of extension ids.
+- A setting inside a `/* */` block comment in a JSONC settings file is still read: only lines
+  starting with `//` or `#` are skipped.
+- Codex values written in single quotes, and a `[profiles.x]` table made the default by
+  `profile = "x"`, are not read.
 - An agent run with a flag on the command line (`--dangerously-skip-permissions`, `--yolo`):
   nothing on disk records it.
 

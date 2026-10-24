@@ -536,6 +536,17 @@ hasnot "near misses: no agent set to run without asking" 'Agents set to run comm
 hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Tools with a security fix|that have a security fix' "$D"
 hasnot "near misses: no link inside ~/.ssh, none to another file" 'link to your SSH logins|links to ~/\.ssh' "$D"
 hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc' "$D"
+# Known limits, as they are today (docs/designs/dossier-checks.md, Not covered): a setting inside a
+# /* */ block comment is still read; Codex values in single quotes, and a profile made the default
+# with profile = "x", are not.
+for L in 1 2; do rm -rf "$WORK/dz-lim$L"; cp -R "$WORK/clean" "$WORK/dz-lim$L"; mkdir -p "$WORK/dz-lim$L/$DAS/Code/User" "$WORK/dz-lim$L/.codex"; done
+printf '{\n  /*\n  "chat.tools.autoApprove": true\n  */\n}\n' > "$WORK/dz-lim1/$DAS/Code/User/settings.json"
+printf "approval_policy = 'never'\nsandbox_mode = 'danger-full-access'\n" > "$WORK/dz-lim1/.codex/config.toml"
+printf 'profile = "yolo"\n[profiles.yolo]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$WORK/dz-lim2/.codex/config.toml"
+dzrun "$WORK/dz-lim1" | tr -s ' \n' '  ' > "$WORK/dz-lim1.txt"; dzrun "$WORK/dz-lim2" | tr -s ' \n' '  ' > "$WORK/dz-lim2.txt"
+has    "known limit: a setting in a /* */ block comment is still read" '! VS Code Copilot ~/.*Code/User/settings\.json chat\.tools\.autoApprove' "$WORK/dz-lim1.txt"
+hasnot "known limit: Codex values in single quotes are not read" '! Codex ' "$WORK/dz-lim1.txt"
+hasnot "known limit: a profile made the default with profile = is not read" '! Codex ' "$WORK/dz-lim2.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 HOME="$WORK/dz-calm" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
