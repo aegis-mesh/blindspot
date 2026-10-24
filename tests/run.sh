@@ -167,6 +167,15 @@ kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null
 if pgrep -f 'SESS_PRE' >/dev/null 2>&1; then bad "HUP leaves no engine process"; pkill -f 'SESS_PRE'; else ok "HUP leaves no engine process"; fi
 if ls "${TMPDIR:-/tmp}"/blindspot.* >/dev/null 2>&1 && ls -l "${TMPDIR:-/tmp}"/blindspot.*.fifo >/dev/null 2>&1; then bad "no fifo is left behind"; else ok "no fifo is left behind"; fi
 
+# Keys pass through the fifo, so only the person running the check can open it, whatever the umask.
+mkdir -p "$SE/tmpd"
+( umask 022; HOME="$WORK/clean" TMPDIR="$SE/tmpd" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_MIN_SECONDS=120 bash "$SCRIPT" --offline > /dev/null 2>&1 ) &
+BP=$!
+for _i in $(seq 1 100); do ls "$SE/tmpd"/blindspot.*.fifo >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+_fm=$(ls -l "$SE/tmpd"/blindspot.*.fifo 2>/dev/null | cut -c1-10)
+if [ "$_fm" = "prw-------" ]; then ok "the fifo keys pass through is the owner's only"; else bad "the fifo keys pass through is the owner's only (${_fm:-no fifo})"; fi
+kill -HUP "$BP" 2>/dev/null; wait "$BP" 2>/dev/null; pkill -f 'SESS_PRE' 2>/dev/null
+
 echo "review fixes: npm, project settings and the wiper"
 RV=$WORK/rv; cp -R "$WORK/clean" "$RV"
 # Lockfiles: a pnpm override pinning away, an npm lock without URLs, a shrinkwrap, pnpm 5.
