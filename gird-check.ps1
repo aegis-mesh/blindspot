@@ -1369,7 +1369,7 @@ $NpmCacheTag = " (npm's download cache)"
 # Versions are shown only if they look like versions, so a package can't put terminal control codes in the report.
 function Npm-Hit([string]$where, [string]$nm, [string]$v) {
   if ($v -cnotmatch '^[0-9A-Za-z.+_-]+\z') { $v = '?' }
-  if ($v.EndsWith('-security')) { return }  # npm's empty placeholder for a removed package
+  if ($v -cmatch '^0\.0\.1-security(\.[0-9]+)?\z') { return }  # npm's empty placeholder for a removed package: 0.0.1-security, or 0.0.1-security.0 for a few names
   $k = "$nm@$v"; $t = $null
   if ($NpmBad.ContainsKey($k)) { $t = $NpmBad[$k] } elseif ($NpmAny.ContainsKey($nm)) { $t = $NpmAny[$nm] }
   if ($null -eq $t -or $NpmSeen.ContainsKey("$where|$k")) { return }

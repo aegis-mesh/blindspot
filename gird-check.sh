@@ -1803,7 +1803,7 @@ npm_hits() {
     }
     function hit(nm, v,   k, t) {
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
-      if (v ~ /-security$/) return   # the empty placeholder npm puts in place of a removed package
+      if (v ~ /^0\.0\.1-security(\.[0-9]+)?$/) return   # the empty placeholder npm puts in place of a removed package: 0.0.1-security, or 0.0.1-security.0 for a few names
       k = nm "@" v; t = ""
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "\t" nm " " v "\t" t }
@@ -1882,7 +1882,7 @@ npm_global_hits() { # package.json paths on stdin; prints folder|name version|ta
       }
       close(fn)
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
-      if (v ~ /-security$/) next   # the empty placeholder npm puts in place of a removed package
+      if (v ~ /^0\.0\.1-security(\.[0-9]+)?$/) next   # the empty placeholder npm puts in place of a removed package
       t = ""; if ((nm "@" v) in bad) t = bad[nm "@" v]; else if (nm in any) t = any[nm]
       if (t != "") print d "\t" nm " " v "\t" t
     }' 2>/dev/null

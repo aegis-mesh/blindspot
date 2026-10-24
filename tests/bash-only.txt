@@ -37,6 +37,7 @@ an outdated line that disagrees with its tool	tools/gen.sh is one bash tool that
 an outdated plist that is not Info.plist	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated range that does not parse	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 npm's -security placeholder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+npm's 0.0.1-security.0 placeholder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 both scripts match the data files	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 perl and ripgrep report the same	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
 kill -9 of the script stops the workers	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
