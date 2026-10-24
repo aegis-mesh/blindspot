@@ -145,7 +145,14 @@ if [ -n "$b" ] && [ "$p" = $((b + 1)) ]; then ok "key files agree, plus PowerShe
 # Only where keys go differs: the macOS Keychain there, a secrets manager here.
 # gird-check.sh finds Claude Desktop in this machine's own /Applications, which a test home can't
 # plant, so whether it is listed differs by machine: it is left out of both lists.
-fixes() { sed -n '/WHAT TO DO/,$p' "$1" | grep -aE '^ +[0-9]+\.' | sed -e 's/^ *[0-9]*\. *//' -e 's/ into .*//' -e 's/Claude Desktop, //'; }
+# Each fix with its wrapped lines joined, so a name left out does not move where the others wrap.
+fixes() {
+  sed -n '/WHAT TO DO/,$p' "$1" | awk '
+    /^ +[0-9]+\. / { if (cur != "") print cur; sub(/^ *[0-9]+\. */, ""); cur = $0; next }
+    cur != "" && /^ +[^ ]/ { sub(/^ +/, ""); cur = cur " " $0; next }
+    { if (cur != "") print cur; cur = "" }
+    END { if (cur != "") print cur }' | sed -e 's/ into .*//' -e 's/Claude Desktop, //'
+}
 fixes "$WORK/bash.txt" > "$WORK/bash-fixes.txt"; fixes "$OUT" > "$WORK/ps-fixes.txt"
 if [ -s "$WORK/ps-fixes.txt" ] && diff -q "$WORK/bash-fixes.txt" "$WORK/ps-fixes.txt" >/dev/null; then ok "the same fixes in the same order"; else bad "the same fixes in the same order"; diff "$WORK/bash-fixes.txt" "$WORK/ps-fixes.txt" | head -n 6; fi
 
