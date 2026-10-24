@@ -824,11 +824,8 @@ WORM_REF_NOTE='runs a file the TanStack and keyv worms plant'
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"defaultMode\": \"bypassPermissions\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"
-VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.autoApprove|\"chat.tools.autoApprove\": true
-VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
-VS Code Copilot|all|{PROJECT}/.vscode/settings.json|chat.tools.autoApprove|\"chat.tools.autoApprove\": true
-VS Code Copilot|all|{PROJECT}/.vscode/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true"
-AA_PROJECT='.vscode/settings.json'
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true"
+AA_PROJECT=''
 # <<< auto-approve
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
 # dependency caches, build output, model and VM images, cloud sync folders.
@@ -870,7 +867,7 @@ EOF
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
-       -o -name .aider.chat.history.md "${_aa[@]}" \) -print \) -o \
+       -o -name .aider.chat.history.md -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        "${_pf[@]}" \) -print \) -o \
     \( -type l -lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} + \) 2>/dev/null
@@ -1112,7 +1109,8 @@ if [ -n "$AA_PROJECT" ]; then
   AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
   AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
 fi
-FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ')
+VSC_SETTINGS=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/settings\.json$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ' | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
@@ -1295,6 +1293,32 @@ auto_row() { # file what flattened-text
   AUTO_ROWS="$AUTO_ROWS$1$TAB$2$TAB$_sum${TAB}0
 "
 }
+# A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
+# file is read as one line through flat (comments are its job), and a match starts at the text, a {
+# or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts. A
+# .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
+# (so a setting inside an inline table, a profile written as one, does not count), and only the
+# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
+# is used.
+aa_hit() { # file pattern|pattern...
+  case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
+  if [ "$_tm" -eq 1 ]; then cat "$1" 2>/dev/null; else flat "$1"; fi | AA_P=$2 awk -v toml="$_tm" '
+    BEGIN { n = split(ENVIRON["AA_P"], p, "|"); for (i = 1; i <= n; i++) gsub(/[[:space:]]/, "", p[i]) }
+    { l = $0; gsub(/[[:space:]]/, "", l) }
+    toml && l ~ /^#/ { next }
+    toml && l ~ /^\[/ { exit }
+    { for (i = 1; i <= n; i++) {
+        if (i in got) continue
+        off = 0
+        while ((k = index(substr(l, off + 1), p[i])) > 0) {
+          k += off; b = k > 1 ? substr(l, k - 1, 1) : ""; a = substr(l, k + length(p[i]), 1)
+          if (toml) hit = (b == "" && (a == "" || a == "#"))
+          else hit = ((b == "" || b == "{" || b == ",") && (a == "" || a == "," || a == "}" || a == "#" || a == "/"))
+          if (hit) { got[i] = 1; break }
+          off = k
+        } } }
+    END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }'
+}
 # Keys that make Claude Code run a command: hooks and its helper commands.
 CMD_KEYS='apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
 while IFS= read -r f; do
@@ -1322,6 +1346,17 @@ while IFS= read -r f; do
   printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' && auto_row "$f" "run a task when the folder opens in VS Code or Cursor" "$_t"
 done <<EOF
 $TASK_FILES
+EOF
+# A project's .vscode/settings.json with "chat.tools.autoApprove": true, the setting the
+# CVE-2025-53773 prompt injection made Copilot write so it could run commands without asking. VS Code
+# 1.104 renamed it without migration, so current VS Code ignores it: a sign of that attack, or of an
+# old VS Code, not a setting in force. A thing to look at, not an agent set to run without asking.
+while IFS= read -r f; do
+  [ -n "$f" ] && [ -f "$f" ] || continue
+  aa_hit "$f" '"chat.tools.autoApprove": true' || continue
+  auto_row "$f" "auto-approve Copilot's tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it" "$(flat "$f")"
+done <<EOF
+$VSC_SETTINGS
 EOF
 # Row 02 counts projects: the folders holding these settings.
 N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/[^/]*$##' | sort -u | grep -c .)
@@ -1909,27 +1944,7 @@ mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could 
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
 # <<< outdated
 # --- 1. Coding agents: settings and versions -------------------------------------
-# Agents set to run commands without asking (data/auto-approve.tsv). A pattern matches a line with
-# its spaces removed, starting at the line, a { or a , and ending at the line's end, a , } # or /,
-# so a longer key or another value never counts. Lines starting with // or # are skipped. In a
-# .toml file a setting after the first [table] belongs to that table, so only the lines before it count.
-aa_hit() { # file pattern|pattern...
-  case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  AA_P=$2 awk -v toml="$_tm" '
-    BEGIN { n = split(ENVIRON["AA_P"], p, "|"); for (i = 1; i <= n; i++) gsub(/[[:space:]]/, "", p[i]) }
-    { l = $0; gsub(/[[:space:]]/, "", l) }
-    l ~ /^(\/\/|#)/ { next }
-    toml && l ~ /^\[/ { exit }
-    { for (i = 1; i <= n; i++) {
-        if (i in got) continue
-        off = 0
-        while ((k = index(substr(l, off + 1), p[i])) > 0) {
-          k += off; b = k > 1 ? substr(l, k - 1, 1) : ""; a = substr(l, k + length(p[i]), 1)
-          if ((b == "" || b == "{" || b == ",") && (a == "" || a == "," || a == "}" || a == "#" || a == "/")) { got[i] = 1; break }
-          off = k
-        } } }
-    END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }' "$1" 2>/dev/null
-}
+# Agents set to run commands without asking (data/auto-approve.tsv), matched by aa_hit (section 2).
 AA_ROWS=""
 while IFS='|' read -r _aa _ao _ap _as _apat; do
   [ -n "$_aa" ] || continue

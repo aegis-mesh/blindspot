@@ -498,12 +498,9 @@ $WormRefNote = 'runs a file the TanStack and keyv worms plant'
 $AaTable = @(
   ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"defaultMode": "bypassPermissions"'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"'))
-  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.autoApprove', @('"chat.tools.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
-  ,@('VS Code Copilot', 'all', '{PROJECT}/.vscode/settings.json', 'chat.tools.autoApprove', @('"chat.tools.autoApprove": true'))
-  ,@('VS Code Copilot', 'all', '{PROJECT}/.vscode/settings.json', 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
 )
-$AaProject = @('.vscode/settings.json')
+$AaProject = @()
 # <<< auto-approve
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
 function Is-AaProject([string]$path) {
@@ -908,6 +905,39 @@ function Flat-Text([string]$f) {
   try { $RxBlockComment.Replace(($RxLineComment.Replace($t, '$1') -replace '[\r\n\t]', ' '), '') } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
+# A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
+# file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
+# a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts.
+# A .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
+# (so a setting inside an inline table, a profile written as one, does not count), and only the
+# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
+# is used.
+function Aa-Hit([string]$f, $pats) {
+  $toml = $f.EndsWith('.toml')
+  if ($toml) { $t = Read-Text $f } else { $t = Flat-Text $f }
+  if ($null -eq $t) { return $false }
+  $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
+  $got = New-Object bool[] $pp.Count
+  $lines = @($t); if ($toml) { $lines = $t.Split("`n") }
+  foreach ($line in $lines) {
+    $l = $line -replace '\s', ''
+    if ($toml -and $l.StartsWith('#')) { continue }
+    if ($toml -and $l.StartsWith('[')) { break }
+    for ($i = 0; $i -lt $pp.Count; $i++) {
+      if ($got[$i]) { continue }
+      $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
+      while ($k -ge 0) {
+        $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
+        $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
+        if ($toml) { $hit = ($b -eq '' -and ($a -eq '' -or $a -eq '#')) }
+        else { $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a))) }
+        if ($hit) { $got[$i] = $true; break }
+        $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
+      }
+    }
+  }
+  -not ($got -contains $false)
+}
 function Auto-Row([string]$f, [string]$what, [string]$t) {
   if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
   # A repo's worktrees carry the same settings: one row, with how many more folders have it.
@@ -930,6 +960,16 @@ foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/') { continue }
   $t = Flat-Text $f
   if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
+}
+# A project's .vscode/settings.json with "chat.tools.autoApprove": true, the setting the
+# CVE-2025-53773 prompt injection made Copilot write so it could run commands without asking. VS Code
+# 1.104 renamed it without migration, so current VS Code ignores it: a sign of that attack, or of an
+# old VS Code, not a setting in force. A thing to look at, not an agent set to run without asking.
+foreach ($f in $VscSettings) {
+  if (-not (Is-File $f)) { continue }
+  if (Aa-Hit $f @('"chat.tools.autoApprove": true')) {
+    Auto-Row $f 'auto-approve Copilot''s tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it' ([string](Flat-Text $f))
+  }
 }
 $N_AUTO = $AutoRows.Count
 # Row 02 counts projects: the folders holding these settings.
@@ -1494,28 +1534,7 @@ $OutTable = @(
 # a line with its spaces removed, starting at the line, a { or a , and ending at the line's end, a
 # , } # or /. Lines starting with // or # are skipped; in a .toml file only the lines before the
 # first [table] count.
-function Aa-Hit([string]$f, $pats) {
-  $t = Read-Text $f; if ($null -eq $t) { return $false }
-  $toml = $f.EndsWith('.toml')
-  $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
-  $got = New-Object bool[] $pp.Count
-  foreach ($line in $t.Split("`n")) {
-    $l = $line -replace '\s', ''
-    if ($l.StartsWith('//') -or $l.StartsWith('#')) { continue }
-    if ($toml -and $l.StartsWith('[')) { break }
-    for ($i = 0; $i -lt $pp.Count; $i++) {
-      if ($got[$i]) { continue }
-      $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
-      while ($k -ge 0) {
-        $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
-        $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
-        if (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a))) { $got[$i] = $true; break }
-        $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
-      }
-    }
-  }
-  -not ($got -contains $false)
-}
+# Agents set to run commands without asking (data/auto-approve.tsv), matched by Aa-Hit (section 2).
 $AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}
 foreach ($r in $AaTable) {
   if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }

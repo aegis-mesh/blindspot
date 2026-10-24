@@ -485,8 +485,9 @@ done
 D=$WORK/dz-hit-flat.txt
 has    "Claude Code set to bypass permissions"        '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$D"
 has    "Codex set to never ask, with full access"     '! Codex ~/\.codex/config\.toml never asks, full access' "$D"
-has    "VS Code's user settings: the global key, not the commented one" 'AppData/Roaming/Code/User/settings\.json chat\.tools\.global\.autoApprove !' "$D"
-has    "a workspace .vscode/settings.json the home scan finds" '! VS Code Copilot ~/p/yolo/\.vscode/settings\.json chat\.tools\.autoApprove' "$D"
+has    "VS Code's user settings: the global key, not the commented one" 'AppData/Roaming/Code/User/settings\.json chat\.tools\.global\.autoApprove A prompt injection' "$D"
+has    "a project's chat.tools.autoApprove: the setting CVE-2025-53773 wrote, which VS Code now ignores" '! ~/p/yolo/\.vscode/settings\.json Set to auto-approve Copilot.s tools with chat\.tools\.autoApprove, the setting the CVE-2025-53773 attack wrote into projects\. VS Code 1\.104 and later ignore it\.' "$D"
+hasnot "a project's chat.tools.autoApprove is not an agent set to run without asking" '! VS Code Copilot ~/p/' "$D"
 hasnot "a workspace set to false is not listed"       'p/calm/' "$D"
 has    "with the advice"                              'A prompt injection in anything the agent reads can then run commands on this computer\. Turn it off unless the agent runs in a sandbox\.' "$D"
 has    "and the fix"                                  'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox\.' "$D"
@@ -544,15 +545,25 @@ hasnot "near misses: no agent set to run without asking" 'Agents set to run comm
 hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Tools with a security fix|that have a security fix' "$D"
 hasnot "near misses: no link inside ~/.ssh, none to another file" 'link to your SSH logins|links to ~/\.ssh' "$D"
 hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc' "$D"
-# Known limits, as they are today (docs/designs/dossier-checks.md, Not covered): a setting inside a
-# /* */ block comment is still read; Codex values in single quotes, and a profile made the default
-# with profile = "x", are not.
+hasnot "the Marketplace build of oorzc.ssh-tools 0.5.1 in VS Code's own folder is not the bad build" 'oorzc\.ssh-tools 0\.5\.1' "$D"
+hasnot "Codex: a profile written as an inline table is not the top level" '! Codex ' "$D"
+hasnot "mcp-remote@0.1 in an MCP config is a range, not a version" 'mcp-remote 0\.1,|mcp-remote 0\.1 ' "$D"
+hasnot "the old chat.tools.autoApprove in user settings is not reported: VS Code 1.104 and later ignore it" 'Code/User/settings\.json' "$D"
+hasnot "a project's chat.tools.global.autoApprove is not reported: VS Code reads it from user settings only" 'p/global/' "$D"
+# A link to an authorized_keys that does not exist yet still counts: an agent writing through it
+# creates the file.
+cp -R "$WORK/dz-hit" "$WORK/dz-dangle"; rm "$WORK/dz-dangle/.ssh/authorized_keys"
+dzrun "$WORK/dz-dangle" | tr -s ' \n' '  ' > "$WORK/dz-dangle.txt"
+has    "a link to an authorized_keys that does not exist yet still counts" 'Files that link to your SSH logins ✗ ~/code/links/notes\.txt' "$WORK/dz-dangle.txt"
+# A settings file is read as one line (Flat-Text), so a setting inside a /* */ block comment is not
+# at a boundary and is not read. Known limits (docs/designs/dossier-checks.md, Not covered): Codex
+# values in single quotes, and a profile made the default with profile = "x", are not read.
 for L in 1 2; do rm -rf "$WORK/dz-lim$L"; cp -R "$WORK/clean" "$WORK/dz-lim$L"; mkdir -p "$WORK/dz-lim$L/AppData/Roaming/Code/User" "$WORK/dz-lim$L/.codex"; done
-printf '{\n  /*\n  "chat.tools.autoApprove": true\n  */\n}\n' > "$WORK/dz-lim1/AppData/Roaming/Code/User/settings.json"
+printf '{\n  /*\n  "chat.tools.global.autoApprove": true\n  */\n}\n' > "$WORK/dz-lim1/AppData/Roaming/Code/User/settings.json"
 printf "approval_policy = 'never'\nsandbox_mode = 'danger-full-access'\n" > "$WORK/dz-lim1/.codex/config.toml"
 printf 'profile = "yolo"\n[profiles.yolo]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$WORK/dz-lim2/.codex/config.toml"
 dzrun "$WORK/dz-lim1" | tr -s ' \n' '  ' > "$WORK/dz-lim1.txt"; dzrun "$WORK/dz-lim2" | tr -s ' \n' '  ' > "$WORK/dz-lim2.txt"
-has    "known limit: a setting in a /* */ block comment is still read" '! VS Code Copilot ~/.*Code/User/settings\.json chat\.tools\.autoApprove' "$WORK/dz-lim1.txt"
+hasnot "a setting in a /* */ block comment is not read" '! VS Code Copilot ' "$WORK/dz-lim1.txt"
 hasnot "known limit: Codex values in single quotes are not read" '! Codex ' "$WORK/dz-lim1.txt"
 hasnot "known limit: a profile made the default with profile = is not read" '! Codex ' "$WORK/dz-lim2.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"

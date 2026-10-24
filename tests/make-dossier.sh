@@ -20,10 +20,13 @@ pkg() { printf '{\n  "name": "%s",\n  "version": "%s"\n}\n' "$2" "$3" > "$1/pack
 : > "$F/.ssh/authorized_keys"
 if [ "$MODE" = miss ]; then
   printf '{\n  "permissions": {\n    "defaultMode": "default"\n  },\n  "note": "defaultMode: bypassPermissions"\n}\n' > "$F/.claude/settings.json"
-  # One of the two settings at the top, both of them only in a profile.
-  printf 'approval_policy = "never"\n[profiles.yolo]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n%s\n' "$toml" > "$F/.codex/config.toml"
-  printf '{\n  // "chat.tools.autoApprove": true,\n  "chat.tools.autoApprove": false\n}\n' > "$AD/Code/User/settings.json"
+  # One of the two settings at the top, both of them only in a profile: a [table] and an inline table.
+  printf 'approval_policy = "never"\nprofiles.fast = { approval_policy = "never", sandbox_mode = "danger-full-access" }\n[profiles.yolo]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n%s\n' "$toml" > "$F/.codex/config.toml"
+  # The old name VS Code 1.104 dropped, live, and the current one only in a comment.
+  printf '{\n  // "chat.tools.global.autoApprove": true,\n  "chat.tools.autoApprove": true\n}\n' > "$AD/Code/User/settings.json"
   printf '{"chat.tools.autoApproveEdits": true, "chat.tools.global.autoApprove": "true"}\n' > "$F/p/calm/.vscode/settings.json"
+  # The current setting in a project: VS Code reads it from the user settings only.
+  mkdir -p "$F/p/global/.vscode"; printf '{"chat.tools.global.autoApprove": true}\n' > "$F/p/global/.vscode/settings.json"
   plist 3.0
   mkdir -p "$F/Library/Caches/$L/1.69.0" "$F/Library/Caches/$L/1.10.0" "$F/.cache/$L/1.69.0" "$F/.cache/$L/1.10.0"
   pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 1.0.24
