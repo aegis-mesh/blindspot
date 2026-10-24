@@ -30,14 +30,15 @@ Check the result: each account's `protected_folders` is `checked` once access wo
    shasum -a 256 gird-check.sh
    ```
 
-2. Add this line under the script's first line:
+2. Add exactly this line under the script's first line:
 
    ```sh
    [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=3000
    ```
 
    The check copies itself for each account, so it must run from a file, not piped in. Piped in,
-   it stops with `run it from a file`.
+   it stops with `run it from a file`. It also stops if the file, or a folder above it, is not
+   root's or can be changed by anyone else.
 
 3. In the Microsoft Intune admin center, select **Devices** > **By platform** > **macOS** >
    **Manage devices** > **Scripts** > **Add**
@@ -53,7 +54,7 @@ Check the result: each account's `protected_folders` is `checked` once access wo
 
 ## Show the result
 
-1. Make a second copy of `gird-check.sh` with this line under its first line instead. It only reads
+1. Make a second copy of `gird-check.sh` with exactly this line under its first line instead. It only reads
    the saved result:
 
    ```sh

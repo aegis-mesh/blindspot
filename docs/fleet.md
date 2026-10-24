@@ -65,14 +65,15 @@ The page for your MDM says where its agent is.
 
 Two items:
 
-- **The check**, run daily. It is the script with one line added under its first line, so it runs
-  with these options whatever arguments your MDM passes:
+- **The check**, run daily. It is the script with exactly this line added under its first line, so
+  it runs with these options whatever arguments your MDM passes:
 
   ```sh
   [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=3000
   ```
 
-- **The inventory field**, run whenever the Mac reports in. It is the script with this line instead.
+- **The inventory field**, run whenever the Mac reports in. It is the script with exactly this line
+  instead.
   It only reads the saved result and never checks anything:
 
   ```sh
@@ -81,7 +82,9 @@ Two items:
 
 Paste the script from a tagged release whose SHA-256 you checked (the release notes give it), so a
 run needs no download. The check must run from a file, not piped in: it copies itself for each
-account. Run that way, it stops with `run it from a file`. Set
+account. Run that way, it stops with `run it from a file`. The file, and every folder above it, must
+be owned by root and writable by no one else, or the check stops (exit 13) before it starts any
+account's check. Set
 `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the number.
 Each account gets an equal share of the time left, so one stuck account cannot hold up the rest. The
 run keeps a few seconds in reserve for its own steps, which sit outside the shares, so set the
@@ -95,7 +98,7 @@ deadline a little below the limit, not at it.
 | `--summary-to-stdout` | Prints one summary line. |
 | `--exit-zero` | Exits 0 whenever the run finished; only `failed` exits 13. |
 | `--deadline=<seconds>` | The run aims to finish before this. 3000 if not given. |
-| `--hash-accounts=<secret>` | Shows each account as a keyed hash of its name. Keep the secret to match them later. |
+| `--hash-accounts=<secret>` | Shows each account as a keyed hash of its name. Keep the secret to match them later. Put it only in the options line, never in an MDM's arguments: an argument shows in the process list, to every account, while the run lasts. |
 | `--inventory` | Prints the saved inventory value. Needs root. |
 | `--stale-days=<days>` | With `--inventory`: older than this reads `stale`. 3 if not given. |
 | `--result-tags` | With `--inventory`: wraps the value in `<result></result>`, for Jamf Pro. |

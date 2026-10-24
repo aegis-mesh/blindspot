@@ -243,6 +243,8 @@ real Mac.
   command in a group or session of its own, out of reach of root's kill of the process group). A run
   that leaves the group is caught only when it still holds root's pipe open, which root then reports
   as a process left running; one that let go of the pipe is not seen.
+- A run as `bash /dev/fd/0 < gird-check.sh` reads its own source from a path that is not the file;
+  it is not refused by name, and is left to the "run it from a file" and ownership checks.
 - Collecting results from many machines in one place. The result is for the MDM's own inventory.
 - Containers, servers and CI runners.
 
@@ -263,20 +265,6 @@ real Mac.
 - A replaced `jq`, `grep` or `sudo` earlier in the MDM's PATH: never run, by root or an account run.
 - A refused protected folder: not checked, never clear.
 - `sudo` failing, and an account with no login shell: not checked.
-- What root checks for the Mac in phase 1: apps in `/Applications` and agent commands in
-  `/usr/local/bin` and `/opt/homebrew/bin`, by name; in the shared temp folder, the malware markers
-  `data/indicators.tsv` lists there, by name; whether a process holds the LiteLLM loader's lock file
-  open (`lsof`), the only running process it looks at; and any startup file `data/indicators.tsv`
-  lists outside a home folder, of which macOS has none today. Startup items in shared folders and
-  other running processes are not checked yet.
-- With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
-  counts its protected folders as checked: there is nothing protected to miss.
-- `--all-users` needs to run from a file, since each account runs a copy of it; from standard input
-  it stops with a message. The copy leaves out an MDM's options line, which can carry the
-  `--hash-accounts` secret. The result's `script` field and the summary's `v=` are the release
-  version from the script's header.
-- An account run stopped at its time limit can leave its temp files in `/tmp`: root does not know
-  their names. Moved-aside saved-result folders stay until removed (`docs/fleet.md`, step 6).
 - A saved-result folder that is a link or owned by someone else: recreated.
 - Not root: exits 13. `--all` with `--all-users`: refused.
 - No network request (a local listener sees nothing), no browser, no saved report.
@@ -301,7 +289,7 @@ real Mac.
   `--result-tags` wraps it for Jamf Pro. An MDM item passes options with one line under the script's
   first line, `[ "${1:-}" = --account-run ] || set -- <options>`, so the account runs it starts keep
   their own.
-- `review` (named `update` in earlier drafts) means something to change or confirm, not urgent. It
+- `review` means something to change or confirm, not urgent. It
   covers a tool with a security fix and an incident at the update level, and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
   covers keys in shell history, MCP configs and Claude Code allow lists, links to
@@ -323,7 +311,8 @@ real Mac.
 - `--all-users` needs to run from a file, since each account runs a copy of it; from standard input
   it stops with a message. The copy leaves out an MDM's options line, which can carry the
   `--hash-accounts` secret. The result's `script` field and the summary's `v=` are the release
-  version from the script's header.
+  version from the script's header, found in its first five lines. Root refuses to start (exit 13)
+  unless the script and every folder above it are owned by root and writable by no one else.
 - An account run stopped at its time limit can leave its temp files in `/tmp`: root does not know
   their names. Moved-aside saved-result folders stay until removed (`docs/fleet.md`, step 6).
 - A saved-result folder that is a link, not a folder, or not root's with mode 0700 is moved aside to

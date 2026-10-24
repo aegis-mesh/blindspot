@@ -30,7 +30,7 @@ the result either way: each account's `protected_folders` is `checked` once acce
    shasum -a 256 gird-check.sh
    ```
 
-2. Add this line under the script's first line, so it runs with these options whatever arguments
+2. Add exactly this line under the script's first line, so it runs with these options whatever arguments
    Jamf passes:
 
    ```sh
@@ -38,7 +38,8 @@ the result either way: each account's `protected_folders` is `checked` once acce
    ```
 
    The check copies itself for each account, so it must run from a file, not piped in. Piped in,
-   it stops with `run it from a file`.
+   it stops with `run it from a file`. It also stops if the file, or a folder above it, is not
+   root's or can be changed by anyone else.
 
 3. In Jamf Pro, click **Settings**, then in **Computer management** click **Scripts**, then **New**
    ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Adding_a_Script_to_Jamf_Pro)).
@@ -59,7 +60,7 @@ the result either way: each account's `protected_folders` is `checked` once acce
 
 ## Show the result in inventory
 
-1. Make a second copy of `gird-check.sh` with this line under its first line instead. It only reads
+1. Make a second copy of `gird-check.sh` with exactly this line under its first line instead. It only reads
    the saved result, and wraps it in the `<result>` tag Jamf stores:
 
    ```sh

@@ -29,14 +29,15 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
    shasum -a 256 gird-check.sh
    ```
 
-2. Add this line under the script's first line:
+2. Add exactly this line under the script's first line:
 
    ```sh
    [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=1800
    ```
 
    The check copies itself for each account, so it must run from a file, not piped in. Piped in,
-   it stops with `run it from a file`.
+   it stops with `run it from a file`. It also stops if the file, or a folder above it, is not
+   root's or can be changed by anyone else.
 
 3. Add a Custom Script library item, and name it `Blindspot check`
    ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)).
