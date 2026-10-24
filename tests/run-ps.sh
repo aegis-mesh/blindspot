@@ -114,8 +114,8 @@ has    "puts the wiper first"                  'ACT NOW: REMOVE GH-TOKEN-MONITOR
 has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
 has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
 tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat.txt"   # the advice wraps, so it is matched on one line
-has    "another OS is pointed at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/out-flat.txt"
-hasnot "another OS is not told to use the Keychain" 'macOS Keychain' "$WORK/out-flat.txt"
+has    "off Windows it points at a secrets manager" 'files into a secrets manager, then rotate' "$WORK/out-flat.txt"
+hasnot "off Windows it never points at the Keychain" 'macOS Keychain' "$WORK/out-flat.txt"
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
 has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
 hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/out-flat.txt"
@@ -187,6 +187,32 @@ done
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" -- -Offline > "$SE/held.txt" 2>&1; RC=$?
 if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad "a held engine does not hold up the check, exit $RC"; fi
 has    "and the report says the sessions were not all checked" 'Checked the newest 0 of 2' "$SE/held.txt"
+if [ -n "$RG" ]; then
+  # A session ripgrep never finishes (a pipe nobody writes to) is stopped when the rest is done.
+  mkdir -p "$SE/stuck/.codex" "$SE/stuck/AppData/Roaming" "$SE/stuck/AppData/Local/Temp"; mkfifo "$SE/stuck/.codex/history.jsonl"
+  psrun "$SE/stuck" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline > "$SE/stuck.txt" 2>&1; RC=$?
+  if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check, exit $RC"; fi
+  if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f "with-filename.*$SE/stuck/"; else ok "rg: no ripgrep process is left running"; fi
+  # Closing the terminal sends HUP to the process group, ripgrep included. Many folders keep the
+  # scan going long enough to send it while ripgrep is stuck. (gird-check.ps1 has no HUP handler:
+  # a HUP to the pwsh process alone leaves ripgrep running.)
+  python3 -c "
+import os, sys
+for d in range(300):
+    p = os.path.join(sys.argv[1], 'code', 'p%d' % d); os.makedirs(p)
+    for f in range(200): open(os.path.join(p, 'f%d' % f), 'w').close()" "$SE/stuck"
+  # Its own session, so the HUP goes to its group and not this script's.
+  "$(command -v python3)" -c 'import os, sys; os.setsid(); os.execv(sys.argv[1], sys.argv[1:])' /usr/bin/env -i PATH="$WORK/bin:$SE/rgbin" \
+    HOME="$WORK/pshome" USERPROFILE="$SE/stuck" APPDATA="$SE/stuck/AppData/Roaming" LOCALAPPDATA="$SE/stuck/AppData/Local" \
+    TEMP="$SE/stuck/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=rg "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline > /dev/null 2>&1 &
+  BP=$!
+  for _i in $(seq 1 100); do pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
+  if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then RGUP=1; else RGUP=0; fi
+  kill -HUP -- "-$BP" 2>/dev/null; wait "$BP" 2>/dev/null
+  for _i in $(seq 1 10); do pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1 || break; sleep 0.1; done
+  if [ "$RGUP" -eq 0 ]; then bad "rg: HUP leaves no ripgrep process: ripgrep never started"
+  elif pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then bad "rg: HUP leaves no ripgrep process"; pkill -f "with-filename.*$SE/stuck/"; else ok "rg: HUP leaves no ripgrep process"; fi
+fi
 mkdir -p "$SE/min/.claude/projects/p" "$SE/min/AppData/Roaming" "$SE/min/AppData/Local/Temp"; printf '{}\n' > "$SE/min/.claude/projects/p/a.jsonl"
 psrun "$SE/min" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/held-sum.txt"
 has    "the summary row is not a check mark after a partial check" 'Keys in plain text none in files; agent sessions partly checked' "$SE/held-sum.txt"
@@ -209,7 +235,7 @@ for sec in 'MCP SERVERS' 'KEYS IN CLAUDE CODE ALLOW LISTS'; do
   if [ -n "$b" ] && [ "$b" = "$p" ]; then ok "$sec agrees ($p)"; else bad "$sec agrees: bash '$b', pwsh '$p'"; fi
 done
 b=$(grep -aoE 'KEYS IN PLAIN TEXT +[0-9]+' "$WORK/bash.txt" | grep -oE '[0-9]+$'); p=$(grep -aoE 'KEYS IN PLAIN TEXT +[0-9]+' "$OUT" | grep -oE '[0-9]+$')
-if [ -n "$b" ] && [ "$p" = $((b + 1)) ]; then ok "key files agree, plus PowerShell's history ($p)"; else bad "key files agree: bash $b, pwsh $p"; fi
+if [ -n "$b" ] && [ "$p" = $((b + 1)) ]; then ok "key files agree, plus PowerShell's history ($p)"; else bad "key files agree, plus PowerShell's history: bash $b, pwsh $p"; fi
 # Only where keys go differs: the macOS Keychain there, a secrets manager here.
 fixes() { sed -n '/WHAT TO DO/,$p' "$1" | grep -aE '^ +[0-9]+\.' | sed -e 's/^ *[0-9]*\. *//' -e 's/ into .*//'; }
 fixes "$WORK/bash.txt" > "$WORK/bash-fixes.txt"; fixes "$OUT" > "$WORK/ps-fixes.txt"
@@ -301,6 +327,11 @@ has    "and the summary row is not green either"       'Recent leaks npm package
 psrun "$WORK/home" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
 has    "Windows is told how to stop the wiper"         'Stop it with Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate, then delete the files above' "$WORK/wwin.txt"
 hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl' "$WORK/wwin.txt"
+if [ "$(uname -s)" = Linux ]; then  # these need pwsh on Linux, as in CI
+  psrun "$WORK/home" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wl.txt"
+  has    "Linux is told how to stop the wiper"         'systemctl --user disable --now gh-token-monitor\.service' "$WORK/wl.txt"
+  hasnot "Linux is not given the Mac command"          'launchctl bootout' "$WORK/wl.txt"
+fi
 # Where a hit was found, and npm's placeholder for a removed package.
 has    "a lockfile hit says it is listed there"      'axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile' "$WORK/out-flat.txt"
 has    "an install hit says it is installed"         'claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed' "$WORK/out-flat.txt"
@@ -330,9 +361,12 @@ has    "with its fix"                                "Treat this machine as comp
 has    "the link flags a Python incident, not LiteLLM" '&ll=0&.*&py=1&' "$WORK/mpy.txt"
 # transformers.pyz in the temp folder is a Linux-only sign of mistralai 2.4.6.
 cp -R "$WORK/clean" "$WORK/mpyt"; : > "$WORK/mpyt/AppData/Local/Temp/transformers.pyz"
-if [ "$(uname -s)" = Darwin ]; then
-  psrun "$WORK/mpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-mac.txt"
-  has  "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt-mac.txt"
+psrun "$WORK/mpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt.txt"
+if [ "$(uname -s)" = Darwin ]; then   # gird-check.ps1 knows macOS by /System/Library/CoreServices
+  has  "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt.txt"
+elif [ "$(uname -s)" = Linux ]; then  # these need pwsh on Linux, as in CI
+  has  "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt.txt"
+  has  "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt.txt"
 fi
 # A version read from a folder name is printed with control characters replaced.
 cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"
@@ -659,6 +693,12 @@ if [ -n "$SAVED" ]; then ok "-Save writes a report"; else bad "-Save writes a re
 if [ -n "$SAVED" ] && [ -n "$(find "$SAVED" -perm 600)" ]; then ok "the report is readable only by you"; else bad "the report is readable only by you"; fi
 if [ -n "$SAVED" ] && grep -q 'KEYS IN PLAIN TEXT' "$SAVED"; then ok "the report has every detail"; else bad "the report has every detail"; fi
 if [ -n "$SAVED" ] && ! grep -aqF -f "$WORK/keys.txt" "$SAVED"; then ok "the report holds no planted key"; else bad "the report holds no planted key"; fi
+# PowerShell before 7.3 has no UnixCreateMode; the test switch takes the path it uses.
+mkdir -p "$WORK/cwd72"
+(cd "$WORK/cwd72" && psrun "$WORK/home" GIRD_CHECK_TEST_NO_UNIXMODE=1 -- -Offline -Save > /dev/null 2>&1)
+SAVED=$(find "$WORK/cwd72" -name 'gird-ai-key-check-*.txt' | head -n 1)
+if [ -n "$SAVED" ] && [ -n "$(find "$SAVED" -perm 600)" ] && grep -q 'KEYS IN PLAIN TEXT' "$SAVED"; then ok "before PowerShell 7.3 the report is readable only by you too"
+else bad "before PowerShell 7.3 the report is readable only by you too"; fi
 
 echo "shared counts and how you compare"
 printf '%s' '{"devices":1234,"runs":2345,"devices_7d":456,"key_files":3412,"agents":5678,"clean":0.31}' > "$WORK/stats.json"
@@ -795,7 +835,7 @@ has    "key_places counts PowerShell's history as shell history" '"key_places":\
 has    "history_keys counts it too"            '"history_keys":2,' "$WORK/report-ps.json"
 B_LINK=$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/bash-online.txt" | tail -n 1 | tr '&' '\n' | sed 's/=.*//' | tr '\n' ' ')
 P_LINK=$(grep -aoE 'blindspot/card/#[^ ]*' "$OUT" | tail -n 1 | tr '&' '\n' | sed 's/=.*//' | tr '\n' ' ')
-if [ -n "$B_LINK" ] && [ "$B_LINK" = "$P_LINK" ]; then ok "the result link has gird-check.sh's parameters in its order"; else bad "the result link has gird-check.sh's parameters"; printf '        bash: %s\n        pwsh: %s\n' "$B_LINK" "$P_LINK"; fi
+if [ -n "$B_LINK" ] && [ "$B_LINK" = "$P_LINK" ]; then ok "the result link has gird-check.sh's parameters in its order"; else bad "the result link has gird-check.sh's parameters in its order"; printf '        bash: %s\n        pwsh: %s\n' "$B_LINK" "$P_LINK"; fi
 
 # The dossier checks share nothing: the same report, link and score with or without them.
 rm -rf "$WORK/pl-base" "$WORK/pl-dz"; cp -R "$WORK/clean" "$WORK/pl-base"; cp -R "$WORK/clean" "$WORK/pl-dz"
@@ -912,7 +952,7 @@ const v = validateEvent(r)
 const dropped = v.ok ? Object.keys(r).filter((k) => JSON.stringify(v.event[k]) !== JSON.stringify(r[k])) : []
 console.log(v.ok && !bad.length && !dropped.length ? 'valid' : `invalid: ${v.why || ''} plan: ${bad} dropped: ${dropped}`)
 JS
-  if grep -qx valid "$WORK/worker.txt"; then ok "the Worker accepts the report and keeps every field"; else bad "the Worker accepts the report"; sed 's/^/        /' "$WORK/worker.txt"; fi
+  if grep -qx valid "$WORK/worker.txt"; then ok "the Worker accepts the report and keeps every field"; else bad "the Worker accepts the report and keeps every field"; sed 's/^/        /' "$WORK/worker.txt"; fi
 else
   echo "  skip  the Worker check (set GIRD_CHECK_WORKER to gird-website's worker/check-stats.js)"
 fi
