@@ -10,7 +10,7 @@
 # It reads files and prints paths and counts. It asks gird.ai for public totals
 # when it starts. When it finishes it shares counts and a hashed device ID, never
 # paths or keys, and gets back how you compare. --offline stops all of that.
-# Key formats come from Argus.
+# Key types and agent session locations come from data/keys.tsv and data/sessions.tsv.
 #
 #   bash gird-check.sh             a short summary; press 1 to 5 for details
 #   bash gird-check.sh --full      every detail, no summary
@@ -18,12 +18,13 @@
 #   bash gird-check.sh --offline   shares nothing (DO_NOT_TRACK=1 works too)
 #   bash gird-check.sh --save      saves the full report as a text file
 #   bash gird-check.sh --no-game   skips the game while it scans
+#   bash gird-check.sh --all-sessions  waits until every agent session is checked
 #   NO_COLOR=1 bash gird-check.sh  plain text, no colors
 
 ORIG_LANG=${LC_ALL:-${LANG:-}}
 export LC_ALL=C
 
-ALL=0; SAVE=0; NOGAME=0; OFFLINE=0; FULL=0
+ALL=0; SAVE=0; NOGAME=0; OFFLINE=0; FULL=0; ALLSESS=0
 [ "${DO_NOT_TRACK:-0}" = 1 ] && OFFLINE=1
 for arg in "$@"; do
   case "$arg" in
@@ -31,9 +32,10 @@ for arg in "$@"; do
     --full) FULL=1 ;;
     --save) SAVE=1 ;;
     --no-game) NOGAME=1 ;;
+    --all-sessions) ALLSESS=1 ;;
     --offline) OFFLINE=1 ;;
     --no-color) NO_COLOR=1 ;;
-    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf 'Unknown option: %s (try --help)\n' "$arg"; exit 2 ;;
   esac
 done
@@ -139,6 +141,7 @@ short() {
   case "$_s" in "$H"/*) printf '~/%s' "${_s#"$H"/}" ;; *) printf '%s' "$_s" ;; esac
 }
 plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s' "$1" "$3"; fi; }
+count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf 0; fi; }
 # 1234567 -> 1,234,567
 commas() {
   _cn=$1; _co=""
@@ -605,36 +608,54 @@ drain_keys() {
 }
 
 PROG_FILE=""; SP_FILE=""; SP_PID=""; EARLY=0
+SESS_PID=""; SESS_FILTER_PID=""; SESS_FIFO=""; SESS_FILE=""; SESS_WIN=0
 cleanup() {
   spin_stop
+  sess_stop
   if [ -n "$SP_PID" ]; then kill "$SP_PID" 2>/dev/null; wait "$SP_PID" 2>/dev/null; SP_PID=""; fi
   if [ -n "$GAME_PID" ]; then kill "$GAME_PID" 2>/dev/null; wait "$GAME_PID" 2>/dev/null; GAME_PID=""; fi
   if [ -n "$KEYS_PID" ]; then kill "$KEYS_PID" 2>/dev/null; wait "$KEYS_PID" 2>/dev/null; KEYS_PID=""; fi
   if [ -n "$SAVED_TTY" ]; then stty "$SAVED_TTY" </dev/tty 2>/dev/null; SAVED_TTY=""; fi
   [ -n "$PROG_FILE" ] && rm -f "$PROG_FILE"
   [ -n "$SP_FILE" ] && rm -f "$SP_FILE"
+  [ -n "$SESS_FILE" ] && rm -f "$SESS_FILE"
+  [ -n "$SESS_FIFO" ] && rm -f "$SESS_FIFO"
   printf '%s' "$SHOW"
 }
 trap cleanup EXIT
 trap 'cleanup; printf "\n"; exit 130' INT TERM
+trap 'cleanup; exit 129' HUP
 
 # ---------------------------------------------------------------------------
 # Key formats. Matching uses grep -q or grep -o into a pipe, so a key is never
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
-P_ANTHROPIC='sk-ant-[A-Za-z0-9_-]{90,}'
-P_OPENAI='sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)'
-P_GOOGLE='AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}'
-P_OPENROUTER='sk-or-v1-[a-f0-9]{64}'
-P_GROQ='gsk_[A-Za-z0-9]{52}'
-P_XAI='xai-[A-Za-z0-9]{64,}'
-P_HF='(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)'
-P_PPLX='pplx-[A-Za-z0-9]{40,52}'
-P_REPLICATE='r8_[A-Za-z0-9]{37}'
-P_AWS='(^|[^A-Z0-9])AKIA[0-9A-Z]{16}([^A-Z0-9]|$)|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t'
-P_GITHUB='gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}'
-P_NPM='npm_[A-Za-z0-9]{36}'
-ALL_KEYS="$P_ANTHROPIC|$P_OPENAI|$P_GOOGLE|$P_OPENROUTER|$P_GROQ|$P_XAI|$P_HF|$P_PPLX|$P_REPLICATE|$P_AWS|$P_GITHUB|$P_NPM"
+# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])AKIA[0-9A-Z]{16}([^A-Z0-9]|$)|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+PROV_AWK='
+function prov(s) {
+  sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s)
+  if (s ~ /^(sk-ant-)/) return "Anthropic"
+  if (s ~ /^(sk-or-v1-)/) return "OpenRouter"
+  if (s ~ /^(sk-)/) return "OpenAI"
+  if (s ~ /^(AIza|AQ[.])/) return "Google"
+  if (s ~ /^(gsk_)/) return "Groq"
+  if (s ~ /^(xai-)/) return "xAI"
+  if (s ~ /^(hf_)/) return "Hugging Face"
+  if (s ~ /^(pplx-)/) return "Perplexity"
+  if (s ~ /^(r8_)/) return "Replicate"
+  if (s ~ /^(AKIA|bedrock-api-key)/) return "AWS"
+  if (s ~ /^(gh[pousr]_|github_pat_)/) return "GitHub"
+  if (s ~ /^(npm_)/) return "npm"
+  return ""
+}'
+prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
+# <<< keys
+# Agent sessions are JSON, where a key often follows an escape such as \n, so a backslash escape
+# also counts as the boundary in front of a key.
+TR_KEYS=$(printf '%s' "$ALL_KEYS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
 
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{12,}'
@@ -643,21 +664,8 @@ P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:spa
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 
 providers_in() {
-  grep -aoE "$ALL_KEYS" "$1" 2>/dev/null | awk '
-    { s = $0; sub(/^[^A-Za-z]+/, "", s)
-      if (s ~ /^sk-ant-/) p = "Anthropic"
-      else if (s ~ /^sk-or-v1-/) p = "OpenRouter"
-      else if (s ~ /^sk-/) p = "OpenAI"
-      else if (s ~ /^(AIza|AQ[.])/) p = "Google"
-      else if (s ~ /^gsk_/) p = "Groq"
-      else if (s ~ /^xai-/) p = "xAI"
-      else if (s ~ /^hf_/) p = "Hugging Face"
-      else if (s ~ /^pplx-/) p = "Perplexity"
-      else if (s ~ /^r8_/) p = "Replicate"
-      else if (s ~ /^(AKIA|bedrock-api-key)/) p = "AWS"
-      else if (s ~ /^(gh[pousr]_|github_pat_)/) p = "GitHub"
-      else if (s ~ /^npm_/) p = "npm"
-      else next
+  grep -aoE "$ALL_KEYS" "$1" 2>/dev/null | awk "$PROV_AWK"'
+    { p = prov($0); if (p == "") next
       if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
     END { printf "%s", out }'
 }
@@ -679,7 +687,6 @@ command_secret() {
 # so change both together. Agent ids are in the table under "1. Coding agents".
 # ---------------------------------------------------------------------------
 # Key providers, for key_providers and provider_files (names in providers_in).
-PROVIDER_IDS="anthropic openai google openrouter groq xai huggingface perplexity replicate aws github npm"
 
 # MCP clients, for mcp_clients and mcp_token_clients, by the file the servers are in:
 #   claude-code     ~/.claude.json, and .mcp.json in a project folder
@@ -829,7 +836,8 @@ scan_home() {
        -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' \
        -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \
        -o -path '*/.claude/setup.mjs' -o -path '*/.claude/math_init.js' -o -path '*/.vscode/setup.mjs' \
-       -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \) -print \) -o \
+       -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
+       -o -name .aider.chat.history.md \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' -o -path '*/.claude/setup.mjs' \
        -o -path '*/.claude/math_init.js' -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \
@@ -879,6 +887,173 @@ else
 fi
 SCAN_T0=$SECONDS
 
+# --- Keys in agent sessions, checked in the background --------------------------
+# docs/designs/transcripts.md. SESS_TABLE rows are os|kind|agent|path, from data/sessions.tsv.
+# Kept apart from AGENTS, whose ids go into the report.
+# >>> sessions: generated from data/sessions.tsv by tools/gen.sh. Edit that file, then run it.
+SESS_TABLE="all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/projects
+mac|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
+win|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
+all|read|Codex|${CODEX_HOME:-$H/.codex}/sessions
+all|read|Codex|${CODEX_HOME:-$H/.codex}/history.jsonl
+all|read|Gemini CLI|${GEMINI_CLI_HOME:-$H}/.gemini/tmp
+all|read|Qwen Code|${QWEN_HOME:-$H/.qwen}/projects
+all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/opencode.db
+all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/storage
+all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-state
+all|read|Roo Code|$AS/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
+all|read|Roo Code|$AS/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks
+all|read|Cline|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks
+all|read|Cline|$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks
+all|read|Cline|$H/.cline/data/sessions
+all|read|Continue|${CONTINUE_GLOBAL_DIR:-$H/.continue}/sessions
+all|read|Goose|$GOOSE_DATA/sessions
+all|read|Kiro CLI|$H/.kiro/sessions
+mac|read|Kiro CLI|$AS/kiro-cli
+linux|read|Kiro CLI|${XDG_DATA_HOME:-$H/.local/share}/kiro-cli
+win|read|Kiro CLI|$WLAPP/kiro-cli
+mac|read|Amazon Q|$AS/amazon-q
+linux|read|Amazon Q|${XDG_DATA_HOME:-$H/.local/share}/amazon-q
+win|read|Amazon Q|$WLAPP/amazon-q
+all|read|Factory Droid|$H/.factory/sessions
+all|read|Cursor|$AS/Cursor/User/globalStorage/state.vscdb
+all|read|Cursor|$H/.cursor/projects
+all|sealed|Windsurf|$H/.codeium/windsurf/cascade
+all|sealed|Antigravity|$H/.gemini/antigravity/conversations"
+# <<< sessions
+case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
+SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "read" { print $3 "|" $4 }')
+# Agents whose sessions are stored encrypted, named as not checked.
+SESS_SEALED=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "sealed" { print $3 "|" $4 }')
+SESS_ROOTS=$(printf '%s\n' "$SESS_SOURCES" | while IFS='|' read -r _a _p; do [ -e "$_p" ] && printf '%s\n' "$_p"; done)
+# Lines without a key's start are skipped cheaply.
+SESS_PRE=$KEY_STARTS
+# One perl parent lists the files newest first and forks workers, each with its own pipe back to
+# the parent, which is the only writer to its output, so lines never interleave. A worker prints
+# K (a match) and then D (done) for a file, or Z for a compressed one; the parent prints T (the
+# total) first. Files are read 1 MB at a time and cut just after the last character that can't be
+# in a key or start an escape such as \n (a backslash never ends a piece), so a huge database file
+# never loads at once and a piece never ends inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers; a worker exits when its parent or the
+# script that started everything is gone, so a kill -9 of the script stops them at the next piece.
+SESS_PERL='
+use strict; use warnings; use File::Find; use IO::Select;
+my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
+$SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
+my @f;
+find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } },
+  map { -d $_ ? "$_/" : $_ } grep { -e } @ARGV);
+my %m; $m{$_} = (stat $_)[9] || 0 for @f;
+@f = sort { $m{$b} <=> $m{$a} or $a cmp $b } @f;
+$| = 1; print "T\t" . scalar(@f) . "\n";
+my $cut = $ENV{GIRD_CHECK_SESSIONS_STOP_AFTER};
+@f = @f[0 .. $cut - 1] if defined $cut && $cut =~ /^[0-9]+$/ && $cut < @f;
+my $n = $ENV{SESS_WORKERS} || 4; my $sel = IO::Select->new;
+for my $w (0 .. $n - 1) {
+  pipe(my $r, my $wr) or last;
+  my $pid = fork; unless (defined $pid) { close $r; close $wr; last }
+  if ($pid == 0) {
+    $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = "DEFAULT"; close $r; select $wr; $| = 1;
+    if (my $hold = $ENV{GIRD_CHECK_SESSIONS_HOLD}) { my $x; open($x, "<", $hold) and <$x> }  # tests only
+    my $alive = sub { getppid() == $parent && kill(0, $owner) };
+    FILE: for (my $i = $w; $i < @f; $i += $n) {
+      exit 0 unless $alive->();
+      my $file = $f[$i];
+      if ($file =~ /\.zst$/) { print "Z\t$file\n"; next }
+      open(my $h, "<", $file) or next; binmode $h; local $/ = \1048576; my $buf = "";
+      my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { print "K\t$file\t$&\n" } } };
+      while (defined(my $c = <$h>)) {
+        exit 0 unless $alive->();
+        select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
+        $buf .= $c;
+        my $cut = $buf =~ /[^A-Za-z0-9_.\\-][A-Za-z0-9_.\\-]*\z/ ? $-[0] + 1 : -1;
+        next if $cut < 0 && length($buf) < 8388608;
+        $scan->(substr($buf, 0, $cut < 0 ? length($buf) : $cut, ""));
+      }
+      $scan->($buf) if length $buf;
+      close $h; print "D\t$file\n";
+    }
+    exit 0;
+  }
+  close $wr; $sel->add($r); push @kids, $pid;
+}
+my %buf;
+while ($sel->count) {
+  for my $fh ($sel->can_read) {
+    my $got = sysread($fh, my $chunk, 65536);
+    if ($got) { $buf{$fh} .= $chunk; while ($buf{$fh} =~ s/^([^\n]*\n)//) { print $1 } }
+    else { $sel->remove($fh); close $fh }
+  }
+}
+1 while wait() != -1;'
+# Turns matches into "H<tab>file<tab>provider", once per file and provider, and drops keys that
+# look made up. T, D and Z lines pass through. Keys reach it through a pipe and stop here.
+sess_filter() {
+  awk -F '\t' "$PROV_AWK"'
+    function madeup(k,   i, c, run, last, n, seen) {
+      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|abcdef|ABCDEF/) return 1
+      run = 0; last = ""; n = 0
+      for (i = 1; i <= length(k); i++) {
+        c = substr(k, i, 1)
+        if (c == last) { if (++run >= 8) return 1 } else { run = 1; last = c }
+        if (!(c in seen)) { seen[c] = 1; n++ }
+      }
+      return n < (length(k) < 30 ? 8 : 12)
+    }
+    $1 == "T" || $1 == "D" || $1 == "Z" { print; fflush(); next }
+    {
+      if ($1 == "K") { f = $2; k = $3 } else { f = $1; k = $2 }
+      p = prov(k); if (p == "") next
+      sub(/^[^A-Za-z]*\\[ntr"]/, "", k); sub(/^[^A-Za-z]+/, "", k); sub(/[^A-Za-z0-9_.-]+$/, "", k)
+      if (madeup(k) || ((f "|" p) in done)) next
+      done[f "|" p] = 1; print "H\t" f "\t" p; fflush()
+    }'
+}
+SESS_ENGINE=none; SESS_RC=""
+RG_BIN=$(type -P rg 2>/dev/null)
+if [ -n "$GIRD_CHECK_SESSIONS_ENGINE" ]; then SESS_ENGINE=$GIRD_CHECK_SESSIONS_ENGINE
+elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null | sed -n '1s/^ripgrep \([0-9]*\).*/\1/p')" -ge 13 ] 2>/dev/null; then SESS_ENGINE=rg
+elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
+[ "$SESS_ENGINE" = rg ] && [ -z "$RG_BIN" ] && SESS_ENGINE=none
+[ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
+sess_start() {
+  [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" != none ] || return 0
+  SESS_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || return 0
+  SESS_FIFO="$SESS_FILE.fifo"
+  # Keys pass through the fifo: only the owner may open it, whatever the umask (/tmp is shared on Linux).
+  mkfifo -m 600 "$SESS_FIFO" 2>/dev/null || { rm -f "$SESS_FILE"; SESS_FILE=""; SESS_FIFO=""; return 0; }
+  sess_filter < "$SESS_FIFO" > "$SESS_FILE" &
+  SESS_FILTER_PID=$!
+  _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
+$SESS_ROOTS
+EOF
+  if [ "$SESS_ENGINE" = rg ]; then
+    "$RG_BIN" -a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename \
+      --field-match-separator="$(printf '\t')" -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+    SESS_PID=$!
+    [ "$WIN" -eq 1 ] && SESS_WIN=1
+  else
+    _nw=$( (sysctl -n hw.ncpu || nproc || getconf _NPROCESSORS_ONLN) 2>/dev/null | head -n 1)
+    case "$_nw" in ''|*[!0-9]*) _nw=4 ;; esac
+    [ "$_nw" -gt 8 ] && _nw=8; [ "$_nw" -lt 1 ] && _nw=1
+    SESS_KEYS=$TR_KEYS SESS_PRE=$SESS_PRE SESS_WORKERS=$_nw perl -e "$SESS_PERL" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+    SESS_PID=$!
+  fi
+}
+# Stops the check, or waits for it with --all-sessions, and records how ripgrep ended.
+sess_stop() { # [wait]
+  [ -n "$SESS_PID" ] || return 0
+  if [ "${1:-}" = wait ]; then wait "$SESS_PID" 2>/dev/null; SESS_RC=$?
+  elif kill -0 "$SESS_PID" 2>/dev/null; then
+    if [ "$SESS_WIN" -eq 1 ] && [ -r "/proc/$SESS_PID/winpid" ]; then
+      taskkill //F //PID "$(cat "/proc/$SESS_PID/winpid")" >/dev/null 2>&1
+    fi
+    kill -TERM "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null; SESS_RC=stopped
+  else wait "$SESS_PID" 2>/dev/null; SESS_RC=$?; fi
+  SESS_PID=""
+  [ -n "$SESS_FILTER_PID" ] && { wait "$SESS_FILTER_PID" 2>/dev/null; SESS_FILTER_PID=""; }
+}
+sess_start
+
 progress i "Looking through your home folder"
 FOUND=$(scan_home | scan_progress)
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
@@ -886,8 +1061,9 @@ TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
 # Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs, .claude/math_init.js
 # and .vscode/setup.mjs).
 WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js|setup\.mjs)$|/\.claude/math_init\.js$')
+AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
-FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.vscode/tasks\.json|\.(claude|vscode)/(router_runtime|tanstack_runner)\.js|\.claude/math_init\.js|\.(claude|vscode)/setup\.mjs)$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|\.(claude|vscode)/(router_runtime|tanstack_runner)\.js|\.claude/math_init\.js|\.(claude|vscode)/setup\.mjs)$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -1161,7 +1337,7 @@ while IFS= read -r f; do
   old_ifs=$IFS; IFS=','
   for _nm in $_p; do
     _nm=${_nm# }
-    case "$_nm" in "Hugging Face") _id=huggingface ;; *) _id=$(printf '%s' "$_nm" | tr 'A-Z' 'a-z') ;; esac
+    _id=$(prov_id "$_nm")
     case " $PROV_IDS " in *" $_id "*) ;; *) PROV_IDS="${PROV_IDS:+$PROV_IDS }$_id" ;; esac
     PROV_TALLY="$PROV_TALLY$_id
 "
@@ -1638,6 +1814,71 @@ if command -v railway >/dev/null 2>&1 || [ -f "$H/.railway/config.json" ]; then 
 ZB=0
 if command -v zeabur >/dev/null 2>&1 || [ -d "$H/.config/zeabur" ]; then ZB=1; fi
 
+# --- Keys in agent sessions: the results --------------------------------------
+# Stopped here, when the rest of the check is done, unless --all-sessions asked to wait.
+if [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
+SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""
+if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
+  SESS_HITS=$(awk -F '\t' '$1 == "H" { print $2 "\t" $3 }' "$SESS_FILE")
+  if [ "$SESS_ENGINE" = perl ]; then
+    SESS_TOTAL=$(awk -F '\t' '$1 == "T" { print $2; exit }' "$SESS_FILE")
+    SESS_DONE=$(grep -c '^D' "$SESS_FILE")
+    # Stopped while still listing the files: count them here, none were checked.
+    if [ -z "$SESS_TOTAL" ]; then
+      SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find "$_r" -type f 2>/dev/null; done | wc -l | tr -d ' ')
+    fi
+    SESS_ZST=$(grep -c '^Z' "$SESS_FILE")
+  else
+    _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
+$SESS_ROOTS
+EOF
+    _rs=(); for _r in "${_roots[@]}"; do if [ -d "$_r" ]; then _rs+=("$_r/"); else _rs+=("$_r"); fi; done
+    SESS_TOTAL=$(find "${_rs[@]}" -type f 2>/dev/null | wc -l | tr -d ' ')
+    SESS_ZST=$(find "${_rs[@]}" -type f -name '*.zst' 2>/dev/null | wc -l | tr -d ' ')
+    # ripgrep reports no progress per file: it either finished (0 or 1) or did not.
+    case "$SESS_RC" in 0|1) SESS_DONE=$((SESS_TOTAL - SESS_ZST)) ;; *) SESS_DONE=-1 ;; esac
+  fi
+elif [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" = none ]; then
+  SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | tr '\n' '\0' | xargs -0 -I{} find {} -type f 2>/dev/null | wc -l | tr -d ' ')
+fi
+case "$SESS_TOTAL" in ''|*[!0-9]*) SESS_TOTAL=0 ;; esac
+# Aider keeps its history in each project, found by the home scan, and is checked here.
+while IFS= read -r f; do
+  [ -n "$f" ] && [ -r "$f" ] || continue
+  SESS_TOTAL=$((SESS_TOTAL + 1)); [ "$SESS_DONE" -ge 0 ] && SESS_DONE=$((SESS_DONE + 1))
+  _h=$(grep -aoE "$TR_KEYS" "$f" 2>/dev/null | SESS_F=$f awk '{ print "K\t" ENVIRON["SESS_F"] "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
+  [ -n "$_h" ] && SESS_HITS="$SESS_HITS
+$_h"
+done <<EOF
+$AIDER_FILES
+EOF
+# Which agent each file belongs to, then one row per agent: agent|files|providers.
+sess_agent() {
+  case "$1" in */.aider.chat.history.md) printf 'Aider'; return ;; esac
+  while IFS='|' read -r _a _p; do
+    case "$1" in "$_p"|"$_p"/*) printf '%s' "$_a"; return ;; esac
+  done <<EOF
+$SESS_SOURCES
+EOF
+  printf 'Other'
+}
+SESS_ROWS=""; SESS_FILES=""; N_SESS=0
+if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
+  SESS_TAGGED=$(printf '%s\n' "$SESS_HITS" | while IFS="$(printf '\t')" read -r f p; do
+    [ -n "$f" ] && printf '%s\t%s\t%s\n' "$(sess_agent "$f")" "$f" "$p"
+  done)
+  SESS_FILES=$(printf '%s\n' "$SESS_TAGGED" | cut -f2 | sort -u)
+  N_SESS=$(count_lines "$SESS_FILES")
+  SESS_ROWS=$(printf '%s\n' "$SESS_TAGGED" | awk -F '\t' '
+    !(($1 "|" $2) in f) { f[$1 "|" $2] = 1; n[$1]++; if (!($1 in o)) { o[$1] = ++k; name[k] = $1 } }
+    !(($1 "|" $3) in pv) { pv[$1 "|" $3] = 1; ps[$1] = ps[$1] (ps[$1] == "" ? "" : ", ") $3 }
+    END { for (i = 1; i <= k; i++) print name[i] "|" n[name[i]] "|" ps[name[i]] }' | sort -t '|' -k2,2nr -k1,1)
+fi
+SESS_PARTIAL=0
+if [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_ENGINE" = none ] || [ "$SESS_DONE" -lt 0 ] || [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; }; then SESS_PARTIAL=1; fi
+SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done)
+if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent session file" "agent session files")"; fi
+
 # --- What to do, and the score -----------------------------------------------
 # Each fix also belongs to a section, so that section's details can end with it.
 TODO=""; ISSUES=0; FIX1=""; FIX2=""; FIX3=""; FIX4=""; FIX5=""
@@ -1673,6 +1914,7 @@ case "$OS" in
 esac
 [ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
 [ "$HIST_KEYS" -gt 0 ] && todo 3 "Keys in shell history were typed into a command. Treat them as exposed and rotate them."
+[ "$N_SESS" -gt 0 ] && todo 3 "Keys turned up in $(plural "$N_SESS" "agent session file" "agent session files"). An agent read or was given them: treat them as exposed and rotate them."
 [ "$N_MCP_TOKEN" -gt 0 ] && todo 2 "Replace tokens written into MCP configs with environment variable references, then rotate them."
 [ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
@@ -1790,7 +2032,6 @@ case "${SHELL##*/}" in zsh|bash|fish|sh|dash|ksh|tcsh|nu|elvish|xonsh) SHELLNAME
 LANGCODE=${ORIG_LANG%%.*}
 case "$LANGCODE" in [a-z][a-z]|[a-z][a-z]_[A-Z][A-Z]) ;; *) LANGCODE=other ;; esac
 VIA=none; [ -n "${CLAUDECODE:-}" ] && VIA=claude-code
-count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf 0; fi; }
 N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s' "$MCP_ROWS" | grep -c '|0$')
 BASHV=${BASH_VERSINFO[0]:-0}
 # For case studies: ids from the fixed lists near the top, and counts. Labels go
@@ -1916,6 +2157,39 @@ if [ -n "$LOGINS" ]; then
   blank
   emit "     ${B}Login files any agent you run can read${RST}"
   wrap "$LOGINS" 8 "        " "        "
+fi
+if [ "$SESS_TOTAL" -gt 0 ] || [ -n "$SESS_SEALED_FOUND" ]; then
+  blank
+  emit "     ${B}Keys in agent sessions${RST}"
+  while IFS='|' read -r a n pv; do
+    [ -n "$a" ] || continue
+    pair "${RED}✗${RST}" "$a" 20 "$(plural "$n" file files): $pv"
+  done <<EOF
+$SESS_ROWS
+EOF
+  if [ "$N_SESS" -gt 0 ]; then
+    _shown=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      _shown=$((_shown + 1)); [ "$_shown" -le 20 ] && emit "        ${DIM}$(short "$f")${RST}"
+    done <<EOF
+$SESS_FILES
+EOF
+    [ "$N_SESS" -gt 20 ] && emit "        ${DIM}and $((N_SESS - 20)) more${RST}"
+    wrap "Treat these keys as exposed and rotate them." 8 "        " "        "
+  fi
+  _all="Install ripgrep, or add --all-sessions, to check all of them."
+  if [ "$SESS_TOTAL" -gt 0 ] && [ "$SESS_ENGINE" = none ]; then
+    wrap "$(plural "$SESS_TOTAL" "agent session file was" "agent session files were") not checked: this needs perl or ripgrep." 8 "     ${YEL}!${RST}  " "        "
+  elif [ "$SESS_DONE" -lt 0 ]; then
+    wrap "Agent sessions were partly checked. Add --all-sessions to check all of them." 8 "     ${YEL}!${RST}  " "        "
+  elif [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; then
+    wrap "Checked the newest $(commas "$SESS_DONE") of $(commas "$SESS_TOTAL") agent session files. $_all" 8 "     ${YEL}!${RST}  " "        "
+  elif [ "$N_SESS" -eq 0 ] && [ "$SESS_TOTAL" -gt 0 ]; then
+    emit "     ${GRN}✓${RST}  No keys in $(plural "$(commas "$SESS_TOTAL")" "agent session file" "agent session files")."
+  fi
+  [ "$SESS_ZST" -gt 0 ] && wrap "$(plural "$SESS_ZST" "compressed session file was" "compressed session files were") not checked." 8 "        " "        " "$DIM"
+  [ -n "$SESS_SEALED_FOUND" ] && wrap "$(printf '%s' "$SESS_SEALED_FOUND" | tr '\n' ',' | sed -e 's/,$//' -e 's/,/ and /g') sessions are stored encrypted, so they were not checked." 8 "        " "        " "$DIM"
 fi
 
 SEC3=$CAP; CAP=""
@@ -2101,6 +2375,8 @@ elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in t
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST%%|*}") (${KEY_FIRST#*|})"
 elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST%%|*}") holds ${KEY_FIRST#*|} keys"
+elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session" "agent sessions"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
+elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agent sessions partly checked"
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
 else G3="${GRN}✓${RST}"; D3="no AI or cloud keys in plain text"; fi
 if [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"

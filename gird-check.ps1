@@ -10,13 +10,15 @@ It never uses admin rights, starts an agent, an MCP server or Python, or prints 
 key. It reads files and prints paths and counts. It asks gird.ai for public totals
 when it starts. When it finishes it shares counts and a hashed device ID, never
 paths or keys, and gets back how you compare. -Offline stops all of that.
-Key formats come from Argus. gird-check.sh is the source of truth for every check.
+Key types and session locations come from data/keys.tsv and data/sessions.tsv; gird-check.sh is
+the source of truth for every other check.
 
   powershell -ExecutionPolicy Bypass -File gird-check.ps1            a short summary
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Full      every detail
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -All       also scans Desktop, Documents and Downloads
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Offline   shares nothing (DO_NOT_TRACK=1 works too)
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Save      saves the full report as a text file
+  powershell -ExecutionPolicy Bypass -File gird-check.ps1 -AllSessions  waits until every agent session is checked
   -NoColor (or NO_COLOR=1)                                            plain text, no colors
 
 Runs on Windows PowerShell 5.1 and PowerShell 7. This file is plain ASCII on purpose:
@@ -24,15 +26,15 @@ Windows PowerShell 5.1 reads a script without a byte order mark as the ANSI code
 so every non-ASCII character below is built from its code point.
 #>
 param(
-  [switch]$All, [switch]$Full, [switch]$Offline, [switch]$Save, [switch]$NoColor, [switch]$Help,
+  [switch]$All, [switch]$Full, [switch]$Offline, [switch]$Save, [switch]$NoColor, [switch]$Help, [switch]$AllSessions,
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
 
-$OptAll = [bool]$All; $OptFull = [bool]$Full; $OptOffline = [bool]$Offline; $OptSave = [bool]$Save; $OptNoColor = [bool]$NoColor
+$OptAllSess = [bool]$AllSessions; $OptAll = [bool]$All; $OptFull = [bool]$Full; $OptOffline = [bool]$Offline; $OptSave = [bool]$Save; $OptNoColor = [bool]$NoColor
 foreach ($arg in $Rest) {
   switch ($arg) {
     '--all' { $OptAll = $true } '--full' { $OptFull = $true } '--save' { $OptSave = $true }
-    '--offline' { $OptOffline = $true } '--no-color' { $OptNoColor = $true } '--no-game' { }
+    '--offline' { $OptOffline = $true } '--no-color' { $OptNoColor = $true } '--no-game' { } '--all-sessions' { $OptAllSess = $true }
     { $_ -eq '--help' -or $_ -eq '-h' } { $Help = $true }
     default { [Console]::Out.WriteLine("Unknown option: $arg (try -Help)"); exit 2 }
   }
@@ -223,19 +225,33 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # Key formats, the same as gird-check.sh. A key is matched and then thrown away:
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
-$P_ANTHROPIC = 'sk-ant-[A-Za-z0-9_-]{90,}'
-$P_OPENAI = 'sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)'
-$P_GOOGLE = 'AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}'
-$P_OPENROUTER = 'sk-or-v1-[a-f0-9]{64}'
-$P_GROQ = 'gsk_[A-Za-z0-9]{52}'
-$P_XAI = 'xai-[A-Za-z0-9]{64,}'
-$P_HF = '(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)'
-$P_PPLX = 'pplx-[A-Za-z0-9]{40,52}'
-$P_REPLICATE = 'r8_[A-Za-z0-9]{37}'
-$P_AWS = '(^|[^A-Z0-9])AKIA[0-9A-Z]{16}([^A-Z0-9]|$)|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t'
-$P_GITHUB = 'gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}'
-$P_NPM = 'npm_[A-Za-z0-9]{36}'
-$ALL_KEYS = "$P_ANTHROPIC|$P_OPENAI|$P_GOOGLE|$P_OPENROUTER|$P_GROQ|$P_XAI|$P_HF|$P_PPLX|$P_REPLICATE|$P_AWS|$P_GITHUB|$P_NPM"
+# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])AKIA[0-9A-Z]{16}([^A-Z0-9]|$)|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
+$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+$KeyProviderFn = @'
+function Key-Provider([string]$s) {
+  $s = $s -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', ''
+  if ($s -cmatch '^(sk-ant-)') { return 'Anthropic' }
+  if ($s -cmatch '^(sk-or-v1-)') { return 'OpenRouter' }
+  if ($s -cmatch '^(sk-)') { return 'OpenAI' }
+  if ($s -cmatch '^(AIza|AQ[.])') { return 'Google' }
+  if ($s -cmatch '^(gsk_)') { return 'Groq' }
+  if ($s -cmatch '^(xai-)') { return 'xAI' }
+  if ($s -cmatch '^(hf_)') { return 'Hugging Face' }
+  if ($s -cmatch '^(pplx-)') { return 'Perplexity' }
+  if ($s -cmatch '^(r8_)') { return 'Replicate' }
+  if ($s -cmatch '^(AKIA|bedrock-api-key)') { return 'AWS' }
+  if ($s -cmatch '^(gh[pousr]_|github_pat_)') { return 'GitHub' }
+  if ($s -cmatch '^(npm_)') { return 'npm' }
+  $null
+}
+function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } default { $null } } }
+'@
+# <<< keys
+# Agent sessions are JSON, where a key often follows an escape such as \n, so a backslash escape
+# also counts as the boundary in front of a key.
+$TR_KEYS = $ALL_KEYS -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])'
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 # These match what gird-check.sh's patterns match, rewritten so .NET's backtracking
 # stays linear: a name is tried once from its first character, (?>...) never gives
@@ -282,26 +298,26 @@ function Has-RealMatch([string]$f, [regex]$rx) {
   try { foreach ($m in $rx.Matches($t)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { return $true } } } catch { Mark-Slow $f }
   $false
 }
+# The provider of a matched key (generated above) and whether a key looks made up. Text, so the
+# background session check can load the same functions.
+$KeyFns = $KeyProviderFn + @'
+function Made-Up([string]$k) {
+  $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' -replace '[^A-Za-z0-9_.-]+$', ''
+  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
+  $set = New-Object 'System.Collections.Generic.HashSet[char]'
+  foreach ($c in $k.ToCharArray()) { [void]$set.Add($c) }
+  $min = 12; if ($k.Length -lt 30) { $min = 8 }
+  $set.Count -lt $min
+}
+'@
+. ([scriptblock]::Create($KeyFns))
 function Providers-In([string]$f) {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
   $seen = New-Object System.Collections.Generic.List[string]
   try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
   foreach ($m in $all) {
-    $s = $m.Value -replace '^[^A-Za-z]+', ''
-    $p = $null
-    if ($s -cmatch '^sk-ant-') { $p = 'Anthropic' }
-    elseif ($s -cmatch '^sk-or-v1-') { $p = 'OpenRouter' }
-    elseif ($s -cmatch '^sk-') { $p = 'OpenAI' }
-    elseif ($s -cmatch '^(AIza|AQ[.])') { $p = 'Google' }
-    elseif ($s -cmatch '^gsk_') { $p = 'Groq' }
-    elseif ($s -cmatch '^xai-') { $p = 'xAI' }
-    elseif ($s -cmatch '^hf_') { $p = 'Hugging Face' }
-    elseif ($s -cmatch '^pplx-') { $p = 'Perplexity' }
-    elseif ($s -cmatch '^r8_') { $p = 'Replicate' }
-    elseif ($s -cmatch '^(AKIA|bedrock-api-key)') { $p = 'AWS' }
-    elseif ($s -cmatch '^(gh[pousr]_|github_pat_)') { $p = 'GitHub' }
-    elseif ($s -cmatch '^npm_') { $p = 'npm' }
+    $p = Key-Provider $m.Value
     if ($p -and -not $seen.Contains($p)) { $seen.Add($p) }
   }
   $seen.ToArray()
@@ -313,7 +329,6 @@ function Providers-In([string]$f) {
 # file name or a name you gave an MCP server. gird.ai keeps the same lists and
 # drops anything else, so change all three together.
 # ---------------------------------------------------------------------------
-$PROVIDER_IDS = 'anthropic openai google openrouter groq xai huggingface perplexity replicate aws github npm'
 $MCP_CLIENT_IDS = 'claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other'
 $MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
   playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
@@ -428,6 +443,7 @@ function Npm-WouldShip([string]$dir) {
 function Is-File([string]$p) { try { [IO.File]::Exists($p) } catch { $false } }
 function Is-Dir([string]$p) { try { [IO.Directory]::Exists($p) } catch { $false } }
 function Exists([string]$p) { (Is-File $p) -or (Is-Dir $p) }
+function Env-Or([string]$name, [string]$fallback) { $v = [Environment]::GetEnvironmentVariable($name); if ($v) { $v } else { $fallback } }
 function Has-Command([string]$name) { $null -ne (Get-Command -Name $name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1) }
 function Entries([string]$dir) {
   try { $e = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { return @() }
@@ -458,6 +474,7 @@ $Found = New-Object System.Collections.Generic.List[string]
 $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
+$AiderFiles = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
@@ -495,6 +512,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       $script:ScanN++
       if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
     } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { $LockFiles.Add($path) }
+    elseif ($name -ceq '.aider.chat.history.md') { $AiderFiles.Add($path) }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
     elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
   }
@@ -573,6 +591,130 @@ if (-not $OptOffline) {
 Blank
 
 Progress 'Looking through your home folder'
+# --- Keys in agent sessions, checked in the background --------------------------
+# docs/designs/transcripts.md, and the same list as gird-check.sh's SESS_SOURCES.
+# >>> sessions: generated from data/sessions.tsv by tools/gen.sh. Edit that file, then run it.
+$SessTable = @(
+  @('read', 'Claude Code', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'projects')),
+  @('read', 'Claude Desktop', (J $AppData 'Claude/local-agent-mode-sessions')),
+  @('read', 'Codex', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'sessions')),
+  @('read', 'Codex', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'history.jsonl')),
+  @('read', 'Gemini CLI', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/tmp')),
+  @('read', 'Qwen Code', (J (Env-Or 'QWEN_HOME' (J $HomeDir '.qwen')) 'projects')),
+  @('read', 'OpenCode', (J (Env-Or 'XDG_DATA_HOME' (J $HomeDir '.local/share')) 'opencode/opencode.db')),
+  @('read', 'OpenCode', (J (Env-Or 'XDG_DATA_HOME' (J $HomeDir '.local/share')) 'opencode/storage')),
+  @('read', 'GitHub Copilot CLI', (J (Env-Or 'COPILOT_HOME' (J $HomeDir '.copilot')) 'session-state')),
+  @('read', 'Roo Code', (J $AppData 'Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks')),
+  @('read', 'Roo Code', (J $AppData 'Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks')),
+  @('read', 'Cline', (J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks')),
+  @('read', 'Cline', (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')),
+  @('read', 'Cline', (J $HomeDir '.cline/data/sessions')),
+  @('read', 'Continue', (J (Env-Or 'CONTINUE_GLOBAL_DIR' (J $HomeDir '.continue')) 'sessions')),
+  @('read', 'Goose', (J (J $AppData 'Block/goose/data') 'sessions')),
+  @('read', 'Kiro CLI', (J $HomeDir '.kiro/sessions')),
+  @('read', 'Kiro CLI', (J $LocalAppData 'kiro-cli')),
+  @('read', 'Amazon Q', (J $LocalAppData 'amazon-q')),
+  @('read', 'Factory Droid', (J $HomeDir '.factory/sessions')),
+  @('read', 'Cursor', (J $AppData 'Cursor/User/globalStorage/state.vscdb')),
+  @('read', 'Cursor', (J $HomeDir '.cursor/projects')),
+  @('sealed', 'Windsurf', (J $HomeDir '.codeium/windsurf/cascade')),
+  @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity/conversations')))
+# <<< sessions
+$SessSources = @($SessTable | Where-Object { $_[0] -eq 'read' } | ForEach-Object { , @($_[1], $_[2]) })
+$SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Object { , @($_[1], $_[2]) })
+$SessRoots = @($SessSources | ForEach-Object { $_[1] } | Where-Object { Exists $_ } | Select-Object -Unique)
+# Runs in its own runspace: lists the files newest first and checks them until told to stop, or
+# lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
+$SessWorker = {
+  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold)
+  . ([scriptblock]::Create($fns))
+  $to = [TimeSpan]::FromMilliseconds($timeoutMs)
+  $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
+  $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
+  $rxSep = New-Object regex('[^A-Za-z0-9_.\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
+  $hit = { param($f, $k)
+    $p = Key-Provider $k
+    if ($p -and -not (Made-Up $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
+  if ($hold) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }  # tests only
+  if ($rg) {
+    $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
+    $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
+    try {
+      $psi = New-Object Diagnostics.ProcessStartInfo $rg
+      $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($roots | ForEach-Object { & $q $_ }) -join ' ')
+      $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
+      $st.Proc = [Diagnostics.Process]::Start($psi)
+      while ($null -ne ($l = $st.Proc.StandardOutput.ReadLine())) { $i = $l.IndexOf([char]0); if ($i -gt 0) { & $hit $l.Substring(0, $i) $l.Substring($i + 1) } }
+      $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
+    } catch { } finally { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+    return
+  }
+  # Stopped while still listing: Listed stays false and the report says the sessions were not all checked.
+  $files = New-Object System.Collections.Generic.List[object]
+  foreach ($r in $roots) {
+    try {
+      if ([IO.File]::Exists($r)) { $files.Add((New-Object IO.FileInfo $r)) }
+      else { foreach ($f in (New-Object IO.DirectoryInfo $r).EnumerateFiles('*', [IO.SearchOption]::AllDirectories)) { if ($st.Stop) { return }; $files.Add($f) } }
+    } catch { }
+  }
+  $sorted = @($files | Sort-Object -Property @{ Expression = 'LastWriteTimeUtc'; Descending = $true }, FullName)
+  $st.Total = $sorted.Count; $st.Listed = $true
+  $n = 0; $latin = [Text.Encoding]::GetEncoding(28591); $buf = New-Object char[] 1048576
+  foreach ($f in $sorted) {
+    if ($st.Stop) { break }
+    if ($null -ne $cut -and $n -ge $cut) { break }
+    $n++
+    if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
+    # Read 1 MB at a time and cut just after the last character that can't be in a key or start an
+    # escape such as \n (a backslash never ends a piece), so a huge database file never loads at
+    # once, a piece never ends inside a token unless one runs past 8 MB, and a stop is seen within
+    # one piece.
+    $sr = $null; $whole = $true
+    try {
+      $sr = New-Object IO.StreamReader((New-Object IO.FileStream($f.FullName, 'Open', 'Read', 'ReadWrite')), $latin)
+      $carry = ''
+      while (($got = $sr.Read($buf, 0, $buf.Length)) -gt 0) {
+        if ($st.Stop) { $whole = $false; break }
+        $t = $carry + (New-Object string($buf, 0, $got))
+        $sep = $rxSep.Match($t)
+        if (-not $sep.Success -and $t.Length -lt 8388608) { $carry = $t; continue }
+        if ($sep.Success) {
+          $at = $sep.Index + 1
+          $carry = $t.Substring($at); $t = $t.Substring(0, $at)
+        } else { $carry = '' }
+        if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
+      }
+      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
+      if ($whole) { $st.Done++ }
+    } catch { } finally { if ($sr) { $sr.Dispose() } }
+  }
+}
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
+$SessEngine = 'none'
+$rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
+if ($SessEngine -eq 'perl') { $SessEngine = 'net' }
+if ($SessEngine -eq 'rg' -and -not $rgCmd) { $SessEngine = 'none' }
+$SessPs = $null; $SessHandle = $null
+if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
+  $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
+  $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
+  $SessPs = [powershell]::Create()
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  $SessHandle = $SessPs.BeginInvoke()
+}
+# Stops the check, or waits for it with -AllSessions.
+function Sess-Stop([bool]$wait) {
+  if ($null -eq $script:SessPs) { return }
+  if (-not $wait) {
+    $SessSt.Stop = $true
+    if (-not $script:SessHandle.IsCompleted) { $SessSt.Stopped = $true; if ($SessSt.Proc) { try { $SessSt.Proc.Kill() } catch { } } }
+  }
+  [void]$script:SessHandle.AsyncWaitHandle.WaitOne()
+  try { $script:SessPs.EndInvoke($script:SessHandle) | Out-Null } catch { }
+  $script:SessPs.Dispose(); $script:SessPs = $null
+}
+
 Scan-Home $HomeDir 0
 $EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
 $AllowFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
@@ -803,7 +945,7 @@ foreach ($f in $Candidates) {
   $kp = Key-Place $f; $KeyPlaces.Add($kp)
   if ($kp -eq 'shell_history') { $HIST_KEYS++ }
   foreach ($nm in $p) {
-    if ($nm -eq 'Hugging Face') { $id = 'huggingface' } else { $id = $nm.ToLowerInvariant() }
+    $id = Provider-Id $nm
     if (-not $ProvIds.Contains($id)) { $ProvIds.Add($id) }
     $ProvTally.Add($id)
   }
@@ -1270,6 +1412,48 @@ $OC = 0; if ((Has-Command 'opencode') -or (Is-Dir (J $HomeDir '.config/opencode'
 $RW = 0; if ((Has-Command 'railway') -or (Is-File (J $HomeDir '.railway/config.json'))) { $RW = 1 }
 $ZB = 0; if ((Has-Command 'zeabur') -or (Is-Dir (J $HomeDir '.config/zeabur'))) { $ZB = 1 }
 
+# --- Keys in agent sessions: the results --------------------------------------
+# Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
+Sess-Stop $OptAllSess
+$SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst
+if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
+  $sessAll = New-Object System.Collections.Generic.List[string]
+  foreach ($r in $SessRoots) {
+    try { if ([IO.File]::Exists($r)) { $sessAll.Add($r) } else { foreach ($f in [IO.Directory]::EnumerateFiles($r, '*', [IO.SearchOption]::AllDirectories)) { $sessAll.Add($f) } } } catch { }
+  }
+  $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.EndsWith('.zst') }).Count
+  # rg.exe reports no progress per file: it either finished (0 or 1) or did not.
+  if ($SessEngine -eq 'rg' -and -not $SessSt.Stopped -and ($SessSt.RgExit -eq 0 -or $SessSt.RgExit -eq 1)) { $SESS_DONE = $SESS_TOTAL - $SESS_ZST } elseif ($SessEngine -eq 'rg') { $SESS_DONE = -1 } else { $SESS_DONE = 0 }
+  if ($SessEngine -eq 'net' -and -not $SessSt.Listed) { $SESS_DONE = 0 }
+}
+$sessHits = New-Object System.Collections.Generic.List[string]
+foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
+# Aider keeps its history in each project, found by the home scan, and is checked here.
+$rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
+foreach ($f in $AiderFiles) {
+  $t = Read-Text $f; if ($null -eq $t) { continue }
+  $SESS_TOTAL++; if ($SESS_DONE -ge 0) { $SESS_DONE++ }
+  $seenA = @{}
+  try { foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } } } catch { Mark-Slow $f }
+}
+function Sess-Agent([string]$f) {
+  if ($f.EndsWith('.aider.chat.history.md')) { return 'Aider' }
+  foreach ($src in $SessSources) { if ($f.Equals($src[1], $PathCmp) -or $f.StartsWith($src[1] + [IO.Path]::DirectorySeparatorChar, $PathCmp) -or $f.StartsWith($src[1] + '/', $PathCmp)) { return $src[0] } }
+  'Other'
+}
+$SessFiles = New-Object System.Collections.Generic.List[string]; $sessAg = [ordered]@{}
+foreach ($h in $sessHits) {
+  $f, $p = $h -split "`t", 2; $a = Sess-Agent $f
+  if (-not $SessFiles.Contains($f)) { $SessFiles.Add($f); if (-not $sessAg.Contains($a)) { $sessAg[$a] = @{ N = 0; P = (New-Object System.Collections.Generic.List[string]) } }; $sessAg[$a].N++ }
+  if (-not $sessAg[$a].P.Contains($p)) { $sessAg[$a].P.Add($p) }
+}
+$SessFiles.Sort([StringComparer]::Ordinal)
+$N_SESS = $SessFiles.Count
+$SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
+$SESS_PARTIAL = $SESS_TOTAL -gt 0 -and ($SessEngine -eq 'none' -or $SESS_DONE -lt 0 -or $SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST))
+$SessSealedFound = @($SessSealed | Where-Object { Is-Dir $_[1] } | ForEach-Object { $_[0] })
+if ($N_SESS -gt 0) { Progress "Keys in $(Plural $N_SESS 'agent session file' 'agent session files')" }
+
 # --- What to do, and the score -----------------------------------------------
 # Each fix also belongs to a section, so that section's details can end with it.
 $Todo = New-Object System.Collections.Generic.List[string]
@@ -1287,6 +1471,7 @@ if ($LITELLM_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Don''t 
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
 if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
+if ($N_SESS -gt 0) { Add-Todo 3 "Keys turned up in $(Plural $N_SESS 'agent session file' 'agent session files'). An agent read or was given them: treat them as exposed and rotate them." }
 if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs with environment variable references, then rotate them.' }
 if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys.' }
 if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
@@ -1480,6 +1665,23 @@ if ($LoginsText) {
   Emit "     ${cBold}Login files any agent you run can read$cRst"
   Wrap $LoginsText 8 '        ' '        '
 }
+if ($SESS_TOTAL -gt 0 -or $SessSealedFound.Count -gt 0) {
+  Blank
+  Emit "     ${cBold}Keys in agent sessions$cRst"
+  foreach ($r in $SessRows) { Pair "$cRed$gX$cRst" $r[0] 20 "$(Plural $r[1] 'file' 'files'): $($r[2])" }
+  if ($N_SESS -gt 0) {
+    foreach ($f in ($SessFiles | Select-Object -First 20)) { Emit "        $cDim$(Short $f)$cRst" }
+    if ($N_SESS -gt 20) { Emit "        ${cDim}and $($N_SESS - 20) more$cRst" }
+    Wrap 'Treat these keys as exposed and rotate them.' 8 '        ' '        '
+  }
+  $allTxt = 'Install ripgrep, or add -AllSessions, to check all of them.'
+  if ($SESS_TOTAL -gt 0 -and $SessEngine -eq 'none') { Wrap "$(Plural $SESS_TOTAL 'agent session file was' 'agent session files were') not checked." 8 "     $cYel!$cRst  " '        ' }
+  elseif ($SESS_DONE -lt 0) { Wrap 'Agent sessions were partly checked. Add -AllSessions to check all of them.' 8 "     $cYel!$cRst  " '        ' }
+  elseif ($SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
+  elseif ($N_SESS -eq 0 -and $SESS_TOTAL -gt 0) { Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_TOTAL) 'agent session file' 'agent session files')." }
+  if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 '        ' '        ' $cDim }
+  if ($SessSealedFound.Count -gt 0) { Wrap "$($SessSealedFound -join ' and ') sessions are stored encrypted, so they were not checked." 8 '        ' '        ' $cDim }
+}
 $Sec3 = Take-Cap
 Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
 if ($N_ALLOW -eq 0) { Emit "     $cGrn$gOk$cRst  No saved commands with keys." }
@@ -1583,6 +1785,8 @@ elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no token
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
 elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) holds $($KeyFirst[1]) keys" }
+elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session' 'agent sessions'): $($SessRows[0][0])" }
+elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessions partly checked' }
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
 else { $G3 = "$cGrn$gOk$cRst"; $D3 = 'no AI or cloud keys in plain text' }
 if ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
@@ -1706,6 +1910,7 @@ if (-not $OptOffline -and $MenuShown) {
 }
 Out-Text "`n"
 } finally {
+  Sess-Stop $false
   if ($null -ne $OldOutEnc) { try { [Console]::OutputEncoding = $OldOutEnc } catch { } }
 }
 exit 0

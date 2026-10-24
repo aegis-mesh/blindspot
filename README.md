@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot run in a terminal: better than 72% of 846 AI builders who ran it, AI builder #142, one of the first 1,000, one line per check, and the prompt to get your AI Exposure Check" width="760"></a>
+  <a href="docs/report-full.png"><img src="docs/report.png" alt="A Blindspot run in a terminal: one of the first 1,000 AI builders, better than 72% of 846 who ran it, 9 things to fix, one line per check, and the prompt to get your AI Exposure Check" width="760"></a>
 </p>
 
 # Blindspot
@@ -9,7 +9,7 @@
 [![release](https://img.shields.io/github/v/release/aegis-mesh/blindspot?color=0D9488&label=release)](https://github.com/aegis-mesh/blindspot/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-0D9488)](LICENSE)
 
-Coding agents run with your access: your shell, your repos and the keys in your home folder. In October 2026, OpenCode, Railway, Zeabur and LiteLLM all leaked developer keys. Blindspot shows where your AI keys sit in plain text, which coding agents could read them, and whether that week's leaks touched you. It never prints a key.
+Coding agents run with your access: your shell, your repos and the keys in your home folder. What they read lands in their session history, and with a hosted model it goes to the AI service too. Blindspot shows where your AI keys sit in plain text, which keys your agents have already seen, which coding agents could read them, and whether this year's npm worms and key leaks touched you. It never prints a key.
 
 ## Run it
 
@@ -33,13 +33,14 @@ Please don't pipe it straight into a shell. Reading it first is the point.
 | `--offline` | Shares nothing. `DO_NOT_TRACK=1` does the same. |
 | `--save` | Saves the full report as a text file without asking. |
 | `--no-game` | Skips the game while it scans. |
+| `--all-sessions` | Waits until every agent session is checked. |
 | `NO_COLOR=1` | Plain text, no colors. |
 
 ## What it checks
 
 1. **Coding agents.** Every agent installed, such as Claude Code, Codex, Cursor, Gemini CLI and OpenCode, and whether you used it in the last 30 days. An agent you never open can still be driven by a poisoned package. That is how the Nx attack stole keys from developer laptops.
 2. **MCP servers.** The servers each agent is set up to start, and any token written straight into a config file. Configs inside plugin folders and caches, such as Codex's `.tmp/plugins`, are shown as a separate count. It also flags project settings that act as soon as an agent or editor opens the folder: Claude Code hooks, MCP servers turned on without asking, API traffic sent to another server, and VS Code or Cursor tasks that run on opening. A cloned repo brings these with it.
-3. **Keys in plain text.** AI and cloud keys in shell profiles, shell history, agent configs and `.env` files, grouped by provider and file. It also lists login files any agent can read, such as AWS credentials and SSH keys without a passphrase.
+3. **Keys in plain text.** AI and cloud keys in shell profiles, shell history, agent configs and `.env` files, grouped by provider and file. Keys in your coding agents' session transcripts too (Claude Code, Codex, Gemini CLI, Cursor, Aider and others), which an agent read or was given. With [ripgrep](https://github.com/BurntSushi/ripgrep) installed it checks every session in a few seconds; without it, it checks the newest sessions while the rest of the scan runs and says how many, and `--all-sessions` waits for all of them. It also lists login files any agent can read, such as AWS credentials and SSH keys without a passphrase.
 4. **Keys saved in Claude Code allow lists.** Click "always allow" on a command that has a key in it, and Claude Code saves the whole command in the project's settings file. Blindspot flags each one, and whether an npm publish from that folder would ship it.
 5. **Recent key leaks.** Files left by the LiteLLM 1.107.0 malware in every Python environment it finds, and the bad package in your uv cache. The npm package versions GitHub's advisory database lists as malware from the 2026 worms (SANDWORM_MODE, Axios, Bitwarden CLI, TanStack, Mistral AI, OpenSearch, Mastra, keyv and others), in your lockfiles (npm, yarn, pnpm and bun's text lockfile), global installs, npx and npm's download cache, and the files those worms leave behind. The list is not every package the worms reached. If it finds `gh-token-monitor`, it says to stop it before revoking any GitHub token, because it runs a destructive command when the stolen token stops working. And what to rotate if you use OpenCode Console, Railway or Zeabur.
 
@@ -49,8 +50,8 @@ At the end you get a short summary: how you compare with the other AI builders w
 
 - Print a key. It names the provider, never the value.
 - Use sudo or ask for your password.
-- Start an agent, an MCP server or Python.
-- Leave a file behind, unless you ask it to save the report. It keeps two small temp files while it runs, for the progress line and the public totals, and deletes them when it exits.
+- Start an agent, an MCP server or Python. To read agent sessions it runs ripgrep if you have it, otherwise perl, and stops them when it finishes.
+- Leave a file behind, unless you ask it to save the report. While it runs it keeps three small temp files, for the progress line, the public totals, and which session files had keys from which provider (never a key), and deletes them when it exits.
 - Send a path, a key, a username, a hostname or your raw hardware ID.
 
 ## What it shares

@@ -1,0 +1,39 @@
+# Where AI coding agents keep their session transcripts. One line each, tab separated.
+# After editing, run: bash tools/gen.sh
+#   os      all, mac, linux or win (win is Git Bash and gird-check.ps1)
+#   kind    read, or sealed for sessions stored encrypted (named as not checked)
+#   path    a file or a folder. ~ is the home folder, {AS} the app data folder (Application Support
+#           on a Mac, ~/.config on Linux, %APPDATA% on Windows), {LOCALAPPDATA}, {XDG_DATA}
+#           (XDG_DATA_HOME or ~/.local/share), {GOOSE_DATA}, and {ENV:NAME:fallback} an
+#           environment variable with a fallback
+#   source  how the location was established: measured, source code, docs or third party
+# os	kind	agent	path	source
+all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/projects	measured
+mac	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	measured
+win	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	unverified
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/sessions	measured
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/history.jsonl	measured
+all	read	Gemini CLI	{ENV:GEMINI_CLI_HOME:~}/.gemini/tmp	source code
+all	read	Qwen Code	{ENV:QWEN_HOME:~/.qwen}/projects	source code
+all	read	OpenCode	{XDG_DATA}/opencode/opencode.db	source code
+all	read	OpenCode	{XDG_DATA}/opencode/storage	source code
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-state	docs
+all	read	Roo Code	{AS}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
+all	read	Roo Code	{AS}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
+all	read	Cline	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks	unverified
+all	read	Cline	{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	unverified
+all	read	Cline	~/.cline/data/sessions	docs
+all	read	Continue	{ENV:CONTINUE_GLOBAL_DIR:~/.continue}/sessions	source code
+all	read	Goose	{GOOSE_DATA}/sessions	source code
+all	read	Kiro CLI	~/.kiro/sessions	docs
+mac	read	Kiro CLI	{AS}/kiro-cli	docs
+linux	read	Kiro CLI	{XDG_DATA}/kiro-cli	docs
+win	read	Kiro CLI	{LOCALAPPDATA}/kiro-cli	docs
+mac	read	Amazon Q	{AS}/amazon-q	source code
+linux	read	Amazon Q	{XDG_DATA}/amazon-q	source code
+win	read	Amazon Q	{LOCALAPPDATA}/amazon-q	source code
+all	read	Factory Droid	~/.factory/sessions	third party
+all	read	Cursor	{AS}/Cursor/User/globalStorage/state.vscdb	third party
+all	read	Cursor	~/.cursor/projects	third party
+all	sealed	Windsurf	~/.codeium/windsurf/cascade	third party
+all	sealed	Antigravity	~/.gemini/antigravity/conversations	third party
