@@ -1501,12 +1501,7 @@ if [ -n "$LITE_BAD" ] || [ -n "$MARKS" ] || [ "$LOADER" -eq 1 ]; then LITELLM_HI
 if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Signs of the LiteLLM malware found"
 elif [ -n "$LITE_PYC" ]; then progress w "A leftover cook.pyc may come from the LiteLLM malware"
 else progress o "No signs of the LiteLLM malware in $(plural "$N_PY" "Python environment" "Python environments")"; fi
-# npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
-# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9 and
-# GHSA-rccm-wwph-vgxc, OpenSearch GHSA-298w-vvm4-ww55, and one advisory per package for the rest.
-# A version of * means every version of that name is malware. tensorlake's advisory also lists every
-# version, but names only 0.5.144 as malicious, so only that one is flagged. Not complete: the AntV, UiPath and
-# Red Hat waves and most packages the keyv worm spread to are not listed.
+# >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_NPM="axios 1.14.1 axios
 axios 0.30.4 axios
 plain-crypto-js * axios
@@ -1657,6 +1652,7 @@ iru-caches * sandworm
 iruchache * sandworm
 node-native-bridge * sandworm
 secp256 * sandworm"
+# <<< bad-npm
 npm_label() {
   case "$1" in
     axios)     printf 'Axios takeover, March 2026' ;;

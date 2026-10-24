@@ -1084,12 +1084,7 @@ $LITELLM_HIT = 0
 if ($LiteBad.Count -gt 0 -or $Marks.Count -gt 0 -or $LOADER -eq 1) { $LITELLM_HIT = 1 }
 if ($LITELLM_HIT -eq 1) { Progress 'Signs of the LiteLLM malware found' }
 elseif ($LitePyc.Count -gt 0) { Progress 'A leftover cook.pyc may come from the LiteLLM malware' }
-# npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
-# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9 and
-# GHSA-rccm-wwph-vgxc, OpenSearch GHSA-298w-vvm4-ww55, and one advisory per package for the rest.
-# A version of * means every version of that name is malware. tensorlake's advisory also lists every
-# version, but names only 0.5.144 as malicious, so only that one is flagged. Not complete: the AntV, UiPath and
-# Red Hat waves and most packages the keyv worm spread to are not listed. The same list as gird-check.sh.
+# >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it.
 $BadNpm = @'
 axios 1.14.1 axios
 axios 0.30.4 axios
@@ -1242,6 +1237,7 @@ iruchache * sandworm
 node-native-bridge * sandworm
 secp256 * sandworm
 '@
+# <<< bad-npm
 $NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]; $N_BAD_NPM = 0
 foreach ($l in ($BadNpm -split "`r?`n")) {
   $p = $l -split ' '; if ($p.Count -lt 3) { continue }

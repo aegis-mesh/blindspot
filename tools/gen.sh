@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Writes the key types (data/keys.tsv) and the agent session locations (data/sessions.tsv) into
-# gird-check.sh and gird-check.ps1, between their "# >>> keys" / "# >>> sessions" markers and the
-# matching "# <<<" lines. The scripts stay single files people can download and check.
+# Writes the data files into gird-check.sh and gird-check.ps1, between each block's "# >>> <name>"
+# and "# <<< <name>" markers: key types (data/keys.tsv), agent session locations
+# (data/sessions.tsv) and bad npm packages (data/bad-npm.tsv). The scripts stay single files people
+# can download and check.
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -13,6 +14,7 @@ WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 rows() { grep -v '^#' "$1" | grep -v '^[[:space:]]*$'; }
 # Characters that would break the generated bash, awk or PowerShell are refused.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
+      rows data/bad-npm.tsv | awk -F '\t' 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $3 !~ /^[a-z0-9]+$/ { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' 'NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || $4 ~ /[\047"`$|\\]/ || $4 ~ /\{ENV:[^}]*\{/ { print "data/sessions.tsv: " $0 }')
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
 
@@ -96,6 +98,16 @@ rows data/sessions.tsv | awk -F '\t' '
   $1 == "all" || $1 == "win" { if (n++) print ","; printf "  @(\047%s\047, \047%s\047, %s)", $2, $3, ps($4) }
   END { print ")"; print "# <<< sessions" }' > "$WORK/sessions.ps1"
 
+# --- bad npm packages ------------------------------------------------------
+rows data/bad-npm.tsv | awk -F '\t' '
+  BEGIN { print "# >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it."; printf "BAD_NPM=\"" }
+  { printf "%s%s %s %s", (NR > 1 ? "\n" : ""), $1, $2, $3 }
+  END { print "\""; print "# <<< bad-npm" }' > "$WORK/bad-npm.sh"
+rows data/bad-npm.tsv | awk -F '\t' '
+  BEGIN { print "# >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it."; print "$BadNpm = @\047" }
+  { print $1 " " $2 " " $3 }
+  END { print "\047@"; print "# <<< bad-npm" }' > "$WORK/bad-npm.ps1"
+
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
   awk -v name="$2" -v gen="$3" '
@@ -107,7 +119,8 @@ splice() { # file block-name generated-file
 RC=0
 for f in gird-check.sh gird-check.ps1; do
   ext=${f##*.}
-  splice "$f" keys "$WORK/keys.$ext" > "$WORK/a" && splice "$WORK/a" sessions "$WORK/sessions.$ext" > "$WORK/b" || { RC=1; continue; }
+  splice "$f" keys "$WORK/keys.$ext" > "$WORK/a" && splice "$WORK/a" sessions "$WORK/sessions.$ext" > "$WORK/c" &&
+    splice "$WORK/c" bad-npm "$WORK/bad-npm.$ext" > "$WORK/b" || { RC=1; continue; }
   if [ "$CHECK" -eq 1 ]; then
     if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/: run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi

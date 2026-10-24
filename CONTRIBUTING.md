@@ -33,21 +33,40 @@ Every change has to keep these true. Reviews check them first.
 - **Windows too.** `gird-check.ps1` keeps the same rules and must run on Windows PowerShell 5.1, which ships with Windows, and on PowerShell 7.
 - **Shares nothing new by accident.** Anything added to the shared counts must be a number or come from a fixed list, and must be listed in [TELEMETRY.md](TELEMETRY.md).
 
+## Lists live in `data/`
+
+The key types, the agents' session folders and the bad npm packages each live in one file under `data/`, one line per entry. `bash tools/gen.sh` writes them into both scripts; edit the data file, never the generated block between `# >>> name` and `# <<< name`. `tests/run.sh` fails if a script and its data file disagree.
+
 ## Add an agent
 
 1. Add a line to the `AGENTS` table in `gird-check.sh`: name, commands, install paths, folders that change when it's used, and an id.
 2. If it has an MCP config, add it to `MCP_FILES`. If it keeps keys in a config, add it to the candidate list in section 3.
-3. Add a fake install to `tests/make-fixture.sh` and an assertion to `tests/run.sh`.
+3. If it keeps session transcripts, add a line to `data/sessions.tsv` and run `bash tools/gen.sh`.
+4. Add a fake install to `tests/make-fixture.sh` and an assertion to `tests/run.sh`.
 
 ## Add a key format
 
-1. Add a `P_` pattern with the other key formats and include it in `ALL_KEYS`. Anchor it on a prefix so it doesn't flag random strings.
-2. Map its prefix to a provider name in `providers_in`.
+1. Add a line to `data/keys.tsv`: an id, the provider's name, the prefix it starts with, and the pattern. Anchor the pattern on a prefix so it doesn't flag random strings. More specific prefixes go first. Run `bash tools/gen.sh`.
+2. A new id also has to be added to `PROVIDERS` in gird.ai's Worker, or the shared counts drop it.
 3. In `tests/make-fixture.sh`, build a fake key at runtime from pieces, as the existing ones do. Never commit a full key-shaped string.
 
 ## Add an incident check
 
 Open an issue with the **New check** template first, with links to the vendor advisory. Checks look for files, versions or markers on disk. They never run the software they check. Add the check to section 5, a fixture to the tests, and a line to "What to do".
+
+A bad npm package is one line in `data/bad-npm.tsv`: the name, the exact version (or `*` when every version is malware) and the incident's id. Take versions from a GitHub malware advisory, and sweep the whole campaign (every advisory published with it) rather than copying the first few names.
+
+## Review checklist
+
+A reviewer starts from the person who acts on the report, not from the diff:
+
+- **Advice that makes things worse.** Follow every finding to every place it shows: its section, the summary row, "First fix", the fix list and the result page the link opens. Nothing may tell someone to revoke or rotate a token while `gh-token-monitor` is present.
+- **False comfort.** A green line or "no keys" over something that wasn't fully read is a bug. Partial, skipped and unreadable must say so.
+- **False alarms.** A red "treat this machine as compromised" over something harmless costs trust. Test the near misses: a version one digit off, a name that contains another, a rule or guard that names a malware file without running it.
+- **Real inputs.** Try the shapes people actually have: pretty-printed JSON, committed `settings.local.json`, worktrees, symlinks, every lockfile format, paths with spaces or `|`, Windows paths.
+- **Sources.** Every incident, version and file path traces to a primary source (the vendor's advisory, a GitHub malware advisory, or a named security research post). A comment or README line the code doesn't support is a bug.
+- **What a list leaves out.** For any list taken from advisories, check what the same campaign published that the list misses, and that the report's wording doesn't claim more than the list covers.
+- **Both scripts.** Every change lands in `gird-check.sh` and `gird-check.ps1`, each with a test that fails without it.
 
 ## Test
 
@@ -66,4 +85,4 @@ Add a Developer Certificate of Origin sign-off to each commit with `git commit -
 
 ## Releases
 
-Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` in the release notes. gird.ai/blindspot serves the released file, never `main`.
+Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` in the release notes. gird.ai/blindspot serves `gird-check.sh` and `gird-check.ps1` from `main`, so a merge to `main` is a release to everyone who downloads from gird.ai.
