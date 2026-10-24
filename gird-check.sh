@@ -617,6 +617,7 @@ cleanup() {
   if [ -n "$KEYS_PID" ]; then kill "$KEYS_PID" 2>/dev/null; wait "$KEYS_PID" 2>/dev/null; KEYS_PID=""; fi
   if [ -n "$SAVED_TTY" ]; then stty "$SAVED_TTY" </dev/tty 2>/dev/null; SAVED_TTY=""; fi
   [ -n "$PROG_FILE" ] && rm -f "$PROG_FILE"
+  [ -n "$SCAN_ERR" ] && rm -f "$SCAN_ERR"
   [ -n "$SP_FILE" ] && rm -f "$SP_FILE"
   [ -n "$SESS_FILE" ] && rm -f "$SESS_FILE"
   [ -n "$SESS_FIFO" ] && rm -f "$SESS_FIFO"
@@ -870,7 +871,7 @@ EOF
        -o -name .aider.chat.history.md -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        "${_pf[@]}" \) -print \) -o \
-    \( -type l -lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} + \) 2>/dev/null
+    \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
 }
 
 # Findings for the game or the spinner to show while the scan runs: a mark (x a
@@ -905,6 +906,7 @@ banner
 proof_line
 blank
 PROG_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || PROG_FILE=""
+SCAN_ERR=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || SCAN_ERR=""   # the home scan's find errors
 if game_ok; then
   SAVED_TTY=$(stty -g </dev/tty 2>/dev/null)
   [ "$G_MODE" = C ] && stty -echo -icanon min 0 time 5 </dev/tty 2>/dev/null
@@ -1085,6 +1087,12 @@ sess_start
 
 progress i "Looking through your home folder"
 FOUND=$(scan_home | scan_progress)
+# A find that rejects the expression prints nothing, which would read as a clean home folder. The
+# header says the folder was not scanned instead, and the headline does not call the scan clean.
+SCAN_FAILED=0; SCAN_WHY=""
+if [ -z "$FOUND" ] && [ -n "$SCAN_ERR" ] && grep -qiE '^find: .*(unrecognized|unknown|invalid|illegal|not a valid|bad option|usage)' "$SCAN_ERR" 2>/dev/null; then
+  SCAN_FAILED=1; SCAN_WHY=$(grep -m 1 '^find: ' "$SCAN_ERR" | tr -d '\r' | cut -c 1-120)
+fi
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv.
@@ -2419,9 +2427,11 @@ fi
 # ===========================================================================
 if [ "$PY_HIT" -eq 1 ] || [ "$ANY_MAL" -eq 1 ]; then SEV=$RED
 elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ] || [ "$N_AK" -gt 0 ]; then SEV=$RED
-elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
+elif [ "$ISSUES" -gt 0 ] || [ "$SCAN_FAILED" -eq 1 ]; then SEV=$YEL
 else SEV=$GRN; fi
-if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="No findings in this scan"; fi
+if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"
+elif [ "$SCAN_FAILED" -eq 1 ]; then FIXN="No findings in the paths checked"
+else FIXN="No findings in this scan"; fi
 PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of AI builders who ran Blindspot"
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
 upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
@@ -2448,6 +2458,7 @@ else
 fi
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
+[ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"

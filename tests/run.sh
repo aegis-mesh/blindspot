@@ -598,6 +598,12 @@ cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 HOME="$WORK/dz-calm" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
 has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
+# A find that rejects the expression (an old or BusyBox find) prints nothing: the report must say the
+# home folder was not scanned, never read it as clean.
+mkdir -p "$WORK/badfind"; printf '#!/bin/sh\necho "find: unrecognized: -maxdepth" >&2\nexit 1\n' > "$WORK/badfind/find"; chmod +x "$WORK/badfind/find"
+HOME="$WORK/dz-calm" PATH="$WORK/badfind:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-badfind.txt"
+has    "a find that rejects its options is reported, not read as a clean home folder" 'The home folder was not scanned \(find: unrecognized: -maxdepth\)' "$WORK/dz-badfind.txt"
+hasnot "a find that rejects its options is not called no findings" 'NO FINDINGS IN THIS SCAN' "$WORK/dz-badfind.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
