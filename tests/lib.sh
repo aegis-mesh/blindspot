@@ -2,7 +2,11 @@
 # The result helpers both suites use (tests/run.sh, tests/run-ps.sh). Every result goes through
 # ok, bad or skip, and each writes its test's name to $PARITY_LOG when it is set, one line per
 # test, so tests/parity.sh can compare what the two suites test. A test that can't run on this
-# machine still records its name: it calls skip, or runs with SKIPPING set to the reason.
+# machine still records its name: it calls skip, or runs with SKIPPING set to the reason. A skip
+# is recorded as "S<tab>name", so parity.sh can tell a skipped twin from one that ran.
+# PARITY_LOG must name an empty or new file: one that already holds names is refused, so a child
+# that sources this with the parent's PARITY_LOG exported can't wipe or add to its list.
+# Unsetting or emptying PARITY_LOG part-way through a suite turns recording and the count check off.
 #
 #   ok NAME [DETAIL]    bad NAME [DETAIL]    skip NAME WHY
 #   has NAME REGEX FILE    hasnot NAME REGEX FILE    hasi NAME REGEX FILE    nokeys NAME KEYS FILE
@@ -11,9 +15,11 @@
 # DETAIL, which is printed and not recorded. PFX, when set, starts every name (the bash version
 # in tests/run.sh's per-bash loop).
 PASS=0; FAIL=0; SKIP=0; SKIPPING=""; PFX=""
-[ -z "${PARITY_LOG:-}" ] || : > "$PARITY_LOG"
+if [ -n "${PARITY_LOG:-}" ] && [ -s "$PARITY_LOG" ]; then
+  echo "tests/lib.sh: PARITY_LOG ($PARITY_LOG) already holds names; give each suite run a new file" >&2; exit 1
+fi
 record() { [ -z "${PARITY_LOG:-}" ] || printf '%s\n' "$PFX$1" >> "$PARITY_LOG"; }
-skip() { SKIP=$((SKIP + 1)); record "$1"; printf '  skip  %s: %s\n' "$PFX$1" "$2"; }
+skip() { SKIP=$((SKIP + 1)); [ -z "${PARITY_LOG:-}" ] || printf 'S\t%s\n' "$PFX$1" >> "$PARITY_LOG"; printf '  skip  %s: %s\n' "$PFX$1" "$2"; }
 ok() {
   if [ -n "$SKIPPING" ]; then skip "$1" "$SKIPPING"; return; fi
   PASS=$((PASS + 1)); record "$1"; printf '  ok    %s%s\n' "$PFX$1" "${2:+ ($2)}"

@@ -975,21 +975,21 @@ else bad "the text backstop finds a twin for every test" "$(grep -v '^    ' "$WO
 
 echo "tests/parity.sh, on the names the suites record"
 # The rule: tests/parity-run.sh runs both suites with PARITY_LOG set and compares the lists.
-PR=$WORK/prt; mkdir -p "$PR"; : > "$PR/only.txt"
+PR=$WORK/prt; mkdir -p "$PR"; : > "$PR/only.txt"; : > "$PR/psk.txt"
 printf '%s\n' 'a test' 'bash 3: a per-bash test' 'perl: an engine test' > "$PR/b.txt"
 printf '%s\n' 'a test' 'a per-bash test' 'net: an engine test' 'a PowerShell test' > "$PR/p.txt"
-if bash tests/parity.sh "$PR/b.txt" "$PR/p.txt" "$PR/only.txt" > "$PR/out.txt" 2>&1; then ok "parity.sh passes two lists that agree"; else bad "parity.sh passes two lists that agree" "$(cat "$PR/out.txt")"; fi
+if bash tests/parity.sh "$PR/b.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1; then ok "parity.sh passes two lists that agree"; else bad "parity.sh passes two lists that agree" "$(cat "$PR/out.txt")"; fi
 { cat "$PR/b.txt"; echo 'a new bash test'; } > "$PR/b2.txt"
-if ! bash tests/parity.sh "$PR/b2.txt" "$PR/p.txt" "$PR/only.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a new bash test$' "$PR/out.txt"; then ok "parity.sh fails on a bash test with no twin"; else bad "parity.sh fails on a bash test with no twin"; fi
+if ! bash tests/parity.sh "$PR/b2.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a new bash test$' "$PR/out.txt"; then ok "parity.sh fails on a bash test with no twin"; else bad "parity.sh fails on a bash test with no twin"; fi
 grep -v '^a test$' "$PR/p.txt" > "$PR/p2.txt"
-if ! bash tests/parity.sh "$PR/b.txt" "$PR/p2.txt" "$PR/only.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a test$' "$PR/out.txt"; then ok "parity.sh fails on a deleted twin"; else bad "parity.sh fails on a deleted twin"; fi
+if ! bash tests/parity.sh "$PR/b.txt" "$PR/p2.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a test$' "$PR/out.txt"; then ok "parity.sh fails on a deleted twin"; else bad "parity.sh fails on a deleted twin"; fi
 { cat "$PR/b.txt"; echo 'a test'; } > "$PR/b3.txt"
-if ! bash tests/parity.sh "$PR/b3.txt" "$PR/p.txt" "$PR/only.txt" > "$PR/out.txt" 2>&1 && grep -q 'reported twice in the bash run: a test$' "$PR/out.txt"; then ok "parity.sh fails on a test reported twice"; else bad "parity.sh fails on a test reported twice"; fi
+if ! bash tests/parity.sh "$PR/b3.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'reported twice in the bash run: a test$' "$PR/out.txt"; then ok "parity.sh fails on a test reported twice"; else bad "parity.sh fails on a test reported twice"; fi
 : > "$PR/empty.txt"
-if ! bash tests/parity.sh "$PR/empty.txt" "$PR/p.txt" "$PR/only.txt" > "$PR/out.txt" 2>&1 && grep -q 'list of test names is empty' "$PR/out.txt"; then ok "parity.sh fails on an empty list"; else bad "parity.sh fails on an empty list"; fi
-if ! bash tests/parity.sh "$PR/b.txt" "$PR/none.txt" "$PR/only.txt" > "$PR/out.txt" 2>&1 && grep -q 'no list of test names' "$PR/out.txt"; then ok "parity.sh fails on a missing list"; else bad "parity.sh fails on a missing list"; fi
+if ! bash tests/parity.sh "$PR/empty.txt" "$PR/p.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'list of test names is empty' "$PR/out.txt"; then ok "parity.sh fails on an empty list"; else bad "parity.sh fails on an empty list"; fi
+if ! bash tests/parity.sh "$PR/b.txt" "$PR/none.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no list of test names' "$PR/out.txt"; then ok "parity.sh fails on a missing list"; else bad "parity.sh fails on a missing list"; fi
 printf 'a new bash test\n' > "$PR/only2.txt"
-if ! bash tests/parity.sh "$PR/b2.txt" "$PR/p.txt" "$PR/only2.txt" > "$PR/out.txt" 2>&1 && grep -q 'needs the name, a tab and the reason' "$PR/out.txt"; then ok "parity.sh fails on a bash-only line with no reason"; else bad "parity.sh fails on a bash-only line with no reason"; fi
+if ! bash tests/parity.sh "$PR/b2.txt" "$PR/p.txt" "$PR/only2.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'needs the name, a tab and the reason' "$PR/out.txt"; then ok "parity.sh fails on a bash-only line with no reason"; else bad "parity.sh fails on a bash-only line with no reason"; fi
 # A skipped test records its name like any other, so it still needs a twin.
 cat > "$PR/skipped.sh" <<'EOF'
 . tests/lib.sh
@@ -1000,8 +1000,22 @@ skip "a test skipped by name" "not on this machine"
 EOF
 PARITY_LOG="$PR/sk.txt" bash "$PR/skipped.sh" > /dev/null 2>&1
 printf '%s\n' 'a skipped test' > "$PR/p3.txt"
-if [ "$(cat "$PR/sk.txt" 2>/dev/null)" = "$(printf 'a skipped test\na test skipped by name')" ] && ! bash tests/parity.sh "$PR/sk.txt" "$PR/p3.txt" "$PR/only.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a test skipped by name$' "$PR/out.txt"
+if [ "$(cat "$PR/sk.txt" 2>/dev/null)" = "$(printf 'S\ta skipped test\nS\ta test skipped by name')" ] && ! bash tests/parity.sh "$PR/sk.txt" "$PR/p3.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'no PowerShell twin: a test skipped by name$' "$PR/out.txt"
 then ok "parity.sh counts a skipped test"; else bad "parity.sh counts a skipped test"; fi
+# A PowerShell skip is a twin only where bash did not run the test either, or with a reason.
+printf '%s\n' 'a test' 'a second test' > "$PR/b4.txt"
+printf 'a test\nS\ta second test\n' > "$PR/p4.txt"
+if ! bash tests/parity.sh "$PR/b4.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1 && grep -q 'PowerShell skipped a test bash ran, and ps-skips.txt does not say why: a second test$' "$PR/out.txt"; then ok "parity.sh fails on a PowerShell skip with no reason"; else bad "parity.sh fails on a PowerShell skip with no reason"; fi
+printf 'a second test\tit needs what this machine lacks\n' > "$PR/psk2.txt"
+if bash tests/parity.sh "$PR/b4.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk2.txt" > "$PR/out.txt" 2>&1; then ok "parity.sh passes a PowerShell skip that ps-skips.txt explains"; else bad "parity.sh passes a PowerShell skip that ps-skips.txt explains" "$(cat "$PR/out.txt")"; fi
+printf 'a second test\tit needs what this machine lacks\nno such test\ta reason\n' > "$PR/psk3.txt"
+if ! bash tests/parity.sh "$PR/b4.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk3.txt" > "$PR/out.txt" 2>&1 && grep -q 'ps-skips.txt names a test run-ps.sh does not have: no such test$' "$PR/out.txt"; then ok "parity.sh fails on a stale ps-skips line"; else bad "parity.sh fails on a stale ps-skips line"; fi
+printf 'S\ta second test\n' > "$PR/b5.txt"; printf 'a test\n' >> "$PR/b5.txt"
+if bash tests/parity.sh "$PR/b5.txt" "$PR/p4.txt" "$PR/only.txt" "$PR/psk.txt" > "$PR/out.txt" 2>&1; then ok "parity.sh passes a test both suites skipped"; else bad "parity.sh passes a test both suites skipped" "$(cat "$PR/out.txt")"; fi
+# A child that sources tests/lib.sh with the parent's PARITY_LOG exported can't wipe that list.
+printf 'a parent test\n' > "$PR/parent.txt"
+PARITY_LOG="$PR/parent.txt" bash -c '. tests/lib.sh; ok "a child test"' > /dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ] && [ "$(cat "$PR/parent.txt")" = "a parent test" ]; then ok "a child that sources tests/lib.sh keeps the parent's list"; else bad "a child that sources tests/lib.sh keeps the parent's list" "exit $RC, list: $(tr '\n' ';' < "$PR/parent.txt")"; fi
 # A result reported where tests/lib.sh's counts can't see it fails the suite.
 cat > "$PR/sub.sh" <<'EOF'
 . tests/lib.sh

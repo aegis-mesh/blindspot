@@ -9,6 +9,7 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 W=$(mktemp -d 2>/dev/null || mktemp -d -t parity-run)
 trap 'rm -rf "$W"' EXIT
+: > "$W/bash.txt"; : > "$W/ps.txt"
 RC=0
 echo "== tests/run.sh"
 PARITY_LOG="$W/bash.txt" bash tests/run.sh > "$W/run.log" 2>&1; r=$?
