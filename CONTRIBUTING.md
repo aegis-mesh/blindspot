@@ -86,11 +86,12 @@ bash tests/run.sh            # builds a fake home folder and checks what the scr
 bash tests/interactive.sh    # macOS: drives the game and the menu with expect
 shellcheck -s bash -S warning gird-check.sh tests/*.sh
 PWSH=/path/to/pwsh bash tests/run-ps.sh   # the same checks for gird-check.ps1, under PowerShell 7
+PWSH=/path/to/pwsh bash tests/parity-run.sh   # both suites, then checks every bash test has a twin
 ```
 
 Run them before you open a pull request, one at a time, never two at once. They run the scripts with `--offline` or against a local stand-in for gird.ai, so a test run never reaches the live counts. `tests/run.sh` and `tests/interactive.sh` each run on the bash that ships with macOS (3.2) and on a newer bash from your PATH if you have one. Maintainers run them again before merging.
 
-Every test in `tests/run.sh` needs a twin in `tests/run-ps.sh`: a test with the same name that checks the same thing for `gird-check.ps1`, on the Windows-shaped home. A test that can't or need not run for PowerShell gets a line in `tests/bash-only.txt` instead: its name, a tab, and the reason. A reason names a feature only `gird-check.sh` has (the game and the menu, the perl session engine, Git Bash and WSL, `tools/gen.sh`), or something PowerShell can't fake on the test machine, such as the OS. "Not written yet" is not a reason. `tests/parity.sh` checks this, and both suites run it, so a bash test with neither fails CI. When a twin fails because the scripts behave differently, fix the script that is wrong, never the test.
+Every test in `tests/run.sh` needs a twin in `tests/run-ps.sh`: a test with the same name that checks the same thing for `gird-check.ps1`, on the Windows-shaped home. A test that can't or need not run for PowerShell gets a line in `tests/bash-only.txt` instead: its name, a tab, and the reason. A reason names a feature only `gird-check.sh` has (the game and the menu, the perl session engine, Git Bash and WSL, `tools/gen.sh`), or something PowerShell can't fake on the test machine, such as the OS. "Not written yet" is not a reason. Each test records its name as it runs, skipped ones too (`tests/lib.sh`: report through `ok`, `bad` and `skip` only, and a test that can't run on a machine calls `skip`). `tests/parity-run.sh` runs both suites and `tests/parity.sh` compares the two lists; run it before you open a pull request. CI runs it in the PowerShell job, so a bash test with neither fails CI. `tests/run.sh` also runs `tests/parity-text.sh`, a backstop that reads both suites as text; the runtime check is the rule. When a twin fails because the scripts behave differently, fix the script that is wrong, never the test.
 
 ## Sign your commits
 

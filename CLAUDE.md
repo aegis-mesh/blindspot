@@ -9,7 +9,10 @@ checklist; read it first.
 
 - Every test in `tests/run.sh` needs a twin of the same name in `tests/run-ps.sh`, or a line in
   `tests/bash-only.txt`: the name, a tab, and a specific reason it can't or need not run for
-  PowerShell. "Not written yet" is not a reason. `tests/parity.sh` enforces it, and both suites run it.
+  PowerShell. "Not written yet" is not a reason. Tests record their names as they run (`tests/lib.sh`:
+  report only through `ok`, `bad` and `skip`; a test that can't run here calls `skip`).
+  `PWSH=/path/to/pwsh bash tests/parity-run.sh` runs both suites and `tests/parity.sh` on the two
+  lists. Run it before a pull request; CI runs it too.
 - A twin that fails because the scripts behave differently is a bug in a script: fix the script that
   is wrong. Never weaken a test to make it pass.
 - Run the scripts with `--offline` / `-Offline`, or against the suites' local mock server. Never run
