@@ -14,6 +14,8 @@
 #             incident's advisory, shown under the incident's row when they are found (the temp lines of one
 #             incident carry the same note). - for wiper and site
 # gh-token-monitor: Wiz (TanStack wave) and SANS (keyv wave). Mastra: Socket. LiteLLM and mistralai: their advisories.
+# GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
+# extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware.
 # incident	os	kind	owner	path	note
 tanstack	all	wiper	no	~/Library/LaunchAgents/com.user.gh-token-monitor.plist	-
 tanstack	all	wiper	no	~/.config/systemd/user/gh-token-monitor.service	-
@@ -22,6 +24,7 @@ tanstack	all	wiper	no	~/.config/gh-token-monitor	-
 tanstack	all	wiper	yes	/tmp/gh-token-monitor.out.log	-
 tanstack	all	wiper	yes	/tmp/gh-token-monitor.err.log	-
 mastra	all	startup	no	~/Library/LaunchAgents/com.nvm.protocal.plist	starts the Mastra worm at login
+glassworm	all	startup	no	~/Library/LaunchAgents/com.user.nodestart.plist	starts the GlassWorm malware at login
 mastra	all	startup	no	~/Library/NodePackages/protocal.cjs	starts the Mastra worm at login
 mastra	all	startup	no	~/.config/systemd/user/nvmconf.service	starts the Mastra worm at login
 mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	starts the Mastra worm at login

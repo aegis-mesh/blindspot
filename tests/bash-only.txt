@@ -29,6 +29,7 @@ an auto-approve path with a glob	tools/gen.sh is one bash tool that writes the d
 an auto-approve pattern with a quote	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an auto-approve project path that climbs	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension listed twice, in another case	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension registry that is not openvsx or any	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension version that is not a version	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension whose incident is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
@@ -67,6 +68,8 @@ only WSL, not plain Linux, gets the WSL note and loses the keyring advice	WSL: g
 WSL reports os Linux while giving the WSL advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 a pyc-only run still says the scan is a snapshot	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never shows it
 without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with ConvertFrom-Json
+a find that rejects its options is reported, not read as a clean home folder	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
+a find that rejects its options is not called no findings	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
 the text backstop fails on a single-quoted name	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
 the text backstop fails on a new helper that calls ok	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
 the text backstop fails on a variable name outside the helpers	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once

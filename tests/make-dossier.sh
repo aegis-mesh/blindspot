@@ -20,20 +20,29 @@ pkg() { printf '{\n  "name": "%s",\n  "version": "%s"\n}\n' "$2" "$3" > "$1/pack
 : > "$F/.ssh/authorized_keys"
 if [ "$MODE" = miss ]; then
   printf '{\n  "permissions": {\n    "defaultMode": "default"\n  },\n  "note": "defaultMode: bypassPermissions"\n}\n' > "$F/.claude/settings.json"
-  # One of the two settings at the top, both of them only in a profile.
-  printf 'approval_policy = "never"\n[profiles.yolo]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n%s\n' "$toml" > "$F/.codex/config.toml"
-  printf '{\n  // "chat.tools.autoApprove": true,\n  "chat.tools.autoApprove": false\n}\n' > "$AD/Code/User/settings.json"
+  # One of the two settings at the top, both of them only in a profile: a [table] and an inline table.
+  printf 'approval_policy = "never"\nprofiles.fast = { approval_policy = "never", sandbox_mode = "danger-full-access" }\n[profiles.yolo]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n%s\n' "$toml" > "$F/.codex/config.toml"
+  # The old name VS Code 1.104 dropped, live, and the current one only in a comment.
+  printf '{\n  // "chat.tools.global.autoApprove": true,\n  "chat.tools.autoApprove": true\n}\n' > "$AD/Code/User/settings.json"
   printf '{"chat.tools.autoApproveEdits": true, "chat.tools.global.autoApprove": "true"}\n' > "$F/p/calm/.vscode/settings.json"
+  # The current setting in a project: VS Code reads it from the user settings only.
+  mkdir -p "$F/p/global/.vscode"; printf '{"chat.tools.global.autoApprove": true}\n' > "$F/p/global/.vscode/settings.json"
   plist 3.0
   mkdir -p "$F/Library/Caches/$L/1.69.0" "$F/Library/Caches/$L/1.10.0" "$F/.cache/$L/1.69.0" "$F/.cache/$L/1.10.0"
   pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 1.0.24
   pkg "$F/.npm-global/lib/node_modules/mcp-remote" mcp-remote 0.1.16-beta.1
   mkdir -p "$F/.npm/_npx/a1/node_modules/@anthropic-ai/claude-code"; pkg "$F/.npm/_npx/a1/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 0.2.115
   mkdir -p "$F/code/mr"
-  printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.16"]},"s":{"command":"npx","args":["my-mcp-remote@0.0.9"]}}}\n' > "$F/code/mr/.mcp.json"
+  # mcp-remote@0.1 is a range npx resolves when it runs, not a version.
+  printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.16"]},"s":{"command":"npx","args":["my-mcp-remote@0.0.9"]},"t":{"command":"npx","args":["mcp-remote@0.1"]}}}\n' > "$F/code/mr/.mcp.json"
   ln -s authorized_keys "$F/.ssh/keys-link"
   ln -s ../../.ssh/known_hosts "$F/code/links/hosts"
-  mkdir -p "$F/.vscode/extensions/oorzc.ssh-tools-0.5.2" "$F/.vscode/extensions/oorzc.ssh-tools-0.5.10" "$F/.vscode/extensions/oorzc.ssh-tools-pro-0.5.1"
+  # A repo's own .ssh/authorized_keys fixture and a link to it: not this user's file.
+  mkdir -p "$F/code/repo/fixtures/.ssh"; : > "$F/code/repo/fixtures/.ssh/authorized_keys"
+  ln -s fixtures/.ssh/authorized_keys "$F/code/repo/sample"
+  # VS Code's own folder holds the Marketplace's clean 0.5.1; the near-miss versions and name sit in an
+  # Open VSX editor's folder, where the bad build is looked for.
+  mkdir -p "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1" "$F/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$F/.cursor/extensions/oorzc.ssh-tools-0.5.10" "$F/.cursor/extensions/oorzc.ssh-tools-pro-0.5.1"
   exit 0
 fi
 printf '{\n  "permissions": {\n    "defaultMode": "bypassPermissions"\n  }\n}\n' > "$F/.claude/settings.json"
@@ -47,6 +56,7 @@ pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/cl
 pkg "$F/.npm-global/lib/node_modules/mcp-remote" mcp-remote 0.0.5
 ln -s ../../.ssh/authorized_keys "$F/code/links/notes.txt"
 [ "$MODE" = calm ] && exit 0
-mkdir -p "$F/code/mr" "$F/code/inj" "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1-darwin-arm64" "$F/.cursor/extensions/Sol-Studio.Solidity-Extension-2.0.0"
+# The oorzc build is looked for in the Open VSX editors' folders (VSCodium's here), not VS Code's.
+mkdir -p "$F/code/mr" "$F/code/inj" "$F/.vscode-oss/extensions/oorzc.ssh-tools-0.5.1-darwin-arm64" "$F/.cursor/extensions/Sol-Studio.Solidity-Extension-2.0.0"
 printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.10","https://example.com/sse"]}}}\n' > "$F/code/mr/.mcp.json"
 printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$F/code/inj/package-lock.json"

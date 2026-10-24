@@ -31,7 +31,7 @@ printf '.vscode\tmadeplant.js\tmadeworm\ta file the Made worm plants\n' >> "$R/d
 printf 'madepkg\t9.9.9\tmadepy\tall\n' >> "$R/data/bad-pypi.tsv"
 printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >> "$R/data/auto-approve.tsv"
 printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\n' >> "$R/data/outdated.tsv"
-printf 'made.ext\t1.0.0\tmadeext\n' >> "$R/data/bad-extensions.tsv"
+printf 'made.ext\t1.0.0\tmadeext\tany\n' >> "$R/data/bad-extensions.tsv"
 bash "$R/tools/gen.sh" > /dev/null
 # Outside the generated blocks, both scripts are unchanged.
 for s in gird-check.sh gird-check.ps1; do

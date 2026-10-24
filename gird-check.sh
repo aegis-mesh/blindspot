@@ -617,6 +617,7 @@ cleanup() {
   if [ -n "$KEYS_PID" ]; then kill "$KEYS_PID" 2>/dev/null; wait "$KEYS_PID" 2>/dev/null; KEYS_PID=""; fi
   if [ -n "$SAVED_TTY" ]; then stty "$SAVED_TTY" </dev/tty 2>/dev/null; SAVED_TTY=""; fi
   [ -n "$PROG_FILE" ] && rm -f "$PROG_FILE"
+  [ -n "$SCAN_ERR" ] && rm -f "$SCAN_ERR"
   [ -n "$SP_FILE" ] && rm -f "$SP_FILE"
   [ -n "$SESS_FILE" ] && rm -f "$SESS_FILE"
   [ -n "$SESS_FIFO" ] && rm -f "$SESS_FIFO"
@@ -824,11 +825,8 @@ WORM_REF_NOTE='runs a file the TanStack and keyv worms plant'
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"defaultMode\": \"bypassPermissions\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"
-VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.autoApprove|\"chat.tools.autoApprove\": true
-VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
-VS Code Copilot|all|{PROJECT}/.vscode/settings.json|chat.tools.autoApprove|\"chat.tools.autoApprove\": true
-VS Code Copilot|all|{PROJECT}/.vscode/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true"
-AA_PROJECT='.vscode/settings.json'
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true"
+AA_PROJECT=''
 # <<< auto-approve
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
 # dependency caches, build output, model and VM images, cloud sync folders.
@@ -840,6 +838,12 @@ EOF
   _aa=(); while IFS= read -r _pp; do [ -n "$_pp" ] && _aa+=(-o -path "*/$_pp"); done <<EOF
 $AA_PROJECT
 EOF
+  # Links are printed as "L path", candidates for the ~/.ssh/authorized_keys check that ak_link
+  # settles in the shell. A find with -lname (GNU, BSD) keeps only links whose text names
+  # authorized_keys. BusyBox's find has no -lname and rejects the whole expression over it, and its
+  # -exec ... + drops links, so there every link is printed, one -exec each.
+  if find /dev/null -maxdepth 0 -lname x >/dev/null 2>&1; then _lk=(-lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -864,10 +868,10 @@ EOF
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
-       -o -name .aider.chat.history.md "${_aa[@]}" \) -print \) -o \
+       -o -name .aider.chat.history.md -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        "${_pf[@]}" \) -print \) -o \
-    \( -type l -lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} + \) 2>/dev/null
+    \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
 }
 
 # Findings for the game or the spinner to show while the scan runs: a mark (x a
@@ -902,6 +906,7 @@ banner
 proof_line
 blank
 PROG_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || PROG_FILE=""
+SCAN_ERR=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || SCAN_ERR=""   # the home scan's find errors
 if game_ok; then
   SAVED_TTY=$(stty -g </dev/tty 2>/dev/null)
   [ "$G_MODE" = C ] && stty -echo -icanon min 0 time 5 </dev/tty 2>/dev/null
@@ -1082,17 +1087,39 @@ sess_start
 
 progress i "Looking through your home folder"
 FOUND=$(scan_home | scan_progress)
+# A find that rejects the expression prints nothing, which would read as a clean home folder. The
+# header says the folder was not scanned instead, and the headline does not call the scan clean.
+SCAN_FAILED=0; SCAN_WHY=""
+if [ -z "$FOUND" ] && [ -n "$SCAN_ERR" ] && grep -qiE '^find: .*(unrecognized|unknown|invalid|illegal|not a valid|bad option|usage)' "$SCAN_ERR" 2>/dev/null; then
+  SCAN_FAILED=1; SCAN_WHY=$(grep -m 1 '^find: ' "$SCAN_ERR" | tr -d '\r' | cut -c 1-120)
+fi
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv.
 WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($PLANTED_ERE)\$")
 AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
-# Links to ~/.ssh/authorized_keys (the scan prints them as "L path"), outside ~/.ssh itself, and the
-# project files of data/auto-approve.tsv.
-AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) printf '%s\n' "$_f" ;; esac; done)
-AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
-AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
-FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ' | grep -vE "/($AA_ERE)\$")
+# Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
+# outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
+# .ssh/authorized_keys fixture does not count. Before the file exists, a link that resolves to its
+# place counts all the same: an agent writing through it creates the file.
+ak_link() { # link
+  if [ -e "$H/.ssh/authorized_keys" ]; then [ "$1" -ef "$H/.ssh/authorized_keys" ]; return; fi
+  _t=$(readlink "$1" 2>/dev/null) || return 1
+  [ "${_t##*/}" = authorized_keys ] || return 1
+  case "$_t" in /*) ;; *) _t="${1%/*}/$_t" ;; esac
+  _d=$(cd "${_t%/*}" 2>/dev/null && pwd -P) || return 1
+  [ "$_d" = "$(cd "$H/.ssh" 2>/dev/null && pwd -P)" ]
+}
+AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) ak_link "$_f" && printf '%s\n' "$_f" ;; esac; done)
+# The project files of data/auto-approve.tsv, and every project's .vscode/settings.json (section 2).
+AA_FILES=""; AA_ERE=""
+if [ -n "$AA_PROJECT" ]; then
+  AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
+  AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
+fi
+VSC_SETTINGS=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/settings\.json$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ' | grep -vE '/\.vscode/settings\.json$')
+[ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
@@ -1274,6 +1301,32 @@ auto_row() { # file what flattened-text
   AUTO_ROWS="$AUTO_ROWS$1$TAB$2$TAB$_sum${TAB}0
 "
 }
+# A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
+# file is read as one line through flat (comments are its job), and a match starts at the text, a {
+# or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts. A
+# .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
+# (so a setting inside an inline table, a profile written as one, does not count), and only the
+# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
+# is used.
+aa_hit() { # file pattern|pattern...
+  case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
+  if [ "$_tm" -eq 1 ]; then cat "$1" 2>/dev/null; else flat "$1"; fi | AA_P=$2 awk -v toml="$_tm" '
+    BEGIN { n = split(ENVIRON["AA_P"], p, "|"); for (i = 1; i <= n; i++) gsub(/[[:space:]]/, "", p[i]) }
+    { l = $0; gsub(/[[:space:]]/, "", l) }
+    toml && l ~ /^#/ { next }
+    toml && l ~ /^\[/ { exit }
+    { for (i = 1; i <= n; i++) {
+        if (i in got) continue
+        off = 0
+        while ((k = index(substr(l, off + 1), p[i])) > 0) {
+          k += off; b = k > 1 ? substr(l, k - 1, 1) : ""; a = substr(l, k + length(p[i]), 1)
+          if (toml) hit = (b == "" && (a == "" || a == "#"))
+          else hit = ((b == "" || b == "{" || b == ",") && (a == "" || a == "," || a == "}" || a == "#" || a == "/"))
+          if (hit) { got[i] = 1; break }
+          off = k
+        } } }
+    END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }'
+}
 # Keys that make Claude Code run a command: hooks and its helper commands.
 CMD_KEYS='apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
 while IFS= read -r f; do
@@ -1301,6 +1354,17 @@ while IFS= read -r f; do
   printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' && auto_row "$f" "run a task when the folder opens in VS Code or Cursor" "$_t"
 done <<EOF
 $TASK_FILES
+EOF
+# A project's .vscode/settings.json with "chat.tools.autoApprove": true, the setting the
+# CVE-2025-53773 prompt injection made Copilot write so it could run commands without asking. VS Code
+# 1.104 renamed it without migration, so current VS Code ignores it: a sign of that attack, or of an
+# old VS Code, not a setting in force. A thing to look at, not an agent set to run without asking.
+while IFS= read -r f; do
+  [ -n "$f" ] && [ -f "$f" ] || continue
+  aa_hit "$f" '"chat.tools.autoApprove": true' || continue
+  auto_row "$f" "auto-approve Copilot's tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it" "$(flat "$f")"
+done <<EOF
+$VSC_SETTINGS
 EOF
 # Row 02 counts projects: the folders holding these settings.
 N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/[^/]*$##' | sort -u | grep -c .)
@@ -1477,7 +1541,7 @@ incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: d
 incident_level() { case "$1" in mistral) printf update ;; injective) printf update ;; *) printf act ;; esac; }
 incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
 incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+incident_advice() { case "$1" in glassworm) printf '%s' 'On a Mac, also delete /tmp/ijewf, /tmp/out.zip and any plist in ~/Library/LaunchAgents you do not recognize, such as com.user.nodestart.plist.' ;; injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
@@ -1492,6 +1556,7 @@ tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
 mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra worm at login
+glassworm|all|startup|no|$H/Library/LaunchAgents/com.user.nodestart.plist|starts the GlassWorm malware at login
 mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra worm at login
 mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra worm at login
 mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra worm at login
@@ -1800,23 +1865,23 @@ secp256 * sandworm
 @injectivelabs/sdk-ts 1.20.21 injective"
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
-BAD_EXT="oorzc.ssh-tools 0.5.1 glassworm
-oorzc.i18n-tools-plus 1.6.8 glassworm
-oorzc.mind-map 1.0.61 glassworm
-oorzc.scss-to-css-compile 1.3.4 glassworm
-Angular-studio.ng-angular-extension * glassworm
-awesome-codebase.codebase-dart-pro * glassworm
-cudra-production.vsce-prettier-pro * glassworm
-dev-studio-sense.php-comp-tools-vscode * glassworm
-ko-zu-gun-studio.synchronization-settings-vscode * glassworm
-littensy-studio.magical-icons * glassworm
-pretty-studio-advisor.prettyxml-formatter * glassworm
-sol-studio.solidity-extension * glassworm
-studio-jjalaire-team.professional-quarto-extension * glassworm
-studio-velte-distributor.pro-svelte-extension * glassworm
-sun-shine-studio.shiny-extension-for-vscode * glassworm
-tucyzirille-studio.angular-pro-tools-extension * glassworm
-vce-brendan-studio-eich.js-debuger-vscode * glassworm"
+BAD_EXT="oorzc.ssh-tools 0.5.1 glassworm openvsx
+oorzc.i18n-tools-plus 1.6.8 glassworm openvsx
+oorzc.mind-map 1.0.61 glassworm openvsx
+oorzc.scss-to-css-compile 1.3.4 glassworm openvsx
+Angular-studio.ng-angular-extension * glassworm openvsx
+awesome-codebase.codebase-dart-pro * glassworm openvsx
+cudra-production.vsce-prettier-pro * glassworm openvsx
+dev-studio-sense.php-comp-tools-vscode * glassworm openvsx
+ko-zu-gun-studio.synchronization-settings-vscode * glassworm openvsx
+littensy-studio.magical-icons * glassworm openvsx
+pretty-studio-advisor.prettyxml-formatter * glassworm openvsx
+sol-studio.solidity-extension * glassworm openvsx
+studio-jjalaire-team.professional-quarto-extension * glassworm openvsx
+studio-velte-distributor.pro-svelte-extension * glassworm openvsx
+sun-shine-studio.shiny-extension-for-vscode * glassworm openvsx
+tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx
+vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx"
 # <<< bad-extensions
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
@@ -1912,35 +1977,15 @@ $_g"
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a prompt injection could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
 cursor|Cursor|mac|plist|$H/Applications/Cursor.app/Contents/Info.plist|-|3.0|a prompt injection could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
-amazonq|Amazon Q|mac|folder|$H/Library/Caches/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
-amazonq|Amazon Q|linux|folder|$H/.cache/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
-amazonq|Amazon Q|win|folder|$WLAPP/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq|Amazon Q language server|mac|folder|$H/Library/Caches/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq|Amazon Q language server|linux|folder|$H/.cache/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq|Amazon Q language server|win|folder|$WLAPP/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web page could reach the editor connection|github.com/advisories/GHSA-9f65-56v6-gxw7
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
 # <<< outdated
 # --- 1. Coding agents: settings and versions -------------------------------------
-# Agents set to run commands without asking (data/auto-approve.tsv). A pattern matches a line with
-# its spaces removed, starting at the line, a { or a , and ending at the line's end, a , } # or /,
-# so a longer key or another value never counts. Lines starting with // or # are skipped. In a
-# .toml file a setting after the first [table] belongs to that table, so only the lines before it count.
-aa_hit() { # file pattern|pattern...
-  case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  AA_P=$2 awk -v toml="$_tm" '
-    BEGIN { n = split(ENVIRON["AA_P"], p, "|"); for (i = 1; i <= n; i++) gsub(/[[:space:]]/, "", p[i]) }
-    { l = $0; gsub(/[[:space:]]/, "", l) }
-    l ~ /^(\/\/|#)/ { next }
-    toml && l ~ /^\[/ { exit }
-    { for (i = 1; i <= n; i++) {
-        if (i in got) continue
-        off = 0
-        while ((k = index(substr(l, off + 1), p[i])) > 0) {
-          k += off; b = k > 1 ? substr(l, k - 1, 1) : ""; a = substr(l, k + length(p[i]), 1)
-          if ((b == "" || b == "{" || b == ",") && (a == "" || a == "," || a == "}" || a == "#" || a == "/")) { got[i] = 1; break }
-          off = k
-        } } }
-    END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }' "$1" 2>/dev/null
-}
+# Agents set to run commands without asking (data/auto-approve.tsv), matched by aa_hit (section 2).
 AA_ROWS=""
 while IFS='|' read -r _aa _ao _ap _as _apat; do
   [ -n "$_aa" ] || continue
@@ -1999,6 +2044,8 @@ while IFS='|' read -r _oid _onm _oos _okind _ow _olo _ohi _ohole _osrc; do
   esac
   while IFS= read -r _v; do
     ver_ok "$_v" || continue
+    # name@0.1 in an MCP config is a range npx resolves when it runs, not a version: not reported.
+    case "$_okind:$_v" in mcparg:*.*.*) ;; mcparg:*) continue ;; esac
     if [ "$_olo" != - ] && [ "$(ver_cmp "$_v" "$_olo")" = -1 ]; then continue; fi
     [ "$(ver_cmp "$_v" "$_ohi")" = -1 ] || continue
     OLD_ROWS="$OLD_ROWS$_oid$TAB$_onm$TAB$_v$TAB$_ohi$TAB$_ohole$TAB$_osrc
@@ -2030,20 +2077,25 @@ done
 NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
-# with a platform suffix such as -darwin-arm64, the id compared without case.
+# with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
+# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. A line whose bad build
+# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
+# same version is the Marketplace's clean build.
 EXT_ROWS=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; do
     [ -d "$r" ] || continue
-    for d in "$r"/*; do [ -d "$d" ] && printf '%s\n' "$d"; done
-  done | BAD_EXT_LIST=$BAD_EXT awk '
-  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3] } }
-  { b = $0; sub(/.*\//, "", b); lb = tolower(b)
+    case "$r" in ("$H/.vscode/extensions") _rg=marketplace ;; (*) _rg=openvsx ;; esac
+    for d in "$r"/*; do [ -d "$d" ] && printf '%s\t%s\n' "$_rg" "$d"; done
+  done | BAD_EXT_LIST=$BAD_EXT awk -F '\t' '
+  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4] } }
+  { reg = $1; d = $2; b = d; sub(/.*\//, "", b); lb = tolower(b)
     for (i = 1; i <= n; i++) {
+      if (rg[i] != "any" && rg[i] != reg) continue
       if (substr(lb, 1, length(id[i]) + 1) != id[i] "-") continue
       r = substr(b, length(id[i]) + 2)
       if (!match(r, /^[0-9]+(\.[0-9]+)*/)) continue
       ver = substr(r, 1, RLENGTH); rest = substr(r, RLENGTH + 1)
       if (rest != "" && rest !~ /^-/) continue
-      if (v[i] == "*" || v[i] == ver) { print $0 "\t" sp[i] " " ver "\t" t[i]; break }
+      if (v[i] == "*" || v[i] == ver) { print d "\t" sp[i] " " ver "\t" t[i]; break }
     } }')
 # Incidents that leave the machine itself uncompromised only need the version updated; the rest mean a compromised machine.
 NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
@@ -2054,14 +2106,23 @@ done
 # when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
 # the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
 # is revoked. A file in the shared /tmp counts only if this person owns it.
-WIPER=""; PERSIST=""
+# A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
+# is that incident's sign, shown with the extensions (EXT_PERSIST), never called npm malware.
+EXT_INCS=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
+NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
+WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
   if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
+  _ext=0; case "$EXT_INCS" in *" $_ii "*) case "$NPM_INCS" in *" $_ii "*) ;; *) _ext=1 ;; esac ;; esac
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
-"; else PERSIST="$PERSIST$_ip$TAB$_in
+"
+  elif [ "$_ext" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$_ip$TAB$_in
+"; EXT_PERSIST_TAGS="$EXT_PERSIST_TAGS$_ii
+"
+  else PERSIST="$PERSIST$_ip$TAB$_in
 "; fi
 done <<EOF
 $IND_TABLE
@@ -2077,9 +2138,10 @@ fi
 "
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
-# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
-EXT_HIT=0; [ -n "$EXT_ROWS" ] && EXT_HIT=1
-EXT_TAGS=$(printf '%s\n' "$EXT_ROWS" | cut -f3 | grep -v '^$' | sort -u)
+# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
+# extension incident's startup file is its sign too.
+EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
+EXT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST_TAGS"; } | grep -v '^$' | sort -u)
 ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
 if [ "$MAL_HIT" -eq 1 ] && [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="npm and editor extension malware"; MAL_SHORT="npm and editor extension"
 elif [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="malware in an editor extension"; MAL_SHORT="editor extension"
@@ -2207,13 +2269,30 @@ todo() { # section text
 }
 [ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."
 [ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
-[ "$EXT_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Uninstall the extensions listed in section 5, delete the files listed there, and rotate every key this machine could reach."
+if [ "$EXT_HIT" -eq 1 ]; then
+  # Only what section 5 lists: the extensions, the incident's startup file, or both.
+  if [ -n "$EXT_ROWS" ] && [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
+  elif [ -n "$EXT_ROWS" ]; then _edo="Uninstall the extensions listed in section 5 and"
+  else _edo="Delete the startup file listed in section 5 and"; fi
+  todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
+fi
+# An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
+# the act-now fixes, an update-level one before the update it has to come before.
+advice_todos() { # level
+  _seen=" "
+  for _t in $NPM_TAGS $EXT_TAGS $PY_HITS; do
+    case "$_seen" in *" $_t "*) continue ;; esac; _seen="$_seen$_t "
+    [ "$(incident_level "$_t")" = "$1" ] || continue
+    _a=$(incident_advice "$_t"); [ -n "$_a" ] && todo 5 "$_a"
+  done
+}
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
 if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
 elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
+advice_todos act
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
   Linux)  if [ "$WSL" -eq 1 ]; then _store="a secrets manager" # WSL usually has no desktop keyring
@@ -2233,10 +2312,9 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
+advice_todos update
 [ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
 [ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
-# An incident's own fix (data/incidents.tsv), once for each incident found.
-for _t in $NPM_TAGS $EXT_TAGS $PY_HITS; do _a=$(incident_advice "$_t"); [ -n "$_a" ] && todo 5 "$_a"; done
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
 
 SCORE=100
@@ -2385,9 +2463,11 @@ fi
 # ===========================================================================
 if [ "$PY_HIT" -eq 1 ] || [ "$ANY_MAL" -eq 1 ]; then SEV=$RED
 elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ] || [ "$N_AK" -gt 0 ]; then SEV=$RED
-elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
+elif [ "$ISSUES" -gt 0 ] || [ "$SCAN_FAILED" -eq 1 ]; then SEV=$YEL
 else SEV=$GRN; fi
-if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"; else FIXN="No findings in this scan"; fi
+if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"
+elif [ "$SCAN_FAILED" -eq 1 ]; then FIXN="No findings in the paths checked"
+else FIXN="No findings in this scan"; fi
 PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of AI builders who ran Blindspot"
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
 upper() { printf '%s' "$1" | tr 'a-z' 'A-Z'; }
@@ -2414,6 +2494,7 @@ else
 fi
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
+[ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
@@ -2667,6 +2748,13 @@ if [ "$EXT_HIT" -eq 1 ]; then
     emit "          ${p} ${DIM}($(npm_label "$t")), installed${RST}"
   done <<EOF
 $EXT_ROWS
+EOF
+  while IFS="$TAB" read -r f p; do
+    [ -n "$f" ] || continue
+    emit "        $(short "$f")"
+    emit "          ${p}"
+  done <<EOF
+$EXT_PERSIST
 EOF
   for _t in $EXT_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 fi

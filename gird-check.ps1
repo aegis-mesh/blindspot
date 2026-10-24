@@ -486,8 +486,10 @@ $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
 $AiderFiles = New-Object System.Collections.Generic.List[string]
-# The project files of data/auto-approve.tsv, and links to ~/.ssh/authorized_keys outside ~/.ssh.
+# The project files of data/auto-approve.tsv, every project's .vscode/settings.json (section 2), and
+# links to this user's ~/.ssh/authorized_keys outside ~/.ssh.
 $AaFiles = New-Object System.Collections.Generic.List[string]
+$VscSettings = New-Object System.Collections.Generic.List[string]
 $AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
@@ -507,12 +509,9 @@ $WormRefNote = 'runs a file the TanStack and keyv worms plant'
 $AaTable = @(
   ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"defaultMode": "bypassPermissions"'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"'))
-  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.autoApprove', @('"chat.tools.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
-  ,@('VS Code Copilot', 'all', '{PROJECT}/.vscode/settings.json', 'chat.tools.autoApprove', @('"chat.tools.autoApprove": true'))
-  ,@('VS Code Copilot', 'all', '{PROJECT}/.vscode/settings.json', 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
 )
-$AaProject = @('.vscode/settings.json')
+$AaProject = @()
 # <<< auto-approve
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
 function Is-AaProject([string]$path) {
@@ -526,6 +525,17 @@ function Link-Target($info) {
   try { $t = $info.LinkTarget } catch { }
   if (-not $t) { try { $t = @((Get-Item -LiteralPath $info.FullName -Force -ErrorAction Stop).Target)[0] } catch { } }
   [string]$t
+}
+# Does a link in $dir with this target resolve to this user's own ~/.ssh/authorized_keys? The paths
+# are compared resolved, so a link into a repo's own .ssh/authorized_keys fixture does not count,
+# and a link to the file's place counts before the file exists: an agent writing through it creates it.
+$AkPath = $null; try { $AkPath = [IO.Path]::GetFullPath((J $HomeDir '.ssh/authorized_keys')) } catch { }
+function Is-AkLink([string]$dir, [string]$target) {
+  if (-not $target -or -not $AkPath) { return $false }
+  try {
+    $t = $target; if (-not [IO.Path]::IsPathRooted($t)) { $t = J $dir $t }
+    return [IO.Path]::GetFullPath($t).Equals($AkPath, $PathCmp)
+  } catch { return $false }
 }
 function Scan-Home([string]$dir, [int]$depth) {
   foreach ($e in (Entries $dir)) {
@@ -543,7 +553,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       if ($isSettings) { $Found.Add($path) }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
       elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
-      if ((Link-Target $e) -match '\.ssh[\\/]authorized_keys$' -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
+      if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
     if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or $isSettings -or
@@ -555,7 +565,10 @@ function Scan-Home([string]$dir, [int]$depth) {
     elseif ($name -ceq '.aider.chat.history.md') { $AiderFiles.Add($path) }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
     elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
-    elseif (Is-AaProject $path) { $AaFiles.Add($path) }
+    else {
+      if ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { $VscSettings.Add($path) }
+      if (Is-AaProject $path) { $AaFiles.Add($path) }
+    }
   }
 }
 # Whether a folder holds any file within three levels, and any changed in 30 days.
@@ -903,6 +916,39 @@ function Flat-Text([string]$f) {
   try { $RxBlockComment.Replace(($RxLineComment.Replace($t, '$1') -replace '[\r\n\t]', ' '), '') } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
+# A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
+# file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
+# a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts.
+# A .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
+# (so a setting inside an inline table, a profile written as one, does not count), and only the
+# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
+# is used.
+function Aa-Hit([string]$f, $pats) {
+  $toml = $f.EndsWith('.toml')
+  if ($toml) { $t = Read-Text $f } else { $t = Flat-Text $f }
+  if ($null -eq $t) { return $false }
+  $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
+  $got = New-Object bool[] $pp.Count
+  $lines = @($t); if ($toml) { $lines = $t.Split("`n") }
+  foreach ($line in $lines) {
+    $l = $line -replace '\s', ''
+    if ($toml -and $l.StartsWith('#')) { continue }
+    if ($toml -and $l.StartsWith('[')) { break }
+    for ($i = 0; $i -lt $pp.Count; $i++) {
+      if ($got[$i]) { continue }
+      $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
+      while ($k -ge 0) {
+        $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
+        $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
+        if ($toml) { $hit = ($b -eq '' -and ($a -eq '' -or $a -eq '#')) }
+        else { $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a))) }
+        if ($hit) { $got[$i] = $true; break }
+        $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
+      }
+    }
+  }
+  -not ($got -contains $false)
+}
 function Auto-Row([string]$f, [string]$what, [string]$t) {
   if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
   # A repo's worktrees carry the same settings: one row, with how many more folders have it.
@@ -925,6 +971,16 @@ foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/') { continue }
   $t = Flat-Text $f
   if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
+}
+# A project's .vscode/settings.json with "chat.tools.autoApprove": true, the setting the
+# CVE-2025-53773 prompt injection made Copilot write so it could run commands without asking. VS Code
+# 1.104 renamed it without migration, so current VS Code ignores it: a sign of that attack, or of an
+# old VS Code, not a setting in force. A thing to look at, not an agent set to run without asking.
+foreach ($f in $VscSettings) {
+  if (-not (Is-File $f)) { continue }
+  if (Aa-Hit $f @('"chat.tools.autoApprove": true')) {
+    Auto-Row $f 'auto-approve Copilot''s tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it' ([string](Flat-Text $f))
+  }
 }
 $N_AUTO = $AutoRows.Count
 # Row 02 counts projects: the folders holding these settings.
@@ -1084,7 +1140,7 @@ function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, Ma
 function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'injective' { 'update' } default { 'act' } } }
 function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'injective' { 'Injective SDK' } default { $t } } }
 function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
-function Incident-Advice([string]$t) { switch ($t) { 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
+function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also delete /tmp/ijewf, /tmp/out.zip and any plist in ~/Library/LaunchAgents you do not recognize, such as com.user.nodestart.plist.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 $BadPypi = @'
@@ -1102,6 +1158,7 @@ $IndTable = @(
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.out.log', '-')
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.err.log', '-')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), 'starts the Mastra worm at login')
+  ,@('glassworm', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.nodestart.plist'), 'starts the GlassWorm malware at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/NodePackages/protocal.cjs'), 'starts the Mastra worm at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/nvmconf.service'), 'starts the Mastra worm at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'), 'starts the Mastra worm at login')
@@ -1366,23 +1423,23 @@ secp256 * sandworm
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
 $BadExt = @'
-oorzc.ssh-tools 0.5.1 glassworm
-oorzc.i18n-tools-plus 1.6.8 glassworm
-oorzc.mind-map 1.0.61 glassworm
-oorzc.scss-to-css-compile 1.3.4 glassworm
-Angular-studio.ng-angular-extension * glassworm
-awesome-codebase.codebase-dart-pro * glassworm
-cudra-production.vsce-prettier-pro * glassworm
-dev-studio-sense.php-comp-tools-vscode * glassworm
-ko-zu-gun-studio.synchronization-settings-vscode * glassworm
-littensy-studio.magical-icons * glassworm
-pretty-studio-advisor.prettyxml-formatter * glassworm
-sol-studio.solidity-extension * glassworm
-studio-jjalaire-team.professional-quarto-extension * glassworm
-studio-velte-distributor.pro-svelte-extension * glassworm
-sun-shine-studio.shiny-extension-for-vscode * glassworm
-tucyzirille-studio.angular-pro-tools-extension * glassworm
-vce-brendan-studio-eich.js-debuger-vscode * glassworm
+oorzc.ssh-tools 0.5.1 glassworm openvsx
+oorzc.i18n-tools-plus 1.6.8 glassworm openvsx
+oorzc.mind-map 1.0.61 glassworm openvsx
+oorzc.scss-to-css-compile 1.3.4 glassworm openvsx
+Angular-studio.ng-angular-extension * glassworm openvsx
+awesome-codebase.codebase-dart-pro * glassworm openvsx
+cudra-production.vsce-prettier-pro * glassworm openvsx
+dev-studio-sense.php-comp-tools-vscode * glassworm openvsx
+ko-zu-gun-studio.synchronization-settings-vscode * glassworm openvsx
+littensy-studio.magical-icons * glassworm openvsx
+pretty-studio-advisor.prettyxml-formatter * glassworm openvsx
+sol-studio.solidity-extension * glassworm openvsx
+studio-jjalaire-team.professional-quarto-extension * glassworm openvsx
+studio-velte-distributor.pro-svelte-extension * glassworm openvsx
+sun-shine-studio.shiny-extension-for-vscode * glassworm openvsx
+tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx
+vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx
 '@
 # <<< bad-extensions
 $NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]; $N_BAD_NPM = 0
@@ -1494,9 +1551,9 @@ foreach ($r in $NpmRoots) {
 $OutTable = @(
   ,@('cursor', 'Cursor', 'mac', 'plist', '/Applications/Cursor.app/Contents/Info.plist', '-', '3.0', 'a prompt injection could escape the sandbox', 'github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw')
   ,@('cursor', 'Cursor', 'mac', 'plist', (J $HomeDir 'Applications/Cursor.app/Contents/Info.plist'), '-', '3.0', 'a prompt injection could escape the sandbox', 'github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw')
-  ,@('amazonq', 'Amazon Q', 'mac', 'folder', (J $HomeDir 'Library/Caches/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'opening a hostile workspace can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
-  ,@('amazonq', 'Amazon Q', 'linux', 'folder', (J $HomeDir '.cache/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'opening a hostile workspace can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
-  ,@('amazonq', 'Amazon Q', 'win', 'folder', (J $LocalAppData 'aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'opening a hostile workspace can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
+  ,@('amazonq', 'Amazon Q language server', 'mac', 'folder', (J $HomeDir 'Library/Caches/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'opening a hostile workspace can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
+  ,@('amazonq', 'Amazon Q language server', 'linux', 'folder', (J $HomeDir '.cache/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'opening a hostile workspace can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
+  ,@('amazonq', 'Amazon Q language server', 'win', 'folder', (J $LocalAppData 'aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'opening a hostile workspace can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '0.2.116', '1.0.24', 'a web page could reach the editor connection', 'github.com/advisories/GHSA-9f65-56v6-gxw7')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
@@ -1507,28 +1564,7 @@ $OutTable = @(
 # a line with its spaces removed, starting at the line, a { or a , and ending at the line's end, a
 # , } # or /. Lines starting with // or # are skipped; in a .toml file only the lines before the
 # first [table] count.
-function Aa-Hit([string]$f, $pats) {
-  $t = Read-Text $f; if ($null -eq $t) { return $false }
-  $toml = $f.EndsWith('.toml')
-  $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
-  $got = New-Object bool[] $pp.Count
-  foreach ($line in $t.Split("`n")) {
-    $l = $line -replace '\s', ''
-    if ($l.StartsWith('//') -or $l.StartsWith('#')) { continue }
-    if ($toml -and $l.StartsWith('[')) { break }
-    for ($i = 0; $i -lt $pp.Count; $i++) {
-      if ($got[$i]) { continue }
-      $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
-      while ($k -ge 0) {
-        $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
-        $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
-        if (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a))) { $got[$i] = $true; break }
-        $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
-      }
-    }
-  }
-  -not ($got -contains $false)
-}
+# Agents set to run commands without asking (data/auto-approve.tsv), matched by Aa-Hit (section 2).
 $AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}
 foreach ($r in $AaTable) {
   if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
@@ -1580,6 +1616,8 @@ foreach ($r in $OutTable) {
   }
   foreach ($v in $vs) {
     if (-not (Ver-Ok $v)) { continue }
+    # name@0.1 in an MCP config is a range npx resolves when it runs, not a version: not reported.
+    if ($r[3] -eq 'mcparg' -and $v.Split('.').Count -lt 3) { continue }
     if ($r[5] -ne '-' -and (Ver-Cmp $v $r[5]) -lt 0) { continue }
     if ((Ver-Cmp $v $r[6]) -ge 0) { continue }
     if ($oldSeen.ContainsKey($r[0])) { $o = $oldSeen[$r[0]]; if (-not $o.Vers.Contains($v)) { $o.Vers.Add($v) } }
@@ -1608,13 +1646,18 @@ foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
 $byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x[0], $y[0]); if ($o -eq 0) { $o = [string]::CompareOrdinal($x[1], $y[1]) }; $o }
 $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
-# with a platform suffix such as -darwin-arm64, the id compared without case.
+# with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
+# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. A line whose bad build
+# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
+# same version is the Marketplace's clean build.
 $ExtRows = New-Object System.Collections.Generic.List[object]
-$BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 3 })
+$BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 4 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
+  $reg = 'openvsx'; if ($er -eq '.vscode/extensions') { $reg = 'marketplace' }
   foreach ($e in (Entries (J $HomeDir $er))) {
     if (-not (Is-DirInfo $e)) { continue }
     foreach ($x in $BadExtRows) {
+      if ($x[3] -ne 'any' -and $x[3] -ne $reg) { continue }
       $pre = $x[0] + '-'
       if (-not $e.Name.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) { continue }
       $m = [regex]::Match($e.Name.Substring($pre.Length), '^([0-9]+(?:\.[0-9]+)*)(-.*)?$')
@@ -1633,6 +1676,11 @@ foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } e
 # is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
+# A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
+# is that incident's sign, shown with the extensions ($ExtPersist), never called npm malware.
+$ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
+$ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
+$NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 foreach ($r in $IndOn) {
   if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
@@ -1640,7 +1688,9 @@ foreach ($r in $IndOn) {
     if ($OnWindows) { continue }
     if (-not (Owns-File $m)) { continue }
   }
-  if ($r[2] -eq 'wiper') { $Wiper.Add($m) } else { $Persist.Add(@($m, $r[5])) }
+  if ($r[2] -eq 'wiper') { $Wiper.Add($m) }
+  elseif ($ExtIncs -contains $r[0] -and -not ($NpmIncs -contains $r[0])) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
+  else { $Persist.Add(@($m, $r[5])) }
 }
 # A registry value is not a file, so the Mastra worm's Run key stays code.
 if ($OnWindows) {
@@ -1653,9 +1703,10 @@ foreach ($f in $WormFiles) { $Persist.Add(@($f, (Planted-Note ([IO.Path]::GetFil
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
-# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
-$EXT_HIT = 0; if ($ExtRows.Count -gt 0) { $EXT_HIT = 1 }
-$ExtTags = @(@(foreach ($r in $ExtRows) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
+# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
+# extension incident's startup file is its sign too.
+$EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
+$ExtTags = @((@(foreach ($r in $ExtRows) { $r[2] }) + @($ExtPersistTags)) | Sort-Object -Unique -CaseSensitive)
 $ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
 if ($MAL_HIT -eq 1 -and $EXT_HIT -eq 1) { $MalWhat = 'npm and editor extension malware'; $MalShort = 'npm and editor extension' }
 elseif ($EXT_HIT -eq 1) { $MalWhat = 'malware in an editor extension'; $MalShort = 'editor extension' }
@@ -1733,13 +1784,30 @@ function Add-Todo([int]$sec, [string]$text) {
 }
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
 if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
-if ($EXT_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Uninstall the extensions listed in section 5, delete the files listed there, and rotate every key this machine could reach.' }
+if ($EXT_HIT -eq 1) {
+  # Only what section 5 lists: the extensions, the incident's startup file, or both.
+  if ($ExtRows.Count -gt 0 -and $ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
+  elseif ($ExtRows.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5 and' }
+  else { $edo = 'Delete the startup file listed in section 5 and' }
+  Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
+}
+# An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
+# the act-now fixes, an update-level one before the update it has to come before.
+function Add-Advice([string]$level) {
+  $seen = @{}
+  foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) {
+    if ($seen.ContainsKey($t)) { continue }; $seen[$t] = 1
+    if ((Incident-Level $t) -ne $level) { continue }
+    $a = Incident-Advice $t; if ($a) { Add-Todo 5 $a }
+  }
+}
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 $PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
 if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
 elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $adv, and rotate every key the machine could reach." }
+Add-Advice 'act'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
@@ -1753,10 +1821,9 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
+Add-Advice 'update'
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
 if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
-# An incident's own fix (data/incidents.tsv), once for each incident found.
-foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) { $a = Incident-Advice $t; if ($a) { Add-Todo 5 $a } }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
 $ISSUES = $Todo.Count
 
@@ -2060,6 +2127,7 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
+  foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   foreach ($t in $ExtTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 }
 foreach ($p in $Platforms) {
