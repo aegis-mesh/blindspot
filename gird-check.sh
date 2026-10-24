@@ -1753,6 +1753,7 @@ npm_hits() {
     }
     function hit(nm, v,   k, t) {
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
+      if (v ~ /-security$/) return   # the empty placeholder npm puts in place of a removed package
       k = nm "@" v; t = ""
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "\t" nm " " v "\t" t }
@@ -1820,7 +1821,7 @@ _g=$(
       for d in "$r/$nm" "$r"/*/node_modules/"$nm" "$r"/@*/*/node_modules/"$nm"; do
         [ -f "$d/package.json" ] || continue
         v=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$d/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/')
-        case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; esac
+        case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; (*-security) continue ;; esac
         printf '%s\n' "$BAD_NPM" | N=$nm V=$v D=$d awk '$1 == ENVIRON["N"] && ($2 == ENVIRON["V"] || $2 == "*") { print ENVIRON["D"] "\t" ENVIRON["N"] " " ENVIRON["V"] "\t" $3; exit }'
       done
     done
@@ -1828,7 +1829,8 @@ _g=$(
 )
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"
-# npm's download cache keeps a package after it is uninstalled, and the malware ran when it installed.
+# npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
+# on this machine, usually by an install; the report says which of the three places it came from.
 for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
   [ -n "$c" ] && [ -d "$c" ] || continue
   _h=$(find "$c" -type f -print0 2>/dev/null | xargs -0 cat 2>/dev/null | npm_hits | awk -F '\t' -v OFS='\t' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u)
@@ -1883,7 +1885,6 @@ PLAT_FOUND=" "; N_PLAT=0; N_PLAT_FOUND=0; PLAT_LIST=""; PLAT_FIX=""
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
   N_PLAT=$((N_PLAT + 1)); PLAT_LIST="${PLAT_LIST:+$PLAT_LIST, }$_pnm"
-  _pname=$(incident_name "$_pid"); PLAT_FIX="${PLAT_FIX:+$PLAT_FIX$TAB}$_pname"
   _hit=0
   [ "$_pcmd" = - ] || for _c in $_pcmd; do command -v "$_c" >/dev/null 2>&1 && _hit=1; done
   _ifs=$IFS; IFS=';'
@@ -1891,11 +1892,14 @@ while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
     case "$_p" in -) ;; */) [ -d "$_p" ] && _hit=1 ;; *) [ -f "$_p" ] && _hit=1 ;; esac
   done
   IFS=$_ifs
-  if [ "$_hit" -eq 1 ]; then PLAT_FOUND="$PLAT_FOUND$_pid "; N_PLAT_FOUND=$((N_PLAT_FOUND + 1)); fi
+  if [ "$_hit" -eq 1 ]; then
+    PLAT_FOUND="$PLAT_FOUND$_pid "; N_PLAT_FOUND=$((N_PLAT_FOUND + 1))
+    PLAT_FIX="${PLAT_FIX:+$PLAT_FIX$TAB}$(incident_name "$_pid")"
+  fi
 done <<EOF
 $PLATFORMS
 EOF
-# "If you used A, B or C": the incidents' names.
+# "If you used A, B or C": the names of the platforms found.
 PLAT_FIX=$(printf '%s' "$PLAT_FIX" | awk -F '\t' '{ for (i = 1; i <= NF; i++) printf "%s%s", (i == 1 ? "" : i == NF ? " or " : ", "), $i }')
 plat_hit() { case "$PLAT_FOUND" in *" $1 "*) printf 1 ;; *) printf 0 ;; esac; }
 # The report's fixed fields opencode and railway.
@@ -2297,7 +2301,8 @@ $ALLOW_ROWS
 EOF
 
 SEC4=$CAP; CAP=""
-section 05 "RECENT KEY LEAKS" "$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 1 + N_PLAT)) checked"
+N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 1 + N_PLAT))   # the Python incidents, npm and each platform
+section 05 "RECENT KEY LEAKS" "$N_LEAKS checked"
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
 for _pi in $PY_INCIDENTS; do
   _pl=$(incident_name "$_pi")
@@ -2355,7 +2360,12 @@ if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
   while IFS="$TAB" read -r f p t; do
     [ -n "$f" ] || continue
     emit "        $(short "$f")"
-    emit "          ${p} ${DIM}($(npm_label "$t"))${RST}"
+    case "$f" in
+      *"(npm's download cache)") _w="downloaded into npm's cache" ;;
+      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock) _w="listed in this lockfile" ;;
+      *) _w="installed" ;;
+    esac
+    emit "          ${p} ${DIM}($(npm_label "$t")), ${_w}${RST}"
   done <<EOF
 $NPM_ROWS
 EOF
@@ -2508,7 +2518,7 @@ elif [ "$N_PLAT_FOUND" -eq 1 ]; then
   while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do [ "$(plat_hit "$_pid")" = 1 ] && D5=$_psum; done <<EOF
 $PLATFORMS
 EOF
-else G5="${GRN}✓${RST}"; D5="no $(py_short "$PY_INCIDENTS" | sed 's/ and /, /g'), npm, $PLAT_LIST leaks"; fi
+else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks it checks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"
 cline 02 "$G2" "MCP servers" "$D2"

@@ -93,4 +93,6 @@ Add a Developer Certificate of Origin sign-off to each commit with `git commit -
 
 ## Releases
 
+Every week, and before a merge to `main`, a maintainer runs `bash tools/check-advisories.sh`. It compares `data/bad-npm.tsv` with OSV.dev (which includes GitHub's malware advisories and the OpenSSF Malicious Packages list) and lists withdrawn entries, versions we flag that nothing names any more, and malicious versions we miss. Treat a MISSING line as a lead: confirm it against a primary source before adding it. It also lists each incident's source to re-read, since a vendor can change what it says an incident did.
+
 Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` in the release notes. gird.ai/blindspot serves `gird-check.sh` and `gird-check.ps1` from `main`, so a merge to `main` is a release to everyone who downloads from gird.ai.

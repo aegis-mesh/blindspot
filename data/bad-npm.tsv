@@ -8,6 +8,7 @@
 #   incident  an id from data/incidents.tsv
 # Not complete: the AntV, UiPath and Red Hat waves and most packages the keyv worm spread to are
 # not listed. tensorlake's advisory also lists every version, but names only 0.5.144 as malicious.
+#! skip tensorlake * the advisory also lists every version, but names only 0.5.144 as malicious
 # name	version	incident
 axios	1.14.1	axios
 axios	0.30.4	axios

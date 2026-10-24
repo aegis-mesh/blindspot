@@ -262,6 +262,14 @@ cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3
 HOME="$WORK/lite" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
 has    "a LiteLLM hit leads the summary"               'ACT NOW: SIGNS OF THE LITELLM 1\.107\.0 MALWARE' "$WORK/lite.txt"
 
+# Where a hit was found, and npm's placeholder for a removed package.
+has    "a lockfile hit says it is listed there"      'axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile' "$WORK/out-flat-incidents.txt"
+has    "an install hit says it is installed"         'claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed' "$WORK/out-flat-incidents.txt"
+has    "a cache hit says it was downloaded"          "@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI, April 2026\), downloaded into npm's cache" "$WORK/out-flat-incidents.txt"
+cp -R "$WORK/clean" "$WORK/ph2"; mkdir -p "$WORK/ph2/code/ph"
+printf '{"lockfileVersion":3,"packages":{"node_modules/plain-crypto-js":{"version":"0.0.1-security","resolved":"https://registry.npmjs.org/plain-crypto-js/-/plain-crypto-js-0.0.1-security.tgz"}}}\n' > "$WORK/ph2/code/ph/package-lock.json"
+HOME="$WORK/ph2" bash "$SCRIPT" --offline > "$WORK/ph2.txt" 2>&1
+hasnot "npm's -security placeholder is not malware" 'plain-crypto-js' "$WORK/ph2.txt"
 echo "incidents from data/incidents.tsv"
 has    "each npm incident found gets its sourced line" 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it\. cisa\.gov' "$WORK/out-flat-incidents.txt"
 cp -R "$WORK/clean" "$WORK/mis"; mkdir -p "$WORK/mis/code/m"
@@ -380,12 +388,12 @@ lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offlin
 lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
-has    "no leaks found: row 05 names all five" 'no LiteLLM, npm, OpenCode, Railway, Zeabur leaks' "$WORK/zb-none.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 5 recent leaks it checks' "$WORK/zb-none.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
 has    "Zeabur alone is flagged"               'Zeabur CLI found: rotate secrets stored there' "$WORK/zb-one.txt"
-has    "Zeabur adds a fix"                     'If you used OpenCode Console, Railway or Zeabur, rotate the keys stored there' "$WORK/zb-one-full.txt"
+has    "Zeabur adds a fix naming only what was found" 'If you used Zeabur, rotate the keys stored there' "$WORK/zb-one-full.txt"
 has    "Zeabur has its own detail line"        'Zeabur CLI found' "$WORK/zb-one-full.txt"
 cp -R "$WORK/zb-one" "$WORK/zb-two"; mkdir -p "$WORK/zb-two/.railway"; printf '{}\n' > "$WORK/zb-two/.railway/config.json"
 lp "$WORK/zb-two" > "$WORK/zb-two.txt"
@@ -441,7 +449,7 @@ else bad "made-up incidents need only data lines and gen.sh"; sed 's/^/        /
 mu() { env HOME="$1" TMPDIR="$1/tmp" PATH=/usr/bin:/bin ${3:+GIRD_CHECK_COMPACT=1} bash "$WORK/mu/gird-check.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$2"; }
 mu "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
-has    "made-up platform: named in the shared fix"    'If you used OpenCode Console, Railway, Zeabur or Made Platform, rotate the keys stored there' "$WORK/mu.txt"
+has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
 has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +7 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "made-up wiper file is a waiting wiper"        'a wiper is waiting ~/\.config/madewiper ' "$WORK/mu.txt"
@@ -460,7 +468,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.local/share/opencode" "$WORK/mu-plat/.railway"
 mu "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 names the made-up ones"  'no LiteLLM, Madepkg, npm, OpenCode, Railway, Z' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 7 recent leaks it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mu "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"

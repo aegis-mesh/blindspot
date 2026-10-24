@@ -1310,6 +1310,7 @@ $NpmCacheTag = " (npm's download cache)"
 # Versions are shown only if they look like versions, so a package can't put terminal control codes in the report.
 function Npm-Hit([string]$where, [string]$nm, [string]$v) {
   if ($v -cnotmatch '^[0-9A-Za-z.+_-]+\z') { $v = '?' }
+  if ($v.EndsWith('-security')) { return }  # npm's empty placeholder for a removed package
   $k = "$nm@$v"; $t = $null
   if ($NpmBad.ContainsKey($k)) { $t = $NpmBad[$k] } elseif ($NpmAny.ContainsKey($nm)) { $t = $NpmAny[$nm] }
   if ($null -eq $t -or $NpmSeen.ContainsKey("$where|$k")) { return }
@@ -1402,7 +1403,8 @@ foreach ($r in $NpmRoots) {
     }
   }
 }
-# npm's download cache keeps a package after it is uninstalled, and the malware ran when it installed.
+# npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
+# on this machine, usually by an install; the report says which of the three places it came from.
 # A folder or file that can't be read leaves the cache not fully checked, never clean.
 foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
   $ix = J $c '_cacache/index-v5'; if (-not (Is-Dir $ix)) { continue }
@@ -1465,7 +1467,7 @@ $PlatFound = @($Platforms | Where-Object {
   $p = $_; (@($p.Cmds | Where-Object { Has-Command $_ }).Count -gt 0) -or (@($p.Dirs | Where-Object { Is-Dir $_ }).Count -gt 0) -or (@($p.Files | Where-Object { Is-File $_ }).Count -gt 0)
 } | ForEach-Object { $_.Id })
 function Join-Or($names) { $n = @($names); if ($n.Count -le 1) { $n -join '' } else { ($n[0..($n.Count - 2)] -join ', ') + ' or ' + $n[$n.Count - 1] } }
-$PlatFix = Join-Or @($Platforms | ForEach-Object { Incident-Name $_.Id })
+$PlatFix = Join-Or @($Platforms | Where-Object { $PlatFound -contains $_.Id } | ForEach-Object { Incident-Name $_.Id })
 # The report's fixed fields opencode and railway.
 $OC = 0; if ($PlatFound -contains 'opencode') { $OC = 1 }
 $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
@@ -1752,7 +1754,8 @@ foreach ($r in $AllowRows) {
 }
 $Sec4 = Take-Cap
 $ind26 = ' ' * 26
-Section '05' 'RECENT KEY LEAKS' "$(@($PyIncidents).Count + 1 + @($Platforms).Count) checked"
+$N_LEAKS = @($PyIncidents).Count + 1 + @($Platforms).Count
+Section '05' 'RECENT KEY LEAKS' "$N_LEAKS checked"
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
 foreach ($pi in $PyIncidents) {
   $pl = Incident-Name $pi
@@ -1784,7 +1787,12 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
     if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}signs of the malware found$cRst" }
   } else { Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}a bad version to update$cRst" }
-  foreach ($r in $NpmRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2]))$cRst" }
+  foreach ($r in $NpmRows) {
+    if ($r[0].EndsWith($NpmCacheTag)) { $w = "downloaded into npm's cache" }
+    elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') { $w = 'listed in this lockfile' }
+    else { $w = 'installed' }
+    Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), $w$cRst"
+  }
   foreach ($r in $Persist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   foreach ($t in $NpmTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 } elseif ($WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $NpmUnread -gt 0)) {
@@ -1875,7 +1883,7 @@ elseif ($leaks.Count -ge 2) {
   if ($leaks.Count -ge 3) { $D5 = "$l found: rotate keys" } else { $D5 = "$l found: rotate their keys" }
 }
 elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
-else { $G5 = "$cGrn$gOk$cRst"; $D5 = "no $((Py-Short $PyIncidents) -replace ' and ', ', '), npm, $(@($Platforms | ForEach-Object { $_.Name }) -join ', ') leaks" }
+else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks it checks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1
 CLine '02' $G2 'MCP servers' $D2
