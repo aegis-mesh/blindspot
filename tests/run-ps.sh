@@ -891,6 +891,14 @@ payload_checks places "$WORK/report-places.json"
 mkdir -p "$WORK/empty"
 report_of "$WORK/report-empty.json" psrun "$WORK/empty" GIRD_CHECK_API="$API" --
 payload_checks empty "$WORK/report-empty.json"
+# files_found counts the files the scan found, as it always has: a linked settings file is checked, not counted.
+mkdir -p "$WORK/fcount/p/.claude" "$WORK/fcount/q/.claude" "$WORK/fcount/AppData/Roaming" "$WORK/fcount/AppData/Local/Temp"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"x"}]}]}}\n' > "$WORK/fcount/p/.claude/settings.json"
+printf 'X=1\n' > "$WORK/fcount/p/.env"; ln -s ../../p/.claude/settings.json "$WORK/fcount/q/.claude/settings.json"
+report_of "$WORK/report-fcount.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" --
+has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
+psrun "$WORK/fcount" -- -Offline > "$WORK/fcount.txt" 2>&1
+has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
 hasnot "no report holds a name you gave an MCP server" 'acme|my notes|web.search' "$WORK/received.log"
 hasnot "no report holds a server label as written"     '@modelcontextprotocol|MCP_DOCKER|Figma Dev Mode|upstash|Playwright|"gh"|"fs"' "$WORK/received.log"
 hasnot "no report holds a file name" '\.zshrc|zsh_history|python_history|bash_profile|\.env|\.mcp|mcp\.json|config\.(toml|yaml)|cline_mcp|claude_desktop|settings(\.local)?\.json|\.aider|PSReadLine|ConsoleHost' "$WORK/received.log"

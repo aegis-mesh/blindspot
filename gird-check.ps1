@@ -470,7 +470,9 @@ foreach ($p in @('AppData', 'Library', 'Applications', 'Pictures', 'Videos', 'Mo
     '3D Objects', 'scoop')) { $PrunePaths.Add((J $HomeDir $p)) }
 if (-not $OptAll) { foreach ($p in @('Desktop', 'Documents', 'Downloads')) { $PrunePaths.Add((J $HomeDir $p)) } }
 $Found = New-Object System.Collections.Generic.List[string]
-# Kept apart from $Found, so files_found counts what it always has.
+# Kept apart from $Found, so files_found counts what it always has: the files of the npm and
+# project checks, and linked settings files, which are checked like the files but are not files.
+$LinkSettings = New-Object System.Collections.Generic.List[string]
 $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
@@ -529,7 +531,7 @@ function Scan-Home([string]$dir, [int]$depth) {
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
     # A linked settings, tasks or worm file is followed; any other link is not.
     if ($link) {
-      if ($isSettings) { $Found.Add($path) }
+      if ($isSettings) { $LinkSettings.Add($path) }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
       elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
       if ((Link-Target $e) -match '\.ssh[\\/]authorized_keys$' -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
@@ -747,7 +749,7 @@ function Sess-Stop([bool]$wait) {
 
 Scan-Home $HomeDir 0
 $EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
-$AllowFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
+$AllowFiles = @(@($Found) + @($LinkSettings) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
 $ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 

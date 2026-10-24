@@ -876,6 +876,14 @@ PY
   mkdir -p "$WORK/empty"
   report_of "$WORK/report-empty.json" env HOME="$WORK/empty" GIRD_CHECK_API="$API" bash "$SCRIPT"
   payload_checks empty "$WORK/report-empty.json"
+  # files_found counts the files the scan found, as it always has: a linked settings file is checked, not counted.
+  mkdir -p "$WORK/fcount/p/.claude" "$WORK/fcount/q/.claude"
+  printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"x"}]}]}}\n' > "$WORK/fcount/p/.claude/settings.json"
+  printf 'X=1\n' > "$WORK/fcount/p/.env"; ln -s ../../p/.claude/settings.json "$WORK/fcount/q/.claude/settings.json"
+  report_of "$WORK/report-fcount.json" env HOME="$WORK/fcount" GIRD_CHECK_API="$API" bash "$SCRIPT"
+  has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
+  HOME="$WORK/fcount" bash "$SCRIPT" --offline > "$WORK/fcount.txt" 2>&1
+  has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
   # The dossier checks share nothing: the same report, link and score with or without them.
   rm -rf "$WORK/pl-base" "$WORK/pl-dz"; cp -R "$WORK/clean" "$WORK/pl-base"; cp -R "$WORK/clean" "$WORK/pl-dz"
   bash tests/make-dossier.sh "$WORK/pl-dz" "$WORK/pl-dz/$DAS" calm
