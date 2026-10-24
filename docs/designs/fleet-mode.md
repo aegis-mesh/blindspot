@@ -60,8 +60,10 @@ files. If `sudo` fails, the account is reported as not checked.
 - The copy of the script each account runs is made once by root, in a new folder made with `mktemp
   -d` and owned by root (folder 0755, file 0644), and its owner and mode are checked again before
   each start. No account can change the code a later account runs.
-- An account run reads only regular files under a size limit. A fifo, socket, device or oversized
-  file is counted as not checked. The session check uses the system's perl, never ripgrep.
+- An account run reads only regular files, and leaves out any over a size limit. A fifo, socket,
+  device or oversized file is counted as not checked. Session files are the exception to the size
+  limit: the session check, which uses the system's perl, never ripgrep, reads them in 1 MB pieces
+  whatever their size.
 - An account run cannot speak for anyone else. It writes a fixed line format (`key=value`, known keys
   only, numbers, and names from the fixed lists) to a pipe root created. Root reads at most a set
   number of bytes, checks every line against the format, and builds the account's row itself. Any
@@ -71,8 +73,8 @@ files. If `sudo` fails, the account is reported as not checked.
   account has a time limit enforced by root with a background timer (macOS has no `timeout`); at the
   limit root kills the run's process group, stops reading, reports the account as partly checked and
   moves on, so a read stuck on a network home cannot hold up the others or the MDM. A process that
-  survives the kill is reported. The whole run has a deadline below the MDM's own timeout, set by a
-  flag each MDM page gives.
+  survives the kill is reported. The whole run aims to finish before a deadline below the MDM's own
+  timeout, set by a flag each MDM page gives.
 - Read only. Nothing is created, changed or deleted in any home, though reading changes files' access
   times. `sudo` writes one line to the system log per account.
 
@@ -98,7 +100,7 @@ it reports not checked. Leftover home folders with no account are not listed.
 Checked once, by root, and reported for the Mac, not for an account: the shared temp folder, startup
 items in shared folders, agents installed in shared folders (found by path, never run), and running
 processes. A malware marker found only in the shared temp folder is reported as a machine finding,
-because any account can create files there.
+because any account can create files there. What phase 1 checks of these is under "As built".
 
 ## The result
 
@@ -135,9 +137,9 @@ today, and no file paths, file names or key values:
 
 - `account` is the local account name, which the MDM already knows. `--hash-accounts=<secret>`
   replaces it with a keyed hash; a plain hash of a name is easy to reverse.
-- `outcome` is the worst of `failed`, `act`, `not_checked`, `update`, `clear`, in that order, so a
+- `outcome` is the worst of `failed`, `act`, `not_checked`, `review`, `clear`, in that order, so a
   finding to act on is never hidden by a partial check, and a partial check never reads as clear.
-- The summary line is `blindspot <outcome> accounts=<n> act=<n> update=<n> not_checked=<n>
+- The summary line is `blindspot <outcome> accounts=<n> act=<n> review=<n> not_checked=<n>
   v=<script version> at=<UTC time>`.
 - The inventory value is a compact form of the whole result, one line, short enough for an MDM's
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
@@ -153,7 +155,7 @@ today, and no file paths, file names or key values:
 ### Exit codes
 
 New codes, clear of the ones the script already uses (1 when HOME is not set, which `--all-users` does
-not need; 2 for an unknown option; 130 when interrupted): 0 `clear`, 10 `act`, 11 `update`, 12
+not need; 2 for an unknown option; 130 when interrupted): 0 `clear`, 10 `act`, 11 `review`, 12
 `not_checked`, 13 `failed`. With `--exit-zero`, a finished run exits 0 and only `failed` exits 13. An
 MDM that stops the script on its own timeout gets no code, so each page treats a missing summary, or
 any code it does not expect, as not checked.
@@ -198,7 +200,7 @@ saved JSON has one `learn_more` field with the link.
 1. Try it on your own Mac: download, check the SHA-256, run it with `sudo`, read the report.
 2. Grant Full Disk Access to your MDM's agent (the page for your MDM has the profile settings).
 3. Add it to your MDM: the script, a schedule (daily suggested), and the inventory field.
-4. Read the results: what `act`, `update`, `not_checked`, `stale` and `clear` mean, and how to list
+4. Read the results: what `act`, `review`, `not_checked`, `stale` and `clear` mean, and how to list
    the Macs to deal with first.
 5. Act on a finding: what to ask the person to do, finding by finding.
 6. Update or remove it.
@@ -237,6 +239,10 @@ real Mac.
 - **Linux** uses this design with `setpriv` (no shell start-up files, no login session) to drop to
   the account, the local `/etc/passwd` only (no directory lookups), and `UID_MIN` from
   `/etc/login.defs`. It is phase 2.
+- Not measured: how the real `sudo` on macOS places the account run (with `use_pty` it may run the
+  command in a group or session of its own, out of reach of root's kill of the process group). A run
+  that leaves the group is caught only when it still holds root's pipe open, which root then reports
+  as a process left running; one that let go of the pipe is not seen.
 - Collecting results from many machines in one place. The result is for the MDM's own inventory.
 - Containers, servers and CI runners.
 
@@ -257,6 +263,20 @@ real Mac.
 - A replaced `jq`, `grep` or `sudo` earlier in the MDM's PATH: never run, by root or an account run.
 - A refused protected folder: not checked, never clear.
 - `sudo` failing, and an account with no login shell: not checked.
+- What root checks for the Mac in phase 1: apps in `/Applications` and agent commands in
+  `/usr/local/bin` and `/opt/homebrew/bin`, by name; in the shared temp folder, the malware markers
+  `data/indicators.tsv` lists there, by name; whether a process holds the LiteLLM loader's lock file
+  open (`lsof`), the only running process it looks at; and any startup file `data/indicators.tsv`
+  lists outside a home folder, of which macOS has none today. Startup items in shared folders and
+  other running processes are not checked yet.
+- With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
+  counts its protected folders as checked: there is nothing protected to miss.
+- `--all-users` needs to run from a file, since each account runs a copy of it; from standard input
+  it stops with a message. The copy leaves out an MDM's options line, which can carry the
+  `--hash-accounts` secret. The result's `script` field and the summary's `v=` are the release
+  version from the script's header.
+- An account run stopped at its time limit can leave its temp files in `/tmp`: root does not know
+  their names. Moved-aside saved-result folders stay until removed (`docs/fleet.md`, step 6).
 - A saved-result folder that is a link or owned by someone else: recreated.
 - Not root: exits 13. `--all` with `--all-users`: refused.
 - No network request (a local listener sees nothing), no browser, no saved report.
@@ -270,23 +290,42 @@ real Mac.
 - `--json`, `--summary-to-stdout`, `--exit-zero`, `--list`, `--hash-accounts` and `--deadline` work
   with `--all-users` only; elsewhere they exit 2. A run with neither `--json` nor
   `--summary-to-stdout` prints the readable report, with the Argus note only on a terminal.
-- `--deadline` is 3000 seconds when not given. Each account gets an equal share of the time left,
-  less the 3 seconds a stop takes, so one stuck account spends only its own share.
+- `--deadline` is 3000 seconds when not given, and the run aims to finish before it. Each account
+  gets an equal share of the time left, less the 3 seconds a stop takes, so one stuck account spends
+  only its own share. A tenth of the deadline, at most 10 seconds, is kept in reserve for the steps
+  outside the shares (the home folder checks, the machine check, saving), which can still overrun it
+  slightly.
 - The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
   value, `stale: last run <time>` past `--stale-days` (3 by default), `none` before the first run
   and `unreadable` when the saved file is not root's own 0600 file in a 0700 folder.
   `--result-tags` wraps it for Jamf Pro. An MDM item passes options with one line under the script's
   first line, `[ "${1:-}" = --account-run ] || set -- <options>`, so the account runs it starts keep
   their own.
-- `update` also covers an agent set to run without asking, an SSH key without a passphrase, a
+- `review` (named `update` in earlier drafts) means something to change or confirm, not urgent. It
+  covers a tool with a security fix and an incident at the update level, and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
   covers keys in shell history, MCP configs and Claude Code allow lists, links to
   `authorized_keys` and files a worm plants. An account with a protected folder refused, a file not
   read or agent sessions not all checked is partly checked: `act` if it found something to act on,
   otherwise `not_checked`.
-- The size limit for a file an account run reads is 16 MB. Root reads at most 4096 bytes of an
+- The size limit for a file an account run reads is 16 MB; session files are read in 1 MB pieces at
+  any size. Root reads at most 4096 bytes of an
   account run's output. Apps in `/Applications` and agent commands in `/usr/local/bin` and
   `/opt/homebrew/bin` are the machine's agents, found by path.
+- What root checks for the Mac in phase 1: apps in `/Applications` and agent commands in
+  `/usr/local/bin` and `/opt/homebrew/bin`, by name; in the shared temp folder, the malware markers
+  `data/indicators.tsv` lists there, by name; whether a process holds the LiteLLM loader's lock file
+  open (`lsof`), the only running process it looks at; and any startup file `data/indicators.tsv`
+  lists outside a home folder, of which macOS has none today. Startup items in shared folders and
+  other running processes are not checked yet.
+- With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
+  counts its protected folders as checked: there is nothing protected to miss.
+- `--all-users` needs to run from a file, since each account runs a copy of it; from standard input
+  it stops with a message. The copy leaves out an MDM's options line, which can carry the
+  `--hash-accounts` secret. The result's `script` field and the summary's `v=` are the release
+  version from the script's header.
+- An account run stopped at its time limit can leave its temp files in `/tmp`: root does not know
+  their names. Moved-aside saved-result folders stay until removed (`docs/fleet.md`, step 6).
 - A saved-result folder that is a link, not a folder, or not root's with mode 0700 is moved aside to
   `/var/db/blindspot.replaced-<time>-<pid>` and made again, so root never deletes a tree it did not
   make.

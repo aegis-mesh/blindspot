@@ -13,7 +13,7 @@ What it never does:
 - Send anything anywhere. It makes no network request.
 - Show a path, a file name or a key. The result holds counts and names from fixed lists.
 - Change anything in a home folder. It reads files and keeps one result in
-  `/var/db/blindspot/last.json`, readable by root only.
+  `/var/db/blindspot/last.json`, readable by root only (step 6 says what else can remain).
 - Run a tool a person could replace. As root it calls every tool by its full path from the system
   folders.
 
@@ -80,9 +80,12 @@ Two items:
   ```
 
 Paste the script from a tagged release whose SHA-256 you checked (the release notes give it), so a
-run needs no download. Set
+run needs no download. The check must run from a file, not piped in: it copies itself for each
+account. Run that way, it stops with `run it from a file`. Set
 `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the number.
-Each account gets an equal share of the time left, so one stuck account cannot hold up the rest.
+Each account gets an equal share of the time left, so one stuck account cannot hold up the rest. The
+run keeps a few seconds in reserve for its own steps, which sit outside the shares, so set the
+deadline a little below the limit, not at it.
 
 | Option | What it does |
 |---|---|
@@ -91,7 +94,7 @@ Each account gets an equal share of the time left, so one stuck account cannot h
 | `--json` | Prints the full result as JSON and nothing else. |
 | `--summary-to-stdout` | Prints one summary line. |
 | `--exit-zero` | Exits 0 whenever the run finished; only `failed` exits 13. |
-| `--deadline=<seconds>` | Stops the run in time. 3000 if not given. |
+| `--deadline=<seconds>` | The run aims to finish before this. 3000 if not given. |
 | `--hash-accounts=<secret>` | Shows each account as a keyed hash of its name. Keep the secret to match them later. |
 | `--inventory` | Prints the saved inventory value. Needs root. |
 | `--stale-days=<days>` | With `--inventory`: older than this reads `stale`. 3 if not given. |
@@ -106,7 +109,7 @@ Each run has one outcome, the worst of these, in this order:
 | `failed` | The run could not finish safely, such as a changed script copy or a result it could not save. | 13 |
 | `act` | Something to act on now: malware signs, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
-| `update` | Something to change: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, a leftover file that can come from malware. | 11 |
+| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, a leftover file that can come from malware. | 11 |
 | `clear` | Every account was checked in full and nothing was found. | 0 |
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
@@ -117,7 +120,7 @@ over 16 MB, or agent sessions not all checked.
 The summary line:
 
 ```
-blindspot act accounts=2 act=1 update=0 not_checked=1 v=1 at=2026-10-25T09:12:00Z
+blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.1.0 at=2026-10-25T09:12:00Z
 ```
 
 The inventory value is one line with each account's outcome and what was found, never a path, file
@@ -151,7 +154,7 @@ Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to s
 | A tool with a security fix | Update it. |
 | An SSH key without a passphrase | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets | If they used it, rotate the keys stored there. |
-| A finding under "This Mac" | Found in the shared temp folder, which any account can write to. Treat the Mac as compromised. |
+| A finding under "This Mac" | Found in the shared temp folder, which any account can write to, or a running LiteLLM loader. Treat the Mac as compromised. |
 
 ## 6. Update or remove it
 
@@ -159,16 +162,31 @@ To update, paste the new release into both MDM items, after checking its SHA-256
 delete both items from your MDM, then remove the saved result on each Mac:
 
 ```sh
-sudo rm -rf /var/db/blindspot
+sudo rm -rf /var/db/blindspot /var/db/blindspot.replaced-*
 ```
+
+Two things can be left behind. A saved-result folder that was not root's own with mode 0700 is moved
+aside to `/var/db/blindspot.replaced-<time>-<number>` and made again; the command above removes
+those too. An account's check that is stopped at its time limit can leave its own temporary files,
+named `/tmp/blindspot.` and six characters and owned by that account. Root does not know their names,
+so it does not remove them; they are small and hold no key, and macOS clears old files from `/tmp`.
 
 ## What it checks for each account
 
 The same places as a normal run, without Desktop, Documents and Downloads (`--all` is refused: they
 can hold cloud files that download when read). Each account's check runs through
-`sudo -n -u <account>` with a clean environment and only that account's rights. Apps in
-`/Applications`, the shared temp folder and the shared startup folders are checked once, by root,
-by name only, and reported for the Mac. `sudo` writes one line to the system log for each account.
+`sudo -n -u <account>` with a clean environment and only that account's rights. It reads regular
+files only, and leaves out any file over 16 MB, except agent session files, which it reads in 1 MB
+pieces whatever their size. `sudo` writes one line to the system log for each account.
+
+What root checks once for the Mac:
+
+Apps in `/Applications`, and agent commands in `/usr/local/bin` and `/opt/homebrew/bin`, are found
+by name and reported as the Mac's agents. In the shared temp folder, root looks by name for the
+malware markers `data/indicators.tsv` lists there, and asks `lsof` whether a process holds the
+LiteLLM loader's lock file open. Those are the only running processes it looks at. It also looks by
+name for any startup file `data/indicators.tsv` lists outside a home folder; for macOS there are none
+today. Nothing in these places is read or run.
 
 The design, with what it does not cover, is in
 [docs/designs/fleet-mode.md](designs/fleet-mode.md).

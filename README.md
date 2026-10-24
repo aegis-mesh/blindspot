@@ -94,7 +94,7 @@ At the end you get a short summary: how you compare with the other AI builders w
 - Print a key. It names the provider, never the value.
 - Use sudo or ask for your password. The one exception is `--all-users`, which IT runs as root to check every account: it uses `sudo` to check each account as that account ([For IT teams](#for-it-teams)).
 - Start an agent, an MCP server or Python. To read agent sessions it runs ripgrep if you have it, otherwise perl, and stops them when it finishes.
-- Leave a file behind, unless you ask it to save the report. `--all-users` keeps its result in `/var/db/blindspot/last.json`, readable by root only. While it runs it keeps three small temp files, for the progress line, the public totals, and which session files had keys from which provider (never a key), and deletes them when it exits.
+- Leave a file behind, unless you ask it to save the report. `--all-users` keeps its result in `/var/db/blindspot/last.json`, readable by root only, and can leave a little more: an account's check stopped at its time limit can leave its temp files in `/tmp`, and a saved-result folder it had to replace is kept as `/var/db/blindspot.replaced-*` ([docs/fleet.md](docs/fleet.md#6-update-or-remove-it) says how to remove them). While it runs it keeps three small temp files, for the progress line, the public totals, and which session files had keys from which provider (never a key), and deletes them when it exits.
 - Send a path, a key, a username, a hostname or your raw hardware ID.
 
 ## What it shares

@@ -1,7 +1,7 @@
 # Blindspot with Microsoft Intune
 
 **Untested:** this page has not yet been run end to end on a real Mac. Menu paths and limits were
-checked on 2026-10-25 against
+checked on 2026-10-24 against
 [Microsoft's guide to shell scripts on macOS](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos).
 
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
@@ -35,6 +35,9 @@ Check the result: each account's `protected_folders` is `checked` once access wo
    ```sh
    [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=3000
    ```
+
+   The check copies itself for each account, so it must run from a file, not piped in. Piped in,
+   it stops with `run it from a file`.
 
 3. In the Microsoft Intune admin center, select **Devices** > **By platform** > **macOS** >
    **Manage devices** > **Scripts** > **Add**
@@ -74,7 +77,7 @@ Mac, such as:
 v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws | itadmin: clear
 ```
 
-It starts with the Mac's outcome: `act`, `update`, `not_checked` or `clear` (see
+It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
 `none` means the check has not run yet, and `unreadable` means the saved result could not be
 trusted. Treat each of those, and an empty result, as not checked.
@@ -84,16 +87,15 @@ In **Scripts** > `Blindspot check` > **Device status**, **Success** means the ch
 
 ## Intune's limits
 
-Checked 2026-10-25:
+Checked 2026-10-24:
 
 - A shell script file must be less than 1 MB. `gird-check.sh` is about 200 KB.
 - A shell script that runs longer than 60 minutes is stopped and reported as failed.
-  `--deadline=3000` stops the check within 50 minutes.
+  `--deadline=3000` aims to finish the check within 50 minutes.
 - A shell script runs as root unless **Run script as signed-in user** is **Yes**.
 - A non-zero exit code reads **Failed**, so the check uses `--exit-zero`.
 - Custom attribute scripts run every 8 hours. The value must be 20 KB or less; Blindspot's is at
-  most 250 characters. A script that exits non-zero reads **Failed**, with the error in the
-  **Result** column.
+  most 250 characters. A script that exits non-zero reads **Failed**.
 - Microsoft's guide does not say which account a custom attribute script runs as. The reader needs
   root: if the **Result** column shows `needs root`, it did not run as root.
 - Scripts need the Intune management agent, at `/Library/Intune/Microsoft Intune Agent.app`.

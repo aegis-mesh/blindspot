@@ -1,7 +1,7 @@
 # Blindspot with Jamf Pro
 
 **Untested:** this page has not yet been run end to end on a real Mac. Menu paths and limits were
-checked on 2026-10-25 against Jamf's documentation, linked at each step.
+checked on 2026-10-24 against Jamf's documentation, linked at each step.
 
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
@@ -36,6 +36,9 @@ the result either way: each account's `protected_folders` is `checked` once acce
    ```sh
    [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=3000
    ```
+
+   The check copies itself for each account, so it must run from a file, not piped in. Piped in,
+   it stops with `run it from a file`.
 
 3. In Jamf Pro, click **Settings**, then in **Computer management** click **Scripts**, then **New**
    ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Adding_a_Script_to_Jamf_Pro)).
@@ -80,7 +83,7 @@ shows one line, such as:
 v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws | itadmin: clear
 ```
 
-It starts with the Mac's outcome: `act`, `update`, `not_checked` or `clear` (see
+It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
 `none` means the check has not run yet, and `unreadable` means the saved result could not be
 trusted. Treat each of those, and an empty value, as not checked. The extension attribute can be used
@@ -88,7 +91,7 @@ as smart group criteria, for example values that start with `v1 act`.
 
 ## Jamf's limits
 
-Checked 2026-10-25:
+Checked 2026-10-24:
 
 - An extension attribute with the Script input type stores the text between `<result>` and
   `</result>`, and runs each time the computer submits inventory
@@ -99,7 +102,7 @@ Checked 2026-10-25:
   ([Execution Frequency for Policies](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Execution_Frequency_for_Policies)).
 - Jamf's documentation does not state a time limit for a policy's script, which account it runs as,
   or what it does with the script's exit code. The check needs root, so `--exit-zero` keeps a
-  finding from reading as a failed policy, and `--deadline=3000` stops it within 50 minutes. If the
+  finding from reading as a failed policy, and `--deadline=3000` aims to finish it within 50 minutes. If the
   policy log shows `needs root`, the script did not run as root.
 
 ## Seeing all your Macs, all the time
