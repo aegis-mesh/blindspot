@@ -920,6 +920,47 @@ fi
 echo "help"
 if bash "$SCRIPT" --help | grep -q -- '--offline'; then ok "--help lists the options"; else bad "--help lists the options"; fi
 
+echo "parity.sh catches what would go uncounted"
+# Each case is a copy of a suite with lines added through a heredoc, which parity.sh skips here.
+pcase() { # run.sh-copy run-ps.sh-copy
+  bash tests/parity.sh "$1" "$2" tests/bash-only.txt > "$WORK/pcase.txt" 2>&1
+}
+cp tests/run.sh "$WORK/pr1.sh"; cat >> "$WORK/pr1.sh" <<'EOF'
+ok 'a single-quoted name'
+EOF
+if ! pcase "$WORK/pr1.sh" tests/run-ps.sh && grep -q 'ok with a name that is not a double-quoted literal' "$WORK/pcase.txt"; then ok "parity.sh fails on a single-quoted name"; else bad "parity.sh fails on a single-quoted name"; fi
+cp tests/run.sh "$WORK/pr2.sh"; cat >> "$WORK/pr2.sh" <<'EOF'
+myhas() { if grep -q "$2" "$3"; then ok "$1"; else bad "$1"; fi; }
+myhas "a name in a new helper" x y
+EOF
+if ! pcase "$WORK/pr2.sh" tests/run-ps.sh && grep -q 'function myhas calls ok' "$WORK/pcase.txt"; then ok "parity.sh fails on a new helper that calls ok"; else bad "parity.sh fails on a new helper that calls ok"; fi
+cp tests/run.sh "$WORK/pr3.sh"; cat >> "$WORK/pr3.sh" <<'EOF'
+while read -r label; do ok "$label"; done < /dev/null
+EOF
+if ! pcase "$WORK/pr3.sh" tests/run-ps.sh && grep -q 'not a loop value: \$label' "$WORK/pcase.txt"; then ok "parity.sh fails on a variable name outside the helpers"; else bad "parity.sh fails on a variable name outside the helpers"; fi
+cp tests/run.sh "$WORK/pr4.sh"; cat >> "$WORK/pr4.sh" <<'EOF'
+for M in a b; do has "one loop $M" x y; done
+for M in c d; do has "two loop $M" x y; done
+EOF
+cp tests/run-ps.sh "$WORK/pp4.sh"; cat >> "$WORK/pp4.sh" <<'EOF'
+has "one loop a" x y; has "one loop b" x y; has "two loop c" x y; has "two loop d" x y
+EOF
+if pcase "$WORK/pr4.sh" "$WORK/pp4.sh"; then ok "parity.sh fills in each loop's own values"; else bad "parity.sh fills in each loop's own values"; sed 's/^/        /' "$WORK/pcase.txt" | head -n 4; fi
+cp tests/run-ps.sh "$WORK/pp4b.sh"; cat >> "$WORK/pp4b.sh" <<'EOF'
+has "one loop a" x y; has "one loop b" x y; has "two loop c" x y
+EOF
+if ! pcase "$WORK/pr4.sh" "$WORK/pp4b.sh" && grep -q 'no PowerShell twin: two loop d$' "$WORK/pcase.txt"; then ok "parity.sh fails on a twin missing from the second loop"; else bad "parity.sh fails on a twin missing from the second loop"; fi
+cp tests/run.sh "$WORK/pr5.sh"; cat >> "$WORK/pr5.sh" <<'EOF'
+if false; then bad "a test that only says when it fails"; fi
+EOF
+if ! pcase "$WORK/pr5.sh" tests/run-ps.sh && grep -q 'a test that only fails is not counted' "$WORK/pcase.txt"; then ok "parity.sh fails on a test that only fails"; else bad "parity.sh fails on a test that only fails"; fi
+cp tests/run.sh "$WORK/pr6.sh"; cat >> "$WORK/pr6.sh" <<'EOF'
+has "a new bash test with no twin" x y
+EOF
+if ! pcase "$WORK/pr6.sh" tests/run-ps.sh && grep -q 'no PowerShell twin: a new bash test with no twin$' "$WORK/pcase.txt"; then ok "parity.sh fails on a bash test with no twin"; else bad "parity.sh fails on a bash test with no twin"; fi
+grep -v '"Windows: finds _netrc"' tests/run-ps.sh > "$WORK/pp7.sh"
+if ! pcase tests/run.sh "$WORK/pp7.sh" && grep -q 'no PowerShell twin: Windows: finds _netrc$' "$WORK/pcase.txt"; then ok "parity.sh fails on a deleted twin"; else bad "parity.sh fails on a deleted twin"; fi
+
 echo "the two suites"
 if bash tests/parity.sh > "$WORK/parity.txt" 2>&1; then ok "the two suites test the same things"
 else bad "the two suites test the same things"; grep -v '^    ' "$WORK/parity.txt" | sed 's/^/      /'; fi
