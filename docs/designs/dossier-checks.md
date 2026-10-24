@@ -1,6 +1,6 @@
 # Checks from the incident dossier
 
-Status: design, not built. Builds on `data/` (PR #17). Nothing new is shared: the payload, the
+Status: built (gird-check.sh, gird-check.ps1, data/auto-approve.tsv, data/outdated.tsv, data/bad-extensions.tsv). Builds on `data/` (PR #17). Nothing new is shared: the payload, the
 result link and the score do not change.
 
 ## Why

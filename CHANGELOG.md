@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Checks from GIRD's incident dossier (`docs/designs/dossier-checks.md`), none of which changes the score, the shared counts or the result link:
+  - Section 1 lists agents set to run commands without asking: Claude Code's `bypassPermissions`, Codex's `approval_policy = "never"` with `sandbox_mode = "danger-full-access"`, and VS Code Copilot's `chat.tools.autoApprove` or `chat.tools.global.autoApprove` in the user settings or a project's `.vscode/settings.json` (`data/auto-approve.tsv`).
+  - Section 1 lists agent versions with a published security fix: Cursor below 3.0 (macOS), the Amazon Q language server below 1.69.0, Claude Code from 0.2.116 and below 1.0.24 installed with npm, and `mcp-remote` from 0.0.5 and below 0.1.16 installed or named in an MCP config (`data/outdated.tsv`).
+  - Section 2 lists files in your projects that are links to `~/.ssh/authorized_keys`: an agent that edits one adds a login to the computer.
+  - Section 5 looks for the GlassWorm VS Code extensions in the VS Code, Cursor, Windsurf, VSCodium and Kiro extension folders (`data/bad-extensions.tsv`) and GlassWorm's startup file on a Mac, and lists `@injectivelabs/sdk-ts` 1.20.21 as a version to update.
 - The incident checks live in data files: the hosted platforms in `data/platforms.tsv`, the files malware leaves on disk in `data/indicators.tsv`, the files worms plant in a project in `data/planted.tsv` and the bad Python packages in `data/bad-pypi.tsv`, each sourced in `data/incidents.tsv`. A new incident of an existing kind is data lines and `bash tools/gen.sh`. The platform fix now reads "If you used OpenCode Console, Railway or Zeabur, rotate the keys stored there".
 - Python: `mistralai` 2.4.6, the PyPI release of the May 2026 Mistral AI compromise, which ran a credential stealer on Linux when imported, gets its own act-now row, and its `/tmp/transformers.pyz` is looked for. The Mistral npm packages stay "a bad version to update": Mistral says their malware could not run. The result link gains `py`, set for a Python incident other than LiteLLM.
 
