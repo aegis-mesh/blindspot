@@ -49,8 +49,7 @@ match in a freed page is still a key that was sent.
 
 ## Matching
 
-- Blindspot's own key list, `ALL_KEYS`, the same one used for files. Argus Enterprise's patterns
-  are not copied: Blindspot is public.
+- Blindspot's own key list, `ALL_KEYS`, the same one used for files.
 - Transcripts are JSON, where a key often follows an escape such as `\n`. Three patterns need a
   non-alphanumeric character before the key (OpenAI's legacy `sk-` keys, `hf_`, `AQ.`), so the
   transcript check also accepts `\n`, `\t`, `\r` and `\"` as that boundary.
