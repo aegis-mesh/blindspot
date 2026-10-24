@@ -140,6 +140,9 @@ short() {
   _s=${1//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
   case "$_s" in "$H"/*) printf '~/%s' "${_s#"$H"/}" ;; *) printf '%s' "$_s" ;; esac
 }
+# A path or name read from disk, made safe to put in a report row: control characters become ?, as
+# short() shows them anyway, so a TAB or a newline in a file name can't split the row it sits in.
+rowsafe() { _r=${1//$'\xc2'[$'\x80'-$'\x9f']/?}; printf '%s' "${_r//[[:cntrl:]]/?}"; }
 plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s' "$1" "$3"; fi; }
 count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf 0; fi; }
 # 1234567 -> 1,234,567
@@ -1310,7 +1313,7 @@ mcp_row() { # who file client-id
     case " $MCP_TOK_IDS " in *" $_ci "*) ;; *) MCP_TOK_IDS="${MCP_TOK_IDS:+$MCP_TOK_IDS }$_ci" ;; esac
     progress x "Token written in an MCP config: $(short "$_f")"
   fi
-  MCP_ROWS="$MCP_ROWS$1|$_f|$_c|$_tok|$_pl
+  MCP_ROWS="$MCP_ROWS$1|$_c|$_tok|$_pl|$(rowsafe "$_f")
 "
 }
 while IFS='|' read -r who cid f; do
@@ -1336,7 +1339,7 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 # CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks). Both
 # settings.json and settings.local.json are read, since repos commit either. Each file is read as
 # one line, so pretty-printed JSON matches too, with JSONC comments removed first.
-AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN="|"
+AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
 # Worms plant a file in the folder (WORM_RUN, from data/planted.tsv) and run it from a hook or a task.
 # A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
 WORM_CMD='"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*([^A-Za-z0-9_"\\]|\\"))?(node|bun|deno|tsx)(\.exe)?[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
@@ -1387,14 +1390,16 @@ auto_row() { # file what flattened-text
 "
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
-  _sum="$(printf '%s' "$3" | cksum | cut -d' ' -f1):$(printf '%s' "$1" | sed -E 's#/\.claude/worktrees/[^/]+/#/#')"
-  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | S=$_sum F=$1 awk -F "$TAB" -v OFS="$TAB" '
+  # The path goes into TAB-separated rows and the list of settings seen, so it is made row-safe first.
+  _rp=$(rowsafe "$1")
+  _sum="$(printf '%s' "$3" | cksum | cut -d' ' -f1):$(printf '%s' "$_rp" | sed -E 's#/\.claude/worktrees/[^/]+/#/#')"
+  case "$TAB$AUTO_SEEN" in *"$TAB$_sum$TAB"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | S=$_sum F=$_rp awk -F "$TAB" -v OFS="$TAB" '
       $3 == ENVIRON["S"] { $4++; if ($1 ~ /\/\.claude\/worktrees\// && ENVIRON["F"] !~ /\/\.claude\/worktrees\//) $1 = ENVIRON["F"] } { print }')
 "; return ;; esac
-  AUTO_SEEN="$AUTO_SEEN$_sum|"
+  AUTO_SEEN="$AUTO_SEEN$_sum$TAB"
   N_AUTO=$((N_AUTO + 1))
   progress w "Project settings that $2: $(short "$1")"
-  AUTO_ROWS="$AUTO_ROWS$1$TAB$2$TAB$_sum${TAB}0
+  AUTO_ROWS="$AUTO_ROWS$_rp$TAB$2$TAB$_sum${TAB}0
 "
 }
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
@@ -1519,7 +1524,7 @@ while IFS= read -r f; do
   [ -n "$f" ] || continue
   _p=$(providers_in "$f")
   [ -n "$_p" ] || continue
-  KEY_FILES=$((KEY_FILES + 1)); [ -n "$KEY_FIRST" ] || KEY_FIRST="$f|$_p"
+  KEY_FILES=$((KEY_FILES + 1)); [ -n "$KEY_FIRST" ] || KEY_FIRST="$_p|$f"
   progress x "Key in plain text: $(short "$f") ($_p)"
   key_place "$f"; KEY_PLACES="$KEY_PLACES$KP
 "
@@ -1533,7 +1538,7 @@ while IFS= read -r f; do
 "
   done
   IFS=$old_ifs
-  KEY_ROWS="$KEY_ROWS$f|$_p
+  KEY_ROWS="$KEY_ROWS$_p|$(rowsafe "$f")
 "
 done <<EOF
 $MATCHED
@@ -1595,7 +1600,7 @@ while IFS= read -r f; do
   N_ALLOW=$((N_ALLOW + 1)); [ -n "$ALLOW_FIRST" ] || ALLOW_FIRST=$f
   progress x "Saved Claude Code command with a key: $(short "$f")"
   npm=0; npm_would_ship "${f%/.claude/*}" && { npm=1; N_ALLOW_NPM=$((N_ALLOW_NPM + 1)); }
-  ALLOW_ROWS="$ALLOW_ROWS$f|$npm
+  ALLOW_ROWS="$ALLOW_ROWS$npm|$(rowsafe "$f")
 "
 done <<EOF
 $ALLOW_ALL
@@ -1744,7 +1749,7 @@ for t in /tmp "${TMPDIR%/}" "$WTEMP"; do
       # Another user's file in the shared /tmp is not this person's sign (owner yes in
       # data/indicators.tsv); %TEMP% on Windows is the person's own folder.
       if [ "$_own" = yes ] && [ "$WIN" -eq 0 ] && [ ! -O "$m" ]; then continue; fi
-      MARKS="$MARKS$_i$TAB$m
+      MARKS="$MARKS$_i$TAB$(rowsafe "$m")
 "
     done
   done <<EOF
@@ -1998,7 +2003,7 @@ npm_hits() {
       if (v ~ /^0\.0\.1-security(\.[0-9]+)?$/) return   # the empty placeholder npm puts in place of a removed package: 0.0.1-security, or 0.0.1-security.0 for a few names
       k = nm "@" v; t = ""
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
-      if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "\t" nm " " v "\t" t }
+      if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; fn = FILENAME; gsub(/[[:cntrl:]]/, "?", fn); print fn "\t" nm " " v "\t" t }
     }
     FNR == 1 { over = 0; depth = 0; pend = "" }
     FILENAME ~ /pnpm-lock\.yaml$/ && /^[^ #]/ { over = ($0 ~ /^overrides:/) }
@@ -2085,7 +2090,7 @@ npm_global_hits() { # package.json paths on stdin; prints folder|name version|ta
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
       if (v ~ /^0\.0\.1-security(\.[0-9]+)?$/) next   # the empty placeholder npm puts in place of a removed package
       t = ""; if ((nm "@" v) in bad) t = bad[nm "@" v]; else if (nm in any) t = any[nm]
-      if (t != "") print d "\t" nm " " v "\t" t
+      if (t != "") { gsub(/[[:cntrl:]]/, "?", d); print d "\t" nm " " v "\t" t }
     }' 2>/dev/null
 }
 _g=$(
@@ -2120,7 +2125,7 @@ while IFS='|' read -r _aa _ao _ap _as _apat; do
     *) _al=$_ap ;;
   esac
   while IFS= read -r _f; do
-    [ -n "$_f" ] && [ -f "$_f" ] && aa_hit "$_f" "$_apat" && AA_ROWS="$AA_ROWS$_f$TAB$_aa$TAB$_as
+    [ -n "$_f" ] && [ -f "$_f" ] && aa_hit "$_f" "$_apat" && AA_ROWS="$AA_ROWS$(rowsafe "$_f")$TAB$_aa$TAB$_as
 "
   done <<EOF
 $_al
@@ -2223,7 +2228,7 @@ EXT_ROWS=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsur
     for d in "$r"/*; do [ -d "$d" ] && printf '%s\t%s\n' "$_rg" "$d"; done
   done | BAD_EXT_LIST=$BAD_EXT awk -F '\t' '
   BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4] } }
-  { reg = $1; d = $2; b = d; sub(/.*\//, "", b); lb = tolower(b)
+  { reg = $1; d = substr($0, length($1) + 2); gsub(/[[:cntrl:]]/, "?", d); b = d; sub(/.*\//, "", b); lb = tolower(b)
     for (i = 1; i <= n; i++) {
       if (rg[i] != "any" && rg[i] != reg) continue
       if (substr(lb, 1, length(id[i]) + 1) != id[i] "-") continue
@@ -2255,10 +2260,10 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   _ext=0; case "$EXT_INCS" in *" $_ii "*) case "$NPM_INCS" in *" $_ii "*) ;; *) _ext=1 ;; esac ;; esac
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
 "
-  elif [ "$_ext" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$_ip$TAB$_in
+  elif [ "$_ext" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
 "; EXT_PERSIST_TAGS="$EXT_PERSIST_TAGS$_ii
 "
-  else PERSIST="$PERSIST$_ip$TAB$_in
+  else PERSIST="$PERSIST$(rowsafe "$_ip")$TAB$_in
 "; fi
 done <<EOF
 $IND_TABLE
@@ -2268,9 +2273,9 @@ if [ "$WIN" -eq 1 ]; then
   win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra worm at login
 "
 fi
-[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | while IFS= read -r _f; do printf '%s\t%s\n' "$_f" "$(planted_note "$_f")"; done)
+[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
 "
-[ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_REFS" | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\t%s\n' "$_f" "$WORM_REF_NOTE"; done)
+[ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_REFS" | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\t%s\n' "$(rowsafe "$_f")" "$WORM_REF_NOTE"; done)
 "
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
@@ -2580,7 +2585,7 @@ case "${SHELL##*/}" in zsh|bash|fish|sh|dash|ksh|tcsh|nu|elvish|xonsh) SHELLNAME
 LANGCODE=${ORIG_LANG%%.*}
 case "$LANGCODE" in [a-z][a-z]|[a-z][a-z]_[A-Z][A-Z]) ;; *) LANGCODE=other ;; esac
 VIA=none; [ -n "${CLAUDECODE:-}" ] && VIA=claude-code
-N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s' "$MCP_ROWS" | grep -c '|0$')
+N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s\n' "$MCP_ROWS" | awk -F '|' '$4 == "0" { n++ } END { print n + 0 }')
 BASHV=${BASH_VERSINFO[0]:-0}
 # For case studies: ids from the fixed lists near the top, and counts. Labels go
 # in, but only list ids and a number come out of mcp_match.
@@ -2690,7 +2695,7 @@ fi
 SEC1=$CAP; CAP=""
 section 02 "MCP SERVERS" "$(plural "$N_MCP" server servers)"
 if [ "$N_MCP" -eq 0 ] && [ "$N_MCP_TOKEN" -eq 0 ]; then emit "     No MCP servers configured."; fi
-while IFS='|' read -r who f c tok pl; do
+while IFS='|' read -r who c tok pl f; do
   [ -n "$who" ] || continue
   [ "$pl" = 1 ] && [ "$tok" != 1 ] && continue
   if [ -n "$c" ]; then d=$(plural "$c" server servers); else d="servers configured"; fi
@@ -2730,7 +2735,7 @@ if [ "$KEY_FILES" -eq 0 ]; then
   wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "
 fi
 _shown=0
-while IFS='|' read -r f p; do
+while IFS='|' read -r p f; do
   [ -n "$f" ] || continue
   _shown=$((_shown + 1)); [ "$_shown" -le 20 ] || continue
   pair "${RED}✗${RST}" "$(short "$f")" 44 "$p"
@@ -2786,7 +2791,7 @@ fi
 SEC3=$CAP; CAP=""
 section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
 if [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
-while IFS='|' read -r f npm; do
+while IFS='|' read -r npm f; do
   [ -n "$f" ] || continue
   emit "     ${RED}✗${RST}  $(short "$f")"
   emit "        A saved command contains a key."
@@ -3030,8 +3035,8 @@ elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token 
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
 elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in their configs"
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
-if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST%%|*}") (${KEY_FIRST#*|})"
-elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST%%|*}") holds ${KEY_FIRST#*|} keys"
+if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST#*|}") (${KEY_FIRST%%|*})"
+elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST#*|}") holds ${KEY_FIRST%%|*} keys"
 elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session file" "agent session files"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
 elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agent sessions partly checked"
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"

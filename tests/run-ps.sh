@@ -606,6 +606,25 @@ psrun "$WORK/home" -- -Offline > "$WORK/evil.txt" 2>&1
 if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')\|$(printf '\302\233')" "$WORK/evil.txt"; then bad "control characters in file names never reach the terminal"; else ok "control characters in file names never reach the terminal"; fi
 has "the hostile folder is still reported" 'code/evil\?' "$WORK/evil.txt"
 rm -rf "$EVIL"
+# A TAB in a folder name would split gird-check.sh's rows, and a | the rows it joins with |: the same
+# folders through gird-check.ps1, which must list every finding the same way and send nothing raw.
+bash tests/make-hostile.sh "$WORK/hostile" "$WORK/keys-hostile.txt"
+mkdir -p "$WORK/hostile/AppData/Roaming" "$WORK/hostile/AppData/Local/Temp"
+psrun "$WORK/hostile" -- -Offline -AllSessions > "$WORK/hostile.txt" 2>&1
+if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')" "$WORK/hostile.txt"; then bad "a TAB in a folder name: no control character reaches the terminal"; else ok "a TAB in a folder name: no control character reaches the terminal"; fi
+tr -s ' \n' '  ' < "$WORK/hostile.txt" > "$WORK/hostile-flat.txt"
+X='\?\?\[2J\?\]0;pwned\?x'
+has    "a TAB in a folder name: project settings keep their row"     "code/auto$X/\.claude/settings\.json Set to run commands" "$WORK/hostile-flat.txt"
+has    "a TAB in a folder name: a project's VS Code settings keep their row" "p/yolo$X/\.vscode/settings\.json Set to auto-approve" "$WORK/hostile-flat.txt"
+has    "a TAB in a folder name: a lockfile hit keeps its package and source" "code/lock$X/package-lock\.json axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile" "$WORK/hostile-flat.txt"
+has    "a TAB in a folder name: a planted file keeps its note"       "code/plant$X/\.vscode/tanstack_runner\.js a file the TanStack and keyv worms plant" "$WORK/hostile-flat.txt"
+has    "a TAB in a folder name: a key in an Aider history is found"  "code/aider$X/\.aider\.chat\.history\.md" "$WORK/hostile-flat.txt"
+has    "a TAB in a folder name: a link to authorized_keys is listed" "code/link$X/notes\.txt" "$WORK/hostile-flat.txt"
+has    "a | in a folder name: an MCP config keeps its count and token" "code/mcp\|\?\[2Jpipe$X/\.mcp\.json 1 server, token in the file" "$WORK/hostile-flat.txt"
+has    "a | in a folder name: a key file keeps its provider"         "code/key\|\?\[2Jpipe$X/\.env OpenAI" "$WORK/hostile-flat.txt"
+has    "a | in a folder name: an allow list keeps its finding"       "code/allow\|\?\[2Jpipe$X/\.claude/settings\.local\.json A saved command contains a key" "$WORK/hostile-flat.txt"
+nokeys "hostile folder names: no planted key is printed" "$WORK/keys-hostile.txt" "$WORK/hostile.txt"
+hasnot "hostile folder names: no shell error" 'Exception|ParserError|At line:|is not recognized' "$WORK/hostile.txt"
 
 echo "placeholders and the LiteLLM leftovers"
 mkdir -p "$WORK/ph/code/ph" "$WORK/ph/AppData/Local/Temp"
