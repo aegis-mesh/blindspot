@@ -1073,7 +1073,7 @@ function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, Ma
 function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'injective' { 'update' } default { 'act' } } }
 function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI packages' } 'mistralpy' { 'mistralai 2.4.6' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'injective' { 'Injective SDK' } default { $t } } }
 function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
-function Incident-Advice([string]$t) { switch ($t) { 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
+function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also delete /tmp/ijewf, /tmp/out.zip and any plist in ~/Library/LaunchAgents you do not recognize, such as com.user.nodestart.plist.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 $BadPypi = @'
@@ -1091,6 +1091,7 @@ $IndTable = @(
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.out.log', '-')
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.err.log', '-')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), 'starts the Mastra worm at login')
+  ,@('glassworm', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.nodestart.plist'), 'starts the GlassWorm malware at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/NodePackages/protocal.cjs'), 'starts the Mastra worm at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/nvmconf.service'), 'starts the Mastra worm at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'), 'starts the Mastra worm at login')
@@ -1603,6 +1604,11 @@ foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } e
 # is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
+# A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
+# is that incident's sign, shown with the extensions ($ExtPersist), never called npm malware.
+$ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
+$ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
+$NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 foreach ($r in $IndOn) {
   if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
@@ -1611,7 +1617,9 @@ foreach ($r in $IndOn) {
     $owner = ''; try { $owner = [string](Get-Item -LiteralPath $m -Force -ErrorAction Stop).User } catch { }
     if (-not ($owner -and $owner -ceq [Environment]::UserName)) { continue }
   }
-  if ($r[2] -eq 'wiper') { $Wiper.Add($m) } else { $Persist.Add(@($m, $r[5])) }
+  if ($r[2] -eq 'wiper') { $Wiper.Add($m) }
+  elseif ($ExtIncs -contains $r[0] -and -not ($NpmIncs -contains $r[0])) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
+  else { $Persist.Add(@($m, $r[5])) }
 }
 # A registry value is not a file, so the Mastra worm's Run key stays code.
 if ($OnWindows) {
@@ -1624,9 +1632,10 @@ foreach ($f in $WormFiles) { $Persist.Add(@($f, (Planted-Note ([IO.Path]::GetFil
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
-# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
-$EXT_HIT = 0; if ($ExtRows.Count -gt 0) { $EXT_HIT = 1 }
-$ExtTags = @(@(foreach ($r in $ExtRows) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
+# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
+# extension incident's startup file is its sign too.
+$EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
+$ExtTags = @((@(foreach ($r in $ExtRows) { $r[2] }) + @($ExtPersistTags)) | Sort-Object -Unique -CaseSensitive)
 $ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
 if ($MAL_HIT -eq 1 -and $EXT_HIT -eq 1) { $MalWhat = 'npm and editor extension malware'; $MalShort = 'npm and editor extension' }
 elseif ($EXT_HIT -eq 1) { $MalWhat = 'malware in an editor extension'; $MalShort = 'editor extension' }
@@ -1704,13 +1713,30 @@ function Add-Todo([int]$sec, [string]$text) {
 }
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
 if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
-if ($EXT_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Uninstall the extensions listed in section 5, delete the files listed there, and rotate every key this machine could reach.' }
+if ($EXT_HIT -eq 1) {
+  # Only what section 5 lists: the extensions, the incident's startup file, or both.
+  if ($ExtRows.Count -gt 0 -and $ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
+  elseif ($ExtRows.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5 and' }
+  else { $edo = 'Delete the startup file listed in section 5 and' }
+  Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
+}
+# An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
+# the act-now fixes, an update-level one before the update it has to come before.
+function Add-Advice([string]$level) {
+  $seen = @{}
+  foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) {
+    if ($seen.ContainsKey($t)) { continue }; $seen[$t] = 1
+    if ((Incident-Level $t) -ne $level) { continue }
+    $a = Incident-Advice $t; if ($a) { Add-Todo 5 $a }
+  }
+}
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 $PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
 if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
 elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $adv, and rotate every key the machine could reach." }
+Add-Advice 'act'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
@@ -1724,9 +1750,8 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
+Add-Advice 'update'
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
-# An incident's own fix (data/incidents.tsv), once for each incident found.
-foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) { $a = Incident-Advice $t; if ($a) { Add-Todo 5 $a } }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
 $ISSUES = $Todo.Count
 
@@ -2016,6 +2041,7 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
+  foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   foreach ($t in $ExtTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 }
 foreach ($p in $Platforms) {

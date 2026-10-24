@@ -1477,7 +1477,7 @@ incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: d
 incident_level() { case "$1" in mistral) printf update ;; injective) printf update ;; *) printf act ;; esac; }
 incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
 incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+incident_advice() { case "$1" in glassworm) printf '%s' 'On a Mac, also delete /tmp/ijewf, /tmp/out.zip and any plist in ~/Library/LaunchAgents you do not recognize, such as com.user.nodestart.plist.' ;; injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm
@@ -1492,6 +1492,7 @@ tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
 mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra worm at login
+glassworm|all|startup|no|$H/Library/LaunchAgents/com.user.nodestart.plist|starts the GlassWorm malware at login
 mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra worm at login
 mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra worm at login
 mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra worm at login
@@ -2021,14 +2022,23 @@ done
 # when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
 # the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
 # is revoked. A file in the shared /tmp counts only if this person owns it.
-WIPER=""; PERSIST=""
+# A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
+# is that incident's sign, shown with the extensions (EXT_PERSIST), never called npm malware.
+EXT_INCS=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
+NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
+WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
   if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
+  _ext=0; case "$EXT_INCS" in *" $_ii "*) case "$NPM_INCS" in *" $_ii "*) ;; *) _ext=1 ;; esac ;; esac
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
-"; else PERSIST="$PERSIST$_ip$TAB$_in
+"
+  elif [ "$_ext" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$_ip$TAB$_in
+"; EXT_PERSIST_TAGS="$EXT_PERSIST_TAGS$_ii
+"
+  else PERSIST="$PERSIST$_ip$TAB$_in
 "; fi
 done <<EOF
 $IND_TABLE
@@ -2044,9 +2054,10 @@ fi
 "
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
-# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex.
-EXT_HIT=0; [ -n "$EXT_ROWS" ] && EXT_HIT=1
-EXT_TAGS=$(printf '%s\n' "$EXT_ROWS" | cut -f3 | grep -v '^$' | sort -u)
+# Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
+# extension incident's startup file is its sign too.
+EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
+EXT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST_TAGS"; } | grep -v '^$' | sort -u)
 ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
 if [ "$MAL_HIT" -eq 1 ] && [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="npm and editor extension malware"; MAL_SHORT="npm and editor extension"
 elif [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="malware in an editor extension"; MAL_SHORT="editor extension"
@@ -2174,13 +2185,30 @@ todo() { # section text
 }
 [ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."
 [ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
-[ "$EXT_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Uninstall the extensions listed in section 5, delete the files listed there, and rotate every key this machine could reach."
+if [ "$EXT_HIT" -eq 1 ]; then
+  # Only what section 5 lists: the extensions, the incident's startup file, or both.
+  if [ -n "$EXT_ROWS" ] && [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
+  elif [ -n "$EXT_ROWS" ]; then _edo="Uninstall the extensions listed in section 5 and"
+  else _edo="Delete the startup file listed in section 5 and"; fi
+  todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
+fi
+# An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
+# the act-now fixes, an update-level one before the update it has to come before.
+advice_todos() { # level
+  _seen=" "
+  for _t in $NPM_TAGS $EXT_TAGS $PY_HITS; do
+    case "$_seen" in *" $_t "*) continue ;; esac; _seen="$_seen$_t "
+    [ "$(incident_level "$_t")" = "$1" ] || continue
+    _a=$(incident_advice "$_t"); [ -n "$_a" ] && todo 5 "$_a"
+  done
+}
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
 if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
 elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
+advice_todos act
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
   Linux)  if [ "$WSL" -eq 1 ]; then _store="a secrets manager" # WSL usually has no desktop keyring
@@ -2200,9 +2228,8 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
+advice_todos update
 [ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
-# An incident's own fix (data/incidents.tsv), once for each incident found.
-for _t in $NPM_TAGS $EXT_TAGS $PY_HITS; do _a=$(incident_advice "$_t"); [ -n "$_a" ] && todo 5 "$_a"; done
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
 
 SCORE=100
@@ -2613,6 +2640,13 @@ if [ "$EXT_HIT" -eq 1 ]; then
     emit "          ${p} ${DIM}($(npm_label "$t")), installed${RST}"
   done <<EOF
 $EXT_ROWS
+EOF
+  while IFS="$TAB" read -r f p; do
+    [ -n "$f" ] || continue
+    emit "        $(short "$f")"
+    emit "          ${p}"
+  done <<EOF
+$EXT_PERSIST
 EOF
   for _t in $EXT_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 fi
