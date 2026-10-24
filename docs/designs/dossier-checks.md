@@ -1,8 +1,9 @@
 # Checks from the incident dossier
 
-Status: built (gird-check.sh, gird-check.ps1, data/auto-approve.tsv, data/outdated.tsv, data/bad-extensions.tsv). Builds on `data/` (PR #17). The payload does not change. The score
-drops for a GlassWorm hit as for other act incidents, and the result link gains `ex` (malware in an
-editor extension, after `py`); the other checks change neither.
+Status: built (gird-check.sh, gird-check.ps1, data/auto-approve.tsv, data/outdated.tsv, data/bad-extensions.tsv).
+Builds on `data/` (PR #17). The payload does not change. The score drops for a GlassWorm hit as for
+other act incidents, and the result link gains `ex` (malware in an editor extension, after `py`);
+the other checks change neither.
 
 ## Why
 
@@ -81,11 +82,13 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
 - `data/bad-extensions.tsv`: the extension id, as its folder spells it (`publisher.name`, compared
   without case), a version or `*`, and the incident. Looked for as `<id>-<version>` folders in
   `~/.vscode/extensions`, `~/.cursor/extensions`, `~/.windsurf/extensions`,
-  `~/.vscode-oss/extensions` and `~/.kiro/extensions`. A hit is a section 5 npm-worm style row with
-  the incident line, level `act`.
+  `~/.vscode-oss/extensions` and `~/.kiro/extensions`. A hit is its own section 5 row, "Editor
+  extensions", with the incident line, level `act`, its own headline and fix, never called npm malware.
 - GlassWorm (Socket, January 2026): the four `oorzc` extensions at their malicious versions, and
   the thirteen earlier extensions Socket names, at every version. Plus the startup file
-  `~/Library/LaunchAgents/com.user.nodestart.plist` (`data/indicators.tsv`, macOS).
+  `~/Library/LaunchAgents/com.user.nodestart.plist` (`data/indicators.tsv`, macOS), shown in the
+  extensions row: a startup file of an incident with a line in `data/bad-extensions.tsv` is an
+  extension finding.
 - Injective: `@injectivelabs/sdk-ts 1.20.21` in `data/bad-npm.tsv`. Only that package carries the
   code (the advisory); the others at 1.20.21 depend on it, so a lockfile with them lists it too.
   Level `update`: the machine is not compromised, but a wallet used with it is, and the incident
