@@ -161,3 +161,5 @@ fleet: --all with --all-users is refused	gird-check.ps1 has no fleet mode: Windo
 fleet: run as root, the test settings are ignored	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: --json without --all-users is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: on Linux --all-users exits 13 with a message	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: no colours, even on a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the result is written to a new file and renamed into place	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

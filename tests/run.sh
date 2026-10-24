@@ -996,7 +996,8 @@ if command -v script > /dev/null 2>&1; then
   GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
     GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" script -q /dev/null bash "$SCRIPT" --all-users < /dev/null > "$FL/tty.out" 2>&1
   has  "fleet: the Argus note once, with a terminal" 'Roll it out through the MDM you' "$FL/tty.out"
-else skip "fleet: the Argus note once, with a terminal" "needs script(1) for a terminal"; fi
+  if LC_ALL=C grep -aq "$(printf '\033')" "$FL/tty.out"; then bad "fleet: no colours, even on a terminal"; else ok "fleet: no colours, even on a terminal"; fi
+else skip "fleet: the Argus note once, with a terminal" "needs script(1) for a terminal"; skip "fleet: no colours, even on a terminal" "needs script(1) for a terminal"; fi
 grep -v '^  Saved: ' "$FL/term.out" > "$FL/term-nosave.out"
 hasnot "fleet: the readable report has no path or file name" '/|~|\.zshrc|\.env' "$FL/term-nosave.out"
 
@@ -1112,6 +1113,9 @@ users "itadmin:$U:$FL/itadmin:/bin/zsh"
 rm -rf "$FL/state" "$FL/elsewhere"; mkdir -p "$FL/elsewhere"; ln -s "$FL/elsewhere" "$FL/state"
 fl_run slink
 if [ -d "$FL/state" ] && [ ! -L "$FL/state" ] && [ "$(stat -f %Lp "$FL/state")" = 700 ] && [ -f "$FL/state/last.json" ] && [ -z "$(ls "$FL/elsewhere")" ]; then ok "fleet: a saved-result folder that is a link is made again"; else bad "fleet: a saved-result folder that is a link is made again" "$(ls -la "$FL/state" "$FL/elsewhere" 2>&1 | head -n 6)"; fi
+rm -rf "$FL"/state*; mkdir -m 700 "$FL/state"; printf 'keep\n' > "$FL/target"; ln -s "$FL/target" "$FL/state/last.json"
+fl_run swrite
+if [ "$(cat "$FL/target")" = keep ] && [ -f "$FL/state/last.json" ] && [ ! -L "$FL/state/last.json" ]; then ok "fleet: the result is written to a new file and renamed into place"; else bad "fleet: the result is written to a new file and renamed into place"; fi
 rm -rf "$FL"/state*; mkdir -m 755 "$FL/state"
 fl_run smode
 if [ "$(stat -f %Lp "$FL/state")" = 700 ] && [ -f "$FL/state/last.json" ]; then ok "fleet: a saved-result folder anyone can read is made again"; else bad "fleet: a saved-result folder anyone can read is made again"; fi
