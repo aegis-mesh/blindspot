@@ -842,8 +842,10 @@ EOF
   # settles in the shell. A find with -lname (GNU, BSD) keeps only links whose text names
   # authorized_keys. BusyBox's find has no -lname and rejects the whole expression over it, and its
   # -exec ... + drops links, so there every link is printed, one -exec each.
-  if find /dev/null -maxdepth 0 -lname x >/dev/null 2>&1; then _lk=(-lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); fi
+  # Linked settings, tasks and planted files are printed as "S path" the same way.
+  if find /dev/null -maxdepth 0 -lname x >/dev/null 2>&1; then
+    _lk=(-lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -870,7 +872,7 @@ EOF
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
        -o -name .aider.chat.history.md -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
-       "${_pf[@]}" \) -print \) -o \
+       "${_pf[@]}" \) "${_ls[@]}" \) -o \
     \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
 }
 
@@ -883,7 +885,7 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
   while IFS= read -r _l; do
     printf '%s\n' "$_l"
     _n=$((_n + 1)); [ $((_n % 4)) -eq 1 ] || continue
-    _s=${_l#L }; _s=${_s//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
+    _s=${_l#[LS] }; _s=${_s//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
     # shellcheck disable=SC2088  # a literal ~ for home paths, as short() prints
     case "$_s" in "$H"/*) _s="~/${_s#"$H"/}" ;; esac
     progress i "Checking $_s"
@@ -1093,11 +1095,9 @@ SCAN_FAILED=0; SCAN_WHY=""
 if [ -z "$FOUND" ] && [ -n "$SCAN_ERR" ] && grep -qiE '^find: .*(unrecognized|unknown|invalid|illegal|not a valid|bad option|usage)' "$SCAN_ERR" 2>/dev/null; then
   SCAN_FAILED=1; SCAN_WHY=$(grep -m 1 '^find: ' "$SCAN_ERR" | tr -d '\r' | cut -c 1-120)
 fi
-LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
-TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
-# Files worms plant in a project, from data/planted.tsv.
-WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($PLANTED_ERE)\$")
-AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
+# Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
+# files_found counts files, as it always has.
+LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p')
 # Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
 # outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
 # .ssh/authorized_keys fixture does not count. Before the file exists, a link that resolves to its
@@ -1111,6 +1111,12 @@ ak_link() { # link
   [ "$_d" = "$(cd "$H/.ssh" 2>/dev/null && pwd -P)" ]
 }
 AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) ak_link "$_f" && printf '%s\n' "$_f" ;; esac; done)
+FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LS] ')
+LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
+TASK_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/tasks\.json$')
+# Files worms plant in a project, from data/planted.tsv.
+WORM_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E "/($PLANTED_ERE)\$")
+AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
 # The project files of data/auto-approve.tsv, and every project's .vscode/settings.json (section 2).
 AA_FILES=""; AA_ERE=""
 if [ -n "$AA_PROJECT" ]; then
@@ -1118,12 +1124,12 @@ if [ -n "$AA_PROJECT" ]; then
   AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
 fi
 VSC_SETTINGS=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/settings\.json$')
-FOUND=$(printf '%s\n' "$FOUND" | grep -v '^L ' | grep -vE '/\.vscode/settings\.json$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
-ALLOW_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.claude/settings(\.local)?\.json$')
+ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
 SITES=$(printf '%s\n' "$FOUND" | grep -E '/site-packages$')
 VENVS=$(printf '%s\n' "$FOUND" | grep -E '/pyvenv\.cfg$' | sed 's#/pyvenv\.cfg$##')
@@ -1280,20 +1286,55 @@ AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN="|"
 # A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
 WORM_CMD='"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*([^A-Za-z0-9_"\\]|\\"))?(node|bun|deno|tsx)(\.exe)?[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
 TAB=$(printf '\t')
-# One line of text. Claude Code's settings are strict JSON; only tasks.json (JSONC) has comments to drop.
+# One line of text, with comments removed first: // to the end of the line and /* */, outside
+# strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
+# JSONC parser reads it). tasks.json and VS Code's settings.json are JSONC, and a commented-out
+# setting in any other file is not active either. Each line is split on its quotes, and each piece
+# outside a string on its slashes, both with a one-character separator, and every chunk is looked at
+# a bounded number of times: linear whatever the input, where a loop over single characters, or a
+# regex split or gsub with many matches, is quadratic on macOS's awk for a long minified line.
 flat() {
-  case "$1" in
-    */tasks.json) sed -E 's#(^|[[:space:],{[])//.*$#\1#' "$1" 2>/dev/null | tr '\n\r\t' '   ' | sed -E 's#/\*([^*]|\*+[^*/])*\*+/##g' ;;
-    *) tr '\n\r\t' '   ' < "$1" 2>/dev/null ;;
-  esac
+  tr '\r\t' '\n ' < "$1" 2>/dev/null | awk '
+    # A piece between two quotes, in code (st 0) or inside a block comment (st 2). Split on /,
+    # // is an empty chunk between two slashes, /* a chunk starting with *, and */ a chunk ending
+    # in * before a slash; the * that opened the comment (a /*/) closes nothing. Returns 1 on a // comment.
+    function piece(s,   nc, c, j, op) {
+      nc = split(s, c, "/"); op = 0
+      for (j = 1; j <= nc; j++) {
+        if (st == 2) { if (j < nc && c[j] ~ /\*$/ && !(j == op && length(c[j]) == 1)) st = 0; continue }
+        printf "%s", c[j]
+        if (j == nc) break
+        if (c[j + 1] == "") { if (j + 1 < nc) return 1; printf "/"; continue }
+        if (substr(c[j + 1], 1, 1) == "*") { st = 2; op = j + 1; continue }
+        printf "/"
+      }
+      return 0
+    }
+    BEGIN { st = 0 }   # 0 code, 1 string, 2 block comment
+    { nq = split($0, q, "\"")
+      for (i = 1; i <= nq; i++) {
+        if (st == 1) {            # in a string: kept as it is; an odd run of \ escapes the quote or the line break
+          printf "%s", q[i]; esc = (match(q[i], /\\+$/) && RLENGTH % 2 == 1)
+          if (i < nq) printf "\""
+          if (!esc) st = 0
+          continue
+        }
+        if (piece(q[i])) break    # a // comment: the rest of the line goes
+        if (st == 2) continue     # inside a block comment: so is the quote after this piece
+        if (i < nq) { printf "\""; st = 1 }
+      }
+      printf " "
+    }'
 }
 auto_row() { # file what flattened-text
   # A worm file counts only when a command runs it, not when a rule or a guard merely names it.
   printf '%s' "$3" | grep -qE "$WORM_CMD" && WORM_REFS="$WORM_REFS$1
 "
-  # Worktrees and copies carry the same settings: one row, with how many more folders have it.
+  # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
+  # row names the repo's own file, whichever one the scan listed first.
   _sum="$(printf '%s' "$3" | cksum | cut -d' ' -f1):$(printf '%s' "$1" | sed -E 's#/\.claude/worktrees/[^/]+/#/#')"
-  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | awk -F "$TAB" -v OFS="$TAB" -v s="$_sum" '$3 == s { $4++ } { print }')
+  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | S=$_sum F=$1 awk -F "$TAB" -v OFS="$TAB" '
+      $3 == ENVIRON["S"] { $4++; if ($1 ~ /\/\.claude\/worktrees\// && ENVIRON["F"] !~ /\/\.claude\/worktrees\//) $1 = ENVIRON["F"] } { print }')
 "; return ;; esac
   AUTO_SEEN="$AUTO_SEEN$_sum|"
   N_AUTO=$((N_AUTO + 1))
@@ -1885,8 +1926,9 @@ vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx"
 # <<< bad-extensions
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
-# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
-# (locks written without URLs) and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
+# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line,
+# nested and bundled ones (node_modules/tool/node_modules/name) included, since those have no URL,
+# and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
 # moves away from a version, so overrides are skipped. Versions are printed only if they look like
 # versions, so a package can't put terminal control codes in the report.
 npm_hits() {
@@ -1898,7 +1940,7 @@ npm_hits() {
     }
     function hit(nm, v,   k, t) {
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
-      if (v ~ /-security$/) return   # the empty placeholder npm puts in place of a removed package
+      if (v ~ /^0\.0\.1-security(\.[0-9]+)?$/) return   # the empty placeholder npm puts in place of a removed package: 0.0.1-security, or 0.0.1-security.0 for a few names
       k = nm "@" v; t = ""
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "\t" nm " " v "\t" t }
@@ -1911,7 +1953,7 @@ npm_hits() {
     }
     over { next }
     FILENAME ~ /(package-lock|npm-shrinkwrap)\.json$/ {
-      if (match($0, /"(node_modules\/)*(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
+      if (match($0, /"(node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
         pend = substr($0, RSTART + 1); sub(/"[[:space:]]*:.*/, "", pend); sub(/^.*node_modules\//, "", pend)
       } else if (pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
         v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); hit(pend, v); pend = ""
@@ -1942,7 +1984,9 @@ if [ "$N_LOCK" -gt 0 ]; then
   NPM_ROWS=$(printf '%s\n' "$LOCKFILES" | while IFS= read -r f; do [ -r "$f" ] && npm_hits "$f"; done)
 fi
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv),
-# pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
+# pnpm's and bun's global folders, and npx's cache. One pass: the package.json of every package
+# under each root (the package itself, or a dependency of a globally installed tool) is listed by
+# its folder, and one awk reads the ones whose folder names a bad package.
 NPM_ROOTS=$(
   for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
            "$H"/.nvm/versions/node/*/lib/node_modules "$H"/.volta/tools/image/node/*/lib/node_modules \
@@ -1954,23 +1998,49 @@ NPM_ROOTS=$(
     [ -d "$r" ] && printf '%s\n' "$r"
   done
   if [ "$WIN" -eq 1 ]; then
-    for r in "$WAPP/npm/node_modules" "$WLAPP"/npm-cache/_npx/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done
+    # The Windows places gird-check.ps1 reads: npm's own folder, nvm-windows (NVM_HOME), fnm (FNM_DIR), Volta, mise, pnpm and npx's cache.
+    _nvm=$(winpath "${NVM_HOME:-}"); _nvm=${_nvm%/}; [ -n "$_nvm" ] || _nvm="$WAPP/nvm"
+    _fnm=$(winpath "${FNM_DIR:-}"); _fnm=${_fnm%/}; [ -n "$_fnm" ] || _fnm="$WAPP/fnm"
+    for r in "$WAPP/npm/node_modules" "$_nvm"/*/node_modules "$_fnm"/node-versions/*/installation/node_modules \
+             "$WLAPP"/Volta/tools/image/node/*/node_modules "$WLAPP"/Volta/tools/image/packages/*/node_modules \
+             "$WLAPP"/Volta/tools/image/packages/*/lib/node_modules "$WLAPP"/mise/installs/node/*/node_modules \
+             "$WLAPP"/pnpm/global/*/node_modules "$WLAPP"/npm-cache/_npx/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done
   fi
+  # pnpm's own folder, where its setup points PNPM_HOME.
+  _ph=$(winpath "${PNPM_HOME:-}"); _ph=${_ph%/}
+  if [ -n "$_ph" ]; then for r in "$_ph"/global/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done; fi
 )
-NPM_NAMES=$(printf '%s\n' "$BAD_NPM" | awk '{print $1}' | sort -u)
+npm_global_hits() { # package.json paths on stdin; prints folder|name version|tag for each bad package
+  BAD_NPM_LIST=$BAD_NPM awk '
+    BEGIN {
+      n = split(ENVIRON["BAD_NPM_LIST"], L, "\n")
+      for (i = 1; i <= n; i++) { if (split(L[i], f, " ") < 3) continue
+        names[f[1]] = 1; if (f[2] == "*") any[f[1]] = f[3]; else bad[f[1] "@" f[2]] = f[3] }
+    }
+    {
+      # The folder names the package: node_modules/<name> or node_modules/@<scope>/<name>.
+      fn = $0; d = fn; sub(/\/package\.json$/, "", d)
+      k = split(d, c, "/"); nm = c[k]; if (k > 1 && c[k - 1] ~ /^@/) nm = c[k - 1] "/" nm
+      if (!(nm in names)) next
+      v = ""
+      while ((getline line < fn) > 0) {
+        if (match(line, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) { v = substr(line, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); break }
+      }
+      close(fn)
+      if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
+      if (v ~ /^0\.0\.1-security(\.[0-9]+)?$/) next   # the empty placeholder npm puts in place of a removed package
+      t = ""; if ((nm "@" v) in bad) t = bad[nm "@" v]; else if (nm in any) t = any[nm]
+      if (t != "") print d "\t" nm " " v "\t" t
+    }' 2>/dev/null
+}
 _g=$(
   printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
     [ -n "$r" ] || continue
-    for nm in $NPM_NAMES; do
-      # The package itself, or a dependency of a globally installed tool.
-      for d in "$r/$nm" "$r"/*/node_modules/"$nm" "$r"/@*/*/node_modules/"$nm"; do
-        [ -f "$d/package.json" ] || continue
-        v=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$d/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/')
-        case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; (*-security) continue ;; esac
-        printf '%s\n' "$BAD_NPM" | N=$nm V=$v D=$d awk '$1 == ENVIRON["N"] && ($2 == ENVIRON["V"] || $2 == "*") { print ENVIRON["D"] "\t" ENVIRON["N"] " " ENVIRON["V"] "\t" $3; exit }'
-      done
+    for f in "$r"/*/package.json "$r"/@*/*/package.json "$r"/*/node_modules/*/package.json "$r"/*/node_modules/@*/*/package.json \
+             "$r"/@*/*/node_modules/*/package.json "$r"/@*/*/node_modules/@*/*/package.json; do
+      [ -f "$f" ] && printf '%s\n' "$f"
     done
-  done
+  done | npm_global_hits
 )
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"
@@ -2064,16 +2134,27 @@ N_OLD=$(count_lines "$OLD_LIST")
 [ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
-# A folder or file that can't be read leaves the cache not fully checked, never clean: find's and
-# cat's errors come back unmarked next to the hits, which are marked with H.
-for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
-  [ -n "$c" ] && [ -d "$c" ] || continue
-  _r=$( { find "$c" -type f -print0 2>&9 | xargs -0 cat 2>&9 | npm_hits | awk -F '\t' -v OFS='\t' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u | sed 's/^/H/'; } 9>&1)
+# A folder or file that can't be read leaves the cache not fully checked, never clean: a cache
+# folder on the way that exists but can't be read or entered counts, and so do find's and cat's
+# errors, which come back unmarked next to the hits, which are marked with H.
+_caches="$H/.npm"; [ "$WIN" -eq 1 ] && _caches="$_caches
+$WLAPP/npm-cache"
+while IFS= read -r _nc; do
+  [ -n "$_nc" ] && [ -d "$_nc" ] || continue
+  c=$_nc; _ok=1
+  for _part in _cacache index-v5; do
+    if [ ! -r "$c" ] || [ ! -x "$c" ]; then NPM_UNREAD=$((NPM_UNREAD + 1)); _ok=0; break; fi
+    c="$c/$_part"; [ -d "$c" ] || { _ok=0; break; }
+  done
+  [ "$_ok" -eq 1 ] || continue
+  _r=$( { find "$c" -type f -print0 2>&9 | xargs -0 cat 2>&9 | npm_hits | awk -F '\t' -v OFS='\t' -v p="$_nc (npm's download cache)" '{ $1 = p; print }' | sort -u | sed 's/^/H/'; } 9>&1)
   _h=$(printf '%s\n' "$_r" | sed -n 's/^H//p')
   NPM_UNREAD=$((NPM_UNREAD + $(printf '%s\n' "$_r" | grep -c '^[^H]')))
   [ -n "$_h" ] && NPM_ROWS="$NPM_ROWS
 $_h"
-done
+done <<EOF
+$_caches
+EOF
 NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
@@ -2696,7 +2777,7 @@ $UV_BAD
 EOF
 done
 if [ "$WIPER_HIT" -eq 1 ]; then
-  pair "${RED}✗${RST}" "npm worms" 16 "${RED}a wiper is waiting${RST}"
+  pair "${RED}✗${RST}" "npm malware" 16 "${RED}a wiper is waiting${RST}"
   while IFS= read -r l; do [ -n "$l" ] && emit "        $(short "$l")"; done <<EOF
 $WIPER
 EOF
@@ -2710,9 +2791,9 @@ EOF
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
   if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
-    [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
+    [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm malware" 16 "${RED}signs of the malware found${RST}"
   else
-    pair "${YEL}!${RST}" "npm worms" 16 "${YEL}a bad version to update${RST}"
+    pair "${YEL}!${RST}" "npm malware" 16 "${YEL}a bad version to update${RST}"
   fi
   while IFS="$TAB" read -r f p t; do
     [ -n "$f" ] || continue
@@ -2735,10 +2816,14 @@ $PERSIST
 EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$WIPER_HIT" -eq 0 ] && [ "$NPM_UNREAD" -gt 0 ]; then
-  pair "${YEL}!${RST}" "npm worms" 16 "${YEL}not fully checked: part of npm's cache could not be read${RST}"
+  pair "${YEL}!${RST}" "npm malware" 16 "${YEL}not fully checked: part of npm's cache could not be read${RST}"
 elif [ "$WIPER_HIT" -eq 0 ]; then
-  pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
+  pair "${GRN}✓${RST}" "npm malware" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
+fi
+# With findings above, a part of the cache that could not be read still has to be said.
+if [ "$NPM_UNREAD" -gt 0 ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
+  wrap "Part of npm's cache could not be read, so this is not the full list." 8 "        " "        " "$YEL"
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
   pair "${RED}✗${RST}" "Editor extensions" 16 "${RED}signs of the malware found${RST}"
@@ -2882,7 +2967,6 @@ if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop
 elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
 elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
-elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
 elif [ "$NPM_UPD" -eq 1 ] && [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="npm and Python packages to update, see section 5"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
@@ -2901,7 +2985,9 @@ elif [ "$N_PLAT_FOUND" -eq 1 ]; then
   while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do [ "$(plat_hit "$_pid")" = 1 ] && D5=$_psum; done <<EOF
 $PLATFORMS
 EOF
-else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks it checks"; fi
+# A partial check comes after every finding someone has to act on, and before the green line.
+elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
+else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"
 cline 02 "$G2" "MCP servers" "$D2"

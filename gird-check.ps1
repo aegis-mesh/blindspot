@@ -481,7 +481,9 @@ foreach ($p in @('AppData', 'Library', 'Applications', 'Pictures', 'Videos', 'Mo
     '3D Objects', 'scoop')) { $PrunePaths.Add((J $HomeDir $p)) }
 if (-not $OptAll) { foreach ($p in @('Desktop', 'Documents', 'Downloads')) { $PrunePaths.Add((J $HomeDir $p)) } }
 $Found = New-Object System.Collections.Generic.List[string]
-# Kept apart from $Found, so files_found counts what it always has.
+# Kept apart from $Found, so files_found counts what it always has: the files of the npm and
+# project checks, and linked settings files, which are checked like the files but are not files.
+$LinkSettings = New-Object System.Collections.Generic.List[string]
 $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
@@ -550,7 +552,7 @@ function Scan-Home([string]$dir, [int]$depth) {
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
     # A linked settings, tasks or worm file is followed; any other link is not.
     if ($link) {
-      if ($isSettings) { $Found.Add($path) }
+      if ($isSettings) { $LinkSettings.Add($path) }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
       elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
       if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
@@ -771,7 +773,7 @@ function Sess-Stop([bool]$wait) {
 
 Scan-Home $HomeDir 0
 $EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
-$AllowFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
+$AllowFiles = @(@($Found) + @($LinkSettings) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
 $ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 
@@ -895,7 +897,11 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 # servers, as soon as the folder is opened. A cloned repo brings them along (Check Point,
 # CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks). Both
 # settings.json and settings.local.json are read, since repos commit either. Each file is read as
-# one line, so pretty-printed JSON matches too; only tasks.json (JSONC) has comments removed first.
+# one line, so pretty-printed JSON matches too, with comments removed first: // to the end of the
+# line and /* */, outside strings only (a \" does not end a string; a line break does, unless a \
+# escapes it, as VS Code's JSONC parser reads it). tasks.json and VS Code's settings.json are
+# JSONC, and a commented-out setting in any other file is not active either. One regex pass keeps
+# each string and drops each comment, so the time is linear whatever the input.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
 $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
 # Worms plant a file in the folder ($WormName, from data/planted.tsv) and run it from a hook or a task.
@@ -908,12 +914,11 @@ $RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsA
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
 $RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
-$RxLineComment = New-Object regex('(^|[\s,{\[])//[^\n]*', $RxOpt, $RxTimeout)
-$RxBlockComment = New-Object regex('/\*(?:[^*]|\*+[^*/])*\*+/', $RxOpt, $RxTimeout)
+# A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
+$RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
 function Flat-Text([string]$f) {
   $t = Read-Text $f; if ($null -eq $t) { return $null }
-  if (-not $f.EndsWith('tasks.json')) { return ($t -replace '[\r\n\t]', ' ') }
-  try { $RxBlockComment.Replace(($RxLineComment.Replace($t, '$1') -replace '[\r\n\t]', ' '), '') } catch { Mark-Slow $f; $null }
+  try { $RxJsonc.Replace($t, '$1') -replace '[\r\n\t]', ' ' } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
@@ -951,9 +956,14 @@ function Aa-Hit([string]$f, $pats) {
 }
 function Auto-Row([string]$f, [string]$what, [string]$t) {
   if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
-  # A repo's worktrees carry the same settings: one row, with how many more folders have it.
+  # A repo's worktrees carry the same settings: one row, with how many more folders have it. The
+  # row names the repo's own file, whichever one the scan listed first.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
-  if ($AutoSeen.ContainsKey($key)) { $AutoSeen[$key].More = $AutoSeen[$key].More + 1; return }
+  if ($AutoSeen.ContainsKey($key)) {
+    $row = $AutoSeen[$key]; $row.More = $row.More + 1
+    if ($row.File -match '[/\\]\.claude[/\\]worktrees[/\\]' -and $f -notmatch '[/\\]\.claude[/\\]worktrees[/\\]') { $row.File = $f }
+    return
+  }
   $row = @{ File = $f; What = $what; More = 0 }
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
@@ -1442,19 +1452,19 @@ tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx
 vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx
 '@
 # <<< bad-extensions
-$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]; $N_BAD_NPM = 0
+$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
 foreach ($l in ($BadNpm -split "`r?`n")) {
   $p = $l -split ' '; if ($p.Count -lt 3) { continue }
   $N_BAD_NPM++
   if ($p[1] -ceq '*') { $NpmAny[$p[0]] = $p[2] } else { $NpmBad["$($p[0])@$($p[1])"] = $p[2] }
-  if (-not $NpmNames.Contains($p[0])) { $NpmNames.Add($p[0]) }
+  [void]$NpmNames.Add($p[0])
 }
 $NpmRows = New-Object System.Collections.Generic.List[object]; $NpmCacheRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
 $NpmCacheTag = " (npm's download cache)"
 # Versions are shown only if they look like versions, so a package can't put terminal control codes in the report.
 function Npm-Hit([string]$where, [string]$nm, [string]$v) {
   if ($v -cnotmatch '^[0-9A-Za-z.+_-]+\z') { $v = '?' }
-  if ($v.EndsWith('-security')) { return }  # npm's empty placeholder for a removed package
+  if ($v -cmatch '^0\.0\.1-security(\.[0-9]+)?\z') { return }  # npm's empty placeholder for a removed package: 0.0.1-security, or 0.0.1-security.0 for a few names
   $k = "$nm@$v"; $t = $null
   if ($NpmBad.ContainsKey($k)) { $t = $NpmBad[$k] } elseif ($NpmAny.ContainsKey($nm)) { $t = $NpmAny[$nm] }
   if ($null -eq $t -or $NpmSeen.ContainsKey("$where|$k")) { return }
@@ -1462,12 +1472,13 @@ function Npm-Hit([string]$where, [string]$nm, [string]$v) {
   if ($where.EndsWith($NpmCacheTag, [StringComparison]::Ordinal)) { $NpmCacheRows.Add(@($where, "$nm $v", $t)) } else { $NpmRows.Add(@($where, "$nm $v", $t)) }
 }
 # Tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
-# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
-# (locks written without URLs) and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
-# moves away from a version, so overrides are skipped.
+# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line,
+# nested and bundled ones (node_modules/tool/node_modules/name) included, since those have no URL,
+# and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section moves away from a version, so
+# overrides are skipped.
 $RxTgz = New-Object regex('/((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))/-/([A-Za-z0-9._~-]+)\.tgz', $RxOpt, $RxTimeout)
 $RxTok = New-Object regex('(?<![A-Za-z0-9._~@-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
-$RxLockEntry = New-Object regex('^[^\n]*?"((?:node_modules/)*(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)"[^\S\n]*:[^\S\n]*\{|^[^\n]*?"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
+$RxLockEntry = New-Object regex('^[^\n]*?"((?:node_modules/(?:[A-Za-z0-9._~@-]+/)*)?(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)"[^\S\n]*:[^\S\n]*\{|^[^\n]*?"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
 $RxPnpmKey = New-Object regex('^[^\S\n]+/((?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)/([0-9][^:(_/\n]*)', $RxOpt, $RxTimeout)
 $RxPnpmOver = New-Object regex('^overrides:', $RxOpt, $RxTimeout)
 $RxBunOver = New-Object regex('"overrides"[^\S\n]*:[^\S\n]*\{', $RxOpt, $RxTimeout)
@@ -1529,24 +1540,29 @@ foreach ($g in @(@($nvmWin, 'node_modules'), @((J $fnmWin 'node-versions'), 'ins
     @((J $LocalAppData 'pnpm/global'), 'node_modules'), @((J $LocalAppData 'npm-cache/_npx'), 'node_modules'))) { $NpmGlobs.Add($g) }
 if ($env:PNPM_HOME) { $NpmGlobs.Add(@((J $env:PNPM_HOME 'global'), 'node_modules')) }
 foreach ($g in $NpmGlobs) { foreach ($d in (Glob-Dirs $g[0] '*')) { Add-NpmRoot (J $d $g[1]) } }
-foreach ($r in $NpmRoots) {
-  # The package itself, or a dependency of a globally installed tool.
-  $mods = New-Object System.Collections.Generic.List[string]; $mods.Add($r)
-  foreach ($d in (Glob-Dirs $r '*')) {
-    $dn = [IO.Path]::GetFileName($d); if ($dn.StartsWith('.')) { continue }
-    if (Is-Dir (J $d 'node_modules')) { $mods.Add((J $d 'node_modules')) }
-    if (-not $dn.StartsWith('@')) { continue }
-    foreach ($d2 in (Glob-Dirs $d '*')) { if (-not [IO.Path]::GetFileName($d2).StartsWith('.') -and (Is-Dir (J $d2 'node_modules'))) { $mods.Add((J $d2 'node_modules')) } }
-  }
-  foreach ($nm in $NpmNames) {
-    foreach ($md in $mods) {
-      $pd = J $md $nm; $pj = J $pd 'package.json'; if (-not (Is-File $pj)) { continue }
+# One pass over each root: a folder named for a bad package (node_modules/<name> or
+# node_modules/@<scope>/<name>) has its package.json read, as the package itself or as a dependency
+# of a globally installed tool. Nothing is looked up per bad name.
+function Npm-Package([string]$d, [string]$nm, [bool]$deep) {
+  if ($NpmNames.Contains($nm)) {
+    $pj = J $d 'package.json'
+    if (Is-File $pj) {
       $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"')
       $v = ''; if ($m.Success) { $v = $m.Groups[1].Value }
-      Npm-Hit $pd $nm $v
+      Npm-Hit $d $nm $v
     }
   }
+  if ($deep) { $nm2 = J $d 'node_modules'; if (Is-Dir $nm2) { Npm-Modules $nm2 $false } }
 }
+function Npm-Modules([string]$md, [bool]$deep) {
+  foreach ($d in (Glob-Dirs $md '*')) {
+    $dn = [IO.Path]::GetFileName($d); if ($dn.StartsWith('.')) { continue }
+    if ($dn.StartsWith('@')) {
+      foreach ($d2 in (Glob-Dirs $d '*')) { $n2 = [IO.Path]::GetFileName($d2); if (-not $n2.StartsWith('.')) { Npm-Package $d2 "$dn/$n2" $deep } }
+    } else { Npm-Package $d $dn $deep }
+  }
+}
+foreach ($r in $NpmRoots) { Npm-Modules $r $true }
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 $OutTable = @(
   ,@('cursor', 'Cursor', 'mac', 'plist', '/Applications/Cursor.app/Contents/Info.plist', '-', '3.0', 'a prompt injection could escape the sandbox', 'github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw')
@@ -1628,9 +1644,22 @@ $N_OLD = $OldList.Count
 if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldList[0].Name)" }
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
-# A folder or file that can't be read leaves the cache not fully checked, never clean.
+# A folder or file that can't be read leaves the cache not fully checked, never clean: a cache
+# folder on the way that exists but can't be listed counts too.
+function Npm-Cache-Index([string]$c) { # the index folder; '' when the cache has none, $null when a folder on the way can't be read
+  $p = $c
+  foreach ($part in @('_cacache', 'index-v5')) {
+    if (-not (Is-Dir $p)) { return '' }
+    try { $kids = @(([IO.DirectoryInfo]$p).GetDirectories() | ForEach-Object { $_.Name }) } catch { return $null }
+    if (@($kids | Where-Object { $_.Equals($part, $PathCmp) }).Count -eq 0) { return '' }
+    $p = J $p $part
+  }
+  $p
+}
 foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
-  $ix = J $c '_cacache/index-v5'; if (-not (Is-Dir $ix)) { continue }
+  $ix = Npm-Cache-Index $c
+  if ($null -eq $ix) { $NpmUnread++; continue }
+  if (-not $ix) { continue }
   $q = New-Object System.Collections.Generic.Queue[string]; $q.Enqueue($ix)
   while ($q.Count -gt 0) {
     $dd = $q.Dequeue()
@@ -2095,7 +2124,7 @@ foreach ($pi in $PyIncidents) {
   foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
 }
 if ($WIPER_HIT -eq 1) {
-  Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}a wiper is waiting$cRst"
+  Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}a wiper is waiting$cRst"
   foreach ($l in $Wiper) { Emit "        $(Short $l)" }
   if ($OnWindows) { $stop = 'Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate, then ' }
   elseif (Is-Dir '/System/Library/CoreServices') { $uidv = ''; try { $uidv = [string](& id -u 2>$null) } catch { }; $stop = "launchctl bootout gui/$uidv/com.user.gh-token-monitor, then pkill -f gh-token-monitor, then " }
@@ -2105,8 +2134,8 @@ if ($WIPER_HIT -eq 1) {
 }
 if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
-    if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}signs of the malware found$cRst" }
-  } else { Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}a bad version to update$cRst" }
+    if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}signs of the malware found$cRst" }
+  } else { Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}a bad version to update$cRst" }
   foreach ($r in $NpmRows) {
     if ($r[0].EndsWith($NpmCacheTag)) { $w = "downloaded into npm's cache" }
     elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') { $w = 'listed in this lockfile' }
@@ -2119,10 +2148,15 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   $why = New-Object System.Collections.Generic.List[string]
   if ($NpmSlow -gt 0) { $why.Add("$(Plural $NpmSlow 'file' 'files') took too long") }
   if ($NpmUnread -gt 0) { $why.Add("part of npm's cache could not be read") }
-  Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
+  Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
 } elseif ($WIPER_HIT -eq 0) {
-  Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
+  Pair "$cGrn$gOk$cRst" 'npm malware' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
   Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
+}
+# With findings above, a part of the check that did not finish still has to be said.
+if (($NpmSlow -gt 0 -or $NpmUnread -gt 0) -and ($WIPER_HIT -eq 1 -or $NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1)) {
+  if ($NpmSlow -gt 0) { Wrap "$(Plural $NpmSlow 'file' 'files') took too long to check, so this is not the full list." 8 '        ' '        ' $cYel }
+  if ($NpmUnread -gt 0) { Wrap "Part of npm's cache could not be read, so this is not the full list." 8 '        ' '        ' $cYel }
 }
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
@@ -2201,8 +2235,6 @@ if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it 
 elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
 elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
-elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
-elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($NPM_UPD -eq 1 -and $PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'npm and Python packages to update, see section 5' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
@@ -2214,7 +2246,10 @@ elseif ($leaks.Count -ge 2) {
   if ($leaks.Count -ge 3) { $D5 = "$l found: rotate keys" } else { $D5 = "$l found: rotate their keys" }
 }
 elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
-else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks it checks" }
+# A partial check comes after every finding someone has to act on, and before the green line.
+elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
+elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
+else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1
 CLine '02' $G2 'MCP servers' $D2

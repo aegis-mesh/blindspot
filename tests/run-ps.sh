@@ -260,6 +260,8 @@ printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/keyv": {\
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$RV/code/shrink/npm-shrinkwrap.json"
 printf "lockfileVersion: 5.4\n\npackages:\n\n  /cacheable/2.5.1:\n    resolution: {integrity: sha512-x}\n" > "$RV/code/pnpm5/pnpm-lock.yaml"
 mkdir -p "$RV/code/esc"; printf '{\n  "packages": {\n    "node_modules/cloude": {\n      "version": "2.0\033[2K"\n    }\n  }\n}\n' > "$RV/code/esc/package-lock.json"
+# A nested or bundled dependency in an npm lock (node_modules/<tool>/node_modules/<name>) has no resolved URL.
+mkdir -p "$RV/code/nested"; printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/some-tool": {\n      "version": "2.0.0"\n    },\n    "node_modules/some-tool/node_modules/axios": {\n      "version": "1.14.1",\n      "inBundle": true\n    },\n    "node_modules/@scope/tool/node_modules/@keyv/redis": {\n      "version": "6.0.0",\n      "inBundle": true\n    }\n  }\n}\n' > "$RV/code/nested/package-lock.json"
 # Global installs: a bad dependency inside a global tool, a version manager's folder, a version with control codes.
 mkdir -p "$RV/.npm-global/lib/node_modules/sometool/node_modules/axios" "$RV/.volta/tools/image/node/20.1.0/lib/node_modules/opencraw"
 printf '{"name":"axios","version":"1.14.1"}\n' > "$RV/.npm-global/lib/node_modules/sometool/node_modules/axios/package.json"
@@ -283,9 +285,18 @@ printf '{"permissions":{"allow":["Bash(ls /tmp/*)"]},"hooks":{"Stop":[{"hooks":[
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$RV/code/x|y/package-lock.json"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make fmt"}]}]}}\n' | tee "$RV/p/r1/.claude/settings.json" > "$RV/p/r2/.claude/settings.json"
 printf '{\n  "overrides": {\n    "axios@1.14.1": "1.14.2"\n  },\n  "packages": {\n    "axios": ["axios@1.14.2", ""]\n  }\n}\n' > "$RV/code/bunpin/bun.lock"
+# Comments: a // inside a string (a label, a URL) is text; only a comment outside strings is dropped, in every settings file.
+mkdir -p "$RV/p/hide/.vscode" "$RV/p/url/.vscode" "$RV/p/unhide/.vscode" "$RV/p/chook/.claude"
+printf '{"tasks":[{"label":"x //","runOptions":{"runOn":"folderOpen"},"command":"make"}]}\n' > "$RV/p/hide/.vscode/tasks.json"
+printf '{"tasks":[{"label":"docs","detail":"docs: //example.com/docs","runOptions":{"runOn":"folderOpen"},"command":"make"}]}\n' > "$RV/p/url/.vscode/tasks.json"
+printf '{"tasks":[{"label":"x //", /*\n  "runOptions":{"runOn":"folderOpen"},\n  */ "command":"make"}]}\n' > "$RV/p/unhide/.vscode/tasks.json"
+printf '{\n  // "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x"}]}]},\n  "permissions": {"allow": ["Bash(ls)"]}\n}\n' > "$RV/p/chook/.claude/settings.json"
 psrun "$RV" -- -Offline > "$WORK/rv.txt" 2>&1
+tr -s ' \n' '  ' < "$WORK/rv.txt" > "$WORK/rv-flat.txt"
 hasnot "a pnpm override pinning away is not a hit"     'code/pin/' "$WORK/rv.txt"
 has    "an npm lock entry without a URL is read"       'keyv 6\.0\.0 \(keyv worm' "$WORK/rv.txt"
+has    "a nested lock entry without a URL is read"     '~/code/nested/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$WORK/rv-flat.txt"
+has    "and a scoped one inside a scoped tool"         '~/code/nested/package-lock\.json @keyv/redis 6\.0\.0 \(keyv worm' "$WORK/rv-flat.txt"
 has    "npm-shrinkwrap.json is read"                   'code/shrink/npm-shrinkwrap\.json' "$WORK/rv.txt"
 has    "a pnpm 5 lockfile is read"                     'cacheable 2\.5\.1' "$WORK/rv.txt"
 has    "a bad dependency inside a global tool is found" 'sometool/node_modules/axios' "$WORK/rv.txt"
@@ -300,6 +311,10 @@ has    "a symlinked settings file is checked"          'p/link/\.claude/settings
 hasnot "a deny rule naming a worm file is not malware" 'runs a file the TanStack and keyv worms plant' "$WORK/rv.txt"
 hasnot "plugin marketplace clones are not projects"    'plugins/marketplaces' "$WORK/rv.txt"
 hasnot "a commented-out folderOpen task is not flagged" 'p/comment/' "$WORK/rv.txt"
+has    "a // inside a task label does not hide a folderOpen task" 'p/hide/\.vscode/tasks\.json' "$WORK/rv.txt"
+has    "a // in a URL inside a task does not hide one either" 'p/url/\.vscode/tasks\.json' "$WORK/rv.txt"
+hasnot "a // inside a string does not unhide a commented-out one" 'p/unhide/' "$WORK/rv.txt"
+hasnot "a commented-out hooks block in a settings file is not flagged" 'p/chook/' "$WORK/rv.txt"
 has    "a | in a folder name keeps its row intact"     'p/a\|b/\.claude/settings\.json' "$WORK/rv.txt"
 sed -n '/05  RECENT KEY LEAKS/,/WHAT TO DO/p' "$WORK/rv.txt" > "$WORK/rv-05.txt"
 hasnot "a guard hook naming a worm file is not malware" 'p/guard/' "$WORK/rv-05.txt"
@@ -309,6 +324,15 @@ has    "and its package"                               'axios 1\.14\.1 \(Axios t
 has    "two unrelated repos with the same settings are both listed (1)" 'p/r1/\.claude/settings\.json' "$WORK/rv.txt"
 has    "two unrelated repos with the same settings are both listed (2)" 'p/r2/\.claude/settings\.json' "$WORK/rv.txt"
 hasnot "a bun override pinning away is not a hit"      'code/bunpin/' "$WORK/rv.txt"
+# A worktree's copy listed before the repo's own file still leaves the row named for the repo's file:
+# the scan reads .claude, and the worktree's tasks.json under it, before the repo's own .vscode.
+mkdir -p "$WORK/wto/r/.claude/worktrees/w1/.claude" "$WORK/wto/r/.claude/worktrees/w1/.vscode" "$WORK/wto/r/.vscode" "$WORK/wto/AppData/Roaming" "$WORK/wto/AppData/Local/Temp"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' | tee "$WORK/wto/r/.claude/settings.json" > "$WORK/wto/r/.claude/worktrees/w1/.claude/settings.json"
+printf '{"tasks":[{"label":"setup","command":"make","runOptions":{"runOn":"folderOpen"}}]}\n' | tee "$WORK/wto/r/.vscode/tasks.json" > "$WORK/wto/r/.claude/worktrees/w1/.vscode/tasks.json"
+psrun "$WORK/wto" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wto.txt"
+hasnot "a worktree listed before its repo is not the row's name" 'worktrees/w1' "$WORK/wto.txt"
+has    "the repo's own settings file is named instead"  '~/r/\.claude/settings\.json Set to run commands while the agent works\. The same settings are in 1 more folder' "$WORK/wto.txt"
+has    "and so is the repo's own tasks file"            '~/r/\.vscode/tasks\.json Set to run a task when the folder opens in VS Code or Cursor\. The same settings are in 1 more folder' "$WORK/wto.txt"
 mkdir -p "$WORK/escq/p/.claude" "$WORK/escq/AppData/Roaming" "$WORK/escq/AppData/Local/Temp" "$WORK/vsp/p/.vscode" "$WORK/vsp/AppData/Roaming" "$WORK/vsp/AppData/Local/Temp"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node \\"$CLAUDE_PROJECT_DIR\\"/.claude/router_runtime.js"}]}]}}\n' > "$WORK/escq/p/.claude/settings.json"
 mkdir -p "$WORK/escq/q/.claude" "$WORK/escq/w/.claude"
@@ -321,18 +345,38 @@ has    "a Windows backslash path counts"               '~/w/\.claude/settings\.j
 printf 'x\n' > "$WORK/vsp/p/.vscode/setup.mjs"
 psrun "$WORK/vsp" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.txt"
 has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack and keyv worms plant' "$WORK/vsp.txt"
+# One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
+mkdir -p "$WORK/bigjs/p/.vscode" "$WORK/bigjs/AppData/Roaming" "$WORK/bigjs/AppData/Local/Temp"
+python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'
+import sys
+tasks = ','.join('{"label":"t%d // x","command":"make"}' % i for i in range(20000))
+open(sys.argv[1], 'w').write('{"tasks":[' + tasks + ',{"label":"last","runOptions":{"runOn":"folderOpen"},"command":"make"}]}')
+PY3
+T0=$(date +%s); psrun "$WORK/bigjs" -- -Offline > "$WORK/bigjs.txt" 2>&1; T=$(( $(date +%s) - T0 ))
+has    "a huge one-line tasks.json is read whole"      'p/\.vscode/tasks\.json' "$WORK/bigjs.txt"
+if [ "$T" -le 60 ]; then ok "and in reasonable time" "${T}s"; else bad "and in reasonable time" "took ${T}s"; fi
 awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
 if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
 # The clean line, against gird-check.sh's count, and a folder of npm's cache that can't be read.
 cp -R "$WORK/clean" "$WORK/npmok"; mkdir -p "$WORK/npmok/.npm/_cacache/index-v5/aa"
 psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmok.txt"
-has    "the clean line counts versions and packages apart" "npm worms none of $(awk '$2 != "*"' "$WORK/bad-sh.txt" | grep -c .) bad versions or $(awk '$2 == "*"' "$WORK/bad-sh.txt" | grep -c .) bad packages" "$WORK/npmok.txt"
+has    "the clean line counts versions and packages apart" "npm malware none of $(awk '$2 != "*"' "$WORK/bad-sh.txt" | grep -c .) bad versions or $(awk '$2 == "*"' "$WORK/bad-sh.txt" | grep -c .) bad packages" "$WORK/npmok.txt"
+# npm's cache that can't be read in full: a folder inside it, _cacache itself, or an index file. Nothing
+# else is found in this home (no platform, no cook.pyc), so the cache alone decides row 05.
 chmod 000 "$WORK/npmok/.npm/_cacache/index-v5/aa"
 psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno.txt"
 psrun "$WORK/npmok" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno-c.txt"
 chmod 755 "$WORK/npmok/.npm/_cacache/index-v5/aa"
-has    "an unreadable cache folder is not called clean" "npm worms not fully checked: part of npm's cache could not be read" "$WORK/npmno.txt"
+has    "an unreadable cache folder is not called clean" "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno.txt"
 has    "and the summary row is not green either"       'Recent leaks npm packages not fully checked: cache unreadable' "$WORK/npmno-c.txt"
+chmod 000 "$WORK/npmok/.npm/_cacache"
+psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno2.txt"
+chmod 755 "$WORK/npmok/.npm/_cacache"
+has    "an unreadable _cacache folder is not called clean" "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno2.txt"
+printf 'x\n' > "$WORK/npmok/.npm/_cacache/index-v5/aa/0e9"; chmod 000 "$WORK/npmok/.npm/_cacache/index-v5/aa/0e9"
+psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno3.txt"
+chmod 644 "$WORK/npmok/.npm/_cacache/index-v5/aa/0e9"
+has    "an unreadable index file is not called clean"  "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno3.txt"
 # Windows: no launchctl or systemctl, a PowerShell way to stop the wiper.
 psrun "$WORK/home" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
 has    "Windows is told how to stop the wiper"         'Stop it with Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate, then delete the files above' "$WORK/wwin.txt"
@@ -350,6 +394,19 @@ cp -R "$WORK/clean" "$WORK/ph2"; mkdir -p "$WORK/ph2/code/ph"
 printf '{"lockfileVersion":3,"packages":{"node_modules/plain-crypto-js":{"version":"0.0.1-security","resolved":"https://registry.npmjs.org/plain-crypto-js/-/plain-crypto-js-0.0.1-security.tgz"}}}\n' > "$WORK/ph2/code/ph/package-lock.json"
 psrun "$WORK/ph2" -- -Offline > "$WORK/ph2.txt" 2>&1
 hasnot "npm's -security placeholder is not malware" 'plain-crypto-js' "$WORK/ph2.txt"
+# The placeholder is exactly 0.0.1-security, or 0.0.1-security.0 for a few names: any other -security version is a version.
+cp -R "$WORK/clean" "$WORK/ph3"; mkdir -p "$WORK/ph3/code/ph" "$WORK/ph3/.npm-global/lib/node_modules/plain-crypto-js" "$WORK/ph3/.npm-global/lib/node_modules/claud-code" "$WORK/ph3/.npm-global/lib/node_modules/rimarf" "$WORK/ph3/.npm/_cacache/index-v5/aa/bb"
+printf '{"lockfileVersion":3,"packages":{"node_modules/plain-crypto-js":{"version":"0.0.1-security.0","resolved":"https://registry.npmjs.org/plain-crypto-js/-/plain-crypto-js-0.0.1-security.0.tgz"},"node_modules/claud-code":{"version":"0.0.1-security","resolved":"https://registry.npmjs.org/claud-code/-/claud-code-0.0.1-security.tgz"},"node_modules/cloude-code":{"version":"1.0.0-security","resolved":"https://registry.npmjs.org/cloude-code/-/cloude-code-1.0.0-security.tgz"}}}\n' > "$WORK/ph3/code/ph/package-lock.json"
+printf '{"name":"plain-crypto-js","version":"0.0.1-security.0"}\n' > "$WORK/ph3/.npm-global/lib/node_modules/plain-crypto-js/package.json"
+printf '{"name":"claud-code","version":"0.0.1-security"}\n' > "$WORK/ph3/.npm-global/lib/node_modules/claud-code/package.json"
+printf '{"name":"rimarf","version":"1.0.0-security"}\n' > "$WORK/ph3/.npm-global/lib/node_modules/rimarf/package.json"
+printf 'a\t{"key":"make-fetch-happen:request-cache:https://registry.npmjs.org/plain-crypto-js/-/plain-crypto-js-0.0.1-security.0.tgz"}\nb\t{"key":"make-fetch-happen:request-cache:https://registry.npmjs.org/claud-code/-/claud-code-0.0.1-security.tgz"}\nc\t{"key":"make-fetch-happen:request-cache:https://registry.npmjs.org/naniod/-/naniod-1.0.0-security.tgz"}\n' > "$WORK/ph3/.npm/_cacache/index-v5/aa/bb/0e9"
+psrun "$WORK/ph3" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph3.txt"
+hasnot "the real 0.0.1-security.0 placeholder of plain-crypto-js is not malware" 'plain-crypto-js' "$WORK/ph3.txt"
+hasnot "0.0.1-security of another any-version name is not malware" 'claud-code' "$WORK/ph3.txt"
+has    "1.0.0-security of an any-version name is malware in a lockfile" 'code/ph/package-lock\.json cloude-code 1\.0\.0-security \(SANDWORM_MODE' "$WORK/ph3.txt"
+has    "and in a global install"                     'node_modules/rimarf rimarf 1\.0\.0-security \(SANDWORM_MODE' "$WORK/ph3.txt"
+has    "and in npm's cache"                          "naniod 1\.0\.0-security \(SANDWORM_MODE worm, February 2026\), downloaded into npm's cache" "$WORK/ph3.txt"
 # Incidents from data/incidents.tsv: a sourced line per incident, and the update level.
 has    "each npm incident found gets its sourced line" 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it\. cisa\.gov' "$WORK/out-flat.txt"
 cp -R "$WORK/clean" "$WORK/mis"; mkdir -p "$WORK/mis/code/m"
@@ -357,13 +414,20 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"v
 psrun "$WORK/mis" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mis.txt"
 psrun "$WORK/mis" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mis-c.txt"
 hasnot "a version whose malware could not run is not 'compromised'" 'ACT NOW|Treat this machine as compromised' "$WORK/mis.txt"
-has    "it is a version to update instead"           'npm worms a bad version to update' "$WORK/mis.txt"
+has    "it is a version to update instead"           'npm malware a bad version to update' "$WORK/mis.txt"
 has    "with the vendor's own explanation"           'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file\. docs\.mistral\.ai' "$WORK/mis.txt"
 has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
+# A version to update outranks an unreadable cache in row 05: a partial check never hides a finding to act on.
+cp -R "$WORK/mis" "$WORK/misno"; mkdir -p "$WORK/misno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/misno/.npm/_cacache/index-v5/aa"
+psrun "$WORK/misno" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/misno.txt"
+psrun "$WORK/misno" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/misno-c.txt"
+chmod 755 "$WORK/misno/.npm/_cacache/index-v5/aa"
+has    "an npm package to update outranks an unreadable cache in row 05" 'Recent leaks an npm package to update' "$WORK/misno-c.txt"
+has    "and the hits say the cache was not read in full" "npm malware a bad version to update .*Part of npm's cache could not be read, so this is not the full list" "$WORK/misno.txt"
 # mistralai 2.4.6's malware ran on Linux only (Mistral's advisory): on Linux the version is an act-now
 # hit, on a Mac or Windows a version to update. gird-check.ps1 takes the OS from the machine it runs on.
 cp -R "$WORK/clean" "$WORK/mpy"; mkdir -p "$WORK/mpy/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"
@@ -456,7 +520,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 6 recent leaks it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 6 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -533,7 +597,7 @@ has    "extensions alone: their own row"              'Editor extensions signs o
 has    "extensions alone: the LaunchAgent GlassWorm leaves is listed with the extension" 'oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own headline"         'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-ext.txt"
 hasnot "extensions alone: no npm in the headline"     'ACT NOW.*NPM' "$WORK/dz-ext.txt"
-hasnot "extensions alone: no npm malware row or fix"  'npm worms +signs of the malware|Delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
+hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the malware|Delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
 has    "extensions alone: their own fix names the extensions and the startup file" 'Treat this machine as compromised\. Uninstall the extensions listed in section 5, delete the startup file listed there, and rotate every key this machine could reach\.' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own summary row"      'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-ext-sum.txt"
 has    "extensions alone: the link says ex, not nm"   '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-ext.txt"
@@ -546,7 +610,7 @@ has    "the LaunchAgent alone: the link says ex, not nm" '&nm=0&py=0&ex=1&wp=0' 
 cp -R "$WORK/dz-ext" "$WORK/dz-both"; mkdir -p "$WORK/dz-both/code/ax"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/dz-both/code/ax/package-lock.json"
 dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"
-has    "npm and extensions: both rows, each with its own findings" 'npm worms signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map' "$WORK/dz-both.txt"
+has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map' "$WORK/dz-both.txt"
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
 has    "npm and extensions: both fixes"               'Delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
 has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
@@ -625,14 +689,14 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
 mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 8 recent leaks it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 8 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
 rm -rf "$WORK/mu-upd"; cp -R "$WORK/clean" "$WORK/mu-upd"; mkdir -p "$WORK/mu-upd/code/u"
 printf '{"lockfileVersion":3,"packages":{"node_modules/made-upd-pkg":{"version":"4.5.6","resolved":"https://registry.npmjs.org/made-upd-pkg/-/made-upd-pkg-4.5.6.tgz"}}}\n' > "$WORK/mu-upd/code/u/package-lock.json"
 mups "$WORK/mu-upd" "$WORK/mu-upd.txt"
-has    "a made-up update-level hit is a version to update" 'npm worms a bad version to update' "$WORK/mu-upd.txt"
+has    "a made-up update-level hit is a version to update" 'npm malware a bad version to update' "$WORK/mu-upd.txt"
 hasnot "and not a compromised machine"                'ACT NOW|Treat this machine as compromised' "$WORK/mu-upd.txt"
 rm -rf "$WORK/mu-act"; cp -R "$WORK/clean" "$WORK/mu-act"; mkdir -p "$WORK/mu-act/code/a"
 printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":"1.2.3","resolved":"https://registry.npmjs.org/made-npm-pkg/-/made-npm-pkg-1.2.3.tgz"}}}\n' > "$WORK/mu-act/code/a/package-lock.json"
@@ -703,7 +767,7 @@ psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_COMPACT=1 -- -Offlin
 has    "a file that hits the time limit is listed" '[0-9]+ files? skipped: took too long to check' "$WORK/slow-to.txt"
 has    "with its path"                         '^ +~/code/s/\.env\.big$' "$WORK/slow-to.txt"
 has    "and the summary says so"               'skipped: took too long to check, like' "$WORK/slow-to-c.txt"
-has    "npm's cache that hits the limit is not called clean" 'npm worms +not fully checked: 1 file took too long' "$WORK/slow-to.txt"
+has    "npm's cache that hits the limit is not called clean" 'npm malware +not fully checked: 1 file took too long' "$WORK/slow-to.txt"
 has    "and the summary row is not green"      'Recent leaks +npm packages not fully checked' "$WORK/slow-to-c.txt"
 cp -R "$WORK/clean" "$WORK/pyc"
 SP="$WORK/pyc/code/winpy/.venv/Lib/site-packages"; mkdir -p "$SP/__pycache__"; printf 'home = C:\\Python312\n' > "$WORK/pyc/code/winpy/.venv/pyvenv.cfg"
@@ -935,6 +999,14 @@ payload_checks places "$WORK/report-places.json"
 mkdir -p "$WORK/empty"
 report_of "$WORK/report-empty.json" psrun "$WORK/empty" GIRD_CHECK_API="$API" --
 payload_checks empty "$WORK/report-empty.json"
+# files_found counts the files the scan found, as it always has: a linked settings file is checked, not counted.
+mkdir -p "$WORK/fcount/p/.claude" "$WORK/fcount/q/.claude" "$WORK/fcount/AppData/Roaming" "$WORK/fcount/AppData/Local/Temp"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"x"}]}]}}\n' > "$WORK/fcount/p/.claude/settings.json"
+printf 'X=1\n' > "$WORK/fcount/p/.env"; ln -s ../../p/.claude/settings.json "$WORK/fcount/q/.claude/settings.json"
+report_of "$WORK/report-fcount.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" --
+has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
+psrun "$WORK/fcount" -- -Offline > "$WORK/fcount.txt" 2>&1
+has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
 hasnot "no report holds a name you gave an MCP server" 'acme|my notes|web.search' "$WORK/received.log"
 hasnot "no report holds a server label as written"     '@modelcontextprotocol|MCP_DOCKER|Figma Dev Mode|upstash|Playwright|"gh"|"fs"' "$WORK/received.log"
 hasnot "no report holds a file name" '\.zshrc|zsh_history|python_history|bash_profile|\.env|\.mcp|mcp\.json|config\.(toml|yaml)|cline_mcp|claude_desktop|settings(\.local)?\.json|\.aider|PSReadLine|ConsoleHost' "$WORK/received.log"
@@ -962,6 +1034,14 @@ printf 'machine example.com login me password x\n' > "$WP/_netrc"
 printf 'import cook\n' > "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages/cook.pth"
 mkdir -p "$WP/AppData/Local/Programs/Python/Python312/Lib/site-packages/mistralai-2.4.6.dist-info"   # its malware ran on Linux only
 : > "$WP/AppData/Local/Temp/.pc_once_1"
+# Global installs in the Windows places: npm's own folder, nvm-windows, fnm, Volta, mise, pnpm and npx's cache.
+for d in AppData/Roaming/npm/node_modules/opencraw AppData/Roaming/nvm/v20.1.0/node_modules/claud-code \
+         AppData/Roaming/fnm/node-versions/v22.0.0/installation/node_modules/cloude-code \
+         AppData/Local/Volta/tools/image/node/20.1.0/node_modules/rimarf AppData/Local/Volta/tools/image/packages/tool/lib/node_modules/naniod \
+         AppData/Local/mise/installs/node/22.0.0/node_modules/suport-color AppData/Local/pnpm/global/5/node_modules/cloude \
+         AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache; do
+  mkdir -p "$WP/$d"; printf '{"name":"%s","version":"1.0.0"}\n' "${d##*/}" > "$WP/$d/package.json"
+done
 WGUID='3F2504E0-4f89-11D3-9A0C-0305E82C3301'
 winps() { psrun "$WP" OS=Windows_NT PROCESSOR_ARCHITECTURE=AMD64 WT_SESSION=1 GIRD_CHECK_TEST_MACHINEGUID="$WGUID" "$@"; }
 winps -- -Offline > "$WORK/win.txt" 2>&1
@@ -980,6 +1060,14 @@ has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a b
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
+has    "Windows: a bad package in npm's AppData folder"  'AppData/Roaming/npm/node_modules/opencraw' "$WORK/win1.txt"
+has    "Windows: a bad package under nvm-windows"        'AppData/Roaming/nvm/v20\.1\.0/node_modules/claud-code' "$WORK/win1.txt"
+has    "Windows: a bad package under fnm"                'AppData/Roaming/fnm/node-versions/v22\.0\.0/installation/node_modules/cloude-code' "$WORK/win1.txt"
+has    "Windows: a bad package under Volta"              'AppData/Local/Volta/tools/image/node/20\.1\.0/node_modules/rimarf' "$WORK/win1.txt"
+has    "Windows: a bad dependency of a Volta tool"       'AppData/Local/Volta/tools/image/packages/tool/lib/node_modules/naniod' "$WORK/win1.txt"
+has    "Windows: a bad package under mise"               'AppData/Local/mise/installs/node/22\.0\.0/node_modules/suport-color' "$WORK/win1.txt"
+has    "Windows: a bad package in pnpm's global folder"  'AppData/Local/pnpm/global/5/node_modules/cloude ' "$WORK/win1.txt"
+has    "Windows: a bad package in npx's cache"           'AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache' "$WORK/win1.txt"
 has    "Windows is pointed at Credential Manager"       'into Windows Credential Manager or a secrets manager' "$WORK/win1.txt"
 nokeys "Windows: never prints a planted key" "$WORK/keys.txt" "$WORK/win.txt"
 report_of "$WORK/report-win.json" winps GIRD_CHECK_API="$API" --
