@@ -128,10 +128,14 @@ SKIPPING=$NORG
 {
   HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
   has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
-  # A pipe where a session file should be is not given to ripgrep, which would wait on it forever.
+  # A pipe where a session file should be is not given to ripgrep, which would wait on it forever:
+  # with --all-sessions the check would never end, so it gets 60 s and is killed and failed after.
   mkdir -p "$SE/fifo/.codex" "$SE/fifo/.claude/projects/p"; mkfifo "$SE/fifo/.codex/history.jsonl"; printf '{}\n' > "$SE/fifo/.claude/projects/p/a.jsonl"
-  HOME="$SE/fifo" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline --all-sessions > "$SE/fifo.txt" 2>&1
-  has    "rg: a pipe where a session file should be is skipped" 'No keys in 1 agent session file' "$SE/fifo.txt"
+  HOME="$SE/fifo" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline --all-sessions > "$SE/fifo.txt" 2>&1 &
+  BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$BP" 2>/dev/null; then kill -9 "$BP" 2>/dev/null; pkill -f "$SE/fifo/" 2>/dev/null; bad "rg: a pipe where a session file should be is skipped" "the check did not finish in 60 s"
+  else has "rg: a pipe where a session file should be is skipped" 'No keys in 1 agent session file' "$SE/fifo.txt"; fi
+  wait "$BP" 2>/dev/null
   # A ripgrep that never finishes is stopped when the rest is done.
   HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_SESSIONS_HOLD="$SE/hold" bash "$SCRIPT" --offline > "$SE/stuck.txt" 2>&1; RC=$?
   if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check" "exit $RC"; fi
@@ -193,9 +197,12 @@ for E in perl rg; do
   has    "$E: a session folder name with a tab keeps the key with its agent" 'Claude Code +1 file: AWS' "$SE/tabdir-$E.txt"
   HOME="$SE/nldir" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/nldir-$E.txt" 2>&1
   has    "$E: a session folder name with a newline keeps the key with its agent" 'Claude Code +1 file: AWS' "$SE/nldir-$E.txt"
+  # The quadratic filter took ten minutes here: the check gets 120 s and is killed and failed after.
   _t0=$SECONDS
-  HOME="$SE/long" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/long-$E.txt" 2>&1
-  _dt=$((SECONDS - _t0))
+  HOME="$SE/long" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/long-$E.txt" 2>&1 &
+  BP=$!; for _i in $(seq 1 1200); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$BP" 2>/dev/null; then kill -9 "$BP" 2>/dev/null; pkill -f "$SE/long/" 2>/dev/null; fi
+  wait "$BP" 2>/dev/null; _dt=$((SECONDS - _t0))
   if grep -aq 'No keys in 2 agent session files' "$SE/long-$E.txt" && [ "$_dt" -lt 120 ]; then ok "$E: a key-shaped run of 2 MB is not a key and does not slow the check" "${_dt}s"
   else bad "$E: a key-shaped run of 2 MB is not a key and does not slow the check" "${_dt}s: $(grep -a 'agent session' "$SE/long-$E.txt" | head -n 2 | tr -s ' \n' '  ')"; fi
   HOME="$SE/urdir" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/urdir-$E.txt"
