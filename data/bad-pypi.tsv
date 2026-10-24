@@ -1,0 +1,10 @@
+# Python package versions that shipped malware. One line each, tab separated.
+# After editing, run: bash tools/gen.sh
+#   name      the package as its .dist-info folder spells it in site-packages (litellm-1.107.0.dist-info)
+#   version   the exact version (every version, *, is not supported)
+#   incident  an id from data/incidents.tsv, whose level must be act
+# Each line is looked for as a .dist-info folder in every Python environment found and as a
+# name-version entry in uv's cache. Section 5 shows one row per incident, named as incidents.tsv names it.
+# name	version	incident
+litellm	1.107.0	litellm
+mistralai	2.4.6	mistralpy

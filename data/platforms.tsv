@@ -1,0 +1,14 @@
+# Hosted platforms that leaked the secrets people stored on them. Section 5 shows one row each.
+# One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id        an id from data/incidents.tsv; its name is what the shared fix names
+#   name      the row's name
+#   commands  commands on PATH that mean it is used, separated by spaces, or -
+#   paths     files or folders that mean it is used, separated by ; (a folder ends in /), or -.
+#             The same path tokens as data/sessions.tsv: ~ is the home folder, {AS}, {XDG_DATA}...
+#   found     the row's word when it is found: installed, or CLI found
+#   advice    the line shown under the row when it is found
+#   summary   the summary row when it is the only platform found
+# id	name	commands	paths	found	advice	summary
+opencode	OpenCode	opencode	~/.config/opencode/;~/.local/share/opencode/	installed	If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.	OpenCode found: used its Console? Rotate keys
+railway	Railway	railway	~/.railway/config.json	CLI found	Railway asked every customer to rotate all secrets stored on the platform and to check their logs.	Railway CLI found: rotate secrets stored there
+zeabur	Zeabur	zeabur	~/.config/zeabur/	CLI found	Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.	Zeabur CLI found: rotate secrets stored there

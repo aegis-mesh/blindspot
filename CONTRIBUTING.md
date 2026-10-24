@@ -33,21 +33,48 @@ Every change has to keep these true. Reviews check them first.
 - **Windows too.** `gird-check.ps1` keeps the same rules and must run on Windows PowerShell 5.1, which ships with Windows, and on PowerShell 7.
 - **Shares nothing new by accident.** Anything added to the shared counts must be a number or come from a fixed list, and must be listed in [TELEMETRY.md](TELEMETRY.md).
 
+## Lists live in `data/`
+
+The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project and the hosted platforms that leaked stored secrets each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts; edit the data file, never the generated block between `# >>> name` and `# <<< name`. `tests/run.sh` fails if a script and its data file disagree.
+
 ## Add an agent
 
 1. Add a line to the `AGENTS` table in `gird-check.sh`: name, commands, install paths, folders that change when it's used, and an id.
 2. If it has an MCP config, add it to `MCP_FILES`. If it keeps keys in a config, add it to the candidate list in section 3.
-3. Add a fake install to `tests/make-fixture.sh` and an assertion to `tests/run.sh`.
+3. If it keeps session transcripts, add a line to `data/sessions.tsv` and run `bash tools/gen.sh`.
+4. Add a fake install to `tests/make-fixture.sh` and an assertion to `tests/run.sh`.
 
 ## Add a key format
 
-1. Add a `P_` pattern with the other key formats and include it in `ALL_KEYS`. Anchor it on a prefix so it doesn't flag random strings.
-2. Map its prefix to a provider name in `providers_in`.
+1. Add a line to `data/keys.tsv`: an id, the provider's name, the prefix it starts with, and the pattern. Anchor the pattern on a prefix so it doesn't flag random strings. More specific prefixes go first. Run `bash tools/gen.sh`.
+2. A new id also has to be added to `PROVIDERS` in gird.ai's Worker, or the shared counts drop it.
 3. In `tests/make-fixture.sh`, build a fake key at runtime from pieces, as the existing ones do. Never commit a full key-shaped string.
 
 ## Add an incident check
 
-Open an issue with the **New check** template first, with links to the vendor advisory. Checks look for files, versions or markers on disk. They never run the software they check. Add the check to section 5, a fixture to the tests, and a line to "What to do".
+Open an issue with the **New check** template first, with links to the vendor advisory. Checks look for files, versions or markers on disk. They never run the software they check.
+
+A new incident of a kind Blindspot already checks is data lines only: add its line to `data/incidents.tsv` (a sourced name, impact and link), then the lines below, and run `bash tools/gen.sh`. No code changes, and `tests/made-up.sh` proves it for every kind below. Add a fixture and an assertion to the tests all the same. The result page names LiteLLM and gh-token-monitor by name; any other Python incident reaches it as `py=1` and is shown as Python package malware.
+
+- **A bad npm package**: one line in `data/bad-npm.tsv`: the name, the exact version (or `*` when every version is malware) and the incident's id. Take versions from a GitHub malware advisory, and sweep the whole campaign (every advisory published with it) rather than copying the first few names.
+- **A bad Python package**: one line in `data/bad-pypi.tsv`: the name as its `.dist-info` folder spells it, the exact version (`*` is not supported) and the incident's id, whose level must be `act`. It is looked for in every Python environment and in uv's cache, and section 5 gets a row named as `data/incidents.tsv` names the incident.
+- **Files malware leaves on disk**: one line each in `data/indicators.tsv`. `startup` is a file that starts malware at login, shown with its note; `site` a file in site-packages and `temp` an entry in the temp folder, both counted as the Python incident's hit; `wiper` a new file of gh-token-monitor (gen.sh refuses a path that does not name it): its stop-it-first advice, commands and result-page step are written for that wiper, so a different wiper is code.
+- **A file planted in a project**: one line in `data/planted.tsv`: `.claude` or `.vscode`, the file name, the incident and the note shown. A hook or task that runs it is flagged too.
+- **A hosted platform that leaked stored secrets**: one line in `data/platforms.tsv`: the incident id, the row's name, its commands and paths, its row word and advice, and its summary row. The shared fix names it from `data/incidents.tsv`.
+
+A new kind of check (a new file format, a running process, a registry value) is code: add it to section 5 of both scripts, a fixture to the tests, and a line to "What to do".
+
+## Review checklist
+
+A reviewer starts from the person who acts on the report, not from the diff:
+
+- **Advice that makes things worse.** Follow every finding to every place it shows: its section, the summary row, "First fix", the fix list and the result page the link opens. Nothing may tell someone to revoke or rotate a token while `gh-token-monitor` is present.
+- **False comfort.** A green line or "no keys" over something that wasn't fully read is a bug. Partial, skipped and unreadable must say so.
+- **False alarms.** A red "treat this machine as compromised" over something harmless costs trust. Test the near misses: a version one digit off, a name that contains another, a rule or guard that names a malware file without running it.
+- **Real inputs.** Try the shapes people actually have: pretty-printed JSON, committed `settings.local.json`, worktrees, symlinks, every lockfile format, paths with spaces or `|`, Windows paths.
+- **Sources.** Every incident, version and file path traces to a primary source (the vendor's advisory, a GitHub malware advisory, or a named security research post). A comment or README line the code doesn't support is a bug.
+- **What a list leaves out.** For any list taken from advisories, check what the same campaign published that the list misses, and that the report's wording doesn't claim more than the list covers.
+- **Both scripts.** Every change lands in `gird-check.sh` and `gird-check.ps1`, each with a test that fails without it.
 
 ## Test
 
@@ -66,4 +93,6 @@ Add a Developer Certificate of Origin sign-off to each commit with `git commit -
 
 ## Releases
 
-Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` in the release notes. gird.ai/blindspot serves the released file, never `main`.
+Every week, and before a merge to `main`, a maintainer runs `bash tools/check-advisories.sh`. It compares `data/bad-npm.tsv` with OSV.dev (which includes GitHub's malware advisories and the OpenSSF Malicious Packages list) and lists withdrawn entries, versions we flag that nothing names any more, and malicious versions we miss. Treat a MISSING line as a lead: confirm it against a primary source before adding it. It also lists each incident's source to re-read, since a vendor can change what it says an incident did.
+
+Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` in the release notes. gird.ai/blindspot serves `gird-check.sh` and `gird-check.ps1` from `main`, so a merge to `main` is a release to everyone who downloads from gird.ai.

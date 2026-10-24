@@ -1,0 +1,17 @@
+# Files worms plant in a project and run from a hook or a task when the folder is opened.
+# One line each, tab separated. After editing, run: bash tools/gen.sh
+#   folder    .claude or .vscode
+#   file      the file's name
+#   incident  an id from data/incidents.tsv
+#   note      shown under the file when it is found. A settings file that runs any of these
+#             files is shown with "runs" before the note (or a general line, if the notes differ)
+# Wiz (TanStack wave); Snyk: .claude/setup.mjs, .claude/math_init.js and .vscode/setup.mjs.
+# A hook counts when it runs any of these file names from either folder.
+# folder	file	incident	note
+.claude	router_runtime.js	tanstack	a file the TanStack and keyv worms plant
+.claude	tanstack_runner.js	tanstack	a file the TanStack and keyv worms plant
+.vscode	router_runtime.js	tanstack	a file the TanStack and keyv worms plant
+.vscode	tanstack_runner.js	tanstack	a file the TanStack and keyv worms plant
+.claude	setup.mjs	keyv	a file the TanStack and keyv worms plant
+.claude	math_init.js	keyv	a file the TanStack and keyv worms plant
+.vscode	setup.mjs	keyv	a file the TanStack and keyv worms plant

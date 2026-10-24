@@ -807,9 +807,26 @@ npm_would_ship() {
   return 0
 }
 
+# >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it.
+PLANTED='.claude/router_runtime.js
+.claude/tanstack_runner.js
+.vscode/router_runtime.js
+.vscode/tanstack_runner.js
+.claude/setup.mjs
+.claude/math_init.js
+.vscode/setup.mjs'
+PLANTED_ERE='\.claude/router_runtime\.js|\.claude/tanstack_runner\.js|\.vscode/router_runtime\.js|\.vscode/tanstack_runner\.js|\.claude/setup\.mjs|\.claude/math_init\.js|\.vscode/setup\.mjs'
+WORM_RUN='\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+planted_note() { case "$1" in */.claude/router_runtime.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/tanstack_runner.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/router_runtime.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/tanstack_runner.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/math_init.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; esac; }
+WORM_REF_NOTE='runs a file the TanStack and keyv worms plant'
+# <<< planted
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
 # dependency caches, build output, model and VM images, cloud sync folders.
 scan_home() {
+  # A planted file is found as a file or a link.
+  _pf=(); while IFS= read -r _pp; do [ -n "$_pp" ] && _pf+=(-o -path "*/$_pp"); done <<EOF
+$PLANTED
+EOF
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -832,16 +849,11 @@ scan_home() {
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
-       -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' \
-       -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' \
-       -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \
-       -o -path '*/.claude/setup.mjs' -o -path '*/.claude/math_init.js' -o -path '*/.vscode/setup.mjs' \
+       -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
        -o -name .aider.chat.history.md \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
-       -o -path '*/.claude/router_runtime.js' -o -path '*/.claude/tanstack_runner.js' -o -path '*/.claude/setup.mjs' \
-       -o -path '*/.claude/math_init.js' -o -path '*/.vscode/router_runtime.js' -o -path '*/.vscode/tanstack_runner.js' \
-       -o -path '*/.vscode/setup.mjs' \) -print \) 2>/dev/null
+       "${_pf[@]}" \) -print \) 2>/dev/null
 }
 
 # Findings for the game or the spinner to show while the scan runs: a mark (x a
@@ -1058,12 +1070,11 @@ progress i "Looking through your home folder"
 FOUND=$(scan_home | scan_progress)
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/tasks\.json$')
-# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs, .claude/math_init.js
-# and .vscode/setup.mjs).
-WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js|setup\.mjs)$|/\.claude/math_init\.js$')
+# Files worms plant in a project, from data/planted.tsv.
+WORM_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($PLANTED_ERE)\$")
 AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
-FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|\.(claude|vscode)/(router_runtime|tanstack_runner)\.js|\.claude/math_init\.js|\.(claude|vscode)/setup\.mjs)$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -1218,8 +1229,7 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 # settings.json and settings.local.json are read, since repos commit either. Each file is read as
 # one line, so pretty-printed JSON matches too, with JSONC comments removed first.
 AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN="|"
-# The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
-WORM_RUN='\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+# Worms plant a file in the folder (WORM_RUN, from data/planted.tsv) and run it from a hook or a task.
 # A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
 WORM_CMD='"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*([^A-Za-z0-9_"\\]|\\"))?(node|bun|deno|tsx)(\.exe)?[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
 TAB=$(printf '\t')
@@ -1441,6 +1451,38 @@ $WLAPP/anaconda3"
 $_pd/miniconda3
 $_pd/anaconda3"
 fi
+# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
+npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; mastra) printf '%s' 'Mastra worm, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; esac; }
+incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI packages, May 2026: published with malware that Mistral says could not run. docs.mistral.ai' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; mastra) printf '%s' 'Mastra worm, June 2026: started itself at login and sent browser history to the attackers. socket.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker accessed stored environment variables and decrypted some of them. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; esac; }
+incident_level() { case "$1" in mistral) printf update ;; *) printf act ;; esac; }
+incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; esac; }
+incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; esac; }
+# <<< incidents
+# >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
+BAD_PYPI="litellm 1.107.0 litellm
+mistralai 2.4.6 mistralpy"
+PY_INCIDENTS="litellm mistralpy"
+# <<< bad-pypi
+# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
+IND_TABLE="tanstack|all|wiper|no|$H/Library/LaunchAgents/com.user.gh-token-monitor.plist|-
+tanstack|all|wiper|no|$H/.config/systemd/user/gh-token-monitor.service|-
+tanstack|all|wiper|no|$H/.local/bin/gh-token-monitor.sh|-
+tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
+tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
+tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
+mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra worm at login
+mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra worm at login
+mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra worm at login
+mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra worm at login
+mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
+litellm|all|site|no|cook.pth|-
+litellm|all|site|no|cook.py|-
+litellm|all|temp|no|remote_code_loader.lock|-
+litellm|all|temp|no|.pc_once_*|-
+litellm|all|temp|no|.pc_sq_*|-
+litellm|all|temp|no|.pc_e_*|-
+mistralpy|linux|temp|no|transformers.pyz|-"
+# <<< indicators
 SITES_ALL=$(
   {
     printf '%s\n' "$SITES"
@@ -1458,25 +1500,46 @@ SITES_ALL=$(
     done
   } | grep -v '^$' | sort -u
 )
-progress i "Checking $(plural "$(printf '%s\n' "$SITES_ALL" | grep -c .)" "Python environment" "Python environments") for the LiteLLM malware"
+# Python incidents (data/bad-pypi.tsv and the site and temp lines of data/indicators.tsv). LITE_BAD
+# and MARKS hold "incident<TAB>what was found". The names of the hit incidents' first words make
+# "the LiteLLM malware".
+py_short() {
+  _ps=""; _pn=0
+  for _pi in $1; do _pnm=$(incident_name "$_pi"); _pn=$((_pn + 1)); _ps="${_ps:+$_ps and }${_pnm%% *}"; done
+  printf '%s' "$_ps"
+}
+progress i "Checking $(plural "$(printf '%s\n' "$SITES_ALL" | grep -c .)" "Python environment" "Python environments") for the $(py_short "$PY_INCIDENTS") malware"
+SITE_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "site" && ($2 == "all" || $2 == o) { print $1 " " $5 }')
+TEMP_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "temp" && ($2 == "all" || $2 == o) { print $1 " " $5 }')
 N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""
 while IFS= read -r sp; do
   [ -n "$sp" ] && [ -d "$sp" ] || continue
   N_PY=$((N_PY + 1))
+  # The installed LiteLLM versions, shown on a clean row and counted in litellm_installed.
   for d in "$sp"/litellm-*.dist-info; do
     [ -d "$d" ] || continue
     v=${d##*/litellm-}; v=${v%.dist-info}
     N_LITE=$((N_LITE + 1))
     case " $LITE_VERS " in *" $v "*) ;; *) LITE_VERS="${LITE_VERS:+$LITE_VERS }$v" ;; esac
   done
-  bad=""
-  [ -d "$sp/litellm-1.107.0.dist-info" ] && bad="litellm 1.107.0"
-  [ -f "$sp/cook.pth" ] && bad="${bad:+$bad, }cook.pth"
-  [ -f "$sp/cook.py" ] && bad="${bad:+$bad, }cook.py"
+  for _pi in $PY_INCIDENTS; do
+    bad=""
+    while read -r _n _v _i; do
+      [ "$_i" = "$_pi" ] && [ -d "$sp/$_n-$_v.dist-info" ] && bad="${bad:+$bad, }$_n $_v"
+    done <<EOF
+$BAD_PYPI
+EOF
+    while read -r _i _f; do
+      [ "$_i" = "$_pi" ] && [ -f "$sp/$_f" ] && bad="${bad:+$bad, }$_f"
+    done <<EOF
+$SITE_IND
+EOF
+    [ -n "$bad" ] && LITE_BAD="$LITE_BAD$_pi$TAB$(short "$sp"): $bad
+"
+  done
+  # cook.pyc stays code: a compiled leftover is only a possible sign, with its own row and fix.
   for _pyc in "$sp"/__pycache__/cook.*.pyc; do [ -f "$_pyc" ] && { LITE_PYC="$LITE_PYC$(short "$sp"): cook.pyc
 "; break; }; done
-  [ -n "$bad" ] && LITE_BAD="$LITE_BAD$(short "$sp"): $bad
-"
 done <<EOF
 $SITES_ALL
 EOF
@@ -1484,30 +1547,52 @@ MARKS=""; _seen_t="|"
 for t in /tmp "${TMPDIR%/}" "$WTEMP"; do
   [ -n "$t" ] && [ -d "$t" ] || continue
   case "$_seen_t" in *"|$t|"*) continue ;; esac; _seen_t="$_seen_t$t|"
-  for m in "$t/remote_code_loader.lock" "$t"/.pc_once_* "$t"/.pc_sq_* "$t"/.pc_e_*; do
-    [ -e "$m" ] && MARKS="$MARKS$m
+  while read -r _i _g; do
+    [ -n "$_g" ] || continue
+    # shellcheck disable=SC2086  # the name may end in a glob
+    for m in "$t"/$_g; do
+      [ -e "$m" ] && MARKS="$MARKS$_i$TAB$m
 "
-  done
+    done
+  done <<EOF
+$TEMP_IND
+EOF
 done
-[ -n "${PRIVCOLLECT_ACTIVE:-}" ] && MARKS="${MARKS}PRIVCOLLECT_ACTIVE is set in this shell
+# An environment variable and a running process are not files, so these two stay code.
+[ -n "${PRIVCOLLECT_ACTIVE:-}" ] && MARKS="${MARKS}litellm${TAB}PRIVCOLLECT_ACTIVE is set in this shell
 "
 LOADER=0
 if [ -e /tmp/remote_code_loader.lock ] && command -v lsof >/dev/null 2>&1; then
   [ -n "$(lsof -t /tmp/remote_code_loader.lock 2>/dev/null)" ] && LOADER=1
 fi
-UV_BAD=$(find "$H/.cache/uv" -maxdepth 6 -name 'litellm-1.107.0*' -print -quit 2>/dev/null)
-[ -z "$UV_BAD" ] && [ "$WIN" -eq 1 ] && UV_BAD=$(find "$WLAPP/uv/cache" -maxdepth 6 -name 'litellm-1.107.0*' -print -quit 2>/dev/null)
-LITELLM_HIT=0
-if [ -n "$LITE_BAD" ] || [ -n "$MARKS" ] || [ "$LOADER" -eq 1 ]; then LITELLM_HIT=1; fi
-if [ "$LITELLM_HIT" -eq 1 ]; then progress x "Signs of the LiteLLM malware found"
+# A bad version in uv's cache: "incident<TAB>name<TAB>version" for each one found.
+UV_BAD=""
+while read -r _n _v _i; do
+  [ -n "$_i" ] || continue
+  # The exact version: 2.4.6 is not 2.4.60 or 2.4.6.post1.
+  _uvn=(-name "$_n-$_v" -o -name "$_n-$_v-*" -o -name "$_n-$_v.dist-info" -o -name "$_n-$_v.tar.gz" -o -name "$_n-$_v.zip")
+  _u=$(find "$H/.cache/uv" -maxdepth 6 \( "${_uvn[@]}" \) -print -quit 2>/dev/null)
+  [ -z "$_u" ] && [ "$WIN" -eq 1 ] && _u=$(find "$WLAPP/uv/cache" -maxdepth 6 \( "${_uvn[@]}" \) -print -quit 2>/dev/null)
+  [ -n "$_u" ] && UV_BAD="$UV_BAD$_i$TAB$_n$TAB$_v
+"
+done <<EOF
+$BAD_PYPI
+EOF
+PY_HITS=""
+for _pi in $PY_INCIDENTS; do
+  if printf '%s' "$LITE_BAD$MARKS" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
+    PY_HITS="${PY_HITS:+$PY_HITS }$_pi"
+  fi
+done
+PY_HIT=0; [ -n "$PY_HITS" ] && PY_HIT=1
+# litellm_found and the card's ll stay LiteLLM's own; the card's py is any other Python incident.
+LITELLM_HIT=0; case " $PY_HITS " in *" litellm "*) LITELLM_HIT=1 ;; esac
+PY_OTHER=0; for _pi in $PY_HITS; do [ "$_pi" = litellm ] || PY_OTHER=1; done
+PY_SHORT=$(py_short "$PY_HITS")
+if [ "$PY_HIT" -eq 1 ]; then progress x "Signs of the $PY_SHORT malware found"
 elif [ -n "$LITE_PYC" ]; then progress w "A leftover cook.pyc may come from the LiteLLM malware"
-else progress o "No signs of the LiteLLM malware in $(plural "$N_PY" "Python environment" "Python environments")"; fi
-# npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
-# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9 and
-# GHSA-rccm-wwph-vgxc, OpenSearch GHSA-298w-vvm4-ww55, and one advisory per package for the rest.
-# A version of * means every version of that name is malware. tensorlake's advisory also lists every
-# version, but names only 0.5.144 as malicious, so only that one is flagged. Not complete: the AntV, UiPath and
-# Red Hat waves and most packages the keyv worm spread to are not listed.
+else progress o "No signs of the $(py_short "$PY_INCIDENTS") malware in $(plural "$N_PY" "Python environment" "Python environments")"; fi
+# >>> bad-npm: generated from data/bad-npm.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_NPM="axios 1.14.1 axios
 axios 0.30.4 axios
 plain-crypto-js * axios
@@ -1658,19 +1743,7 @@ iru-caches * sandworm
 iruchache * sandworm
 node-native-bridge * sandworm
 secp256 * sandworm"
-npm_label() {
-  case "$1" in
-    axios)     printf 'Axios takeover, March 2026' ;;
-    tanstack)  printf 'TanStack worm, May 2026' ;;
-    mistral)   printf 'Mistral AI packages, May 2026' ;;
-    bitwarden) printf 'Bitwarden CLI, April 2026' ;;
-    mastra)    printf 'Mastra worm, June 2026' ;;
-    keyv)      printf 'keyv worm, August 2026' ;;
-    opensearch) printf 'OpenSearch client, May 2026' ;;
-    tensorlake) printf 'tensorlake package, October 2026' ;;
-    *)         printf 'SANDWORM_MODE worm, February 2026' ;;
-  esac
-}
+# <<< bad-npm
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
 # bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
@@ -1686,6 +1759,7 @@ npm_hits() {
     }
     function hit(nm, v,   k, t) {
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
+      if (v ~ /-security$/) return   # the empty placeholder npm puts in place of a removed package
       k = nm "@" v; t = ""
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; print FILENAME "\t" nm " " v "\t" t }
@@ -1721,7 +1795,7 @@ npm_hits() {
       }
     }' "$@" 2>/dev/null
 }
-NPM_ROWS=""; NPM_HIT=0; N_LOCK=0
+NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0
 while IFS= read -r f; do [ -n "$f" ] && [ -r "$f" ] && N_LOCK=$((N_LOCK + 1)); done <<EOF
 $LOCKFILES
 EOF
@@ -1753,7 +1827,7 @@ _g=$(
       for d in "$r/$nm" "$r"/*/node_modules/"$nm" "$r"/@*/*/node_modules/"$nm"; do
         [ -f "$d/package.json" ] || continue
         v=$(grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$d/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/')
-        case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; esac
+        case "$v" in ('' | *[!0-9A-Za-z.+_-]*) v="?" ;; (*-security) continue ;; esac
         printf '%s\n' "$BAD_NPM" | N=$nm V=$v D=$d awk '$1 == ENVIRON["N"] && ($2 == ENVIRON["V"] || $2 == "*") { print ENVIRON["D"] "\t" ENVIRON["N"] " " ENVIRON["V"] "\t" $3; exit }'
       done
     done
@@ -1761,7 +1835,8 @@ _g=$(
 )
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"
-# npm's download cache keeps a package after it is uninstalled, and the malware ran when it installed.
+# npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
+# on this machine, usually by an install; the report says which of the three places it came from.
 for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
   [ -n "$c" ] && [ -d "$c" ] || continue
   _h=$(find "$c" -type f -print0 2>/dev/null | xargs -0 cat 2>/dev/null | npm_hits | awk -F '\t' -v OFS='\t' -v p="${c%/_cacache/index-v5} (npm's download cache)" '{ $1 = p; print }' | sort -u)
@@ -1770,49 +1845,71 @@ $_h"
 done
 NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" | grep -v '^$' | sort -u
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
-[ -n "$NPM_ROWS" ] && NPM_HIT=1
-# What these worms leave behind. gh-token-monitor runs a destructive command when the stolen GitHub
-# token stops working (it erased the home folder in the TanStack wave, Wiz; in the keyv wave it runs
-# an attacker-supplied command, SANS), so it must be stopped before any token is revoked.
-WIPER=""
-for m in "$H/Library/LaunchAgents/com.user.gh-token-monitor.plist" "$H/.config/systemd/user/gh-token-monitor.service" \
-         "$H/.local/bin/gh-token-monitor.sh" "$H/.config/gh-token-monitor"; do
-  [ -e "$m" ] && WIPER="$WIPER$m
-"
+# Incidents whose malware could not run only need the version updated; the rest mean a compromised machine.
+NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
+for _t in $NPM_TAGS; do
+  if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
 done
-# Its logs in the shared /tmp count only if this person owns them.
-for m in /tmp/gh-token-monitor.out.log /tmp/gh-token-monitor.err.log; do
-  [ -e "$m" ] && [ -O "$m" ] && WIPER="$WIPER$m
-"
-done
-# The Mastra worm's startup files (Socket).
-PERSIST=""
-for m in "$H/Library/LaunchAgents/com.nvm.protocal.plist" "$H/Library/NodePackages/protocal.cjs" \
-         "$H/.config/systemd/user/nvmconf.service" "$H/.config/systemd/nvmconf/protocal.cjs"; do
-  [ -e "$m" ] && PERSIST="$PERSIST$m${TAB}starts the Mastra worm at login
-"
-done
+# What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
+# when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
+# the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
+# is revoked. A file in the shared /tmp counts only if this person owns it.
+WIPER=""; PERSIST=""
+while IFS='|' read -r _ii _io _ik _iown _ip _in; do
+  case "$_ik" in wiper|startup) ;; *) continue ;; esac
+  case "$_io" in all|"$_os") ;; *) continue ;; esac
+  [ -n "$_ip" ] && [ -e "$_ip" ] || continue
+  if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
+  if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
+"; else PERSIST="$PERSIST$_ip$TAB$_in
+"; fi
+done <<EOF
+$IND_TABLE
+EOF
+# A registry value is not a file, so the Mastra worm's Run key stays code.
 if [ "$WIN" -eq 1 ]; then
-  [ -n "$_pd" ] && [ -e "$_pd/NodePackages/protocal.cjs" ] && PERSIST="$PERSIST$_pd/NodePackages/protocal.cjs${TAB}starts the Mastra worm at login
-"
   win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra worm at login
 "
 fi
-[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | sed "s/\$/${TAB}a file the TanStack and keyv worms plant/")
+[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | while IFS= read -r _f; do printf '%s\t%s\n' "$_f" "$(planted_note "$_f")"; done)
 "
-[ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_REFS" | sed "s/\$/${TAB}runs a file the TanStack and keyv worms plant/")
+[ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_REFS" | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\t%s\n' "$_f" "$WORM_REF_NOTE"; done)
 "
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "A wiper waits for a GitHub token to be revoked: gh-token-monitor"
 elif [ "$MAL_HIT" -eq 1 ]; then progress x "Signs of npm malware found"
 else progress o "No npm malware in $(plural "$N_LOCK" lockfile lockfiles), global installs or npm's cache"; fi
-OC=0
-if command -v opencode >/dev/null 2>&1 || [ -d "$H/.config/opencode" ] || [ -d "$H/.local/share/opencode" ]; then OC=1; fi
-RW=0
-if command -v railway >/dev/null 2>&1 || [ -f "$H/.railway/config.json" ]; then RW=1; fi
-ZB=0
-if command -v zeabur >/dev/null 2>&1 || [ -d "$H/.config/zeabur" ]; then ZB=1; fi
+# Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
+# file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
+# >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
+PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/opencode/|installed|If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.|OpenCode found: used its Console? Rotate keys
+railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked every customer to rotate all secrets stored on the platform and to check their logs.|Railway CLI found: rotate secrets stored there
+zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.|Zeabur CLI found: rotate secrets stored there"
+# <<< platforms
+PLAT_FOUND=" "; N_PLAT=0; N_PLAT_FOUND=0; PLAT_LIST=""; PLAT_FIX=""
+while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
+  [ -n "$_pid" ] || continue
+  N_PLAT=$((N_PLAT + 1)); PLAT_LIST="${PLAT_LIST:+$PLAT_LIST, }$_pnm"
+  _hit=0
+  [ "$_pcmd" = - ] || for _c in $_pcmd; do command -v "$_c" >/dev/null 2>&1 && _hit=1; done
+  _ifs=$IFS; IFS=';'
+  for _p in $_ppath; do
+    case "$_p" in -) ;; */) [ -d "$_p" ] && _hit=1 ;; *) [ -f "$_p" ] && _hit=1 ;; esac
+  done
+  IFS=$_ifs
+  if [ "$_hit" -eq 1 ]; then
+    PLAT_FOUND="$PLAT_FOUND$_pid "; N_PLAT_FOUND=$((N_PLAT_FOUND + 1))
+    PLAT_FIX="${PLAT_FIX:+$PLAT_FIX$TAB}$(incident_name "$_pid")"
+  fi
+done <<EOF
+$PLATFORMS
+EOF
+# "If you used A, B or C": the names of the platforms found.
+PLAT_FIX=$(printf '%s' "$PLAT_FIX" | awk -F '\t' '{ for (i = 1; i <= NF; i++) printf "%s%s", (i == 1 ? "" : i == NF ? " or " : ", "), $i }')
+plat_hit() { case "$PLAT_FOUND" in *" $1 "*) printf 1 ;; *) printf 0 ;; esac; }
+# The report's fixed fields opencode and railway.
+OC=$(plat_hit opencode); RW=$(plat_hit railway)
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless --all-sessions asked to wait.
@@ -1904,7 +2001,11 @@ todo() { # section text
 [ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."
 [ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
-[ "$LITELLM_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow LiteLLM's advisory, and rotate every key the machine could reach."
+case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
+# "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
+PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
+if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
+elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
   Linux)  if [ "$WSL" -eq 1 ]; then _store="a secrets manager" # WSL usually has no desktop keyring
@@ -1920,10 +2021,11 @@ esac
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
-if [ "$OC" -eq 1 ] || [ "$RW" -eq 1 ] || [ "$ZB" -eq 1 ]; then todo 5 "If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong."; fi
+[ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
+[ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
 
 SCORE=100
-[ "$LITELLM_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
+[ "$PY_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
 [ "$MAL_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
 _d=$((KEY_FILES * 8)); [ "$_d" -gt 32 ] && _d=32; SCORE=$((SCORE - _d))
 _d=$((HIST_KEYS * 6)); [ "$_d" -gt 12 ] && _d=12; SCORE=$((SCORE - _d))
@@ -1937,7 +2039,7 @@ elif [ "$SCORE" -ge 64 ]; then GRADE=C; elif [ "$SCORE" -ge 50 ]; then GRADE=D; 
 # GRADE only goes in the research counts. People see how they compare instead.
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "Scan done. Don't revoke GitHub tokens yet: act now"
 elif [ "$MAL_HIT" -eq 1 ]; then progress x "Scan done. Signs of npm malware: act now"
-elif [ "$LITELLM_HIT" -eq 1 ]; then progress x "Scan done. Signs of the LiteLLM malware: act now"
+elif [ "$PY_HIT" -eq 1 ]; then progress x "Scan done. Signs of the $PY_SHORT malware: act now"
 elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
 else progress o "Scan done: no findings"; fi
 
@@ -2066,7 +2168,7 @@ fi
 # with each section's details a key press away, or every detail with --full or
 # when the output isn't a terminal. A saved report always has every detail.
 # ===========================================================================
-if [ "$LITELLM_HIT" -eq 1 ] || [ "$MAL_HIT" -eq 1 ]; then SEV=$RED
+if [ "$PY_HIT" -eq 1 ] || [ "$MAL_HIT" -eq 1 ]; then SEV=$RED
 elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ]; then SEV=$RED
 elif [ "$ISSUES" -gt 0 ]; then SEV=$YEL
 else SEV=$GRN; fi
@@ -2082,7 +2184,10 @@ fi
 _act=""
 if [ "$WIPER_HIT" -eq 1 ]; then _act="ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN"
 elif [ "$MAL_HIT" -eq 1 ]; then _act="ACT NOW: SIGNS OF NPM MALWARE"
-elif [ "$LITELLM_HIT" -eq 1 ]; then _act="ACT NOW: SIGNS OF THE LITELLM 1.107.0 MALWARE"; fi
+elif [ "$PY_HIT" -eq 1 ]; then
+  _act=""; for _pi in $PY_HITS; do _act="${_act:+$_act AND }$(incident_name "$_pi")"; done
+  _act="ACT NOW: SIGNS OF THE $(upper "$_act") MALWARE"
+fi
 if [ -n "$_act" ]; then
   emit "  ${SEV}▌${RST} ${B}${_act}${RST}"
   if [ -n "$PCT_TXT" ]; then emit "  ${SEV}▌${RST} ${B}${PCT_TXT}.${RST} ${FIXN}."; else emit "  ${SEV}▌${RST} ${FIXN}."; fi
@@ -2205,29 +2310,44 @@ $ALLOW_ROWS
 EOF
 
 SEC4=$CAP; CAP=""
-section 05 "RECENT KEY LEAKS" "5 checked"
-if [ "$LITELLM_HIT" -eq 1 ]; then
-  pair "${RED}✗${RST}" "LiteLLM 1.107.0" 16 "${RED}signs of the malware found${RST}"
-  while IFS= read -r l; do
-    [ -n "$l" ] && emit "        $(short "$l")"
-  done <<EOF
+N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 1 + N_PLAT))   # the Python incidents, npm and each platform
+section 05 "RECENT KEY LEAKS" "$N_LEAKS checked"
+# One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
+for _pi in $PY_INCIDENTS; do
+  _pl=$(incident_name "$_pi")
+  case " $PY_HITS " in
+    *" $_pi "*)
+      pair "${RED}✗${RST}" "$_pl" 16 "${RED}signs of the malware found${RST}"
+      while IFS="$TAB" read -r _t l; do
+        [ "$_t" = "$_pi" ] && [ -n "$l" ] && emit "        $(short "$l")"
+      done <<EOF
 $LITE_BAD$MARKS
 EOF
-  [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
-  wrap "Don't run Python or pip in these environments. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 "        " "        "
-elif [ -n "$LITE_PYC" ]; then
-  pair "${YEL}!${RST}" "LiteLLM 1.107.0" 16 "${YEL}possible leftover${RST}"
-  while IFS= read -r l; do
-    [ -n "$l" ] && emit "        $(short "$l")"
-  done <<EOF
+      [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
+      if printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB"; then _do="Don't run Python or pip in these environments."; else _do="Stop any process started from these files, then delete them."; fi
+      wrap "$_do Advisory: $(incident_source "$_pi")" 8 "        " "        "
+      ;;
+    *)
+      if [ "$_pi" = litellm ] && [ -n "$LITE_PYC" ]; then
+        pair "${YEL}!${RST}" "$_pl" 16 "${YEL}possible leftover${RST}"
+        while IFS= read -r l; do
+          [ -n "$l" ] && emit "        $(short "$l")"
+        done <<EOF
 $LITE_PYC
 EOF
-  wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: docs.litellm.ai/blog/security-incident-oct-21-2026" 8 "        " "        "
-else
-  pair "${GRN}✓${RST}" "LiteLLM 1.107.0" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"
-  [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $LITE_VERS${RST}"
-fi
-[ -n "$UV_BAD" ] && wrap "Your uv cache holds the 1.107.0 package. Clear it with: uv cache clean litellm" 8 "        " "        " "$YEL"
+        wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(incident_source "$_pi")" 8 "        " "        "
+      else
+        pair "${GRN}✓${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"
+        [ "$_pi" = litellm ] && [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $(short "$LITE_VERS")${RST}"
+      fi
+      ;;
+  esac
+  while IFS="$TAB" read -r _t _un _uv; do
+    [ "$_t" = "$_pi" ] && wrap "Your uv cache holds the $_uv package. Clear it with: uv cache clean $_un" 8 "        " "        " "$YEL"
+  done <<EOF
+$UV_BAD
+EOF
+done
 if [ "$WIPER_HIT" -eq 1 ]; then
   pair "${RED}✗${RST}" "npm worms" 16 "${RED}a wiper is waiting${RST}"
   while IFS= read -r l; do [ -n "$l" ] && emit "        $(short "$l")"; done <<EOF
@@ -2241,12 +2361,21 @@ EOF
   wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and erased the home folder in the TanStack wave." 8 "        " "        " "$RED"
   wrap "Stop it with ${_stop:+$_stop, then }pkill -f gh-token-monitor, then delete the files above." 8 "        " "        " "$RED"
 fi
-if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
-  [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
+if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
+  if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
+    [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm worms" 16 "${RED}signs of the malware found${RST}"
+  else
+    pair "${YEL}!${RST}" "npm worms" 16 "${YEL}a bad version to update${RST}"
+  fi
   while IFS="$TAB" read -r f p t; do
     [ -n "$f" ] || continue
     emit "        $(short "$f")"
-    emit "          ${p} ${DIM}($(npm_label "$t"))${RST}"
+    case "$f" in
+      *"(npm's download cache)") _w="downloaded into npm's cache" ;;
+      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock) _w="listed in this lockfile" ;;
+      *) _w="installed" ;;
+    esac
+    emit "          ${p} ${DIM}($(npm_label "$t")), ${_w}${RST}"
   done <<EOF
 $NPM_ROWS
 EOF
@@ -2257,28 +2386,23 @@ EOF
   done <<EOF
 $PERSIST
 EOF
+  for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm worms" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
 fi
-if [ "$OC" -eq 1 ]; then
-  pair "${YEL}!${RST}" "OpenCode" 16 "installed"
-  wrap "If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected." 26 "                          " "                          " "$DIM"
-else
-  pair "${DIM}·${RST}" "OpenCode" 16 "${DIM}not installed${RST}"
-fi
-if [ "$RW" -eq 1 ]; then
-  pair "${YEL}!${RST}" "Railway" 16 "CLI found"
-  wrap "Railway asked every customer to rotate all secrets stored on the platform and to check their logs." 26 "                          " "                          " "$DIM"
-else
-  pair "${DIM}·${RST}" "Railway" 16 "${DIM}CLI not found${RST}"
-fi
-if [ "$ZB" -eq 1 ]; then
-  pair "${YEL}!${RST}" "Zeabur" 16 "CLI found"
-  wrap "Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first." 26 "                          " "                          " "$DIM"
-else
-  pair "${DIM}·${RST}" "Zeabur" 16 "${DIM}CLI not found${RST}"
-fi
+while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
+  [ -n "$_pid" ] || continue
+  if [ "$(plat_hit "$_pid")" = 1 ]; then
+    pair "${YEL}!${RST}" "$_pnm" 16 "$_pw"
+    wrap "$_padv" 26 "                          " "                          " "$DIM"
+  else
+    case "$_pw" in *" found") _pw="${_pw% found} not found" ;; *) _pw="not $_pw" ;; esac
+    pair "${DIM}·${RST}" "$_pnm" 16 "${DIM}$_pw${RST}"
+  fi
+done <<EOF
+$PLATFORMS
+EOF
 
 SEC5=$CAP; CAP=""
 heading "WHAT TO DO" "most urgent first"
@@ -2306,9 +2430,9 @@ if [ "$OS" = Darwin ]; then
   elif [ "$MAL_HIT" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found signs of npm malware. It can't tell you what the malware already took, or what your agents do after you close this window."
-  elif [ "$LITELLM_HIT" -eq 1 ]; then
+  elif [ "$PY_HIT" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found signs of the LiteLLM malware. It can't tell you what the malware already took, or what your agents do after you close this window."
+    _p1="It found signs of the $PY_SHORT malware. It can't tell you what the malware already took, or what your agents do after you close this window."
   elif [ "$N_IDLE" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="$(plural "$N_IDLE" "agent you haven't used in 30 days is" "agents you haven't used in 30 days are") still installed. A poisoned package can drive an installed agent, and nothing on your Mac would tell you."
@@ -2385,21 +2509,26 @@ elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved key
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop it before revoking tokens"
-elif [ "$MAL_HIT" -eq 1 ] && [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="npm and LiteLLM malware found. Act now"
+elif [ "$MAL_HIT" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="npm and $PY_SHORT malware found. Act now"
 elif [ "$MAL_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of npm malware. Act now"
-elif [ "$LITELLM_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the LiteLLM malware. Act now"
+elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
-elif [ $((OC + RW + ZB)) -ge 2 ]; then
-  G5="${YEL}!${RST}"; _l=""; _n=$((OC + RW + ZB)); _i=0
-  for _p in "OpenCode:$OC" "Railway:$RW" "Zeabur:$ZB"; do
-    [ "${_p#*:}" -eq 1 ] || continue
-    _i=$((_i + 1)); if [ "$_i" -eq 1 ]; then _l=${_p%:*}; elif [ "$_i" -eq "$_n" ]; then _l="$_l and ${_p%:*}"; else _l="$_l, ${_p%:*}"; fi
-  done
-  if [ "$_n" -eq 3 ]; then D5="$_l found: rotate keys"; else D5="$_l found: rotate their keys"; fi
-elif [ "$OC" -eq 1 ]; then G5="${YEL}!${RST}"; D5="OpenCode found: used its Console? Rotate keys"
-elif [ "$RW" -eq 1 ]; then G5="${YEL}!${RST}"; D5="Railway CLI found: rotate secrets stored there"
-elif [ "$ZB" -eq 1 ]; then G5="${YEL}!${RST}"; D5="Zeabur CLI found: rotate secrets stored there"
-else G5="${GRN}✓${RST}"; D5="no LiteLLM, npm, OpenCode, Railway, Zeabur leaks"; fi
+elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
+elif [ "$N_PLAT_FOUND" -ge 2 ]; then
+  G5="${YEL}!${RST}"; _l=""; _i=0
+  while IFS='|' read -r _pid _pnm _rest; do
+    [ "$(plat_hit "$_pid")" = 1 ] || continue
+    _i=$((_i + 1)); if [ "$_i" -eq 1 ]; then _l=$_pnm; elif [ "$_i" -eq "$N_PLAT_FOUND" ]; then _l="$_l and $_pnm"; else _l="$_l, $_pnm"; fi
+  done <<EOF
+$PLATFORMS
+EOF
+  if [ "$N_PLAT_FOUND" -ge 3 ]; then D5="$_l found: rotate keys"; else D5="$_l found: rotate their keys"; fi
+elif [ "$N_PLAT_FOUND" -eq 1 ]; then
+  G5="${YEL}!${RST}"
+  while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do [ "$(plat_hit "$_pid")" = 1 ] && D5=$_psum; done <<EOF
+$PLATFORMS
+EOF
+else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks it checks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"
 cline 02 "$G2" "MCP servers" "$D2"
@@ -2414,7 +2543,7 @@ fi
 if [ "$OS" = Darwin ]; then
   if [ "$ARCH" = arm64 ]; then _how="Free for individuals: gird.ai/argus/download"
   else _how="It runs on Apple Silicon Macs today: gird.ai/argus/download"; fi
-  if [ "$LITELLM_HIT" -eq 1 ] || [ "$MAL_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then _lead="This scan is a snapshot."
+  if [ "$PY_HIT" -eq 1 ] || [ "$MAL_HIT" -eq 1 ] || [ "$KEY_FILES" -gt 0 ]; then _lead="This scan is a snapshot."
   elif [ "$N_IDLE" -gt 0 ]; then _lead="A poisoned package can drive an agent you no longer use."
   elif [ "$ISSUES" -gt 0 ]; then _lead="This scan is a snapshot."
   else _lead="The next leak won't wait for a scan."; fi
@@ -2440,13 +2569,14 @@ else printf '%s' "$HEAD_FULL$SEC1$SEC2$SEC3$SEC4$SEC5$SEC_TODO$SEC_ARGUS$SEC_FOO
 # nothing happens unasked.
 # ---------------------------------------------------------------------------
 # u is the run ID, so a share from the certificate can be matched to its run, r the
-# early rank, sk the SSH private keys and hk the shell history files with keys, nm npm malware and
-# wp gh-token-monitor, so the page never says to rotate a token while it is there.
+# early rank, sk the SSH private keys and hk the shell history files with keys, nm npm malware,
+# py a Python incident other than LiteLLM and wp gh-token-monitor, so the page never says to rotate
+# a token while it is there.
 card_url() {
-  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s&nm=%s&wp=%s' \
+  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s&nm=%s&py=%s&wp=%s' \
     "$WEB" "$SCORE" "$GRADE" "$N_AG" "$N_IDLE" "$N_MCP" "$N_MCP_TOKEN" "$KEY_FILES" "$(printf '%s' "$PROV_IDS" | tr ' ' '.')" \
     "$N_ALLOW" "$N_ALLOW_NPM" "$LITELLM_HIT" "$N_LOGIN" "$N_SSH_OPEN" "$(date +%Y-%m-%d)" "$PCT" "$PCT_N" \
-    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')" "$MAL_HIT" "$WIPER_HIT"
+    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')" "$MAL_HIT" "$PY_OTHER" "$WIPER_HIT"
 }
 # Windows' default browser, from Git Bash or WSL. cmd.exe would read each & in the
 # link as a new command, so they are escaped as ^&. explorer.exe reports failure
