@@ -316,9 +316,15 @@ HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" PATH="$WORK/macbin2:$PATH" bash "$SCRI
 has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/tmp/transformers\.pyz' "$WORK/mpyt-linux.txt"
 has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt-linux.txt"
 has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt-mac.txt"
-has    "a temp file alone: stop and delete, in section 5" 'Stop any process started from these files, then delete them\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
+has    "a temp file alone: stop and delete, in section 5" 'Kill any python process started from transformers\.pyz, then delete the file\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
 has    "and in the fix"                               'Stop any process started from the files listed in section 5, delete them, follow mistralai.s advisory' "$WORK/mpyt-linux.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mpyt-linux.txt"
+# A LiteLLM marker alone: the row carries LiteLLM's own advice (data/indicators.tsv), not the environment one.
+cp -R "$WORK/clean" "$WORK/lmark"; mkdir -p "$WORK/lmark/tmp"; : > "$WORK/lmark/tmp/.pc_once_1"
+HOME="$WORK/lmark" TMPDIR="$WORK/lmark/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmark.txt"
+has    "finds a malware marker in TEMP"               'LiteLLM 1\.107\.0 +signs of the malware found ~/tmp/\.pc_once_1' "$WORK/lmark.txt"
+has    "with LiteLLM's own advice"                    'Kill the detached python process that holds remote_code_loader\.lock, then delete these files\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth and cook\.py are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
+hasnot "a marker alone names no environment to stop"  "Don't run Python or pip in these environments" "$WORK/lmark.txt"
 # A version read from a folder name is printed with control characters replaced.
 cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"
 HOME="$WORK/esc" bash "$SCRIPT" --offline --full > "$WORK/esc.txt" 2>&1
@@ -642,6 +648,8 @@ gen_refuses "a site file with a slash"                  indicators.tsv "litellm$
 gen_refuses "a temp name of dots"                       indicators.tsv "litellm${T}all${T}temp${T}no${T}..${T}-"
 gen_refuses "a Python incident that is only an update"  bad-pypi.tsv "mistralai${T}1.0.0${T}mistral"
 gen_refuses "a Python name with a hyphen"               bad-pypi.tsv "lite-llm${T}1.0.0${T}litellm"
+gen_refuses "a temp line with no note"                  indicators.tsv "litellm${T}all${T}temp${T}yes${T}.pc_x_*${T}-"
+gen_refuses "temp lines of one incident that disagree"  indicators.tsv "litellm${T}all${T}temp${T}yes${T}.pc_x_*${T}Another note."
 # Only the path tokens the generators translate, in the syntax they translate: anything else would
 # come out as a PowerShell parse error or a bash bad substitution for everyone.
 gen_refuses "a path with an unknown token"              indicators.tsv "mastra${T}all${T}startup${T}no${T}{FOO}/x.cjs${T}note"

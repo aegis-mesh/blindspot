@@ -1097,11 +1097,11 @@ $IndTable = @(
   ,@('mastra', 'win', 'startup', 'no', $(if ($env:ProgramData) { J $env:ProgramData 'NodePackages/protocal.cjs' } else { '' }), 'starts the Mastra worm at login')
   ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
   ,@('litellm', 'all', 'site', 'no', 'cook.py', '-')
-  ,@('litellm', 'all', 'temp', 'no', 'remote_code_loader.lock', '-')
-  ,@('litellm', 'all', 'temp', 'no', '.pc_once_*', '-')
-  ,@('litellm', 'all', 'temp', 'no', '.pc_sq_*', '-')
-  ,@('litellm', 'all', 'temp', 'no', '.pc_e_*', '-')
-  ,@('mistralpy', 'linux', 'temp', 'no', 'transformers.pyz', '-')
+  ,@('litellm', 'all', 'temp', 'no', 'remote_code_loader.lock', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'no', '.pc_once_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'no', '.pc_sq_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'no', '.pc_e_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('mistralpy', 'linux', 'temp', 'no', 'transformers.pyz', 'Kill any python process started from transformers.pyz, then delete the file.')
 )
 # <<< indicators
 if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
@@ -1110,6 +1110,8 @@ $BadPypiRows = @($BadPypi -split "`r?`n" | ForEach-Object { , @($_ -split ' ') }
 # Python incidents (data/bad-pypi.tsv and the site and temp lines of data/indicators.tsv). $LiteBad
 # and $Marks hold @(incident, what was found). The hit incidents' first words make "the LiteLLM malware".
 function Py-Short($ids) { (@($ids | ForEach-Object { (Incident-Name $_).Split(' ')[0] }) -join ' and ') }
+# The advice shown under an incident's row when its temp files are found: the note of its temp lines.
+function Temp-Advice([string]$pi) { foreach ($r in $IndTable) { if ($r[0] -ceq $pi -and $r[2] -eq 'temp') { return $r[5] } }; '' }
 Progress "Checking $(Plural $SitesAll.Count 'Python environment' 'Python environments') for the $(Py-Short $PyIncidents) malware"
 $N_PY = 0; $N_LITE = 0; $LiteVers = New-Object System.Collections.Generic.List[string]
 $LiteBad = New-Object System.Collections.Generic.List[object]; $LitePyc = New-Object System.Collections.Generic.List[string]
@@ -1967,12 +1969,13 @@ Section '05' 'RECENT KEY LEAKS' "$N_LEAKS checked"
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
 foreach ($pi in $PyIncidents) {
   $pl = Incident-Name $pi
+  $do = ''
   if ($PyHits -contains $pi) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
     foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
-    if (@($LiteBad | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = "Don't run Python or pip in these environments." } else { $do = 'Stop any process started from these files, then delete them.' }
-    Wrap "$do Advisory: $(Incident-Source $pi)" 8 '        ' '        '
+    if (@($LiteBad | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = "Don't run Python or pip in these environments." }
+    if (@($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0 -or -not $do) { $do = (@($do, (Temp-Advice $pi)) | Where-Object { $_ }) -join ' ' }
   } elseif ($pi -eq 'litellm' -and $LitePyc.Count -gt 0) {
     Pair "$cYel!$cRst" $pl 16 "${cYel}possible leftover$cRst"
     foreach ($l in $LitePyc) { Emit "        $l" }
@@ -1981,6 +1984,7 @@ foreach ($pi in $PyIncidents) {
     Pair "$cGrn$gOk$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')"
     if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $(Short ($LiteVers -join ' '))$cRst" }
   }
+  if ($do) { Wrap "$do Advisory: $(Incident-Source $pi)" 8 '        ' '        ' }
   foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
 }
 if ($WIPER_HIT -eq 1) {

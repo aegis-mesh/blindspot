@@ -1498,11 +1498,11 @@ mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra 
 mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
 litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
-litellm|all|temp|no|remote_code_loader.lock|-
-litellm|all|temp|no|.pc_once_*|-
-litellm|all|temp|no|.pc_sq_*|-
-litellm|all|temp|no|.pc_e_*|-
-mistralpy|linux|temp|no|transformers.pyz|-"
+litellm|all|temp|no|remote_code_loader.lock|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm|all|temp|no|.pc_once_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm|all|temp|no|.pc_sq_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm|all|temp|no|.pc_e_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+mistralpy|linux|temp|no|transformers.pyz|Kill any python process started from transformers.pyz, then delete the file."
 # <<< indicators
 SITES_ALL=$(
   {
@@ -1532,6 +1532,8 @@ py_short() {
 progress i "Checking $(plural "$(printf '%s\n' "$SITES_ALL" | grep -c .)" "Python environment" "Python environments") for the $(py_short "$PY_INCIDENTS") malware"
 SITE_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "site" && ($2 == "all" || $2 == o) { print $1 " " $5 }')
 TEMP_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "temp" && ($2 == "all" || $2 == o) { print $1 " " $5 }')
+# The advice shown under an incident's row when its temp files are found: the note of its temp lines.
+temp_advice() { printf '%s\n' "$IND_TABLE" | awk -F '|' -v i="$1" '$1 == i && $3 == "temp" { print $6; exit }'; }
 N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""
 while IFS= read -r sp; do
   [ -n "$sp" ] && [ -d "$sp" ] || continue
@@ -2527,6 +2529,7 @@ section 05 "RECENT KEY LEAKS" "$N_LEAKS checked"
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's.
 for _pi in $PY_INCIDENTS; do
   _pl=$(incident_name "$_pi")
+  _do=""
   case " $PY_HITS " in
     *" $_pi "*)
       pair "${RED}✗${RST}" "$_pl" 16 "${RED}signs of the malware found${RST}"
@@ -2536,8 +2539,8 @@ for _pi in $PY_INCIDENTS; do
 $LITE_BAD$MARKS
 EOF
       [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
-      if printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB"; then _do="Don't run Python or pip in these environments."; else _do="Stop any process started from these files, then delete them."; fi
-      wrap "$_do Advisory: $(incident_source "$_pi")" 8 "        " "        "
+      printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && _do="Don't run Python or pip in these environments."
+      if printf '%s' "$MARKS" | grep -q "^$_pi$TAB" || [ -z "$_do" ]; then _do="${_do:+$_do }$(temp_advice "$_pi")"; fi
       ;;
     *)
       if [ "$_pi" = litellm ] && [ -n "$LITE_PYC" ]; then
@@ -2554,6 +2557,7 @@ EOF
       fi
       ;;
   esac
+  [ -n "$_do" ] && wrap "$_do Advisory: $(incident_source "$_pi")" 8 "        " "        "
   while IFS="$TAB" read -r _t _un _uv; do
     [ "$_t" = "$_pi" ] && wrap "Your uv cache holds the $_uv package. Clear it with: uv cache clean $_un" 8 "        " "        " "$YEL"
   done <<EOF

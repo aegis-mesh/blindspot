@@ -691,9 +691,12 @@ has    "LiteLLM 1.107.0 in a conda install outside the usual places is found" 's
 cp -R "$WORK/clean" "$WORK/inst"; mkdir -p "$WORK/inst/AppData/Local/Programs/Python/Python312/Lib/site-packages/litellm-1.107.0.dist-info"
 psrun "$WORK/inst" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/inst.txt"
 has    "finds 1.107.0 in the python.org install folder" 'signs of the LiteLLM malware\. Act now' "$WORK/inst.txt"
+# A LiteLLM marker alone: the row carries LiteLLM's own advice (data/indicators.tsv), not the environment one.
 cp -R "$WORK/clean" "$WORK/mark"; : > "$WORK/mark/AppData/Local/Temp/.pc_once_1"
 psrun "$WORK/mark" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mark.txt"
-has    "finds a malware marker in TEMP"        'signs of the malware found ~/AppData/Local/Temp/\.pc_once_1' "$WORK/mark.txt"
+has    "finds a malware marker in TEMP"        'LiteLLM 1\.107\.0 +signs of the malware found ~/AppData/Local/Temp/\.pc_once_1' "$WORK/mark.txt"
+has    "with LiteLLM's own advice"             'Kill the detached python process that holds remote_code_loader\.lock, then delete these files\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth and cook\.py are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/mark.txt"
+hasnot "a marker alone names no environment to stop" "Don't run Python or pip in these environments" "$WORK/mark.txt"
 
 echo "saving the report"
 mkdir -p "$WORK/cwd"

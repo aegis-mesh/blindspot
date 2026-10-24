@@ -53,11 +53,18 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[
         NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || !path_ok($4) { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused.
       rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 3 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 { print "data/bad-pypi.tsv: " $0 }'
+      # A startup line carries a note, a temp line the advice of its incident (the same on each of its
+      # temp lines); wiper and site lines carry -. PowerShell gets the note quoted, so it may hold a quote.
       rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" "$PATH_OK"'
-        NF != 6 || index(ids, " " $1 " ") == 0 || $2 !~ /^(all|mac|linux|win)$/ || $3 !~ /^(wiper|startup|site|temp)$/ || $4 !~ /^(yes|no)$/ ||
-        ($3 ~ /^(wiper|startup)$/ && !path_ok($5)) || ($3 == "wiper" && $5 !~ /gh-token-monitor/) || ($3 == "site" && $5 !~ /^[A-Za-z0-9._-]+$/) || ($3 == "temp" && $5 !~ /^[A-Za-z0-9._-]+\*?$/) ||
-        ($3 ~ /^(site|temp)$/ && ($5 ~ /^\.+\*?$/ || index(acts, " " $1 " ") == 0)) ||
-        ($3 == "startup" && ($6 == "-" || $6 ~ /[\047"`$|\\]/)) || ($3 != "startup" && $6 != "-") { print "data/indicators.tsv: " $0 }'
+        { ok = NF == 6 && index(ids, " " $1 " ") > 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
+          if ($3 ~ /^(wiper|startup)$/) ok = ok && path_ok($5)
+          if ($3 == "wiper") ok = ok && $5 ~ /gh-token-monitor/
+          if ($3 == "site") ok = ok && $5 ~ /^[A-Za-z0-9._-]+$/
+          if ($3 == "temp") ok = ok && $5 ~ /^[A-Za-z0-9._-]+\*?$/
+          if ($3 ~ /^(site|temp)$/) ok = ok && $5 !~ /^\.+\*?$/ && index(acts, " " $1 " ") > 0
+          if ($3 ~ /^(startup|temp)$/) ok = ok && $6 != "-" && $6 != "" && $6 !~ /["`$|\\]/; else ok = ok && $6 == "-"
+          if ($3 == "temp") { if (($1 in tn) && tn[$1] != $6) ok = 0; tn[$1] = $6 }
+          if (!ok) print "data/indicators.tsv: " $0 }'
       rows data/planted.tsv | awk -F '\t' -v ids="$IDS" 'NF != 4 || $1 !~ /^\.(claude|vscode)$/ || $2 !~ /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/ || index(ids, " " $3 " ") == 0 || $4 == "" || $4 ~ /[\047"`$|\\]/ || seen[$1 "/" $2]++ { print "data/planted.tsv: " $0 }'
       rows data/auto-approve.tsv | awk -F '\t' "$PATH_OK"'
         function pat_ok(s) { return s ~ /[^[:space:]]/ && s !~ /[\047`$|\\]/ }
@@ -243,7 +250,7 @@ rows data/indicators.tsv | awk -F '\t' "$PATH_SH"'
 rows data/indicators.tsv | awk -F '\t' "$PATH_PS"'
   BEGIN { print "# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it."
           print "$IndTable = @(" }
-  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, %s, \047%s\047)\n", $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? "\047" $5 "\047" : ps($5)), $6 }
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, %s, %s)\n", $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? "\047" $5 "\047" : ps($5)), psq($6) }
   END { print ")"; print "# <<< indicators" }' > "$WORK/indicators.ps1"
 
 # --- files planted in a project ----------------------------------------------
