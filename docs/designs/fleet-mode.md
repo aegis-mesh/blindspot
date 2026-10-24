@@ -1,7 +1,10 @@
 # Fleet mode: running Blindspot from an MDM
 
-Status: proposal, not built. Phase 1 is macOS. Linux follows on the same design. Windows needs a
-design of its own (see Not covered).
+Status: built for macOS (phase 1), as `gird-check.sh --all-users`, with the admin guide in
+`docs/fleet.md` and the MDM pages in `docs/mdm/` (each marked untested until run end to end on a real
+Mac). Linux is phase 2: until then `--all-users` on Linux exits 13 with a message. `gird-check.ps1`
+has no fleet mode; Windows needs a design of its own (see Not covered). What the build adds to this
+design, or settles where it was open, is under "As built" at the end.
 
 ## Why
 
@@ -261,3 +264,31 @@ real Mac.
 - Each outcome and exit code from a fixture that produces it, the order between them, and a run
   stopped part-way.
 - An MDM-like environment: no HOME, minimal PATH, working folder `/`, no terminal.
+
+## As built
+
+- `--json`, `--summary-to-stdout`, `--exit-zero`, `--list`, `--hash-accounts` and `--deadline` work
+  with `--all-users` only; elsewhere they exit 2. A run with neither `--json` nor
+  `--summary-to-stdout` prints the readable report, with the Argus note only on a terminal.
+- `--deadline` is 3000 seconds when not given. Each account gets an equal share of the time left,
+  less the 3 seconds a stop takes, so one stuck account spends only its own share.
+- The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
+  value, `stale: last run <time>` past `--stale-days` (3 by default), `none` before the first run
+  and `unreadable` when the saved file is not root's own 0600 file in a 0700 folder.
+  `--result-tags` wraps it for Jamf Pro. An MDM item passes options with one line under the script's
+  first line, `[ "${1:-}" = --account-run ] || set -- <options>`, so the account runs it starts keep
+  their own.
+- `update` also covers an agent set to run without asking, an SSH key without a passphrase, a
+  platform that leaked stored secrets and a leftover file that can come from malware; `act` also
+  covers keys in shell history, MCP configs and Claude Code allow lists, links to
+  `authorized_keys` and files a worm plants. An account with a protected folder refused, a file not
+  read or agent sessions not all checked is partly checked: `act` if it found something to act on,
+  otherwise `not_checked`.
+- The size limit for a file an account run reads is 16 MB. Root reads at most 4096 bytes of an
+  account run's output. Apps in `/Applications` and agent commands in `/usr/local/bin` and
+  `/opt/homebrew/bin` are the machine's agents, found by path.
+- A saved-result folder that is a link, not a folder, or not root's with mode 0700 is moved aside to
+  `/var/db/blindspot.replaced-<time>-<pid>` and made again, so root never deletes a tree it did not
+  make.
+- The tests stand in for root, dscl and sudo with `GIRD_CHECK_FLEET_*` settings that the script
+  reads only when it is not running as root; as root they are unset before anything else runs.

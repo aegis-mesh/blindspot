@@ -59,8 +59,9 @@ Answer each question with line numbers:
 6. Anything hidden or hard to read: encoded blobs, downloaded code, dense
    one-liners.
 
-The script claims it never prints a key, never uses sudo, never starts an agent
-or an MCP server, leaves no file behind unless I ask it to save the report, and
+The script claims it never prints a key, never uses sudo (except in --all-users,
+which IT runs as root), never starts an agent or an MCP server, leaves no file
+behind unless I ask it to save the report (or, with --all-users, its result), and
 sends only counts, names from fixed lists, setup facts (OS version, hardware
 model, terminal app, shell, locale), a hashed device ID and which menu keys I
 pressed: never a path, key, username or hostname.
@@ -91,9 +92,9 @@ At the end you get a short summary: how you compare with the other AI builders w
 ## What it never does
 
 - Print a key. It names the provider, never the value.
-- Use sudo or ask for your password.
+- Use sudo or ask for your password. The one exception is `--all-users`, which IT runs as root to check every account: it uses `sudo` to check each account as that account ([For IT teams](#for-it-teams)).
 - Start an agent, an MCP server or Python. To read agent sessions it runs ripgrep if you have it, otherwise perl, and stops them when it finishes.
-- Leave a file behind, unless you ask it to save the report. While it runs it keeps three small temp files, for the progress line, the public totals, and which session files had keys from which provider (never a key), and deletes them when it exits.
+- Leave a file behind, unless you ask it to save the report. `--all-users` keeps its result in `/var/db/blindspot/last.json`, readable by root only. While it runs it keeps three small temp files, for the progress line, the public totals, and which session files had keys from which provider (never a key), and deletes them when it exits.
 - Send a path, a key, a username, a hostname or your raw hardware ID.
 
 ## What it shares
@@ -125,6 +126,10 @@ powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 ```
 
 `-ExecutionPolicy Bypass` applies to that one run. The switches are `-All`, `-Full`, `-Offline` and `-Save`, and `DO_NOT_TRACK=1` works too. It also reads PowerShell's command history. It has no game. A file that takes too long to check is listed as skipped, never counted as clean. On the same PC, Git Bash and PowerShell send the same device ID.
+
+## For IT teams
+
+`sudo bash gird-check.sh --all-users` checks every account on a Mac, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
 
 ## Limits
 

@@ -4,7 +4,7 @@ When the script starts, it asks `https://gird.ai/api/check/stats` for public **t
 
 When the script finishes, it sends one **report** to `https://gird.ai/api/check` and waits up to 3 seconds for the reply, which says how your result compares. If you use the menu at the end, it sends one more small **actions** event when you quit, in the background with a 5-second timeout. Everything goes over https. If a request fails, nothing happens and nothing is retried.
 
-Turn all of it off, the totals request included, with `--offline` or `DO_NOT_TRACK=1`.
+Turn all of it off, the totals request included, with `--offline` or `DO_NOT_TRACK=1`. `--all-users`, the check IT runs as root on every account ([docs/fleet.md](docs/fleet.md)), makes no request at all: its result stays on the Mac for the MDM to read.
 
 Everything is built in one place near the end of [`gird-check.sh`](gird-check.sh), so you can read exactly what goes. Every field is a number or comes from a fixed list or a strict pattern. The fixed lists of MCP apps, well-known MCP servers and kinds of file are in one block in the script, under "Fixed lists for the case-study counts". The server applies the same rules and drops anything else.
 
