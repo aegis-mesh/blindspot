@@ -493,7 +493,7 @@ has    "and the fix"                                  'Turn off run-without-aski
 [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS: Cursor's version is read from its app bundle"
 has    "Cursor below the fixed version" '! Cursor 2\.9\.1, update to 3\.0 or later A prompt injection could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw' "$D"
 SKIPPING=""
-has    "Amazon Q: the highest version folder, compared as numbers" '! Amazon Q 1\.68\.0, update to 1\.69\.0 or later Opening a hostile workspace' "$D"
+has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later Opening a hostile workspace' "$D"
 has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 1\.0\.24 or later A web page could reach the editor connection\.' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
