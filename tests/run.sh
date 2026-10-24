@@ -188,6 +188,8 @@ printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/keyv": {\
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$RV/code/shrink/npm-shrinkwrap.json"
 printf "lockfileVersion: 5.4\n\npackages:\n\n  /cacheable/2.5.1:\n    resolution: {integrity: sha512-x}\n" > "$RV/code/pnpm5/pnpm-lock.yaml"
 mkdir -p "$RV/code/esc"; printf '{\n  "packages": {\n    "node_modules/cloude": {\n      "version": "2.0\033[2K"\n    }\n  }\n}\n' > "$RV/code/esc/package-lock.json"
+# A nested or bundled dependency in an npm lock (node_modules/<tool>/node_modules/<name>) has no resolved URL.
+mkdir -p "$RV/code/nested"; printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/some-tool": {\n      "version": "2.0.0"\n    },\n    "node_modules/some-tool/node_modules/axios": {\n      "version": "1.14.1",\n      "inBundle": true\n    },\n    "node_modules/@scope/tool/node_modules/@keyv/redis": {\n      "version": "6.0.0",\n      "inBundle": true\n    }\n  }\n}\n' > "$RV/code/nested/package-lock.json"
 # Global installs: a bad dependency inside a global tool, a version manager's folder, a version with control codes.
 mkdir -p "$RV/.npm-global/lib/node_modules/sometool/node_modules/axios" "$RV/.volta/tools/image/node/20.1.0/lib/node_modules/opencraw"
 printf '{"name":"axios","version":"1.14.1"}\n' > "$RV/.npm-global/lib/node_modules/sometool/node_modules/axios/package.json"
@@ -221,6 +223,8 @@ HOME="$RV" bash "$SCRIPT" --offline > "$WORK/rv.txt" 2>&1
 tr -s ' \n' '  ' < "$WORK/rv.txt" > "$WORK/rv-flat.txt"
 hasnot "a pnpm override pinning away is not a hit"     'code/pin/' "$WORK/rv.txt"
 has    "an npm lock entry without a URL is read"       'keyv 6\.0\.0 \(keyv worm' "$WORK/rv.txt"
+has    "a nested lock entry without a URL is read"     '~/code/nested/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$WORK/rv-flat.txt"
+has    "and a scoped one inside a scoped tool"         '~/code/nested/package-lock\.json @keyv/redis 6\.0\.0 \(keyv worm' "$WORK/rv-flat.txt"
 has    "npm-shrinkwrap.json is read"                   'code/shrink/npm-shrinkwrap\.json' "$WORK/rv.txt"
 has    "a pnpm 5 lockfile is read"                     'cacheable 2\.5\.1' "$WORK/rv.txt"
 has    "a bad dependency inside a global tool is found" 'sometool/node_modules/axios' "$WORK/rv.txt"

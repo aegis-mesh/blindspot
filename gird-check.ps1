@@ -1385,12 +1385,13 @@ function Npm-Hit([string]$where, [string]$nm, [string]$v) {
   if ($where.EndsWith($NpmCacheTag, [StringComparison]::Ordinal)) { $NpmCacheRows.Add(@($where, "$nm $v", $t)) } else { $NpmRows.Add(@($where, "$nm $v", $t)) }
 }
 # Tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
-# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
-# (locks written without URLs) and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
-# moves away from a version, so overrides are skipped.
+# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line,
+# nested and bundled ones (node_modules/tool/node_modules/name) included, since those have no URL,
+# and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section moves away from a version, so
+# overrides are skipped.
 $RxTgz = New-Object regex('/((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))/-/([A-Za-z0-9._~-]+)\.tgz', $RxOpt, $RxTimeout)
 $RxTok = New-Object regex('(?<![A-Za-z0-9._~@-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
-$RxLockEntry = New-Object regex('^[^\n]*?"((?:node_modules/)*(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)"[^\S\n]*:[^\S\n]*\{|^[^\n]*?"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
+$RxLockEntry = New-Object regex('^[^\n]*?"((?:node_modules/(?:[A-Za-z0-9._~@-]+/)*)?(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)"[^\S\n]*:[^\S\n]*\{|^[^\n]*?"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
 $RxPnpmKey = New-Object regex('^[^\S\n]+/((?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)/([0-9][^:(_/\n]*)', $RxOpt, $RxTimeout)
 $RxPnpmOver = New-Object regex('^overrides:', $RxOpt, $RxTimeout)
 $RxBunOver = New-Object regex('"overrides"[^\S\n]*:[^\S\n]*\{', $RxOpt, $RxTimeout)

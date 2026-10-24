@@ -1825,8 +1825,9 @@ vce-brendan-studio-eich.js-debuger-vscode * glassworm"
 # <<< bad-extensions
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
-# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
-# (locks written without URLs) and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
+# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line,
+# nested and bundled ones (node_modules/tool/node_modules/name) included, since those have no URL,
+# and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
 # moves away from a version, so overrides are skipped. Versions are printed only if they look like
 # versions, so a package can't put terminal control codes in the report.
 npm_hits() {
@@ -1851,7 +1852,7 @@ npm_hits() {
     }
     over { next }
     FILENAME ~ /(package-lock|npm-shrinkwrap)\.json$/ {
-      if (match($0, /"(node_modules\/)*(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
+      if (match($0, /"(node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
         pend = substr($0, RSTART + 1); sub(/"[[:space:]]*:.*/, "", pend); sub(/^.*node_modules\//, "", pend)
       } else if (pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
         v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); hit(pend, v); pend = ""
