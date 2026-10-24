@@ -84,3 +84,5 @@ parity.sh passes a PowerShell skip that ps-skips.txt explains	tests tests/parity
 parity.sh fails on a stale ps-skips line	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 parity.sh passes a test both suites skipped	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+a key id that is not lowercase	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key id listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
