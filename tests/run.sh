@@ -1031,6 +1031,9 @@ for M in other-row machine oversize malformed; do
   has "fleet: $M output makes that account not checked" '^asha\.not_checked=bad_output$' "$FL/forge-$M.flat"
   if diff -q "$FL/it-ok.txt" "$FL/it-$M.txt" > /dev/null; then ok "fleet: $M output changes no other row"; else bad "fleet: $M output changes no other row" "$(diff "$FL/it-ok.txt" "$FL/it-$M.txt" | head -n 4)"; fi
 done
+printf 'endless\n' > "$FL/mode-asha"
+T0=$SECONDS; fl_run endless --deadline=60; T1=$((SECONDS - T0))
+if grep -q '^asha\.not_checked=bad_output$' "$FL/endless.flat" && [ "$T1" -lt 20 ]; then ok "fleet: root reads a set number of bytes, then stops the run" "${T1}s"; else bad "fleet: root reads a set number of bytes, then stops the run" "${T1}s $(grep '^asha' "$FL/endless.flat")"; fi
 rm -f "$FL/mode-asha"
 hasnot "fleet: nothing an account run sent reaches the result" 'forged|99999' "$FL/forge-malformed.flat"
 printf 'fail\n' > "$FL/mode-asha"; fl_run sudofail
@@ -1084,7 +1087,7 @@ has    "fleet: act comes before not_checked" '^outcome=act$' "$FL/order2.flat"
 
 # Root runs nothing a person can replace.
 FAKE=$FL/fakebin; mkdir -p "$FAKE"
-for t in jq rg grep sudo dscl stat perl find awk sed cat head mktemp open curl; do
+for t in jq rg grep sudo dscl stat perl find awk sed cat head mktemp open curl uname sysctl tput tr cut date; do
   printf '#!/bin/sh\necho %s >> "%s/fake-ran"\nexit 1\n' "$t" "$FL" > "$FAKE/$t"; chmod +x "$FAKE/$t"
 done
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"

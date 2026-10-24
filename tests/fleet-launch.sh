@@ -8,6 +8,7 @@
 #   other-row  the real output with a line for another account first
 #   machine    the real output with a forged machine line before its end
 #   oversize   more output than root reads
+#   endless    output that never stops
 #   malformed  the real output with one value that is not a number
 #   hold       holds its output open past any limit, with a process that leaves its group
 #   maxbytes   the real run with a 1000-byte file limit
@@ -27,6 +28,7 @@ case "$mode" in
   chmod) for a in "$@"; do case "$a" in */gird-check.sh) /bin/chmod 666 "$a" ;; esac; done ;;
   maxbytes) extra+=(GIRD_CHECK_FLEET_MAX_BYTES=1000) ;;
   noprot) extra+=("GIRD_CHECK_FLEET_PROTECTED=$FLL_DIR/noprot") ;;
+  endless) exec /usr/bin/yes agents=claude-code ;;
   hold) /usr/bin/perl -e 'use POSIX; POSIX::setsid(); sleep 60' fleet-hold-escapee &
         echo v=1; exec /bin/sleep 300 ;;
 esac
