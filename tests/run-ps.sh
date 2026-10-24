@@ -395,7 +395,7 @@ has    "summary row 02 names the link"                '02 . MCP servers .* 1 fil
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, [34] security fixes to install' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
 hasnot "near misses: no agent set to run without asking" 'Agents set to run commands without asking|run-without-asking' "$D"
-hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Agents with a security fix|that have a security fix' "$D"
+hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Tools with a security fix|that have a security fix' "$D"
 hasnot "near misses: no link inside ~/.ssh, none to another file" 'link to your SSH logins|links to ~/\.ssh' "$D"
 hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc' "$D"
 # gird-check.sh, on the same home with its Mac paths, must find the same things in the same order.
@@ -620,7 +620,7 @@ for r in rs:
     for k in ("run_id", "scan_seconds", "results_wait_seconds"): r.pop(k, None)
 sys.exit(0 if len(rs) == 2 and rs[0] == rs[1] else 1)' "$WORK/received.log"; then ok "the dossier findings leave the report unchanged"
 else bad "the dossier findings leave the report unchanged"; fi
-has    "and they were found"                         'Agents with a security fix to install' "$WORK/pl-dz.txt"
+has    "and they were found"                         'Tools with a security fix to install' "$WORK/pl-dz.txt"
 if [ "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-dz.txt" | sed 's/&u=[0-9a-f]*&/\&u=\&/')" = "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-base.txt" | sed 's/&u=[0-9a-f]*&/\&u=\&/')" ]; then ok "and the result link, score included, is the same"
 else bad "and the result link, score included, is the same"; fi
 

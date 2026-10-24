@@ -1981,7 +1981,7 @@ OLD_LIST=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '!($1 in o) { o[$1] = ++n; r[
   !(($1 "|" $3) in seen) { seen[$1 "|" $3] = 1; v[o[$1]] = v[o[$1]] ", " $3 }
   END { for (i = 1; i <= n; i++) print r[i] "\t" v[i] "\t" rest[i] }')
 N_OLD=$(count_lines "$OLD_LIST")
-[ "$N_OLD" -gt 0 ] && progress w "An agent with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
+[ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
 for c in "$H/.npm/_cacache/index-v5" "$WLAPP/npm-cache/_cacache/index-v5"; do
@@ -2405,7 +2405,7 @@ EOF
 fi
 if [ "$N_OLD" -gt 0 ]; then
   blank
-  emit "     ${B}Agents with a security fix to install${RST}"
+  emit "     ${B}Tools with a security fix to install${RST}"
   while IFS="$TAB" read -r nm vs fx hole src; do
     [ -n "$nm" ] || continue
     pair "${YEL}!${RST}" "$nm" 20 "$vs, update to $fx or later"

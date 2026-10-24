@@ -1556,7 +1556,7 @@ foreach ($r in $OutTable) {
   }
 }
 $N_OLD = $OldList.Count
-if ($N_OLD -gt 0) { Progress "An agent with a security fix to install: $($OldList[0].Name)" }
+if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldList[0].Name)" }
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
 # A folder or file that can't be read leaves the cache not fully checked, never clean.
@@ -1885,7 +1885,7 @@ if ($N_YOLO -gt 0) {
 }
 if ($N_OLD -gt 0) {
   Blank
-  Emit "     ${cBold}Agents with a security fix to install$cRst"
+  Emit "     ${cBold}Tools with a security fix to install$cRst"
   foreach ($r in $OldList) {
     Pair "$cYel!$cRst" $r.Name 20 "$($r.Vers -join ', '), update to $($r.Fixed) or later"
     Wrap "$($r.Hole.Substring(0, 1).ToUpperInvariant())$($r.Hole.Substring(1)). $($r.Src)" 8 '        ' '        ' $cDim

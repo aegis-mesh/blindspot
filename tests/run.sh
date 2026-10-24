@@ -533,7 +533,7 @@ has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
 hasnot "near misses: no agent set to run without asking" 'Agents set to run commands without asking|run-without-asking' "$D"
-hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Agents with a security fix|that have a security fix' "$D"
+hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Tools with a security fix|that have a security fix' "$D"
 hasnot "near misses: no link inside ~/.ssh, none to another file" 'link to your SSH logins|links to ~/\.ssh' "$D"
 hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc' "$D"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
@@ -920,7 +920,7 @@ sys.exit(0 if a == b and a else 1)' "$WORK/report-pl-base.json" "$WORK/report-pl
   else bad "the dossier findings leave the report unchanged"; fi
   HOME="$WORK/pl-dz" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/pl-dz.txt" 2>&1
   HOME="$WORK/pl-base" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/pl-base.txt" 2>&1
-  has    "and they were found"                         'Agents with a security fix to install' "$WORK/pl-dz.txt"
+  has    "and they were found"                         'Tools with a security fix to install' "$WORK/pl-dz.txt"
   if [ "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-dz.txt")" = "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-base.txt")" ]; then ok "and the result link, score included, is the same"
   else bad "and the result link, score included, is the same"; fi
   if [ "$(uname -s)" = Darwin ] && [ -x /usr/bin/osascript ]; then

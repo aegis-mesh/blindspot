@@ -63,7 +63,7 @@ Versions are compared numerically, part by part. A version that does not parse i
 Kiro is not built: the vendor's fixed version (0.11) and the dossier's (0.11.130) differ, and its
 version file was not verified.
 
-Report, section 01, a block "Agents with a security fix to install": one `!` row per tool, the
+Report, section 01, a block "Tools with a security fix to install": one `!` row per tool, the
 installed version, "update to <fixed> or later", what the hole allows and the advisory. Fix (yellow):
 "Update the tools listed in section 1 that have a security fix."
 
