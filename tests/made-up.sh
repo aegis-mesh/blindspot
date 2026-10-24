@@ -25,7 +25,7 @@ cat >> "$R/data/indicators.tsv" <<EOF
 madeworm${T}all${T}startup${T}no${T}~/.config/madeworm/boot.cjs${T}starts the Made worm at login
 tanstack${T}all${T}wiper${T}no${T}~/.config/gh-token-monitor-made${T}-
 madepy${T}all${T}site${T}no${T}madepy_boot.pth${T}-
-madepy${T}all${T}temp${T}no${T}.madepy_*${T}Stop any process started from these files, then delete them.
+madepy${T}all${T}temp${T}yes${T}.madepy_*${T}Stop any process started from these files, then delete them.
 EOF
 printf '.vscode\tmadeplant.js\tmadeworm\ta file the Made worm plants\n' >> "$R/data/planted.tsv"
 printf 'madepkg\t9.9.9\tmadepy\n' >> "$R/data/bad-pypi.tsv"

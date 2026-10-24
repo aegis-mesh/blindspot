@@ -697,6 +697,11 @@ psrun "$WORK/mark" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mark.txt"
 has    "finds a malware marker in TEMP"        'LiteLLM 1\.107\.0 +signs of the malware found ~/AppData/Local/Temp/\.pc_once_1' "$WORK/mark.txt"
 has    "with LiteLLM's own advice"             'Kill the detached python process that holds remote_code_loader\.lock, then delete these files\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth and cook\.py are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/mark.txt"
 hasnot "a marker alone names no environment to stop" "Don't run Python or pip in these environments" "$WORK/mark.txt"
+# Another user's file in the shared temp folder is not this person's sign: a link to a root-owned file stands in for one.
+cp -R "$WORK/clean" "$WORK/lmo"; ln -s /etc/passwd "$WORK/lmo/AppData/Local/Temp/.pc_once_1"
+psrun "$WORK/lmo" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmo.txt"
+has    "a temp file owned by someone else is not this person's hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmo.txt"
+hasnot "and the file is not listed"            'pc_once' "$WORK/lmo.txt"
 
 echo "saving the report"
 mkdir -p "$WORK/cwd"

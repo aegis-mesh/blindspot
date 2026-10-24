@@ -451,6 +451,17 @@ function Entries([string]$dir) {
 }
 function Is-Link($info) { ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }
 function Is-DirInfo($info) { ($info.Attributes -band [IO.FileAttributes]::Directory) -ne 0 }
+# Whether this person owns a file, read off Windows (PowerShell 7 adds User to a file's info). A link
+# is judged by what it points at, as bash's -O does, where .NET can resolve it (PowerShell 7.2 and up).
+function Owns-File([string]$p) {
+  try {
+    $it = Get-Item -LiteralPath $p -Force -ErrorAction Stop
+    $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
+    if ($t) { $it = Get-Item -LiteralPath $t.FullName -Force -ErrorAction Stop }
+    $owner = [string]$it.User
+    return [bool]($owner -and $owner -ceq [Environment]::UserName)
+  } catch { return $false }
+}
 # Children of these patterns, by name, under the folders named.
 function Glob-Dirs([string]$parent, [string]$pattern) {
   if (-not (Is-Dir $parent)) { return @() }
@@ -1097,11 +1108,11 @@ $IndTable = @(
   ,@('mastra', 'win', 'startup', 'no', $(if ($env:ProgramData) { J $env:ProgramData 'NodePackages/protocal.cjs' } else { '' }), 'starts the Mastra worm at login')
   ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
   ,@('litellm', 'all', 'site', 'no', 'cook.py', '-')
-  ,@('litellm', 'all', 'temp', 'no', 'remote_code_loader.lock', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
-  ,@('litellm', 'all', 'temp', 'no', '.pc_once_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
-  ,@('litellm', 'all', 'temp', 'no', '.pc_sq_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
-  ,@('litellm', 'all', 'temp', 'no', '.pc_e_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
-  ,@('mistralpy', 'linux', 'temp', 'no', 'transformers.pyz', 'Kill any python process started from transformers.pyz, then delete the file.')
+  ,@('litellm', 'all', 'temp', 'yes', 'remote_code_loader.lock', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'yes', '.pc_once_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'yes', '.pc_sq_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('litellm', 'all', 'temp', 'yes', '.pc_e_*', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.')
+  ,@('mistralpy', 'linux', 'temp', 'yes', 'transformers.pyz', 'Kill any python process started from transformers.pyz, then delete the file.')
 )
 # <<< indicators
 if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
@@ -1138,9 +1149,15 @@ foreach ($t in $TempDirs) {
   if (-not (Is-Dir $t)) { continue }
   foreach ($r in $IndOn) {
     if ($r[2] -ne 'temp') { continue }
-    if ($r[4].EndsWith('*')) {
-      try { foreach ($m in ([IO.Directory]::GetFileSystemEntries($t, $r[4]) | Sort-Object)) { $Marks.Add(@($r[0], $m)) } } catch { }
-    } elseif (Exists (J $t $r[4])) { $Marks.Add(@($r[0], (J $t $r[4]))) }
+    $found = @()
+    if ($r[4].EndsWith('*')) { try { $found = @([IO.Directory]::GetFileSystemEntries($t, $r[4]) | Sort-Object) } catch { } }
+    elseif (Exists (J $t $r[4])) { $found = @((J $t $r[4])) }
+    foreach ($m in $found) {
+      # Another user's file in the shared /tmp is not this person's sign (owner yes in
+      # data/indicators.tsv); %TEMP% on Windows is the person's own folder.
+      if ($r[3] -eq 'yes' -and -not $OnWindows -and -not (Owns-File $m)) { continue }
+      $Marks.Add(@($r[0], $m))
+    }
   }
 }
 # An environment variable and a running process are not files, so these stay code. The hourly
@@ -1610,8 +1627,7 @@ foreach ($r in $IndOn) {
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
   if ($r[3] -eq 'yes') {
     if ($OnWindows) { continue }
-    $owner = ''; try { $owner = [string](Get-Item -LiteralPath $m -Force -ErrorAction Stop).User } catch { }
-    if (-not ($owner -and $owner -ceq [Environment]::UserName)) { continue }
+    if (-not (Owns-File $m)) { continue }
   }
   if ($r[2] -eq 'wiper') { $Wiper.Add($m) } else { $Persist.Add(@($m, $r[5])) }
 }

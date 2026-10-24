@@ -6,7 +6,8 @@
 #             startup  a file that starts malware at login; the note is shown under it
 #             site     a file in any Python environment's site-packages: a Python incident's hit
 #             temp     an entry in /tmp, TMPDIR or %TEMP%: a Python incident's hit. May end in *
-#   owner     yes: counts only if this person owns it (for files in the shared /tmp). no otherwise
+#   owner     yes: counts only if this person owns it (for files in the shared /tmp; %TEMP% on Windows is the
+#             person's own folder, so there it always counts). no otherwise
 #   path      wiper and startup: a file or folder, with the path tokens data/sessions.tsv uses, an
 #             absolute path, or {PROGRAMDATA} (Windows' ProgramData). site and temp: a file name
 #   note      startup: what the file does, as shown under it. temp: what to do about the files, from the
@@ -27,8 +28,8 @@ mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	starts the Mastra w
 mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	starts the Mastra worm at login
 litellm	all	site	no	cook.pth	-
 litellm	all	site	no	cook.py	-
-litellm	all	temp	no	remote_code_loader.lock	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm	all	temp	no	.pc_once_*	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm	all	temp	no	.pc_sq_*	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm	all	temp	no	.pc_e_*	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-mistralpy	linux	temp	no	transformers.pyz	Kill any python process started from transformers.pyz, then delete the file.
+litellm	all	temp	yes	remote_code_loader.lock	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm	all	temp	yes	.pc_once_*	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm	all	temp	yes	.pc_sq_*	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm	all	temp	yes	.pc_e_*	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+mistralpy	linux	temp	yes	transformers.pyz	Kill any python process started from transformers.pyz, then delete the file.

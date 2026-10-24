@@ -1498,11 +1498,11 @@ mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra 
 mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
 litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
-litellm|all|temp|no|remote_code_loader.lock|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm|all|temp|no|.pc_once_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm|all|temp|no|.pc_sq_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-litellm|all|temp|no|.pc_e_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
-mistralpy|linux|temp|no|transformers.pyz|Kill any python process started from transformers.pyz, then delete the file."
+litellm|all|temp|yes|remote_code_loader.lock|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm|all|temp|yes|.pc_once_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm|all|temp|yes|.pc_sq_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+litellm|all|temp|yes|.pc_e_*|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth and cook.py are deleted from it.
+mistralpy|linux|temp|yes|transformers.pyz|Kill any python process started from transformers.pyz, then delete the file."
 # <<< indicators
 SITES_ALL=$(
   {
@@ -1531,7 +1531,7 @@ py_short() {
 }
 progress i "Checking $(plural "$(printf '%s\n' "$SITES_ALL" | grep -c .)" "Python environment" "Python environments") for the $(py_short "$PY_INCIDENTS") malware"
 SITE_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "site" && ($2 == "all" || $2 == o) { print $1 " " $5 }')
-TEMP_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "temp" && ($2 == "all" || $2 == o) { print $1 " " $5 }')
+TEMP_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "temp" && ($2 == "all" || $2 == o) { print $1 " " $4 " " $5 }')
 # The advice shown under an incident's row when its temp files are found: the note of its temp lines.
 temp_advice() { printf '%s\n' "$IND_TABLE" | awk -F '|' -v i="$1" '$1 == i && $3 == "temp" { print $6; exit }'; }
 N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""
@@ -1570,11 +1570,15 @@ MARKS=""; _seen_t="|"
 for t in /tmp "${TMPDIR%/}" "$WTEMP"; do
   [ -n "$t" ] && [ -d "$t" ] || continue
   case "$_seen_t" in *"|$t|"*) continue ;; esac; _seen_t="$_seen_t$t|"
-  while read -r _i _g; do
+  while read -r _i _own _g; do
     [ -n "$_g" ] || continue
     # shellcheck disable=SC2086  # the name may end in a glob
     for m in "$t"/$_g; do
-      [ -e "$m" ] && MARKS="$MARKS$_i$TAB$m
+      [ -e "$m" ] || continue
+      # Another user's file in the shared /tmp is not this person's sign (owner yes in
+      # data/indicators.tsv); %TEMP% on Windows is the person's own folder.
+      if [ "$_own" = yes ] && [ "$WIN" -eq 0 ] && [ ! -O "$m" ]; then continue; fi
+      MARKS="$MARKS$_i$TAB$m
 "
     done
   done <<EOF
