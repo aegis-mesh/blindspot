@@ -2141,11 +2141,20 @@ function Do-Save {
     try {
       $path = J $cand $name
       # Readable only by you, as gird-check.sh's umask 077. On Windows the folder's permissions apply.
-      if ([Environment]::OSVersion.Platform -eq [PlatformID]::Unix -and ('IO.UnixFileMode' -as [type])) {
+      # Before PowerShell 7.3 there is no UnixCreateMode: the empty file is made owner-only first
+      # (GIRD_CHECK_TEST_NO_UNIXMODE takes that path in the tests).
+      $unix = [Environment]::OSVersion.Platform -eq [PlatformID]::Unix
+      if ($unix -and ('IO.UnixFileMode' -as [type]) -and -not $env:GIRD_CHECK_TEST_NO_UNIXMODE) {
         $fo = New-Object IO.FileStreamOptions; $fo.Mode = [IO.FileMode]::CreateNew; $fo.Access = [IO.FileAccess]::Write
         $fo.UnixCreateMode = [IO.UnixFileMode]'UserRead, UserWrite'
         $fs = New-Object IO.FileStream($path, $fo)
-      } else { $fs = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write) }
+      } else {
+        $fs = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+        if ($unix) {
+          & /bin/chmod 600 $path 2>$null
+          if ($LASTEXITCODE -ne 0) { $fs.Close(); Remove-Item -LiteralPath $path -ErrorAction SilentlyContinue; throw 'chmod' }
+        }
+      }
       $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(([regex]::Replace($Report.ToString(), "$Esc\[[0-9;]*m", '')).Replace("`n", $NL))
       $fs.Write($bytes, 0, $bytes.Length); $fs.Close(); $out = $path; break
     } catch { $out = $null }
