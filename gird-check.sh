@@ -1043,9 +1043,9 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 # one line, so pretty-printed JSON matches too, with JSONC comments removed first.
 AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN="|"
 # The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
-WORM_RUN='\.(claude|vscode)/(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+WORM_RUN='\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
 # A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
-WORM_CMD='"command"[[:space:]]*:[[:space:]]*"([^"\\]|\\.)*(node|bun|deno|tsx)[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
+WORM_CMD='"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*([^A-Za-z0-9_"\\]|\\"))?(node|bun|deno|tsx)(\.exe)?[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
 TAB=$(printf '\t')
 # One line of text. Claude Code's settings are strict JSON; only tasks.json (JSONC) has comments to drop.
 flat() {
