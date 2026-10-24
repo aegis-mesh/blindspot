@@ -41,7 +41,9 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
         !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
-bad="$bad$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII: /')"
+_na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
+bad="$bad${bad:+${_na:+
+}}$_na"
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
 
 # Path tokens (see data/sessions.tsv) as bash and as PowerShell. A trailing / is kept in bash.

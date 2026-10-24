@@ -288,6 +288,14 @@ HOME="$WORK/mpy" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy.t
 has    "mistralai 2.4.6 from PyPI is its own act-now row" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
 has    "with its fix"                                "Treat this machine as compromised\. Don't run Python in the affected environments, follow mistralai's advisory" "$WORK/mpy.txt"
 has    "the link flags a Python incident, not LiteLLM" '&ll=0&.*&py=1&' "$WORK/mpy.txt"
+# /tmp/transformers.pyz is a Linux-only sign: the uname is faked, the temp folder is the fixture's.
+cp -R "$WORK/clean" "$WORK/mpyt"; mkdir -p "$WORK/mpyt/tmp" "$WORK/linbin"; : > "$WORK/mpyt/tmp/transformers.pyz"
+printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Linux; else exec /usr/bin/uname "$@"; fi\n' > "$WORK/linbin/uname"; chmod +x "$WORK/linbin/uname"
+HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-linux.txt"
+HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-mac.txt"
+has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/tmp/transformers\.pyz' "$WORK/mpyt-linux.txt"
+has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt-linux.txt"
+has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt-mac.txt"
 
 echo "advice by OS"
 mkdir -p "$WORK/fakebin"
