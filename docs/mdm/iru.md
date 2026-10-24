@@ -7,7 +7,8 @@ on 2026-10-24 against
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
 
-You add one Custom Script library item. Iru records its output, so the summary line is the result.
+You add two Custom Script library items: one installs the script once, the other runs it daily.
+Iru records the daily run's output, so its summary line is the result.
 
 ## Full Disk Access
 
@@ -21,30 +22,31 @@ codesign -dr - "<path to the Iru agent app>"
 Never grant it to `/bin/bash`. Check the result either way: each account's `protected_folders` is
 `checked` once access works.
 
-## Add the check
+## Install it once
 
-1. Download `gird-check.sh` from a tagged release and check its SHA-256 against the release notes:
+1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
+   release of `gird-check.sh` whose SHA-256 you checked, with the options line starting its second
+   line (`--deadline=1800` for Iru), pasted between the install script's marker lines. This install
+   step has not yet been run end to end on a real Mac.
+2. Add a Custom Script library item named `Blindspot install`
+   ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)),
+   and assign it to your Blueprints.
+3. In **Execution Frequency**, choose **Install once per device**.
+4. Paste the install script into the **Audit Script** field, and select **Save**.
+
+## Run it daily
+
+1. Add a second Custom Script library item named `Blindspot check`, assigned to the same
+   Blueprints.
+2. In **Execution Frequency**, choose **Run daily**.
+3. Paste only these lines into the **Audit Script** field. Leave **Remediation Script** empty:
 
    ```sh
-   shasum -a 256 gird-check.sh
+   #!/bin/bash
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh"
    ```
 
-2. Add exactly this line under the script's first line:
-
-   ```sh
-   [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=1800
-   ```
-
-   The check copies itself for each account, so it must run from a file, not piped in. Piped in,
-   it stops with `run it from a file`. It also stops if the file, or a folder above it, is not
-   root's or can be changed by anyone else.
-
-3. Add a Custom Script library item, and name it `Blindspot check`
-   ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)).
-4. Assign it to your Blueprints.
-5. In **Execution Frequency**, choose **Run daily**.
-6. Paste the script into the **Audit Script** field. Leave **Remediation Script** empty.
-7. Select **Save**.
+4. Select **Save**.
 
 ## What you should see
 

@@ -6,8 +6,8 @@ checked on 2026-10-24 against Jamf's documentation, linked at each step.
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
 
-You add two things: a script that a policy runs daily, and an extension attribute that shows the
-result in each computer's inventory.
+You add three things: a policy that installs the script once, a policy that runs it daily, and an
+extension attribute that shows the result in each computer's inventory.
 
 ## Full Disk Access
 
@@ -22,58 +22,52 @@ codesign -dr - /usr/local/jamf/bin/jamf
 Jamf Pro also has a setting that installs a Privacy Preferences profile for its own framework. Check
 the result either way: each account's `protected_folders` is `checked` once access works.
 
-## Add the check
+## Install it once
 
-1. Download `gird-check.sh` from a tagged release and check its SHA-256 against the release notes:
-
-   ```sh
-   shasum -a 256 gird-check.sh
-   ```
-
-2. Add exactly this line under the script's first line, so it runs with these options whatever arguments
-   Jamf passes:
-
-   ```sh
-   [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=3000
-   ```
-
-   The check copies itself for each account, so it must run from a file, not piped in. Piped in,
-   it stops with `run it from a file`. It also stops if the file, or a folder above it, is not
-   root's or can be changed by anyone else.
-
-3. In Jamf Pro, click **Settings**, then in **Computer management** click **Scripts**, then **New**
+1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
+   release of `gird-check.sh` whose SHA-256 you checked, with the options line starting its second
+   line (`--deadline=3000` for Jamf), pasted between the install script's marker lines. This install
+   step has not yet been run end to end on a real Mac.
+2. In Jamf Pro, click **Settings**, then in **Computer management** click **Scripts**, then **New**
    ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Adding_a_Script_to_Jamf_Pro)).
-4. In the **General** pane, name it `Blindspot check`.
-5. Click the **Script** tab and paste the script.
-6. Click **Save**.
+3. In the **General** pane, name it `Blindspot install`.
+4. Click the **Script** tab, paste the install script, and click **Save**.
+5. Click **Computers**, then **Policies**, then **New**
+   ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-11.24.0/Creating_a_Policy)).
+6. In the **General** payload, choose a trigger such as recurring check-in, and the execution
+   frequency **Once per computer**
+   ([execution frequency](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Execution_Frequency_for_Policies)).
+7. Add the `Blindspot install` script to the policy, choose the Macs on the **Scope** tab, and click
+   **Save**.
 
 ## Run it daily
 
-1. Click **Computers**, then **Policies**, then **New**
-   ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-11.24.0/Creating_a_Policy)).
-2. In the **General** payload, choose a trigger such as recurring check-in, and the execution
-   frequency **Once every day**
-   ([execution frequency](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Execution_Frequency_for_Policies)).
-3. Add the `Blindspot check` script to the policy.
-4. Click the **Scope** tab and choose the Macs.
-5. Click **Save**.
+1. Add a second script, named `Blindspot check`, the same way, with only these lines:
+
+   ```sh
+   #!/bin/bash
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh"
+   ```
+
+2. Make a second policy the same way, with the execution frequency **Once every day**, the
+   `Blindspot check` script and the same scope, and click **Save**.
 
 ## Show the result in inventory
 
-1. Make a second copy of `gird-check.sh` with exactly this line under its first line instead. It only reads
-   the saved result, and wraps it in the `<result>` tag Jamf stores:
+1. Click **Settings**, then in **Computer management** click **Extension attributes**, then **New**
+   ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Manually_Creating_a_Computer_Extension_Attribute)).
+2. Name it `Blindspot`.
+3. In **Data Type**, choose **String**.
+4. In **Inventory Display**, choose where it shows.
+5. In **Input Type**, choose **Script**, and paste these lines. They only read the saved result, and
+   wrap it in the `<result>` tag Jamf stores:
 
    ```sh
-   [ "${1:-}" = --account-run ] || set -- --inventory --stale-days=3 --result-tags
+   #!/bin/bash
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh" --inventory --stale-days=3 --result-tags
    ```
 
-2. Click **Settings**, then in **Computer management** click **Extension attributes**, then **New**
-   ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Manually_Creating_a_Computer_Extension_Attribute)).
-3. Name it `Blindspot`.
-4. In **Data Type**, choose **String**.
-5. In **Inventory Display**, choose where it shows.
-6. In **Input Type**, choose **Script**, and paste the second copy.
-7. Click **Save**.
+6. Click **Save**.
 
 ## What you should see
 

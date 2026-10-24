@@ -26,16 +26,23 @@ curl -fsSLO https://gird.ai/blindspot/gird-check.sh
 shasum -a 256 gird-check.sh   # compare with the SHA-256 on gird.ai/blindspot
 ```
 
+Root runs only a script that root alone can change, so put it where only root can:
+
+```sh
+sudo /usr/bin/install -d -o root -g wheel -m 0755 "/Library/Application Support/Blindspot"
+sudo /usr/bin/install -o root -g wheel -m 0755 gird-check.sh "/Library/Application Support/Blindspot/"
+```
+
 See who it would check, without checking anything:
 
 ```sh
-sudo bash gird-check.sh --all-users --list
+sudo bash "/Library/Application Support/Blindspot/gird-check.sh" --all-users --list
 ```
 
 Then run it:
 
 ```sh
-sudo bash gird-check.sh --all-users
+sudo bash "/Library/Application Support/Blindspot/gird-check.sh" --all-users
 ```
 
 You get a report per account and where the result was saved. To see which files a finding is
@@ -63,32 +70,57 @@ The page for your MDM says where its agent is.
 
 ## 3. Add it to your MDM
 
-Two items:
+Root runs only a script that root alone can change: the file and every folder above it owned by root
+and writable by no one else, or the check stops (exit 13) before it starts any account's check. So
+the MDM installs the script once, in `/Library/Application Support/Blindspot`, and its other items
+only run it from there. The install step has not yet been run end to end on a real Mac.
 
-- **The check**, run daily. It is the script with exactly this line added under its first line, so
-  it runs with these options whatever arguments your MDM passes:
+1. Take `gird-check.sh` from a tagged release whose SHA-256 you checked (the release notes give it),
+   and add exactly this line under its first line, starting the line. It sets the options for the
+   daily check; an indented line is not removed from the copies each account runs:
 
-  ```sh
-  [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=3000
-  ```
+   ```sh
+   case "${1:-}" in --account-run|--inventory) ;; *) set -- --all-users --exit-zero --summary-to-stdout --deadline=3000 ;; esac
+   ```
 
-- **The inventory field**, run whenever the Mac reports in. It is the script with exactly this line
-  instead.
-  It only reads the saved result and never checks anything:
+   Put `--hash-accounts=<secret>` here if you use it, never in an MDM's arguments.
 
-  ```sh
-  [ "${1:-}" = --account-run ] || set -- --inventory --stale-days=3
-  ```
+2. **Install it once.** Paste that script between the two marker lines of this install script, and
+   have your MDM run it once, as root:
 
-Paste the script from a tagged release whose SHA-256 you checked (the release notes give it), so a
-run needs no download. The check must run from a file, not piped in: it copies itself for each
-account. Run that way, it stops with `run it from a file`. The file, and every folder above it, must
-be owned by root and writable by no one else, or the check stops (exit 13) before it starts any
-account's check. Set
-`--deadline` below your MDM's own time limit for a script; the page for your MDM gives the number.
-Each account gets an equal share of the time left, so one stuck account cannot hold up the rest. The
-run keeps a few seconds in reserve for its own steps, which sit outside the shares, so set the
-deadline a little below the limit, not at it.
+   ```sh
+   #!/bin/bash
+   set -e
+   d="/Library/Application Support/Blindspot"
+   /bin/mkdir -p "$d"
+   /usr/sbin/chown root:wheel "$d"
+   /bin/chmod 0755 "$d"
+   /bin/cat > "$d/gird-check.sh.new" <<'BLINDSPOT_SCRIPT'
+   (paste gird-check.sh, with its options line, here)
+   BLINDSPOT_SCRIPT
+   /usr/sbin/chown root:wheel "$d/gird-check.sh.new"
+   /bin/chmod 0755 "$d/gird-check.sh.new"
+   /bin/mv -f "$d/gird-check.sh.new" "$d/gird-check.sh"
+   ```
+
+3. **The check**, run daily. The MDM's script is only this line:
+
+   ```sh
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh"
+   ```
+
+4. **The inventory field**, run whenever the Mac reports in. It only reads the saved result and
+   never checks anything:
+
+   ```sh
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh" --inventory --stale-days=3
+   ```
+
+Set `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the
+number. Each account gets an equal share of the time left, so one stuck account cannot hold up the
+rest. The run keeps a few seconds in reserve for its own steps, which sit outside the shares, so set
+the deadline a little below the limit, not at it. Run from standard input instead of a file, the
+check stops with `run it from a file`: it copies itself for each account.
 
 | Option | What it does |
 |---|---|
@@ -98,7 +130,7 @@ deadline a little below the limit, not at it.
 | `--summary-to-stdout` | Prints one summary line. |
 | `--exit-zero` | Exits 0 whenever the run finished; only `failed` exits 13. |
 | `--deadline=<seconds>` | The run aims to finish before this. 3000 if not given. |
-| `--hash-accounts=<secret>` | Shows each account as a keyed hash of its name. Keep the secret to match them later. Put it only in the options line, never in an MDM's arguments: an argument shows in the process list, to every account, while the run lasts. |
+| `--hash-accounts=<secret>` | Shows each account as a keyed hash of its name. Keep the secret to match them later. Put it only in the installed options line, never in an MDM's arguments: an argument shows in the process list, to every account, while the run lasts. |
 | `--inventory` | Prints the saved inventory value. Needs root. |
 | `--stale-days=<days>` | With `--inventory`: older than this reads `stale`. 3 if not given. |
 | `--result-tags` | With `--inventory`: wraps the value in `<result></result>`, for Jamf Pro. |
@@ -161,18 +193,20 @@ Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to s
 
 ## 6. Update or remove it
 
-To update, paste the new release into both MDM items, after checking its SHA-256. To remove it,
-delete both items from your MDM, then remove the saved result on each Mac:
+To update, paste the new release, with its options line, into the install script after checking its
+SHA-256, and have your MDM run the install again. To remove it, delete the MDM's items, then remove
+the installed script and the saved result on each Mac:
 
 ```sh
-sudo rm -rf /var/db/blindspot /var/db/blindspot.replaced-*
+sudo rm -rf "/Library/Application Support/Blindspot" /var/db/blindspot /var/db/blindspot.replaced-*
 ```
 
 Two things can be left behind. A saved-result folder that was not root's own with mode 0700 is moved
 aside to `/var/db/blindspot.replaced-<time>-<number>` and made again; the command above removes
 those too. An account's check that is stopped at its time limit can leave its own temporary files,
 named `/tmp/blindspot.` and six characters and owned by that account. Root does not know their names,
-so it does not remove them; they are small and hold no key, and macOS clears old files from `/tmp`.
+so it does not remove them. They hold paths and counts, never a key, and can be removed once no
+Blindspot check is running.
 
 ## What it checks for each account
 

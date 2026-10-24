@@ -129,7 +129,7 @@ powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 
 ## For IT teams
 
-`sudo bash gird-check.sh --all-users` checks every account on a Mac, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
+`--all-users` checks every account on a Mac, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. Root runs it only from a folder root alone can change, such as `/Library/Application Support/Blindspot`. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
 
 ## Limits
 

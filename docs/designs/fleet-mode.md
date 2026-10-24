@@ -286,11 +286,14 @@ real Mac.
 - The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
   value, `stale: last run <time>` past `--stale-days` (3 by default), `none` before the first run
   and `unreadable` when the saved file is not root's own 0600 file in a 0700 folder.
-  `--result-tags` wraps it for Jamf Pro. An MDM item passes options with one line under the script's
-  first line, `[ "${1:-}" = --account-run ] || set -- <options>`, so the account runs it starts keep
-  their own.
-- `review` means something to change or confirm, not urgent. It
-  covers a tool with a security fix and an incident at the update level, and also an agent set to run without asking, an SSH key without a passphrase, a
+  `--result-tags` wraps it for Jamf Pro.
+- Deployment: the MDM installs the script once at `/Library/Application Support/Blindspot/gird-check.sh`
+  (folder and file `root:wheel` 0755), with the options in one line that starts its second line,
+  `case "${1:-}" in --account-run|--inventory) ;; *) set -- <options> ;; esac`, so the account runs it
+  starts and an `--inventory` call keep their own. The MDM's daily item and its inventory field only
+  `exec` that file, with no options or secret on their own line. The install step is untested on a
+  real Mac.
+- `review` means something to change or confirm, not urgent. It covers a tool with a security fix and an incident at the update level, and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
   covers keys in shell history, MCP configs and Claude Code allow lists, links to
   `authorized_keys` and files a worm plants. An account with a protected folder refused, a file not

@@ -7,8 +7,8 @@ checked on 2026-10-24 against
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
 
-You add two things: a shell script that runs the check, and a custom attribute that shows the
-result.
+You add three things: a shell script that installs the script once, a shell script that runs the
+check, and a custom attribute that shows the result.
 
 ## Full Disk Access
 
@@ -22,51 +22,51 @@ codesign -dr - "/Library/Intune/Microsoft Intune Agent.app"
 
 Check the result: each account's `protected_folders` is `checked` once access works.
 
-## Add the check
+## Install it once
 
-1. Download `gird-check.sh` from a tagged release and check its SHA-256 against the release notes:
-
-   ```sh
-   shasum -a 256 gird-check.sh
-   ```
-
-2. Add exactly this line under the script's first line:
-
-   ```sh
-   [ "${1:-}" = --account-run ] || set -- --all-users --exit-zero --summary-to-stdout --deadline=3000
-   ```
-
-   The check copies itself for each account, so it must run from a file, not piped in. Piped in,
-   it stops with `run it from a file`. It also stops if the file, or a folder above it, is not
-   root's or can be changed by anyone else.
-
+1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
+   release of `gird-check.sh` whose SHA-256 you checked, with the options line starting its second
+   line (`--deadline=3000` for Intune), pasted between the install script's marker lines. This install
+   step has not yet been run end to end on a real Mac.
+2. Save the install script as a file, `blindspot-install.sh`.
 3. In the Microsoft Intune admin center, select **Devices** > **By platform** > **macOS** >
    **Manage devices** > **Scripts** > **Add**
    ([Microsoft's guide](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos#create-and-assign-a-shell-script-policy)).
-4. In **Basics**, name it `Blindspot check`, and select **Next**.
-5. In **Script settings**, upload the script.
-6. Set **Run script as signed-in user** to **No**, so it runs as root.
-7. In **Script frequency**, choose how often it runs; daily is suggested. **Not configured** runs it
-   only once.
-8. Leave **Max number of times to retry if script fails** as **Not configured**, and select
-   **Next**.
-9. In **Assignments**, select the device groups, then **Review + add** > **Add**.
+4. In **Basics**, name it `Blindspot install`, and select **Next**.
+5. In **Script settings**, upload `blindspot-install.sh`, set **Run script as signed-in user** to
+   **No**, leave **Script frequency** as **Not configured** so it runs once, and select **Next**.
+6. In **Assignments**, select the device groups, then **Review + add** > **Add**.
+
+## Run it daily
+
+1. Save these lines as a file, `blindspot-check.sh`:
+
+   ```sh
+   #!/bin/bash
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh"
+   ```
+
+2. Add a second script the same way, named `Blindspot check`, uploading `blindspot-check.sh`.
+3. Set **Run script as signed-in user** to **No**, so it runs as root.
+4. In **Script frequency**, choose how often it runs; daily is suggested.
+5. Leave **Max number of times to retry if script fails** as **Not configured**.
+6. Assign it to the same device groups, then **Review + add** > **Add**.
 
 ## Show the result
 
-1. Make a second copy of `gird-check.sh` with exactly this line under its first line instead. It only reads
-   the saved result:
+1. Save these lines as a file, `blindspot-inventory.sh`. They only read the saved result:
 
    ```sh
-   [ "${1:-}" = --account-run ] || set -- --inventory --stale-days=3
+   #!/bin/bash
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh" --inventory --stale-days=3
    ```
 
 2. Select **Devices** > **By platform** > **macOS** > **Organize devices** >
    **Custom attributes for macOS** > **Add**
    ([Microsoft's guide](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos#create-and-assign-a-custom-attribute-for-macos-devices)).
 3. In **Basics**, name it `Blindspot`, and select **Next**.
-4. In **Attribute settings**, set **Data type of attribute** to **String**, select the second copy as
-   the **Script**, and select **Next**.
+4. In **Attribute settings**, set **Data type of attribute** to **String**, select
+   `blindspot-inventory.sh` as the **Script**, and select **Next**.
 5. In **Assignments**, select the same device groups, then **Review + add** > **Add**.
 
 ## What you should see
@@ -90,7 +90,7 @@ In **Scripts** > `Blindspot check` > **Device status**, **Success** means the ch
 
 Checked 2026-10-24:
 
-- A shell script file must be less than 1 MB. `gird-check.sh` is about 200 KB.
+- A shell script file must be less than 1 MB. The install script, with `gird-check.sh` in it, is about 200 KB.
 - A shell script that runs longer than 60 minutes is stopped and reported as failed.
   `--deadline=3000` aims to finish the check within 50 minutes.
 - A shell script runs as root unless **Run script as signed-in user** is **Yes**.
