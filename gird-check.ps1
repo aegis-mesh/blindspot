@@ -2139,7 +2139,12 @@ function Do-Save {
     if (-not $cand) { continue }
     try {
       $path = J $cand $name
-      $fs = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write)
+      # Readable only by you, as gird-check.sh's umask 077. On Windows the folder's permissions apply.
+      if ([Environment]::OSVersion.Platform -eq [PlatformID]::Unix -and ('IO.UnixFileMode' -as [type])) {
+        $fo = New-Object IO.FileStreamOptions; $fo.Mode = [IO.FileMode]::CreateNew; $fo.Access = [IO.FileAccess]::Write
+        $fo.UnixCreateMode = [IO.UnixFileMode]'UserRead, UserWrite'
+        $fs = New-Object IO.FileStream($path, $fo)
+      } else { $fs = New-Object IO.FileStream($path, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write) }
       $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes(([regex]::Replace($Report.ToString(), "$Esc\[[0-9;]*m", '')).Replace("`n", $NL))
       $fs.Write($bytes, 0, $bytes.Length); $fs.Close(); $out = $path; break
     } catch { $out = $null }
