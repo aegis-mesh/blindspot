@@ -608,18 +608,17 @@ drain_keys() {
 }
 
 PROG_FILE=""; SP_FILE=""; SP_PID=""; EARLY=0
-SESS_PID=""; SESS_FILTER_PID=""; SESS_FIFO=""; SESS_FILE=""; SESS_WIN=0
+SESS_PID=""; SESS_FILTER_PID=""; SESS_DIR=""; SESS_FIFO=""; SESS_FILE=""; SESS_WIN=0
 cleanup() {
   spin_stop
-  sess_stop
+  sess_stop kill
   if [ -n "$SP_PID" ]; then kill "$SP_PID" 2>/dev/null; wait "$SP_PID" 2>/dev/null; SP_PID=""; fi
   if [ -n "$GAME_PID" ]; then kill "$GAME_PID" 2>/dev/null; wait "$GAME_PID" 2>/dev/null; GAME_PID=""; fi
   if [ -n "$KEYS_PID" ]; then kill "$KEYS_PID" 2>/dev/null; wait "$KEYS_PID" 2>/dev/null; KEYS_PID=""; fi
   if [ -n "$SAVED_TTY" ]; then stty "$SAVED_TTY" </dev/tty 2>/dev/null; SAVED_TTY=""; fi
   [ -n "$PROG_FILE" ] && rm -f "$PROG_FILE"
   [ -n "$SP_FILE" ] && rm -f "$SP_FILE"
-  [ -n "$SESS_FILE" ] && rm -f "$SESS_FILE"
-  [ -n "$SESS_FIFO" ] && rm -f "$SESS_FIFO"
+  [ -n "$SESS_DIR" ] && rm -rf "$SESS_DIR"
   printf '%s' "$SHOW"
 }
 trap cleanup EXIT
@@ -951,26 +950,35 @@ case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=w
 SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "read" { print $3 "|" $4 }')
 # Agents whose sessions are stored encrypted, named as not checked.
 SESS_SEALED=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "sealed" { print $3 "|" $4 }')
-SESS_ROOTS=$(printf '%s\n' "$SESS_SOURCES" | while IFS='|' read -r _a _p; do [ -e "$_p" ] && printf '%s\n' "$_p"; done)
+# Files and folders only: ripgrep reads a pipe or a device given as a root, and waits on it forever.
+SESS_ROOTS=$(printf '%s\n' "$SESS_SOURCES" | while IFS='|' read -r _a _p; do { [ -f "$_p" ] || [ -d "$_p" ]; } && printf '%s\n' "$_p"; done)
 # Lines without a key's start are skipped cheaply.
 SESS_PRE=$KEY_STARTS
 # One perl parent lists the files newest first and forks workers, each with its own pipe back to
 # the parent, which is the only writer to its output, so lines never interleave. A worker prints
 # K (a match) and then D (done) for a file, or Z for a compressed one; the parent prints T (the
-# total) first. Files are read 1 MB at a time and cut just after the last character that can't be
-# in a key or start an escape such as \n (a backslash never ends a piece), so a huge database file
-# never loads at once and a piece never ends inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers; a worker exits when its parent or the
-# script that started everything is gone, so a kill -9 of the script stops them at the next piece.
+# total) first, and S (the folders it could not open, whose files are not in the total) when
+# there are any. Before printing, control characters become ? in a file name and a space in a
+# match, so neither a hostile folder name nor a newline or tab that happens to be the boundary
+# byte of a match can split a line or shift its fields. Files are read 1 MB at a time and cut
+# just after the last character that can't be in a key or start an escape such as \n (a backslash
+# never ends a piece), so a huge database file never loads at once and a piece never ends inside
+# a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers; a
+# worker exits when its parent or the script that started everything is gone, so a kill -9 of
+# the script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
 my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
 $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
-my @f;
-find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } },
-  map { -d $_ ? "$_/" : $_ } grep { -e } @ARGV);
+my @f; my $unread = 0;
+{
+  local $SIG{__WARN__} = sub { $unread++ if $_[0] =~ /^Can.t opendir/ };
+  find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } },
+    map { -d $_ ? "$_/" : $_ } grep { -e } @ARGV);
+}
 my %m; $m{$_} = (stat $_)[9] || 0 for @f;
 @f = sort { $m{$b} <=> $m{$a} or $a cmp $b } @f;
-$| = 1; print "T\t" . scalar(@f) . "\n";
+$| = 1; print "T\t" . scalar(@f) . "\n"; print "S\t$unread\n" if $unread;
 my $cut = $ENV{GIRD_CHECK_SESSIONS_STOP_AFTER};
 @f = @f[0 .. $cut - 1] if defined $cut && $cut =~ /^[0-9]+$/ && $cut < @f;
 my $n = $ENV{SESS_WORKERS} || 4; my $sel = IO::Select->new;
@@ -983,10 +991,10 @@ for my $w (0 .. $n - 1) {
     my $alive = sub { getppid() == $parent && kill(0, $owner) };
     FILE: for (my $i = $w; $i < @f; $i += $n) {
       exit 0 unless $alive->();
-      my $file = $f[$i];
-      if ($file =~ /\.zst$/) { print "Z\t$file\n"; next }
+      my $file = $f[$i]; (my $fn = $file) =~ tr/\x00-\x1f\x7f/?/;
+      if ($file =~ /\.zst$/) { print "Z\t$fn\n"; next }
       open(my $h, "<", $file) or next; binmode $h; local $/ = \1048576; my $buf = "";
-      my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { print "K\t$file\t$&\n" } } };
+      my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { (my $k = $&) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n" } } };
       while (defined(my $c = <$h>)) {
         exit 0 unless $alive->();
         select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
@@ -996,7 +1004,7 @@ for my $w (0 .. $n - 1) {
         $scan->(substr($buf, 0, $cut < 0 ? length($buf) : $cut, ""));
       }
       $scan->($buf) if length $buf;
-      close $h; print "D\t$file\n";
+      close $h; print "D\t$fn\n";
     }
     exit 0;
   }
@@ -1012,22 +1020,34 @@ while ($sel->count) {
 }
 1 while wait() != -1;'
 # Turns matches into "H<tab>file<tab>provider", once per file and provider, and drops keys that
-# look made up. T, D and Z lines pass through. Keys reach it through a pipe and stop here.
-sess_filter() {
-  awk -F '\t' "$PROV_AWK"'
-    function madeup(k,   i, c, run, last, n, seen) {
-      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|abcdef|ABCDEF/) return 1
-      run = 0; last = ""; n = 0
-      for (i = 1; i <= length(k); i++) {
+# look made up. T, D, Z and S lines pass through. Keys reach it through a pipe and stop here.
+# With rg, the input is ripgrep's own: the file, the NUL that --null puts after it (the one byte
+# a path can't hold) turned into a tab by tr, which turns every real tab into ?, then the match.
+# So a line without a tab is a piece of a file name that holds a newline, and the match may hold
+# any byte but a newline. No key is longer than 300 characters (GitHub's 93-character tokens are
+# the longest fixed format, OpenAI project keys run to about 170): a longer run of key characters
+# is data, not a key, and would make madeup() slow. Always called in a subshell (a pipe or a
+# background job): exec makes awk that job's own process, the one sess_stop signals.
+sess_filter() { # [rg]
+  exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK"'
+    function madeup(k,   i, c, run, last, n, seen, len) {
+      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF/) return 1
+      run = 0; last = ""; n = 0; len = length(k)
+      for (i = 1; i <= len; i++) {
         c = substr(k, i, 1)
         if (c == last) { if (++run >= 8) return 1 } else { run = 1; last = c }
         if (!(c in seen)) { seen[c] = 1; n++ }
       }
-      return n < (length(k) < 30 ? 8 : 12)
+      return n < (len < 30 ? 8 : 12)
     }
-    $1 == "T" || $1 == "D" || $1 == "Z" { print; fflush(); next }
+    rg == "" && ($1 == "T" || $1 == "D" || $1 == "Z" || $1 == "S") { print; fflush(); next }
     {
-      if ($1 == "K") { f = $2; k = $3 } else { f = $1; k = $2 }
+      if (rg != "") {
+        i = index($0, "\t")
+        if (i == 0) { part = part $0 "?"; next }
+        f = part substr($0, 1, i - 1); k = substr($0, i + 1); part = ""
+      } else if ($1 == "K") { f = $2; k = $3 } else next
+      if (length(k) > 300) next
       p = prov(k); if (p == "") next
       sub(/^[^A-Za-z]*\\[ntr"]/, "", k); sub(/^[^A-Za-z]+/, "", k); sub(/[^A-Za-z0-9_.-]+$/, "", k)
       if (madeup(k) || ((f "|" p) in done)) next
@@ -1041,23 +1061,31 @@ elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null | sed -n '1s/^ripg
 elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
 [ "$SESS_ENGINE" = rg ] && [ -z "$RG_BIN" ] && SESS_ENGINE=none
 [ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
+# SESS_FAIL is set when the check could not start, so the report can say the sessions were not checked.
+SESS_FAIL=0
 sess_start() {
   [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" != none ] || return 0
-  SESS_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || return 0
-  SESS_FIFO="$SESS_FILE.fifo"
-  # Keys pass through the fifo: only the owner may open it, whatever the umask (/tmp is shared on Linux).
-  mkfifo -m 600 "$SESS_FIFO" 2>/dev/null || { rm -f "$SESS_FILE"; SESS_FILE=""; SESS_FIFO=""; return 0; }
-  sess_filter < "$SESS_FIFO" > "$SESS_FILE" &
-  SESS_FILTER_PID=$!
+  # Keys pass through a pipe inside a folder that only the owner can open, whatever the umask
+  # (/tmp is shared on Linux), under a name nobody can guess in advance.
+  SESS_DIR=$(mktemp -d "$TMPD/blindspot.XXXXXX" 2>/dev/null) || { SESS_DIR=""; SESS_FAIL=1; return 0; }
+  SESS_FILE="$SESS_DIR/hits"; SESS_FIFO="$SESS_DIR/pipe"
+  mkfifo -m 600 "$SESS_FIFO" 2>/dev/null || { rm -rf "$SESS_DIR"; SESS_DIR=""; SESS_FILE=""; SESS_FIFO=""; SESS_FAIL=1; return 0; }
   _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
 $SESS_ROOTS
 EOF
   if [ "$SESS_ENGINE" = rg ]; then
-    "$RG_BIN" -a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename \
-      --field-match-separator="$(printf '\t')" -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+    [ -n "$GIRD_CHECK_SESSIONS_HOLD" ] && _roots+=("$GIRD_CHECK_SESSIONS_HOLD")  # tests only: a pipe nobody writes to holds ripgrep
+    # --null ends each file name with a NUL, the one byte a path can't hold: tr turns it into the
+    # tab the filter splits on, and every real tab into ?, so a file name can't shift the fields.
+    tr '\000\t' '\t?' < "$SESS_FIFO" | sess_filter rg > "$SESS_FILE" &
+    SESS_FILTER_PID=$!
+    "$RG_BIN" -a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
+      -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
     SESS_PID=$!
     [ "$WIN" -eq 1 ] && SESS_WIN=1
   else
+    sess_filter < "$SESS_FIFO" > "$SESS_FILE" &
+    SESS_FILTER_PID=$!
     _nw=$( (sysctl -n hw.ncpu || nproc || getconf _NPROCESSORS_ONLN) 2>/dev/null | head -n 1)
     case "$_nw" in ''|*[!0-9]*) _nw=4 ;; esac
     [ "$_nw" -gt 8 ] && _nw=8; [ "$_nw" -lt 1 ] && _nw=1
@@ -1065,18 +1093,25 @@ EOF
     SESS_PID=$!
   fi
 }
-# Stops the check, or waits for it with --all-sessions, and records how ripgrep ended.
-sess_stop() { # [wait]
-  [ -n "$SESS_PID" ] || return 0
-  if [ "${1:-}" = wait ]; then wait "$SESS_PID" 2>/dev/null; SESS_RC=$?
-  elif kill -0 "$SESS_PID" 2>/dev/null; then
-    if [ "$SESS_WIN" -eq 1 ] && [ -r "/proc/$SESS_PID/winpid" ]; then
-      taskkill //F //PID "$(cat "/proc/$SESS_PID/winpid")" >/dev/null 2>&1
-    fi
-    kill -TERM "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null; SESS_RC=stopped
-  else wait "$SESS_PID" 2>/dev/null; SESS_RC=$?; fi
-  SESS_PID=""
-  [ -n "$SESS_FILTER_PID" ] && { wait "$SESS_FILTER_PID" 2>/dev/null; SESS_FILTER_PID=""; }
+# Stops the check, or waits for it with --all-sessions, and records how ripgrep ended. Then the
+# filter: with the engine gone it reads what is left in the pipe and exits on its own, and gets
+# five seconds to; with kill (a signal: nothing left to keep) it is stopped at once.
+sess_stop() { # [wait|kill]
+  if [ -n "$SESS_PID" ]; then
+    if [ "${1:-}" = wait ]; then wait "$SESS_PID" 2>/dev/null; SESS_RC=$?
+    elif kill -0 "$SESS_PID" 2>/dev/null; then
+      if [ "$SESS_WIN" -eq 1 ] && [ -r "/proc/$SESS_PID/winpid" ]; then
+        taskkill //F //PID "$(cat "/proc/$SESS_PID/winpid")" >/dev/null 2>&1
+      fi
+      kill -TERM "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null; SESS_RC=stopped
+    else wait "$SESS_PID" 2>/dev/null; SESS_RC=$?; fi
+    SESS_PID=""
+  fi
+  [ -n "$SESS_FILTER_PID" ] || return 0
+  if [ "${1:-}" != kill ]; then
+    _i=0; while [ "$_i" -lt 50 ] && kill -0 "$SESS_FILTER_PID" 2>/dev/null; do sleep 0.1; _i=$((_i + 1)); done
+  fi
+  kill -TERM "$SESS_FILTER_PID" 2>/dev/null; wait "$SESS_FILTER_PID" 2>/dev/null; SESS_FILTER_PID=""
 }
 sess_start
 
@@ -2088,7 +2123,9 @@ OC=$(plat_hit opencode); RW=$(plat_hit railway)
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless --all-sessions asked to wait.
 if [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
-SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""
+# SESS_UNREAD counts the folders that could not be read (-1: some, ripgrep gives no count);
+# SESS_NOTRUN the files no engine looked at, because there is none or the check could not start.
+SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""; SESS_UNREAD=0; SESS_NOTRUN=0
 if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
   SESS_HITS=$(awk -F '\t' '$1 == "H" { print $2 "\t" $3 }' "$SESS_FILE")
   if [ "$SESS_ENGINE" = perl ]; then
@@ -2096,57 +2133,72 @@ if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
     SESS_DONE=$(grep -c '^D' "$SESS_FILE")
     # Stopped while still listing the files: count them here, none were checked.
     if [ -z "$SESS_TOTAL" ]; then
-      SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find "$_r" -type f 2>/dev/null; done | wc -l | tr -d ' ')
+      SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find "$_r" -type f -print0 2>/dev/null; done | tr -cd '\000' | wc -c | tr -d ' ')
     fi
     SESS_ZST=$(grep -c '^Z' "$SESS_FILE")
+    SESS_UNREAD=$(awk -F '\t' '$1 == "S" { print $2; exit }' "$SESS_FILE")
   else
     _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
 $SESS_ROOTS
 EOF
     _rs=(); for _r in "${_roots[@]}"; do if [ -d "$_r" ]; then _rs+=("$_r/"); else _rs+=("$_r"); fi; done
-    SESS_TOTAL=$(find "${_rs[@]}" -type f 2>/dev/null | wc -l | tr -d ' ')
-    SESS_ZST=$(find "${_rs[@]}" -type f -name '*.zst' 2>/dev/null | wc -l | tr -d ' ')
-    # ripgrep reports no progress per file: it either finished (0 or 1) or did not.
-    case "$SESS_RC" in 0|1) SESS_DONE=$((SESS_TOTAL - SESS_ZST)) ;; *) SESS_DONE=-1 ;; esac
+    # Counted by the NUL after each name, so a newline in a file name counts once.
+    SESS_TOTAL=$(find "${_rs[@]}" -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+    SESS_ZST=$(find "${_rs[@]}" -type f -name '*.zst' -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+    # ripgrep reports no progress per file: it finished (0 or 1), finished but could not read
+    # some file or folder (2), or was stopped before the end.
+    case "$SESS_RC" in 0|1) SESS_DONE=$((SESS_TOTAL - SESS_ZST)) ;; 2) SESS_DONE=$((SESS_TOTAL - SESS_ZST)); SESS_UNREAD=-1 ;; *) SESS_DONE=-1 ;; esac
   fi
-elif [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" = none ]; then
-  SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | tr '\n' '\0' | xargs -0 -I{} find {} -type f 2>/dev/null | wc -l | tr -d ' ')
+elif [ -n "$SESS_ROOTS" ] && { [ "$SESS_ENGINE" = none ] || [ "$SESS_FAIL" -eq 1 ]; }; then
+  SESS_NOTRUN=$(printf '%s\n' "$SESS_ROOTS" | tr '\n' '\0' | xargs -0 -I{} find {} -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+  case "$SESS_NOTRUN" in ''|*[!0-9]*) SESS_NOTRUN=0 ;; esac
+  SESS_TOTAL=$SESS_NOTRUN
 fi
 case "$SESS_TOTAL" in ''|*[!0-9]*) SESS_TOTAL=0 ;; esac
-# Aider keeps its history in each project, found by the home scan, and is checked here.
+case "$SESS_UNREAD" in ''|*[!0-9-]*) SESS_UNREAD=0 ;; esac
+# Aider keeps its history in each project, found by the home scan, and is checked here. The file
+# name and the match are cleaned of control characters as the perl engine cleans its own, so a
+# tab in a cloned repo's folder name can't shift the fields.
 while IFS= read -r f; do
   [ -n "$f" ] && [ -r "$f" ] || continue
   SESS_TOTAL=$((SESS_TOTAL + 1)); [ "$SESS_DONE" -ge 0 ] && SESS_DONE=$((SESS_DONE + 1))
-  _h=$(grep -aoE "$TR_KEYS" "$f" 2>/dev/null | SESS_F=$f awk '{ print "K\t" ENVIRON["SESS_F"] "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
+  _h=$(grep -aoE "$TR_KEYS" "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
   [ -n "$_h" ] && SESS_HITS="$SESS_HITS
 $_h"
 done <<EOF
 $AIDER_FILES
 EOF
-# Which agent each file belongs to, then one row per agent: agent|files|providers.
-sess_agent() {
-  case "$1" in */.aider.chat.history.md) printf 'Aider'; return ;; esac
+# Which agent each file belongs to and where it was found: the session folder it is under, or the
+# file itself when the location is one file (Codex's history.jsonl, an Aider history). The report
+# names places, not session files: a session file's path can spell out a project folder (Claude
+# Code keeps sessions under one named after the project's full path), which would put a username
+# and a project into a report pasted into an issue.
+sess_where() { # file: sets S_AGENT and S_PLACE
+  case "$1" in */.aider.chat.history.md) S_AGENT=Aider; S_PLACE=$1; return ;; esac
   while IFS='|' read -r _a _p; do
-    case "$1" in "$_p"|"$_p"/*) printf '%s' "$_a"; return ;; esac
+    case "$1" in "$_p"|"$_p"/*) S_AGENT=$_a; S_PLACE=$_p; return ;; esac
   done <<EOF
 $SESS_SOURCES
 EOF
-  printf 'Other'
+  S_AGENT=Other; S_PLACE=${1%/*}
 }
-SESS_ROWS=""; SESS_FILES=""; N_SESS=0
+SESS_ROWS=""; SESS_FILES=""; SESS_PLACES=""; N_SESS=0; N_PLACES=0
 if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
   SESS_TAGGED=$(printf '%s\n' "$SESS_HITS" | while IFS="$(printf '\t')" read -r f p; do
-    [ -n "$f" ] && printf '%s\t%s\t%s\n' "$(sess_agent "$f")" "$f" "$p"
+    [ -n "$f" ] || continue
+    sess_where "$f"; printf '%s\t%s\t%s\t%s\n' "$S_AGENT" "$f" "$p" "$S_PLACE"
   done)
   SESS_FILES=$(printf '%s\n' "$SESS_TAGGED" | cut -f2 | sort -u)
   N_SESS=$(count_lines "$SESS_FILES")
+  SESS_PLACES=$(printf '%s\n' "$SESS_TAGGED" | cut -f4 | sort -u)
+  N_PLACES=$(count_lines "$SESS_PLACES")
   SESS_ROWS=$(printf '%s\n' "$SESS_TAGGED" | awk -F '\t' '
     !(($1 "|" $2) in f) { f[$1 "|" $2] = 1; n[$1]++; if (!($1 in o)) { o[$1] = ++k; name[k] = $1 } }
     !(($1 "|" $3) in pv) { pv[$1 "|" $3] = 1; ps[$1] = ps[$1] (ps[$1] == "" ? "" : ", ") $3 }
     END { for (i = 1; i <= k; i++) print name[i] "|" n[name[i]] "|" ps[name[i]] }' | sort -t '|' -k2,2nr -k1,1)
 fi
 SESS_PARTIAL=0
-if [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_ENGINE" = none ] || [ "$SESS_DONE" -lt 0 ] || [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; }; then SESS_PARTIAL=1; fi
+if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt 0 ] || [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; }; }; then SESS_PARTIAL=1; fi
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done)
 if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent session file" "agent session files")"; fi
 
@@ -2475,7 +2527,7 @@ if [ -n "$LOGINS" ]; then
   emit "     ${B}Login files any agent you run can read${RST}"
   wrap "$LOGINS" 8 "        " "        "
 fi
-if [ "$SESS_TOTAL" -gt 0 ] || [ -n "$SESS_SEALED_FOUND" ]; then
+if [ "$SESS_TOTAL" -gt 0 ] || [ "$SESS_UNREAD" -ne 0 ] || [ -n "$SESS_SEALED_FOUND" ]; then
   blank
   emit "     ${B}Keys in agent sessions${RST}"
   while IFS='|' read -r a n pv; do
@@ -2490,20 +2542,26 @@ EOF
       [ -n "$f" ] || continue
       _shown=$((_shown + 1)); [ "$_shown" -le 20 ] && emit "        ${DIM}$(short "$f")${RST}"
     done <<EOF
-$SESS_FILES
+$SESS_PLACES
 EOF
-    [ "$N_SESS" -gt 20 ] && emit "        ${DIM}and $((N_SESS - 20)) more${RST}"
+    [ "$N_PLACES" -gt 20 ] && emit "        ${DIM}and $((N_PLACES - 20)) more${RST}"
     wrap "Treat these keys as exposed and rotate them." 8 "        " "        "
   fi
   _all="Install ripgrep, or add --all-sessions, to check all of them."
-  if [ "$SESS_TOTAL" -gt 0 ] && [ "$SESS_ENGINE" = none ]; then
-    wrap "$(plural "$SESS_TOTAL" "agent session file was" "agent session files were") not checked: this needs perl or ripgrep." 8 "     ${YEL}!${RST}  " "        "
+  if [ "$SESS_NOTRUN" -gt 0 ]; then
+    if [ "$SESS_FAIL" -eq 1 ]; then _why="the check could not start"; else _why="this needs perl or ripgrep"; fi
+    wrap "$(plural "$SESS_NOTRUN" "agent session file was" "agent session files were") not checked: $_why." 8 "     ${YEL}!${RST}  " "        "
   elif [ "$SESS_DONE" -lt 0 ]; then
     wrap "Agent sessions were partly checked. Add --all-sessions to check all of them." 8 "     ${YEL}!${RST}  " "        "
   elif [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; then
     wrap "Checked the newest $(commas "$SESS_DONE") of $(commas "$SESS_TOTAL") agent session files. $_all" 8 "     ${YEL}!${RST}  " "        "
-  elif [ "$N_SESS" -eq 0 ] && [ "$SESS_TOTAL" -gt 0 ]; then
+  elif [ "$N_SESS" -eq 0 ] && [ "$SESS_TOTAL" -gt 0 ] && [ "$SESS_UNREAD" -eq 0 ]; then
     emit "     ${GRN}✓${RST}  No keys in $(plural "$(commas "$SESS_TOTAL")" "agent session file" "agent session files")."
+  fi
+  if [ "$SESS_UNREAD" -gt 0 ]; then
+    wrap "Agent sessions were partly checked: $(plural "$SESS_UNREAD" "folder" "folders") could not be read." 8 "     ${YEL}!${RST}  " "        "
+  elif [ "$SESS_UNREAD" -lt 0 ]; then
+    wrap "Agent sessions were partly checked: some files or folders could not be read." 8 "     ${YEL}!${RST}  " "        "
   fi
   [ "$SESS_ZST" -gt 0 ] && wrap "$(plural "$SESS_ZST" "compressed session file was" "compressed session files were") not checked." 8 "        " "        " "$DIM"
   [ -n "$SESS_SEALED_FOUND" ] && wrap "$(printf '%s' "$SESS_SEALED_FOUND" | tr '\n' ',' | sed -e 's/,$//' -e 's/,/ and /g') sessions are stored encrypted, so they were not checked." 8 "        " "        " "$DIM"
@@ -2727,7 +2785,7 @@ elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in t
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST%%|*}") (${KEY_FIRST#*|})"
 elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST%%|*}") holds ${KEY_FIRST#*|} keys"
-elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session" "agent sessions"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
+elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session file" "agent session files"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
 elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agent sessions partly checked"
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
 else G3="${GRN}✓${RST}"; D3="no AI or cloud keys in plain text"; fi

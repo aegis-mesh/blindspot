@@ -72,8 +72,9 @@ printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}
 # Lockfiles with good versions of packages that once had bad ones.
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.10","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.10.tgz"},"node_modules/my-axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/my-axios/-/my-axios-1.14.1.tgz"},"node_modules/keyv-x":{"resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.0-beta.1.tgz"},"node_modules/keyv":{"version":"6.0.1","resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.1.tgz"}}}\n' > "$F/code/lib/package-lock.json"
 if [ "$MODE" = full ]; then
-  # Agent sessions: a key right after an escaped newline, a made-up one, and one per agent.
-  printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s docs AKIAIOSFODNN7EXAMPLE and ghp_%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" "$(printf 'ab%.0s' $(seq 1 18))" > "$F/.claude/projects/p1/k.jsonl"
+  # Agent sessions: a key right after an escaped newline, made-up ones (a run of one letter, a
+  # documented example, a two-letter pattern, counting digits), and one per agent.
+  printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s docs AKIAIOSFODNN7EXAMPLE and ghp_%s or gsk_1234567890%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" "$(printf 'ab%.0s' $(seq 1 18))" "$(rnd 42)" > "$F/.claude/projects/p1/k.jsonl"
   mkdir -p "$F/.codex/sessions/2026/10"
   # A real-looking AWS key with only 11 different characters still counts.
   printf '{"payload":{"output":"OPENAI_API_KEY=%s aws AKIA2B2B3C3C4D4D5E5E"}}\n' "$OPENAI" > "$F/.codex/sessions/2026/10/rollout-k.jsonl"

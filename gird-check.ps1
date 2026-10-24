@@ -302,8 +302,11 @@ function Has-RealMatch([string]$f, [regex]$rx) {
 # background session check can load the same functions.
 $KeyFns = $KeyProviderFn + @'
 function Made-Up([string]$k) {
+  # No key is longer than 300 characters (GitHub's 93-character tokens are the longest fixed
+  # format, OpenAI project keys run to about 170): a longer run of key characters is data.
+  if ($k.Length -gt 300) { return $true }
   $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' -replace '[^A-Za-z0-9_.-]+$', ''
-  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
+  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
   $set = New-Object 'System.Collections.Generic.HashSet[char]'
   foreach ($c in $k.ToCharArray()) { [void]$set.Add($c) }
   $min = 12; if ($k.Length -lt 30) { $min = 8 }
@@ -653,6 +656,32 @@ $SessTable = @(
 $SessSources = @($SessTable | Where-Object { $_[0] -eq 'read' } | ForEach-Object { , @($_[1], $_[2]) })
 $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Object { , @($_[1], $_[2]) })
 $SessRoots = @($SessSources | ForEach-Object { $_[1] } | Where-Object { Exists $_ } | Select-Object -Unique)
+# Lists the files under the session roots one folder at a time, so a folder that can't be read is
+# counted in $st.Skipped and the rest are still listed (EnumerateFiles over all folders at once
+# stops at the first one it can't open, and drops the rest of that root). Folders that are links
+# are not followed, as ripgrep and gird-check.sh's perl do not. Text, so the background session
+# check can load it too; it returns the list as one object.
+$SessListFn = @'
+function Sess-List($roots, $st) {
+  $files = New-Object System.Collections.Generic.List[object]
+  $dirs = New-Object System.Collections.Generic.Stack[object]
+  foreach ($r in $roots) {
+    try {
+      if ([IO.File]::Exists($r)) { $files.Add((New-Object IO.FileInfo $r)) } else { $dirs.Push((New-Object IO.DirectoryInfo $r)) }
+    } catch { $st.Skipped++ }
+  }
+  while ($dirs.Count -gt 0) {
+    if ($st.Stop) { break }
+    $d = $dirs.Pop()
+    try {
+      foreach ($f in $d.EnumerateFiles()) { $files.Add($f) }
+      foreach ($sd in $d.EnumerateDirectories()) { if (($sd.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $dirs.Push($sd) } }
+    } catch { $st.Skipped++ }
+  }
+  ,$files
+}
+'@
+. ([scriptblock]::Create($SessListFn))
 # Runs in its own runspace: lists the files newest first and checks them until told to stop, or
 # lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
 $SessWorker = {
@@ -668,25 +697,28 @@ $SessWorker = {
   if ($hold) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }  # tests only
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
-    $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
+    $pf = $null
     try {
+      $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
       $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($roots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
-      while ($null -ne ($l = $st.Proc.StandardOutput.ReadLine())) { $i = $l.IndexOf([char]0); if ($i -gt 0) { & $hit $l.Substring(0, $i) $l.Substring($i + 1) } }
+      # --null ends the file name with a NUL, the one character a path can't hold. A line without
+      # one is a piece of a file name that holds a newline.
+      $frag = ''
+      while ($null -ne ($l = $st.Proc.StandardOutput.ReadLine())) {
+        $i = $l.IndexOf([char]0)
+        if ($i -lt 0) { $frag += $l + '?'; continue }
+        & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1); $frag = ''
+      }
       $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
-    } catch { } finally { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
     return
   }
   # Stopped while still listing: Listed stays false and the report says the sessions were not all checked.
-  $files = New-Object System.Collections.Generic.List[object]
-  foreach ($r in $roots) {
-    try {
-      if ([IO.File]::Exists($r)) { $files.Add((New-Object IO.FileInfo $r)) }
-      else { foreach ($f in (New-Object IO.DirectoryInfo $r).EnumerateFiles('*', [IO.SearchOption]::AllDirectories)) { if ($st.Stop) { return }; $files.Add($f) } }
-    } catch { }
-  }
+  $files = Sess-List $roots $st
+  if ($st.Stop) { return }
   $sorted = @($files | Sort-Object -Property @{ Expression = 'LastWriteTimeUtc'; Descending = $true }, FullName)
   $st.Total = $sorted.Count; $st.Listed = $true
   $n = 0; $latin = [Text.Encoding]::GetEncoding(28591); $buf = New-Object char[] 1048576
@@ -719,7 +751,7 @@ $SessWorker = {
     } catch { } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -730,7 +762,7 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
   $SessHandle = $SessPs.BeginInvoke()
 }
 # Stops the check, or waits for it with -AllSessions.
@@ -1653,16 +1685,20 @@ $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
 Sess-Stop $OptAllSess
-$SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst
+# SESS_UNREAD counts the folders that could not be read (-1: some, rg.exe gives no count);
+# SESS_NOTRUN the files no engine looked at, because there is none or the check could not start.
+$SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst; $SESS_UNREAD = [int]$SessSt.Skipped; $SESS_NOTRUN = 0
 if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
-  $sessAll = New-Object System.Collections.Generic.List[string]
-  foreach ($r in $SessRoots) {
-    try { if ([IO.File]::Exists($r)) { $sessAll.Add($r) } else { foreach ($f in [IO.Directory]::EnumerateFiles($r, '*', [IO.SearchOption]::AllDirectories)) { $sessAll.Add($f) } } } catch { }
-  }
-  $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.EndsWith('.zst') }).Count
-  # rg.exe reports no progress per file: it either finished (0 or 1) or did not.
-  if ($SessEngine -eq 'rg' -and -not $SessSt.Stopped -and ($SessSt.RgExit -eq 0 -or $SessSt.RgExit -eq 1)) { $SESS_DONE = $SESS_TOTAL - $SESS_ZST } elseif ($SessEngine -eq 'rg') { $SESS_DONE = -1 } else { $SESS_DONE = 0 }
-  if ($SessEngine -eq 'net' -and -not $SessSt.Listed) { $SESS_DONE = 0 }
+  $cnt = @{ Skipped = 0; Stop = $false }
+  $sessAll = Sess-List $SessRoots $cnt
+  $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.Name.EndsWith('.zst') }).Count; $SESS_UNREAD = [int]$cnt.Skipped
+  # rg.exe reports no progress per file: it finished (0 or 1), finished but could not read some
+  # file or folder (2), or was stopped before the end.
+  if ($SessEngine -eq 'none' -or $SessSt.Failed) { $SESS_NOTRUN = $SESS_TOTAL; $SESS_DONE = 0 }
+  elseif ($SessEngine -eq 'rg' -and -not $SessSt.Stopped -and ($SessSt.RgExit -eq 0 -or $SessSt.RgExit -eq 1)) { $SESS_DONE = $SESS_TOTAL - $SESS_ZST }
+  elseif ($SessEngine -eq 'rg' -and -not $SessSt.Stopped -and $SessSt.RgExit -eq 2) { $SESS_DONE = $SESS_TOTAL - $SESS_ZST; $SESS_UNREAD = -1 }
+  elseif ($SessEngine -eq 'rg') { $SESS_DONE = -1 }
+  else { $SESS_DONE = 0 }
 }
 $sessHits = New-Object System.Collections.Generic.List[string]
 foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
@@ -1674,21 +1710,30 @@ foreach ($f in $AiderFiles) {
   $seenA = @{}
   try { foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } } } catch { Mark-Slow $f }
 }
-function Sess-Agent([string]$f) {
-  if ($f.EndsWith('.aider.chat.history.md')) { return 'Aider' }
-  foreach ($src in $SessSources) { if ($f.Equals($src[1], $PathCmp) -or $f.StartsWith($src[1] + [IO.Path]::DirectorySeparatorChar, $PathCmp) -or $f.StartsWith($src[1] + '/', $PathCmp)) { return $src[0] } }
-  'Other'
+# Which agent a file belongs to and where it was found: the session folder it is under, or the
+# file itself when the location is one file (Codex's history.jsonl, an Aider history). The report
+# names places, not session files: a session file's path can spell out a project folder (Claude
+# Code keeps sessions under one named after the project's full path), which would put a username
+# and a project into a report pasted into an issue.
+function Sess-Where([string]$f) {
+  if ($f.EndsWith('.aider.chat.history.md')) { return @('Aider', $f) }
+  foreach ($src in $SessSources) { if ($f.Equals($src[1], $PathCmp) -or $f.StartsWith($src[1] + [IO.Path]::DirectorySeparatorChar, $PathCmp) -or $f.StartsWith($src[1] + '/', $PathCmp)) { return @($src[0], $src[1]) } }
+  @('Other', [IO.Path]::GetDirectoryName($f))
 }
-$SessFiles = New-Object System.Collections.Generic.List[string]; $sessAg = [ordered]@{}
+$SessFiles = New-Object System.Collections.Generic.List[string]; $SessPlaces = New-Object System.Collections.Generic.List[string]; $sessAg = [ordered]@{}
 foreach ($h in $sessHits) {
-  $f, $p = $h -split "`t", 2; $a = Sess-Agent $f
-  if (-not $SessFiles.Contains($f)) { $SessFiles.Add($f); if (-not $sessAg.Contains($a)) { $sessAg[$a] = @{ N = 0; P = (New-Object System.Collections.Generic.List[string]) } }; $sessAg[$a].N++ }
+  # The provider comes last and holds no tab, so a tab in a file name can't shift the split.
+  $at = $h.LastIndexOf("`t"); $f = $h.Substring(0, $at); $p = $h.Substring($at + 1); $a, $where = Sess-Where $f
+  if (-not $SessFiles.Contains($f)) {
+    $SessFiles.Add($f); if (-not $SessPlaces.Contains($where)) { $SessPlaces.Add($where) }
+    if (-not $sessAg.Contains($a)) { $sessAg[$a] = @{ N = 0; P = (New-Object System.Collections.Generic.List[string]) } }; $sessAg[$a].N++
+  }
   if (-not $sessAg[$a].P.Contains($p)) { $sessAg[$a].P.Add($p) }
 }
-$SessFiles.Sort([StringComparer]::Ordinal)
-$N_SESS = $SessFiles.Count
+$SessFiles.Sort([StringComparer]::Ordinal); $SessPlaces.Sort([StringComparer]::Ordinal)
+$N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
-$SESS_PARTIAL = $SESS_TOTAL -gt 0 -and ($SessEngine -eq 'none' -or $SESS_DONE -lt 0 -or $SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST))
+$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt 0 -or $SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST)))
 $SessSealedFound = @($SessSealed | Where-Object { Is-Dir $_[1] } | ForEach-Object { $_[0] })
 if ($N_SESS -gt 0) { Progress "Keys in $(Plural $N_SESS 'agent session file' 'agent session files')" }
 
@@ -1935,20 +1980,25 @@ if ($LoginsText) {
   Emit "     ${cBold}Login files any agent you run can read$cRst"
   Wrap $LoginsText 8 '        ' '        '
 }
-if ($SESS_TOTAL -gt 0 -or $SessSealedFound.Count -gt 0) {
+if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedFound.Count -gt 0) {
   Blank
   Emit "     ${cBold}Keys in agent sessions$cRst"
   foreach ($r in $SessRows) { Pair "$cRed$gX$cRst" $r[0] 20 "$(Plural $r[1] 'file' 'files'): $($r[2])" }
   if ($N_SESS -gt 0) {
-    foreach ($f in ($SessFiles | Select-Object -First 20)) { Emit "        $cDim$(Short $f)$cRst" }
-    if ($N_SESS -gt 20) { Emit "        ${cDim}and $($N_SESS - 20) more$cRst" }
+    foreach ($f in ($SessPlaces | Select-Object -First 20)) { Emit "        $cDim$(Short $f)$cRst" }
+    if ($N_PLACES -gt 20) { Emit "        ${cDim}and $($N_PLACES - 20) more$cRst" }
     Wrap 'Treat these keys as exposed and rotate them.' 8 '        ' '        '
   }
   $allTxt = 'Install ripgrep, or add -AllSessions, to check all of them.'
-  if ($SESS_TOTAL -gt 0 -and $SessEngine -eq 'none') { Wrap "$(Plural $SESS_TOTAL 'agent session file was' 'agent session files were') not checked." 8 "     $cYel!$cRst  " '        ' }
+  if ($SESS_NOTRUN -gt 0) {
+    $why = '.'; if ($SessSt.Failed) { $why = ': the check could not start.' }
+    Wrap "$(Plural $SESS_NOTRUN 'agent session file was' 'agent session files were') not checked$why" 8 "     $cYel!$cRst  " '        '
+  }
   elseif ($SESS_DONE -lt 0) { Wrap 'Agent sessions were partly checked. Add -AllSessions to check all of them.' 8 "     $cYel!$cRst  " '        ' }
   elseif ($SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
-  elseif ($N_SESS -eq 0 -and $SESS_TOTAL -gt 0) { Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_TOTAL) 'agent session file' 'agent session files')." }
+  elseif ($N_SESS -eq 0 -and $SESS_TOTAL -gt 0 -and $SESS_UNREAD -eq 0) { Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_TOTAL) 'agent session file' 'agent session files')." }
+  if ($SESS_UNREAD -gt 0) { Wrap "Agent sessions were partly checked: $(Plural $SESS_UNREAD 'folder' 'folders') could not be read." 8 "     $cYel!$cRst  " '        ' }
+  elseif ($SESS_UNREAD -lt 0) { Wrap 'Agent sessions were partly checked: some files or folders could not be read.' 8 "     $cYel!$cRst  " '        ' }
   if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 '        ' '        ' $cDim }
   if ($SessSealedFound.Count -gt 0) { Wrap "$($SessSealedFound -join ' and ') sessions are stored encrypted, so they were not checked." 8 '        ' '        ' $cDim }
 }
@@ -2075,7 +2125,7 @@ elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no token
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
 elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) holds $($KeyFirst[1]) keys" }
-elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session' 'agent sessions'): $($SessRows[0][0])" }
+elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session file' 'agent session files'): $($SessRows[0][0])" }
 elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessions partly checked' }
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
 else { $G3 = "$cGrn$gOk$cRst"; $D3 = 'no AI or cloud keys in plain text' }
