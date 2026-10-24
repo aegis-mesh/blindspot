@@ -5,6 +5,15 @@ only) must find the same things and print the same report. A change to one lands
 test in each suite. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules the scripts keep and the review
 checklist; read it first.
 
+## This repository is public
+
+Everything here is published: files, comments, commit messages, pull request descriptions, review
+comments and issues. Write each one for a stranger reading it, and choose what goes in on purpose.
+Never include GIRD internals: names of private repositories, internal tools or agents, servers,
+endpoints, tokens, customer or tenant details, or how GIRD's other products are built. Describe
+only what this repo's code does. If a reason for a change is internal, state the public effect and
+leave the internal part out.
+
 ## Tests
 
 - Every test in `tests/run.sh` needs a twin of the same name in `tests/run-ps.sh`, or a line in
