@@ -1,0 +1,69 @@
+# Tests in tests/run.sh that have no twin in tests/run-ps.sh, one per line: the test's name as
+# tests/parity.sh reads it, a tab, and why it can't or need not run for gird-check.ps1. A name
+# listed twice covers two of its uses. "Not written yet" is not a reason: write the twin.
+a Python incident that is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python name with a hyphen	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a line that is not ASCII	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a planted file in another folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a planted file listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform advice with a $	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform path that is only the home	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform with another found word	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a site file with a slash	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a startup line with no note	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a startup path with a glob	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a temp name of dots	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a wiper file that is not gh-token-monitor	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+advice on an incident with no package to show it	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve line with another os	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve line with no pattern	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve path with a glob	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve pattern with a quote	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve project path that climbs	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension listed twice, in another case	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension version that is not a version	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension whose incident is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident advice with a quote	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident source that is not https	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident with an empty advice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident with another level	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident with no month	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an npm package with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated line of another kind	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated line that disagrees with its tool	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated plist that is not Info.plist	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated range that does not parse	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+npm's -security placeholder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+both scripts match the data files	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+perl and ripgrep report the same	the perl session engine and its worker processes, fifo and signals are gird-check.sh's; gird-check.ps1 checks sessions in a runspace inside its own process
+kill -9 of the script stops the workers	the perl session engine and its worker processes, fifo and signals are gird-check.sh's; gird-check.ps1 checks sessions in a runspace inside its own process
+no engine process is left running	the perl session engine and its worker processes, fifo and signals are gird-check.sh's; gird-check.ps1 checks sessions in a runspace inside its own process
+HUP leaves no engine process	the perl session engine and its worker processes, fifo and signals are gird-check.sh's; gird-check.ps1 checks sessions in a runspace inside its own process
+no fifo is left behind	the perl session engine and its worker processes, fifo and signals are gird-check.sh's; gird-check.ps1 checks sessions in a runspace inside its own process
+the fifo keys pass through is the owner's only	the perl session engine and its worker processes, fifo and signals are gird-check.sh's; gird-check.ps1 checks sessions in a runspace inside its own process
+rg: a stuck ripgrep does not hold up the check	a fifo and HUP are Unix: gird-check.ps1 runs ripgrep on Windows, where neither exists
+rg: no ripgrep process is left running	a fifo and HUP are Unix: gird-check.ps1 runs ripgrep on Windows, where neither exists
+rg: HUP leaves no ripgrep process	a fifo and HUP are Unix: gird-check.ps1 runs ripgrep on Windows, where neither exists
+Linux is pointed at its keyring	the OS is faked with a uname stand-in; gird-check.ps1 takes the OS from the file system and .NET, which can't be faked on this Mac
+Linux is not told to use the Keychain	the OS is faked with a uname stand-in; gird-check.ps1 takes the OS from the file system and .NET, which can't be faked on this Mac
+Linux is told how to stop the wiper	the OS is faked with a uname stand-in; gird-check.ps1 takes the OS from the file system and .NET, which can't be faked on this Mac
+Linux is not given the Mac command	the OS is faked with a uname stand-in; gird-check.ps1 takes the OS from the file system and .NET, which can't be faked on this Mac
+on Linux, transformers.pyz is the mistralai hit	the OS is faked with a uname stand-in; gird-check.ps1 takes the OS from the file system and .NET, which can't be faked on this Mac
+and the link flags it	the OS is faked with a uname stand-in; gird-check.ps1 takes the OS from the file system and .NET, which can't be faked on this Mac
+macOS is pointed at the Keychain	macOS advice: gird-check.sh is the script for macOS, and gird-check.ps1 never points at the Keychain
+Windows bash is pointed at Credential Manager	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
+Windows: keys in the shell's own home too	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
+Windows: os is Windows 11 for build 22000 and up	Git Bash reads the Windows version from reg and uname, faked here; gird-check.ps1 reads it from .NET, which can't be faked on this Mac
+Windows: os is Windows 10 from uname's build when reg has none	Git Bash reads the Windows version from reg and uname, faked here; gird-check.ps1 reads it from .NET, which can't be faked on this Mac
+WSL is pointed at a secrets manager	WSL: gird-check.sh run inside Linux on Windows; gird-check.ps1 does not run there
+WSL is not told to use a desktop keyring	WSL: gird-check.sh run inside Linux on Windows; gird-check.ps1 does not run there
+WSL says Windows-side files were not checked	WSL: gird-check.sh run inside Linux on Windows; gird-check.ps1 does not run there
+only WSL, not plain Linux, gets the WSL note and loses the keyring advice	WSL: gird-check.sh run inside Linux on Windows; gird-check.ps1 does not run there
+WSL reports os Linux while giving the WSL advice	WSL: gird-check.sh run inside Linux on Windows; gird-check.ps1 does not run there
+nothing found: it says this is not a guarantee	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never does; its twin checks the line every other system gets
+a pyc-only run counts its things to fix	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never does; its twin checks the line every other system gets
+a pyc-only run still says the scan is a snapshot	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never does; its twin checks the line every other system gets
+without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with ConvertFrom-Json

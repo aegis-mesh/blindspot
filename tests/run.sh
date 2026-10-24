@@ -920,6 +920,10 @@ fi
 echo "help"
 if bash "$SCRIPT" --help | grep -q -- '--offline'; then ok "--help lists the options"; else bad "--help lists the options"; fi
 
+echo "the two suites"
+if bash tests/parity.sh > "$WORK/parity.txt" 2>&1; then ok "the two suites test the same things"
+else bad "the two suites test the same things"; grep -v '^    ' "$WORK/parity.txt" | sed 's/^/      /'; fi
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
