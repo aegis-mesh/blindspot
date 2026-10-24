@@ -26,13 +26,13 @@ PATH_OK='function path_ok(p,   r) {
 # incident id no line of data/incidents.tsv has.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
       rows data/incidents.tsv | awk -F '\t' 'NF != 6 || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9]{4}$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
-      rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
+      rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /-security$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' 'NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || $4 ~ /[\047"`$|\\]/ || $4 ~ /\{ENV:[^}]*\{/ { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused.
       rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 3 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 { print "data/bad-pypi.tsv: " $0 }'
       rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" "$PATH_OK"'
         NF != 6 || index(ids, " " $1 " ") == 0 || $2 !~ /^(all|mac|linux|win)$/ || $3 !~ /^(wiper|startup|site|temp)$/ || $4 !~ /^(yes|no)$/ ||
-        ($3 ~ /^(wiper|startup)$/ && !path_ok($5)) || ($3 == "site" && $5 !~ /^[A-Za-z0-9._-]+$/) || ($3 == "temp" && $5 !~ /^[A-Za-z0-9._-]+\*?$/) ||
+        ($3 ~ /^(wiper|startup)$/ && !path_ok($5)) || ($3 == "wiper" && $5 !~ /gh-token-monitor/) || ($3 == "site" && $5 !~ /^[A-Za-z0-9._-]+$/) || ($3 == "temp" && $5 !~ /^[A-Za-z0-9._-]+\*?$/) ||
         ($3 ~ /^(site|temp)$/ && ($5 ~ /^\.+\*?$/ || index(acts, " " $1 " ") == 0)) ||
         ($3 == "startup" && ($6 == "-" || $6 ~ /[\047"`$|\\]/)) || ($3 != "startup" && $6 != "-") { print "data/indicators.tsv: " $0 }'
       rows data/planted.tsv | awk -F '\t' -v ids="$IDS" 'NF != 4 || $1 !~ /^\.(claude|vscode)$/ || $2 !~ /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/ || index(ids, " " $3 " ") == 0 || $4 == "" || $4 ~ /[\047"`$|\\]/ || seen[$1 "/" $2]++ { print "data/planted.tsv: " $0 }'
@@ -40,6 +40,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $2 ~ /[\047"`$\\]/ || $3 ~ /[
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
         !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')
+# The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
+bad="$bad$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII: /')"
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
 
 # Path tokens (see data/sessions.tsv) as bash and as PowerShell. A trailing / is kept in bash.

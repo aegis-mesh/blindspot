@@ -1,7 +1,7 @@
 # Files malware leaves on disk. One line each, tab separated. After editing, run: bash tools/gen.sh
 #   incident  an id from data/incidents.tsv
 #   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
-#   kind      wiper    a file of gh-token-monitor, the wiper that runs a destructive command when a
+#   kind      wiper    a file of gh-token-monitor (its path must name it), the wiper that runs a destructive command when a
 #                      stolen GitHub token is revoked. Section 5 tells people to stop it first.
 #             startup  a file that starts malware at login; the note is shown under it
 #             site     a file in any Python environment's site-packages: a Python incident's hit
@@ -10,7 +10,7 @@
 #   path      wiper and startup: a file or folder, with the path tokens data/sessions.tsv uses, an
 #             absolute path, or {PROGRAMDATA} (Windows' ProgramData). site and temp: a file name
 #   note      startup: what the file does, as shown. - for the other kinds
-# gh-token-monitor: Wiz (TanStack wave) and SANS (keyv wave). Mastra: Socket. LiteLLM: its advisory.
+# gh-token-monitor: Wiz (TanStack wave) and SANS (keyv wave). Mastra: Socket. LiteLLM and mistralai: their advisories.
 # incident	os	kind	owner	path	note
 tanstack	all	wiper	no	~/Library/LaunchAgents/com.user.gh-token-monitor.plist	-
 tanstack	all	wiper	no	~/.config/systemd/user/gh-token-monitor.service	-
@@ -29,3 +29,4 @@ litellm	all	temp	no	remote_code_loader.lock	-
 litellm	all	temp	no	.pc_once_*	-
 litellm	all	temp	no	.pc_sq_*	-
 litellm	all	temp	no	.pc_e_*	-
+mistralpy	linux	temp	no	transformers.pyz	-

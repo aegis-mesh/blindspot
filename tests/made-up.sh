@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Proves that a new incident of each data-only kind needs nothing but data lines: copies the repo
+# Proves that a new incident of each data-only kind (and a new gh-token-monitor file) needs nothing but data lines: copies the repo
 # to REPO, appends a made-up incident of each kind to the data files, runs tools/gen.sh there, and
 # checks that only the generated blocks changed. Then plants matching files in HOME (a copy of a
 # clean fixture home) and in HOME/tmp for the temp folder. The suites run the copy's scripts.
@@ -14,11 +14,14 @@ cat >> "$R/data/incidents.tsv" <<EOF
 madeplat${T}Made Platform${T}October 2026${T}a made-up platform leak for the tests${T}https://example.com/madeplat${T}act
 madeworm${T}Made worm${T}October 2026${T}a made-up worm for the tests${T}https://example.com/madeworm${T}act
 madepy${T}Madepkg 9.9.9${T}October 2026${T}a made-up Python package for the tests${T}https://example.com/madepy/advisory${T}act
+madenpm${T}Made npm worm${T}October 2026${T}a made-up npm worm for the tests${T}https://example.com/madenpm${T}act
+madeupd${T}Made npm slip${T}October 2026${T}a made-up npm version whose malware could not run${T}https://example.com/madeupd${T}update
 EOF
+printf 'made-npm-pkg\t1.2.3\tmadenpm\nmade-upd-pkg\t4.5.6\tmadeupd\n' >> "$R/data/bad-npm.tsv"
 printf 'madeplat\tMadeplat\tmadeplat-cli\t~/.config/madeplat/;~/.madeplat.json\tCLI found\tMadeplat asked customers to rotate stored secrets.\tMadeplat CLI found: rotate secrets stored there\n' >> "$R/data/platforms.tsv"
 cat >> "$R/data/indicators.tsv" <<EOF
 madeworm${T}all${T}startup${T}no${T}~/.config/madeworm/boot.cjs${T}starts the Made worm at login
-madeworm${T}all${T}wiper${T}no${T}~/.config/madewiper${T}-
+tanstack${T}all${T}wiper${T}no${T}~/.config/gh-token-monitor-made${T}-
 madepy${T}all${T}site${T}no${T}madepy_boot.pth${T}-
 madepy${T}all${T}temp${T}no${T}.madepy_*${T}-
 EOF
@@ -36,10 +39,11 @@ done
 rm -rf "$F"; cp -R "$C" "$F"
 rm -rf "$F/.config/opencode" "$F/.local/share/opencode" "$F/.railway"
 : > "$F/.madeplat.json"
-mkdir -p "$F/.config/madeworm" "$F/.config/madewiper" "$F/code/venv/lib/site-packages/madepkg-9.9.9.dist-info" \
+mkdir -p "$F/.config/madeworm" "$F/.config/gh-token-monitor-made" "$F/code/venv/lib/site-packages/madepkg-9.9.9.dist-info" \
   "$F/tmp" "$F/AppData/Local/Temp" "$F/.cache/uv/wheels/madepkg-9.9.9-py3-none-any" "$F/code/made/.vscode" "$F/code/made/.claude"
 : > "$F/.config/madeworm/boot.cjs"
 : > "$F/code/venv/lib/site-packages/madepy_boot.pth"
 : > "$F/tmp/.madepy_1"; : > "$F/AppData/Local/Temp/.madepy_1"
 printf 'x\n' > "$F/code/made/.vscode/madeplant.js"
+printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":"1.2.3","resolved":"https://registry.npmjs.org/made-npm-pkg/-/made-npm-pkg-1.2.3.tgz"},"node_modules/made-upd-pkg":{"version":"4.5.6","resolved":"https://registry.npmjs.org/made-upd-pkg/-/made-upd-pkg-4.5.6.tgz"}}}\n' > "$F/code/made/package-lock.json"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .vscode/madeplant.js"}]}]}}\n' > "$F/code/made/.claude/settings.json"

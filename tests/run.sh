@@ -67,7 +67,7 @@ for B in $BASHES; do
   has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
   has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
   has    "full output lists every key file"      '~/\.cursor/mcp\.json +GitHub' "$OUT"
-  has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&wp=[01]$' "$OUT"
+  has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&wp=[01]$' "$OUT"
   if grep -aqF -f "$WORK/keys.txt" "$OUT"; then bad "never prints a planted key"; else ok "never prints a planted key"; fi
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
   tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat-incidents.txt"
@@ -252,7 +252,7 @@ hasnot "Linux is not given the Mac command"            'launchctl bootout' "$WOR
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/wl.txt"
-has    "the link flags npm malware and the wiper"      'nm=1&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
+has    "the link flags npm malware and the wiper"      'nm=1&py=0&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 HOME="$WORK/both" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
@@ -282,6 +282,12 @@ has    "with the vendor's own explanation"           'Mistral AI packages, May 2
 has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
+has    "the link does not call it npm malware"       '&nm=0&py=0&wp=0( |$)' "$WORK/mis.txt"
+cp -R "$WORK/clean" "$WORK/mpy"; mkdir -p "$WORK/mpy/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"
+HOME="$WORK/mpy" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy.txt"
+has    "mistralai 2.4.6 from PyPI is its own act-now row" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
+has    "with its fix"                                "Treat this machine as compromised\. Don't run Python in the affected environments, follow mistralai's advisory" "$WORK/mpy.txt"
+has    "the link flags a Python incident, not LiteLLM" '&ll=0&.*&py=1&' "$WORK/mpy.txt"
 
 echo "advice by OS"
 mkdir -p "$WORK/fakebin"
@@ -388,7 +394,7 @@ lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offlin
 lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 5 recent leaks it checks' "$WORK/zb-none.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 6 recent leaks it checks' "$WORK/zb-none.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
@@ -450,9 +456,12 @@ mu() { env HOME="$1" TMPDIR="$1/tmp" PATH=/usr/bin:/bin ${3:+GIRD_CHECK_COMPACT=
 mu "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +7 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +8 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
-has    "made-up wiper file is a waiting wiper"        'a wiper is waiting ~/\.config/madewiper ' "$WORK/mu.txt"
+has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
+has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
+has    "made-up update-level npm incident: its line"  'Made npm slip, October 2026: a made-up npm version whose malware could not run\. example\.com' "$WORK/mu.txt"
+has    "made-up Python package: the link flags it"    '&ll=0&.*&py=1&' "$WORK/mu.txt"
 has    "made-up planted file and its note"            '~/code/made/\.vscode/madeplant\.js a file the Made worm plants' "$WORK/mu.txt"
 has    "a hook that runs it, with the general note"   '~/code/made/\.claude/settings\.json runs a file a worm plants' "$WORK/mu.txt"
 has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/tmp/\.madepy_1 ' "$WORK/mu.txt"
@@ -461,17 +470,22 @@ has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.
 has    "made-up Python package: its fix"              "follow Madepkg's advisory" "$WORK/mu.txt"
 hasnot "LiteLLM is not blamed for it"                 'LITELLM 1\.107\.0 MALWARE|signs of the LiteLLM malware' "$WORK/mu.txt"
 # Without the wiper and the npm files, the Python package leads; with only the platform, it does.
-cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/madewiper" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json"
+cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/gh-token-monitor-made" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json"
 mu "$WORK/mu-py" "$WORK/mu-py.txt" compact
 has    "made-up Python package leads the summary"     'ACT NOW: SIGNS OF THE MADEPKG 9\.9\.9 MALWARE' "$WORK/mu-py.txt"
 has    "and row 05 names it"                          'signs of the Madepkg malware\. Act now' "$WORK/mu-py.txt"
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.local/share/opencode" "$WORK/mu-plat/.railway"
 mu "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 7 recent leaks it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 8 recent leaks it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mu "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
+rm -rf "$WORK/mu-upd"; cp -R "$WORK/clean" "$WORK/mu-upd"; mkdir -p "$WORK/mu-upd/code/u"
+printf '{"lockfileVersion":3,"packages":{"node_modules/made-upd-pkg":{"version":"4.5.6","resolved":"https://registry.npmjs.org/made-upd-pkg/-/made-upd-pkg-4.5.6.tgz"}}}\n' > "$WORK/mu-upd/code/u/package-lock.json"
+mu "$WORK/mu-upd" "$WORK/mu-upd.txt"
+has    "a made-up update-level hit is a version to update" 'npm worms a bad version to update' "$WORK/mu-upd.txt"
+hasnot "and not a compromised machine"                'ACT NOW|Treat this machine as compromised' "$WORK/mu-upd.txt"
 
 echo "gen.sh refuses what it cannot write safely"
 gen_refuses() { # what file line
@@ -495,6 +509,12 @@ gen_refuses "a planted file in another folder"          planted.tsv ".git${T}x.j
 gen_refuses "a planted file listed twice"               planted.tsv ".claude${T}setup.mjs${T}keyv${T}note"
 gen_refuses "an npm package with an unknown incident"   bad-npm.tsv "left-pad${T}1.0.0${T}nosuch"
 gen_refuses "an incident listed twice"                  incidents.tsv "litellm${T}X${T}October 2026${T}x${T}https://example.com${T}act"
+gen_refuses "an incident with another level"            incidents.tsv "newone${T}X${T}October 2026${T}x${T}https://example.com${T}remove"
+gen_refuses "an incident with no month"                 incidents.tsv "newone${T}X${T}2026${T}x${T}https://example.com${T}act"
+gen_refuses "an incident source that is not https"      incidents.tsv "newone${T}X${T}October 2026${T}x${T}http://example.com${T}act"
+gen_refuses "a wiper file that is not gh-token-monitor" indicators.tsv "tanstack${T}all${T}wiper${T}no${T}~/.config/otherwiper${T}-"
+gen_refuses "npm's -security placeholder"               bad-npm.tsv "left-pad${T}0.0.1-security${T}axios"
+gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
@@ -619,7 +639,7 @@ PY
   hasnot "the percentile line carries no count" 'of 1,234 AI builders' "$OUT"
   has  "the result link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
-  has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&wp=[01]\$" "$OUT"
+  has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&wp=[01]\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
   has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
