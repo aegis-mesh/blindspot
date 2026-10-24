@@ -296,6 +296,16 @@ HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s 
 has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/tmp/transformers\.pyz' "$WORK/mpyt-linux.txt"
 has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt-linux.txt"
 has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt-mac.txt"
+has    "a temp file alone: stop and delete, in section 5" 'Stop any process started from these files, then delete them\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
+has    "and in the fix"                               'Stop any process started from the files listed in section 5, delete them, follow mistralai.s advisory' "$WORK/mpyt-linux.txt"
+hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mpyt-linux.txt"
+# uv's cache: the exact version only.
+cp -R "$WORK/clean" "$WORK/uvn"; mkdir -p "$WORK/uvn/.cache/uv/wheels-v5/mistralai-2.4.60-py3-none-any" "$WORK/uvn/.cache/uv/archive-v0/x/mistralai-2.4.6.post1.dist-info"
+HOME="$WORK/uvn" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvn.txt"
+hasnot "uv's cache: 2.4.60 and 2.4.6.post1 are not 2.4.6" 'uv cache holds the 2\.4\.6 package' "$WORK/uvn.txt"
+mkdir -p "$WORK/uvn/.cache/uv/archive-v0/y/mistralai-2.4.6.dist-info"
+HOME="$WORK/uvn" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvn2.txt"
+has    "uv's cache: 2.4.6 itself is"                  'uv cache holds the 2\.4\.6 package\. Clear it with: uv cache clean mistralai' "$WORK/uvn2.txt"
 
 echo "advice by OS"
 mkdir -p "$WORK/fakebin"
@@ -494,6 +504,11 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/made-upd-pkg":{"version":
 mu "$WORK/mu-upd" "$WORK/mu-upd.txt"
 has    "a made-up update-level hit is a version to update" 'npm worms a bad version to update' "$WORK/mu-upd.txt"
 hasnot "and not a compromised machine"                'ACT NOW|Treat this machine as compromised' "$WORK/mu-upd.txt"
+rm -rf "$WORK/mu-act"; cp -R "$WORK/clean" "$WORK/mu-act"; mkdir -p "$WORK/mu-act/code/a"
+printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":"1.2.3","resolved":"https://registry.npmjs.org/made-npm-pkg/-/made-npm-pkg-1.2.3.tgz"}}}\n' > "$WORK/mu-act/code/a/package-lock.json"
+mu "$WORK/mu-act" "$WORK/mu-act.txt"
+has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
+has    "and the link says npm malware"                '&nm=1&py=0&wp=0' "$WORK/mu-act.txt"
 
 echo "gen.sh refuses what it cannot write safely"
 gen_refuses() { # what file line

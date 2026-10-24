@@ -1568,8 +1568,10 @@ fi
 UV_BAD=""
 while read -r _n _v _i; do
   [ -n "$_i" ] || continue
-  _u=$(find "$H/.cache/uv" -maxdepth 6 -name "$_n-$_v*" -print -quit 2>/dev/null)
-  [ -z "$_u" ] && [ "$WIN" -eq 1 ] && _u=$(find "$WLAPP/uv/cache" -maxdepth 6 -name "$_n-$_v*" -print -quit 2>/dev/null)
+  # The exact version: 2.4.6 is not 2.4.60 or 2.4.6.post1.
+  _uvn=(-name "$_n-$_v" -o -name "$_n-$_v-*" -o -name "$_n-$_v.dist-info" -o -name "$_n-$_v.tar.gz" -o -name "$_n-$_v.zip")
+  _u=$(find "$H/.cache/uv" -maxdepth 6 \( "${_uvn[@]}" \) -print -quit 2>/dev/null)
+  [ -z "$_u" ] && [ "$WIN" -eq 1 ] && _u=$(find "$WLAPP/uv/cache" -maxdepth 6 \( "${_uvn[@]}" \) -print -quit 2>/dev/null)
   [ -n "$_u" ] && UV_BAD="$UV_BAD$_i$TAB$_n$TAB$_v
 "
 done <<EOF
@@ -1999,7 +2001,10 @@ todo() { # section text
 [ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
-[ "$PY_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
+# "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
+PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
+if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
+elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
   Linux)  if [ "$WSL" -eq 1 ]; then _store="a secrets manager" # WSL usually has no desktop keyring
@@ -2318,7 +2323,8 @@ for _pi in $PY_INCIDENTS; do
 $LITE_BAD$MARKS
 EOF
       [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
-      wrap "Don't run Python or pip in these environments. Advisory: $(incident_source "$_pi")" 8 "        " "        "
+      if printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB"; then _do="Don't run Python or pip in these environments."; else _do="Stop any process started from these files, then delete them."; fi
+      wrap "$_do Advisory: $(incident_source "$_pi")" 8 "        " "        "
       ;;
     *)
       if [ "$_pi" = litellm ] && [ -n "$LITE_PYC" ]; then

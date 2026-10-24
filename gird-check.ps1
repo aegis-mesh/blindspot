@@ -1117,7 +1117,8 @@ $LOADER = 0
 # A bad version in uv's cache: @(incident, name, version) for each one found.
 $UvBad = New-Object System.Collections.Generic.List[object]
 foreach ($r in $BadPypiRows) {
-  $want = "$($r[0])-$($r[1])"; $found = $false
+  # The exact version: 2.4.6 is not 2.4.60 or 2.4.6.post1.
+  $want = '^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$'; $found = $false
   foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
     if ($found -or -not (Is-Dir $uv)) { continue }
     try {
@@ -1125,7 +1126,7 @@ foreach ($r in $BadPypiRows) {
       while ($q.Count -gt 0 -and -not $found) {
         $it = $q.Dequeue()
         foreach ($e in (Entries $it[0])) {
-          if ($e.Name.StartsWith($want)) { $found = $true; break }
+          if ($e.Name -cmatch $want) { $found = $true; break }
           if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
         }
       }
@@ -1531,7 +1532,10 @@ if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First st
 if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
-if ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
+# "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
+$PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
+if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
+elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $adv, and rotate every key the machine could reach." }
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
 if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
@@ -1766,7 +1770,8 @@ foreach ($pi in $PyIncidents) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
     foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
-    Wrap "Don't run Python or pip in these environments. Advisory: $(Incident-Source $pi)" 8 '        ' '        '
+    if (@($LiteBad | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = "Don't run Python or pip in these environments." } else { $do = 'Stop any process started from these files, then delete them.' }
+    Wrap "$do Advisory: $(Incident-Source $pi)" 8 '        ' '        '
   } elseif ($pi -eq 'litellm' -and $LitePyc.Count -gt 0) {
     Pair "$cYel!$cRst" $pl 16 "${cYel}possible leftover$cRst"
     foreach ($l in $LitePyc) { Emit "        $l" }
