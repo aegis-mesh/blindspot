@@ -479,6 +479,52 @@ fi
 hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS SCAN' "$WORK/ni-pyc.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
+echo "checks from the incident dossier"
+if [ "$(uname -s)" = Darwin ]; then DAS="Library/Application Support"; else DAS=".config"; fi
+for M in hit miss; do
+  rm -rf "$WORK/dz-$M"; cp -R "$WORK/clean" "$WORK/dz-$M"; bash tests/make-dossier.sh "$WORK/dz-$M" "$WORK/dz-$M/$DAS" "$M"
+  HOME="$WORK/dz-$M" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/dz-$M.txt" 2>&1
+  tr -s ' \n' '  ' < "$WORK/dz-$M.txt" > "$WORK/dz-$M-flat.txt"
+  HOME="$WORK/dz-$M" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-$M-sum.txt"
+done
+D=$WORK/dz-hit-flat.txt
+has    "Claude Code set to bypass permissions"        '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$D"
+has    "Codex set to never ask, with full access"     '! Codex ~/\.codex/config\.toml never asks, full access' "$D"
+has    "VS Code's user settings: the global key, not the commented one" 'Code/User/settings\.json chat\.tools\.global\.autoApprove !' "$D"
+has    "a workspace .vscode/settings.json the home scan finds" '! VS Code Copilot ~/p/yolo/\.vscode/settings\.json chat\.tools\.autoApprove' "$D"
+hasnot "a workspace set to false is not listed"       'p/calm/' "$D"
+has    "with the advice"                              'A prompt injection in anything the agent reads can then run commands on this computer\. Turn it off unless the agent runs in a sandbox\.' "$D"
+has    "and the fix"                                  'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox\.' "$D"
+has    "Cursor below the fixed version"               '! Cursor 2\.9\.1, update to 3\.0 or later A prompt injection could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw' "$D"
+has    "Amazon Q: the highest version folder, compared as numbers" '! Amazon Q 1\.68\.0, update to 1\.69\.0 or later Opening a hostile workspace' "$D"
+has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 1\.0\.24 or later A web page could reach the editor connection\.' "$D"
+has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
+has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
+has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
+has    "with the fix"                                 'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
+has    "a GlassWorm extension at its bad version, with a platform suffix" '~/\.vscode/extensions/oorzc\.ssh-tools-0\.5\.1-darwin-arm64 oorzc\.ssh-tools 0\.5\.1 \(GlassWorm extensions, January 2026\), installed' "$D"
+has    "a GlassWorm extension at any version, its id in another case" '~/\.cursor/extensions/Sol-Studio\.Solidity-Extension-2\.0\.0 sol-studio\.solidity-extension 2\.0\.0 \(GlassWorm' "$D"
+has    "with GlassWorm's sourced line"                'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs\. socket\.dev' "$D"
+has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
+has    "with its sourced line"                        'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it\. github\.com' "$D"
+has    "a GlassWorm extension is npm-style malware in the link" '&nm=1&py=0&wp=0' "$D"
+if [ "$(uname -s)" = Darwin ]; then
+  has  "GlassWorm's startup file on a Mac"            '~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm loader at login' "$D"
+else
+  hasnot "GlassWorm's startup file is looked for on a Mac only" 'nodestart' "$D"
+fi
+has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, 4 security fixes to install' "$WORK/dz-hit-sum.txt"
+has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
+D=$WORK/dz-miss-flat.txt
+hasnot "near misses: no agent set to run without asking" 'Agents set to run commands without asking|run-without-asking' "$D"
+hasnot "near misses: no version to update (fixed, below the range, unparseable, another package)" 'Agents with a security fix|that have a security fix' "$D"
+hasnot "near misses: no link inside ~/.ssh, none to another file" 'link to your SSH logins|links to ~/\.ssh' "$D"
+hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc' "$D"
+cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
+printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
+HOME="$WORK/dz-calm" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
+has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
+
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
 # package to a copy's data files and runs gen.sh there; it fails if any code changed.
@@ -502,7 +548,7 @@ has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.
 has    "made-up Python package: its fix"              "follow Madepkg's advisory" "$WORK/mu.txt"
 hasnot "LiteLLM is not blamed for it"                 'LITELLM 1\.107\.0 MALWARE|signs of the LiteLLM malware' "$WORK/mu.txt"
 # Without the wiper and the npm files, the Python package leads; with only the platform, it does.
-cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/gh-token-monitor-made" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json"
+cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/gh-token-monitor-made" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json" "$WORK/mu-py/.vscode/extensions/made.ext-1.0.0"
 mu "$WORK/mu-py" "$WORK/mu-py.txt" compact
 has    "made-up Python package leads the summary"     'ACT NOW: SIGNS OF THE MADEPKG 9\.9\.9 MALWARE' "$WORK/mu-py.txt"
 has    "and row 05 names it"                          'signs of the Madepkg malware\. Act now' "$WORK/mu-py.txt"
@@ -523,6 +569,9 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":
 mu "$WORK/mu-act" "$WORK/mu-act.txt"
 has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
 has    "and the link says npm malware"                '&nm=1&py=0&wp=0' "$WORK/mu-act.txt"
+has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagent/config\.json madeMode' "$WORK/mu.txt"
+has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 2\.0\.0 or later A made-up hole for the tests\. example\.com/madetool' "$WORK/mu.txt"
+has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made worm, October 2026\), installed' "$WORK/mu.txt"
 
 echo "gen.sh refuses what it cannot write safely"
 gen_refuses() { # what file line
@@ -551,6 +600,19 @@ gen_refuses "an incident with no month"                 incidents.tsv "newone${T
 gen_refuses "an incident source that is not https"      incidents.tsv "newone${T}X${T}October 2026${T}x${T}http://example.com${T}act"
 gen_refuses "a wiper file that is not gh-token-monitor" indicators.tsv "tanstack${T}all${T}wiper${T}no${T}~/.config/otherwiper${T}-"
 gen_refuses "npm's -security placeholder"               bad-npm.tsv "left-pad${T}0.0.1-security${T}axios"
+gen_refuses "an auto-approve line with another os"    auto-approve.tsv "X${T}mac os${T}~/.x/settings.json${T}s${T}\"a\": true"
+gen_refuses "an auto-approve pattern with a quote"     auto-approve.tsv "X${T}all${T}~/.x/settings.json${T}s${T}it's"
+gen_refuses "an auto-approve line with no pattern"     auto-approve.tsv "X${T}all${T}~/.x/settings.json${T}s"
+gen_refuses "an auto-approve path with a glob"         auto-approve.tsv "X${T}all${T}~/.x/*.json${T}s${T}\"a\": true"
+gen_refuses "an auto-approve project path that climbs" auto-approve.tsv "X${T}all${T}{PROJECT}/../.x/settings.json${T}s${T}\"a\": true"
+gen_refuses "an outdated line of another kind"         outdated.tsv "newtool${T}New${T}all${T}exe${T}new-tool${T}<1.0${T}a hole${T}https://example.com"
+gen_refuses "an outdated range that does not parse"    outdated.tsv "newtool${T}New${T}all${T}npm${T}new-tool${T}<=1.0${T}a hole${T}https://example.com"
+gen_refuses "an outdated line that disagrees with its tool" outdated.tsv "cursor${T}Cursor${T}mac${T}plist${T}~/x/Info.plist${T}<4.0${T}a prompt injection could escape the sandbox${T}https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw"
+gen_refuses "an outdated plist that is not Info.plist" outdated.tsv "newtool${T}New${T}mac${T}plist${T}~/x/Other.plist${T}<1.0${T}a hole${T}https://example.com"
+gen_refuses "an extension with an unknown incident"    bad-extensions.tsv "pub.ext${T}1.0.0${T}nosuch"
+gen_refuses "an extension whose incident is only an update" bad-extensions.tsv "pub.ext${T}1.0.0${T}injective"
+gen_refuses "an extension version that is not a version" bad-extensions.tsv "pub.ext${T}1.0.0-beta${T}glassworm"
+gen_refuses "an extension listed twice, in another case" bad-extensions.tsv "OORZC.ssh-tools${T}0.5.1${T}glassworm"
 gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
 
 echo "MCP configs in plugin folders"
@@ -827,6 +889,22 @@ PY
   mkdir -p "$WORK/empty"
   report_of "$WORK/report-empty.json" env HOME="$WORK/empty" GIRD_CHECK_API="$API" bash "$SCRIPT"
   payload_checks empty "$WORK/report-empty.json"
+  # The dossier checks share nothing: the same report, link and score with or without them.
+  rm -rf "$WORK/pl-base" "$WORK/pl-dz"; cp -R "$WORK/clean" "$WORK/pl-base"; cp -R "$WORK/clean" "$WORK/pl-dz"
+  bash tests/make-dossier.sh "$WORK/pl-dz" "$WORK/pl-dz/$DAS" calm
+  report_of "$WORK/report-pl-base.json" env HOME="$WORK/pl-base" PATH=/usr/bin:/bin GIRD_CHECK_API="$API" bash "$SCRIPT"
+  report_of "$WORK/report-pl-dz.json" env HOME="$WORK/pl-dz" PATH=/usr/bin:/bin GIRD_CHECK_API="$API" bash "$SCRIPT"
+  if python3 -c 'import json,sys
+a, b = (json.loads(open(f).readline()) for f in sys.argv[1:3])
+for r in (a, b):
+    for k in ("run_id", "scan_seconds", "results_wait_seconds"): r.pop(k, None)
+sys.exit(0 if a == b and a else 1)' "$WORK/report-pl-base.json" "$WORK/report-pl-dz.json"; then ok "the dossier findings leave the report unchanged"
+  else bad "the dossier findings leave the report unchanged"; fi
+  HOME="$WORK/pl-dz" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/pl-dz.txt" 2>&1
+  HOME="$WORK/pl-base" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/pl-base.txt" 2>&1
+  has    "and they were found"                         'Agents with a security fix to install' "$WORK/pl-dz.txt"
+  if [ "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-dz.txt")" = "$(grep -aoE 'blindspot/card/#[^ ]*' "$WORK/pl-base.txt")" ]; then ok "and the result link, score included, is the same"
+  else bad "and the result link, score included, is the same"; fi
   if [ "$(uname -s)" = Darwin ] && [ -x /usr/bin/osascript ]; then
     # Without jq on PATH, the script reads JSON configs with macOS's JavaScript.
     mkdir -p "$WORK/nojq"; ln -s /usr/bin/* /bin/* /usr/sbin/* /sbin/* "$WORK/nojq/" 2>/dev/null; rm -f "$WORK/nojq/jq"
