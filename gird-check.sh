@@ -886,6 +886,71 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
   done
 }
 
+# ---------------------------------------------------------------------------
+# Tables the checks below read, kept here so fleet mode can read them before any check runs.
+# ---------------------------------------------------------------------------
+case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
+_pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-}"); _pd=${_pd%/}; fi
+# Coding agents: name | commands | install paths | folders that change when it is used | id
+AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
+Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
+Codex|codex|$H/.codex|$H/.codex/sessions|codex
+Gemini CLI|gemini|$H/.gemini|$H/.gemini/tmp|gemini-cli
+Cursor|cursor|$APP_CURSOR;$H/.cursor|$AS/Cursor/User/workspaceStorage|cursor
+Windsurf|windsurf|$APP_WINDSURF;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage|windsurf
+Antigravity|antigravity|$APP_ANTIGRAVITY|$AS/Antigravity/User/workspaceStorage|antigravity
+GitHub Copilot CLI|copilot|$H/.copilot|$H/.copilot|copilot-cli
+OpenCode|opencode|$H/.config/opencode;$H/.local/share/opencode|$H/.local/share/opencode|opencode
+Goose|goose|$GOOSE_CFG|$GOOSE_DATA|goose
+Aider|aider|||aider
+Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks|cline
+Continue||$H/.continue|$H/.continue/sessions|continue"
+# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
+npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; mastra) printf '%s' 'Mastra worm, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; esac; }
+incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI packages, May 2026: published with malware that Mistral says could not run. docs.mistral.ai' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; mastra) printf '%s' 'Mastra worm, June 2026: started itself at login and sent browser history to the attackers. socket.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker accessed stored environment variables and decrypted some of them. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' ;; esac; }
+incident_level() { case "$1" in mistral) printf update ;; injective) printf update ;; *) printf act ;; esac; }
+incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
+incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
+incident_advice() { case "$1" in injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+# <<< incidents
+# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
+IND_TABLE="tanstack|all|wiper|no|$H/Library/LaunchAgents/com.user.gh-token-monitor.plist|-
+tanstack|all|wiper|no|$H/.config/systemd/user/gh-token-monitor.service|-
+tanstack|all|wiper|no|$H/.local/bin/gh-token-monitor.sh|-
+tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
+tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
+tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
+mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra worm at login
+mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra worm at login
+mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra worm at login
+mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra worm at login
+mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
+litellm|all|site|no|cook.pth|-
+litellm|all|site|no|cook.py|-
+litellm|all|temp|no|remote_code_loader.lock|-
+litellm|all|temp|no|.pc_once_*|-
+litellm|all|temp|no|.pc_sq_*|-
+litellm|all|temp|no|.pc_e_*|-
+mistralpy|linux|temp|no|transformers.pyz|-"
+# <<< indicators
+# >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
+OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a prompt injection could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
+cursor|Cursor|mac|plist|$H/Applications/Cursor.app/Contents/Info.plist|-|3.0|a prompt injection could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
+amazonq|Amazon Q|mac|folder|$H/Library/Caches/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq|Amazon Q|linux|folder|$H/.cache/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq|Amazon Q|win|folder|$WLAPP/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
+claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web page could reach the editor connection|github.com/advisories/GHSA-9f65-56v6-gxw7
+mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
+mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
+# <<< outdated
+# Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
+# file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
+# >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
+PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/opencode/|installed|If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.|OpenCode found: used its Console? Rotate keys
+railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked every customer to rotate all secrets stored on the platform and to check their logs.|Railway CLI found: rotate secrets stored there
+zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.|Zeabur CLI found: rotate secrets stored there"
+# <<< platforms
+
 # ===========================================================================
 # Public totals for the line under the banner, fetched while the banner prints.
 # Only the request itself goes out, and nothing at all with --offline.
@@ -947,7 +1012,6 @@ all|read|Cursor|$H/.cursor/projects
 all|sealed|Windsurf|$H/.codeium/windsurf/cascade
 all|sealed|Antigravity|$H/.gemini/antigravity/conversations"
 # <<< sessions
-case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
 SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "read" { print $3 "|" $4 }')
 # Agents whose sessions are stored encrypted, named as not checked.
 SESS_SEALED=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "sealed" { print $3 "|" $4 }')
@@ -1113,20 +1177,6 @@ win_reg() { # key value
   return 1
 }
 # --- 1. Coding agents --------------------------------------------------------
-# name | commands | install paths | folders that change when it is used | id
-AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
-Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
-Codex|codex|$H/.codex|$H/.codex/sessions|codex
-Gemini CLI|gemini|$H/.gemini|$H/.gemini/tmp|gemini-cli
-Cursor|cursor|$APP_CURSOR;$H/.cursor|$AS/Cursor/User/workspaceStorage|cursor
-Windsurf|windsurf|$APP_WINDSURF;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage|windsurf
-Antigravity|antigravity|$APP_ANTIGRAVITY|$AS/Antigravity/User/workspaceStorage|antigravity
-GitHub Copilot CLI|copilot|$H/.copilot|$H/.copilot|copilot-cli
-OpenCode|opencode|$H/.config/opencode;$H/.local/share/opencode|$H/.local/share/opencode|opencode
-Goose|goose|$GOOSE_CFG|$GOOSE_DATA|goose
-Aider|aider|||aider
-Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks;$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks|cline
-Continue||$H/.continue|$H/.continue/sessions|continue"
 
 AG_ROWS=""; AGENT_IDS=""; AG_NAMES=""; N_AG=0; N_IDLE=0; IDLE_NAMES=""; IDLE_IDS=""
 while IFS='|' read -r name bins paths acts aid; do
@@ -1466,44 +1516,15 @@ $WLAPP/Programs/Python
 $WAPP/Python
 $WLAPP/miniconda3
 $WLAPP/anaconda3"
-  _pd=$(winpath "${PROGRAMDATA:-}"); _pd=${_pd%/}
   [ -n "$_pd" ] && PY_ROOTS="$PY_ROOTS
 $_pd/miniconda3
 $_pd/anaconda3"
 fi
-# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; mastra) printf '%s' 'Mastra worm, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; esac; }
-incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI packages, May 2026: published with malware that Mistral says could not run. docs.mistral.ai' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; mastra) printf '%s' 'Mastra worm, June 2026: started itself at login and sent browser history to the attackers. socket.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker accessed stored environment variables and decrypted some of them. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' ;; esac; }
-incident_level() { case "$1" in mistral) printf update ;; injective) printf update ;; *) printf act ;; esac; }
-incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
-incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
-# <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm
 mistralai 2.4.6 mistralpy"
 PY_INCIDENTS="litellm mistralpy"
 # <<< bad-pypi
-# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
-IND_TABLE="tanstack|all|wiper|no|$H/Library/LaunchAgents/com.user.gh-token-monitor.plist|-
-tanstack|all|wiper|no|$H/.config/systemd/user/gh-token-monitor.service|-
-tanstack|all|wiper|no|$H/.local/bin/gh-token-monitor.sh|-
-tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
-tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
-tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
-mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra worm at login
-mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra worm at login
-mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra worm at login
-mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra worm at login
-mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
-litellm|all|site|no|cook.pth|-
-litellm|all|site|no|cook.py|-
-litellm|all|temp|no|remote_code_loader.lock|-
-litellm|all|temp|no|.pc_once_*|-
-litellm|all|temp|no|.pc_sq_*|-
-litellm|all|temp|no|.pc_e_*|-
-mistralpy|linux|temp|no|transformers.pyz|-"
-# <<< indicators
 SITES_ALL=$(
   {
     printf '%s\n' "$SITES"
@@ -1876,16 +1897,6 @@ _g=$(
 )
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"
-# >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
-OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a prompt injection could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
-cursor|Cursor|mac|plist|$H/Applications/Cursor.app/Contents/Info.plist|-|3.0|a prompt injection could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
-amazonq|Amazon Q|mac|folder|$H/Library/Caches/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
-amazonq|Amazon Q|linux|folder|$H/.cache/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
-amazonq|Amazon Q|win|folder|$WLAPP/aws/toolkits/language-servers/AmazonQ|-|1.69.0|opening a hostile workspace can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
-claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web page could reach the editor connection|github.com/advisories/GHSA-9f65-56v6-gxw7
-mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
-mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
-# <<< outdated
 # --- 1. Coding agents: settings and versions -------------------------------------
 # Agents set to run commands without asking (data/auto-approve.tsv). A pattern matches a line with
 # its spaces removed, starting at the line, a { or a , and ending at the line's end, a , } # or /,
@@ -2054,13 +2065,6 @@ else MAL_WHAT="npm malware"; MAL_SHORT="npm"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "A wiper waits for a GitHub token to be revoked: gh-token-monitor"
 elif [ "$ANY_MAL" -eq 1 ]; then progress x "Signs of $MAL_WHAT found"
 else progress o "No npm malware in $(plural "$N_LOCK" lockfile lockfiles), global installs or npm's cache"; fi
-# Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
-# file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
-# >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
-PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/opencode/|installed|If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.|OpenCode found: used its Console? Rotate keys
-railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked every customer to rotate all secrets stored on the platform and to check their logs.|Railway CLI found: rotate secrets stored there
-zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.|Zeabur CLI found: rotate secrets stored there"
-# <<< platforms
 PLAT_FOUND=" "; N_PLAT=0; N_PLAT_FOUND=0; PLAT_LIST=""; PLAT_FIX=""
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
