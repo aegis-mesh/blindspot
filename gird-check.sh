@@ -2244,9 +2244,9 @@ for _t in $NPM_TAGS; do
   if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
 done
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
-# when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
-# the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
-# is revoked. A file in the shared /tmp counts only if this person owns it.
+# when the stolen GitHub token stops working (in the TanStack wave it tries to run rm -rf ~/, Wiz; in
+# the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
+# before any token is revoked. A file in the shared /tmp counts only if this person owns it.
 # A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
 # is that incident's sign, shown with the extensions (EXT_PERSIST), never called npm malware.
 EXT_INCS=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
@@ -2295,7 +2295,7 @@ else progress o "No npm malware in $(plural "$N_LOCK" lockfile lockfiles), globa
 # >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
 PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/opencode/|installed|If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.|OpenCode found: used its Console? Rotate keys
 railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.|Railway CLI found: rotate secrets stored there
-zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.|Zeabur CLI found: rotate secrets stored there"
+zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that an attacker read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.|Zeabur CLI found: rotate secrets stored there"
 # <<< platforms
 PLAT_FOUND=" "; N_PLAT=0; N_PLAT_FOUND=0; PLAT_LIST=""; PLAT_FIX=""
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
@@ -2869,7 +2869,7 @@ EOF
     Linux)  _stop="systemctl --user disable --now gh-token-monitor.service" ;;
     *)      _stop="" ;;
   esac
-  wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and erased the home folder in the TanStack wave." 8 "        " "        " "$RED"
+  wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and in the TanStack wave it tries to erase the home folder." 8 "        " "        " "$RED"
   wrap "Stop it with ${_stop:+$_stop, then }pkill -f gh-token-monitor, then delete the files above." 8 "        " "        " "$RED"
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then

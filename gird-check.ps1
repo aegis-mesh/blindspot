@@ -1750,9 +1750,9 @@ $NPM_HIT = 0; $NPM_UPD = 0
 $NpmTags = @($NpmRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } else { $NPM_UPD = 1 } }
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
-# when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
-# the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
-# is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
+# when the stolen GitHub token stops working (in the TanStack wave it tries to run rm -rf ~/, Wiz; in
+# the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
+# before any token is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
 # A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
@@ -1798,7 +1798,7 @@ elseif ($ANY_MAL -eq 1) { Progress "Signs of $MalWhat found" }
 $Platforms = @(
   @{ Id = 'opencode'; Name = 'OpenCode'; Cmds = @('opencode'); Dirs = @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')); Files = @(); Found = 'installed'; Advice = 'If you used OpenCode Console, the hosted gateway, rotate every provider key you saved there. Keys kept only in the CLI were not affected.'; Summary = 'OpenCode found: used its Console? Rotate keys' },
   @{ Id = 'railway'; Name = 'Railway'; Cmds = @('railway'); Dirs = @(); Files = @((J $HomeDir '.railway/config.json')); Found = 'CLI found'; Advice = 'Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.'; Summary = 'Railway CLI found: rotate secrets stored there' },
-  @{ Id = 'zeabur'; Name = 'Zeabur'; Cmds = @('zeabur'); Dirs = @((J $HomeDir '.config/zeabur')); Files = @(); Found = 'CLI found'; Advice = 'Zeabur said on 15 October that attackers read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.'; Summary = 'Zeabur CLI found: rotate secrets stored there' })
+  @{ Id = 'zeabur'; Name = 'Zeabur'; Cmds = @('zeabur'); Dirs = @((J $HomeDir '.config/zeabur')); Files = @(); Found = 'CLI found'; Advice = 'Zeabur said on 19 October that an attacker read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.'; Summary = 'Zeabur CLI found: rotate secrets stored there' })
 # <<< platforms
 $PlatFound = @($Platforms | Where-Object {
   $p = $_; (@($p.Cmds | Where-Object { Has-Command $_ }).Count -gt 0) -or (@($p.Dirs | Where-Object { Is-Dir $_ }).Count -gt 0) -or (@($p.Files | Where-Object { Is-File $_ }).Count -gt 0)
@@ -2198,7 +2198,7 @@ if ($WIPER_HIT -eq 1) {
   if ($OnWindows) { $stop = 'Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate, then ' }
   elseif (Is-Dir '/System/Library/CoreServices') { $uidv = ''; try { $uidv = [string](& id -u 2>$null) } catch { }; $stop = "launchctl bootout gui/$uidv/com.user.gh-token-monitor, then pkill -f gh-token-monitor, then " }
   else { $stop = 'systemctl --user disable --now gh-token-monitor.service, then pkill -f gh-token-monitor, then ' }
-  Wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and erased the home folder in the TanStack wave." 8 '        ' '        ' $cRed
+  Wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and in the TanStack wave it tries to erase the home folder." 8 '        ' '        ' $cRed
   Wrap "Stop it with $($stop)delete the files above." 8 '        ' '        ' $cRed
 }
 if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
