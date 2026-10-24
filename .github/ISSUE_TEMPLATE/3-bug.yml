@@ -13,7 +13,7 @@ body:
     id: system
     attributes:
       label: Your setup
-      description: macOS or Linux version, terminal app, and the output of `bash --version | head -1`.
+      description: Blindspot version (in the report's header), macOS, Linux, WSL or Windows version, terminal app, and the output of `bash --version | head -1` (in PowerShell, `$PSVersionTable.PSVersion`).
   - type: textarea
     id: output
     attributes:

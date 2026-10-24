@@ -482,27 +482,39 @@ function Is-Pruned([string]$path, [string]$name, [int]$depth) {
   foreach ($p in $PrunePaths) { if ($path.Equals($p, $PathCmp)) { return $true } }
   ($depth -eq 1) -and $name.StartsWith('OneDrive', $PathCmp)
 }
+# Files the TanStack and keyv worms plant in a project (Wiz; Snyk: .claude/setup.mjs, .claude/math_init.js
+# and .vscode/setup.mjs).
+function Is-WormFile([string]$parent, [string]$name) {
+  (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and ($name -ceq 'router_runtime.js' -or $name -ceq 'tanstack_runner.js')) -or
+  (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and $name -ceq 'setup.mjs') -or ($parent -ceq '.claude' -and $name -ceq 'math_init.js')
+}
 function Scan-Home([string]$dir, [int]$depth) {
   foreach ($e in (Entries $dir)) {
-    if (Is-Link $e) { continue }
-    $name = $e.Name; $path = $e.FullName; $d = $depth + 1
+    $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
     if (Is-DirInfo $e) {
-      if (Is-Pruned $path $name $d) { continue }
+      if ($link -or (Is-Pruned $path $name $d)) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
       if ($d -lt 6) { Scan-Home $path $d }
       continue
     }
     $parent = [IO.Path]::GetFileName($dir)
-    if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or
-      ($parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')) -or
+    $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
+    # A linked settings, tasks or worm file is followed; any other link is not.
+    if ($link) {
+      if ($isSettings) { $Found.Add($path) }
+      elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
+      elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
+      continue
+    }
+    if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or $isSettings -or
       ($name -ceq 'mcp.json' -and ($parent -ceq '.cursor' -or $parent -ceq '.vscode'))) {
       $Found.Add($path)
       $script:ScanN++
       if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
-    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { $LockFiles.Add($path) }
+    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { $LockFiles.Add($path) }
     elseif ($name -ceq '.aider.chat.history.md') { $AiderFiles.Add($path) }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
-    elseif (($parent -ceq '.claude' -or $parent -ceq '.vscode') -and ($name -ceq 'router_runtime.js' -or $name -ceq 'tanstack_runner.js')) { $WormFiles.Add($path) }
+    elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
   }
 }
 # Whether a folder holds any file within three levels, and any changed in 30 days.
@@ -827,31 +839,58 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 
 # Project settings that make an agent or editor run something, or trust the project's MCP
 # servers, as soon as the folder is opened. A cloned repo brings them along (Check Point,
-# CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks).
-# settings.local.json is personal and never part of a clone, so only settings.json is read.
+# CVE-2025-59536 and CVE-2026-21852; Oasis Security on Cursor's folderOpen tasks). Both
+# settings.json and settings.local.json are read, since repos commit either. Each file is read as
+# one line, so pretty-printed JSON matches too; only tasks.json (JSONC) has comments removed first.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
+$AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
 # The TanStack and keyv worms plant one of these in the folder and run it from a hook or a task.
-$RxWormRun = New-Object regex('\.(claude|vscode)[/\\]+(router_runtime|tanstack_runner)\.js', $RxOpt, $RxTimeout)
-$RxHooks = New-Object regex('"(PreToolUse|PostToolUse|UserPromptSubmit|SessionStart|SessionEnd|Stop|SubagentStop|Notification|PreCompact|PermissionRequest|apiKeyHelper|statusLine)"\s*:|"hooks"\s*:\s*\{\s*"', $RxOpt, $RxTimeout)
+# A worm file counts only when a command runs it (an interpreter given its path, the path as the
+# command itself, or a task's argument), not when a rule or a guard merely names it.
+$WormName = '\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
+$RxWormRun = New-Object regex(('"command"\s*:\s*"(?:[^"\\]|\\.)*\b(node|bun|deno|tsx)(\.exe)?\s(?:[^"\\]|\\.)*' + $WormName +
+  '|"command"\s*:\s*"\s*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?[/\\]|\.[/\\])?' + $WormName + '|"args"\s*:\s*\[[^\]]*' + $WormName), $RxOpt, $RxTimeout)
+# Keys that make Claude Code run a command: hooks and its helper commands.
+$RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper)"\s*:', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
 $RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
-function Auto-Row([string]$f, [string]$what) {
-  if (Has-Match $f $RxWormRun) { $WormRefs.Add($f) }
-  $AutoRows.Add(@($f, $what)); Progress "Project settings that $($what): $(Short $f)"
+$RxLineComment = New-Object regex('(^|[\s,{\[])//[^\n]*', $RxOpt, $RxTimeout)
+$RxBlockComment = New-Object regex('/\*(?:[^*]|\*+[^*/])*\*+/', $RxOpt, $RxTimeout)
+function Flat-Text([string]$f) {
+  $t = Read-Text $f; if ($null -eq $t) { return $null }
+  if (-not $f.EndsWith('tasks.json')) { return ($t -replace '[\r\n\t]', ' ') }
+  try { $RxBlockComment.Replace(($RxLineComment.Replace($t, '$1') -replace '[\r\n\t]', ' '), '') } catch { Mark-Slow $f; $null }
 }
-$homeSettings = J $HomeDir '.claude/settings.json'
+function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
+function Auto-Row([string]$f, [string]$what, [string]$t) {
+  if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
+  # A repo's worktrees carry the same settings: one row, with how many more folders have it.
+  $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
+  if ($AutoSeen.ContainsKey($key)) { $AutoSeen[$key].More = $AutoSeen[$key].More + 1; return }
+  $row = @{ File = $f; What = $what; More = 0 }
+  $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
+}
+$homeClaude = J $HomeDir '.claude'
 foreach ($f in $AllowFiles) {
-  # A worktree carries the same committed settings as its repo, so it is not listed again.
-  if ([IO.Path]::GetFileName($f) -cne 'settings.json' -or $f.Equals($homeSettings, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/worktrees/') { continue }
+  if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f)) { continue }
+  $t = Flat-Text $f; if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
-  if (Has-Match $f $RxHooks) { $w.Add('run commands while the agent works') }
-  if (Has-Match $f $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
-  if (Has-Match $f $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
-  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') }
+  if (Flat-Match $f $t $RxHooks) { $w.Add('run commands while the agent works') }
+  if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
+  if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
+  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
 }
-foreach ($f in $TaskFiles) { if (($f -replace '\\', '/') -notmatch '/\.claude/worktrees/' -and (Has-Match $f $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' } }
+foreach ($f in $TaskFiles) {
+  if (($f -replace '\\', '/') -match '/\.claude/plugins/') { continue }
+  $t = Flat-Text $f
+  if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
+}
 $N_AUTO = $AutoRows.Count
+# Row 02 counts projects: the folders holding these settings.
+$AutoProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($r in $AutoRows) { [void]$AutoProj.Add([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($r.File))) }
+$N_AUTO_PROJ = $AutoProj.Count
 
 # --- 3. Keys in plain text ---------------------------------------------------
 $DocsRoots = New-Object System.Collections.Generic.List[string]
@@ -1046,8 +1085,11 @@ if ($LiteBad.Count -gt 0 -or $Marks.Count -gt 0 -or $LOADER -eq 1) { $LITELLM_HI
 if ($LITELLM_HIT -eq 1) { Progress 'Signs of the LiteLLM malware found' }
 elseif ($LitePyc.Count -gt 0) { Progress 'A leftover cook.pyc may come from the LiteLLM malware' }
 # npm packages with malware, each one named in a GitHub malware advisory: Axios GHSA-fw8c-xr5c-95f9,
-# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-jgg6-4rpr-wfh7, and one advisory per package for the rest.
-# A version of * means every version of that name is malware. The same list as gird-check.sh.
+# TanStack GHSA-g7cv-rxg3-hmpx, Mistral GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9 and
+# GHSA-rccm-wwph-vgxc, OpenSearch GHSA-298w-vvm4-ww55, and one advisory per package for the rest.
+# A version of * means every version of that name is malware. tensorlake's advisory also lists every
+# version, but names only 0.5.144 as malicious, so only that one is flagged. Not complete: the AntV, UiPath and
+# Red Hat waves and most packages the keyv worm spread to are not listed. The same list as gird-check.sh.
 $BadNpm = @'
 axios 1.14.1 axios
 axios 0.30.4 axios
@@ -1166,10 +1208,44 @@ cloude-code * sandworm
 rimarf * sandworm
 naniod * sandworm
 suport-color * sandworm
+@keyv/bigmap 6.0.0 keyv
+@keyv/cloudflare-kv 6.0.0 keyv
+@keyv/compress-brotli 6.0.0 keyv
+@keyv/compress-gzip 6.0.0 keyv
+@keyv/compress-lz4 6.0.0 keyv
+@keyv/dynamo 6.0.0 keyv
+@keyv/encrypt-node 6.0.0 keyv
+@keyv/encrypt-web 6.0.0 keyv
+@keyv/etcd 6.0.0 keyv
+@keyv/memcache 6.0.0 keyv
+@keyv/mongo 6.0.0 keyv
+@keyv/mysql 6.0.0 keyv
+@keyv/postgres 6.0.0 keyv
+@keyv/redis 6.0.0 keyv
+@keyv/serialize-msgpackr 6.0.0 keyv
+@keyv/serialize-superjson 6.0.0 keyv
+@keyv/sqlite 6.0.0 keyv
+@keyv/test-suite 6.0.0 keyv
+@keyv/valkey 6.0.0 keyv
+@opensearch-project/opensearch 3.5.3 opensearch
+@opensearch-project/opensearch 3.6.2 opensearch
+@opensearch-project/opensearch 3.7.0 opensearch
+@opensearch-project/opensearch 3.8.0 opensearch
+tensorlake 0.5.144 tensorlake
+cloude * sandworm
+opencraw * sandworm
+crypto-reader-info * sandworm
+format-defaults * sandworm
+hardhta * sandworm
+iru-caches * sandworm
+iruchache * sandworm
+node-native-bridge * sandworm
+secp256 * sandworm
 '@
-$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]
+$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object System.Collections.Generic.List[string]; $N_BAD_NPM = 0
 foreach ($l in ($BadNpm -split "`r?`n")) {
   $p = $l -split ' '; if ($p.Count -lt 3) { continue }
+  $N_BAD_NPM++
   if ($p[1] -ceq '*') { $NpmAny[$p[0]] = $p[2] } else { $NpmBad["$($p[0])@$($p[1])"] = $p[2] }
   if (-not $NpmNames.Contains($p[0])) { $NpmNames.Add($p[0]) }
 }
@@ -1177,22 +1253,59 @@ function Npm-Label([string]$t) {
   switch ($t) {
     'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI packages, May 2026' }
     'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' }
-    default { 'fake AI tool packages, February 2026' }
+    'opensearch' { 'OpenSearch client, May 2026' } 'tensorlake' { 'tensorlake package, October 2026' }
+    default { 'SANDWORM_MODE worm, February 2026' }
   }
 }
-$NpmRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
+$NpmRows = New-Object System.Collections.Generic.List[object]; $NpmCacheRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
+$NpmCacheTag = " (npm's download cache)"
+# Versions are shown only if they look like versions, so a package can't put terminal control codes in the report.
 function Npm-Hit([string]$where, [string]$nm, [string]$v) {
+  if ($v -cnotmatch '^[0-9A-Za-z.+_-]+\z') { $v = '?' }
   $k = "$nm@$v"; $t = $null
   if ($NpmBad.ContainsKey($k)) { $t = $NpmBad[$k] } elseif ($NpmAny.ContainsKey($nm)) { $t = $NpmAny[$nm] }
   if ($null -eq $t -or $NpmSeen.ContainsKey("$where|$k")) { return }
-  $NpmSeen["$where|$k"] = $true; $NpmRows.Add(@($where, "$nm $v", $t))
+  $NpmSeen["$where|$k"] = $true
+  if ($where.EndsWith($NpmCacheTag, [StringComparison]::Ordinal)) { $NpmCacheRows.Add(@($where, "$nm $v", $t)) } else { $NpmRows.Add(@($where, "$nm $v", $t)) }
 }
-# Tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache) and name@version tokens
-# (pnpm, bun, yarn berry's name@npm:version).
+# Tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
+# bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line
+# (locks written without URLs) and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
+# moves away from a version, so overrides are skipped.
 $RxTgz = New-Object regex('/((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))/-/([A-Za-z0-9._~-]+)\.tgz', $RxOpt, $RxTimeout)
 $RxTok = New-Object regex('(?<![A-Za-z0-9._~@-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
-function Npm-Scan([string]$where, [string]$text) {
+$RxLockEntry = New-Object regex('^[^\n]*?"((?:node_modules/)*(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)"[^\S\n]*:[^\S\n]*\{|^[^\n]*?"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
+$RxPnpmKey = New-Object regex('^[^\S\n]+/((?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)/([0-9][^:(_/\n]*)', $RxOpt, $RxTimeout)
+$RxPnpmOver = New-Object regex('^overrides:', $RxOpt, $RxTimeout)
+$RxBunOver = New-Object regex('"overrides"[^\S\n]*:[^\S\n]*\{', $RxOpt, $RxTimeout)
+function Strip-Overrides([string]$kind, [string]$text) {
+  $pnpm = $kind -ceq 'pnpm-lock.yaml'
+  if ($pnpm) { if (-not $RxPnpmOver.IsMatch($text)) { return $text } } elseif (-not $RxBunOver.IsMatch($text)) { return $text }
+  $sb = New-Object System.Text.StringBuilder; $over = $false; $depth = 0
+  foreach ($l in $text.Split("`n")) {
+    if ($pnpm) {
+      if ($l.Length -gt 0 -and $l[0] -ne ' ' -and $l[0] -ne '#') { $over = $l.StartsWith('overrides:', [StringComparison]::Ordinal) }
+      if ($over) { continue }
+    } else {
+      $o = $l.Split('{').Count - $l.Split('}').Count
+      if ($over) { $depth += $o; if ($depth -le 0) { $over = $false }; continue }
+      if ($RxBunOver.IsMatch($l)) { $depth = $o; $over = $depth -gt 0; continue }
+    }
+    [void]$sb.Append($l).Append("`n")
+  }
+  $sb.ToString()
+}
+function Npm-Scan([string]$where, [string]$text, [string]$kind) {
   try {
+    if ($kind -ceq 'pnpm-lock.yaml' -or $kind -ceq 'bun.lock') { $text = Strip-Overrides $kind $text }
+    if ($kind -ceq 'package-lock.json' -or $kind -ceq 'npm-shrinkwrap.json') {
+      $pend = ''
+      foreach ($m in $RxLockEntry.Matches($text)) {
+        if ($m.Groups[1].Success) { $pend = $m.Groups[1].Value -replace '^.*node_modules/', '' }
+        elseif ($pend) { Npm-Hit $where $pend $m.Groups[2].Value; $pend = '' }
+      }
+    }
+    if ($kind -ceq 'pnpm-lock.yaml') { foreach ($m in $RxPnpmKey.Matches($text)) { Npm-Hit $where $m.Groups[1].Value $m.Groups[2].Value } }
     foreach ($m in $RxTgz.Matches($text)) {
       $nm = $m.Groups[1].Value; $b = $nm -replace '^@[^/]*/', ''; $base = $m.Groups[2].Value
       if ($base.StartsWith("$b-", [StringComparison]::Ordinal)) { Npm-Hit $where $nm $base.Substring($b.Length + 1) }
@@ -1201,34 +1314,80 @@ function Npm-Scan([string]$where, [string]$text) {
   } catch { if (-not $SlowFiles.Contains($where)) { $script:NpmSlow++ }; Mark-Slow $where }
 }
 # Read directly rather than through Read-Text, so big lockfiles are not kept in memory.
-$N_LOCK = 0; $NpmSlow = 0
-foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { continue }; $N_LOCK++; Npm-Scan $f $t }
-# Global installs and npx's cache, read from each package's package.json.
+$N_LOCK = 0; $NpmSlow = 0; $NpmUnread = 0
+foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { continue }; $N_LOCK++; Npm-Scan $f $t ([IO.Path]::GetFileName($f)) }
+# Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv,
+# nvm-windows), pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
 $NpmRoots = New-Object System.Collections.Generic.List[string]
+function Add-NpmRoot([string]$r) { if ($r -and (Is-Dir $r) -and -not $NpmRoots.Contains($r)) { $NpmRoots.Add($r) } }
 foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'),
-    '/opt/homebrew/lib/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules')) { if (Is-Dir $r) { $NpmRoots.Add($r) } }
-foreach ($d in (Glob-Dirs (J $HomeDir '.nvm/versions/node') '*')) { $r = J $d 'lib/node_modules'; if (Is-Dir $r) { $NpmRoots.Add($r) } }
-foreach ($c in @((J $LocalAppData 'npm-cache/_npx'), (J $HomeDir '.npm/_npx'))) { foreach ($d in (Glob-Dirs $c '*')) { $r = J $d 'node_modules'; if (Is-Dir $r) { $NpmRoots.Add($r) } } }
+    '/opt/homebrew/lib/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules')) { Add-NpmRoot $r }
+# Folders holding one folder per version or package, and where node_modules sits in each.
+$NpmGlobs = New-Object System.Collections.Generic.List[object]
+foreach ($g in @(@('.nvm/versions/node', 'lib/node_modules'), @('.volta/tools/image/node', 'lib/node_modules'), @('.volta/tools/image/packages', 'lib/node_modules'),
+    @('.local/share/fnm/node-versions', 'installation/lib/node_modules'), @('Library/Application Support/fnm/node-versions', 'installation/lib/node_modules'),
+    @('.asdf/installs/nodejs', 'lib/node_modules'), @('.local/share/mise/installs/node', 'lib/node_modules'), @('.nodenv/versions', 'lib/node_modules'),
+    @('Library/pnpm/global', 'node_modules'), @('.local/share/pnpm/global', 'node_modules'), @('.npm/_npx', 'node_modules'))) { $NpmGlobs.Add(@((J $HomeDir $g[0]), $g[1])) }
+$nvmWin = $env:NVM_HOME; if (-not $nvmWin) { $nvmWin = J $AppData 'nvm' }
+$fnmWin = $env:FNM_DIR; if (-not $fnmWin) { $fnmWin = J $AppData 'fnm' }
+foreach ($g in @(@($nvmWin, 'node_modules'), @((J $fnmWin 'node-versions'), 'installation/node_modules'),
+    @((J $LocalAppData 'Volta/tools/image/node'), 'node_modules'), @((J $LocalAppData 'Volta/tools/image/packages'), 'node_modules'),
+    @((J $LocalAppData 'Volta/tools/image/packages'), 'lib/node_modules'), @((J $LocalAppData 'mise/installs/node'), 'node_modules'),
+    @((J $LocalAppData 'pnpm/global'), 'node_modules'), @((J $LocalAppData 'npm-cache/_npx'), 'node_modules'))) { $NpmGlobs.Add($g) }
+if ($env:PNPM_HOME) { $NpmGlobs.Add(@((J $env:PNPM_HOME 'global'), 'node_modules')) }
+foreach ($g in $NpmGlobs) { foreach ($d in (Glob-Dirs $g[0] '*')) { Add-NpmRoot (J $d $g[1]) } }
 foreach ($r in $NpmRoots) {
+  # The package itself, or a dependency of a globally installed tool.
+  $mods = New-Object System.Collections.Generic.List[string]; $mods.Add($r)
+  foreach ($d in (Glob-Dirs $r '*')) {
+    $dn = [IO.Path]::GetFileName($d); if ($dn.StartsWith('.')) { continue }
+    if (Is-Dir (J $d 'node_modules')) { $mods.Add((J $d 'node_modules')) }
+    if (-not $dn.StartsWith('@')) { continue }
+    foreach ($d2 in (Glob-Dirs $d '*')) { if (-not [IO.Path]::GetFileName($d2).StartsWith('.') -and (Is-Dir (J $d2 'node_modules'))) { $mods.Add((J $d2 'node_modules')) } }
+  }
   foreach ($nm in $NpmNames) {
-    $pj = J $r "$nm/package.json"; if (-not (Is-File $pj)) { continue }
-    $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"')
-    if ($m.Success) { Npm-Hit (J $r $nm) $nm $m.Groups[1].Value }
+    foreach ($md in $mods) {
+      $pd = J $md $nm; $pj = J $pd 'package.json'; if (-not (Is-File $pj)) { continue }
+      $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"')
+      $v = ''; if ($m.Success) { $v = $m.Groups[1].Value }
+      Npm-Hit $pd $nm $v
+    }
   }
 }
 # npm's download cache keeps a package after it is uninstalled, and the malware ran when it installed.
+# A folder or file that can't be read leaves the cache not fully checked, never clean.
 foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
   $ix = J $c '_cacache/index-v5'; if (-not (Is-Dir $ix)) { continue }
-  $files = @(); try { $files = [IO.Directory]::GetFiles($ix, '*', [IO.SearchOption]::AllDirectories) } catch { }
-  foreach ($f in $files) { try { $t = [IO.File]::ReadAllText($f) } catch { continue }; Npm-Scan "$c (npm's download cache)" $t }
+  $q = New-Object System.Collections.Generic.Queue[string]; $q.Enqueue($ix)
+  while ($q.Count -gt 0) {
+    $dd = $q.Dequeue()
+    try { $ents = ([IO.DirectoryInfo]$dd).GetFileSystemInfos() } catch { $NpmUnread++; continue }
+    foreach ($e in $ents) {
+      if (Is-Link $e) { continue }
+      if (Is-DirInfo $e) { $q.Enqueue($e.FullName); continue }
+      try { $t = [IO.File]::ReadAllText($e.FullName) } catch { $NpmUnread++; continue }
+      Npm-Scan "$c$NpmCacheTag" $t ''
+    }
+  }
 }
+$byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x[0], $y[0]); if ($o -eq 0) { $o = [string]::CompareOrdinal($x[1], $y[1]) }; $o }
+$NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
 $NPM_HIT = 0; if ($NpmRows.Count -gt 0) { $NPM_HIT = 1 }
-# What these worms leave behind. gh-token-monitor erases the home folder once the stolen GitHub
-# token stops working, so it must go before any token is revoked (Wiz, TanStack; Socket, keyv).
+# What these worms leave behind. gh-token-monitor runs a destructive command when the stolen GitHub
+# token stops working (it erased the home folder in the TanStack wave, Wiz; in the keyv wave it runs
+# an attacker-supplied command, SANS), so it must be stopped before any token is revoked.
 $Wiper = New-Object System.Collections.Generic.List[string]
 foreach ($m in @((J $HomeDir 'Library/LaunchAgents/com.user.gh-token-monitor.plist'), (J $HomeDir '.config/systemd/user/gh-token-monitor.service'),
-    (J $HomeDir '.local/bin/gh-token-monitor.sh'), (J $HomeDir '.config/gh-token-monitor'), '/tmp/gh-token-monitor.out.log', '/tmp/gh-token-monitor.err.log')) {
+    (J $HomeDir '.local/bin/gh-token-monitor.sh'), (J $HomeDir '.config/gh-token-monitor'))) {
   if (Exists $m) { $Wiper.Add($m) }
+}
+# Its logs in the shared /tmp count only if this person owns them. Windows has no /tmp.
+if (-not $OnWindows) {
+  foreach ($m in @('/tmp/gh-token-monitor.out.log', '/tmp/gh-token-monitor.err.log')) {
+    if (-not (Exists $m)) { continue }
+    $owner = ''; try { $owner = [string](Get-Item -LiteralPath $m -Force -ErrorAction Stop).User } catch { }
+    if ($owner -and $owner -ceq [Environment]::UserName) { $Wiper.Add($m) }
+  }
 }
 # The Mastra worm's startup files (Socket).
 $Persist = New-Object System.Collections.Generic.List[object]
@@ -1300,8 +1459,12 @@ if ($N_SESS -gt 0) { Progress "Keys in $(Plural $N_SESS 'agent session file' 'ag
 $Todo = New-Object System.Collections.Generic.List[string]
 $Fixes = @{ 1 = (New-Object System.Collections.Generic.List[string]); 2 = (New-Object System.Collections.Generic.List[string]);
   3 = (New-Object System.Collections.Generic.List[string]); 4 = (New-Object System.Collections.Generic.List[string]); 5 = (New-Object System.Collections.Generic.List[string]) }
-function Add-Todo([int]$sec, [string]$text) { $Todo.Add($text); $Fixes[$sec].Add($text) }
-if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First remove gh-token-monitor, listed in section 5: it erases your home folder when the stolen token stops working. Then rotate every key this machine could reach.' }
+function Add-Todo([int]$sec, [string]$text) {
+  # With gh-token-monitor present, revoking a token sets it off: every other rotate waits for it.
+  if ($WIPER_HIT -eq 1 -and -not $text.StartsWith("Don't revoke") -and $text -match 'rotate') { $text += ' Only once gh-token-monitor is stopped and removed (section 5).' }
+  $Todo.Add($text); $Fixes[$sec].Add($text)
+}
+if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
 if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($LITELLM_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Don''t run Python in the affected environments, follow LiteLLM''s advisory, and rotate every key the machine could reach.' }
@@ -1310,10 +1473,10 @@ if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and
 if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
 if ($N_SESS -gt 0) { Add-Todo 3 "Keys turned up in $(Plural $N_SESS 'agent session file' 'agent session files'). An agent read or was given them: treat them as exposed and rotate them." }
 if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs with environment variable references, then rotate them.' }
-if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys.' }
 if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
+if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($OC -eq 1 -or $RW -eq 1 -or $ZB -eq 1) { Add-Todo 5 'If you used OpenCode Console or deploy on Railway or Zeabur, rotate the keys stored there, even if nothing above looks wrong.' }
 $ISSUES = $Todo.Count
 
@@ -1430,7 +1593,7 @@ if ($LITELLM_HIT -eq 1 -or $MAL_HIT -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
 if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
-$PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of $(Commas $PCT_N) AI builders who ran Blindspot" }
+$PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of AI builders who ran Blindspot" }
 $SlowText = "$(Plural $SlowFiles.Count 'file' 'files') skipped: took too long to check"
 $Stats = "$(Plural $N_AG 'coding agent' 'coding agents'), $N_IDLE not used in 30 days, $(Plural $N_MCP 'MCP server' 'MCP servers'), $(Plural $KEY_FILES 'file' 'files') with keys in plain text, $(Plural $N_ALLOW 'key' 'keys') in allow lists"
 $Capture = $true; [void]$Cap.Clear()
@@ -1480,7 +1643,11 @@ if ($N_MCP_CACHE -gt 0) {
 if ($N_AUTO -gt 0) {
   Blank
   Emit "     ${cBold}Project settings that act as soon as the folder is opened$cRst"
-  foreach ($r in $AutoRows) { Emit "     $cYel!$cRst  $(Short $r[0])"; Wrap "Set to $($r[1])." 8 '        ' '        ' $cDim }
+  foreach ($r in $AutoRows) {
+    Emit "     $cYel!$cRst  $(Short $r.File)"
+    $more = ''; if ($r.More -gt 0) { $more = " The same settings are in $(Plural $r.More 'more folder' 'more folders'), such as worktrees." }
+    Wrap "Set to $($r.What).$more" 8 '        ' '        ' $cDim
+  }
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
@@ -1542,18 +1709,24 @@ if ($UvBad) { Wrap 'Your uv cache holds the 1.107.0 package. Clear it with: uv c
 if ($WIPER_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}a wiper is waiting$cRst"
   foreach ($l in $Wiper) { Emit "        $(Short $l)" }
-  Wrap "Don't revoke any GitHub token until these are gone: gh-token-monitor erases your home folder when the stolen token stops working." 8 '        ' '        ' $cRed
+  if ($OnWindows) { $stop = 'Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate, then ' }
+  elseif (Is-Dir '/System/Library/CoreServices') { $uidv = ''; try { $uidv = [string](& id -u 2>$null) } catch { }; $stop = "launchctl bootout gui/$uidv/com.user.gh-token-monitor, then pkill -f gh-token-monitor, then " }
+  else { $stop = 'systemctl --user disable --now gh-token-monitor.service, then pkill -f gh-token-monitor, then ' }
+  Wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and erased the home folder in the TanStack wave." 8 '        ' '        ' $cRed
+  Wrap "Stop it with $($stop)delete the files above." 8 '        ' '        ' $cRed
 }
 if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
   if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm worms' 16 "${cRed}signs of the malware found$cRst" }
-  $shown = 0
-  foreach ($r in $NpmRows) { $shown++; if ($shown -le 12) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2]))$cRst" } }
-  if ($shown -gt 12) { Emit "        ${cDim}and $($shown - 12) more$cRst" }
+  foreach ($r in $NpmRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2]))$cRst" }
   foreach ($r in $Persist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
-} elseif ($WIPER_HIT -eq 0 -and $NpmSlow -gt 0) {
-  Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $(Plural $NpmSlow 'file' 'files') took too long$cRst"
+} elseif ($WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $NpmUnread -gt 0)) {
+  $why = New-Object System.Collections.Generic.List[string]
+  if ($NpmSlow -gt 0) { $why.Add("$(Plural $NpmSlow 'file' 'files') took too long") }
+  if ($NpmUnread -gt 0) { $why.Add("part of npm's cache could not be read") }
+  Pair "$cYel!$cRst" 'npm worms' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
 } elseif ($WIPER_HIT -eq 0) {
-  Pair "$cGrn$gOk$cRst" 'npm worms' 16 "no bad versions in $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs or npm's cache"
+  Pair "$cGrn$gOk$cRst" 'npm worms' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
+  Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
 }
 if ($OC -eq 1) {
   Pair "$cYel!$cRst" 'OpenCode' 16 'installed'
@@ -1607,7 +1780,7 @@ elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE i
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }
 if ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
-elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO 'project acts' 'projects act') on opening" }
+elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
 elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
@@ -1622,10 +1795,12 @@ elseif ($N_ALLOW_NPM -gt 0) { $G4 = "$cRed$gX$cRst"; $D4 = "$N_ALLOW saved keys,
 elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $AllowFirst)" }
 else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
 $leaks = @(); if ($OC -eq 1) { $leaks += 'OpenCode' }; if ($RW -eq 1) { $leaks += 'Railway' }; if ($ZB -eq 1) { $leaks += 'Zeabur' }
-if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor found. Remove it before revoking tokens' }
+if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it before revoking tokens' }
+elseif ($MAL_HIT -eq 1 -and $LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'npm and LiteLLM malware found. Act now' }
 elseif ($MAL_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of npm malware. Act now' }
 elseif ($LITELLM_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'signs of the LiteLLM malware. Act now' }
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
+elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"
@@ -1658,12 +1833,13 @@ if ($Compact) { Out-Text ($HeadShort + $Summary) } else { Out-Text $FullText }
 
 # ---------------------------------------------------------------------------
 # What next: the result link first, then details and save. One key each, nothing
-# happens unasked. u is the run ID, r the early rank, sk the SSH private keys and
-# hk the shell history files with keys.
+# happens unasked. u is the run ID, r the early rank, sk the SSH private keys,
+# hk the shell history files with keys, nm npm malware and wp gh-token-monitor, so the
+# page never says to rotate a token while it is there.
 # ---------------------------------------------------------------------------
 function Card-Url {
   $d = (Get-Date).ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
-  "$Web/blindspot/card/#v=2&s=$SCORE&g=$GRADE&a=$N_AG&i=$N_IDLE&m=$N_MCP&mt=$N_MCP_TOKEN&k=$KEY_FILES&p=$($ProvIds -join '.')&al=$N_ALLOW&an=$N_ALLOW_NPM&ll=$LITELLM_HIT&lf=$N_LOGIN&sp=$N_SSH_OPEN&d=$d&pc=$PCT&pn=$PCT_N&u=$LinkRunId&r=$RANK&sk=$N_SSH&hk=$HIST_KEYS&ag=$($AgentIds -join '.')"
+  "$Web/blindspot/card/#v=2&s=$SCORE&g=$GRADE&a=$N_AG&i=$N_IDLE&m=$N_MCP&mt=$N_MCP_TOKEN&k=$KEY_FILES&p=$($ProvIds -join '.')&al=$N_ALLOW&an=$N_ALLOW_NPM&ll=$LITELLM_HIT&lf=$N_LOGIN&sp=$N_SSH_OPEN&d=$d&pc=$PCT&pn=$PCT_N&u=$LinkRunId&r=$RANK&sk=$N_SSH&hk=$HIST_KEYS&ag=$($AgentIds -join '.')&nm=$MAL_HIT&wp=$WIPER_HIT"
 }
 $ActSaved = 0; $ActCard = 0
 function Do-Save {
@@ -1702,7 +1878,7 @@ if ($IsConsole -and $InConsole) {
   $MenuShown = $true
   # Drop anything typed during the scan, so it can't answer a question by accident.
   try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { }
-  if ($PCT) { $Hero = 'Press ENTER to see how you rank and get your AI Exposure Check' } else { $Hero = 'Press ENTER to get your AI Exposure Check' }
+  if ($PCT) { $Hero = 'Press ENTER to see how you rank and help spread awareness' } else { $Hero = 'Press ENTER to get your AI Exposure Check and help spread awareness' }
   $Hint = '1-5 details   s save   q quit'
   $tri = [string][char]0x25B6; if (-not $Fancy) { $tri = '>' }
   $hinted = $false
