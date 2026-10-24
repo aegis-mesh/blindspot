@@ -250,6 +250,13 @@ HOME="$WORK/vsp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.t
 has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack and keyv worms plant' "$WORK/vsp.txt"
 HOME="$WORK/clean" bash "$SCRIPT" --offline > "$WORK/clean-npm.txt" 2>&1
 has    "the clean line counts versions and packages apart" 'none of [0-9]+ bad versions or [0-9]+ bad packages' "$WORK/clean-npm.txt"
+# A folder of npm's cache that can't be read.
+cp -R "$WORK/clean" "$WORK/npmno"; mkdir -p "$WORK/npmno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/npmno/.npm/_cacache/index-v5/aa"
+HOME="$WORK/npmno" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno.txt"
+HOME="$WORK/npmno" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno-c.txt"
+chmod 755 "$WORK/npmno/.npm/_cacache/index-v5/aa"
+has    "an unreadable cache folder is not called clean" "npm worms not fully checked: part of npm's cache could not be read" "$WORK/npmno.txt"
+has    "and the summary row is not green either"       'Recent leaks npm packages not fully checked: cache unreadable' "$WORK/npmno-c.txt"
 awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
 if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
 # Wiper: Linux steps, and every other rotate waits for it.
@@ -419,6 +426,16 @@ has    "WSL says Windows-side files were not checked"   'inside WSL, so files on
 if grep -q 'inside WSL' "$WORK/wsl.txt" && ! grep -q 'inside WSL' "$WORK/notwsl.txt" && grep -q 'GNOME Keyring or KWallet' "$WORK/notwsl.txt"; then
   ok "only WSL, not plain Linux, gets the WSL note and loses the keyring advice"
 else bad "only WSL, not plain Linux, gets the WSL note and loses the keyring advice"; fi
+
+echo "placeholders"
+mkdir -p "$WORK/ph/code/ph/.claude"
+printf '{"mcpServers":{"x":{"command":"npx","env":{"API_KEY":"your-api-key-goes-here"}}}}\n' > "$WORK/ph/code/ph/.mcp.json"
+# A placeholder shaped like a real command key, which only the placeholder screen stops.
+printf '{"name":"ph","private":true}\n' > "$WORK/ph/code/ph/package.json"
+printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here npm test)"]}}\n' > "$WORK/ph/code/ph/.claude/settings.local.json"
+HOME="$WORK/ph" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
+has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
+has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 # A minimal PATH hides any opencode, railway or zeabur command on this machine, so
