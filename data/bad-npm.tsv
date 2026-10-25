@@ -11,10 +11,10 @@
 #   TanStack wave, May 2026: every npm version in the affected-packages list of Wiz's post on it,
 #     each also named by a GitHub or OpenSSF malware advisory: the 42 @tanstack packages
 #     (GHSA-g7cv-rxg3-hmpx) and the packages the worm spread to (tanstack), the @mistralai builds
-#     (GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc), versions to update because
-#     Mistral, their maintainer, says the malware could not run (mistral), the @uipath builds, malware
-#     as GitHub's advisory GHSA-cx9h-9vrc-7393 says, though Wiz found a bug in their payload (uipath),
-#     and OpenSearch
+#     (GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc) and the @uipath builds (malware
+#     advisories such as GHSA-cx9h-9vrc-7393), versions to update because their maintainers say the
+#     malware could not run: Mistral (mistral), and UiPath, whose trust center says a bug left it
+#     non-functional and the packages pose no risk (uipath), and OpenSearch
 #     (GHSA-298w-vvm4-ww55). And wot-api 0.8.5, which Wiz's list leaves out: OpenSSF's MAL-2026-3591
 #     adds it to GitHub's 0.8.1 to 0.8.4, and npm's registry shows it published an hour after 0.8.4.
 #     Not the five versions Wiz's list also names from April's SAP and Intercom compromise, which

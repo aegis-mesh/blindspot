@@ -862,8 +862,8 @@ hasnot "it does not outrank moving keys out of plain text" 'First fix: Update th
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
 # The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
-# malware, as GitHub's malware advisories say, and so are the UiPath builds, though Wiz found a bug in
-# their payload. Packages the TanStack worm spread to, GitHub's second
+# malware, as GitHub's malware advisories say; the UiPath builds are versions to update, as UiPath, their
+# maintainer, says a bug left their malware non-functional. Packages the TanStack worm spread to, GitHub's second
 # SANDWORM_MODE batch and the Mastra packages besides @mastra/core are found, Mastra named as Socket does.
 for np in npd npa npk; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x"; done
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
@@ -874,12 +874,15 @@ has    "a @keyv 6.0.0 build is npm malware, as GitHub's advisory says" '@keyv/re
 has    "with its advice to rotate from another computer" 'Rotate the secrets this machine held from another computer, as the GitHub advisory says, then pin each @keyv package listed in section 5 to its version before 6\.0\.0\.' "$WORK/npk.txt"
 has    "a SANDWORM_MODE sleeper package is malware, as GitHub's advisories say" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised\.' "$WORK/npd.txt"
 hasnot "and no fix says its attackers published every version" 'the attackers published every version' "$WORK/npd.txt"
-has    "a UiPath build is malware, as GitHub's advisory says" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware, and the GitHub advisory says to treat a machine that installed one as compromised, though Wiz found a bug kept its payload from working\.' "$WORK/npd.txt"
+has    "a UiPath build is a version to update, as UiPath says" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional\.' "$WORK/npd.txt"
 rm -rf "$WORK/npu"; mkdir -p "$WORK/npu/code/x" "$WORK/npu/AppData/Roaming" "$WORK/npu/AppData/Local/Temp"
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npu/code/x/package-lock.json"
 HOME="$WORK/npu" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npu.txt"
-has    "a UiPath build alone in a lockfile says to act if that project was installed" 'ACT NOW IF YOU INSTALLED IT' "$WORK/npu.txt"
-has    "and its fix says to rotate from another computer" 'Rotate the secrets this machine held from another computer, as the GitHub advisory says, then remove the @uipath packages section 5 lists\.' "$WORK/npu.txt"
+HOME="$WORK/npu" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npu-sum.txt"
+hasnot "a UiPath build alone is not a compromised machine" 'ACT NOW|Treat this machine as compromised|[Rr]otate' "$WORK/npu.txt"
+has    "and is a version to update"                   'npm malware a bad version to update' "$WORK/npu.txt"
+has    "with UiPath's own fix"                        'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional: updating them is all they need\.' "$WORK/npu.txt"
+has    "and row 05 gives UiPath's summary"            'Recent leaks +UiPath builds: update them, UiPath says no risk' "$WORK/npu-sum.txt"
 has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
 has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
 # SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
