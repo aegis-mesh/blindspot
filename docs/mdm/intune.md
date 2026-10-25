@@ -7,7 +7,7 @@ checked on 2026-10-24 against
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
 
-You add three things: a shell script that installs the script once, a shell script that runs the
+You add three things: a shell script that installs the scripts once, a shell script that runs the
 check, and a custom attribute that shows the result.
 
 ## Full Disk Access
@@ -25,9 +25,10 @@ Check the result: each account's `protected_folders` is `checked` once access wo
 ## Install it once
 
 1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` whose SHA-256 you checked, with the options line starting its second
-   line (`--deadline=3000` for Intune), pasted between the install script's marker lines. This install
-   step has not yet been run end to end on a real Mac.
+   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
+   starting the second line of `gird-fleet.sh` (`--deadline=3000` for Intune), each pasted between
+   its marker lines in the install script. This install step has not yet been run end to end on a
+   real Mac.
 2. Save the install script as a file, `blindspot-install.sh`.
 3. In the Microsoft Intune admin center, select **Devices** > **By platform** > **macOS** >
    **Manage devices** > **Scripts** > **Add**
@@ -43,7 +44,7 @@ Check the result: each account's `protected_folders` is `checked` once access wo
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh"
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
    ```
 
 2. Add a second script the same way, named `Blindspot check`, uploading `blindspot-check.sh`.
@@ -58,7 +59,7 @@ Check the result: each account's `protected_folders` is `checked` once access wo
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh" --inventory --stale-days=3
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
    ```
 
 2. Select **Devices** > **By platform** > **macOS** > **Organize devices** >
@@ -90,7 +91,7 @@ In **Scripts** > `Blindspot check` > **Device status**, **Success** means the ch
 
 Checked 2026-10-24:
 
-- A shell script file must be less than 1 MB. The install script, with `gird-check.sh` in it, is about 200 KB.
+- A shell script file must be less than 1 MB. The install script, with both files in it, is about 220 KB.
 - A shell script that runs longer than 60 minutes is stopped and reported as failed.
   `--deadline=3000` aims to finish the check within 50 minutes.
 - A shell script runs as root unless **Run script as signed-in user** is **Yes**.

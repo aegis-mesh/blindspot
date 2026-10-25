@@ -6,7 +6,7 @@ checked on 2026-10-24 against Jamf's documentation, linked at each step.
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
 
-You add three things: a policy that installs the script once, a policy that runs it daily, and an
+You add three things: a policy that installs the scripts once, a policy that runs it daily, and an
 extension attribute that shows the result in each computer's inventory.
 
 ## Full Disk Access
@@ -25,9 +25,10 @@ the result either way: each account's `protected_folders` is `checked` once acce
 ## Install it once
 
 1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` whose SHA-256 you checked, with the options line starting its second
-   line (`--deadline=3000` for Jamf), pasted between the install script's marker lines. This install
-   step has not yet been run end to end on a real Mac.
+   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
+   starting the second line of `gird-fleet.sh` (`--deadline=3000` for Jamf), each pasted between its
+   marker lines in the install script. This install step has not yet been run end to end on a real
+   Mac.
 2. In Jamf Pro, click **Settings**, then in **Computer management** click **Scripts**, then **New**
    ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Adding_a_Script_to_Jamf_Pro)).
 3. In the **General** pane, name it `Blindspot install`.
@@ -46,7 +47,7 @@ the result either way: each account's `protected_folders` is `checked` once acce
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh"
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
    ```
 
 2. Make a second policy the same way, with the execution frequency **Once every day**, the
@@ -64,7 +65,7 @@ the result either way: each account's `protected_folders` is `checked` once acce
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh" --inventory --stale-days=3 --result-tags
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3 --result-tags
    ```
 
 6. Click **Save**.

@@ -9,8 +9,8 @@ We acknowledge reports within 2 business days, triage within 5, and fix high-sev
 - The script printing, storing or sending a key, a key fragment, a path, a username or a hostname.
 - File names or file contents that make the script run a command, or send escape sequences to your terminal.
 - The script writing or changing a file other than the report you asked it to save.
-- The script starting an agent, an MCP server or Python, or using sudo outside `--all-users`.
-- In `--all-users`, run as root: anything an account can do to change what root runs, reads or reports for another account.
+- The script starting an agent, an MCP server or Python, or using sudo.
+- In `gird-fleet.sh`, which runs as root: anything an account can do to change what root runs, reads or reports for another account.
 - The shared counts carrying anything not listed in [TELEMETRY.md](TELEMETRY.md).
 
 ## How it is built to stay safe

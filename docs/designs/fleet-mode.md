@@ -1,6 +1,6 @@
 # Fleet mode: running Blindspot from an MDM
 
-Status: built for macOS (phase 1), as `gird-check.sh --all-users`, with the admin guide in
+Status: built for macOS (phase 1), as `gird-fleet.sh --all-users`, with the admin guide in
 `docs/fleet.md` and the MDM pages in `docs/mdm/` (each marked untested until run end to end on a real
 Mac). Linux is phase 2: until then `--all-users` on Linux exits 13 with a message. `gird-check.ps1`
 has no fleet mode; Windows needs a design of its own (see Not covered). What the build adds to this
@@ -162,7 +162,7 @@ any code it does not expect, as not checked.
 
 ## A person checking it in Terminal
 
-An admin trying it on one Mac (`sudo bash gird-check.sh --all-users`, with a terminal) gets a
+An admin trying it on one Mac (`sudo bash gird-fleet.sh --all-users`, with a terminal) gets a
 readable report per account, in Blindspot's usual style, then where the result was saved:
 
 ```
@@ -287,11 +287,11 @@ real Mac.
   value, `stale: last run <time>` past `--stale-days` (3 by default), `none` before the first run
   and `unreadable` when the saved file is not root's own 0600 file in a 0700 folder.
   `--result-tags` wraps it for Jamf Pro.
-- Deployment: the MDM installs the script once at `/Library/Application Support/Blindspot/gird-check.sh`
-  (folder and file `root:wheel` 0755), with the options in one line that starts its second line,
-  `case "${1:-}" in --account-run|--inventory) ;; *) set -- <options> ;; esac`, so the account runs it
-  starts and an `--inventory` call keep their own. The MDM's daily item and its inventory field only
-  `exec` that file, with no options or secret on their own line. The install step is untested on a
+- Deployment: the MDM installs both files once in `/Library/Application Support/Blindspot`
+  (folder and files `root:wheel` 0755), with the options in one line that starts the second line of
+  `gird-fleet.sh`, `case "${1:-}" in --inventory) ;; *) set -- <options> ;; esac`, so an
+  `--inventory` call keeps its own. The MDM's daily item and its inventory field only `exec`
+  `gird-fleet.sh`, with no options or secret on their own line. The install step is untested on a
   real Mac.
 - `review` means something to change or confirm, not urgent. It covers a tool with a security fix and an incident at the update level, and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
@@ -311,11 +311,21 @@ real Mac.
   other running processes are not checked yet.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
-- `--all-users` needs to run from a file, since each account runs a copy of it; from standard input
-  it stops with a message. The copy leaves out an MDM's options line, which can carry the
-  `--hash-accounts` secret. The result's `script` field and the summary's `v=` are the release
-  version from the script's header, found in its first five lines. Root refuses to start (exit 13)
-  unless the script and every folder above it are owned by root and writable by no one else.
+- Two files. `gird-fleet.sh` holds all the root work: the fixed PATH, the ownership checks, the
+  account list, the machine checks, the copy, the sudo launch, the timer, the strict parsing,
+  outcomes, exit codes, every fleet option, the saved result and the readable report.
+  `gird-check.sh`, the script each person runs, holds no root code: it keeps `--account-run`, the
+  fixed lines one account's check sends back, and given `--all-users` it points to `gird-fleet.sh`.
+  Root never sources `gird-check.sh`: `tools/gen.sh` writes the tables root reads (keys, agents set
+  to run without asking, incidents, indicators, outdated tools, platforms) into `gird-fleet.sh` from
+  `data/`, and copies `gird-check.sh`'s agents table, which has no data file; `--check` covers both.
+- `gird-fleet.sh` needs to run from a file, since it copies `gird-check.sh` from its own folder for
+  each account; from standard input it stops with a message. Root refuses to start (exit 13) unless
+  `gird-fleet.sh`, `gird-check.sh` next to it and every folder above them are owned by root and
+  writable by no one else. The options line, with any `--hash-accounts` secret, sits in
+  `gird-fleet.sh`, which is never copied for an account. The result's `script` field and the
+  summary's `v=` are `gird-check.sh`'s release version, from its header, so both files report one
+  version.
 - An account run stopped at its time limit can leave its temp files in `/tmp`: root does not know
   their names. Moved-aside saved-result folders stay until removed (`docs/fleet.md`, step 6).
 - A saved-result folder that is a link, not a folder, or not root's with mode 0700 is moved aside to

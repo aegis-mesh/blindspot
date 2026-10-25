@@ -7,7 +7,7 @@ on 2026-10-24 against
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
 
-You add two Custom Script library items: one installs the script once, the other runs it daily.
+You add two Custom Script library items: one installs the scripts once, the other runs it daily.
 Iru records the daily run's output, so its summary line is the result.
 
 ## Full Disk Access
@@ -25,9 +25,10 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
 ## Install it once
 
 1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` whose SHA-256 you checked, with the options line starting its second
-   line (`--deadline=1800` for Iru), pasted between the install script's marker lines. This install
-   step has not yet been run end to end on a real Mac.
+   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
+   starting the second line of `gird-fleet.sh` (`--deadline=1800` for Iru), each pasted between its
+   marker lines in the install script. This install step has not yet been run end to end on a real
+   Mac.
 2. Add a Custom Script library item named `Blindspot install`
    ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)),
    and assign it to your Blueprints.
@@ -43,7 +44,7 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-check.sh"
+   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
    ```
 
 4. Select **Save**.
