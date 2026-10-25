@@ -2454,8 +2454,12 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # became Devin Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads
 # the old folder (its FAQ: only the name changed), so both are read. Antigravity IDE keeps them in
 # ~/.antigravity-ide/extensions (its product.json: data folder .antigravity-ide, Open VSX's gallery),
-# and the Antigravity before it in ~/.antigravity/extensions. A line whose bad build
-# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
+# and the Antigravity before it in ~/.antigravity/extensions. VS Code Insiders keeps them in
+# ~/.vscode-insiders/extensions, and the remote servers these editors run over SSH, WSL or in a container
+# in their own folders (VS Code's docs and source: ~/.vscode-server and ~/.vscode-server-insiders; the
+# serverDataFolderName of each product.json: ~/.cursor-server, ~/.windsurf-server, and ~/.devin-server
+# since the rename), installing from the same registry as the editor. A line whose bad build
+# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folders, where the
 # same id is the Marketplace's own build. A folder that can't be read leaves the check not
 # done in full ($ExtUnread), never clean.
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
@@ -2463,8 +2467,9 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # ($ExtUpd, with the os), with no part in EXT_HIT, the score or the link's ex.
 $ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUpd = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 5 })
-foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions', '.antigravity-ide/extensions', '.antigravity/extensions')) {
-  $reg = 'openvsx'; if ($er -eq '.vscode/extensions') { $reg = 'marketplace' }
+foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions', '.antigravity-ide/extensions', '.antigravity/extensions',
+                  '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions', '.cursor-server/extensions', '.windsurf-server/extensions', '.devin-server/extensions')) {
+  $reg = 'openvsx'; if (@('.vscode/extensions', '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions') -contains $er) { $reg = 'marketplace' }
   $xdir = J $HomeDir $er
   if (-not (Is-Dir $xdir)) { continue }
   try { $xents = @(([IO.DirectoryInfo]$xdir).GetFileSystemInfos() | Sort-Object -Property Name -CaseSensitive) } catch { $ExtUnread++; continue }

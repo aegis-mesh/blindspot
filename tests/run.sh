@@ -1370,6 +1370,18 @@ mkdir -p "$WORK/dz-ag/.antigravity-ide/extensions/mswincx.antigravity-cockpit-1.
 dzrun "$WORK/dz-ag" | tr -s ' \n' '  ' > "$WORK/dz-ag.txt"
 has    "Antigravity IDE's extension folder is read, as an Open VSX editor's" '~/\.antigravity-ide/extensions/mswincx\.antigravity-cockpit-1\.2\.0-universal mswincx\.antigravity-cockpit 1\.2\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ag.txt"
 has    "and the earlier Antigravity's folder too"     '~/\.antigravity/extensions/keyacrosslaud\.auto-loop-for-antigravity-0\.4\.1 keyacrosslaud\.auto-loop-for-antigravity 0\.4\.1 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-ag.txt"
+# VS Code Insiders and the remote servers keep extensions in folders of their own: VS Code's install
+# from the Marketplace (an Open VSX build's id there is the Marketplace's own), the others from Open VSX.
+rm -rf "$WORK/dz-rem"; cp -R "$WORK/clean" "$WORK/dz-rem"
+mkdir -p "$WORK/dz-rem/.vscode-insiders/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-rem/.vscode-server/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
+  "$WORK/dz-rem/.vscode-server-insiders/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" "$WORK/dz-rem/.vscode-server/extensions/aadarkcode.one-dark-material-3.20.1" \
+  "$WORK/dz-rem/.cursor-server/extensions/aadarkcode.one-dark-material-3.20.1" "$WORK/dz-rem/.windsurf-server/extensions/spacetoow.vsc-python-indent-1.21.4" \
+  "$WORK/dz-rem/.devin-server/extensions/littensy-studio.magical-icons-1.0.61"
+dzrun "$WORK/dz-rem" | tr -s ' \n' '  ' > "$WORK/dz-rem.txt"
+has    "VS Code Insiders' extension folder is read, as VS Code's" '~/\.vscode-insiders/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-rem.txt"
+has    "the VS Code Server folders are read, as VS Code's" '~/\.vscode-server/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed ~/\.vscode-server-insiders/extensions/holiday-themes\.theme-coca-cola-christmas-1\.0\.2 holiday-themes' "$WORK/dz-rem.txt"
+hasnot "an Open VSX build's id in a VS Code Server folder is not flagged" '~/\.vscode-server/extensions/aadarkcode' "$WORK/dz-rem.txt"
+has    "the Cursor, Windsurf and Devin Desktop server folders are read, as Open VSX editors'" '~/\.cursor-server/extensions/aadarkcode\.one-dark-material-3\.20\.1 aadarkcode\.one-dark-material 3\.20\.1 \(GlassWorm extensions, March 2026\), installed ~/\.windsurf-server/extensions/spacetoow\.vsc-python-indent-1\.21\.4 .*~/\.devin-server/extensions/littensy-studio\.magical-icons-1\.0\.61 littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-rem.txt"
 # Microsoft's list of extensions removed from the Marketplace: a GlassWorm theme it removed as malware and
 # an extension it removed as impersonation are looked for in VS Code's own folder too. Open VSX removed
 # every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. And a theme of the
