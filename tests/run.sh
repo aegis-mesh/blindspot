@@ -2021,17 +2021,20 @@ has    "the VS Code Server folders are read, as VS Code's" '~/\.vscode-server/ex
 hasnot "an Open VSX build's id in a VS Code Server folder is not flagged" '~/\.vscode-server/extensions/aadarkcode' "$WORK/dz-rem.txt"
 has    "the Cursor, Windsurf and Devin Desktop server folders are read, as Open VSX editors'" '~/\.cursor-server/extensions/aadarkcode\.one-dark-material-3\.20\.1 aadarkcode\.one-dark-material 3\.20\.1 \(GlassWorm extensions, March 2026\), installed ~/\.windsurf-server/extensions/spacetoow\.vsc-python-indent-1\.21\.4 .*~/\.devin-server/extensions/littensy-studio\.magical-icons-1\.0\.61 littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-rem.txt"
 # Microsoft's list of extensions removed from the Marketplace: a GlassWorm theme it removed as malware and
-# an extension it removed as impersonation are looked for in VS Code's own folder too. Open VSX removed
-# every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. The three themes of
+# an extension it removed as impersonation are looked for in VS Code's own folder too. oorzc.ssh-tools
+# counts at 0.5.1, the build Socket names, and not at a build from before the developer's token was
+# stolen, though Open VSX removed every version; oorzc.ssh-tool is another id. The three themes of
 # the October cluster that Microsoft removed as malware, and no source shows a payload in, are not listed.
 rm -rf "$WORK/dz-ms"; cp -R "$WORK/clean" "$WORK/dz-ms"
 mkdir -p "$WORK/dz-ms/.vscode/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-ms/.vscode/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
-  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" \
+  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.1" "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.4.0" "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tool-0.5.1" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" \
   "$WORK/dz-ms/.cursor/extensions/charcoal-mint-studio.theme-charcoal-mint-1.0.2" "$WORK/dz-ms/.vscode/extensions/lohsebhipolg2s.theme-aurora-borealis-1.0.1"
 dzrun "$WORK/dz-ms" | tr -s ' \n' '  ' > "$WORK/dz-ms.txt"
 has    "a theme Microsoft removed from its Marketplace as malware, in VS Code's own folder" '~/\.vscode/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
 has    "one it removed as impersonation, in VS Code's own folder too" '~/\.vscode/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
-has    "any oorzc.ssh-tools version in an Open VSX editor's folder, as Open VSX removed them all" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.2 oorzc\.ssh-tools 0\.5\.2 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
+has    "oorzc.ssh-tools 0.5.1, the build Socket names, in an Open VSX editor's folder" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.1 oorzc\.ssh-tools 0\.5\.1 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
+hasnot "an oorzc.ssh-tools build from before the compromise is not flagged" 'oorzc\.ssh-tools-0\.4\.0|oorzc\.ssh-tools 0\.4\.0' "$WORK/dz-ms.txt"
+hasnot "Open VSX's oorzc.ssh-tool is another extension" 'oorzc\.ssh-tool-0\.5\.1|oorzc\.ssh-tool 0\.5\.1' "$WORK/dz-ms.txt"
 hasnot "the October cluster's themes with no payload are not listed" 'theme-coca-cola-christmas|theme-charcoal-mint|theme-aurora-borealis' "$WORK/dz-ms.txt"
 # A folder is split the way the editors split it: the id is the longest start that leaves a version of
 # three numbers, so oorzc.ssh-tools-2-0.1.0 is the extension oorzc.ssh-tools-2 at 0.1.0.
@@ -2420,7 +2423,7 @@ gen_refuses "an outdated plist that is not Info.plist" outdated.tsv "newtool${T}
 gen_refuses "an extension with an unknown incident"    bad-extensions.tsv "pub.ext${T}1.0.0${T}nosuch${T}any${T}all"
 gen_refuses "an extension whose incident is only an update" bad-extensions.tsv "pub.ext${T}1.0.0${T}injective${T}any${T}all"
 gen_refuses "an extension version that is not a version" bad-extensions.tsv "pub.ext${T}1.0.0-beta${T}glassworm${T}any${T}all"
-gen_refuses "an extension listed twice, in another case" bad-extensions.tsv "OORZC.ssh-tools${T}*${T}glassworm${T}openvsx${T}all"
+gen_refuses "an extension listed twice, in another case" bad-extensions.tsv "OORZC.ssh-tools${T}0.5.1${T}glassworm${T}openvsx${T}all"
 gen_refuses "an extension registry that is not openvsx or any" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}marketplace${T}all"
 gen_refuses "an extension os that is not all, mac, linux or win" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any${T}windows"
 gen_refuses "an extension line without its os"         bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any"

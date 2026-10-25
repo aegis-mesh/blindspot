@@ -5955,7 +5955,7 @@ uudi * sandsleep
 @iflow-mcp/watercrawl-watercrawl-mcp 1.3.4 glasswormuni"
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
-BAD_EXT="oorzc.ssh-tools * glassworm openvsx mac
+BAD_EXT="oorzc.ssh-tools 0.5.1 glassworm openvsx mac
 oorzc.i18n-tools-plus 1.6.8 glassworm openvsx mac
 oorzc.mind-map 1.0.61 glassworm openvsx mac
 oorzc.scss-to-css-compile 1.3.4 glassworm openvsx mac

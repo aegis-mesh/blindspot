@@ -144,8 +144,9 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
 - GlassWorm, from Socket's posts, one incident per post: a version where the post gives one, and
   every version where it names an extension without one (these are the attacker's own extensions,
   which update themselves, so a version from before an extension was turned counts too).
-  - January 2026: three `oorzc` extensions at their malicious versions, every `oorzc.ssh-tools`
-    version (Open VSX removed them all and added it to its malware list, Socket says), and the
+  - January 2026: the four `oorzc` extensions at the versions Socket names (a real developer's,
+    published with a stolen token: Open VSX removed every `oorzc.ssh-tools` version, but Socket names
+    0.5.1 as its only bad build, so the developer's earlier builds are not listed), and the
     thirteen earlier extensions Socket names, at every version, all `openvsx`: Socket's findings
     concern the Open VSX builds and do not suggest the publisher's Marketplace listings were
     compromised (the Marketplace still offers them, `oorzc.ssh-tools` with a 0.5.1 of 30 March

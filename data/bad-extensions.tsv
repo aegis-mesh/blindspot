@@ -28,13 +28,20 @@
 # the cluster's two other Open VSX extensions, aurora-them-creator.theme-aurora-nocturne (which Microsoft's
 # list removes as impersonation, 30 January 2026) and solidity-syntax.deep-focus: Socket shows no payload
 # in either.
-#   January 2026: the four oorzc extensions, Open VSX only: Socket's findings concern the Open VSX
-#     builds, and it does not suggest the publisher's Marketplace listings were compromised. The
-#     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026, after that post:
-#     Microsoft's list of removed extensions does not name it (24 October 2026), and its package
-#     holds none of the loader IOCs Socket publishes (the AES key and IVs, the Solana address, the
-#     IP). Three at their malicious versions, and oorzc.ssh-tools at every version: Open VSX removed them all and added it
-#     to its malware list, Socket says. Their os is mac: Socket shows their loader going on only when
+#   January 2026: the four oorzc extensions at the versions the post names, Open VSX only: Socket's
+#     findings concern the Open VSX builds, and it does not suggest the publisher's Marketplace
+#     listings were compromised. The Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30
+#     March 2026, after that post: Microsoft's list of removed extensions does not name it (24 October
+#     2026), and its package holds none of the loader IOCs Socket publishes (the AES key and IVs, the
+#     Solana address, the IP). These are a real developer's extensions, published with a stolen token
+#     on 30 January 2026, so a build from before then is the developer's own and is not listed. Open
+#     VSX removed every oorzc.ssh-tools version and lists the id as malware "because multiple recent
+#     oorzc.ssh-tools versions scanned as malware and many versions were published" (Socket): a
+#     removal, not a finding that each build was malware. Socket's page for the extension names 0.5.1
+#     as its only affected version, and its list of the Open VSX versions has none after 0.5.0 (June
+#     2025) but that 0.5.1; the Wayback Machine has Open VSX serving the developer's 0.0.6 to 0.4.7
+#     from October 2023 to April 2025. oorzc.ssh-tool, which Open VSX has offered since 30 March 2026,
+#     is another id. Their os is mac: Socket shows their loader going on only when
 #     os.platform() is darwin, to a second stage that is a macOS implant. And the thirteen earlier
 #     extensions it lists, which the Marketplace does not offer and Microsoft's list does not name
 #     (all: the post does not show what their code checks).
@@ -76,7 +83,7 @@
 #   minutes and on Open VSX for 36 (any), and gives its signs on macOS, Linux and Windows (all). The
 #   kitty-monitor files it leaves have lines of their own in data/indicators.tsv, beside the AntV wave's.
 # id	version	incident	registry	os
-oorzc.ssh-tools	*	glassworm	openvsx	mac
+oorzc.ssh-tools	0.5.1	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
 oorzc.mind-map	1.0.61	glassworm	openvsx	mac
 oorzc.scss-to-css-compile	1.3.4	glassworm	openvsx	mac
