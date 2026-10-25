@@ -367,7 +367,7 @@ tr -s ' \n' '  ' < "$WORK/rv.txt" > "$WORK/rv-flat.txt"
 hasnot "a pnpm override pinning away is not a hit"     'code/pin/' "$WORK/rv.txt"
 has    "an npm lock entry without a URL is read"       'keyv 6\.0\.0 \(keyv worm' "$WORK/rv.txt"
 has    "a nested lock entry without a URL is read"     '~/code/nested/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$WORK/rv-flat.txt"
-has    "and a scoped one inside a scoped tool"         '~/code/nested/package-lock\.json @keyv/redis 6\.0\.0 \(keyv worm' "$WORK/rv-flat.txt"
+has    "and a scoped one inside a scoped tool"         '~/code/nested/package-lock\.json @keyv/redis 6\.0\.0 \(keyv account takeover' "$WORK/rv-flat.txt"
 has    "npm-shrinkwrap.json is read"                   'code/shrink/npm-shrinkwrap\.json' "$WORK/rv.txt"
 has    "a pnpm 5 lockfile is read"                     'cacheable 2\.5\.1' "$WORK/rv.txt"
 has    "a bad dependency inside a global tool is found" 'sometool/node_modules/axios' "$WORK/rv.txt"
@@ -502,6 +502,23 @@ has    "the summary row says so in yellow"           'Recent leaks an npm packag
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
+# Versions the sources say carried no working malware are versions to update, each with its own
+# line: the @keyv 6.0.0 builds published without the install hook, SANDWORM_MODE's sleeper packages
+# and the UiPath builds whose payload had a bug. Packages the TanStack worm spread to, GitHub's second
+# SANDWORM_MODE batch and the Mastra packages besides @mastra/core are found, Mastra named as Socket does.
+for np in npd npa; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x"; done
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    },\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
+for np in npd npa; do HOME="$WORK/$np" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
+has    "a payload-less @keyv build is a version to update" 'npm malware a bad version to update .*keyv account takeover, August 2026: published from the compromised keyv account, but without the malicious install hook, Socket says\.' "$WORK/npd.txt"
+has    "with Socket's advice to pin it"               'Pin each @keyv package listed in section 5 to its version before 6\.0\.0, as Socket advises\.' "$WORK/npd.txt"
+has    "a SANDWORM_MODE sleeper package is a version to update" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: published by the SANDWORM_MODE attackers with no malware in them yet, Socket says\.' "$WORK/npd.txt"
+has    "with a fix to uninstall it"                   'Uninstall the SANDWORM_MODE sleeper packages listed in section 5: the attackers published every version of them\.' "$WORK/npd.txt"
+has    "a UiPath build whose payload could not run is a version to update" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware that a bug in its payload kept from working, Wiz says\.' "$WORK/npd.txt"
+hasnot "none of them is a compromised machine"        'ACT NOW|Treat this machine as compromised' "$WORK/npd.txt"
+has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
+has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
+has    "a Mastra package is named as its sources name it" '@mastra/mcp 1\.10\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
 # A version to update outranks an unreadable cache in row 05: a partial check never hides a finding to act on.
 cp -R "$WORK/mis" "$WORK/misno"; mkdir -p "$WORK/misno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/misno/.npm/_cacache/index-v5/aa"
 HOME="$WORK/misno" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/misno.txt"
