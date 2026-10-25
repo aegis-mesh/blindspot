@@ -2364,9 +2364,13 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
 done <<EOF
 $IND_TABLE
 EOF
-LOADER=0
-if [ "$ACCTRUN" -eq 0 ] && [ -e /tmp/remote_code_loader.lock ] && command -v lsof >/dev/null 2>&1; then
-  [ -n "$(lsof -t /tmp/remote_code_loader.lock 2>/dev/null)" ] && LOADER=1
+# The loader lock counts under the marker rule above: this person's own file, not a link and with one
+# name, since any account can put a link or its own file in /tmp under that name. GIRD_CHECK_LOADER_LOCK
+# is for tests, and is honoured only when not root.
+LOADER=0; _llk=/tmp/remote_code_loader.lock
+[ -n "${GIRD_CHECK_LOADER_LOCK:-}" ] && [ "$(id -u)" != 0 ] && _llk=$GIRD_CHECK_LOADER_LOCK
+if [ "$ACCTRUN" -eq 0 ] && [ -e "$_llk" ] && [ ! -L "$_llk" ] && [ -O "$_llk" ] && [ -n "$(find "$_llk" -prune -links 1 -print 2>/dev/null)" ] && command -v lsof >/dev/null 2>&1; then
+  [ -n "$(lsof -t "$_llk" 2>/dev/null)" ] && LOADER=1
 fi
 # A bad version in uv's cache: "incident<TAB>name<TAB>version" for each one found. The cache is
 # walked once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or

@@ -301,3 +301,5 @@ a Python incident's startup file that must be its owner's	tools/gen.sh is one ba
 on a Mac, Gemini CLI's sandbox sessions under GEMINI_CLI_HOME are found	the line is macOS-only, for Gemini CLI's sandbox on a Mac, and gird-check.ps1 reads the Windows folders
 on a Mac, a lockfile's version to update beside its malware keeps the lockfile note	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
 and one installed is named as that	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
+a link at the loader lock's name is not the malware's lock	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
+and this person's own lock a process holds still counts	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
