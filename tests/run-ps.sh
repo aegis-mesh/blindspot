@@ -845,6 +845,8 @@ has    "the LaunchAgent alone: the fix names the startup file, not extensions" '
 has    "the LaunchAgent alone: the link says ex, not nm" '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-la.txt"
 cp -R "$WORK/dz-ext" "$WORK/dz-both"; mkdir -p "$WORK/dz-both/code/ax"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/dz-both/code/ax/package-lock.json"
+# Installed next to its lockfile: a lockfile alone would leave the npm fix depending on an install.
+mkdir -p "$WORK/dz-both/code/ax/node_modules/axios"; printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/dz-both/code/ax/node_modules/axios/package.json"
 dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"
 has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map' "$WORK/dz-both.txt"
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
@@ -938,6 +940,7 @@ has    "a made-up update-level hit is a version to update" 'npm malware a bad ve
 hasnot "and not a compromised machine"                'ACT NOW|Treat this machine as compromised' "$WORK/mu-upd.txt"
 rm -rf "$WORK/mu-act"; cp -R "$WORK/clean" "$WORK/mu-act"; mkdir -p "$WORK/mu-act/code/a"
 printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":"1.2.3","resolved":"https://registry.npmjs.org/made-npm-pkg/-/made-npm-pkg-1.2.3.tgz"}}}\n' > "$WORK/mu-act/code/a/package-lock.json"
+mkdir -p "$WORK/mu-act/code/a/node_modules/made-npm-pkg"; printf '{"name":"made-npm-pkg","version":"1.2.3"}\n' > "$WORK/mu-act/code/a/node_modules/made-npm-pkg/package.json"
 mups "$WORK/mu-act" "$WORK/mu-act.txt"
 has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
 has    "and the link says npm malware"                '&nm=1&py=0&ex=0&wp=0' "$WORK/mu-act.txt"
