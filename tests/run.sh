@@ -705,20 +705,34 @@ mkdir -p "$WORK/vsp/p/.claude"; printf 'x\n' > "$WORK/vsp/p/.vscode/setup.mjs"; 
 HOME="$WORK/vsp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.txt"
 has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/vsp.txt"
 # April's Mini Shai-Hulud wave plants .claude/execution.js, a copy of its payload, beside its setup.mjs dropper in
-# .claude and .vscode, run by a SessionStart hook and a folder-open task (Wiz). Only the worm uses that name in
-# .claude, so it counts on its own and makes the files beside it count. The name elsewhere is not the worm's.
+# .claude and .vscode, run by a SessionStart hook and a folder-open task (Wiz). Projects use the name too, so it
+# counts by the payload's published SHA-256 or beside a worm's own file, here the router_runtime.js that lightning,
+# that wave's PyPI release, plants in .claude: then the files beside it, the hook and the task count. The name
+# elsewhere is not the worm's.
 mkdir -p "$WORK/msh/code/r/.claude" "$WORK/msh/code/r/.vscode" "$WORK/msh/code/other/.vscode" "$WORK/msh/code/other/.claude/hooks"
 printf 'x\n' > "$WORK/msh/code/r/.claude/execution.js"; printf 'y\n' | tee "$WORK/msh/code/r/.claude/setup.mjs" > "$WORK/msh/code/r/.vscode/setup.mjs"
+printf 'w\n' > "$WORK/msh/code/r/.claude/router_runtime.js"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .vscode/setup.mjs"}]}]}}\n' > "$WORK/msh/code/r/.claude/settings.json"
 printf '{"version":"2.0.0","tasks":[{"label":"Environment Setup","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/msh/code/r/.vscode/tasks.json"
 printf 'z\n' | tee "$WORK/msh/code/other/.vscode/execution.js" > "$WORK/msh/code/other/.claude/hooks/execution.js"
 HOME="$WORK/msh" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/msh.txt"
-has    "Mini Shai-Hulud's .claude/execution.js counts on its own" '~/code/r/\.claude/execution\.js a file the Mini Shai-Hulud worm plants' "$WORK/msh.txt"
+has    "Mini Shai-Hulud's .claude/execution.js counts beside a worm's own file" '~/code/r/\.claude/execution\.js a file the Mini Shai-Hulud worm plants' "$WORK/msh.txt"
 has    "and its setup.mjs dropper beside it counts too" '~/code/r/\.vscode/setup\.mjs a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/msh.txt"
 has    "and so does its SessionStart hook"           '~/code/r/\.claude/settings\.json runs a file a worm plants' "$WORK/msh.txt"
 has    "and its folder-open task"                    '~/code/r/\.vscode/tasks\.json runs a file a worm plants' "$WORK/msh.txt"
 hasnot "none of them is a file to read"              'Named like a file' "$WORK/msh.txt"
 hasnot "execution.js in another folder is not the worm's" 'code/other' "$WORK/msh.txt"
+# Alone, and not the payload Wiz publishes the SHA-256 of, it is a file to read, and the hook that runs it is
+# not malware. The published values are the three npm packages' execution.js.
+mkdir -p "$WORK/msx/code/tool/.claude"
+printf 'console.log("tool ready")\n' > "$WORK/msx/code/tool/.claude/execution.js"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/execution.js"}]}]}}\n' > "$WORK/msx/code/tool/.claude/settings.json"
+HOME="$WORK/msx" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/msx.txt"
+hasnot "a lone .claude/execution.js that is not the payload is not malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/msx.txt"
+has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool/\.claude/execution\.js Named like a file the Mini Shai-Hulud worm plants, with nothing else of theirs beside it\.' "$WORK/msx.txt"
+_es=$({ grep '^planted_sha()' "$SCRIPT"; echo 'planted_sha x/.claude/execution.js'; } | bash)
+if [ "$_es" = 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' ]; then ok "execution.js counts by the three SHA-256 values Wiz publishes for its payload"
+else bad "execution.js counts by the three SHA-256 values Wiz publishes for its payload" "got: $_es"; fi
 # The AntV wave (SafeDep): the kitty-monitor backdoor's systemd unit and LaunchAgent, the cat.py they start, and
 # the payload copies that the hooks it adds to Claude Code and Codex settings run are signs of its malware. It also
 # commits .claude/index.js, a name projects use too: alone, and not the published payload, it is a file to read;
