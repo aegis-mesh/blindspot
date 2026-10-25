@@ -1232,7 +1232,7 @@ mkdir -p "$WP/.config/gh-token-monitor"
 winrun --offline > "$WORK/wwin-raw.txt" 2>&1; tr -s ' \n' '  ' < "$WORK/wwin-raw.txt" > "$WORK/wwin.txt"
 rm -rf "${WP:?}/.config/gh-token-monitor"
 has    "the stop command is printed whole, on a line of its own" "^ +powershell -NoProfile -Command 'schtasks /Delete /TN gh-token-monitor /F; .*Invoke-CimMethod -MethodName Terminate'\$" "$WORK/wwin-raw.txt"
-has    "Windows is told how to stop the wiper"         "Stop it first, one command at a time: powershell -NoProfile -Command 'schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate' files above" "$WORK/wwin.txt"
+has    "Windows is told how to stop the wiper"         "Stop it first, one command at a time: powershell -NoProfile -Command 'schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate' Then delete the files listed above" "$WORK/wwin.txt"
 has    "and its PowerShell does not end itself"        'Where-Object \{ \$_\.CommandLine -like "\*gh-token-monitor\*" -and \$_\.ProcessId -ne \$PID \}' "$WORK/wwin.txt"
 hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl|pkill' "$WORK/wwin.txt"
 # On Windows it lives in %LOCALAPPDATA%\gh-token-monitor, started at logon by a scheduled task of that name
