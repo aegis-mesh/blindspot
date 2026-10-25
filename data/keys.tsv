@@ -1,11 +1,13 @@
 # Key types Blindspot looks for. One line each, tab separated, most specific first: the first
 # line whose start matches names the provider. After editing, run: bash tools/gen.sh
-# A new id must also be added to PROVIDERS in gird-website worker/check-stats.js, or gird.ai
-# drops it from the counts. Patterns are POSIX extended regexes that .NET reads the same way.
+# A new id must also be added to PROVIDERS in gird.ai's Worker, or gird.ai drops it from the
+# counts. Patterns are POSIX extended regexes that .NET reads the same way. Older OpenAI project
+# keys are 48 characters after sk-proj-: 20, then T3BlbkFJ (OpenAI in base64), then 20; newer ones
+# are 156 (OpenAI's community forum, GitGuardian's OpenAI detectors, gitleaks and TruffleHog).
 # id	name	starts	pattern
 anthropic	Anthropic	sk-ant-	sk-ant-[A-Za-z0-9_-]{90,}
 openrouter	OpenRouter	sk-or-v1-	sk-or-v1-[a-f0-9]{64}
-openai	OpenAI	sk-	sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
+openai	OpenAI	sk-	sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
 google	Google	AIza|AQ[.]	AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}
 groq	Groq	gsk_	gsk_[A-Za-z0-9]{52}
 xai	xAI	xai-	xai-[A-Za-z0-9]{64,}

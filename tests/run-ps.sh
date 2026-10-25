@@ -173,7 +173,7 @@ for E in net rg; do
   has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
-  has    "$E: names encrypted sessions as not checked" 'Windsurf conversation files are encrypted, so they were not checked' "$SE/$E.flat"
+  has    "$E: names encrypted sessions as not checked" '1 Windsurf conversation file is encrypted, so it was not checked' "$SE/$E.flat"
   nokeys "$E: never prints a key" "$WORK/keys.txt" "$SE/$E.txt"
 done
 SKIPPING=$NORG
@@ -197,7 +197,7 @@ has    "with no engine the sessions are named as not checked" 'agent session fil
 mkdir -p "$SE/unread/.claude/projects/p" "$SE/unread/AppData/Roaming" "$SE/unread/AppData/Local/Temp"
 printf '{}\n' > "$SE/unread/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/unread/.claude/projects/p/b.jsonl"; chmod 000 "$SE/unread/.claude/projects/p/b.jsonl"
 psrun "$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-net.txt"
-has    "net: an unreadable session is not counted as checked" 'Checked the newest 1 of 2 agent session files' "$SE/unread-net.txt"
+has    "net: an unreadable session is not counted as checked" 'Agent sessions were partly checked: 1 file could not be read' "$SE/unread-net.txt"
 SKIPPING=$NORG
 psrun "$SE/unread" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
 has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
@@ -262,6 +262,159 @@ for E in net rg; do
 done
 SKIPPING=""
 chmod 755 "$SE/urdir/.claude/projects/locked"
+# A compressed session is not read: the check line counts only the files read, the summary row
+# says partly checked, and a home whose only session is compressed is never told no keys.
+for D in zst zst1 aq kiro aqk unr3 aidur; do mkdir -p "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
+mkdir -p "$SE/zst/.codex/sessions/2026/10" "$SE/zst1/.codex/sessions/2026/10"
+printf '{}\n' > "$SE/zst/.codex/sessions/2026/10/rollout-a.jsonl"; printf 'x' > "$SE/zst/.codex/sessions/2026/10/rollout-b.jsonl.zst"
+printf 'x' > "$SE/zst1/.codex/sessions/2026/10/rollout-b.jsonl.zst"
+# Amazon Q CLI keeps temporary AWS credentials for its own telemetry in its database, and so does
+# Kiro CLI: an ASIA key id there is not a key an agent read. A long-term key or another provider's
+# key in that database still counts. Real SQLite files, built by python3; keys from pieces.
+low() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-z0-9' | head -c "$1"; }
+mkq() { # database [conversation text]
+  mkdir -p "$(dirname "$1")"
+  python3 -c '
+import json, sqlite3, sys
+db, kid, sec, tok, conv = sys.argv[1:6]
+c = sqlite3.connect(db)
+c.execute("CREATE TABLE state (key TEXT PRIMARY KEY, value BLOB)")
+c.execute("CREATE TABLE conversations (key TEXT PRIMARY KEY, value TEXT)")
+c.execute("INSERT INTO state VALUES (?, ?)", ("telemetry-cognito-credentials", json.dumps({"access_key_id": kid, "secret_key": sec, "session_token": tok, "expiration": "2026-10-25T10:00:00Z"})))
+c.execute("INSERT INTO conversations VALUES (?, ?)", ("/home/me/app", json.dumps({"history": [{"user": "deploy it " + conv}]})))
+c.commit(); c.close()' "$1" "AS""IA$(upper 16)" "$(low 40)" "$(low 300)" "${2:-}"
+}
+mkq "$SE/aq/AppData/Local/amazon-q/data.sqlite3"; mkq "$SE/kiro/AppData/Local/kiro-cli/data.sqlite3"
+mkq "$SE/aqk/AppData/Local/amazon-q/data.sqlite3" "AK""IA$(upper 16) and g""hp_$(rnd 36)"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$SE/zst" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst-$E.txt"
+  has    "$E: the check line counts only the files read, not compressed ones" 'No keys in 1 agent session file\. ! 1 compressed session file was not checked' "$SE/zst-$E.txt"
+  psrun "$SE/zst" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E GIRD_CHECK_COMPACT=1 -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst-sum-$E.txt"
+  has    "$E: and a compressed session makes the summary row partly checked" 'Keys in plain text none in files; agent sessions partly checked' "$SE/zst-sum-$E.txt"
+  psrun "$SE/zst1" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst1-$E.txt"
+  hasnot "$E: a home with only compressed sessions is never told no keys" 'No keys in' "$SE/zst1-$E.txt"
+  psrun "$SE/aq" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/aq-$E.txt" 2>&1
+  has    "$E: Amazon Q's own telemetry key in its database is not counted" 'No keys in 1 agent session file\.' "$SE/aq-$E.txt"
+  psrun "$SE/kiro" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/kiro-$E.txt" 2>&1
+  has    "$E: nor Kiro CLI's" 'No keys in 1 agent session file\.' "$SE/kiro-$E.txt"
+  psrun "$SE/aqk" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/aqk-$E.txt" 2>&1
+  has    "$E: a long-term AWS key or another provider's in that database still counts" 'Amazon Q +1 file: (AWS, GitHub|GitHub, AWS)$' "$SE/aqk-$E.txt"
+done
+SKIPPING=""
+# An unreadable session file is named as one, never as a time cut that ripgrep or -AllSessions
+# would fix, and an unreadable Aider history is counted too instead of being skipped.
+mkdir -p "$SE/unr3/.claude/projects/p" "$SE/aidur/code/aid"
+for _f in a b c; do printf '{}\n' > "$SE/unr3/.claude/projects/p/$_f.jsonl"; done; chmod 000 "$SE/unr3/.claude/projects/p/b.jsonl"
+printf '#### hello\n' > "$SE/aidur/code/aid/.aider.chat.history.md"; chmod 000 "$SE/aidur/code/aid/.aider.chat.history.md"
+psrun "$SE/unr3" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/unr3.txt"
+has    "net: an unreadable session file is named as one" 'Agent sessions were partly checked: 1 file could not be read\.' "$SE/unr3.txt"
+hasnot "net: not as a time cut"                   'Checked the newest|Install ripgrep' "$SE/unr3.txt"
+hasnot "net: and the sessions read are not called clean" 'No keys in' "$SE/unr3.txt"
+psrun "$SE/aidur" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/aidur.txt"
+has    "an unreadable Aider history is named as not read" 'Agent sessions were partly checked: 1 file could not be read\.' "$SE/aidur.txt"
+chmod 644 "$SE/unr3/.claude/projects/p/b.jsonl" "$SE/aidur/code/aid/.aider.chat.history.md"
+# A session location that is a link to a file is read and counted, as ripgrep reads it. A link to
+# a pipe or a device, or a pipe in a session folder, is never read: the check still ends, with
+# -AllSessions too, and counts the one regular file. Each run gets 60 s and is killed and failed after.
+for D in lnk lnkc lnkp; do mkdir -p "$SE/$D/.claude/projects/p" "$SE/$D/.codex" "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done; mkdir -p "$SE/lnkel"
+printf '{}\n' | tee "$SE/lnk/.claude/projects/p/s.jsonl" "$SE/lnkc/.claude/projects/p/s.jsonl" "$SE/lnkp/.claude/projects/p/s.jsonl" "$SE/lnkel/clean.jsonl" > /dev/null
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/lnkel/key.jsonl"
+ln -s "$SE/lnkel/key.jsonl" "$SE/lnk/.codex/history.jsonl"; ln -s "$SE/lnkel/clean.jsonl" "$SE/lnkc/.codex/history.jsonl"
+mkfifo "$SE/lnkel/pipe" "$SE/lnkp/.claude/projects/p/f.jsonl"; ln -s "$SE/lnkel/pipe" "$SE/lnkp/.codex/history.jsonl"; ln -s /dev/null "$SE/lnkp/.claude/history.jsonl"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  if [ -z "$SKIPPING" ]; then
+    psrun "$SE/lnk" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/lnk-$E.txt" 2>&1
+    psrun "$SE/lnkc" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/lnkc-$E.txt" 2>&1
+    psrun "$SE/lnkp" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/lnkp-$E.txt" 2>&1 &
+    BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+    if kill -0 "$BP" 2>/dev/null; then
+      pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$SE/lnkp-$E.txt"
+      pkill -f "with-filename.*$SE/lnkp/" 2>/dev/null
+    fi
+    wait "$BP" 2>/dev/null
+  fi
+  has    "$E: a session location that is a link to a file is read" 'Codex +1 file: AWS' "$SE/lnk-$E.txt"
+  has    "$E: and counted as read"                  'No keys in 2 agent session files\.' "$SE/lnkc-$E.txt"
+  has    "$E: a link to a pipe or a device, or a pipe in a session folder, is not read" 'No keys in 1 agent session file\.' "$SE/lnkp-$E.txt"
+done
+SKIPPING=""
+# Antigravity keeps newer conversations as SQLite files (.db, and their -wal) beside the older .pb
+# files: the SQLite files are read and nothing else in the folder is, only the .pb files are named
+# as encrypted, and a folder with none is never called encrypted.
+for D in ag ag2 new cx1 gx; do mkdir -p "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
+_ag="$SE/ag/.gemini/antigravity/conversations"; mkdir -p "$_ag" "$SE/ag2/.gemini/antigravity-cli/conversations"
+printf 'x' > "$_ag/a.pb"
+mkdb() { # database text
+  python3 -c '
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, body BLOB)")
+c.execute("INSERT INTO items (body) VALUES (?)", (sys.argv[2].encode(),)); c.commit(); c.close()' "$1" "$2"
+}
+mkdb "$_ag/b.db" "run with AK""IA$(upper 16)"
+printf 'x %s y\n' "g""hp_$(rnd 36)" > "$_ag/b.db-wal"
+printf 'x %s y\n' "sk""-ant-api03-$(rnd 95)" > "$_ag/notes.txt"
+mkdb "$SE/ag2/.gemini/antigravity-cli/conversations/c.db" "hello"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$SE/ag" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/ag-$E.block"
+  tr -s ' \n' '  ' < "$SE/ag-$E.block" > "$SE/ag-$E.flat"
+  has    "$E: Antigravity's SQLite conversations and their -wal files are read" 'Antigravity +2 files: (AWS, GitHub|GitHub, AWS)$' "$SE/ag-$E.block"
+  hasnot "$E: nothing else in that folder is read"   'Anthropic' "$SE/ag-$E.block"
+  has    "$E: its .pb files are counted and named as encrypted" '1 Antigravity conversation file is encrypted, so it was not checked' "$SE/ag-$E.flat"
+  psrun "$SE/ag2" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/ag2-$E.txt" 2>&1
+  has    "$E: a folder of SQLite conversations alone is read" 'No keys in 1 agent session file\.' "$SE/ag2-$E.txt"
+  hasnot "$E: and never called encrypted"            'encrypted' "$SE/ag2-$E.txt"
+done
+SKIPPING=""
+# A conversations folder that can't be listed is named as a folder not read, never skipped.
+mkdir -p "$SE/ag3/.gemini/antigravity/conversations" "$SE/ag3/AppData/Roaming" "$SE/ag3/AppData/Local/Temp"; mkdb "$SE/ag3/.gemini/antigravity/conversations/d.db" "hello"; chmod 000 "$SE/ag3/.gemini/antigravity/conversations"
+psrun "$SE/ag3" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/ag3.txt"
+has    "net: an Antigravity conversations folder that can't be listed is named as not read" 'Agent sessions were partly checked: 1 folder could not be read' "$SE/ag3.txt"
+chmod 755 "$SE/ag3/.gemini/antigravity/conversations"
+# Session places found in the agents' source and docs: Codex's thread history database and its
+# -wal, Claude Desktop's mode for Bedrock and other providers (Claude-3p), Copilot CLI's session
+# store and command history, and the prompts typed into Aider, Amazon Q, Continue, Factory Droid
+# and Goose. A key in each is found under its agent. Codex names its database's folder two ways;
+# with neither set, the one file counts once.
+mkdir -p "$SE/new/.codex" "$SE/new/AppData/Roaming/Claude/local-agent-mode-sessions" "$SE/new/AppData/Local/Claude-3p/local-agent-mode-sessions" \
+  "$SE/new/.aws/amazonq" "$SE/new/.continue/dev_data/0.2.0" "$SE/new/.factory/state" "$SE/new/AppData/Roaming/Block/goose/data" \
+  "$SE/cx1/.codex" "$SE/csq" "$SE/groot/state" "$SE/xs/goose"
+mkdb "$SE/new/.codex/thread_history_1.sqlite" "{\"text\":\"use AK""IA$(upper 16)\"}"
+printf 'x %s y\n' "AK""IA$(upper 16)" > "$SE/new/.codex/thread_history_1.sqlite-wal"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/new/AppData/Roaming/Claude/local-agent-mode-sessions/local_b.json"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/new/AppData/Local/Claude-3p/local-agent-mode-sessions/local_a.json"
+printf 'export AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$SE/new/.aws/amazonq/.cli_bash_history"
+printf '{"prompt":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/new/.continue/dev_data/0.2.0/chatInteraction.jsonl"
+printf '[{"command": "use %s"}]\n' "AK""IA$(upper 16)" > "$SE/new/.factory/state/history.json"
+printf '#V2\nuse %s\n' "AK""IA$(upper 16)" > "$SE/new/AppData/Roaming/Block/goose/data/history.txt"
+mkdir -p "$SE/new/.copilot/command-history-state"; printf '["use %s"]\n' "AK""IA$(upper 16)" > "$SE/new/.copilot/command-history-state/history.json"
+mkdb "$SE/new/.copilot/session-store.db" "{\"text\":\"use AK""IA$(upper 16)\"}"
+mkdir -p "$SE/new/code/a"; printf '\n# 2026-10-25 06:00:00.000000\n+use %s\n' "AK""IA$(upper 16)" > "$SE/new/code/a/.aider.input.history"
+mkdb "$SE/cx1/.codex/thread_history_1.sqlite" "hello"
+mkdb "$SE/csq/thread_history_1.sqlite" "{\"text\":\"use AK""IA$(upper 16)\"}"
+printf '#V2\nuse %s\n' "AK""IA$(upper 16)" | tee "$SE/groot/state/history.txt" "$SE/xs/goose/history.txt" > /dev/null
+psrun "$SE/new" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/new.block"
+has    "a key in Codex's thread history database and its -wal is found" 'Codex +2 files: AWS$' "$SE/new.block"
+has    "a key in Claude Desktop's sessions, there and in its Claude-3p mode, is found" 'Claude Desktop +2 files: AWS$' "$SE/new.block"
+has    "a key typed into Amazon Q is found"        'Amazon Q +1 file: AWS$' "$SE/new.block"
+has    "a key in Continue's chat log is found"     'Continue +1 file: AWS$' "$SE/new.block"
+has    "a key typed into Factory Droid is found"   'Factory Droid +1 file: AWS$' "$SE/new.block"
+has    "a key typed into Goose is found"           'Goose +1 file: AWS$' "$SE/new.block"
+has    "a key typed into Aider is found"           'Aider +1 file: AWS$' "$SE/new.block"
+has    "a key in Copilot CLI's session store and command history is found" 'GitHub Copilot CLI +2 files: AWS$' "$SE/new.block"
+psrun "$SE/cx1" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/cx1.txt" 2>&1
+has    "a place two lines name is counted once"   'No keys in 1 agent session file\.' "$SE/cx1.txt"
+psrun "$SE/gx" CODEX_SQLITE_HOME="$SE/csq" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/csq.txt" 2>&1
+has    "Codex's thread history under CODEX_SQLITE_HOME is found" 'Codex +1 file: AWS$' "$SE/csq.txt"
+mkdir -p "$SE/cdir/data/sessions/s1" "$SE/csd/s2"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cdir/data/sessions/s1/m.json"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/csd/s2/m.json"
+psrun "$SE/gx" CLINE_DIR="$SE/cdir" CLINE_SESSION_DATA_DIR="$SE/csd" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/cline.txt" 2>&1
+has    "Cline's sessions under CLINE_DIR and CLINE_SESSION_DATA_DIR are found" 'Cline +2 files: AWS$' "$SE/cline.txt"
+psrun "$SE/gx" GOOSE_PATH_ROOT="$SE/groot" XDG_STATE_HOME="$SE/xs" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/groot.block"
+has    "Goose's prompts under GOOSE_PATH_ROOT are found" 'groot/state/history\.txt$' "$SE/groot.block"
+has    "ahead of XDG_STATE_HOME"                    'Goose +1 file: AWS$' "$SE/groot.block"
 # A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
 mkdir -p "$SE/aidtab/code/a${_tab}b" "$SE/aidtab/AppData/Roaming" "$SE/aidtab/AppData/Local/Temp"
 printf '> export GROQ_API_KEY=%s\n' "gs""k_$(rnd 52)" > "$SE/aidtab/code/a${_tab}b/.aider.chat.history.md"
@@ -302,6 +455,22 @@ has    "a Bedrock API key is found"                   'Gemini CLI +1 file: AWS' 
 has    "a GitHub app token in the new format is found" 'Continue +1 file: GitHub' "$SE/fmt.txt"
 has    "and all four in a project .env file"          '~/code/new/\.env +AWS, GitHub, OpenAI' "$SE/fmt.txt"
 nokeys "and none of them is printed" "$SE/fmt-keys.txt" "$SE/fmt.txt"
+# OpenAI project keys from before their length grew: sk-proj-, 20 letters and digits, T3BlbkFJ
+# (OpenAI in base64), 20 more; and today's 156 characters. Near misses, not keys: the old length
+# without the marker, and one character short of it. Built from pieces.
+mkdir -p "$SE/oai/.claude/projects/p" "$SE/oai/.codex/sessions/x" "$SE/oai/code/old" "$SE/oai/code/near" "$SE/oai/AppData/Roaming" "$SE/oai/AppData/Local/Temp"
+_m="T3Blb""kFJ"; _p48="sk""-proj-$(rnd 20)$_m$(rnd 20)"; _p156="sk""-proj-$(rnd 74)$_m$(rnd 74)"
+printf '{"a":"x %s y"}\n' "$_p48" > "$SE/oai/.claude/projects/p/a.jsonl"
+printf '{"a":"x %s y"}\n' "$_p156" > "$SE/oai/.codex/sessions/x/r.jsonl"
+printf 'OPENAI_API_KEY=%s\n' "$_p48" > "$SE/oai/code/old/.env"
+printf 'OPENAI_API_KEY=%s\nOPENAI_KEY_2=%s\n' "sk""-proj-$(rnd 48)" "sk""-proj-$(rnd 19)$_m$(rnd 20)" > "$SE/oai/code/near/.env"
+printf '%s\n' "$_p48" "$_p156" > "$SE/oai-keys.txt"
+psrun "$SE/oai" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/oai.txt" 2>&1
+has    "an OpenAI project key of 48 characters is found" 'Claude Code +1 file: OpenAI' "$SE/oai.txt"
+has    "and one of 156"                                'Codex +1 file: OpenAI' "$SE/oai.txt"
+has    "and the short one in a project .env file"       '~/code/old/\.env +OpenAI' "$SE/oai.txt"
+hasnot "the old length without the marker, or one short of it, is not a key" 'code/near' "$SE/oai.txt"
+nokeys "and no OpenAI key is printed" "$SE/oai-keys.txt" "$SE/oai.txt"
 # A held engine is still running when the rest of the check is done: it is stopped.
 : > "$SE/hold"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$SE/hold" -- -Offline > "$SE/held.txt" 2>&1; RC=$?
@@ -309,9 +478,19 @@ if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad
 has    "and the report says the sessions were not all checked" 'Checked the newest 0 of 2' "$SE/held.txt"
 SKIPPING=$NORG
 {
-  # A session ripgrep never finishes (a pipe nobody writes to) is stopped when the rest is done.
-  mkdir -p "$SE/stuck/.codex" "$SE/stuck/AppData/Roaming" "$SE/stuck/AppData/Local/Temp"; mkfifo "$SE/stuck/.codex/history.jsonl"
-  psrun "$SE/stuck" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline > "$SE/stuck.txt" 2>&1; RC=$?
+  # A pipe where a session file should be is not given to ripgrep, which would wait on it forever:
+  # with -AllSessions the check would never end, so it gets 60 s and is killed and failed after.
+  mkdir -p "$SE/fifo/.codex" "$SE/fifo/.claude/projects/p" "$SE/fifo/AppData/Roaming" "$SE/fifo/AppData/Local/Temp"
+  mkfifo "$SE/fifo/.codex/history.jsonl"; printf '{}\n' > "$SE/fifo/.claude/projects/p/a.jsonl"
+  psrun "$SE/fifo" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions > "$SE/fifo.txt" 2>&1 &
+  BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; pkill -f "with-filename.*$SE/fifo/" 2>/dev/null; bad "rg: a pipe where a session file should be is skipped" "the check did not finish in 60 s"
+  else has "rg: a pipe where a session file should be is skipped" 'No keys in 1 agent session file' "$SE/fifo.txt"; fi
+  wait "$BP" 2>/dev/null
+  # A session ripgrep never finishes is stopped when the rest is done. A pipe nobody writes to,
+  # given to rg.exe as one more root (GIRD_CHECK_SESSIONS_HOLD, tests only), keeps it reading.
+  mkdir -p "$SE/stuck/.codex" "$SE/stuck/AppData/Roaming" "$SE/stuck/AppData/Local/Temp"; printf '{}\n' > "$SE/stuck/.codex/history.jsonl"; mkfifo "$SE/stuck/pipe"
+  psrun "$SE/stuck" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_SESSIONS_HOLD="$SE/stuck/pipe" -- -Offline > "$SE/stuck.txt" 2>&1; RC=$?
   if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check" "exit $RC"; fi
   if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f "with-filename.*$SE/stuck/"; else ok "rg: no ripgrep process is left running"; fi
   # Closing the terminal sends HUP to the process group, ripgrep included. Many folders keep the
@@ -325,7 +504,7 @@ for d in range(300):
   # Its own session, so the HUP goes to its group and not this script's.
   "$(command -v python3)" -c 'import os, sys; os.setsid(); os.execv(sys.argv[1], sys.argv[1:])' /usr/bin/env -i PATH="$WORK/bin:$SE/rgbin" \
     HOME="$WORK/pshome" USERPROFILE="$SE/stuck" APPDATA="$SE/stuck/AppData/Roaming" LOCALAPPDATA="$SE/stuck/AppData/Local" \
-    TEMP="$SE/stuck/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=rg "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline > /dev/null 2>&1 &
+    TEMP="$SE/stuck/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_SESSIONS_HOLD="$SE/stuck/pipe" "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline > /dev/null 2>&1 &
   BP=$!
   for _i in $(seq 1 100); do [ -n "$SKIPPING" ] && break; pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
   if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then RGUP=1; else RGUP=0; fi

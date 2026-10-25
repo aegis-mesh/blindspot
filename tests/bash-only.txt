@@ -74,7 +74,7 @@ WSL says Windows-side files were not checked	WSL: gird-check.sh reads /proc to t
 only WSL, not plain Linux, gets the WSL note and loses the keyring advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 WSL reports os Linux while giving the WSL advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 a pyc-only run still says the scan is a snapshot	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never shows it
-without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with ConvertFrom-Json
+without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with .NET's System.Text.Json on PowerShell 7 and JavaScriptSerializer on 5.1, never ConvertFrom-Json
 a find that rejects its options is reported, not read as a clean home folder	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
 a find that rejects its options is not called no findings	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
 the text backstop fails on a single-quoted name	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
@@ -101,7 +101,6 @@ parity.sh passes a PowerShell skip that ps-skips.txt explains	tests tests/parity
 parity.sh fails on a stale ps-skips line	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 parity.sh passes a test both suites skipped	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
-rg: a pipe where a session file should be is skipped	a pipe in the file system where a session file should be: gird-check.ps1 runs on Windows, which has none, and its Linux-only test run keeps one as the way to hold ripgrep
 and so is the folder it is in	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
 a key id that is not lowercase	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a key id listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
@@ -109,3 +108,7 @@ HUP leaves no engine or filter process	the filter process the keys pass through,
 INT leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 HUP leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 INT leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
+Windows: a session hit from a native rg.exe keeps its agent	Git Bash hands a native rg.exe Windows paths: a fake uname, cygpath and rg.exe stand in for Windows; gird-check.ps1 gives rg.exe Windows paths itself and reads them back as they are
+Goose's prompts under XDG_STATE_HOME are found	the XDG folders are Goose's rule on macOS and Linux, which gird-check.sh follows; gird-check.ps1 reads Goose's Windows folders
+on Linux, a VS Code extension's sessions under XDG_CONFIG_HOME are found	VS Code and Electron apps move their folders to XDG_CONFIG_HOME on Linux, which gird-check.sh follows; gird-check.ps1 reads the Windows folders
+an ENV token alone whose fallback is the home folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

@@ -61,6 +61,13 @@ if ($HomeDir.Length -gt 3) { $HomeDir = $HomeDir.TrimEnd('\', '/') }
 function J([string]$base, [string]$rel) { $base + $Sep + ($rel -replace '[\\/]', $Sep) }
 $AppData = $env:APPDATA; if (-not $AppData) { $AppData = J $HomeDir 'AppData/Roaming' }
 $LocalAppData = $env:LOCALAPPDATA; if (-not $LocalAppData) { $LocalAppData = J $HomeDir 'AppData/Local' }
+# Goose keeps its data and state in %APPDATA%\Block\goose\data, or under GOOSE_PATH_ROOT when that
+# is an absolute path (crates/goose/src/config/paths.rs).
+$GooseData = J $AppData 'Block/goose/data'; $GooseState = $GooseData
+$GoosePathRoot = [Environment]::GetEnvironmentVariable('GOOSE_PATH_ROOT')
+if ($GoosePathRoot -and ($GoosePathRoot -match '^[A-Za-z]:[\\/]' -or (-not $OnWindows -and $GoosePathRoot.StartsWith('/')))) {
+  $GooseData = J $GoosePathRoot.TrimEnd('\', '/') 'data'; $GooseState = J $GoosePathRoot.TrimEnd('\', '/') 'state'
+}
 $TempDirs = New-Object System.Collections.Generic.List[string]
 foreach ($t in @($env:TEMP, $env:TMP)) { if ($t) { $t = $t.TrimEnd('\', '/'); if (-not $TempDirs.Contains($t)) { $TempDirs.Add($t) } } }
 if ($TempDirs.Count -eq 0) { $TempDirs.Add([IO.Path]::GetTempPath().TrimEnd('\', '/')) }
@@ -226,7 +233,7 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 $PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
 $KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 $KeyProviderFn = @'
@@ -311,6 +318,14 @@ function Made-Up([string]$k) {
   foreach ($c in $k.ToCharArray()) { [void]$set.Add($c) }
   $min = 12; if ($k.Length -lt 30) { $min = 8 }
   $set.Count -lt $min
+}
+function Is-CliOwnKey([string]$f, [string]$k) {
+  # Amazon Q CLI keeps temporary AWS credentials for its own telemetry in its database
+  # (data.sqlite3, state entry telemetry-cognito-credentials, an ASIA key id), and so does Kiro
+  # CLI, the same CLI renamed: such a key id there is the CLI's own, not a key an agent read.
+  # Long-term AKIA keys and every other provider in those files still count.
+  $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', ''
+  ($k -cmatch '^ASIA') -and ($f -match '[\\/](amazon-q|kiro-cli)[\\/]data\.sqlite3(-journal|-wal)?$')
 }
 '@
 . ([scriptblock]::Create($KeyFns))
@@ -588,7 +603,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       $script:ScanN++
       if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
     } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { $LockFiles.Add($path) }
-    elseif ($name -ceq '.aider.chat.history.md') { $AiderFiles.Add($path) }
+    elseif ($name -ceq '.aider.chat.history.md' -or $name -ceq '.aider.input.history') { $AiderFiles.Add($path) }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
     elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
     else {
@@ -680,9 +695,15 @@ $SessTable = @(
   @('read', 'Claude Code', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'paste-cache')),
   @('read', 'Claude Desktop', (J $AppData 'Claude/local-agent-mode-sessions')),
   @('read', 'Claude Desktop', (J $LocalAppData 'Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions')),
+  @('read', 'Claude Desktop', (J $AppData 'Claude-3p/local-agent-mode-sessions')),
+  @('read', 'Claude Desktop', (J $LocalAppData 'Claude-3p/local-agent-mode-sessions')),
   @('read', 'Codex', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'sessions')),
   @('read', 'Codex', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'archived_sessions')),
   @('read', 'Codex', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'history.jsonl')),
+  @('read', 'Codex', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'thread_history_1.sqlite')),
+  @('read', 'Codex', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'thread_history_1.sqlite-wal')),
+  @('read', 'Codex', (J (Env-Or 'CODEX_SQLITE_HOME' (J $HomeDir '.codex')) 'thread_history_1.sqlite')),
+  @('read', 'Codex', (J (Env-Or 'CODEX_SQLITE_HOME' (J $HomeDir '.codex')) 'thread_history_1.sqlite-wal')),
   @('read', 'Gemini CLI', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/tmp')),
   @('read', 'Qwen Code', (J (Env-Or 'QWEN_HOME' (J $HomeDir '.qwen')) 'projects')),
   @('read', 'Qwen Code', (J (Env-Or 'QWEN_HOME' (J $HomeDir '.qwen')) 'tmp')),
@@ -691,20 +712,28 @@ $SessTable = @(
   @('read', 'OpenCode', (J (Env-Or 'XDG_DATA_HOME' (J $HomeDir '.local/share')) 'opencode/storage')),
   @('read', 'GitHub Copilot CLI', (J (Env-Or 'COPILOT_HOME' (J $HomeDir '.copilot')) 'session-state')),
   @('read', 'GitHub Copilot CLI', (J (Env-Or 'COPILOT_HOME' (J $HomeDir '.copilot')) 'history-session-state')),
+  @('read', 'GitHub Copilot CLI', (J (Env-Or 'COPILOT_HOME' (J $HomeDir '.copilot')) 'command-history-state')),
+  @('read', 'GitHub Copilot CLI', (J (Env-Or 'COPILOT_HOME' (J $HomeDir '.copilot')) 'session-store.db')),
   @('read', 'Roo Code', (J $AppData 'Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks')),
   @('read', 'Roo Code', (J $AppData 'Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks')),
   @('read', 'Cline', (J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks')),
   @('read', 'Cline', (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')),
   @('read', 'Cline', (J (Env-Or 'CLINE_DATA_DIR' (J $HomeDir '.cline/data')) 'sessions')),
   @('read', 'Cline', (J (Env-Or 'CLINE_DATA_DIR' (J $HomeDir '.cline/data')) 'tasks')),
+  @('read', 'Cline', (J (Env-Or 'CLINE_DIR' (J $HomeDir '.cline')) 'data/sessions')),
+  @('read', 'Cline', (Env-Or 'CLINE_SESSION_DATA_DIR' (J $HomeDir '.cline/data/sessions'))),
   @('read', 'Continue', (J (Env-Or 'CONTINUE_GLOBAL_DIR' (J $HomeDir '.continue')) 'sessions')),
-  @('read', 'Goose', (J (J $AppData 'Block/goose/data') 'sessions')),
-  @('read', 'Goose', (J (J $AppData 'Block/goose/data') 'logs')),
+  @('read', 'Continue', (J (Env-Or 'CONTINUE_GLOBAL_DIR' (J $HomeDir '.continue')) 'dev_data/0.2.0/chatInteraction.jsonl')),
+  @('read', 'Goose', (J $GooseData 'sessions')),
+  @('read', 'Goose', (J $GooseState 'logs')),
+  @('read', 'Goose', (J $GooseState 'history.txt')),
   @('read', 'Kiro CLI', (J (Env-Or 'KIRO_HOME' (J $HomeDir '.kiro')) 'sessions')),
   @('read', 'Kiro CLI', (J $LocalAppData 'kiro-cli')),
   @('read', 'Amazon Q', (J $LocalAppData 'amazon-q')),
+  @('read', 'Amazon Q', (J $HomeDir '.aws/amazonq/.cli_bash_history')),
   @('read', 'Factory Droid', (J $HomeDir '.factory/sessions')),
   @('read', 'Factory Droid', (J $HomeDir '.factory/projects')),
+  @('read', 'Factory Droid', (J $HomeDir '.factory/state/history.json')),
   @('read', 'Cursor', (J $AppData 'Cursor/User/globalStorage/state.vscdb')),
   @('read', 'Cursor', (J $HomeDir '.cursor/projects')),
   @('read', 'Cursor', (J $HomeDir '.cursor/chats')),
@@ -712,20 +741,37 @@ $SessTable = @(
   @('read', 'Antigravity', (J $HomeDir '.gemini/antigravity/brain')),
   @('read', 'Antigravity', (J $HomeDir '.gemini/antigravity-cli/brain')),
   @('read', 'Antigravity', (J $HomeDir '.gemini/antigravity-ide/brain')),
+  @('db', 'Antigravity', (J $HomeDir '.gemini/antigravity/conversations')),
+  @('db', 'Antigravity', (J $HomeDir '.gemini/antigravity-cli/conversations')),
+  @('db', 'Antigravity', (J $HomeDir '.gemini/antigravity-ide/conversations')),
   @('sealed', 'Windsurf', (J $HomeDir '.codeium/windsurf/cascade')),
   @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity/conversations')),
   @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity-cli/conversations')),
   @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity-ide/conversations')))
 # <<< sessions
-$SessSources = @($SessTable | Where-Object { $_[0] -eq 'read' } | ForEach-Object { , @($_[1], $_[2]) })
+$SessSources = @($SessTable | Where-Object { $_[0] -eq 'read' -or $_[0] -eq 'db' } | ForEach-Object { , @($_[1], $_[2]) })
+# Folders whose .pb conversation files are stored encrypted: those files are counted and named as
+# not checked.
 $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Object { , @($_[1], $_[2]) })
-$SessRoots = @($SessSources | ForEach-Object { $_[1] } | Where-Object { Exists $_ } | Select-Object -Unique)
 # Lists the files under the session roots one folder at a time, so a folder that can't be read is
 # counted in $st.Skipped and the rest are still listed (EnumerateFiles over all folders at once
 # stops at the first one it can't open, and drops the rest of that root). Folders that are links
-# are not followed, as ripgrep and gird-check.sh's perl do not. Text, so the background session
-# check can load it too; it returns the list as one object.
+# are not followed, as ripgrep and gird-check.sh's perl do not. A pipe, a socket or a device is
+# never listed: opening a pipe waits for a writer, and a device may never end. Text, so the
+# background session check can load it too; it returns the list as one object.
 $SessListFn = @'
+# A regular file, following a link: what bash's [ -f ] and perl's -f say. PowerShell 7.2 and up
+# say which a file is off Windows (the first letter of UnixMode, from Get-Item); Windows keeps no
+# pipes or devices among files, and an older PowerShell is taken at its word.
+function Is-PlainFile([string]$p) {
+  if ($env:OS -eq 'Windows_NT') { return $true }
+  try {
+    $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
+    if ($t) { if (-not $t.Exists) { return $false }; $p = $t.FullName }
+    $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode
+    return (-not $m) -or $m.StartsWith('-')
+  } catch { return $true }
+}
 function Sess-List($roots, $st) {
   $files = New-Object System.Collections.Generic.List[object]
   $dirs = New-Object System.Collections.Generic.Stack[object]
@@ -738,7 +784,12 @@ function Sess-List($roots, $st) {
     if ($st.Stop) { break }
     $d = $dirs.Pop()
     try {
-      foreach ($f in $d.EnumerateFiles()) { $files.Add($f) }
+      foreach ($f in $d.EnumerateFiles()) {
+        # Only an entry that may not be a regular file is asked about: a link, or an empty one, as
+        # pipes, sockets and devices are.
+        if ((($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $f.Length -eq 0) -and -not (Is-PlainFile $f.FullName)) { continue }
+        $files.Add($f)
+      }
       foreach ($sd in $d.EnumerateDirectories()) { if (($sd.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $dirs.Push($sd) } }
     } catch { $st.Skipped++ }
   }
@@ -746,6 +797,19 @@ function Sess-List($roots, $st) {
 }
 '@
 . ([scriptblock]::Create($SessListFn))
+# A location given as a file is read as it is, following a link as ripgrep follows one, but only to
+# a regular file. A db folder gives its SQLite files, *.db and their *.db-wal, and nothing else in it;
+# one that can't be listed is given as it is, so the check names it as a folder not read.
+$SessRoots = @(@(foreach ($sessRow in $SessTable) {
+    if ($sessRow[0] -eq 'read') { if ((Is-Dir $sessRow[2]) -or ((Is-File $sessRow[2]) -and (Is-PlainFile $sessRow[2]))) { $sessRow[2] } }
+    elseif ($sessRow[0] -eq 'db' -and (Is-Dir $sessRow[2])) {
+      try {
+        foreach ($f in ([IO.DirectoryInfo]$sessRow[2]).EnumerateFiles()) {
+          if ($f.Name -cmatch '\.db(-wal)?$' -and ((($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 -and $f.Length -gt 0) -or (Is-PlainFile $f.FullName))) { $f.FullName }
+        }
+      } catch { $sessRow[2] }
+    }
+  }) | Select-Object -Unique)
 # Runs in its own runspace: lists the files newest first and checks them until told to stop, or
 # lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
 $SessWorker = {
@@ -757,15 +821,18 @@ $SessWorker = {
   $rxSep = New-Object regex('[^A-Za-z0-9_.\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
     $p = Key-Provider $k
-    if ($p -and -not (Made-Up $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
-  if ($hold) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }  # tests only
+    if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
+  # Tests only: the .NET engine waits while the file named exists; rg.exe gets it as one more root,
+  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held.
+  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
     try {
       $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
-      $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($roots | ForEach-Object { & $q $_ }) -join ' ')
+      $rgRoots = @($roots); if ($hold) { $rgRoots += $hold }
+      $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
       # --null ends the file name with a NUL, the one character a path can't hold. A line without
@@ -791,6 +858,9 @@ $SessWorker = {
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
+    # An empty file holds nothing and is not opened, so a pipe an older PowerShell could not tell
+    # from a file never holds the check up. Never a link: Windows gives a link's own size, 0.
+    if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $st.Done++; continue }
     # Read 1 MB at a time and cut just after the last character that can't be in a key or start an
     # escape such as \n (a backslash never ends a piece), so a huge database file never loads at
     # once, a piece never ends inside a token unless one runs past 8 MB, and a stop is seen within
@@ -812,10 +882,17 @@ $SessWorker = {
       }
       if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
       if ($whole) { $st.Done++ }
-    } catch { } finally { if ($sr) { $sr.Dispose() } }
+    } catch {
+      # A pattern that ran out of time leaves the file not checked, as a stop does. Anything else
+      # (no permission, a range another program has locked, a file that is gone) is a file that
+      # could not be read, counted apart so the report says so.
+      $timedOut = $false; $xe = $_.Exception
+      while ($xe) { if ($xe -is [Text.RegularExpressions.RegexMatchTimeoutException]) { $timedOut = $true }; $xe = $xe.InnerException }
+      if (-not $timedOut) { $st.Unread++ }
+    } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -859,7 +936,7 @@ $Agents = @(
   @('Antigravity', 'antigravity', @((J $LocalAppData 'Programs/Antigravity')), @((J $AppData 'Antigravity/User/workspaceStorage')), 'antigravity'),
   @('GitHub Copilot CLI', 'copilot', @((J $HomeDir '.copilot')), @((J $HomeDir '.copilot')), 'copilot-cli'),
   @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
-  @('Goose', 'goose', @((J $AppData 'Block/goose')), @((J $AppData 'Block/goose/data')), 'goose'),
+  @('Goose', 'goose', @((J $AppData 'Block/goose')), @($GooseData), 'goose'),
   @('Aider', 'aider', @(), @(), 'aider'),
   @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')),
     @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
@@ -1940,9 +2017,10 @@ $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
 Sess-Stop $OptAllSess
-# SESS_UNREAD counts the folders that could not be read (-1: some, rg.exe gives no count);
-# SESS_NOTRUN the files no engine looked at, because there is none or the check could not start.
-$SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst; $SESS_UNREAD = [int]$SessSt.Skipped; $SESS_NOTRUN = 0
+# SESS_DONE counts the files read to the end; SESS_UNREAD the folders that could not be read (-1:
+# some, rg.exe gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
+# looked at, because there is none or the check could not start.
+$SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst; $SESS_UNREAD = [int]$SessSt.Skipped; $SESS_UNREAD_FILES = [int]$SessSt.Unread; $SESS_NOTRUN = 0
 if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
   $cnt = @{ Skipped = 0; Stop = $false }
   $sessAll = Sess-List $SessRoots $cnt
@@ -1957,11 +2035,13 @@ if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
 }
 $sessHits = New-Object System.Collections.Generic.List[string]
 foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
-# Aider keeps its history in each project, found by the home scan, and is checked here.
+# Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
+# in each project, found by the home scan, and they are checked here.
 $rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
 foreach ($f in $AiderFiles) {
-  $t = Read-Text $f; if ($null -eq $t) { continue }
-  $SESS_TOTAL++; if ($SESS_DONE -ge 0) { $SESS_DONE++ }
+  $SESS_TOTAL++
+  $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }
+  if ($SESS_DONE -ge 0) { $SESS_DONE++ }
   $seenA = @{}
   try { foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } } } catch { Mark-Slow $f }
 }
@@ -1971,7 +2051,7 @@ foreach ($f in $AiderFiles) {
 # Code keeps sessions under one named after the project's full path), which would put a username
 # and a project into a report pasted into an issue.
 function Sess-Where([string]$f) {
-  if ($f.EndsWith('.aider.chat.history.md')) { return @('Aider', $f) }
+  if ($f.EndsWith('.aider.chat.history.md') -or $f.EndsWith('.aider.input.history')) { return @('Aider', $f) }
   foreach ($src in $SessSources) { if ($f.Equals($src[1], $PathCmp) -or $f.StartsWith($src[1] + [IO.Path]::DirectorySeparatorChar, $PathCmp) -or $f.StartsWith($src[1] + '/', $PathCmp)) { return @($src[0], $src[1]) } }
   @('Other', [IO.Path]::GetDirectoryName($f))
 }
@@ -1988,8 +2068,17 @@ foreach ($h in $sessHits) {
 $SessFiles.Sort([StringComparer]::Ordinal); $SessPlaces.Sort([StringComparer]::Ordinal)
 $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
-$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt 0 -or $SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST)))
-$SessSealedFound = @($SessSealed | Where-Object { Is-Dir $_[1] } | ForEach-Object { $_[0] } | Select-Object -Unique)
+# Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
+# check was stopped), or a folder that could not be read.
+$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
+# The encrypted .pb files in those folders, by agent. A folder that holds none (Antigravity's newer
+# conversations are SQLite, read above) is never named.
+$SessSealedAg = New-Object System.Collections.Generic.List[string]; $SessSealedN = 0
+foreach ($sealRow in $SessSealed) {
+  if (-not (Is-Dir $sealRow[1])) { continue }
+  $sealN = @((Sess-List @($sealRow[1]) @{ Skipped = 0; Stop = $false }) | Where-Object { $_.Name -cmatch '\.pb$' }).Count
+  if ($sealN -gt 0) { $SessSealedN += $sealN; if (-not $SessSealedAg.Contains($sealRow[0])) { $SessSealedAg.Add($sealRow[0]) } }
+}
 if ($N_SESS -gt 0) { Progress "Keys in $(Plural $N_SESS 'agent session file' 'agent session files')" }
 
 # --- What to do, and the score -----------------------------------------------
@@ -2265,7 +2354,7 @@ if ($LoginsText) {
   Emit "     ${cBold}Login files any agent you run can read$cRst"
   Wrap $LoginsText 8 '        ' '        '
 }
-if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedFound.Count -gt 0) {
+if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
   Blank
   Emit "     ${cBold}Keys in agent sessions$cRst"
   foreach ($r in $SessRows) { Pair "$cRed$gX$cRst" $r[0] 20 "$(Plural $r[1] 'file' 'files'): $($r[2])" }
@@ -2280,12 +2369,21 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedFound.Count -gt 0) {
     Wrap "$(Plural $SESS_NOTRUN 'agent session file was' 'agent session files were') not checked$why" 8 "     $cYel!$cRst  " '        '
   }
   elseif ($SESS_DONE -lt 0) { Wrap 'Agent sessions were partly checked. Add -AllSessions to check all of them.' 8 "     $cYel!$cRst  " '        ' }
-  elseif ($SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
-  elseif ($N_SESS -eq 0 -and $SESS_TOTAL -gt 0 -and $SESS_UNREAD -eq 0) { Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_TOTAL) 'agent session file' 'agent session files')." }
-  if ($SESS_UNREAD -gt 0) { Wrap "Agent sessions were partly checked: $(Plural $SESS_UNREAD 'folder' 'folders') could not be read." 8 "     $cYel!$cRst  " '        ' }
+  elseif (($SESS_DONE + $SESS_UNREAD_FILES) -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
+  elseif ($N_SESS -eq 0 -and $SESS_DONE -gt 0 -and $SESS_UNREAD -eq 0 -and $SESS_UNREAD_FILES -eq 0) {
+    # The files read, not the compressed ones, which are named below.
+    Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_DONE) 'agent session file' 'agent session files')."
+  }
+  $urParts = @()
+  if ($SESS_UNREAD -gt 0) { $urParts += (Plural $SESS_UNREAD 'folder' 'folders') }
+  if ($SESS_UNREAD_FILES -gt 0) { $urParts += (Plural $SESS_UNREAD_FILES 'file' 'files') }
+  if ($urParts.Count -gt 0) { Wrap "Agent sessions were partly checked: $($urParts -join ' and ') could not be read." 8 "     $cYel!$cRst  " '        ' }
   elseif ($SESS_UNREAD -lt 0) { Wrap 'Agent sessions were partly checked: some files or folders could not be read.' 8 "     $cYel!$cRst  " '        ' }
-  if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 '        ' '        ' $cDim }
-  if ($SessSealedFound.Count -gt 0) { Wrap "$($SessSealedFound -join ' and ') conversation files are encrypted, so they were not checked." 8 '        ' '        ' $cDim }
+  if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 "     $cYel!$cRst  " '        ' }
+  if ($SessSealedN -gt 0) {
+    $sealVerb = 'conversation files are encrypted, so they were'; if ($SessSealedN -eq 1) { $sealVerb = 'conversation file is encrypted, so it was' }
+    Wrap "$SessSealedN $($SessSealedAg -join ' and ') $sealVerb not checked." 8 '        ' '        ' $cDim
+  }
 }
 $Sec3 = Take-Cap
 Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
