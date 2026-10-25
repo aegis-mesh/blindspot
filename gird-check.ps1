@@ -312,6 +312,14 @@ function Made-Up([string]$k) {
   $min = 12; if ($k.Length -lt 30) { $min = 8 }
   $set.Count -lt $min
 }
+function Is-CliOwnKey([string]$f, [string]$k) {
+  # Amazon Q CLI keeps temporary AWS credentials for its own telemetry in its database
+  # (data.sqlite3, state entry telemetry-cognito-credentials, an ASIA key id), and so does Kiro
+  # CLI, the same CLI renamed: such a key id there is the CLI's own, not a key an agent read.
+  # Long-term AKIA keys and every other provider in those files still count.
+  $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', ''
+  ($k -cmatch '^ASIA') -and ($f -match '[\\/](amazon-q|kiro-cli)[\\/]data\.sqlite3(-journal|-wal)?$')
+}
 '@
 . ([scriptblock]::Create($KeyFns))
 function Providers-In([string]$f) {
@@ -736,7 +744,7 @@ $SessWorker = {
   $rxSep = New-Object regex('[^A-Za-z0-9_.\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
     $p = Key-Provider $k
-    if ($p -and -not (Made-Up $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
+    if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
   if ($hold) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }  # tests only
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }

@@ -57,6 +57,11 @@ match in a freed page is still a key that was sent.
   character in a row, fewer than 12 distinct characters, or `EXAMPLE`, `xxxx`, `0123456789`,
   `abcdef` in it. Shell history is not filtered this way, because its matches come from commands
   the person typed; transcripts also hold tool output such as test fixtures.
+- Amazon Q CLI caches temporary AWS credentials for its own telemetry in its `data.sqlite3` (the
+  `telemetry-cognito-credentials` entry of its `state` table, an `ASIA` key id from Cognito), and
+  Kiro CLI, the same CLI renamed and closed source, keeps the same entry by third-party accounts.
+  An `ASIA` key id in either database (or its `-journal` or `-wal`) is not counted; long-term `AKIA`
+  keys and every other provider there still are.
 - Only a session path and a provider id leave the matching stage. Keys travel through a pipe from
   ripgrep to that stage, as `grep -o | awk` does today, and are never written to disk, printed or
   sent. Distinct keys are not counted: the report counts sessions.

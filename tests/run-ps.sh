@@ -239,10 +239,28 @@ SKIPPING=""
 chmod 755 "$SE/urdir/.claude/projects/locked"
 # A compressed session is not read: the check line counts only the files read, the summary row
 # says partly checked, and a home whose only session is compressed is never told no keys.
-for D in zst zst1 unr3 aidur; do mkdir -p "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
+for D in zst zst1 aq kiro aqk unr3 aidur; do mkdir -p "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
 mkdir -p "$SE/zst/.codex/sessions/2026/10" "$SE/zst1/.codex/sessions/2026/10"
 printf '{}\n' > "$SE/zst/.codex/sessions/2026/10/rollout-a.jsonl"; printf 'x' > "$SE/zst/.codex/sessions/2026/10/rollout-b.jsonl.zst"
 printf 'x' > "$SE/zst1/.codex/sessions/2026/10/rollout-b.jsonl.zst"
+# Amazon Q CLI keeps temporary AWS credentials for its own telemetry in its database, and so does
+# Kiro CLI: an ASIA key id there is not a key an agent read. A long-term key or another provider's
+# key in that database still counts. Real SQLite files, built by python3; keys from pieces.
+low() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-z0-9' | head -c "$1"; }
+mkq() { # database [conversation text]
+  mkdir -p "$(dirname "$1")"
+  python3 -c '
+import json, sqlite3, sys
+db, kid, sec, tok, conv = sys.argv[1:6]
+c = sqlite3.connect(db)
+c.execute("CREATE TABLE state (key TEXT PRIMARY KEY, value BLOB)")
+c.execute("CREATE TABLE conversations (key TEXT PRIMARY KEY, value TEXT)")
+c.execute("INSERT INTO state VALUES (?, ?)", ("telemetry-cognito-credentials", json.dumps({"access_key_id": kid, "secret_key": sec, "session_token": tok, "expiration": "2026-10-25T10:00:00Z"})))
+c.execute("INSERT INTO conversations VALUES (?, ?)", ("/home/me/app", json.dumps({"history": [{"user": "deploy it " + conv}]})))
+c.commit(); c.close()' "$1" "AS""IA$(upper 16)" "$(low 40)" "$(low 300)" "${2:-}"
+}
+mkq "$SE/aq/AppData/Local/amazon-q/data.sqlite3"; mkq "$SE/kiro/AppData/Local/kiro-cli/data.sqlite3"
+mkq "$SE/aqk/AppData/Local/amazon-q/data.sqlite3" "AK""IA$(upper 16) and g""hp_$(rnd 36)"
 for E in net rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   psrun "$SE/zst" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst-$E.txt"
@@ -251,6 +269,12 @@ for E in net rg; do
   has    "$E: and a compressed session makes the summary row partly checked" 'Keys in plain text none in files; agent sessions partly checked' "$SE/zst-sum-$E.txt"
   psrun "$SE/zst1" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst1-$E.txt"
   hasnot "$E: a home with only compressed sessions is never told no keys" 'No keys in' "$SE/zst1-$E.txt"
+  psrun "$SE/aq" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/aq-$E.txt" 2>&1
+  has    "$E: Amazon Q's own telemetry key in its database is not counted" 'No keys in 1 agent session file\.' "$SE/aq-$E.txt"
+  psrun "$SE/kiro" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/kiro-$E.txt" 2>&1
+  has    "$E: nor Kiro CLI's" 'No keys in 1 agent session file\.' "$SE/kiro-$E.txt"
+  psrun "$SE/aqk" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/aqk-$E.txt" 2>&1
+  has    "$E: a long-term AWS key or another provider's in that database still counts" 'Amazon Q +1 file: (AWS, GitHub|GitHub, AWS)$' "$SE/aqk-$E.txt"
 done
 SKIPPING=""
 # An unreadable session file is named as one, never as a time cut that ripgrep or -AllSessions

@@ -1071,6 +1071,15 @@ sess_filter() { # [rg]
       }
       return n < (len < 30 ? 8 : 12)
     }
+    # Amazon Q CLI keeps temporary AWS credentials for its own telemetry in its database
+    # (data.sqlite3, state entry telemetry-cognito-credentials, an ASIA key id), and so does Kiro
+    # CLI, the same CLI renamed: such a key id there belongs to the CLI, it is not a key an agent
+    # read. Long-term AKIA keys and every other provider in those files still count.
+    function cli_own(f, k,   t) {
+      if (k !~ /^ASIA/) return 0
+      t = f; gsub(/\\/, "/", t)
+      return t ~ /\/(amazon-q|kiro-cli)\/data\.sqlite3(-journal|-wal)?$/
+    }
     rg == "" && ($1 == "T" || $1 == "D" || $1 == "Z" || $1 == "U" || $1 == "S") { print; fflush(); next }
     {
       if (rg != "") {
@@ -1081,7 +1090,7 @@ sess_filter() { # [rg]
       if (length(k) > 300) next
       p = prov(k); if (p == "") next
       sub(/^[^A-Za-z]*\\[ntr"]/, "", k); sub(/^[^A-Za-z]+/, "", k); sub(/[^A-Za-z0-9_.-]+$/, "", k)
-      if (madeup(k) || ((f "|" p) in done)) next
+      if (madeup(k) || cli_own(f, k) || ((f "|" p) in done)) next
       done[f "|" p] = 1; print "H\t" f "\t" p; fflush()
     }'
 }
