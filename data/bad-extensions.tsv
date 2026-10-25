@@ -9,9 +9,10 @@
 #             that Microsoft's list of extensions removed from the Marketplace names
 #             (github.com/microsoft/vsmarketplace, RemovedPackages.md) was on the Marketplace too, so it
 #             is any. Of the openvsx ids, the Marketplace offers only the oorzc extensions (October 2026).
-#   os        all, mac, linux or win: where the extension's malware could run, as its source says. It is
-#             looked for on every OS; on one where its malware could not run, the report shows it as a
-#             malicious extension to remove, not a compromised machine (as data/bad-pypi.tsv's os does)
+#   os        all, mac, linux or win, or two of them separated by a comma (mac,win): where the
+#             extension's malware could run, as its source says. It is looked for on every OS; on one
+#             where its malware could not run, the report shows it as a malicious extension to remove,
+#             not a compromised machine (as data/bad-pypi.tsv's os does)
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
 # GlassWorm, from Socket's posts, each wave its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
@@ -31,7 +32,9 @@
 #     October 2026), and the dopbop-studio, kwitch-studio and potstok ones as impersonation (3 March
 #     2026). Whether those Marketplace builds carried the loader is not known: they are any.
 #   18 March 2026: the versions the post shows delivering malware, themselves or through an extension pack.
-#   25 April 2026: the six it confirms as malicious; its 67 sleepers are left out.
+#   25 April 2026: the six it confirms as malicious; its 67 sleepers are left out. The post shows
+#     boulderzitunnel.vscode-buddies loading its native installer only on win32 and darwin, so its
+#     os is mac,win.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
 #     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe), and three
 #     of the cluster's themes on both registries that Microsoft's list removes as malware (1 and 2
@@ -138,7 +141,7 @@ quickrunn.auto-run-command-quick	1.6.2	glasswormvsix	openvsx	all
 outsidestormcommand.monochromator-theme	*	glasswormapr	openvsx	all
 keyacrosslaud.auto-loop-for-antigravity	*	glasswormapr	openvsx	all
 krundoven.ironplc-fast-hub	*	glasswormapr	openvsx	all
-boulderzitunnel.vscode-buddies	*	glasswormapr	openvsx	all
+boulderzitunnel.vscode-buddies	*	glasswormapr	openvsx	mac,win
 cubedivervolt.html-code-validate	*	glasswormapr	openvsx	all
 winnerdomain17.version-lens-tool	*	glasswormapr	openvsx	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win

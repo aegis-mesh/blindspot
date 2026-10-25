@@ -67,3 +67,5 @@ rg: its .pb files are counted and named as encrypted	needs ripgrep on PATH: thes
 rg: a folder of SQLite conversations alone is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: and never called encrypted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 on a Mac, a January GlassWorm extension is malware	needs pwsh on macOS: gird-check.ps1 knows macOS by /System/Library/CoreServices, and the January oorzc extensions are malware only there
+an extension whose malware runs on macOS and Windows is one to remove on Linux	needs pwsh on Linux: gird-check.ps1 reads the OS it runs on (macOS by /System/Library/CoreServices), and on macOS this extension's malware runs
+the same extension on a Mac is malware	needs pwsh on macOS: gird-check.ps1 knows macOS by /System/Library/CoreServices

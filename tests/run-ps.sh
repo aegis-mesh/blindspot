@@ -1288,6 +1288,16 @@ rm -rf "$WORK/dz-jan"; cp -R "$WORK/clean" "$WORK/dz-jan"; mkdir -p "$WORK/dz-ja
 [ -n "$SKIPPING" ] || dzrun "$WORK/dz-jan" | tr -s ' \n' '  ' > "$WORK/dz-jan.txt"
 has    "on a Mac, a January GlassWorm extension is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-jan.txt"
 SKIPPING=""
+# boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket's April post), so
+# its os is mac,win: on Linux it is an extension to remove, on a Mac malware.
+rm -rf "$WORK/dz-mw"; cp -R "$WORK/clean" "$WORK/dz-mw"; mkdir -p "$WORK/dz-mw/.cursor/extensions/boulderzitunnel.vscode-buddies-1.35.3"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux: gird-check.ps1 reads the OS it runs on, and this extension's malware runs on macOS and Windows"
+[ -n "$SKIPPING" ] || dzrun "$WORK/dz-mw" | tr -s ' \n' '  ' > "$WORK/dz-mw.txt"
+has    "an extension whose malware runs on macOS and Windows is one to remove on Linux" 'Editor extensions a malicious extension to remove ~/\.cursor/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed Its malware runs on macOS and Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-mw.txt"
+SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
+[ -n "$SKIPPING" ] || dzrun "$WORK/dz-mw" | tr -s ' \n' '  ' > "$WORK/dz-mw2.txt"
+has    "the same extension on a Mac is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-mw2.txt"
+SKIPPING=""
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, [34] security fixes to install' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
@@ -1814,6 +1824,11 @@ mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
 winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
 rm -rf "$WP/.vscode-oss"
 has    "Windows: a January GlassWorm extension, whose malware runs on macOS only, is one to remove" 'Editor extensions a malicious extension to remove ~/\.vscode-oss/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed Its malware runs on macOS only, so it did not run here\. Uninstall it\.' "$WORK/win-jan.txt"
+# boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket): on Windows it is malware.
+mkdir -p "$WP/.vscode-oss/extensions/boulderzitunnel.vscode-buddies-1.35.3"
+winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-mw.txt"
+rm -rf "$WP/.vscode-oss"
+has    "Windows: an extension whose malware runs on macOS and Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode-oss/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/win-mw.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"

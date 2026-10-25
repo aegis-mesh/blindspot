@@ -2782,7 +2782,7 @@ quickrunn.auto-run-command-quick 1.6.2 glasswormvsix openvsx all
 outsidestormcommand.monochromator-theme * glasswormapr openvsx all
 keyacrosslaud.auto-loop-for-antigravity * glasswormapr openvsx all
 krundoven.ironplc-fast-hub * glasswormapr openvsx all
-boulderzitunnel.vscode-buddies * glasswormapr openvsx all
+boulderzitunnel.vscode-buddies * glasswormapr openvsx mac,win
 cubedivervolt.html-code-validate * glasswormapr openvsx all
 winnerdomain17.version-lens-tool * glasswormapr openvsx all
 microsoftvs.microsoftvs * glasswormoct any win
@@ -3088,11 +3088,12 @@ _ext_found=$(ext_roots | while IFS= read -r r; do
       if (rest != "" && rest !~ /^-/) continue
       if (v[i] == "*" || v[i] == ver) { print d "\t" sp[i] " " ver "\t" t[i] "\t" os[i]; break }
     } }')
-# Where its malware could run (the os column), an extension that shipped malware means a compromised
-# machine (EXT_ROWS: folder, id and version, incident). Elsewhere it is a malicious extension to remove
-# (EXT_UPD, with the os), with no part in EXT_HIT, the score or the link's ex.
-EXT_ROWS=$(printf '%s\n' "$_ext_found" | awk -F '\t' -v o="$_os" 'NF >= 4 && ($4 == "all" || $4 == o) { print $1 "\t" $2 "\t" $3 }')
-EXT_UPD=$(printf '%s\n' "$_ext_found" | awk -F '\t' -v o="$_os" 'NF >= 4 && $4 != "all" && $4 != o')
+# Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
+# shipped malware means a compromised machine (EXT_ROWS: folder, id and version, incident). Elsewhere it
+# is a malicious extension to remove (EXT_UPD, with the os), with no part in EXT_HIT, the score or the
+# link's ex.
+EXT_ROWS=$(printf '%s\n' "$_ext_found" | awk -F '\t' -v o="$_os" 'NF >= 4 && ($4 == "all" || index("," $4 ",", "," o ",")) { print $1 "\t" $2 "\t" $3 }')
+EXT_UPD=$(printf '%s\n' "$_ext_found" | awk -F '\t' -v o="$_os" 'NF >= 4 && $4 != "all" && !index("," $4 ",", "," o ",")')
 # Incidents that leave the machine itself uncompromised only need the version updated; the rest mean a compromised machine.
 NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
 for _t in $NPM_TAGS; do
@@ -4053,7 +4054,11 @@ ext_upd_rows() {
     emit "        $(short "$f")"
     emit "          ${p} ${DIM}($(npm_label "$t")), installed${RST}"
     _xn=$((_xn + 1))
-    case " $_oss " in *" $(os_name "$o") "*) ;; *) _oss="${_oss:+$_oss and }$(os_name "$o")" ;; esac
+    _ol="$o,"
+    while [ -n "$_ol" ]; do
+      _o1=${_ol%%,*}; _ol=${_ol#*,}
+      case " $_oss " in *" $(os_name "$_o1") "*) ;; *) _oss="${_oss:+$_oss and }$(os_name "$_o1")" ;; esac
+    done
   done <<EOF
 $EXT_UPD
 EOF

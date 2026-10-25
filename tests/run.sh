@@ -1077,6 +1077,11 @@ mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
 rm -rf "$WP/.vscode-oss"
 has    "Windows: a January GlassWorm extension, whose malware runs on macOS only, is one to remove" 'Editor extensions a malicious extension to remove ~/\.vscode-oss/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed Its malware runs on macOS only, so it did not run here\. Uninstall it\.' "$WORK/win-jan.txt"
+# boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket): on Windows it is malware.
+mkdir -p "$WP/.vscode-oss/extensions/boulderzitunnel.vscode-buddies-1.35.3"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-mw.txt"
+rm -rf "$WP/.vscode-oss"
+has    "Windows: an extension whose malware runs on macOS and Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode-oss/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/win-mw.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
@@ -1404,6 +1409,13 @@ hasnot "and the fix to uninstall it alone is not given then" 'Their malware coul
 rm -rf "$WORK/dz-jan"; cp -R "$WORK/clean" "$WORK/dz-jan"; mkdir -p "$WORK/dz-jan/.cursor/extensions/oorzc.mind-map-1.0.61"
 dzrun "$WORK/dz-jan" | tr -s ' \n' '  ' > "$WORK/dz-jan.txt"
 has    "on a Mac, a January GlassWorm extension is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-jan.txt"
+# boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket's April post), so
+# its os is mac,win: on Linux it is an extension to remove, on a Mac malware.
+rm -rf "$WORK/dz-mw"; cp -R "$WORK/clean" "$WORK/dz-mw"; mkdir -p "$WORK/dz-mw/.cursor/extensions/boulderzitunnel.vscode-buddies-1.35.3"
+env HOME="$WORK/dz-mw" PATH="$WORK/linbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-mw.txt"
+has    "an extension whose malware runs on macOS and Windows is one to remove on Linux" 'Editor extensions a malicious extension to remove ~/\.cursor/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed Its malware runs on macOS and Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-mw.txt"
+dzrun "$WORK/dz-mw" | tr -s ' \n' '  ' > "$WORK/dz-mw2.txt"
+has    "the same extension on a Mac is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-mw2.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, 4 security fixes to install' "$WORK/dz-hit-sum.txt"
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
@@ -1564,6 +1576,8 @@ gen_refuses "a temp name of dots"                       indicators.tsv "litellm$
 gen_refuses "a Python incident that is only an update"  bad-pypi.tsv "mistralai${T}1.0.0${T}mistral${T}all"
 gen_refuses "a Python name with a hyphen"               bad-pypi.tsv "lite-llm${T}1.0.0${T}litellm${T}all"
 gen_refuses "a Python version with another os"          bad-pypi.tsv "mistralai${T}1.0.0${T}mistralpy${T}bsd"
+gen_refuses "an extension with an OS listed twice"         bad-extensions.tsv "x-pub.y-ext${T}*${T}glasswormapr${T}openvsx${T}mac,mac"
+gen_refuses "an extension with all three OSes, which is all" bad-extensions.tsv "x-pub.y-ext${T}*${T}glasswormapr${T}openvsx${T}mac,linux,win"
 gen_refuses "a temp line with no note"                  indicators.tsv "litellm${T}all${T}temp${T}yes${T}.pc_x_*${T}-"
 gen_refuses "temp lines of one incident that disagree"  indicators.tsv "litellm${T}all${T}temp${T}yes${T}.pc_x_*${T}Another note."
 # Only the path tokens the generators translate, in the syntax they translate: anything else would

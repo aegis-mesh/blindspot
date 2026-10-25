@@ -2204,7 +2204,7 @@ quickrunn.auto-run-command-quick 1.6.2 glasswormvsix openvsx all
 outsidestormcommand.monochromator-theme * glasswormapr openvsx all
 keyacrosslaud.auto-loop-for-antigravity * glasswormapr openvsx all
 krundoven.ironplc-fast-hub * glasswormapr openvsx all
-boulderzitunnel.vscode-buddies * glasswormapr openvsx all
+boulderzitunnel.vscode-buddies * glasswormapr openvsx mac,win
 cubedivervolt.html-code-validate * glasswormapr openvsx all
 winnerdomain17.version-lens-tool * glasswormapr openvsx all
 microsoftvs.microsoftvs * glasswormoct any win
@@ -2458,9 +2458,9 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
 # same id is the Marketplace's own build. A folder that can't be read leaves the check not
 # done in full ($ExtUnread), never clean.
-# Where its malware could run (the os column), an extension that shipped malware means a compromised
-# machine ($ExtRows). Elsewhere it is a malicious extension to remove ($ExtUpd, with the os), with no
-# part in EXT_HIT, the score or the link's ex.
+# Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
+# shipped malware means a compromised machine ($ExtRows). Elsewhere it is a malicious extension to remove
+# ($ExtUpd, with the os), with no part in EXT_HIT, the score or the link's ex.
 $ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUpd = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 5 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions', '.antigravity-ide/extensions', '.antigravity/extensions')) {
@@ -2477,7 +2477,7 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
       $m = [regex]::Match($e.Name.Substring($pre.Length), '^([0-9]+(?:\.[0-9]+)*)(-.*)?$')
       if (-not $m.Success) { continue }
       if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[1].Value) {
-        if ($x[4] -eq 'all' -or $x[4] -eq $IndOs) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])) }
+        if ($x[4] -eq 'all' -or @($x[4] -split ',') -contains $IndOs) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])) }
         else { $ExtUpd.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2], $x[4])) }
         break
       }
@@ -3119,7 +3119,7 @@ function Ext-Upd-Rows {
   $oss = @()
   foreach ($r in $ExtUpd) {
     Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst"
-    $osn = Os-Name $r[3]; if ($oss -notcontains $osn) { $oss += $osn }
+    foreach ($o1 in @($r[3] -split ',')) { $osn = Os-Name $o1; if ($oss -notcontains $osn) { $oss += $osn } }
   }
   if ($ExtUpd.Count -eq 1) { Wrap "Its malware runs on $($oss -join ' and ') only, so it did not run here. Uninstall it." 8 '        ' '        ' }
   else { Wrap "Their malware runs on $($oss -join ' and ') only, so it did not run here. Uninstall them." 8 '        ' '        ' }
