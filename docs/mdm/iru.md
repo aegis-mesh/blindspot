@@ -54,7 +54,7 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
 Each run's output is in the script's audit information, on the device status page. It is one line:
 
 ```
-blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.1.0 at=2026-10-25T09:12:00Z
+blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:12:00Z
 ```
 
 The word after `blindspot` is the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see

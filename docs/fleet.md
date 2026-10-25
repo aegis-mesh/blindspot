@@ -197,18 +197,18 @@ Each run has one outcome, the worst of these, in this order:
 | `failed` | The run could not finish safely, such as a changed script copy or a result it could not save. | 13 |
 | `act` | Something to act on now: malware signs, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
-| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, a leftover file that can come from malware. | 11 |
+| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
 | `clear` | Every account was checked in full and nothing was found. | 0 |
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
 no login shell, its check could not start or ran out of time, its check sent back something
-unexpected, or part of it was not read: a protected folder, a file that is not a regular file or is
-over 16 MB, or agent sessions not all checked.
+unexpected, or part of it was not read: a protected folder, a folder it could not open, a file that
+is not a regular file or is over 16 MB, or agent sessions not all checked.
 
 The summary line:
 
 ```
-blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.1.0 at=2026-10-25T09:12:00Z
+blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:12:00Z
 ```
 
 The inventory value is one line with each account's outcome and what was found, never a path, file
@@ -273,7 +273,8 @@ pieces whatever their size. A file or folder the account can't read counts as no
 holding nothing. With its fixed PATH, it looks for agents in the account's own install folders
 (`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. The
 gh-token-monitor logs in `/tmp`, which must be the person's own, count for the account that owns
-them, never for the Mac, and never through a link. `sudo` writes one line to the system log for each account.
+them, never for the Mac, and never through a link. It looks for the malware markers in the account's
+own temp folder, the one macOS gives each account under `/var/folders`. `sudo` writes one line to the system log for each account.
 
 What root checks once for the Mac:
 
