@@ -2295,6 +2295,8 @@ if ! pcase tests/run.sh "$WORK/pp7.sh" && grep -q 'no PowerShell twin: Windows: 
 
 cp tests/run.sh "$WORK/pr8.sh"; printf '%s\n' 'echo "a quote left open' >> "$WORK/pr8.sh"
 if ! pcase "$WORK/pr8.sh" tests/run-ps.sh && grep -q 'the file ends inside a quote' "$WORK/pcase.txt"; then ok "the text backstop fails on a file that ends inside a quote"; else bad "the text backstop fails on a file that ends inside a quote"; fi
+{ cat tests/bash-only.txt; grep -v '^#' tests/bash-only.txt | grep . | head -n 1; } > "$WORK/only-twice.txt"
+if ! bash tests/parity-text.sh tests/run.sh tests/run-ps.sh "$WORK/only-twice.txt" > "$WORK/pcase.txt" 2>&1 && grep -q '^  bash-only\.txt lists twice: ' "$WORK/pcase.txt"; then ok "the text backstop fails on a bash-only line listed twice"; else bad "the text backstop fails on a bash-only line listed twice"; fi
 if bash tests/parity-text.sh > "$WORK/parity.txt" 2>&1; then ok "the text backstop finds a twin for every test"
 else bad "the text backstop finds a twin for every test" "$(grep -v '^    ' "$WORK/parity.txt")"; fi
 
