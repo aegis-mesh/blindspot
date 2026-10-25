@@ -64,8 +64,9 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       rows data/sessions.tsv | awk -F '\t' "$PATH_OK"'
         NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|db|sealed)$/ || $3 ~ /[\047"`$|\\]/ || !path_ok($4) { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused. The os
-      # column says where the malware of that version could run; elsewhere it is a version to update.
-      rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(all|mac|linux|win)$/ { print "data/bad-pypi.tsv: " $0 }'
+      # column says where the malware of that version could run; elsewhere it is a version to update,
+      # and everywhere for none, when the package's maintainer says its malware could not run.
+      rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(all|mac|linux|win|none)$/ { print "data/bad-pypi.tsv: " $0 }'
       # A startup line carries a note, a temp line the advice of its incident (the same on each of its
       # temp lines); wiper and site lines carry -. PowerShell gets the note quoted, so it may hold a quote.
       # A Python incident's startup file is shown in its row in section 5, checked before the ownership

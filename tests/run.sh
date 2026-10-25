@@ -1433,6 +1433,37 @@ HOME="$WORK/lpy" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lpy.t
 has    "lightning 2.6.3 from PyPI is its own act-now row" 'lightning 2\.6\.2 and 2\.6\.3 +signs of the malware found ~/code/venv/lib/site-packages: lightning 2\.6\.3' "$WORK/lpy.txt"
 has    "with its fix, naming lightning"               "Treat this machine as compromised\. Don't run Python in the affected environments\. From another computer, rotate every key the machine could reach, then follow lightning's advisory" "$WORK/lpy.txt"
 hasnot "the version Lightning AI says to pin is not flagged" 'lightning 2\.6\.1' "$WORK/lpy.txt"
+# telnyx 4.87.1 and 4.87.2 (Telnyx's own advisory): 4.87.2's malware ran on Linux, macOS and Windows, and
+# 4.87.1's typo kept its malware from running, Telnyx says, so 4.87.1 is a version to update everywhere.
+cp -R "$WORK/clean" "$WORK/tlx"; mkdir -p "$WORK/tlx/code/venv/lib/site-packages/telnyx-4.87.2.dist-info" "$WORK/tlx/code/old/lib/site-packages/telnyx-4.87.0.dist-info"
+cp -R "$WORK/clean" "$WORK/tlx1"; mkdir -p "$WORK/tlx1/code/venv/lib/site-packages/telnyx-4.87.1.dist-info"
+HOME="$WORK/tlx" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlx.txt"
+HOME="$WORK/tlx1" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlx1.txt"
+HOME="$WORK/tlx1" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlx1-c.txt"
+has    "telnyx 4.87.2 is an act-now row of its own"   'telnyx 4\.87\.1 and 4\.87\.2 +signs of the malware found ~/code/venv/lib/site-packages: telnyx 4\.87\.2' "$WORK/tlx.txt"
+hasnot "telnyx 4.87.0, the version Telnyx says is safe, is not flagged" 'telnyx 4\.87\.0' "$WORK/tlx.txt"
+has    "telnyx 4.87.1, whose malware could not run, is a version to update" 'telnyx 4\.87\.1 and 4\.87\.2 +a bad version to update ~/code/venv/lib/site-packages: telnyx 4\.87\.1 Its maintainer says the malware in this version could not run\. Update to a version without it\. Advisory: github\.com/advisories/GHSA-955r-262c-33jc' "$WORK/tlx1.txt"
+hasnot "and it is not a compromised machine"          'ACT NOW|Treat this machine as compromised|signs of the malware found' "$WORK/tlx1.txt"
+has    "row 05 says a Python package to update for it" 'Recent leaks a Python package to update, see section 5' "$WORK/tlx1-c.txt"
+# The files Telnyx names: its backdoor, the systemd unit that starts it on Linux, and its state file.
+cp -R "$WORK/clean" "$WORK/tlxf"; mkdir -p "$WORK/tlxf/tmp" "$WORK/tlxf/.config/audiomon" "$WORK/tlxf/.config/systemd/user"
+: > "$WORK/tlxf/.config/audiomon/audiomon.py"; : > "$WORK/tlxf/.config/systemd/user/audiomon.service"; : > "$WORK/tlxf/tmp/.initd_state"
+HOME="$WORK/tlxf" TMPDIR="$WORK/tlxf/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlxf.txt"
+has    "telnyx's backdoor is a sign of it, in its row" 'telnyx 4\.87\.1 and 4\.87\.2 +signs of the malware found .*~/\.config/audiomon/audiomon\.py the backdoor the telnyx malware leaves' "$WORK/tlxf.txt"
+has    "and on Linux the systemd unit that starts it" '~/\.config/systemd/user/audiomon\.service starts the backdoor the telnyx malware leaves, at login' "$WORK/tlxf.txt"
+has    "and its state file, with Telnyx's advice"     '\.initd_state .*Telnyx lists this file as the malware.s state file' "$WORK/tlxf.txt"
+hasnot "and none of it is called npm malware"         'npm malware +signs of the malware found|SIGNS OF NPM MALWARE' "$WORK/tlxf.txt"
+# durabletask 1.4.1 to 1.4.3 (GitHub's malware advisory; Wiz ties it to the AntV wave): its dropper runs
+# on Linux only, and fetches the payload to /tmp/managed.pyz. 1.4.0, the version to pin, is not one of them.
+cp -R "$WORK/clean" "$WORK/dtk"; mkdir -p "$WORK/dtk/code/venv/lib/site-packages/durabletask-1.4.2.dist-info" "$WORK/dtk/code/old/lib/site-packages/durabletask-1.4.0.dist-info"
+HOME="$WORK/dtk" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dtk.txt"
+HOME="$WORK/dtk" PATH="$WORK/macbin2:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dtk-mac.txt"
+has    "durabletask 1.4.2 is an act-now row on Linux" 'durabletask 1\.4\.1 to 1\.4\.3 +signs of the malware found ~/code/venv/lib/site-packages: durabletask 1\.4\.2' "$WORK/dtk.txt"
+hasnot "durabletask 1.4.0, the version to pin, is not flagged" 'durabletask 1\.4\.0' "$WORK/dtk.txt"
+has    "on a Mac, durabletask 1.4.2 is a version to update" 'durabletask 1\.4\.1 to 1\.4\.3 +a bad version to update ~/code/venv/lib/site-packages: durabletask 1\.4\.2 Its malware runs on Linux only, so it did not run here\.' "$WORK/dtk-mac.txt"
+cp -R "$WORK/clean" "$WORK/dtkt"; mkdir -p "$WORK/dtkt/tmp"; : > "$WORK/dtkt/tmp/managed.pyz"
+HOME="$WORK/dtkt" TMPDIR="$WORK/dtkt/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dtkt.txt"
+has    "on Linux, managed.pyz in the temp folder is durabletask's sign" 'durabletask 1\.4\.1 to 1\.4\.3 +signs of the malware found ~/tmp/managed\.pyz Wiz lists this file as the payload it downloads' "$WORK/dtkt.txt"
 # litellm 1.82.7 and 1.82.8, March 2026 (OpenSSF's MAL-2026-2144, GitHub's GHSA-5mg7-485q-xm76), on any OS: a row
 # of their own beside LiteLLM 1.107.0's, with the litellm_init.pth 1.82.8 leaves (LiteLLM's post). 1.82.6, the
 # version LiteLLM says to pin, is not one of them. With both LiteLLM incidents found, row 05 says LiteLLM once.
@@ -1633,6 +1664,11 @@ has    "Windows: keys in the shell's own home too"      'msyshome/\.bash_history
 has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
 has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
 has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/AppData/Local/Programs/Python/Python312/Lib/site-packages: mistralai 2\.4\.6' "$WORK/win1.txt"
+# telnyx 4.87.2's Windows payload drops msbuild.exe in the Startup folder (Telnyx's advisory): a sign of it.
+mkdir -p "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"; : > "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-tlx.txt"
+rm -f "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe"
+has    "Windows: telnyx's msbuild.exe in the Startup folder is its sign" 'telnyx 4\.87\.1 and 4\.87\.2 +signs of the malware found ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild\.exe the telnyx malware, which Windows starts at every login from the Startup folder' "$WORK/win-tlx.txt"
 # An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
 mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
@@ -1731,11 +1767,11 @@ lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offlin
 lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 10 recent leaks or malware it checks' "$WORK/zb-none.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 12 recent leaks or malware it checks' "$WORK/zb-none.txt"
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +10 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +12 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -2319,7 +2355,7 @@ mu() { env HOME="$1" TMPDIR="$1/tmp" PATH=/usr/bin:/bin ${3:+GIRD_CHECK_COMPACT=
 mu "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +12 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +14 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -2344,7 +2380,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.local/share/opencode" "$WORK/mu-plat/.railway"
 mu "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 12 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 14 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mu "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"

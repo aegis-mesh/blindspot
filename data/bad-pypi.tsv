@@ -5,7 +5,9 @@
 #   incident  an id from data/incidents.tsv, whose level must be act
 #   os        all, mac, linux or win: where the version's malware could run, as its advisory says. The
 #             version is looked for on every OS; on one where its malware could not run, the report
-#             shows it as a version to update, not a compromised machine
+#             shows it as a version to update, not a compromised machine. none: the package's own
+#             maintainer says the version's malware could not run (the level rule in data/bad-npm.tsv's
+#             header), so it is a version to update on every OS
 # Each line is looked for as a .dist-info folder in every Python environment found and as a
 # name-version entry in uv's cache. Section 5 shows one row per incident, named as incidents.tsv names it.
 # mistralai 2.4.6 is Linux-only by Mistral's advisory. guardrails-ai 0.10.1, published in the same wave
@@ -21,6 +23,20 @@
 # litellm 1.82.7 and 1.82.8, March 2026: OpenSSF's MAL-2026-2144 (the entry that also names 1.107.0) and
 # GitHub's GHSA-5mg7-485q-xm76, on any OS; LiteLLM's own post says they stole credentials and that
 # 1.82.8 also carried litellm_init.pth, its file in data/indicators.tsv.
+# durabletask 1.4.1 to 1.4.3, May 2026: GitHub's malware advisory GHSA-3qf7-886j-9wrc and OpenSSF's
+# MAL-2026-4174; its dropper runs when imported on Linux only, and the advisory says to treat a Linux
+# system that imported one as fully compromised. Wiz ties it to the AntV wave (data/bad-npm.tsv): the
+# account that published that wave's repositories took the PyPI token from microsoft/durabletask-python.
+# It is its own incident, since the AntV wave's is an npm incident. Its files are in data/indicators.tsv.
+# telnyx 4.87.1 and 4.87.2, March 2026: Telnyx's own advisory, GHSA-955r-262c-33jc, and GitHub's malware
+# advisory GHSA-crmv-hqwr-fqfv (OpenSSF's MAL-2026-2254). Telnyx says 4.87.1's typo kept its malware
+# from running, so it is a version to update (none), and that 4.87.2's ran on Linux, macOS and Windows.
+# Telnyx ties it to the LiteLLM compromise of March by the same RSA key; it is its own incident.
+# pytorch-lightning 2.6.2 and 2.6.3 have no line: Lightning AI's advisory, GHSA-w37p-236h-pfx3, gives
+# that name in its package field, but its text says only one of our PyPI packages, the maintainers'
+# thread on the compromise (Lightning-AI/pytorch-lightning issue 21691) speaks of lightning, which is
+# listed, and neither PyPI nor deps.dev knows a pytorch-lightning 2.6.2 or 2.6.3: no source shows
+# that they were published.
 # name	version	incident	os
 litellm	1.107.0	litellm	all
 litellm	1.82.7	litellmmar	all
@@ -29,3 +45,8 @@ mistralai	2.4.6	mistralpy	linux
 guardrails_ai	0.10.1	guardrails	linux
 lightning	2.6.2	lightning	all
 lightning	2.6.3	lightning	all
+durabletask	1.4.1	durabletask	linux
+durabletask	1.4.2	durabletask	linux
+durabletask	1.4.3	durabletask	linux
+telnyx	4.87.1	telnyx	none
+telnyx	4.87.2	telnyx	all

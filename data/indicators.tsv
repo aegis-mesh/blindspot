@@ -54,6 +54,16 @@
 # of the npm incident's packages were, else as npm malware. Its /var/tmp/.gh_update_state, /tmp/kitty-*
 # and their %TEMP% copies have no line, as for the AntV wave, nor %USERPROFILE%\.bun\bin\bun.exe, where
 # Bun's own installer puts Bun.
+# durabletask 1.4.1 to 1.4.3: Wiz's post on it, which names /tmp/managed.pyz, the payload it downloads (as
+# GitHub's malware advisory does). Not its /tmp/rope-*.pyz (a temp line's * may only end the name), its
+# /tmp/.rope_state folder (a temp line in the shared /tmp counts a file this person owns under one name,
+# never a folder), its ~/.cache/.sys-update-check markers (no kind fits a marker in the home folder: it
+# starts nothing, and a temp line is in the temp folder), nor its systemd unit, pgsql-monitor.service,
+# whose folder no source gives and whose name monitoring tools can use.
+# telnyx 4.87.2: Telnyx's own advisory, which names ~/.config/audiomon/audiomon.py (Linux and macOS),
+# the systemd unit that starts it (Linux), /tmp/.initd_state (Linux and macOS) and msbuild.exe in the
+# Startup folder (Windows, %APPDATA%; a Python incident's startup file is under ~, so its line takes
+# the usual ~/AppData/Roaming). Its msbuild.exe.lock has no line: the advisory gives no folder for it.
 # GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
 # extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware,
 # and only when an extension that shipped malware is found: alone, it is a file to check.
@@ -88,3 +98,10 @@ litellm	all	temp	yes	.pc_sq_*	These files mean the malware ran here, and a .pc_o
 litellm	all	temp	yes	.pc_e_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 mistralpy	linux	temp	yes	transformers.pyz	Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.
 guardrails	linux	temp	yes	transformers.pyz	SafeDep shows guardrails-ai 0.10.1 writing this file on Linux and running it. Guardrails AI says to treat such a machine as compromised: rotate every credential it could reach and check your GitHub account for workflows, repositories or commits you did not make.
+durabletask	linux	temp	yes	managed.pyz	Wiz lists this file as the payload it downloads: stop any python3 process running /tmp/managed.pyz, then rotate every secret this machine could reach and rebuild it, as GitHub's malware advisory says.
+telnyx	mac	startup	no	~/.config/audiomon/audiomon.py	the backdoor the telnyx malware leaves, which a systemd service starts at login on Linux
+telnyx	linux	startup	no	~/.config/audiomon/audiomon.py	the backdoor the telnyx malware leaves, which a systemd service starts at login on Linux
+telnyx	linux	startup	no	~/.config/systemd/user/audiomon.service	starts the backdoor the telnyx malware leaves, at login
+telnyx	win	startup	no	~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe	the telnyx malware, which Windows starts at every login from the Startup folder
+telnyx	mac	temp	yes	.initd_state	Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
+telnyx	linux	temp	yes	.initd_state	Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
