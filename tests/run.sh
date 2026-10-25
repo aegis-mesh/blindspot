@@ -127,7 +127,7 @@ printf '{"type":"image","source":{"type":"base64","media_type":"image/png","data
 printf '{"t":"GOOGLE_API_KEY=AIza%s and \\"r8_%s\\" end"}\n' "$(rnd 35)" "$(rnd 37)" > "$SE/b64k/.claude/projects/p/s.jsonl"
 for E in perl rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
-  for _c in brn brk brl b64 b64k; do HOME="$SE/$_c" PATH=/usr/bin:/bin GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/$_c-$E.txt" 2>&1; done
+  for _c in brn brk brl b64 b64k; do HOME="$SE/$_c" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/$_c-$E.txt" 2>&1; done
   has    "$E: an agent that read Blindspot's scripts has no key in its session" 'No keys in 1 agent session file' "$SE/brn-$E.txt"
   has    "$E: a Bedrock short-term key counts"     'Claude Code +1 file: AWS' "$SE/brk-$E.txt"
   has    "$E: a Bedrock long-term key across a 1 MB read counts" 'Claude Code +1 file: AWS' "$SE/brl-$E.txt"
