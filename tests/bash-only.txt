@@ -308,3 +308,4 @@ fleet: a startup file root owns in /tmp is only a possible sign for the Mac	gird
 fleet: and not the Mac's finding	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and no row says the malware ran as root	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a link at that name in /tmp is nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a home whose path holds a character it does not read says so, not that it is a system folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

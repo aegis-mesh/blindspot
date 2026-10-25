@@ -300,8 +300,8 @@ told its time, so its session check stops in time and what it found still counts
 partly checked. `sudo` writes one line to the system log for each account.
 
 Some folders outside the home are read by every account's check: npm's global folders in
-`/opt/homebrew/lib` and `/usr/local/lib`, shared Python environments, conda in `/opt`, and Cursor's
-version in `/Applications/Cursor.app`. A finding there shows on every account's row, and whoever can
+`/opt/homebrew/lib` and `/usr/local/lib`, shared Python environments, conda in `/opt`, and the versions of
+Cursor and Claude Desktop in `/Applications`. A finding there shows on every account's row, and whoever can
 write to those folders (Homebrew's belong to the account that installed it) can put one there.
 
 What root checks once for the Mac:

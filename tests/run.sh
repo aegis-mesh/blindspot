@@ -2961,7 +2961,8 @@ hasnot "fleet: the readable report has no path or file name" '/|~|\.zshrc|\.env'
 # Which accounts: from fixtures.
 users "gone:$U:$FL/nothere:/bin/zsh" "linked:$U:$FL/homelink:/bin/zsh" "other:$((U + 1)):$FL/notmine:/bin/zsh" \
       "first:$U:$FL/clean:/bin/zsh" "second:$U:$FL/clean:/bin/zsh" "noshell:$U:$FL/upd:/usr/bin/false" "sys:$U:/System:/bin/zsh" \
-      "rooted:$U:/:/bin/zsh"
+      "rooted:$U:/:/bin/zsh" "dollar:$U:$FL/home\$x:/bin/zsh"
+mkdir -p "$FL/home\$x"
 fl_run list --list
 if grep -q '^first  *will be checked$' "$FL/list.out" && [ ! -s "$FL/argv.log" ]; then ok "fleet: --list says who will be checked, and checks nothing"; else bad "fleet: --list says who will be checked, and checks nothing" "$(cat "$FL/list.out" "$FL/argv.log")"; fi
 fl_run homes
@@ -2972,6 +2973,7 @@ has    "fleet: a home shared with an account above is not checked" '^second\.not
 has    "fleet: an account with no login shell is not checked" '^noshell\.not_checked=no_login_shell$' "$FL/homes.flat"
 has    "fleet: a system folder as a home is not checked" '^sys\.not_checked=home_system$' "$FL/homes.flat"
 has    "fleet: a home of / is not checked, and keeps its reason" '^rooted\.not_checked=home_system$' "$FL/homes.flat"
+has    "fleet: a home whose path holds a character it does not read says so, not that it is a system folder" '^dollar\.not_checked=home_name$' "$FL/homes.flat"
 has    "fleet: the one good account is checked" '^first\.outcome=clear$' "$FL/homes.flat"
 if [ "$(grep -c . "$FL/argv.log")" -eq 1 ]; then ok "fleet: and only it is started"; else bad "fleet: and only it is started" "$(cat "$FL/argv.log")"; fi
 has    "fleet: accounts not checked make the run not_checked" '^outcome=not_checked$' "$FL/homes.flat"

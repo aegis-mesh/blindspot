@@ -351,7 +351,7 @@ fl_accounts() {
       case "$_h" in
         ''|/var|/private|/tmp|/private/tmp|/private/var|/var/empty|/private/var/empty|/var/root|/private/var/root|/Users|/Volumes|/Network) _r=home_system ;;
         /System|/System/*|/usr|/usr/*|/bin|/bin/*|/sbin|/sbin/*|/etc|/etc/*|/private/etc|/private/etc/*|/dev|/dev/*|/Library|/Library/*|/Applications|/Applications/*|/opt|/opt/*|/cores|/cores/*) _r=home_system ;;
-        *[!A-Za-z0-9._/@\ -]*) _r=home_system ;;
+        *[!A-Za-z0-9._/@\ -]*) _r=home_name ;;
       esac
     fi
     if [ "$_r" = ok ]; then
@@ -384,6 +384,7 @@ fl_reason_text() {
     home_owner) printf 'not checked: the home folder belongs to another account' ;;
     home_shared) printf 'not checked: the home folder is shared with an account above' ;;
     home_system) printf 'not checked: the home folder is a system folder' ;;
+    home_name) printf 'not checked: the home folder path holds a character Blindspot does not read' ;;
     home_no_answer) printf 'not checked: the home folder did not answer in time' ;;
     sudo) printf 'not checked: could not start a check as this account' ;;
     bad_output) printf 'not checked: its check sent back something unexpected' ;;
