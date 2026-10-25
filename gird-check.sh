@@ -6964,11 +6964,11 @@ advice_todos() { # first, act, lock or update
   done
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
-FIRST_HIT=0; FIRST_WHAT=""
+FIRST_HIT=0; FIRST_WHAT=""; FIRST_IDS=""
 for _t in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do
   [ "$(incident_level "$_t")" = act ] || continue
   case "$(incident_advice "$_t")" in
-    First\ *) FIRST_HIT=1; _fn="the $(incident_name "$_t")"
+    First\ *) FIRST_HIT=1; FIRST_IDS="$FIRST_IDS $_t"; _fn="the $(incident_name "$_t")"
       case " and $FIRST_WHAT and " in *" and $_fn and "*) ;; *) FIRST_WHAT="${FIRST_WHAT:+$FIRST_WHAT and }$_fn" ;; esac ;;
   esac
 done
@@ -7988,14 +7988,18 @@ else printf '%s' "$HEAD_FULL$SEC1$SEC2$SEC3$SEC4$SEC5$SEC_TODO$SEC_ARGUS$SEC_FOO
 # nothing happens unasked.
 # ---------------------------------------------------------------------------
 # u is the run ID, so a share from the certificate can be matched to its run, r the
-# early rank, sk the SSH private keys and hk the shell history files with keys, nm npm malware,
-# py a Python incident other than LiteLLM, ex malware in an editor extension and wp
-# gh-token-monitor, so the page never says to rotate a token while it is there.
+# early rank, sk the SSH private keys and hk the shell history files with keys, nm npm malware
+# found on this machine, py a Python incident other than LiteLLM, ex malware in an editor
+# extension and wp gh-token-monitor, so the page never says to rotate a token while it is there.
+# lo is npm malware found only in a lockfile (act if that project was installed), never nm, and fi
+# the incidents whose own fix comes before any rotate (SANDWORM_MODE's git hooks and MCP servers).
 card_url() {
-  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s&nm=%s&py=%s&ex=%s&wp=%s' \
+  _lnm=0; [ "$MAL_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ] && _lnm=1
+  printf '%s/blindspot/card/#v=2&s=%s&g=%s&a=%s&i=%s&m=%s&mt=%s&k=%s&p=%s&al=%s&an=%s&ll=%s&lf=%s&sp=%s&d=%s&pc=%s&pn=%s&u=%s&r=%s&sk=%s&hk=%s&ag=%s&nm=%s&py=%s&ex=%s&wp=%s&lo=%s&fi=%s' \
     "$WEB" "$SCORE" "$GRADE" "$N_AG" "$N_IDLE" "$N_MCP" "$N_MCP_TOKEN" "$KEY_FILES" "$(printf '%s' "$PROV_IDS" | tr ' ' '.')" \
     "$N_ALLOW" "$N_ALLOW_NPM" "$LITELLM_HIT" "$N_LOGIN" "$N_SSH_OPEN" "$(date +%Y-%m-%d)" "$PCT" "$PCT_N" \
-    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')" "$MAL_HIT" "$PY_OTHER" "$EXT_HIT" "$WIPER_HIT"
+    "$LINK_RUN_ID" "$RANK" "$N_SSH" "$HIST_KEYS" "$(printf '%s' "$AGENT_IDS" | tr ' ' '.')" "$_lnm" "$PY_OTHER" "$EXT_HIT" "$WIPER_HIT" \
+    "$MAL_LOCKONLY" "$(printf '%s\n' $FIRST_IDS | grep -E '^[a-z0-9-]+$' | sort -u | paste -sd . -)"
 }
 # Windows' default browser, from Git Bash or WSL. cmd.exe would read each & in the
 # link as a new command, so they are escaped as ^&. explorer.exe reports failure

@@ -6899,12 +6899,15 @@ if ($Compact) { Out-Text ($HeadShort + $Summary) } else { Out-Text $FullText }
 # ---------------------------------------------------------------------------
 # What next: the result link first, then details and save. One key each, nothing
 # happens unasked. u is the run ID, r the early rank, sk the SSH private keys,
-# hk the shell history files with keys, nm npm malware, ex malware in an editor extension
-# and wp gh-token-monitor, so the page never says to rotate a token while it is there.
+# hk the shell history files with keys, nm npm malware found on this machine, ex malware in an
+# editor extension and wp gh-token-monitor, so the page never says to rotate a token while it is
+# there. lo is npm malware found only in a lockfile (act if that project was installed), never nm,
+# and fi the incidents whose own fix comes before any rotate (SANDWORM_MODE's git hooks and MCP servers).
 # ---------------------------------------------------------------------------
 function Card-Url {
   $d = (Get-Date).ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture)
-  "$Web/blindspot/card/#v=2&s=$SCORE&g=$GRADE&a=$N_AG&i=$N_IDLE&m=$N_MCP&mt=$N_MCP_TOKEN&k=$KEY_FILES&p=$($ProvIds -join '.')&al=$N_ALLOW&an=$N_ALLOW_NPM&ll=$LITELLM_HIT&lf=$N_LOGIN&sp=$N_SSH_OPEN&d=$d&pc=$PCT&pn=$PCT_N&u=$LinkRunId&r=$RANK&sk=$N_SSH&hk=$HIST_KEYS&ag=$($AgentIds -join '.')&nm=$MAL_HIT&py=$PY_OTHER&ex=$EXT_HIT&wp=$WIPER_HIT"
+  $lnm = 0; if ($MAL_HIT -eq 1 -and $MAL_LOCKONLY -eq 0) { $lnm = 1 }
+  "$Web/blindspot/card/#v=2&s=$SCORE&g=$GRADE&a=$N_AG&i=$N_IDLE&m=$N_MCP&mt=$N_MCP_TOKEN&k=$KEY_FILES&p=$($ProvIds -join '.')&al=$N_ALLOW&an=$N_ALLOW_NPM&ll=$LITELLM_HIT&lf=$N_LOGIN&sp=$N_SSH_OPEN&d=$d&pc=$PCT&pn=$PCT_N&u=$LinkRunId&r=$RANK&sk=$N_SSH&hk=$HIST_KEYS&ag=$($AgentIds -join '.')&nm=$lnm&py=$PY_OTHER&ex=$EXT_HIT&wp=$WIPER_HIT&lo=$MAL_LOCKONLY&fi=$((@($FirstTags | Where-Object { $_ -cmatch '^[a-z0-9-]+$' } | Sort-Object -Unique -CaseSensitive)) -join '.')"
 }
 $ActSaved = 0; $ActCard = 0
 function Do-Save {

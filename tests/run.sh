@@ -68,7 +68,7 @@ for B in $BASHES; do
   has    "lists the wiper's files"               '~/\.config/gh-token-monitor' "$OUT"
   has    "a hook that runs a planted worm file counts as malware" '^ +~/code/cloned/\.claude/settings\.json$' "$OUT"
   has    "full output lists every key file"      '~/\.cursor/mcp\.json +GitHub' "$OUT"
-  has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]$' "$OUT"
+  has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2&.*&u=&r=&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]&lo=[01]&fi=[a-z0-9.-]*$' "$OUT"
   if grep -aqF -f "$WORK/keys.txt" "$OUT"; then bad "never prints a planted key"; else ok "never prints a planted key"; fi
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
   tr -s ' \n' '  ' < "$OUT" > "$WORK/out-flat-incidents.txt"
@@ -1114,7 +1114,7 @@ if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sess
 else bad "with the wiper present, no rotate or revoke anywhere in the report goes without the wait" "$(printf '%s' "${_u:-the fixture lost its sessions, platforms or temp markers}" | head -n 3 | tr '\n' '|')"; fi
 has    "the session keys wait for the wiper"         'Treat these keys as exposed and rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wwait-flat.txt"
 has    "and for SANDWORM_MODE's leftovers too"       'rotate them\. Only once gh-token-monitor is stopped and removed, and what the SANDWORM_MODE worm leaves is removed: What to do starts with both' "$WORK/wwait-flat.txt"
-has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
+has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1&lo=0&fi=[a-z0-9.-]*$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 HOME="$WORK/both" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
@@ -1195,7 +1195,7 @@ has    "a lockfile alone: the headline depends on an install" 'ACT NOW IF YOU IN
 has    "and so does the fix" "If you ran an install in the project section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force\. If not, update its lockfile to a version without the malware\." "$WORK/lko.txt"
 has    "and the summary row" 'Recent leaks npm malware in a lockfile: act if installed' "$WORK/lko-c.txt"
 _s1=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lko.txt"); _s2=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lki.txt")
-if [ -n "$_s1" ] && [ "$_s1" = "$_s2" ] && grep -q '&nm=1&' "$WORK/lko.txt"; then ok "a lockfile alone keeps the score and the link's nm"; else bad "a lockfile alone keeps the score and the link's nm" "${_s1:-no link} / ${_s2:-no link}"; fi
+if [ -n "$_s1" ] && [ "$_s1" = "$_s2" ] && grep -q '&nm=0&.*&lo=1&' "$WORK/lko.txt"; then ok "a lockfile alone keeps the score, and the link says lo, never nm"; else bad "a lockfile alone keeps the score, and the link says lo, never nm" "${_s1:-no link} / ${_s2:-no link}"; fi
 has    "a bad version installed next to its lockfile is act-now" 'ACT NOW: SIGNS OF NPM MALWARE .*Treat this machine as compromised\. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5' "$WORK/lki.txt"
 has    "another version in node_modules leaves it depending on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lkd.txt"
 # Each entry is looked for where its lockfile installs it: the folder npm's lockfile names (nested, or a
@@ -1307,7 +1307,7 @@ has    "with the vendor's own explanation"           'Mistral AI npm packages, M
 has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
-has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
+has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0&lo=0&fi=( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
 # The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
 # malware, as GitHub's malware advisories say; the UiPath builds are versions to update, as UiPath, their
@@ -1377,6 +1377,7 @@ HOME="$WORK/sw" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline
 has    "SANDWORM_MODE's fix: remove its git hooks and MCP servers first" ' 1\. First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init\.templateDir names and in the \.git/hooks and \.husky folders of your repositories, and MCP servers you did not add to your AI assistants\. Its pre-push hook sends npm tokens out on every push\. 2\. Treat this machine as compromised\.' "$WORK/sw.txt"
 has    "ahead of an incident's own advice to rotate"  'Its pre-push hook sends npm tokens out on every push\. .*Rotate the secrets this machine held from another computer' "$WORK/sw.txt"
 has    "and the summary's first fix is to remove them" 'First fix: First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
+has    "and the result link names it, so the page removes them first too" '&nm=1&.*&lo=0&fi=sandworm( |$)' "$WORK/sw.txt"
 # wot-api 0.8.5, published an hour after 0.8.4, is malware by OpenSSF's entry, which Wiz's list leaves out.
 rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/w" "$WORK/npw/AppData/Roaming" "$WORK/npw/AppData/Local/Temp"
 printf '{"lockfileVersion":3,"packages":{"node_modules/wot-api":{"version":"0.8.5","resolved":"https://registry.npmjs.org/wot-api/-/wot-api-0.8.5.tgz"}}}\n' > "$WORK/npw/code/w/package-lock.json"
@@ -2665,7 +2666,7 @@ PY
   hasnot "the percentile line carries no count" 'of 1,234 AI builders' "$OUT"
   has  "the result link carries the percentile" 'blindspot/card/#v=2&.*&pc=72&pn=1234' "$OUT"
   RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/received.log" | head -n 1 | cut -d'"' -f4)
-  has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]\$" "$OUT"
+  has  "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=1&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]&lo=[01]&fi=[a-z0-9.-]*\$" "$OUT"
   head -n 1 "$WORK/received.log" > "$WORK/report-home.json"   # its case-study counts are checked below
   HOME="$WORK/clean" GIRD_CHECK_API="$API" bash "$SCRIPT" > "$WORK/clean-online.txt" 2>&1
   has  "leads with the percentile when nothing is urgent" 'BETTER THAN 72% OF AI BUILDERS WHO RAN BLINDSPOT' "$WORK/clean-online.txt"
