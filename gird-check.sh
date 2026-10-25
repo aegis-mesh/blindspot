@@ -1199,6 +1199,10 @@ all|sealed|Antigravity|$H/.gemini/antigravity/conversations
 all|sealed|Antigravity|$H/.gemini/antigravity-cli/conversations
 all|sealed|Antigravity|$H/.gemini/antigravity-ide/conversations"
 # <<< sessions
+# A location whose folder variable is written with a doubled or trailing / is spelled with single
+# slashes, as ripgrep prints the paths under it, so each hit keeps its place: otherwise it reads as
+# Other, shown by the folder it is in, whose name can spell out a project and a username.
+SESS_TABLE=$(printf '%s\n' "$SESS_TABLE" | sed -e 's#\([^|]\)//*#\1/#g' -e 's#\([^|]\)/$#\1#')
 SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && ($2 == "read" || $2 == "db") { print $3 "|" $4 }')
 # Folders whose .pb conversation files are stored encrypted: those files are counted and named as
 # not checked.

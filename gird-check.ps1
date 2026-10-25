@@ -798,16 +798,24 @@ $SessTable = @(
   @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity-cli/conversations')),
   @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity-ide/conversations')))
 # <<< sessions
+# Each location spelled as .NET spells the paths it lists (FullName), so every hit keeps its place: a
+# folder variable written with / on Windows, or with a doubled or trailing separator, would leave its
+# hits as Other, shown by the folder they are in, whose name can spell out a project and a username.
+foreach ($sessRow in $SessTable) {
+  try { $sessFull = [IO.Path]::GetFullPath($sessRow[2]) } catch { continue }
+  $sessTrim = $sessFull.TrimEnd('\', '/'); if ($sessTrim -and $sessTrim -notmatch '^[A-Za-z]:$') { $sessFull = $sessTrim }
+  $sessRow[2] = $sessFull
+}
 $SessSources = @($SessTable | Where-Object { $_[0] -eq 'read' -or $_[0] -eq 'db' } | ForEach-Object { , @($_[1], $_[2]) })
 # Folders whose .pb conversation files are stored encrypted: those files are counted and named as
 # not checked.
 $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Object { , @($_[1], $_[2]) })
 # Lists the files under the session roots one folder at a time, so a folder that can't be read is
 # counted in $st.Skipped and the rest are still listed (EnumerateFiles over all folders at once
-# stops at the first one it can't open, and drops the rest of that root). Folders that are links
-# are not followed, as ripgrep and gird-check.sh's perl do not. A pipe, a socket or a device is
-# never listed: opening a pipe waits for a writer, and a device may never end. Text, so the
-# background session check can load it too; it returns the list as one object.
+# stops at the first one it can't open, and drops the rest of that root). Links found inside a
+# folder, to a file or a folder, are not followed, as ripgrep and gird-check.sh's perl do not. A
+# pipe, a socket or a device is never listed: opening a pipe waits for a writer, and a device may
+# never end. Text, so the background session check can load it too; it returns the list as one object.
 $SessListFn = @'
 # A regular file, following a link: what bash's [ -f ] and perl's -f say. PowerShell 7.2 and up
 # say which a file is off Windows (the first letter of UnixMode, from Get-Item); Windows keeps no
@@ -820,6 +828,16 @@ function Is-PlainFile([string]$p) {
     $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode
     return (-not $m) -or $m.StartsWith('-')
   } catch { return $true }
+}
+# An empty file that can't be opened, so was not read. It is opened only where it is known to be a
+# regular file (on Windows, or where PowerShell 7.2 and up says so off Windows), so a pipe an older
+# PowerShell could not tell from a file never holds the check up; there it counts as read unopened.
+function Empty-Unreadable([string]$p) {
+  if ($env:OS -ne 'Windows_NT') {
+    $m = ''; try { $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode } catch { }
+    if (-not $m.StartsWith('-')) { return $false }
+  }
+  try { (New-Object IO.FileStream($p, 'Open', 'Read', 'ReadWrite')).Dispose(); $false } catch { $true }
 }
 function Sess-List($roots, $st) {
   $files = New-Object System.Collections.Generic.List[object]
@@ -834,9 +852,9 @@ function Sess-List($roots, $st) {
     $d = $dirs.Pop()
     try {
       foreach ($f in $d.EnumerateFiles()) {
-        # Only an entry that may not be a regular file is asked about: a link, or an empty one, as
-        # pipes, sockets and devices are.
-        if ((($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $f.Length -eq 0) -and -not (Is-PlainFile $f.FullName)) { continue }
+        # A link is skipped. Only an empty entry is asked about, as pipes, sockets and devices are empty.
+        if (($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+        if ($f.Length -eq 0 -and -not (Is-PlainFile $f.FullName)) { continue }
         $files.Add($f)
       }
       foreach ($sd in $d.EnumerateDirectories()) { if (($sd.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $dirs.Push($sd) } }
@@ -884,14 +902,24 @@ $SessWorker = {
       $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
-      # --null ends the file name with a NUL, the one character a path can't hold. A line without
-      # one is a piece of a file name that holds a newline.
-      $frag = ''
-      while ($null -ne ($l = $st.Proc.StandardOutput.ReadLine())) {
-        $i = $l.IndexOf([char]0)
-        if ($i -lt 0) { $frag += $l + '?'; continue }
-        & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1); $frag = ''
+      # --null ends the file name with a NUL, the one character a path can't hold. ripgrep ends a
+      # match with a newline (LF) alone, and its lines are split there only: a carriage return can be
+      # the byte before a key, and ReadLine would end the line at it, dropping the key or gluing it to
+      # the next file name. So all text after a NUL is the match, and a line without one is a piece
+      # of a file name that holds a newline.
+      $frag = ''; $sb = New-Object Text.StringBuilder; $cb = New-Object char[] 65536; $so = $st.Proc.StandardOutput
+      while (($got = $so.Read($cb, 0, $cb.Length)) -gt 0) {
+        $s = New-Object string($cb, 0, $got); $at = 0
+        while (($nl = $s.IndexOf([char]10, $at)) -ge 0) {
+          [void]$sb.Append($s, $at, $nl - $at); $l = $sb.ToString(); [void]$sb.Clear(); $at = $nl + 1
+          $i = $l.IndexOf([char]0)
+          if ($i -lt 0) { $frag += $l + '?'; continue }
+          & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1); $frag = ''
+        }
+        [void]$sb.Append($s, $at, $s.Length - $at)
       }
+      $l = $sb.ToString(); $i = $l.IndexOf([char]0)
+      if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
       $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
     } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
     return
@@ -907,9 +935,12 @@ $SessWorker = {
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
-    # An empty file holds nothing and is not opened, so a pipe an older PowerShell could not tell
-    # from a file never holds the check up. Never a link: Windows gives a link's own size, 0.
-    if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $st.Done++; continue }
+    # An empty file holds nothing: it counts as read once it opens, as perl's open does, and one that
+    # can't be opened was not read. Never a link: Windows gives a link's own size, 0.
+    if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+      if (Empty-Unreadable $f.FullName) { $st.Unread++ } else { $st.Done++ }
+      continue
+    }
     # Read 1 MB at a time and cut just after the last character that can't be in a key (Bedrock's
     # long-term keys hold + and /) or start an escape such as \n (a backslash never ends a piece), so a huge database file never loads at
     # once, a piece never ends inside a token unless one runs past 8 MB, and a stop is seen within
@@ -5689,14 +5720,18 @@ if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
 $sessHits = New-Object System.Collections.Generic.List[string]
 foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
-# in each project, found by the home scan, and they are checked here.
+# in each project, found by the home scan, and they are checked here. One counts as read once the
+# pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
 $rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
+$SESS_SLOW = 0
 foreach ($f in $AiderFiles) {
   $SESS_TOTAL++
   $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }
-  if ($SESS_DONE -ge 0) { $SESS_DONE++ }
   $seenA = @{}
-  try { foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } } } catch { Mark-Slow $f }
+  try {
+    foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
+    if ($SESS_DONE -ge 0) { $SESS_DONE++ }
+  } catch { Mark-Slow $f; $SESS_SLOW++ }
 }
 # Which agent a file belongs to and where it was found: the session folder it is under, or the
 # file itself when the location is one file (Codex's history.jsonl, an Aider history). The report
@@ -6098,8 +6133,8 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
     Wrap "$(Plural $SESS_NOTRUN 'agent session file was' 'agent session files were') not checked$why" 8 "     $cYel!$cRst  " '        '
   }
   elseif ($SESS_DONE -lt 0) { Wrap 'Agent sessions were partly checked. Add -AllSessions to check all of them.' 8 "     $cYel!$cRst  " '        ' }
-  elseif (($SESS_DONE + $SESS_UNREAD_FILES) -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
-  elseif ($N_SESS -eq 0 -and $SESS_DONE -gt 0 -and $SESS_UNREAD -eq 0 -and $SESS_UNREAD_FILES -eq 0) {
+  elseif (($SESS_DONE + $SESS_UNREAD_FILES + $SESS_SLOW) -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
+  elseif ($N_SESS -eq 0 -and $SESS_DONE -gt 0 -and $SESS_UNREAD -eq 0 -and $SESS_UNREAD_FILES -eq 0 -and $SESS_SLOW -eq 0) {
     # The files read, not the compressed ones, which are named below.
     Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_DONE) 'agent session file' 'agent session files')."
   }
@@ -6108,6 +6143,7 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
   if ($SESS_UNREAD_FILES -gt 0) { $urParts += (Plural $SESS_UNREAD_FILES 'file' 'files') }
   if ($urParts.Count -gt 0) { Wrap "Agent sessions were partly checked: $($urParts -join ' and ') could not be read." 8 "     $cYel!$cRst  " '        ' }
   elseif ($SESS_UNREAD -lt 0) { Wrap 'Agent sessions were partly checked: some files or folders could not be read.' 8 "     $cYel!$cRst  " '        ' }
+  if ($SESS_SLOW -gt 0) { Wrap "Agent sessions were partly checked: $(Plural $SESS_SLOW 'file' 'files') took too long to check." 8 "     $cYel!$cRst  " '        ' }
   if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 "     $cYel!$cRst  " '        ' }
   if ($SessSealedN -gt 0) {
     $sealVerb = 'conversation files are encrypted, so they were'; if ($SessSealedN -eq 1) { $sealVerb = 'conversation file is encrypted, so it was' }

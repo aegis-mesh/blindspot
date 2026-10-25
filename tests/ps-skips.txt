@@ -73,3 +73,14 @@ Claude Desktop in both its advisories' ranges: the newest fix and each hole	gird
 Claude Desktop at that fix is not listed	gird-check.ps1 reads Claude Desktop's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
 nor one older than both ranges	gird-check.ps1 reads Claude Desktop's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
 on Linux, Aikido's WakaTime impostor is one to remove	needs pwsh on Linux: gird-check.ps1 reads the OS it runs on (macOS by /System/Library/CoreServices), and on macOS this extension's malware runs
+rg: a link inside a session folder is neither read nor counted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key right after a carriage return is found	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the hit after it keeps its file and place	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and neither key is printed	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a folder variable that ends in / keeps its hit with its agent	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and so does one that names the session folder itself	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: the first hit's place is the session folder	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the second's is the variable's folder	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: never a folder under them	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: an empty session file that cannot be opened is not counted as read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the sessions are not called clean over it	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed

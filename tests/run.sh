@@ -373,6 +373,39 @@ for E in perl rg; do
   has    "$E: a link to a pipe or a device, or a pipe in a session folder, is not read" 'No keys in 1 agent session file\.' "$SE/lnkp-$E.txt"
 done
 SKIPPING=""
+# A link inside a session folder is not followed, as ripgrep follows none: the key in the file it
+# points at is not found, and the link is not counted as a file checked. A carriage return right
+# before a key is the first byte of ripgrep's match: the key is found, and the hit on the next line
+# keeps its file and place, with no key printed. A folder variable that ends in / keeps each hit with
+# its agent and place, never the folder under it, whose name can spell out a project. An empty
+# session file that can't be opened was not read.
+mkdir -p "$SE/slnk/.claude/projects/p" "$SE/crk/.codex" "$SE/vsl/cc/projects/-home-someone-work-acme" "$SE/vsl/csd/-home-someone-work-beta" "$SE/emp/.claude/projects/p"
+printf '{}\n' > "$SE/slnk/.claude/projects/p/real.jsonl"; ln -s "$SE/lnkel/key.jsonl" "$SE/slnk/.claude/projects/p/linked.jsonl"
+CRK="AK""IA$(upper 16)"; CRG="gh""p_$(rnd 36)"; printf '%s\n%s\n' "$CRK" "$CRG" > "$SE/crk.keys"
+printf '{"a":"x\r%s y"}\n{"b":"z %s w"}\n' "$CRK" "$CRG" > "$SE/crk/.codex/history.jsonl"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" | tee "$SE/vsl/cc/projects/-home-someone-work-acme/s.jsonl" "$SE/vsl/csd/-home-someone-work-beta/m.json" > /dev/null
+printf '{}\n' > "$SE/emp/.claude/projects/p/a.jsonl"; : > "$SE/emp/.claude/projects/p/b.jsonl"; chmod 000 "$SE/emp/.claude/projects/p/b.jsonl"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$SE/slnk" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/slnk-$E.txt" 2>&1
+  has    "$E: a link inside a session folder is neither read nor counted" 'No keys in 1 agent session file\.' "$SE/slnk-$E.txt"
+  HOME="$SE/crk" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/crk-$E.txt" 2>&1
+  sed -n '/Keys in agent sessions/,/^$/p' "$SE/crk-$E.txt" > "$SE/crk-$E.block"
+  has    "$E: a key right after a carriage return is found" 'Codex +1 file: (AWS, GitHub|GitHub, AWS)$' "$SE/crk-$E.block"
+  has    "$E: and the hit after it keeps its file and place" '^ +~/\.codex/history\.jsonl +1 file$' "$SE/crk-$E.block"
+  nokeys "$E: and neither key is printed" "$SE/crk.keys" "$SE/crk-$E.txt"
+  HOME="$SE/vsl" CLAUDE_CONFIG_DIR="$SE/vsl/cc/" CLINE_SESSION_DATA_DIR="$SE/vsl/csd/" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/vsl-$E.block"
+  has    "$E: a folder variable that ends in / keeps its hit with its agent" 'Claude Code +1 file: AWS$' "$SE/vsl-$E.block"
+  has    "$E: and so does one that names the session folder itself" 'Cline +1 file: AWS$' "$SE/vsl-$E.block"
+  has    "$E: the first hit's place is the session folder" '^ +~/cc/projects +1 file$' "$SE/vsl-$E.block"
+  has    "$E: and the second's is the variable's folder" '^ +~/csd +1 file$' "$SE/vsl-$E.block"
+  hasnot "$E: never a folder under them" 'work-acme|work-beta|Other' "$SE/vsl-$E.block"
+  HOME="$SE/emp" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/emp-$E.txt"
+  has    "$E: an empty session file that cannot be opened is not counted as read" 'Agent sessions were partly checked: (1 file|some files or folders) could not be read' "$SE/emp-$E.txt"
+  hasnot "$E: and the sessions are not called clean over it" 'No keys in' "$SE/emp-$E.txt"
+done
+SKIPPING=""
+chmod 644 "$SE/emp/.claude/projects/p/b.jsonl"
 # Antigravity keeps newer conversations as SQLite files (.db, and their -wal) beside the older .pb
 # files: the SQLite files are read and nothing else in the folder is, only the .pb files are named
 # as encrypted, and a folder with none is never called encrypted.
