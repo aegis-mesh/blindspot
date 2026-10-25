@@ -1749,14 +1749,25 @@ while IFS= read -r f; do
 done <<EOF
 $TASK_FILES
 EOF
-# A project's .vscode/settings.json with "chat.tools.autoApprove": true, the setting the
-# CVE-2025-53773 prompt injection made Copilot write so it could run commands without asking. VS Code
-# 1.104 renamed it without migration, so current VS Code ignores it: a sign of that attack, or of an
-# old VS Code, not a setting in force. A thing to look at, not an agent set to run without asking.
+# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" (Allow all) or
+# "autopilot" starts new Copilot chats that run every tool call without asking, and the setting
+# declares no scope, so VS Code takes it from a project too: a cloned repo can bring it.
+# "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
+# write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
+# current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
+# Both are things to look at in a project, not an agent set to run without asking. A file that names
+# neither setting (most do not) is skipped before it is flattened: flat only takes comments out, so a
+# setting's name stays as written.
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
-  aa_hit "$f" '"chat.tools.autoApprove": true' || continue
-  auto_row "$f" "auto-approve Copilot's tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it" "$(flat "$f")"
+  tr -d '[:space:]' < "$f" 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)' || continue
+  _w=""
+  if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
+  elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
+  if aa_hit "$f" '"chat.tools.autoApprove": true'; then
+    _w="${_w:+$_w, }auto-approve Copilot's tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it"
+  fi
+  [ -n "$_w" ] && auto_row "$f" "$_w" "$(flat "$f")"
 done <<EOF
 $VSC_SETTINGS
 EOF

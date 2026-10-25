@@ -1245,17 +1245,27 @@ cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 dzrun "$WORK/dz-calm" | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
 has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
-# VS Code 1.124's chat.permissions.default: autoApprove ("Allow all") and autopilot run every tool call
-# without asking. The default level, a commented line and a project's copy (not read yet) are not reported.
-for L in pilot allow none; do rm -rf "$WORK/dz-perm-$L"; cp -R "$WORK/clean" "$WORK/dz-perm-$L"; mkdir -p "$WORK/dz-perm-$L/AppData/Roaming/Code/User"; done
+# chat.permissions.default: autoApprove ("Allow all") and autopilot run every tool call without asking.
+# In the user settings the agent is set to run without asking; the default level and a commented line
+# are not reported. The setting declares no scope, so a project's copy is in force too: section 2 lists
+# it, as a setting a cloned project brings, and a project at the default level is not counted.
+for L in pilot allow none proj; do rm -rf "$WORK/dz-perm-$L"; cp -R "$WORK/clean" "$WORK/dz-perm-$L"; mkdir -p "$WORK/dz-perm-$L/AppData/Roaming/Code/User"; done
 printf '{\n  // "chat.permissions.default": "autoApprove",\n  "chat.permissions.default": "autopilot"\n}\n' > "$WORK/dz-perm-pilot/AppData/Roaming/Code/User/settings.json"
 printf '{"chat.permissions.default": "autoApprove"}\n' > "$WORK/dz-perm-allow/AppData/Roaming/Code/User/settings.json"
 printf '{\n  // "chat.permissions.default": "autoApprove",\n  "chat.permissions.default": "default"\n}\n' > "$WORK/dz-perm-none/AppData/Roaming/Code/User/settings.json"
-mkdir -p "$WORK/dz-perm-none/p/w/.vscode"; printf '{"chat.permissions.default": "autoApprove"}\n' > "$WORK/dz-perm-none/p/w/.vscode/settings.json"
-for L in pilot allow none; do dzrun "$WORK/dz-perm-$L" | tr -s ' \n' '  ' > "$WORK/dz-perm-$L.txt"; done
+mkdir -p "$WORK/dz-perm-proj/p/w/.vscode" "$WORK/dz-perm-proj/p/x/.vscode" "$WORK/dz-perm-proj/p/d/.vscode"; rm -f "$WORK/dz-perm-proj/.cursor/mcp.json"   # no MCP token, so row 02 shows the projects
+printf '{"chat.permissions.default": "autoApprove"}\n' > "$WORK/dz-perm-proj/p/w/.vscode/settings.json"
+printf '{\n  // "chat.permissions.default": "autoApprove",\n  "chat.permissions.default": "autopilot"\n}\n' > "$WORK/dz-perm-proj/p/x/.vscode/settings.json"
+printf '{\n  // "chat.permissions.default": "autopilot",\n  "chat.permissions.default": "default"\n}\n' > "$WORK/dz-perm-proj/p/d/.vscode/settings.json"
+for L in pilot allow none proj; do dzrun "$WORK/dz-perm-$L" | tr -s ' \n' '  ' > "$WORK/dz-perm-$L.txt"; done
+dzrun "$WORK/dz-perm-proj" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-perm-proj-c.txt"
 has    "VS Code set to start chats in Autopilot"      '! VS Code Copilot ~/AppData/Roaming/Code/User/settings\.json chat\.permissions\.default: autopilot' "$WORK/dz-perm-pilot.txt"
 has    "VS Code set to start chats allowing all"      '! VS Code Copilot ~/AppData/Roaming/Code/User/settings\.json chat\.permissions\.default: autoApprove' "$WORK/dz-perm-allow.txt"
-hasnot "the default level, a commented one or a project's copy is not reported" 'chat\.permissions\.default' "$WORK/dz-perm-none.txt"
+hasnot "the default level or a commented one is not reported" 'chat\.permissions\.default' "$WORK/dz-perm-none.txt"
+has    "a project's chat.permissions.default: autoApprove is listed in section 2" '! ~/p/w/\.vscode/settings\.json Set to run every Copilot tool call without asking in new chats, with chat\.permissions\.default: autoApprove\.' "$WORK/dz-perm-proj.txt"
+has    "and a project's autopilot"                    '! ~/p/x/\.vscode/settings\.json Set to run every Copilot tool call without asking in new chats, with chat\.permissions\.default: autopilot\.' "$WORK/dz-perm-proj.txt"
+has    "a project at the default level is not counted: row 02 counts the other 2" '02 . MCP servers .*, 2 projects act on opening' "$WORK/dz-perm-proj-c.txt"
+has    "and the fix says to read those settings before an editor opens the folder" 'Read the settings marked in section 2 before an agent or editor opens those folders' "$WORK/dz-perm-proj.txt"
 # gird-check.sh, on the same home with its Mac paths, must find the same things in the same order.
 rm -rf "$WORK/dz-b"; bash tests/make-fixture.sh "$WORK/dz-b" "$WORK/keys-dz.txt" clean > /dev/null
 if [ "$(uname -s)" = Darwin ]; then DAS="Library/Application Support"; else DAS=".config"; fi

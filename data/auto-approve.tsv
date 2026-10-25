@@ -22,9 +22,11 @@
 # wrote; section 2 of the scripts lists it as a sign of that attack, not as a setting in force.
 # VS Code added chat.permissions.default, the permission level new chats start with: autoApprove
 # ("Allow all") and autopilot run every tool call without asking (VS Code's AI settings reference and
-# approvals page; the values from chat.shared.contribution.ts). It declares no scope, so a project's
-# .vscode/settings.json may set it as well; that copy is not read yet. chat.defaultConfiguration, an
-# object whose approvals and mode would have to be read inside it, is not read.
+# approvals page; the values from chat.shared.contribution.ts). It declares no scope, and VS Code reads
+# its merged value, so a project's .vscode/settings.json sets it too: section 2 of the scripts lists
+# such a project's copy, as a setting a cloned project brings, not as a line here.
+# chat.defaultConfiguration, an object whose approvals and mode would have to be read inside it, is
+# not read.
 # agent	os	path	setting	pattern...
 Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"defaultMode": "bypassPermissions"
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"

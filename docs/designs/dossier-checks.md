@@ -46,12 +46,14 @@ section 2 lists it under "Project settings that act as soon as the folder is ope
 sign of that attack (or of an old VS Code) that VS Code 1.104 and later ignore; it does not lower
 the score.
 
-VS Code 1.124 added `chat.permissions.default`, the permission level new chats start with. Its values
+VS Code added `chat.permissions.default`, the permission level new chats start with. Its values
 `autoApprove` ("Allow all") and `autopilot` run every tool call without asking, so in the user
 settings they are an agent set to run without asking, like the global setting. The setting declares no
-scope, so a project's `.vscode/settings.json` may set it as well; that copy is not read yet.
-`chat.defaultConfiguration`, an object whose `approvals` and `mode` would have to be read inside it,
-is not read either.
+scope, and VS Code reads its merged value (`chatInputPart.ts`), so a project's `.vscode/settings.json`
+sets it too: section 2 lists such a project's copy under "Project settings that act as soon as the
+folder is opened", as a setting a cloned project brings (it does not lower the score), and a project
+at the default level is not listed. `chat.defaultConfiguration`, an object whose `approvals` and
+`mode` would have to be read inside it, is not read either.
 
 Not built: Gemini CLI (its YOLO mode cannot be saved in settings), the Cursor editor (stored in
 SQLite), Cursor CLI (the docs do not say what `unrestricted` does), Kiro (YAML rules need a parser),
