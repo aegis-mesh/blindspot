@@ -3147,7 +3147,8 @@ case "${SHELL##*/}" in zsh|bash|fish|sh|dash|ksh|tcsh|nu|elvish|xonsh) SHELLNAME
 LANGCODE=${ORIG_LANG%%.*}
 case "$LANGCODE" in [a-z][a-z]|[a-z][a-z]_[A-Z][A-Z]) ;; *) LANGCODE=other ;; esac
 VIA=none; [ -n "${CLAUDECODE:-}" ] && VIA=claude-code
-N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s\n' "$MCP_ROWS" | awk -F '|' '$4 == "0" { n++ } END { print n + 0 }')
+# files_found counts files, as TELEMETRY.md says: the site-packages folders the scan lists are not files.
+N_FOUND=$(printf '%s\n' "$FOUND" | grep -v '/site-packages$' | grep -c .); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s\n' "$MCP_ROWS" | awk -F '|' '$4 == "0" { n++ } END { print n + 0 }')
 BASHV=${BASH_VERSINFO[0]:-0}
 # For case studies: ids from the fixed lists near the top, and counts. Labels go
 # in, but only list ids and a number come out of mcp_match.

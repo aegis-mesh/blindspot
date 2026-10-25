@@ -1245,6 +1245,11 @@ report_of "$WORK/report-fcount.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" 
 has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
 psrun "$WORK/fcount" -- -Offline > "$WORK/fcount.txt" 2>&1
 has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
+# files_found counts files: a site-packages folder the scan lists is not one.
+mkdir -p "$WORK/fcount/v/lib/python3.12/site-packages"; printf 'home = /usr\n' > "$WORK/fcount/v/pyvenv.cfg"
+report_of "$WORK/report-fsite.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" --
+has    "files_found counts no site-packages folder" '"files_found":3,' "$WORK/report-fsite.json"
+rm -rf "$WORK/fcount/v"
 # A settings file a repo links to a device: /dev/zero never ends and /dev/tty waits for the keyboard.
 # Only a link that ends at a regular file is a settings file, and the allow list after it is still
 # read. A heap limit keeps a regression from eating the machine's memory on /dev/zero.
