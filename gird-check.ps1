@@ -537,8 +537,9 @@ function Link-Target($info) {
 # the current directory back from the system, which resolves them (Windows keeps the path as given).
 # $null when the folder can't be entered.
 function Real-Dir([string]$d) {
-  $old = [IO.Directory]::GetCurrentDirectory()
-  try { [IO.Directory]::SetCurrentDirectory($d); [IO.Directory]::GetCurrentDirectory() } catch { $null } finally { try { [IO.Directory]::SetCurrentDirectory($old) } catch { } }
+  $old = $null
+  try { $old = [IO.Directory]::GetCurrentDirectory(); [IO.Directory]::SetCurrentDirectory($d); [IO.Directory]::GetCurrentDirectory() } catch { $null }
+  finally { if ($old) { try { [IO.Directory]::SetCurrentDirectory($old) } catch { } } }
 }
 # Does a link in $dir with this target resolve to this user's own ~/.ssh/authorized_keys? As bash's
 # find -ilname '*authorized_keys' and -ef: a target named so, in any case, whose folder resolves to
