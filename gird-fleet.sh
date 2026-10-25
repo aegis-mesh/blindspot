@@ -153,6 +153,22 @@ Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access, when the project is trusted|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access profile, when the project is trusted|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, default approvals|sandbox_mode = \"danger-full-access\"|!approval_policy|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, on-request approvals|approval_policy = \"on-request\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, on-failure approvals|approval_policy = \"on-failure\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, granular approvals|approval_policy = { granular = {|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, default approvals|default_permissions = \":danger-full-access\"|!approval_policy
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, on-request approvals|approval_policy = \"on-request\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, on-failure approvals|approval_policy = \"on-failure\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, granular approvals|approval_policy = { granular = {|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access, default approvals, when the project is trusted|sandbox_mode = \"danger-full-access\"|!approval_policy|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, on-request approvals, when the project is trusted|approval_policy = \"on-request\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, on-failure approvals, when the project is trusted|approval_policy = \"on-failure\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, granular approvals, when the project is trusted|approval_policy = { granular = {|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, default approvals, when the project is trusted|default_permissions = \":danger-full-access\"|!approval_policy
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, on-request approvals, when the project is trusted|approval_policy = \"on-request\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, on-failure approvals, when the project is trusted|approval_policy = \"on-failure\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, granular approvals, when the project is trusted|approval_policy = { granular = {|default_permissions = \":danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"

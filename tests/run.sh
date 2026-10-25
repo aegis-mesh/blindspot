@@ -1993,6 +1993,35 @@ has    "and one that picks the full-access profile"    '! Codex ~/code/r/\.codex
 hasnot "a project that keeps the sandbox is not listed" 'code/q/' "$WORK/cxp.txt"
 has    "the person's own config is listed as theirs"   '! Codex ~/\.codex/config\.toml never asks, full access( !| A prompt)' "$WORK/cxp.txt"
 hasnot "and not as a project's too"                   '~/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxp.txt"
+# With full access Codex runs commands without asking under its other approval policies too (0.164.0's
+# exec_policy.rs): unset (on-request), on-request, on-failure (its alias) and granular. untrusted stops
+# Codex from starting. A [ line inside a multi-line string is the string's text, and so is a setting there.
+rm -rf "$WORK/cxa"; mkdir -p "$WORK/cxa/.codex"; for p in a b c d e f g h i j k; do mkdir -p "$WORK/cxa/code/$p/.codex"; done
+printf 'model = "gpt-5"\nsandbox_mode = "danger-full-access"\n' > "$WORK/cxa/.codex/config.toml"
+printf 'approval_policy = "on-request"\nsandbox_mode = "danger-full-access"\n' > "$WORK/cxa/code/a/.codex/config.toml"
+printf "approval_policy = 'on-failure'\nsandbox_mode = 'danger-full-access'\n" > "$WORK/cxa/code/b/.codex/config.toml"
+printf 'sandbox_mode = "danger-full-access"\napproval_policy = { granular = { sandbox_approval = true, rules = true, mcp_elicitations = true } }\n' > "$WORK/cxa/code/c/.codex/config.toml"
+printf 'default_permissions = ":danger-full-access"\n' > "$WORK/cxa/code/d/.codex/config.toml"
+printf 'default_permissions = ":danger-full-access"\nsandbox_mode = "danger-full-access"\n' > "$WORK/cxa/code/e/.codex/config.toml"
+printf 'approval_policy = "untrusted"\nsandbox_mode = "danger-full-access"\n' > "$WORK/cxa/code/f/.codex/config.toml"
+printf 'approval_policy = "on-request"\ndefault_permissions = ":workspace"\n' > "$WORK/cxa/code/g/.codex/config.toml"
+printf 'model = "gpt-5"\n[profiles.x]\napproval_policy = "on-request"\nsandbox_mode = "danger-full-access"\n' > "$WORK/cxa/code/h/.codex/config.toml"
+printf 'developer_instructions = """\nFollow the guide:\n[style guide](https://example.com/guide)\n"""\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$WORK/cxa/code/i/.codex/config.toml"
+printf "notes = '''\napproval_policy = \"never\"\nsandbox_mode = \"danger-full-access\"\n'''\n" > "$WORK/cxa/code/j/.codex/config.toml"
+printf 'sandbox_mode = "workspace-write"\n' > "$WORK/cxa/code/k/.codex/config.toml"
+HOME="$WORK/cxa" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/cxa.txt"
+has    "Codex with full access and no approval policy set runs commands without asking" '! Codex ~/\.codex/config\.toml full access, default approvals( !| A prompt)' "$WORK/cxa.txt"
+has    "and with on-request approvals, in a trusted project" '! Codex ~/code/a/\.codex/config\.toml full access, on-request approvals, when the project is trusted' "$WORK/cxa.txt"
+has    "and with on-failure, an alias of on-request"  '! Codex ~/code/b/\.codex/config\.toml full access, on-failure approvals, when the project is trusted' "$WORK/cxa.txt"
+has    "and with a granular approval policy"          '! Codex ~/code/c/\.codex/config\.toml full access, granular approvals, when the project is trusted' "$WORK/cxa.txt"
+has    "and the full-access profile with no approval policy" '! Codex ~/code/d/\.codex/config\.toml full access profile, default approvals, when the project is trusted' "$WORK/cxa.txt"
+has    "a file that sets the profile and sandbox_mode is listed once, as the profile" '! Codex ~/code/e/\.codex/config\.toml full access profile, default approvals, when the project is trusted( !| A prompt)' "$WORK/cxa.txt"
+hasnot "near miss: approval_policy untrusted, which stops Codex from starting, is not listed" 'code/f/' "$WORK/cxa.txt"
+hasnot "near miss: on-request with the workspace profile is not listed" 'code/g/' "$WORK/cxa.txt"
+hasnot "near miss: full access under a profiles table is not listed" 'code/h/' "$WORK/cxa.txt"
+hasnot "near miss: the workspace-write sandbox alone is not listed" 'code/k/' "$WORK/cxa.txt"
+has    "a [ line inside a multi-line TOML string does not hide the settings after it" '! Codex ~/code/i/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxa.txt"
+hasnot "and settings written inside a multi-line string are not read as settings" 'code/j/' "$WORK/cxa.txt"
 # Antigravity installs from Open VSX: Antigravity IDE keeps its extensions in ~/.antigravity-ide, the
 # Antigravity before it in ~/.antigravity. A GlassWorm extension that names Antigravity, in each.
 rm -rf "$WORK/dz-ag"; cp -R "$WORK/clean" "$WORK/dz-ag"

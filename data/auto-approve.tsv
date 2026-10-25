@@ -12,11 +12,13 @@
 #             counts. A pattern written "key": {... matches its rest that way, and only directly
 #             inside the object that top-level key holds. A .toml file is read line by line: a line
 #             starting with # is skipped, a match is a whole line (up to a # comment), so a setting
-#             inside an inline table does not count, a value in double quotes also matches the same
-#             value in single quotes (a TOML literal string), and only the lines before the first
-#             [table] count (a setting under [profiles.x] applies only when that profile is used, and
-#             Codex 0.134.0 and later read no such table from config.toml). A pattern !key, in a .toml
-#             file only and beside another pattern, matches when none of those lines sets that key
+#             inside an inline table does not count (a pattern that ends in { matches the start of a
+#             line instead, an inline table's first line), a value in double quotes also matches the
+#             same value in single quotes (a TOML literal string), a line inside a multi-line string
+#             is that string's text, and only the lines before the first [table] count (a setting
+#             under [profiles.x] applies only when that profile is used, and Codex 0.134.0 and later
+#             read no such table from config.toml). A pattern !key, in a .toml file only and beside
+#             another pattern, matches when none of those lines sets that key
 # Claude Code: code.claude.com/docs/en/permission-modes, and its settings reference, where defaultMode
 # is a key of permissions and of nothing else. Codex: its configuration reference, and its
 # advanced configuration page for profiles (0.134.0). Its permissions page (beta): the built-in
@@ -27,7 +29,15 @@
 # in a file that sets no default_permissions. Codex reads a project's .codex/config.toml once that project
 # is trusted, above the user's file (its basic configuration page; 0.164.0's loader keeps it disabled
 # while untrusted), and the keys a project may not set (PROJECT_LOCAL_CONFIG_DENYLIST) do not include
-# approval_policy, sandbox_mode or default_permissions: a project's file has the same two lines.
+# approval_policy, sandbox_mode or default_permissions: a project's file has the same lines.
+# With full access Codex also runs commands without asking under its other approval policies (0.164.0):
+# approval_policy unset is on-request (config/mod.rs), except in a project marked untrusted
+# (trust_level), where it asks before every command; on-failure is an alias of on-request (protocol.rs);
+# and exec_policy.rs allows on-request and granular commands in an unrestricted sandbox, asking only
+# before the ones it flags as dangerous (on a Mac and Linux, rm with force). Its approvals page says the
+# same: danger-full-access runs commands without approval prompts. approval_policy = "untrusted" stops
+# Codex from starting, so it has no line. A granular policy is read from its inline table's first line;
+# one written as dotted keys or a [table] reads as unset, which also runs commands without asking.
 # TOML's literal strings: toml.io. VS Code:
 # the Copilot settings reference and the 1.104 release notes. VS Code 1.104 renamed chat.tools.autoApprove
 # to chat.tools.global.autoApprove without migrating it, so the old name is ignored, and it reads the
@@ -65,6 +75,22 @@ Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access profile	approval_policy = "never"	default_permissions = ":danger-full-access"
 Codex	all	{PROJECT}/.codex/config.toml	never asks, full access, when the project is trusted	approval_policy = "never"	sandbox_mode = "danger-full-access"	!default_permissions
 Codex	all	{PROJECT}/.codex/config.toml	never asks, full access profile, when the project is trusted	approval_policy = "never"	default_permissions = ":danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, default approvals	sandbox_mode = "danger-full-access"	!approval_policy	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, on-request approvals	approval_policy = "on-request"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, on-failure approvals	approval_policy = "on-failure"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, granular approvals	approval_policy = { granular = {	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, default approvals	default_permissions = ":danger-full-access"	!approval_policy
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, on-request approvals	approval_policy = "on-request"	default_permissions = ":danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, on-failure approvals	approval_policy = "on-failure"	default_permissions = ":danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, granular approvals	approval_policy = { granular = {	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	full access, default approvals, when the project is trusted	sandbox_mode = "danger-full-access"	!approval_policy	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access, on-request approvals, when the project is trusted	approval_policy = "on-request"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access, on-failure approvals, when the project is trusted	approval_policy = "on-failure"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access, granular approvals, when the project is trusted	approval_policy = { granular = {	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, default approvals, when the project is trusted	default_permissions = ":danger-full-access"	!approval_policy
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, on-request approvals, when the project is trusted	approval_policy = "on-request"	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, on-failure approvals, when the project is trusted	approval_policy = "on-failure"	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, granular approvals, when the project is trusted	approval_policy = { granular = {	default_permissions = ":danger-full-access"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"

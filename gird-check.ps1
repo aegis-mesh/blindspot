@@ -555,6 +555,22 @@ $AaTable = @(
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access profile', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
   ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'never asks, full access, when the project is trusted', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
   ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'never asks, full access profile, when the project is trusted', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, default approvals', @('sandbox_mode = "danger-full-access"', '!approval_policy', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, on-request approvals', @('approval_policy = "on-request"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, on-failure approvals', @('approval_policy = "on-failure"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, granular approvals', @('approval_policy = { granular = {', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, default approvals', @('default_permissions = ":danger-full-access"', '!approval_policy'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, on-request approvals', @('approval_policy = "on-request"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, on-failure approvals', @('approval_policy = "on-failure"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, granular approvals', @('approval_policy = { granular = {', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, default approvals, when the project is trusted', @('sandbox_mode = "danger-full-access"', '!approval_policy', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, on-request approvals, when the project is trusted', @('approval_policy = "on-request"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, on-failure approvals, when the project is trusted', @('approval_policy = "on-failure"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, granular approvals, when the project is trusted', @('approval_policy = { granular = {', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, default approvals, when the project is trusted', @('default_permissions = ":danger-full-access"', '!approval_policy'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, on-request approvals, when the project is trusted', @('approval_policy = "on-request"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, on-failure approvals, when the project is trusted', @('approval_policy = "on-failure"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, granular approvals, when the project is trusted', @('approval_policy = { granular = {', 'default_permissions = ":danger-full-access"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
@@ -1332,10 +1348,51 @@ function Json-Top([string]$f, [string]$t, [string]$key) {
 # a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts;
 # a pattern written "key": {... matches its rest the same way, inside that top-level key's object only
 # (Aa-Keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
-# comment (so a setting inside an inline table, a profile written as one, does not count), a value in
+# comment (so a setting inside an inline table, a profile written as one, does not count; a pattern
+# that ends in { matches the start of a line instead, an inline table's first line), a value in
 # double quotes also matches the same value in single quotes (a TOML literal string), and only the
 # lines before the first [table] count: a setting under [profiles.x] applies only when that profile is
-# used, and Codex 0.134.0 and later read no such table from config.toml.
+# used, and Codex 0.134.0 and later read no such table from config.toml. A line inside a multi-line
+# string (""" or ''') is that string's text: never a setting, a comment or a [table].
+# The multi-line string a .toml line leaves open: '' for none, 'b' inside """ and 'l' inside '''. One-line
+# strings and # comments are read as TOML reads them, so quotes in them open nothing; a basic string
+# skips the quotes an odd run of \ escapes, and the three closing quotes can carry up to two more, the
+# end of the text. The same as gird-check.sh's mlstate.
+function Toml-Ml([string]$s, [string]$st) {
+  $i = 0
+  while ($i -lt $s.Length) {
+    if ($st) {
+      if ($st -eq 'b') { $c = '"' } else { $c = "'" }
+      $k = $i
+      while ($true) {
+        $k = $s.IndexOf($c + $c + $c, $k, [StringComparison]::Ordinal)
+        if ($k -lt 0) { return $st }
+        $b = 0; while ($k - $b - 1 -ge $i -and $s[$k - $b - 1] -eq '\') { $b++ }
+        if ($st -eq 'l' -or $b % 2 -eq 0) { break }
+        $k++
+      }
+      $k += 3; $r = 0; while ($r -lt 2 -and $k -lt $s.Length -and [string]$s[$k] -eq $c) { $k++; $r++ }
+      $i = $k; $st = ''; continue
+    }
+    $k = $s.IndexOfAny([char[]]@('"', "'", '#'), $i)
+    if ($k -lt 0) { return '' }
+    $c = [string]$s[$k]
+    if ($c -eq '#') { return '' }
+    if ($k + 2 -lt $s.Length -and [string]$s[$k + 1] -eq $c -and [string]$s[$k + 2] -eq $c) {
+      if ($c -eq '"') { $st = 'b' } else { $st = 'l' }; $i = $k + 3; continue
+    }
+    $j = $k + 1
+    while ($true) {
+      $j = $s.IndexOf($c, $j, [StringComparison]::Ordinal)
+      if ($j -lt 0) { return '' }
+      $b = 0; while ($j - $b - 1 -gt $k -and $s[$j - $b - 1] -eq '\') { $b++ }
+      if ($c -eq "'" -or $b % 2 -eq 0) { break }
+      $j++
+    }
+    $i = $j + 1
+  }
+  $st
+}
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
   if ($toml) { $t = Read-Text $f } else { $t = Flat-Text $f }
@@ -1353,8 +1410,11 @@ function Aa-Hit([string]$f, $pats) {
     }
   }
   $lines = @($t); if ($toml) { $lines = $t.Split("`n") }
+  $ml = ''
   foreach ($line in $lines) {
-    $l = $line -replace '\s', ''
+    # TOML's whitespace is a space or a tab: as gird-check.sh's tr, no other character is taken out.
+    if ($toml) { $l = $line -replace '[ \t\r\f\v]', '' } else { $l = $line -replace '\s', '' }
+    if ($toml) { $s0 = $ml; $ml = Toml-Ml $l $ml; if ($s0) { continue } }
     # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
     if ($toml) { $l = $l -replace '^("([A-Za-z0-9_-]+)"|''([A-Za-z0-9_-]+)'')=', '$2$3=' }
     if ($toml -and $l.StartsWith('#')) { continue }
@@ -1365,7 +1425,7 @@ function Aa-Hit([string]$f, $pats) {
       if ($toml) {
         if ($neg[$i]) { if ($l.StartsWith($pp[$i], [StringComparison]::Ordinal)) { $got[$i] = $true }; continue }
         foreach ($q in @($pp[$i], $pp[$i].Replace('"', "'"))) {
-          if ($l.StartsWith($q, [StringComparison]::Ordinal) -and ($l.Length -eq $q.Length -or [string]$l[$q.Length] -eq '#')) { $got[$i] = $true }
+          if ($l.StartsWith($q, [StringComparison]::Ordinal) -and ($l.Length -eq $q.Length -or [string]$l[$q.Length] -eq '#' -or $q.EndsWith('{'))) { $got[$i] = $true }
         }
         continue
       }

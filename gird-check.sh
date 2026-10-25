@@ -927,6 +927,22 @@ Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access, when the project is trusted|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access profile, when the project is trusted|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, default approvals|sandbox_mode = \"danger-full-access\"|!approval_policy|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, on-request approvals|approval_policy = \"on-request\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, on-failure approvals|approval_policy = \"on-failure\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, granular approvals|approval_policy = { granular = {|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, default approvals|default_permissions = \":danger-full-access\"|!approval_policy
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, on-request approvals|approval_policy = \"on-request\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, on-failure approvals|approval_policy = \"on-failure\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, granular approvals|approval_policy = { granular = {|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access, default approvals, when the project is trusted|sandbox_mode = \"danger-full-access\"|!approval_policy|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, on-request approvals, when the project is trusted|approval_policy = \"on-request\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, on-failure approvals, when the project is trusted|approval_policy = \"on-failure\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, granular approvals, when the project is trusted|approval_policy = { granular = {|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, default approvals, when the project is trusted|default_permissions = \":danger-full-access\"|!approval_policy
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, on-request approvals, when the project is trusted|approval_policy = \"on-request\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, on-failure approvals, when the project is trusted|approval_policy = \"on-failure\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, granular approvals, when the project is trusted|approval_policy = { granular = {|default_permissions = \":danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
@@ -1866,13 +1882,15 @@ aa_keys() { # pattern|pattern...
 # or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts; a
 # pattern written "key": {... matches its rest the same way, inside that top-level key's object only
 # (aa_keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
-# comment (so a setting inside an inline table, a profile written as one, does not count), a value in
+# comment (so a setting inside an inline table, a profile written as one, does not count; a pattern
+# that ends in { matches the start of a line instead, an inline table's first line), a value in
 # double quotes also matches the same value in single quotes (a TOML literal string), and only the
 # lines before the first [table] count: a setting under [profiles.x] applies only when that profile
-# is used, and Codex 0.134.0 and later read no such table from config.toml. tr removes the spaces in
-# one pass, and each pattern becomes one regex with its boundaries in it, tried once per line:
-# linear on every awk, where a gsub on the joined text, or an index() of the rest of the line at
-# every near miss, is quadratic on macOS's awk for a large file.
+# is used, and Codex 0.134.0 and later read no such table from config.toml. A line inside a
+# multi-line string (""" or ''') is that string's text: never a setting, a comment or a [table].
+# tr removes the spaces in one pass, and each pattern becomes one regex with its boundaries in it,
+# tried once per line: linear on every awk, where a gsub on the joined text, or an index() of the rest
+# of the line at every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
   if [ "$_tm" -eq 1 ]; then { tr -d ' \t\r\f\v' < "$1"; } 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
@@ -1885,12 +1903,50 @@ aa_hit() { # file pattern|pattern...
       }
       return o
     }
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    # The multi-line string a .toml line leaves open: "" for none, "b" inside a basic one (""") and "l"
+    # inside a literal one (three single quotes). One-line strings and # comments are read as TOML reads
+    # them, so quotes in them open nothing; a basic string skips the quotes an odd run of \ escapes, and
+    # the three closing quotes can carry up to two more, the end of the text.
+    function mlstate(s, st,   c, k, m, r) {
+      while (s != "") {
+        if (st != "") {
+          c = (st == "b") ? "\"" : "\047"; k = 0
+          for (;;) {
+            m = index(substr(s, k + 1), c c c)
+            if (m == 0) return st
+            k += m
+            if (st == "l" || trail(substr(s, 1, k - 1)) % 2 == 0) break
+          }
+          k += 3; for (r = 0; r < 2 && substr(s, k, 1) == c; r++) k++
+          s = substr(s, k); st = ""; continue
+        }
+        if (!match(s, /["\047#]/)) return ""
+        c = substr(s, RSTART, 1); s = substr(s, RSTART + 1)
+        if (c == "#") return ""
+        if (substr(s, 1, 2) == c c) { st = (c == "\"") ? "b" : "l"; s = substr(s, 3); continue }
+        k = 0
+        for (;;) {
+          m = index(substr(s, k + 1), c)
+          if (m == 0) return ""
+          k += m
+          if (c == "\047" || trail(substr(s, 1, k - 1)) % 2 == 0) break
+        }
+        s = substr(s, k + 1)
+      }
+      return st
+    }
     BEGIN { n = split(ENVIRON["AA_P"], p, "|")
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); q = p[i]; gsub(/"/, "\047", q)
         if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { in_[i] = 1; re[i] = "^" lit(substr(p[i], 2, RLENGTH - 4)) "\t(.*[{,])?" lit(substr(p[i], RLENGTH + 1)) "($|[,}#/])" }
         # !key in a .toml file: the line counts only when no line sets that key.
         else if (toml && substr(p[i], 1, 1) == "!") { neg[i] = 1; re[i] = "^" lit(substr(p[i], 2)) "=" }
-        else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+        else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")" (p[i] ~ /\{$/ ? "" : "(#|$)") : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+    toml { s0 = ml; ml = mlstate($0, ml); if (s0 != "") next }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
     # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
