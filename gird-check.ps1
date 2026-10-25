@@ -6452,6 +6452,7 @@ if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
 }
 $Act = ''
 if ($WIPER_HIT -eq 1) { $Act = 'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' }
+elseif ($MAL_SIGN -eq 1 -and $PY_HIT -eq 1) { $Act = "ACT NOW: SIGNS OF $($MalShort.ToUpperInvariant()) AND $($PyShort.ToUpperInvariant()) MALWARE" }
 elseif ($MAL_SIGN -eq 1) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
 elseif ($PY_HIT -eq 1) { $Act = "ACT NOW: SIGNS OF THE $((@($PyHits | ForEach-Object { Incident-Name $_ }) -join ' AND ').ToUpperInvariant()) MALWARE" }
 elseif ($MAL_LOCKONLY -eq 1) {

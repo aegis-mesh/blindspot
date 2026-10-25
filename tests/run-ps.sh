@@ -1259,7 +1259,7 @@ has    "and a fix to update it"                      'Update the npm packages li
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0&lo=0&fi=( |$)' "$WORK/mis.txt"
-hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
+hasnot "a Mistral hit does not get Injective's wallet fix" '[Mm]ove the funds' "$WORK/mis.txt"
 # The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
 # malware, as GitHub's malware advisories say; the UiPath builds are versions to update, as UiPath, their
 # maintainer, says a bug left their malware non-functional. Packages the TanStack worm spread to, GitHub's second
@@ -1470,6 +1470,7 @@ SKIPPING=""
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 psrun "$WORK/both" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
 has    "npm and LiteLLM malware together are both named" 'npm and LiteLLM malware found' "$WORK/both.txt"
+has    "and the headline names both, as row 05 does"  'ACT NOW: SIGNS OF NPM AND LITELLM MALWARE' "$WORK/both.txt"
 # SANDWORM_MODE without the wiper: its hooks would send a new npm token out, so section 3 waits for them.
 psrun "$WORK/both" -- -Offline -Full -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/both-full.txt"
 has    "with SANDWORM_MODE's leftovers, the session keys wait for them" 'Treat these keys as exposed and rotate them\. Only once what the SANDWORM_MODE worm leaves is removed: What to do starts with it' "$WORK/both-full.txt"
@@ -1800,7 +1801,7 @@ has    "extensions alone: their own row"              'Editor extensions signs o
 has    "extensions alone: the LaunchAgent GlassWorm leaves is listed with the extension" 'littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own headline"         'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-ext.txt"
 hasnot "extensions alone: no npm in the headline"     'ACT NOW.*NPM' "$WORK/dz-ext.txt"
-hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the malware|then delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
+hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the malware|then delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own fix names the extensions and the startup file" 'Treat this machine as compromised\. Uninstall the extensions listed in section 5, delete the startup file listed there, and rotate every key this machine could reach\.' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own summary row"      'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-ext-sum.txt"
 has    "extensions alone: the link says ex, not nm"   '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-ext.txt"
