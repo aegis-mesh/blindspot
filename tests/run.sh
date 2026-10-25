@@ -411,6 +411,8 @@ mkdir -p "$SE/slnk/.claude/projects/p" "$SE/crk/.codex" "$SE/vsl/cc/projects/-ho
 printf '{}\n' > "$SE/slnk/.claude/projects/p/real.jsonl"; ln -s "$SE/lnkel/key.jsonl" "$SE/slnk/.claude/projects/p/linked.jsonl"
 CRK="AK""IA$(upper 16)"; CRG="gh""p_$(rnd 36)"; printf '%s\n%s\n' "$CRK" "$CRG" > "$SE/crk.keys"
 printf '{"a":"x\r%s y"}\n{"b":"z %s w"}\n' "$CRK" "$CRG" > "$SE/crk/.codex/history.jsonl"
+# A key right after a byte that is not UTF-8, as in a SQLite value after a binary column.
+mkdir -p "$SE/u8k/.codex" "$SE/u8k/AppData/Roaming" "$SE/u8k/AppData/Local/Temp"; printf '{"a":"x\232%s y"}\n' "AK""IA$(upper 16)" > "$SE/u8k/.codex/history.jsonl"
 printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" | tee "$SE/vsl/cc/projects/-home-someone-work-acme/s.jsonl" "$SE/vsl/csd/-home-someone-work-beta/m.json" > /dev/null
 printf '{}\n' > "$SE/emp/.claude/projects/p/a.jsonl"; : > "$SE/emp/.claude/projects/p/b.jsonl"; chmod 000 "$SE/emp/.claude/projects/p/b.jsonl"
 for E in perl rg; do
@@ -422,6 +424,8 @@ for E in perl rg; do
   has    "$E: a key right after a carriage return is found" 'Codex +1 file: (AWS, GitHub|GitHub, AWS)$' "$SE/crk-$E.block"
   has    "$E: and the hit after it keeps its file and place" '^ +~/\.codex/history\.jsonl +1 file$' "$SE/crk-$E.block"
   nokeys "$E: and neither key is printed" "$SE/crk.keys" "$SE/crk-$E.txt"
+  HOME="$SE/u8k" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/u8k-$E.block"
+  has    "$E: a key right after a byte that is not UTF-8 is found" 'Codex +1 file: AWS$' "$SE/u8k-$E.block"
   HOME="$SE/vsl" CLAUDE_CONFIG_DIR="$SE/vsl/cc/" CLINE_SESSION_DATA_DIR="$SE/vsl/csd/" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/vsl-$E.block"
   has    "$E: a folder variable that ends in / keeps its hit with its agent" 'Claude Code +1 file: AWS$' "$SE/vsl-$E.block"
   has    "$E: and so does one that names the session folder itself" 'Cline +1 file: AWS$' "$SE/vsl-$E.block"

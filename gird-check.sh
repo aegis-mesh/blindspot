@@ -1388,7 +1388,10 @@ EOF
     # tab the filter splits on, and every real tab into ?, so a file name can't shift the fields.
     tr '\000\t' '\t?' < "$SESS_FIFO" | sess_filter rg > "$SESS_FILE" &
     SESS_FILTER_PID=$!
-    "$RG_BIN" -a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
+    # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
+    # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed. The
+    # patterns are byte patterns, as perl and grep read them under LC_ALL=C.
+    "$RG_BIN" -a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
       -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
     SESS_PID=$!
     [ "$WIN" -eq 1 ] && SESS_WIN=1

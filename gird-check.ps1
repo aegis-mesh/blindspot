@@ -943,7 +943,9 @@ $SessWorker = {
       $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
       $rgRoots = @($roots); if ($hold) { $rgRoots += $hold }
-      $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
+      # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
+      # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed.
+      $psi.Arguments = '-a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
       # --null ends the file name with a NUL, the one character a path can't hold. ripgrep ends a
