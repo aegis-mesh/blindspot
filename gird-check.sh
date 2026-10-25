@@ -6365,8 +6365,10 @@ EOF
   esac
   # Git for Windows has no pkill: PowerShell deletes the scheduled task that starts it at logon (its name in
   # Tensorlake's advisory) and ends the process by its command line, as gird-check.ps1 says. Deleting a task
-  # does not end its running program, so both. The quote and * keep Git Bash from rewriting /Delete as a path.
-  [ "$WIN" -eq 1 ] && _stop="powershell -NoProfile -Command \"schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance Win32_Process | Where-Object CommandLine -like '*gh-token-monitor*' | Invoke-CimMethod -MethodName Terminate\""
+  # does not end its running program, so both. That PowerShell's own command line names gh-token-monitor, so
+  # $PID leaves it out. The single quotes keep bash from expanding anything, and the * in the argument keeps
+  # Git Bash from rewriting /Delete as a path.
+  [ "$WIN" -eq 1 ] && _stop="powershell -NoProfile -Command 'schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like \"*gh-token-monitor*\" -and \$_.ProcessId -ne \$PID } | Invoke-CimMethod -MethodName Terminate'"
   wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and in the TanStack wave it tries to erase the home folder." 8 "        " "        " "$RED"
   wrap "Stop it with $_stop, then delete the files above." 8 "        " "        " "$RED"
 fi

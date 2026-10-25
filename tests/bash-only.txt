@@ -276,3 +276,4 @@ fleet: 20,000 marker names an account made cost root no time each	gird-check.ps1
 an extension with an OS listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension with all three OSes, which is all	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a list of bad npm versions longer than awk gets	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+and its PowerShell does not end itself	only gird-check.sh's Git Bash stop starts a PowerShell whose own command line names gh-token-monitor; gird-check.ps1's is typed into the person's own session
