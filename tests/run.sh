@@ -1451,6 +1451,21 @@ hasnot "a setting in a /* */ block comment is not read" '! VS Code Copilot ' "$W
 has    "Codex values in single quotes, TOML's literal strings, are read" '! Codex ~/\.codex/config\.toml never asks, full access' "$WORK/dz-lim1.txt"
 has    "a literal string and a basic one in one Codex file both count" '! Codex ~/\.codex/config\.toml never asks, full access' "$WORK/dz-lim3.txt"
 hasnot "known limit: a profile made the default with profile = is not read" '! Codex ' "$WORK/dz-lim2.txt"
+# Codex's permission profiles: default_permissions = ":danger-full-access" with approval_policy = "never"
+# runs every command without asking and without a sandbox. Another profile, approvals left on, or the
+# key under a [table] is not that.
+for L in dfa dfal ws ask tbl; do rm -rf "$WORK/dz-cx-$L"; cp -R "$WORK/clean" "$WORK/dz-cx-$L"; mkdir -p "$WORK/dz-cx-$L/.codex"; done
+printf 'approval_policy = "never"\ndefault_permissions = ":danger-full-access"\n' > "$WORK/dz-cx-dfa/.codex/config.toml"
+printf "approval_policy = 'never'\ndefault_permissions = ':danger-full-access' # no sandbox\n" > "$WORK/dz-cx-dfal/.codex/config.toml"
+printf 'approval_policy = "never"\ndefault_permissions = ":workspace"\n' > "$WORK/dz-cx-ws/.codex/config.toml"
+printf 'approval_policy = "on-request"\ndefault_permissions = ":danger-full-access"\n' > "$WORK/dz-cx-ask/.codex/config.toml"
+printf 'approval_policy = "never"\n[profiles.yolo]\ndefault_permissions = ":danger-full-access"\n' > "$WORK/dz-cx-tbl/.codex/config.toml"
+for L in dfa dfal ws ask tbl; do dzrun "$WORK/dz-cx-$L" | tr -s ' \n' '  ' > "$WORK/dz-cx-$L.txt"; done
+has    "Codex's full access profile with approvals off runs without asking" '! Codex ~/\.codex/config\.toml never asks, full access profile' "$WORK/dz-cx-dfa.txt"
+has    "the full access profile in TOML's literal strings counts too" '! Codex ~/\.codex/config\.toml never asks, full access profile' "$WORK/dz-cx-dfal.txt"
+hasnot "the workspace profile is not full access" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ws.txt"
+hasnot "the full access profile with approvals on is not reported" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ask.txt"
+hasnot "the full access profile under a [table] is not the top level" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-tbl.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 HOME="$WORK/dz-calm" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"

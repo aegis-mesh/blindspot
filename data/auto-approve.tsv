@@ -16,7 +16,10 @@
 #             Codex 0.134.0 and later read no such table from config.toml)
 # Claude Code: code.claude.com/docs/en/permission-modes, and its settings reference, where defaultMode
 # is a key of permissions and of nothing else. Codex: its configuration reference, and its
-# advanced configuration page for profiles (0.134.0). TOML's literal strings: toml.io. VS Code:
+# advanced configuration page for profiles (0.134.0). Its permissions page (beta): the built-in
+# profile :danger-full-access, chosen with default_permissions, removes the sandbox, and replaces the
+# older sandbox_mode; in Codex's code (0.164.0) a config file that sets default_permissions uses it.
+# TOML's literal strings: toml.io. VS Code:
 # the Copilot settings reference and the 1.104 release notes. VS Code 1.104 renamed chat.tools.autoApprove
 # to chat.tools.global.autoApprove without migrating it, so the old name is ignored, and it reads the
 # new one from the user settings only (scope APPLICATION_MACHINE in its source), never from a
@@ -32,6 +35,7 @@
 # agent	os	path	setting	pattern...
 Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"permissions": {"defaultMode": "bypassPermissions"
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access profile	approval_policy = "never"	default_permissions = ":danger-full-access"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
