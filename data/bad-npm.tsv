@@ -5,12 +5,16 @@
 #   version   the exact version, or * when every version of that name is malware
 #   incident  an id from data/incidents.tsv
 # What each campaign's lines cover:
+# The level: a GitHub or OpenSSF malware advisory decides it, unless the package's own maintainer says
+# its malware could not run. A third party's reading (Socket's, Wiz's) is noted, not followed.
 #   Axios, Bitwarden, OpenSearch, tensorlake and Injective: the versions their advisories name.
 #   TanStack wave, May 2026: every npm version in the affected-packages list of Wiz's post on it,
 #     each also named by a GitHub or OpenSSF malware advisory: the 42 @tanstack packages
 #     (GHSA-g7cv-rxg3-hmpx) and the packages the worm spread to (tanstack), the @mistralai builds
-#     (GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc) and @uipath builds, whose
-#     payload could not run (mistral, uipath: versions to update), and OpenSearch
+#     (GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc), versions to update because
+#     Mistral, their maintainer, says the malware could not run (mistral), the @uipath builds, malware
+#     as GitHub's advisory GHSA-cx9h-9vrc-7393 says, though Wiz found a bug in their payload (uipath),
+#     and OpenSearch
 #     (GHSA-298w-vvm4-ww55). And wot-api 0.8.5, which Wiz's list leaves out: OpenSSF's MAL-2026-3591
 #     adds it to GitHub's 0.8.1 to 0.8.4, and npm's registry shows it published an hour after 0.8.4.
 #     Not the five versions Wiz's list also names from April's SAP and Intercom compromise, which
