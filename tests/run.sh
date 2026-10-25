@@ -2064,7 +2064,7 @@ if ! grep -q '^outcome=failed$' "$FL/hlink.flat" && grep -q '^itadmin\.complete=
 for h in lk inj; do fl_home "$h"; done
 mkdir -p "$FL/lk/code/app" "$FL/inj/code/w/node_modules/@injectivelabs/sdk-ts"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$FL/lk/code/app/package-lock.json"
-printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21"}}}\n' > "$FL/inj/code/w/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@injectivelabs/sdk-ts": {\n      "version": "1.20.21"\n    }\n  }\n}\n' > "$FL/inj/code/w/package-lock.json"
 printf '{"name":"@injectivelabs/sdk-ts","version":"1.20.21"}\n' > "$FL/inj/code/w/node_modules/@injectivelabs/sdk-ts/package.json"
 users "lk:$U:$FL/lk:/bin/zsh" "inj:$U:$FL/inj:/bin/zsh"
 fl_run lkinj --json
