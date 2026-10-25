@@ -402,7 +402,7 @@ printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/xc/Code/User/globalStorage/
 HOME="$SE/gx" XDG_CONFIG_HOME="$SE/xc" PATH="$SE/linbin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/xc.txt" 2>&1
 has    "on Linux, a VS Code extension's sessions under XDG_CONFIG_HOME are found" 'Cline +1 file: AWS$' "$SE/xc.txt"
 HOME="$SE/gx" GOOSE_PATH_ROOT="$SE/groot" XDG_STATE_HOME="$SE/xs" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/groot.block"
-has    "Goose's prompts under GOOSE_PATH_ROOT are found" 'groot/state/history\.txt$' "$SE/groot.block"
+has    "Goose's prompts under GOOSE_PATH_ROOT are found" 'groot/state/history\.txt +[0-9]+ files?$' "$SE/groot.block"
 has    "ahead of XDG_STATE_HOME"                    'Goose +1 file: AWS$' "$SE/groot.block"
 HOME="$SE/gx" GOOSE_PATH_ROOT="" XDG_STATE_HOME="$SE/xs" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/xs.txt" 2>&1
 has    "Goose's prompts under XDG_STATE_HOME are found" 'Goose +1 file: AWS$' "$SE/xs.txt"
@@ -422,7 +422,7 @@ has    "the summary row counts session files"    'Keys in plain text keys in 12 
 mkdir -p "$SE/priv/.claude/projects/-Users-alice-code-acme"
 printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/priv/.claude/projects/-Users-alice-code-acme/s.jsonl"
 HOME="$SE/priv" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions --full > "$SE/priv.txt" 2>&1
-has    "the report names where sessions are, not the project folders they are named after" '^ +~/\.claude/projects$' "$SE/priv.txt"
+has    "the report names where sessions are, not the project folders they are named after" '^ +~/\.claude/projects +[0-9]+ files?$' "$SE/priv.txt"
 hasnot "and never the project path or username in a session folder name" 'alice|acme' "$SE/priv.txt"
 # Key formats from the providers' own docs: OpenAI admin keys, AWS temporary key ids, Amazon
 # Bedrock long-term keys (ABSK, then the base64 of BedrockAPIKey) and GitHub app tokens in the
@@ -1923,6 +1923,19 @@ fl_run hash2 --hash-accounts=other-secret
 if grep -qE '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat" && ! grep -q 'asha' "$FL/state/last.json" && [ "$(grep -cE '^[0-9a-f]{16}\.outcome=' "$FL/hash1.flat")" -eq 2 ] \
    && [ "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat")" != "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash2.flat")" ]
 then ok "fleet: --hash-accounts shows a keyed hash, never the name"; else bad "fleet: --hash-accounts shows a keyed hash, never the name" "$(grep outcome "$FL/hash1.flat" "$FL/hash2.flat")"; fi
+
+# Possible signs, and the account's own temp folder (tests/fleet-launch.sh hands each account run
+# $FL/usertmp-<account> as the one macOS would give it).
+for h in gw tm; do fl_home "$h"; done
+mkdir -p "$FL/gw/Library/LaunchAgents"; : > "$FL/gw/Library/LaunchAgents/com.user.nodestart.plist"
+mkdir -p "$FL/usertmp-tm"; : > "$FL/usertmp-tm/remote_code_loader.lock"
+users "gw:$U:$FL/gw:/bin/zsh" "tm:$U:$FL/tm:/bin/zsh"
+fl_run own
+has    "fleet: a startup file named like GlassWorm's, with no GlassWorm extension, is a possible sign" '^gw\.possible_signs=glassworm$' "$FL/own.flat"
+has    "fleet: and its account is to review, not act now" '^gw\.outcome=review$' "$FL/own.flat"
+has    "fleet: a malware marker in the account's own temp folder counts for that account" '^tm\.incidents=litellm$' "$FL/own.flat"
+hasnot "fleet: and not for the Mac" '^machine\.incidents=.*litellm' "$FL/own.flat"
+rm -rf "$FL/usertmp-tm"
 
 # Refusals.
 bash "$FLEETSH" --all-users > "$FL/noroot.out" 2> "$FL/noroot.err"; RC=$?

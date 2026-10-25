@@ -1901,9 +1901,13 @@ done <<EOF
 $SITES_ALL
 EOF
 MARKS=""; _seen_t="|"
-for t in /tmp "${TMPDIR%/}" "$WTEMP"; do
+# An account run looks only in the account's own temp folder, the one macOS gives each account under
+# /var/folders: the shared one is the Mac's, checked by root.
+_utmp=""
+if [ "$ACCTRUN" -eq 1 ]; then _utmp=${GIRD_CHECK_FLEET_USER_TMP:-$(/usr/bin/getconf DARWIN_USER_TEMP_DIR 2>/dev/null)}; _utmp=${_utmp%/}; fi
+for t in /tmp "${TMPDIR%/}" "$WTEMP" "$_utmp"; do
   [ -n "$t" ] && [ -d "$t" ] || continue
-  [ "$ACCTRUN" -eq 1 ] && continue   # the shared temp folder is the Mac's, checked by root
+  [ "$ACCTRUN" -eq 1 ] && [ "$t" != "$_utmp" ] && continue
   case "$_seen_t" in *"|$t|"*) continue ;; esac; _seen_t="$_seen_t$t|"
   while read -r _i _own _g; do
     [ -n "$_g" ] || continue
@@ -2808,7 +2812,10 @@ if [ "$ACCTRUN" -eq 1 ]; then
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
   _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + EXT_UNREAD + _fe))
   _planted=$(( $(count_lines "$WORM_FILES") + $(count_lines "$WORM_REFS") ))
-  _poss=0; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=1
+  # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
+  # named like an extension incident's with no such extension (EXT_CHECK).
+  _poss=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=litellm
+  _poss=$(printf '%s\n' $_poss $EXT_CHECK_TAGS | fleet_ids)
   {
     echo "v=1"
     echo "agents=$(printf '%s' "$AGENT_IDS" | fleet_ids)"

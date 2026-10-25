@@ -449,7 +449,7 @@ printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cdir/data/sessions/s1/m.jso
 psrun "$SE/gx" CLINE_DIR="$SE/cdir" CLINE_SESSION_DATA_DIR="$SE/csd" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/cline.txt" 2>&1
 has    "Cline's sessions and tasks under CLINE_DIR and CLINE_SESSION_DATA_DIR are found" 'Cline +3 files: AWS$' "$SE/cline.txt"
 psrun "$SE/gx" GOOSE_PATH_ROOT="$SE/groot" XDG_STATE_HOME="$SE/xs" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/groot.block"
-has    "Goose's prompts under GOOSE_PATH_ROOT are found" 'groot/state/history\.txt$' "$SE/groot.block"
+has    "Goose's prompts under GOOSE_PATH_ROOT are found" 'groot/state/history\.txt +[0-9]+ files?$' "$SE/groot.block"
 has    "ahead of XDG_STATE_HOME"                    'Goose +1 file: AWS$' "$SE/groot.block"
 # A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
 mkdir -p "$SE/aidtab/code/a${_tab}b" "$SE/aidtab/AppData/Roaming" "$SE/aidtab/AppData/Local/Temp"
@@ -470,7 +470,7 @@ has    "the summary row counts session files"    'Keys in plain text keys in 12 
 mkdir -p "$SE/priv/.claude/projects/-Users-alice-code-acme" "$SE/priv/AppData/Roaming" "$SE/priv/AppData/Local/Temp"
 printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/priv/.claude/projects/-Users-alice-code-acme/s.jsonl"
 psrun "$SE/priv" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions -Full > "$SE/priv.txt" 2>&1
-has    "the report names where sessions are, not the project folders they are named after" '^ +~/\.claude/projects$' "$SE/priv.txt"
+has    "the report names where sessions are, not the project folders they are named after" '^ +~/\.claude/projects +[0-9]+ files?$' "$SE/priv.txt"
 hasnot "and never the project path or username in a session folder name" 'alice|acme' "$SE/priv.txt"
 # Key formats from the providers' own docs: OpenAI admin keys, AWS temporary key ids, Amazon
 # Bedrock long-term keys (ABSK, then the base64 of BedrockAPIKey) and GitHub app tokens in the

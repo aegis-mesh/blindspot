@@ -225,3 +225,7 @@ fleet: --stale-days is at most 30	gird-check.ps1 has no fleet mode: Windows need
 fleet: a folder whose ACL lets anyone write is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: but a link there never counts	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: installed as the guide says, run with env -i, it runs	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a startup file named like GlassWorm's, with no GlassWorm extension, is a possible sign	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and its account is to review, not act now	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a malware marker in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and not for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

@@ -391,7 +391,8 @@ fl_parse() {
       key_providers) fl_ids_ok "$_v" "$PROVIDER_IDS" || return 1 ;;
       platforms) fl_ids_ok "$_v" "$FL_PLAT_IDS" || return 1 ;;
       incidents) fl_incidents_ok "$_v" || return 1 ;;
-      sessions_partial|possible) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
+      possible) fl_incidents_ok "$_v" || return 1 ;;
+      sessions_partial) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
       protected) case "$_v" in ok|refused|unknown) ;; *) return 1 ;; esac ;;
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
@@ -611,7 +612,12 @@ fleet_main() {
       if [ "$FA_ssh_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  $(fl_plural "$FA_ssh_open" "SSH key" "SSH keys") without a passphrase"; _inv="$_inv; ssh-open $FA_ssh_open"; fi
       if [ -n "$FA_update" ]; then _upd=1; _tn=""; for _x in $FA_update; do _tn="${_tn:+$_tn, }$(printf '%s\n' "$OUT_TABLE" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $2; exit }')"; done; _lines="$_lines$NL    !  Tools with a security fix to install: $_tn"; _inv="$_inv; update-tools $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; fi
       if [ -n "$FA_platforms" ]; then _upd=1; _tn=""; for _x in $FA_platforms; do _tn="${_tn:+$_tn, }$(incident_name "$_x")"; done; _lines="$_lines$NL    !  Uses a platform that leaked stored secrets: $_tn"; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
-      if [ "$FA_possible" -eq 1 ]; then _upd=1; _lines="$_lines$NL    !  A leftover file that can come from the LiteLLM malware"; _inv="$_inv; possible litellm"; fi
+      for _x in $FA_possible; do
+        _upd=1
+        if [ "$_x" = litellm ]; then _lines="$_lines$NL    !  A leftover file that can come from the LiteLLM malware"
+        else _lines="$_lines$NL    !  A startup file named like the one the $(incident_name "$_x") install, with none of them here"; fi
+      done
+      [ -n "$FA_possible" ] && _inv="$_inv; possible $(printf '%s' "$FA_possible" | /usr/bin/tr ' ' ',')"
       _why=""
       [ "$FA_sessions_partial" -eq 1 ] && _why="${_why:+$_why, }agent sessions partly checked"
       [ "$FA_not_read" -gt 0 ] && _why="${_why:+$_why, }$(fl_plural "$FA_not_read" "file was" "files were") not read"
@@ -622,7 +628,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$FA_possible,\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"

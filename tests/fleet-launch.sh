@@ -27,7 +27,8 @@ mode=$(/bin/cat "$FLL_DIR/mode-$acct" 2>/dev/null)
 while [ $# -gt 0 ] && [ "$1" != -H ]; do shift; done; shift
 # "$@" is now: /usr/bin/env -i PATH=... HOME=... /bin/bash COPY --account-run
 envv=$1; shift 2   # /usr/bin/env -i
-extra=()
+# Each account's own temp folder, so an account run never looks in the real one of the person testing.
+extra=("GIRD_CHECK_FLEET_USER_TMP=$FLL_DIR/usertmp-$acct")
 [ -n "${FLL_API:-}" ] && extra+=("GIRD_CHECK_API=$FLL_API" "GIRD_CHECK_WEB=$FLL_API")
 case "$mode" in
   fail) echo "sudo: a password is required" >&2; exit 1 ;;
