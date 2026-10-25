@@ -4,7 +4,7 @@
 
 # Blindspot
 
-**See the AI keys and agents you can't.** A free, read-only check for your Mac, Linux or Windows computer, from [GIRD](https://gird.ai).
+**See the AI keys and agents you can't.** An open-source, read-only check for your Mac, Linux or Windows computer, from [GIRD](https://gird.ai).
 
 [![release](https://img.shields.io/github/v/release/aegis-mesh/blindspot?color=0D9488&label=release)](https://github.com/aegis-mesh/blindspot/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-0D9488)](LICENSE)
