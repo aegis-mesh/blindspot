@@ -237,7 +237,7 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 $PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
 $KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 $KeyProviderFn = @'
@@ -1051,6 +1051,7 @@ $McpFiles = @(
   @('Claude Desktop', 'claude-desktop', (J $AppData 'Claude/claude_desktop_config.json')),
   @('Cursor', 'cursor', (J $HomeDir '.cursor/mcp.json')),
   @('Windsurf', 'windsurf', (J $HomeDir '.codeium/windsurf/mcp_config.json')),
+  @('Devin Desktop', 'windsurf', (J $HomeDir '.codeium/mcp_config.json')),  # Windsurf renamed (docs.devin.ai/desktop/devin-desktop-faq)
   @('Codex', 'codex', (J $HomeDir '.codex/config.toml')),
   @('Gemini CLI', 'gemini-cli', (J $HomeDir '.gemini/settings.json')),
   @('VS Code', 'vscode', (J $AppData 'Code/User/mcp.json')),
@@ -4986,8 +4987,7 @@ function Wiper-Wait([string]$text) {
   $text
 }
 function Add-Todo([int]$sec, [string]$text) {
-  $text = Wiper-Wait $text
-  $Todo.Add($text); $Fixes[$sec].Add($text)
+  $Todo.Add((Wiper-Wait $text)); $Fixes[$sec].Add((Rotate-Wait $text))
 }
 # An incident's own fix (data/incidents.tsv), once for each incident found. An act-level one that
 # starts with "First" is what the incident leaves behind that must go before any key is rotated
@@ -5009,14 +5009,17 @@ function Add-Advice([string]$mode) {
   }
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
-$HasFirstFix = @(foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) { if ((Incident-Level $t) -eq 'act' -and (Incident-Advice $t).StartsWith('First ', [StringComparison]::Ordinal)) { $t } }).Count -gt 0
-# A rotate in a section also waits for what an act-level incident says to remove first ($HasFirstFix:
-# SANDWORM_MODE's pre-push hook would send a new npm token out on the next push). The fix list puts
-# that fix ahead of every rotate instead, so its own fixes need no wait for it.
+$FirstTags = @(foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) { if ((Incident-Level $t) -eq 'act' -and (Incident-Advice $t).StartsWith('First ', [StringComparison]::Ordinal)) { $t } })
+$HasFirstFix = $FirstTags.Count -gt 0
+$FirstWhat = (@($FirstTags | ForEach-Object { 'the ' + (Incident-Name $_) } | Select-Object -Unique) -join ' and ')
+# A rotate in a section, and in a section's own fixes (its details page), also waits for what an
+# act-level incident says to remove first ($HasFirstFix, named in $FirstWhat: SANDWORM_MODE's pre-push
+# hook would send a new npm token out on the next push). The full fix list puts that fix ahead of
+# every rotate instead, so it needs no wait for it.
 function Rotate-Wait([string]$text) {
   if ($text.StartsWith("Don't revoke") -or $text.StartsWith('First ', [StringComparison]::Ordinal) -or $text -cnotmatch '[Rr]otate|[Rr]evoke') { return $text }
-  if ($HasFirstFix -and $WIPER_HIT -eq 1) { return "$text Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone." }
-  if ($HasFirstFix) { return "$text Only once what section 5 says to remove first is gone." }
+  if ($HasFirstFix -and $WIPER_HIT -eq 1) { return "$text Only once gh-token-monitor is stopped and removed, and what $FirstWhat leaves is removed: What to do starts with both." }
+  if ($HasFirstFix) { return "$text Only once what $FirstWhat leaves is removed: What to do starts with it." }
   Wiper-Wait $text
 }
 if ($WIPER_HIT -eq 1 -and $HasFirstFix) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working.' }

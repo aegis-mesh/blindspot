@@ -171,8 +171,8 @@ The install step has not yet been run end to end on a real Mac.
 
 Set `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the
 number. Each account gets an equal share of the time left, so one stuck account cannot hold up the
-rest. The run keeps up to 40 seconds in reserve for its own steps, which sit outside the shares, so set
-the deadline a little below the limit, not at it. Run from standard input instead of a file,
+rest. The run keeps a tenth of the deadline, up to 40 seconds, in reserve for its own steps, which sit
+outside the shares and are timed to fit it, so set the deadline a little below the limit, not at it. Run from standard input instead of a file,
 `gird-fleet.sh` stops with `run it from a file`: it copies `gird-check.sh` from its own folder for
 each account.
 

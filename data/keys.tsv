@@ -5,8 +5,9 @@
 # keys are 48 characters after sk-proj-: 20, then T3BlbkFJ (OpenAI in base64), then 20; newer ones
 # are 156 (OpenAI's community forum, GitGuardian's OpenAI detectors, gitleaks and TruffleHog).
 # A Bedrock short-term key is bedrock-api-key- and the base64 of a signed bedrock.amazonaws.com address,
-# so its fixed start is followed by 60 more base64 characters at least: the start alone is text about
-# keys, such as this file, which an agent may have read into its session.
+# whose next 104 characters are the same in every key too (/?Action=CallWithBearerToken&X-Amz-Algorithm=
+# AWS4-HMAC-SHA256&X-Amz-Credential=): 144 must follow the fixed start, so the start, or a key quoted
+# only that far, is text about keys, such as this file, which an agent may have read into its session.
 # A GitHub server-to-server token is ghs_ and 36 letters and digits, or, since GitHub's stateless
 # tokens of April 2026, ghs_ and a JWT of about 520 characters with two dots (GitHub's changelog of
 # 24 April 2026). Neither may follow a letter, digit or _: words such as troughs_ and highs_ hold ghs_.
@@ -23,6 +24,6 @@ xai	xAI	xai-	xai-[A-Za-z0-9]{64,}
 huggingface	Hugging Face	hf_	(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)
 perplexity	Perplexity	pplx-	pplx-[A-Za-z0-9]{40,52}
 replicate	Replicate	r8_	(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}
-aws	AWS	AKIA|ASIA|ABSK|bedrock-api-key	(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}
+aws	AWS	AKIA|ASIA|ABSK|bedrock-api-key	(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}
 github	GitHub	gh[pousr]_|github_pat_	gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
 npm	npm	npm_	npm_[A-Za-z0-9]{36}

@@ -720,7 +720,7 @@ trap 'cleanup; exit 129' HUP
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
 KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
@@ -1543,10 +1543,12 @@ else progress i "No coding agents found"; fi
 
 # --- 2. MCP servers ----------------------------------------------------------
 # app | client id, from the fixed list | config file
+# Devin Desktop, Windsurf renamed, keeps its MCP config in ~/.codeium (docs.devin.ai/desktop/devin-desktop-faq).
 MCP_FILES="Claude Code|claude-code|$H/.claude.json
 Claude Desktop|claude-desktop|$AS/Claude/claude_desktop_config.json
 Cursor|cursor|$H/.cursor/mcp.json
 Windsurf|windsurf|$H/.codeium/windsurf/mcp_config.json
+Devin Desktop|windsurf|$H/.codeium/mcp_config.json
 Codex|codex|$H/.codex/config.toml
 Gemini CLI|gemini-cli|$H/.gemini/settings.json
 VS Code|vscode|$AS/Code/User/mcp.json
@@ -1711,7 +1713,7 @@ auto_row() { # file what flattened-text
   _rp=$(rowsafe "$1")
   _sum="$(printf '%s' "$3" | cksum | cut -d' ' -f1):$(printf '%s' "$_rp" | sed -E 's#/\.claude/worktrees/[^/]+/#/#')"
   case "$TAB$AUTO_SEEN" in *"$TAB$_sum$TAB"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | S=$_sum F=$_rp awk -F "$TAB" -v OFS="$TAB" '
-      $3 == ENVIRON["S"] { $4++; if ($1 ~ /\/\.claude\/worktrees\// && ENVIRON["F"] !~ /\/\.claude\/worktrees\//) $1 = ENVIRON["F"] } { print }')
+      $3 == ENVIRON["S"] { $4 = $4 + 1; if ($1 ~ /\/\.claude\/worktrees\// && ENVIRON["F"] !~ /\/\.claude\/worktrees\//) $1 = ENVIRON["F"] } { print }')
 "; return ;; esac
   AUTO_SEEN="$AUTO_SEEN$_sum$TAB"
   N_AUTO=$((N_AUTO + 1))
@@ -5200,12 +5202,17 @@ $LOCKFILES
 EOF
 N_LOCK_UNREAD=$(count_lines "$LOCK_UNREAD")
 # One awk for up to 100 lockfiles at a time: each awk loads the whole list of bad versions first,
-# which once per lockfile costs a home with hundreds of projects seconds.
+# which once per lockfile costs a home with hundreds of projects seconds. awk stops at a file it can't
+# open (one gone or locked since it was listed), so a batch that fails is read again a file at a time,
+# and only that file is lost, as before.
 if [ "$N_LOCK" -gt 0 ]; then
   _lf=(); while IFS= read -r f; do [ -n "$f" ] && [ -r "$f" ] && _lf+=("$f"); done <<EOF
 $LOCKFILES
 EOF
-  NPM_ROWS=$(_i=0; while [ "$_i" -lt "${#_lf[@]}" ]; do npm_hits "${_lf[@]:$_i:100}"; _i=$((_i + 100)); done)
+  NPM_ROWS=$(_i=0; while [ "$_i" -lt "${#_lf[@]}" ]; do
+    _b=$(npm_hits "${_lf[@]:$_i:100}") || _b=$(for _f in "${_lf[@]:$_i:100}"; do npm_hits "$_f"; done)
+    [ -n "$_b" ] && printf '%s\n' "$_b"; _i=$((_i + 100))
+  done)
 fi
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv),
 # pnpm's and bun's global folders, and npx's cache. One pass: the package.json of every package
@@ -5693,21 +5700,24 @@ wiper_wait() { # text
     *) printf '%s' "$1" ;;
   esac
 }
-# A rotate in a section also waits for what an act-level incident says to remove first (FIRST_HIT:
-# SANDWORM_MODE's pre-push hook would send a new npm token out on the next push). The fix list puts
-# that fix ahead of every rotate instead, so its own fixes need no wait for it.
+# A rotate in a section, and in a section's own fixes (its details page), also waits for what an
+# act-level incident says to remove first (FIRST_HIT, named in FIRST_WHAT: SANDWORM_MODE's pre-push
+# hook would send a new npm token out on the next push). The full fix list puts that fix ahead of
+# every rotate instead, so it needs no wait for it.
 rotate_wait() { # text
   case "$1" in "Don't revoke"*|First\ *) printf '%s' "$1"; return ;; *[Rr]otate*|*[Rr]evoke*) ;; *) printf '%s' "$1"; return ;; esac
   case "$WIPER_HIT$FIRST_HIT" in
-    11) printf '%s %s' "$1" "Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone." ;;
-    01) printf '%s %s' "$1" "Only once what section 5 says to remove first is gone." ;;
+    11) printf '%s %s' "$1" "Only once gh-token-monitor is stopped and removed, and what $FIRST_WHAT leaves is removed: What to do starts with both." ;;
+    01) printf '%s %s' "$1" "Only once what $FIRST_WHAT leaves is removed: What to do starts with it." ;;
     *) wiper_wait "$1" ;;
   esac
 }
 todo() { # section text
+  _ft=$(rotate_wait "$2")
   set -- "$1" "$(wiper_wait "$2")"
   TODO="$TODO$2
 "; ISSUES=$((ISSUES + 1))
+  set -- "$1" "$_ft"
   case "$1" in
     1) FIX1="$FIX1$2
 " ;;
@@ -5739,7 +5749,14 @@ advice_todos() { # first, act or update
   done
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
-FIRST_HIT=0; for _t in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do [ "$(incident_level "$_t")" = act ] && case "$(incident_advice "$_t")" in First\ *) FIRST_HIT=1 ;; esac; done
+FIRST_HIT=0; FIRST_WHAT=""
+for _t in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do
+  [ "$(incident_level "$_t")" = act ] || continue
+  case "$(incident_advice "$_t")" in
+    First\ *) FIRST_HIT=1; _fn="the $(incident_name "$_t")"
+      case " and $FIRST_WHAT and " in *" and $_fn and "*) ;; *) FIRST_WHAT="${FIRST_WHAT:+$FIRST_WHAT and }$_fn" ;; esac ;;
+  esac
+done
 if [ "$WIPER_HIT" -eq 1 ] && [ "$FIRST_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working."
 elif [ "$WIPER_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."; fi
 advice_todos first

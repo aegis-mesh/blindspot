@@ -286,8 +286,8 @@ real Mac.
   gets an equal share of the time left, less the 3 seconds a stop takes, so one stuck account spends
   only its own share. A tenth of the deadline, at most 40 seconds, is kept in reserve for the steps
   outside the shares (the home folder checks, the machine check, saving), which can still overrun it
-  slightly. The machine check is timed: its temp folder finds share 20 seconds, `lsof` gets 10, and
-  one that runs out leaves the Mac partly checked.
+  slightly. The machine check is timed to fit it: its temp folder finds share half the reserve and
+  `lsof` gets a quarter, at most 20 and 10 seconds, and one that runs out leaves the Mac partly checked.
 - The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
   value, `stale: last run <time>` past `--stale-days` (3 by default, at most 30), `none` before the
   first run, `unreadable` when the saved file is not root's own 0600 file in a 0700 folder, and

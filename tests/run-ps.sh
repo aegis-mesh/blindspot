@@ -142,7 +142,7 @@ if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sess
 else bad "with the wiper present, no rotate or revoke anywhere in the report goes without the wait" "$(printf '%s' "${_u:-the fixture lost its sessions or platforms}" | head -n 3 | tr '\n' '|')"; fi
 tr -s ' \n' '  ' < "$WORK/wwait.txt" > "$WORK/wwait-flat.txt"
 has    "the session keys wait for the wiper"         'Treat these keys as exposed and rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wwait-flat.txt"
-has    "and for SANDWORM_MODE's leftovers too"       'rotate them\. Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone' "$WORK/wwait-flat.txt"
+has    "and for SANDWORM_MODE's leftovers too"       'rotate them\. Only once gh-token-monitor is stopped and removed, and what the SANDWORM_MODE worm leaves is removed: What to do starts with both' "$WORK/wwait-flat.txt"
 has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1$' "$OUT"
 has    "uses the non-Mac Argus line"           'Argus, our free Mac app, shows what AI coding agents' "$OUT"
 hasnot "never offers the Argus download off a Mac" 'argus/download' "$OUT"
@@ -191,7 +191,11 @@ BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
 mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
 cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
-printf '{"t":"export AWS_BEARER_TOKEN_BEDROCK=%s%s end"}\n' "$BRS" "$(rnd 160)" > "$SE/brk/.claude/projects/p/s.jsonl"
+# A real key's next 104 characters are fixed as well (the base64 of /?Action=CallWithBearerToken&...
+# &X-Amz-Credential=): quoted only that far, it is not a key.
+BRF="Lz9BY3Rpb249Q2FsbFdpdGhCZWFyZXJUb2tlbiZYLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFs"
+printf '{"t":"the token starts %s%s... and goes on"}\n' "$BRS" "$BRF" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+printf '{"t":"export AWS_BEARER_TOKEN_BEDROCK=%s%sPUFTSUE%s end"}\n' "$BRS" "$BRF" "$(rnd 160)" > "$SE/brk/.claude/projects/p/s.jsonl"
 BRL="AB""SKQmVkcm9ja0FQSUtleS$(rnd 30)+$(rnd 69)"   # its + at 52, so a read that ends at 63 cuts there
 python3 -I -c 'import sys; k = sys.argv[1]; p = "{\"t\":\"" + "lorem ipsum " * 90000; p = p[:1048576 - 63]; open(sys.argv[2], "w").write(p + k + " end\"}\n")' "$BRL" "$SE/brl/.claude/projects/p/s.jsonl"
 # A pasted image is base64, which can hold AIza or r8_ with enough key characters after them: neither
@@ -1027,13 +1031,27 @@ psrun "$WORK/both" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$
 has    "npm and LiteLLM malware together are both named" 'npm and LiteLLM malware found' "$WORK/both.txt"
 # SANDWORM_MODE without the wiper: its hooks would send a new npm token out, so section 3 waits for them.
 psrun "$WORK/both" -- -Offline -Full -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/both-full.txt"
-has    "with SANDWORM_MODE's leftovers, the session keys wait for them" 'Treat these keys as exposed and rotate them\. Only once what section 5 says to remove first is gone' "$WORK/both-full.txt"
+has    "with SANDWORM_MODE's leftovers, the session keys wait for them" 'Treat these keys as exposed and rotate them\. Only once what the SANDWORM_MODE worm leaves is removed: What to do starts with it' "$WORK/both-full.txt"
 hasnot "and nothing waits for a wiper that is not there" 'Only once gh-token-monitor' "$WORK/both-full.txt"
+# Each section's own fixes, shown on its details page and at its end in --full, wait for that cleanup
+# too: only the full fix list, which puts the cleanup first, goes without the wait.
+_u=$(python3 -I -c '
+import re, sys
+t = re.sub(r"\x1b\[[0-9;]*m", "", open(sys.argv[1], encoding="utf-8", errors="replace").read())
+t = t[:t.rfind("WHAT TO DO")] if "WHAT TO DO" in t else t
+s = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", t))
+for i, x in enumerate(s):
+    if re.search(r"[Rr]otate|[Rr]evoke", x) and not x.startswith("First") and not any(n.startswith("Only once") for n in s[i + 1:i + 3]): print(x)' "$WORK/both-full.txt")
+if [ -z "$_u" ] && grep -q 'leaves is removed: What to do starts with it' "$WORK/both-full.txt"; then ok "with SANDWORM_MODE's leftovers, every section's fixes wait for them"
+else bad "with SANDWORM_MODE's leftovers, every section's fixes wait for them" "$(printf '%s' "${_u:-no wait in the report}" | head -n 3 | tr '\n' '|')"; fi
 # Windsurf has been Devin Desktop since June 2026, with its editor data under Devin: that use counts.
 mkdir -p "$WORK/devin/.codeium/windsurf" "$WORK/devin/AppData/Roaming/Devin/User/workspaceStorage/w" "$WORK/devin/AppData/Local/Temp"
 printf '{}\n' > "$WORK/devin/AppData/Roaming/Devin/User/workspaceStorage/w/state.json"
-psrun "$WORK/devin" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/devin.txt"
+# Its MCP config is in ~/.codeium, as its FAQ says, not in ~/.codeium/windsurf.
+mkdir -p "$WORK/devin/.codeium"; printf '{"mcpServers":{"github":{"command":"npx","env":{"GITHUB_TOKEN":"%s%s"}}}}\n' "gh""p_" "$(rnd 36)" > "$WORK/devin/.codeium/mcp_config.json"
+psrun "$WORK/devin" -- -Offline -Full 2>&1 | tr -s ' \n' '  ' > "$WORK/devin.txt"
 has    "Windsurf's use as Devin Desktop counts"       'Windsurf +used in the last 30 days' "$WORK/devin.txt"
+has    "Devin Desktop's MCP config is read"           'Devin Desktop ~/\.codeium/mcp_config\.json 1 server, token in the file' "$WORK/devin.txt"
 # A pipe named like a file the scan reads is not a file: opening one would wait for a writer for ever.
 mkdir -p "$WORK/pipes/code/pp/.claude" "$WORK/pipes/AppData/Roaming" "$WORK/pipes/AppData/Local/Temp"
 mkfifo "$WORK/pipes/code/pp/package-lock.json" "$WORK/pipes/code/pp/.env" "$WORK/pipes/code/pp/.claude/settings.json"
@@ -1047,6 +1065,12 @@ cp -R "$WORK/clean" "$WORK/longurl"; mkdir -p "$WORK/longurl/code/py/.venv/lib/p
 printf 'home = /usr\n' > "$WORK/longurl/code/py/.venv/pyvenv.cfg"
 psrun "$WORK/longurl" -- -Offline -Full > "$WORK/longurl.txt" 2>&1
 has    "a link longer than the line is not cut"      '^ +www\.wiz\.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised$' "$WORK/longurl.txt"
+# Lockfiles are read 100 at a time: a bad version in each of 150 is found in every one.
+cp -R "$WORK/clean" "$WORK/manylock"
+for _n in $(seq 1 150); do mkdir -p "$WORK/manylock/code/m$_n"; printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$WORK/manylock/code/m$_n/package-lock.json"; done
+psrun "$WORK/manylock" -- -Offline -Full 2>&1 | tr -s ' \n' '  ' > "$WORK/manylock.txt"
+_c=$(grep -o 'axios 1\.14\.1 (Axios takeover' "$WORK/manylock.txt" | grep -c .)
+if [ "$_c" -eq 150 ]; then ok "a bad version in each of 150 lockfiles is found in all of them"; else bad "a bad version in each of 150 lockfiles is found in all of them" "found $_c"; fi
 # LiteLLM alone still leads the summary.
 cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
 psrun "$WORK/lite" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"

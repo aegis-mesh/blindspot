@@ -10,4 +10,4 @@ useDefault = true
 [[allowlists]]
 description = "Blindspot's own Bedrock key pattern, not a key"
 regexTarget = "line"
-regexes = ['''bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t\[A-Za-z0-9\+/=\]\{60\}''']
+regexes = ['''bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t\[A-Za-z0-9\+/=\]\{144\}''']

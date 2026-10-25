@@ -77,6 +77,10 @@ PFX=""
 
 echo "data files"
 if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
+# BusyBox awk (Alpine) refuses ++ or -- on a field, and an awk that fails prints nothing: a row list
+# rewritten through it would come back empty.
+if grep -nE '\$([0-9]+|NF)(\+\+|--)' gird-check.sh gird-fleet.sh > "$WORK/inc.txt"; then bad "no ++ or -- on an awk field, which BusyBox refuses" "$(head -n 3 "$WORK/inc.txt" | tr '\n' '|')"
+else ok "no ++ or -- on an awk field, which BusyBox refuses"; fi
 
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE"
@@ -117,7 +121,11 @@ BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
 mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
 cat gird-check.sh gird-check.ps1 gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
-printf '{"t":"export AWS_BEARER_TOKEN_BEDROCK=%s%s end"}\n' "$BRS" "$(rnd 160)" > "$SE/brk/.claude/projects/p/s.jsonl"
+# A real key's next 104 characters are fixed as well (the base64 of /?Action=CallWithBearerToken&...
+# &X-Amz-Credential=): quoted only that far, it is not a key.
+BRF="Lz9BY3Rpb249Q2FsbFdpdGhCZWFyZXJUb2tlbiZYLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFs"
+printf '{"t":"the token starts %s%s... and goes on"}\n' "$BRS" "$BRF" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+printf '{"t":"export AWS_BEARER_TOKEN_BEDROCK=%s%sPUFTSUE%s end"}\n' "$BRS" "$BRF" "$(rnd 160)" > "$SE/brk/.claude/projects/p/s.jsonl"
 BRL="AB""SKQmVkcm9ja0FQSUtleS$(rnd 30)+$(rnd 69)"   # its + at 52, so a read that ends at 63 cuts there
 python3 -I -c 'import sys; k = sys.argv[1]; p = "{\"t\":\"" + "lorem ipsum " * 90000; p = p[:1048576 - 63]; open(sys.argv[2], "w").write(p + k + " end\"}\n")' "$BRL" "$SE/brl/.claude/projects/p/s.jsonl"
 # A pasted image is base64, which can hold AIza or r8_ with enough key characters after them: neither
@@ -832,7 +840,7 @@ if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sess
    grep -q 'rotate all secrets it could reach' "$WORK/wwait-flat.txt" && [ -z "$_u" ]; then ok "with the wiper present, no rotate or revoke anywhere in the report goes without the wait"
 else bad "with the wiper present, no rotate or revoke anywhere in the report goes without the wait" "$(printf '%s' "${_u:-the fixture lost its sessions, platforms or temp markers}" | head -n 3 | tr '\n' '|')"; fi
 has    "the session keys wait for the wiper"         'Treat these keys as exposed and rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wwait-flat.txt"
-has    "and for SANDWORM_MODE's leftovers too"       'rotate them\. Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone' "$WORK/wwait-flat.txt"
+has    "and for SANDWORM_MODE's leftovers too"       'rotate them\. Only once gh-token-monitor is stopped and removed, and what the SANDWORM_MODE worm leaves is removed: What to do starts with both' "$WORK/wwait-flat.txt"
 has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
@@ -840,13 +848,27 @@ HOME="$WORK/both" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \
 has    "npm and LiteLLM malware together are both named" 'npm and LiteLLM malware found' "$WORK/both.txt"
 # SANDWORM_MODE without the wiper: its hooks would send a new npm token out, so section 3 waits for them.
 HOME="$WORK/both" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full --all-sessions 2>&1 | tr -s ' \n' '  ' > "$WORK/both-full.txt"
-has    "with SANDWORM_MODE's leftovers, the session keys wait for them" 'Treat these keys as exposed and rotate them\. Only once what section 5 says to remove first is gone' "$WORK/both-full.txt"
+has    "with SANDWORM_MODE's leftovers, the session keys wait for them" 'Treat these keys as exposed and rotate them\. Only once what the SANDWORM_MODE worm leaves is removed: What to do starts with it' "$WORK/both-full.txt"
 hasnot "and nothing waits for a wiper that is not there" 'Only once gh-token-monitor' "$WORK/both-full.txt"
+# Each section's own fixes, shown on its details page and at its end in --full, wait for that cleanup
+# too: only the full fix list, which puts the cleanup first, goes without the wait.
+_u=$(python3 -I -c '
+import re, sys
+t = re.sub(r"\x1b\[[0-9;]*m", "", open(sys.argv[1], encoding="utf-8", errors="replace").read())
+t = t[:t.rfind("WHAT TO DO")] if "WHAT TO DO" in t else t
+s = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", t))
+for i, x in enumerate(s):
+    if re.search(r"[Rr]otate|[Rr]evoke", x) and not x.startswith("First") and not any(n.startswith("Only once") for n in s[i + 1:i + 3]): print(x)' "$WORK/both-full.txt")
+if [ -z "$_u" ] && grep -q 'leaves is removed: What to do starts with it' "$WORK/both-full.txt"; then ok "with SANDWORM_MODE's leftovers, every section's fixes wait for them"
+else bad "with SANDWORM_MODE's leftovers, every section's fixes wait for them" "$(printf '%s' "${_u:-no wait in the report}" | head -n 3 | tr '\n' '|')"; fi
 # Windsurf has been Devin Desktop since June 2026, with its editor data under Devin: that use counts.
 mkdir -p "$WORK/devin/.codeium/windsurf" "$WORK/devin/Library/Application Support/Devin/User/workspaceStorage/w" "$WORK/devin/.config/Devin/User/workspaceStorage/w"
 printf '{}\n' > "$WORK/devin/Library/Application Support/Devin/User/workspaceStorage/w/state.json"; printf '{}\n' > "$WORK/devin/.config/Devin/User/workspaceStorage/w/state.json"
-HOME="$WORK/devin" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/devin.txt"
+# Its MCP config is in ~/.codeium, as its FAQ says, not in ~/.codeium/windsurf.
+mkdir -p "$WORK/devin/.codeium"; printf '{"mcpServers":{"github":{"command":"npx","env":{"GITHUB_TOKEN":"%s%s"}}}}\n' "gh""p_" "$(rnd 36)" > "$WORK/devin/.codeium/mcp_config.json"
+HOME="$WORK/devin" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$WORK/devin.txt"
 has    "Windsurf's use as Devin Desktop counts"       'Windsurf +used in the last 30 days' "$WORK/devin.txt"
+has    "Devin Desktop's MCP config is read"           'Devin Desktop ~/\.codeium/mcp_config\.json 1 server, token in the file' "$WORK/devin.txt"
 # A pipe named like a file the scan reads is not a file: opening one would wait for a writer for ever.
 mkdir -p "$WORK/pipes/code/pp/.claude"; mkfifo "$WORK/pipes/code/pp/package-lock.json" "$WORK/pipes/code/pp/.env" "$WORK/pipes/code/pp/.claude/settings.json"
 HOME="$WORK/pipes" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/pipes.txt" 2>&1 & BP=$!
@@ -859,6 +881,12 @@ cp -R "$WORK/clean" "$WORK/longurl"; mkdir -p "$WORK/longurl/code/py/.venv/lib/p
 printf 'home = /usr\n' > "$WORK/longurl/code/py/.venv/pyvenv.cfg"
 HOME="$WORK/longurl" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$WORK/longurl.txt" 2>&1
 has    "a link longer than the line is not cut"      '^ +www\.wiz\.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised$' "$WORK/longurl.txt"
+# Lockfiles are read 100 at a time: a bad version in each of 150 is found in every one.
+cp -R "$WORK/clean" "$WORK/manylock"
+for _n in $(seq 1 150); do mkdir -p "$WORK/manylock/code/m$_n"; printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$WORK/manylock/code/m$_n/package-lock.json"; done
+HOME="$WORK/manylock" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$WORK/manylock.txt"
+_c=$(grep -o 'axios 1\.14\.1 (Axios takeover' "$WORK/manylock.txt" | grep -c .)
+if [ "$_c" -eq 150 ]; then ok "a bad version in each of 150 lockfiles is found in all of them"; else bad "a bad version in each of 150 lockfiles is found in all of them" "found $_c"; fi
 # LiteLLM alone still leads the summary.
 cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
 HOME="$WORK/lite" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
@@ -2472,7 +2500,7 @@ rm -rf "$FL/usertmp-tm"
 # the gh-token-monitor wiper reach the account's row, as they reach the one-person report.
 for h in proj upd2 wip wip1; do fl_home "$h"; done
 mkdir -p "$FL/proj/code/p/.claude" "$FL/proj/code/q/.claude" "$FL/upd2/Library/Python/3.9/lib/python/site-packages/mistralai-2.4.6.dist-info" "$FL/wip/Library/LaunchAgents" \
-  "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core" "$FL/wip1/.config/gh-token-monitor"
+  "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core" "$FL/wip1/.config/gh-token-monitor" "$FL/wip/.local/share/opencode"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FL/proj/code/p/.claude/settings.json"
 : > "$FL/proj/code/q/.claude/setup.mjs"; : > "$FL/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
 printf '{"name":"@tanstack/router-core","version":"1.169.5"}\n' > "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core/package.json"
@@ -2489,6 +2517,7 @@ if grep -q '^wip1\.wiper=true$' "$FL/rows.flat" && grep -q '^wip1\.incidents=$' 
 else bad "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm" "$(grep '^wip1\.' "$FL/rows.flat" | tr '\n' ' ')"; fi
 users "wip:$U:$FL/wip:/bin/zsh"
 fl_run wipterm
+has    "fleet: with the wiper there, a platform's rotate waits for it too" '^    !  OpenCode found: got its breach email\? Rotate keys, once gh-token-monitor is stopped$' "$FL/wipterm.out"
 if awk '/gh-token-monitor is installed/ && !w { w = NR } /TanStack worm/ && !t { t = NR } END { exit !(w && t && w < t) }' "$FL/wipterm.out"; then ok "fleet: and stopping it comes before the incident's other advice"; else bad "fleet: and stopping it comes before the incident's other advice" "$(grep -n 'gh-token-monitor\|TanStack' "$FL/wipterm.out" | head -n 3)"; fi
 
 # An editor extension whose malware runs only on Windows is one to remove on a Mac, as the person's
@@ -2562,8 +2591,9 @@ rm -f "$FL/sharedtmp/remote_code_loader.lock"
 # The temp folder's names are looked for with timed finds: one that does not answer leaves the Mac partly
 # checked, and a folder an account filled with such names costs root no time for each.
 printf '#!/bin/sh\nexec /bin/sleep 60\n' > "$FL/slow-find"; chmod +x "$FL/slow-find"
-T0=$SECONDS; GIRD_CHECK_FLEET_FIND="$FL/slow-find" fl_run slowfind; T=$((SECONDS - T0))
-if grep -q '^machine\.complete=false$' "$FL/slowfind.flat" && ! grep -q '^outcome=clear$' "$FL/slowfind.flat" && [ "$T" -lt 55 ]; then ok "fleet: a temp folder find that runs out of time leaves the Mac not checked"
+# A short deadline gives the Mac's own check a share of a smaller reserve: 60 seconds keeps 6.
+T0=$SECONDS; GIRD_CHECK_FLEET_FIND="$FL/slow-find" fl_run slowfind --deadline=60; T=$((SECONDS - T0))
+if grep -q '^machine\.complete=false$' "$FL/slowfind.flat" && ! grep -q '^outcome=clear$' "$FL/slowfind.flat" && [ "$T" -lt 60 ]; then ok "fleet: a temp folder find that runs out of time leaves the Mac not checked"
 else bad "fleet: a temp folder find that runs out of time leaves the Mac not checked" "${T}s; $(grep -E '^(machine|outcome)' "$FL/slowfind.flat" | tr '\n' ' ')"; fi
 has    "fleet: and the report says what was not looked through" 'Partly checked: the shared temp folder could not be looked through in time' "$FL/slowfind.out"
 : > "$FL/seed"; python3 -I -c 'import os, sys; [os.link(sys.argv[1], "%s/.pc_once_%d" % (sys.argv[2], i)) for i in range(20000)]' "$FL/seed" "$FL/sharedtmp"

@@ -12,6 +12,7 @@ if [ -n "$OTHER" ] && [ "$("$OTHER" -c 'echo "$BASH_VERSION"')" != "$(/bin/bash 
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 trap 'rm -rf "$WORK"' EXIT
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt" clean
+bash tests/make-fixture.sh "$WORK/sandworm" "$WORK/keys-sw.txt"; rm -rf "$WORK/sandworm/.config/gh-token-monitor"
 FAILED=0
 for B in $BASHES; do
   echo "bash $("$B" -c 'echo "$BASH_VERSION"') ($B)"
@@ -23,6 +24,21 @@ for B in $BASHES; do
   fi
   FAKEHOME="$WORK/home" SCRIPT="$PWD/gird-check.sh" BASHBIN="$B" expect tests/fast.exp || FAILED=1
   FAKEHOME="$WORK/home" SCRIPT="$PWD/gird-check.sh" BASHBIN="$B" expect tests/interrupt.exp || FAILED=1
+  # A details page shows only its section's fixes, without the full list's first fix: with a
+  # SANDWORM_MODE package (and no wiper), each of its rotate lines waits for the worm's cleanup.
+  if FAKEHOME="$WORK/sandworm" SCRIPT="$PWD/gird-check.sh" BASHBIN="$B" LOGFILE="$WORK/details.log" expect tests/details.exp; then
+    _u=$(python3 -I -c '
+import re, sys
+t = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", open(sys.argv[1], encoding="utf-8", errors="replace").read())
+t = t[t.find("02  MCP SERVERS"):] if "02  MCP SERVERS" in t else ""
+s = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", t))
+bad = [x for i, x in enumerate(s) if re.search(r"[Rr]otate|[Rr]evoke", x) and not x.startswith("First") and not any(n.startswith("Only once") for n in s[i + 1:i + 3])]
+print("\n".join(bad) if bad or "leaves is removed" in t else "no details page waited")' "$WORK/details.log")
+    if [ -z "$_u" ]; then echo "  ok    with SANDWORM_MODE, the details pages of sections 2 to 4 wait for its cleanup"
+    else echo "  FAIL  with SANDWORM_MODE, the details pages of sections 2 to 4 wait for its cleanup"; printf '%s\n' "$_u" | head -n 3; FAILED=1; fi
+  else
+    FAILED=1
+  fi
 done
 
 # Opening the result on Windows (Git Bash) and in WSL, with stand-ins for uname,

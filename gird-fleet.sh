@@ -125,7 +125,7 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME
 # The tables gird-check.sh checks with, written here by tools/gen.sh: never edit them here.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
 KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
@@ -453,7 +453,7 @@ fl_plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s
 
 # The Mac's shared places, checked once, by root, by name only: nothing in them is read or run.
 fl_machine() {
-  FM_AGENTS=""; FM_INC=""; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + 20))
+  FM_AGENTS=""; FM_INC=""; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + ${FM_FIND_S:-20}))
   while IFS='|' read -r _nm _bins _paths _acts _id; do
     [ -n "$_nm" ] || continue
     _hit=0; _ifs=$IFS; IFS=';'
@@ -471,8 +471,8 @@ EOF
         # Never through a link, which any account can make. A marker that must be someone's own counts
         # for the Mac only when root made it, under its one name; one an account owns is that
         # account's finding, which its own run looks for in /tmp. A find for each name, all of them
-        # within 20 seconds: any account can fill the folder with such names, and they must not cost
-        # root a step each.
+        # within FM_FIND_S seconds: any account can fill the folder with such names, and they must not
+        # cost root a step each.
         _tl=$((_tend - SECONDS)); [ "$_tl" -ge 1 ] || { _late=1; continue; }
         set -- -name "$_ip" ! -type l
         [ "$_iown" = yes ] && set -- "$@" -user "$FL_OWNER" -links 1
@@ -494,7 +494,7 @@ EOF
   _lk="$FL_SHARED_TMP/remote_code_loader.lock"
   # Only a lock file root made: one an account owns is that account's marker, found by its own run.
   if [ -f "$_lk" ] && [ ! -L "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
-    fl_timed 10 "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
+    fl_timed "${FM_LSOF_S:-10}" "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
     [ -s "$FL_TMP/lsof" ] && FM_INC="$FM_INC litellm"
     [ "$FL_TIMEOUT" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }a running LiteLLM loader could not be looked for in time"; }
   fi
@@ -569,9 +569,11 @@ fleet_main() {
     echo "System accounts (UID below 500, or a name starting with _) are never checked."
     return 0
   fi
-  # The Mac's own check comes last and takes under 40 seconds: 20 for the temp folder and 10 for
-  # lsof, each stopped within 3 seconds of its limit.
+  # The Mac's own check comes last, within this reserve: its temp folder finds get half of it and
+  # lsof a quarter, at most 20 and 10 seconds, each stopped within 3 seconds of its limit.
   _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 40 ] && _rs=40
+  FM_FIND_S=$((_rs / 2)); [ "$FM_FIND_S" -gt 20 ] && FM_FIND_S=20; [ "$FM_FIND_S" -lt 1 ] && FM_FIND_S=1
+  FM_LSOF_S=$((_rs / 4)); [ "$FM_LSOF_S" -gt 10 ] && FM_LSOF_S=10; [ "$FM_LSOF_S" -lt 1 ] && FM_LSOF_S=1
   FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""
   # One version for both files: gird-check.sh's release, from its header.
   FL_REL=$(/usr/bin/sed -n '1,5{s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p;}' "$FL_CHECK" | /usr/bin/head -n 1)
@@ -651,7 +653,8 @@ fleet_main() {
       if [ -n "$FA_update" ]; then _upd=1; _tn=""; for _x in $FA_update; do _tn="${_tn:+$_tn, }$(printf '%s\n' "$OUT_TABLE" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $2; exit }')"; done; _lines="$_lines$NL    !  Tools with a security fix to install: $_tn"; _inv="$_inv; update-tools $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; fi
       # Found means its CLI or files are there, not that the person used the hosted service: each
       # platform's own summary says what to check, as the person's report does.
-      if [ -n "$FA_platforms" ]; then _upd=1; for _x in $FA_platforms; do _lines="$_lines$NL    !  $(printf '%s\n' "$PLATFORMS" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $7; exit }')"; done; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
+      # With gh-token-monitor there, its rotate waits for it, as every rotate in the person's report does.
+      if [ -n "$FA_platforms" ]; then _upd=1; for _x in $FA_platforms; do _lines="$_lines$NL    !  $(printf '%s\n' "$PLATFORMS" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $7; exit }')$( [ "$FA_wiper" -eq 1 ] && printf ', once gh-token-monitor is stopped')"; done; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_on_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Project settings that act when an agent or editor opens the folder: $FA_on_open"; _inv="$_inv; on-open $FA_on_open"; fi
       if [ "$FA_to_read" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Files named like the ones worms plant, to read: $FA_to_read"; _inv="$_inv; to-read $FA_to_read"; fi
       for _x in $FA_updates; do _upd=1; _lines="$_lines$NL    !  A version to update: $(incident_name "$_x")"; done
