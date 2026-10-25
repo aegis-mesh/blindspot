@@ -747,6 +747,22 @@ has    "and so does its SessionStart hook"           '~/code/r/\.claude/settings
 has    "and its folder-open task"                    '~/code/r/\.vscode/tasks\.json runs a file a worm plants' "$WORK/msh.txt"
 hasnot "none of them is a file to read"              'Named like a file' "$WORK/msh.txt"
 hasnot "execution.js in another folder is not the worm's" 'code/other' "$WORK/msh.txt"
+# The AntV wave (SafeDep): the kitty-monitor backdoor's systemd unit and LaunchAgent, the cat.py they start, and
+# the payload copies that the hooks it adds to Claude Code and Codex settings run are signs of its malware. It also
+# commits .claude/index.js, a name projects use too: alone, and not the published payload, it is a file to read;
+# the name in another folder is not listed.
+mkdir -p "$WORK/akm/.config/systemd/user" "$WORK/akm/Library/LaunchAgents" "$WORK/akm/.local/share/kitty" "$WORK/akm/.codex/package" \
+  "$WORK/akm/code/i/.claude" "$WORK/akm/code/j/.claude/hooks"
+: > "$WORK/akm/.config/systemd/user/kitty-monitor.service"; : > "$WORK/akm/Library/LaunchAgents/com.user.kitty-monitor.plist"
+: > "$WORK/akm/.local/share/kitty/cat.py"; : > "$WORK/akm/.codex/package/index.js"
+printf 'x\n' > "$WORK/akm/code/i/.claude/index.js"; printf 'y\n' > "$WORK/akm/code/j/.claude/hooks/index.js"
+psrun "$WORK/akm" -- -Offline -Full 2>&1 | tr -s ' \n' '  ' > "$WORK/akm.txt"
+has    "the AntV wave's kitty-monitor service is a sign of its malware" '~/\.config/systemd/user/kitty-monitor\.service starts the AntV wave.s kitty-monitor backdoor at login' "$WORK/akm.txt"
+has    "and its LaunchAgent"                           '~/Library/LaunchAgents/com\.user\.kitty-monitor\.plist starts the AntV wave.s kitty-monitor backdoor at login' "$WORK/akm.txt"
+has    "and the backdoor they start"                   '~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor, which its service starts at login' "$WORK/akm.txt"
+has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
+has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
+hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
 # A command counts only when it runs the file: a guard in node -e code, a script given the file to
 # block, and a task whose first argument is another script are not malware; a task that runs node
 # on the file is.

@@ -532,9 +532,9 @@ function Is-Pruned([string]$path, [string]$name, [int]$depth) {
 # Files worms plant in a project, from data/planted.tsv.
 # >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it.
 $WormNameAlone = '\.(claude|vscode)[/\\]+(router_runtime\.js|math_init\.js|execution\.js)'
-$WormNameWeak = '\.(claude|vscode)[/\\]+(setup\.mjs)'
-function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack and Mini Shai-Hulud worms plant' } '.vscode/router_runtime.js' { 'a file the TanStack worm plants' } '.claude/setup.mjs' { 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' } '.claude/math_init.js' { 'a file the keyv worm plants' } '.vscode/setup.mjs' { 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' } '.claude/execution.js' { 'a file the Mini Shai-Hulud worm plants' } default { $null } } }
-function Planted-Sha([string]$p) { switch -CaseSensitive ($p) { '.claude/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' } '.vscode/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' } default { '' } } }
+$WormNameWeak = '\.(claude|vscode)[/\\]+(setup\.mjs|index\.js)'
+function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack and Mini Shai-Hulud worms plant' } '.vscode/router_runtime.js' { 'a file the TanStack worm plants' } '.claude/setup.mjs' { 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' } '.claude/math_init.js' { 'a file the keyv worm plants' } '.vscode/setup.mjs' { 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' } '.claude/execution.js' { 'a file the Mini Shai-Hulud worm plants' } '.claude/index.js' { 'a file the AntV wave plants' } default { $null } } }
+function Planted-Sha([string]$p) { switch -CaseSensitive ($p) { '.claude/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' } '.vscode/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' } '.claude/index.js' { 'a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c' } default { '' } } }
 $PlantedAlone = @('.claude/router_runtime.js', '.vscode/router_runtime.js', '.claude/math_init.js', '.claude/execution.js')
 $WormRefNote = 'runs a file a worm plants'
 # <<< planted
@@ -1521,6 +1521,11 @@ $IndTable = @(
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/nvmconf.service'), 'starts the Mastra malware at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'), 'starts the Mastra malware at login')
   ,@('mastra', 'win', 'startup', 'no', $(if ($env:ProgramData) { J $env:ProgramData 'NodePackages/protocal.cjs' } else { '' }), 'starts the Mastra malware at login')
+  ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/kitty-monitor.service'), 'starts the AntV wave''s kitty-monitor backdoor at login')
+  ,@('antv', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.kitty-monitor.plist'), 'starts the AntV wave''s kitty-monitor backdoor at login')
+  ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.local/share/kitty/cat.py'), 'the AntV wave''s kitty-monitor backdoor, which its service starts at login')
+  ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.claude/package/index.js'), 'a copy of the AntV wave''s payload, run by the hooks it adds to agent settings')
+  ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.codex/package/index.js'), 'a copy of the AntV wave''s payload, run by the hooks it adds to agent settings')
   ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
   ,@('litellm', 'all', 'site', 'no', 'cook.py', '-')
   ,@('litellmmar', 'all', 'site', 'no', 'litellm_init.pth', '-')
