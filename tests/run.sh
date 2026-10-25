@@ -2224,7 +2224,7 @@ has    "fleet: the readable report lists each account" '^  asha +act now$' "$FL/
 has    "fleet: and where the result was saved" "^  Saved: $FL/state/last.json\$" "$FL/term.out"
 hasnot "fleet: no Argus note without a terminal" 'gird\.ai/argus|Argus' "$FL/term.out"
 # OpenCode's CLI files are there, which is not to say the person used the hosted Console its breach hit.
-has    "fleet: a platform found reads as its own summary" '^    !  OpenCode found: got its breach email\? Rotate keys$' "$FL/term.out"
+has    "fleet: a platform found reads as its own summary" '^    !  OpenCode found: got its breach email\? Rotate keys(, once gh-token-monitor is stopped)?$' "$FL/term.out"
 hasnot "fleet: never that the account uses it"         'Uses a platform' "$FL/term.out"
 has    "fleet: the JSON names the platforms found"     '^asha\.platforms_found=opencode$' "$FL/two.flat"
 if command -v script > /dev/null 2>&1; then
