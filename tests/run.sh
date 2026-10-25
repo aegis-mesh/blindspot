@@ -1033,6 +1033,14 @@ has    "with the spread's sourced line"               'keyv worm spread, August 
 hasnot "a version of it the advisories do not name is not flagged" '@thiennq/docs-viewer 1\.6\.5' "$WORK/npa.txt"
 has    "a package its advisory ties to the keyv and cacheable account is the keyv worm's" 'hamus\.js 0\.4\.1 \(keyv worm, August 2026\)' "$WORK/npa.txt"
 has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
+# The AntV wave reached a second account (Wiz's list of the wave, GitHub's malware advisories of 19 May):
+# its packages are the wave's at the versions named, and a version beside one is not.
+rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/x"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/openclaw-cn": {\n      "version": "0.3.0"\n    },\n    "node_modules/@starmind/collector-cli": {\n      "version": "0.3.10"\n    },\n    "node_modules/x/node_modules/openclaw-cn": {\n      "version": "0.3.1"\n    }\n  }\n}\n' > "$WORK/npw/code/x/package-lock.json"
+HOME="$WORK/npw" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npw.txt"
+has    "a package of the AntV wave's second account is found" 'openclaw-cn 0\.3\.0 \(AntV account takeover, May 2026\)' "$WORK/npw.txt"
+has    "and another package of that account"          '@starmind/collector-cli 0\.3\.10 \(AntV account takeover, May 2026\)' "$WORK/npw.txt"
+hasnot "a version of openclaw-cn no advisory names is not flagged" 'openclaw-cn 0\.3\.1' "$WORK/npw.txt"
 # SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
 # to remove them comes ahead of every fix that says to rotate, an incident's own advice to rotate too.
 rm -rf "$WORK/sw"; mkdir -p "$WORK/sw/code/s/node_modules/suport-color" "$WORK/sw/code/s/node_modules/@keyv/redis" "$WORK/sw/AppData/Roaming" "$WORK/sw/AppData/Local/Temp"

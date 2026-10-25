@@ -3313,6 +3313,11 @@ caspian-day-js 1.11.23 mastra
 @lint-md/core 2.2.0 antv
 @lint-md/parser 0.1.14 antv
 @lint-md/parser 0.2.14 antv
+@openclaw-cn/cli 1.4.1 antv
+@openclaw-cn/feishu 0.2.11 antv
+@openclaw-cn/libsignal 2.1.1 antv
+@openclaw-cn/toutiao-ops 1.2.4 antv
+@starmind/collector-cli 0.3.10 antv
 ai-figure 0.5.0 antv
 ai-figure 0.6.0 antv
 amapcn 0.2.2 antv
@@ -3366,6 +3371,7 @@ miz 1.1.1 antv
 miz 1.2.1 antv
 onfire.js 2.1.1 antv
 onfire.js 2.2.1 antv
+openclaw-cn 0.3.0 antv
 react-adsense 0.2.0 antv
 react-adsense 0.3.0 antv
 relationship.js 1.3.9 antv

@@ -38,9 +38,16 @@
 #     2026), 638 versions of 317 packages: @antv's and others that account published, such as
 #     echarts-for-react, size-sensor and timeago.js, the 317 of SafeDep's list of the wave. GitHub's malware
 #     advisories name the same versions for 145 and have none for 120; for 51, OpenSSF's entry adds
-#     versions GitHub's leaves out, and @antv/a8's spans every version (below). And @cap-js/openapi 1.4.1,
+#     versions GitHub's leaves out, and @antv/a8's spans every version (below). And the six packages of a
+#     second account, jiulingyun, published in the same wave (02:53 to 02:55 UTC on 19 May by npm's
+#     registry), each in Wiz's list of the wave, with a GitHub malware advisory of that day (such as
+#     GHSA-w2fv-p53h-wcph) and an OpenSSF entry that puts it in the same worm: openclaw-cn 0.3.0,
+#     @openclaw-cn/cli 1.4.1, @openclaw-cn/feishu 0.2.11, @openclaw-cn/libsignal 2.1.1,
+#     @openclaw-cn/toutiao-ops 1.2.4 and @starmind/collector-cli 0.3.10. And @cap-js/openapi 1.4.1,
 #     published on 18 May by npm's registry: its OpenSSF entry, MAL-2026-4161, and GitHub's
 #     GHSA-qj5h-p6mj-66pf cite only the AntV wave's posts, though SafeDep's list of the wave leaves it out.
+#     Nothing else of the wave is named by Wiz's list, by GitHub's malware advisories of 18 to 21 May or
+#     by an OpenSSF entry.
 #   Red Hat Cloud Services, June 2026 (redhat): the 32 @redhat-cloud-services packages whose OpenSSF
 #     entries name the worm's takeover of the trusted publisher they share, 96 versions. GitHub's malware
 #     advisories (such as GHSA-942v-f47r-w9c3) name the same versions for 22, and for 10 OpenSSF's entry
@@ -1172,6 +1179,11 @@ caspian-day-js	1.11.23	mastra
 @lint-md/core	2.2.0	antv
 @lint-md/parser	0.1.14	antv
 @lint-md/parser	0.2.14	antv
+@openclaw-cn/cli	1.4.1	antv
+@openclaw-cn/feishu	0.2.11	antv
+@openclaw-cn/libsignal	2.1.1	antv
+@openclaw-cn/toutiao-ops	1.2.4	antv
+@starmind/collector-cli	0.3.10	antv
 ai-figure	0.5.0	antv
 ai-figure	0.6.0	antv
 amapcn	0.2.2	antv
@@ -1225,6 +1237,7 @@ miz	1.1.1	antv
 miz	1.2.1	antv
 onfire.js	2.1.1	antv
 onfire.js	2.2.1	antv
+openclaw-cn	0.3.0	antv
 react-adsense	0.2.0	antv
 react-adsense	0.3.0	antv
 relationship.js	1.3.9	antv
