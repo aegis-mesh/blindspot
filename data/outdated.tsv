@@ -33,7 +33,12 @@
 # (GHSA-v234-4jrq-mgg6, macOS), and GHSA-3rwf-2g6p-c2f9 has lines for its hole. No kind reads its version
 # on Windows or Linux, so the two Windows advisories, GHSA-4p2j-qj3c-6x84 (below 1.8089.0) and
 # GHSA-5p5x-5294-qhp3 (below 1.3834.0), have no line.
-# mcp-remote: GHSA-6xpm-ggf7-wc3p is its only advisory, and its repository publishes none.
+# mcp-remote: GHSA-6xpm-ggf7-wc3p is its only advisory with a fixed version. GitHub's database also
+# holds six unreviewed ones with no package field, which ?affects= does not find: GHSA-8rrr-xx35-4q6h,
+# GHSA-5wmf-76f4-cg47, GHSA-mvq8-g2rm-4rhm, GHSA-v65w-6crh-cp3h and GHSA-4gh6-j99c-x6g2, from one
+# researcher's review of 0.1.16 to 0.1.38, and GHSA-jrvg-vw6c-rp59, on 0.8.0 to 0.14.3. None names a fix,
+# OSV gives each only a last affected commit, and its repository (now punkpeye/mcp-remote) publishes no
+# advisory and no release note that names one, so they have no line.
 # Amazon Q: the version folder is the language server's (Language Servers for AWS), which the bulletin
 # fixes in 1.69.0 (aws/language-servers publishes the bulletin's two advisories, and no later bulletin
 # names it). The extension's own version is not read. Amazon Q keeps the server in
