@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0, 25 October 2026
 
 - npm worms: the leaks check reads your lockfiles (npm, `npm-shrinkwrap.json`, pnpm, yarn, bun), global installs (including tools' own dependencies and the nvm, volta, fnm, asdf, mise, nodenv and pnpm folders), npx and npm's download cache for the package versions GitHub's advisory database lists as malware: SANDWORM_MODE (February 2026), Axios (March), Bitwarden CLI (April), TanStack, Mistral AI and OpenSearch (May), Mastra (June), keyv (August) and tensorlake (October). A pin in an overrides section that moves away from a bad version is not a hit. It also looks for what those worms leave behind: `gh-token-monitor`, the Mastra startup files, and worm files in a project's `.claude` or `.vscode` folder. `gh-token-monitor` runs a destructive command when the stolen GitHub token stops working, so finding it puts "stop it before you revoke any token" first, with the Mac and Linux commands, and every other fix that rotates a key waits for it. The result page gets the same warning. Section 5 is now "Recent key leaks".
 - Project settings that act on opening: the MCP section flags a project's `.claude/settings.json` or `settings.local.json` that runs hooks or other commands, turns on MCP servers without asking or sends API traffic to another server, and a `.vscode/tasks.json` task that runs when the folder opens. Worktrees with the same settings share one row. They are listed as things to look at, and don't lower your score.

@@ -72,6 +72,19 @@ for B in $BASHES; do
   if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 done
 
+echo "one version"
+# The release version is written in both headers and in every banner: they must all agree, and match
+# the newest CHANGELOG release.
+_v() { grep -oE 'version [0-9]+\.[0-9]+\.[0-9]+ \([0-9]+ [A-Z][a-z]+ [0-9]{4}\)' "$1" | head -n 1; }
+VSH=$(_v gird-check.sh); VPS=$(_v gird-check.ps1)
+VNUM=$(printf '%s' "$VSH" | awk '{print $2}')
+VDAY=$(printf '%s' "$VSH" | sed -E 's/.*\(([0-9]+) ([A-Z][a-z][a-z])[a-z]* ([0-9]{4})\)/\1 \2 \3/')
+if [ -n "$VSH" ] && [ "$VSH" = "$VPS" ]; then ok "both scripts carry the same version and date"; else bad "both scripts carry the same version and date"; fi
+BAN=$(grep -ohE 'v[0-9]+\.[0-9]+\.[0-9]+ (·|\$gMid) [0-9]+ [A-Z][a-z]{2} [0-9]{4}' gird-check.sh gird-check.ps1)
+NB=$(printf '%s\n' "$BAN" | grep -c .); NGOOD=$(printf '%s\n' "$BAN" | grep -cE "^v$VNUM .* $VDAY\$")
+if [ "$NB" -ge 3 ] && [ "$NB" -eq "$NGOOD" ]; then ok "every banner shows that version and date"; else bad "every banner shows that version and date"; fi
+if [ "$(grep -m1 -E '^## [0-9]' CHANGELOG.md | awk '{print $2}' | tr -d ,)" = "$VNUM" ]; then ok "the newest CHANGELOG release is that version"; else bad "the newest CHANGELOG release is that version"; fi
+
 echo "review fixes: npm, project settings and the wiper"
 RV=$WORK/rv; cp -R "$WORK/clean" "$RV"
 # Lockfiles: a pnpm override pinning away, an npm lock without URLs, a shrinkwrap, pnpm 5.

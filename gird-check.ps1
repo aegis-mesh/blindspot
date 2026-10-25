@@ -1,5 +1,5 @@
 <#
-Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.1.0 (23 October 2026)
+Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.2.0 (25 October 2026)
 https://gird.ai/blindspot
 
 Shows the AI coding agents and MCP servers on this computer, AI and cloud keys
@@ -532,7 +532,7 @@ function Show-Banner {
     if ($i -eq 3) { $mark = (& $u ' \u2819\u281b\u283b\u2801 ') + $cGold + (& $u '\u2830\u2806') + $cTeal + (& $u ' \u2880\u28e6\u28e4\u28c4\u2840') } else { $mark = & $u $mk[$i] }
     Emit ("  $cTeal$mark$cRst   $cBold$row$cRst")
   }
-  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.1.0 $gMid 23 Oct 2026 $gMid gird.ai/blindspot$cRst")
+  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
 }
 
 # ===========================================================================
@@ -541,7 +541,7 @@ $Early = $false
 try {
 Blank
 if ($Fancy) { Show-Banner } else {
-Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.1.0 $gMid 23 Oct 2026 $gMid gird.ai/blindspot$cRst")
+Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
 }
 Blank
 Emit "  ${cDim}Read-only. Prints paths and counts, never a key.$cRst"
