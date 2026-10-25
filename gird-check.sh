@@ -6663,9 +6663,10 @@ EXT_INCS=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' '
 NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
 # packages and Nx Console 18.95.0 leave the same kitty-monitor files) is listed once, by the incident
-# IND_OWNER names: the extension's when it was found and none of the npm incident's packages were.
+# IND_OWNER names: the extension's when it was found and none of the npm incident's packages was found
+# installed (NPM_INST_TAGS): a version only in a lockfile is no sign of what made these files.
 EXT_FOUND=" $(printf '%s\n' "$EXT_ROWS" | cut -f3 | sort -u | tr '\n' ' ')"
-IND_OWNER=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v e="$EXT_INCS" -v n="$NPM_INCS" -v f="$EXT_FOUND" -v t=" $(printf '%s ' $NPM_TAGS)" -v o="$_os" '
+IND_OWNER=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v e="$EXT_INCS" -v n="$NPM_INCS" -v f="$EXT_FOUND" -v t="$NPM_INST_TAGS" -v o="$_os" '
   $3 == "startup" && ($2 == "all" || $2 == o) && $5 != "" {
     if (index(e, " " $1 " ") && !index(n, " " $1 " ")) { if (!($5 in xa)) xa[$5] = $1; if (index(f, " " $1 " ") && !($5 in xf)) xf[$5] = $1 }
     else { if (!($5 in m)) m[$5] = $1; if (index(t, " " $1 " ")) nf[$5] = 1 }

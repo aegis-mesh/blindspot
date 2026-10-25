@@ -6041,7 +6041,8 @@ $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
 # packages and Nx Console 18.95.0 leave the same kitty-monitor files) is listed once, by the incident
-# $IndOwner names: the extension's when it was found and none of the npm incident's packages were.
+# $IndOwner names: the extension's when it was found and none of the npm incident's packages was found
+# installed ($NpmInstTags): a version only in a lockfile is no sign of what made these files.
 $ExtFound = @($ExtRows | ForEach-Object { $_[2] })
 $IndOwner = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
 $ownXa = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ownXf = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
@@ -6053,7 +6054,7 @@ foreach ($r in $IndOn) {
     if ($ExtFound -ccontains $r[0] -and -not $ownXf.ContainsKey($r[4])) { $ownXf[$r[4]] = $r[0] }
   } else {
     if (-not $ownM.ContainsKey($r[4])) { $ownM[$r[4]] = $r[0] }
-    if ($NpmTags -ccontains $r[0]) { $ownNf[$r[4]] = $true }
+    if ($NpmInstTags.Contains($r[0])) { $ownNf[$r[4]] = $true }
   }
 }
 foreach ($p in @($ownM.Keys)) {

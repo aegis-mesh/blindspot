@@ -1972,20 +1972,24 @@ has    "and in an Open VSX editor's folder"           '~/\.cursor/extensions/nrw
 has    "with Nx's sourced line"                       'Nx Console 18\.95\.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory\. github\.com' "$WORK/dz-nx.txt"
 hasnot "its fixed version is not flagged"             'angular-console-18\.100\.0' "$WORK/dz-nx.txt"
 # Nx Console 18.95.0 leaves the AntV wave's kitty-monitor files (Nx's advisory). Found with it and no
-# AntV package, they are listed with the extension, once; beside an AntV package, as that wave's npm
-# malware, once; alone, as the AntV wave's npm malware, never as a file to check as well.
-rm -rf "$WORK/dz-nxk" "$WORK/dz-nxka" "$WORK/dz-nxk0"; cp -R "$WORK/dz-nx" "$WORK/dz-nxk"
+# AntV package installed, they are listed with the extension, once, even beside an AntV version only
+# in a lockfile; beside an AntV package installed, as that wave's npm malware, once; alone, as the AntV
+# wave's npm malware, never as a file to check as well.
+rm -rf "$WORK/dz-nxk" "$WORK/dz-nxka" "$WORK/dz-nxkl" "$WORK/dz-nxk0"; cp -R "$WORK/dz-nx" "$WORK/dz-nxk"
 mkdir -p "$WORK/dz-nxk/.local/share/kitty" "$WORK/dz-nxk/Library/LaunchAgents"
 : > "$WORK/dz-nxk/.local/share/kitty/cat.py"; : > "$WORK/dz-nxk/Library/LaunchAgents/com.user.kitty-monitor.plist"
-cp -R "$WORK/dz-nxk" "$WORK/dz-nxka"; mkdir -p "$WORK/dz-nxka/code/a"
-printf '{"lockfileVersion":3,"packages":{"node_modules/size-sensor":{"version":"1.0.4","resolved":"https://registry.npmjs.org/size-sensor/-/size-sensor-1.0.4.tgz"}}}\n' > "$WORK/dz-nxka/code/a/package-lock.json"
+cp -R "$WORK/dz-nxk" "$WORK/dz-nxkl"; mkdir -p "$WORK/dz-nxkl/code/a"
+printf '{"lockfileVersion":3,"packages":{"node_modules/size-sensor":{"version":"1.0.4","resolved":"https://registry.npmjs.org/size-sensor/-/size-sensor-1.0.4.tgz"}}}\n' > "$WORK/dz-nxkl/code/a/package-lock.json"
+cp -R "$WORK/dz-nxkl" "$WORK/dz-nxka"; mkdir -p "$WORK/dz-nxka/code/a/node_modules/size-sensor"; printf '{"name":"size-sensor","version":"1.0.4"}\n' > "$WORK/dz-nxka/code/a/node_modules/size-sensor/package.json"
 cp -R "$WORK/clean" "$WORK/dz-nxk0"; mkdir -p "$WORK/dz-nxk0/.local/share/kitty"; : > "$WORK/dz-nxk0/.local/share/kitty/cat.py"
-for nk in dz-nxk dz-nxka dz-nxk0; do dzrun "$WORK/$nk" | tr -s ' \n' '  ' > "$WORK/$nk.txt"; done
+for nk in dz-nxk dz-nxka dz-nxkl dz-nxk0; do dzrun "$WORK/$nk" | tr -s ' \n' '  ' > "$WORK/$nk.txt"; done
 has    "the kitty-monitor files Nx Console leaves are listed with it" 'nrwl\.angular-console 18\.95\.0 \(Nx Console 18\.95\.0, May 2026\), installed .*~/\.local/share/kitty/cat\.py the kitty-monitor backdoor Nx Console 18\.95\.0 installed' "$WORK/dz-nxk.txt"
 hasnot "and not as npm malware too"                     'npm malware signs of the malware found|the AntV wave.s kitty-monitor backdoor' "$WORK/dz-nxk.txt"
 has    "and the fix says to delete the startup files"   'delete the startup files listed there' "$WORK/dz-nxk.txt"
 has    "beside an AntV package, they are that wave's npm malware" 'size-sensor 1\.0\.4 \(AntV account takeover, May 2026\).*~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor' "$WORK/dz-nxka.txt"
 hasnot "and are not listed with the extension as well"  'Nx Console 18\.95\.0 installed' "$WORK/dz-nxka.txt"
+has    "beside an AntV version only in a lockfile, they stay with the extension" '~/\.local/share/kitty/cat\.py the kitty-monitor backdoor Nx Console 18\.95\.0 installed' "$WORK/dz-nxkl.txt"
+has    "and the headline names only the extension's malware" 'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-nxkl.txt"
 has    "alone, the backdoor is the AntV wave's npm malware" 'npm malware signs of the malware found ~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor' "$WORK/dz-nxk0.txt"
 hasnot "and not a file to check as well"                'a startup file to check|Nx Console 18\.95\.0 installed' "$WORK/dz-nxk0.txt"
 # GlassWorm's invisible-code wave (Aikido, March 2026): its Marketplace extension at the version the post names.
