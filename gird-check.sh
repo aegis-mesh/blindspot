@@ -1841,8 +1841,9 @@ aa_hit() { # file pattern|pattern...
     { for (i = 1; i <= n; i++) if (!(i in got) && (toml || (NR == 1) == !(i in in_)) && $0 ~ re[i]) got[i] = 1 }
     END { for (i = 1; i <= n; i++) if ((i in neg) == (i in got)) exit 1; exit 0 }'
 }
-# Keys that make Claude Code run a command: hooks and its helper commands.
-CMD_KEYS='apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
+# Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
+# reference lists each as running your own command, set from any settings file.
+CMD_KEYS='apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper|fileSuggestion|subagentStatusLine'
 while IFS= read -r f; do
   case "$f" in */.claude/settings.json|*/.claude/settings.local.json) ;; *) continue ;; esac
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
