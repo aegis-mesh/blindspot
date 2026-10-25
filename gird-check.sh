@@ -7122,9 +7122,12 @@ if [ "$WIPER_HIT" -eq 1 ]; then
   while IFS= read -r l; do [ -n "$l" ] && emit "        $(short "$l")"; done <<EOF
 $WIPER
 EOF
+  # The commands go one to a line, never wrapped, so each can be copied whole.
   case "$OS" in
-    Darwin) _stop="launchctl bootout gui/$(id -u 2>/dev/null)/com.user.gh-token-monitor, then pkill -f gh-token-monitor" ;;
-    Linux)  _stop="systemctl --user disable --now gh-token-monitor.service, then pkill -f gh-token-monitor" ;;
+    Darwin) _stop="launchctl bootout gui/$(id -u 2>/dev/null)/com.user.gh-token-monitor
+pkill -f gh-token-monitor" ;;
+    Linux)  _stop="systemctl --user disable --now gh-token-monitor.service
+pkill -f gh-token-monitor" ;;
     *)      _stop="pkill -f gh-token-monitor" ;;
   esac
   # Git for Windows has no pkill: PowerShell deletes the scheduled task that starts it at logon (its name in
@@ -7134,7 +7137,11 @@ EOF
   # Git Bash from rewriting /Delete as a path.
   [ "$WIN" -eq 1 ] && _stop="powershell -NoProfile -Command 'schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like \"*gh-token-monitor*\" -and \$_.ProcessId -ne \$PID } | Invoke-CimMethod -MethodName Terminate'"
   wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and in the TanStack wave it tries to erase the home folder." 8 "        " "        " "$RED"
-  wrap "Stop it with $_stop, then delete the files above." 8 "        " "        " "$RED"
+  wrap "Stop it first, one command at a time:" 8 "        " "        " "$RED"
+  while IFS= read -r _c; do [ -n "$_c" ] && emit "          $_c"; done <<EOF
+$_stop
+EOF
+  wrap "Then delete the files listed above." 8 "        " "        " "$RED"
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
   if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then

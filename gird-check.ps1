@@ -6158,11 +6158,14 @@ if ($WIPER_HIT -eq 1) {
   foreach ($l in $Wiper) { Emit "        $(Short $l)" }
   # On Windows a scheduled task named gh-token-monitor starts it at logon (Tensorlake's advisory). Deleting the
   # task does not end its running program, so the process is ended too.
-  if ($OnWindows) { $stop = 'schtasks /Delete /TN gh-token-monitor /F, then Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate, then ' }
-  elseif (Is-Dir '/System/Library/CoreServices') { $uidv = ''; try { $uidv = [string](& id -u 2>$null) } catch { }; $stop = "launchctl bootout gui/$uidv/com.user.gh-token-monitor, then pkill -f gh-token-monitor, then " }
-  else { $stop = 'systemctl --user disable --now gh-token-monitor.service, then pkill -f gh-token-monitor, then ' }
+  # The commands go one to a line, never wrapped, so each can be copied whole.
+  if ($OnWindows) { $stop = @('schtasks /Delete /TN gh-token-monitor /F', 'Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate') }
+  elseif (Is-Dir '/System/Library/CoreServices') { $uidv = ''; try { $uidv = [string](& id -u 2>$null) } catch { }; $stop = @("launchctl bootout gui/$uidv/com.user.gh-token-monitor", 'pkill -f gh-token-monitor') }
+  else { $stop = @('systemctl --user disable --now gh-token-monitor.service', 'pkill -f gh-token-monitor') }
   Wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and in the TanStack wave it tries to erase the home folder." 8 '        ' '        ' $cRed
-  Wrap "Stop it with $($stop)delete the files above." 8 '        ' '        ' $cRed
+  Wrap 'Stop it first, one command at a time:' 8 '        ' '        ' $cRed
+  foreach ($stopCmd in $stop) { Emit "          $stopCmd" }
+  Wrap 'Then delete the files listed above.' 8 '        ' '        ' $cRed
 }
 if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {

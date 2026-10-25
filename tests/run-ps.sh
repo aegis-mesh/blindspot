@@ -853,8 +853,9 @@ psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmno3.txt"
 chmod 644 "$WORK/npmok/.npm/_cacache/index-v5/aa/0e9"
 has    "an unreadable index file is not called clean"  "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno3.txt"
 # Windows: no launchctl or systemctl, a PowerShell way to stop the wiper.
-psrun "$WORK/home" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
-has    "Windows is told how to stop the wiper"         'Stop it with schtasks /Delete /TN gh-token-monitor /F, then Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate, then delete the files above' "$WORK/wwin.txt"
+psrun "$WORK/home" OS=Windows_NT -- -Offline > "$WORK/wwin-raw.txt" 2>&1; tr -s ' \n' '  ' < "$WORK/wwin-raw.txt" > "$WORK/wwin.txt"
+has    "the stop command is printed whole, on a line of its own" '^ +Get-CimInstance Win32_Process \| Where-Object CommandLine -like .*Invoke-CimMethod -MethodName Terminate$' "$WORK/wwin-raw.txt"
+has    "Windows is told how to stop the wiper"         'Stop it first, one command at a time: schtasks /Delete /TN gh-token-monitor /F Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate' "$WORK/wwin.txt"
 hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl' "$WORK/wwin.txt"
 # On Windows it lives in %LOCALAPPDATA%\gh-token-monitor, started at logon by a scheduled task of that name
 # (Tensorlake's advisory GHSA-8g63-53c9-65j2): found there, the stop deletes the task, and every rotate waits.
@@ -863,7 +864,7 @@ mkdir -p "$WORK/wlad/AppData/Local/gh-token-monitor"; : > "$WORK/wlad/AppData/Lo
 psrun "$WORK/wlad" OS=Windows_NT -- -Offline -Full > "$WORK/wlad.txt" 2>&1
 tr -s ' \n' '  ' < "$WORK/wlad.txt" > "$WORK/wlad1.txt"
 has    "Windows: gh-token-monitor's folder in LOCALAPPDATA is a waiting wiper" 'a wiper is waiting ~/AppData/Local/gh-token-monitor Don' "$WORK/wlad1.txt"
-has    "Windows: the stop deletes its scheduled task first" 'Stop it with schtasks /Delete /TN gh-token-monitor /F, then Get-CimInstance' "$WORK/wlad1.txt"
+has    "Windows: the stop deletes its scheduled task first" 'one command at a time: schtasks /Delete /TN gh-token-monitor /F Get-CimInstance' "$WORK/wlad1.txt"
 _u=$(unwaited "$WORK/wlad.txt")
 if grep -q 'ACT NOW: REMOVE GH-TOKEN-MONITOR' "$WORK/wlad.txt" && grep -q 'rotate every key this machine could reach\. Only once gh-token-monitor' "$WORK/wlad1.txt" && [ -z "$_u" ]; then
   ok "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait"
