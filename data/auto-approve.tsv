@@ -26,9 +26,10 @@
 # project's .vscode/settings.json. A project's chat.tools.autoApprove is the setting CVE-2025-53773
 # wrote; section 2 of the scripts lists it as a sign of that attack, not as a setting in force.
 # VS Code added chat.permissions.default, the permission level new chats start with: autoApprove
-# (Bypass Approvals in its picker, VS Code 1.143) and autopilot run every tool call without asking
-# (VS Code's AI settings reference and approvals page; the values and labels from
-# chat.shared.contribution.ts). It declares no scope, and VS Code reads its merged value, so a
+# ("Allow all" in the chat's permission picker and "Bypass Approvals" in the Settings editor, at VS Code
+# 1.143.1) and autopilot run every tool call without asking (VS Code's AI settings reference and
+# approvals page; the values and labels from chat.shared.contribution.ts and
+# permissionPickerActionItem.ts). It declares no scope, and VS Code reads its merged value, so a
 # project's .vscode/settings.json sets it too: section 2 of the scripts lists such a project's copy,
 # as a setting a cloned project brings, not as a line here.
 # chat.defaultConfiguration, an object whose approvals and mode would have to be read inside it, is
