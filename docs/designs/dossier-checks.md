@@ -26,8 +26,9 @@ A new data file, `data/auto-approve.tsv`: agent, os, path (the path tokens of
 file is read as one line through the scripts' `flat` (comments are its job), and a match starts at
 the text, a `{` or a `,` and ends at the text's end, a `,` `}` `#` or `/`. A `.toml` file is read
 line by line: a `#` line is skipped, a match is a whole line up to a `#` comment (so a setting
-inside an inline table, a profile written as one, does not count), and only the lines before the
-first `[table]` count.
+inside an inline table, a profile written as one, does not count), a value in double quotes also
+matches the same value in single quotes (a TOML literal string, `approval_policy = 'never'`), and
+only the lines before the first `[table]` count.
 
 | agent | file | patterns | source |
 |---|---|---|---|
@@ -45,12 +46,14 @@ section 2 lists it under "Project settings that act as soon as the folder is ope
 sign of that attack (or of an old VS Code) that VS Code 1.104 and later ignore; it does not lower
 the score.
 
-VS Code 1.124 added `chat.permissions.default`, the permission level new chats start with. Its values
+VS Code added `chat.permissions.default`, the permission level new chats start with. Its values
 `autoApprove` ("Allow all") and `autopilot` run every tool call without asking, so in the user
 settings they are an agent set to run without asking, like the global setting. The setting declares no
-scope, so a project's `.vscode/settings.json` may set it as well; that copy is not read yet.
-`chat.defaultConfiguration`, an object whose `approvals` and `mode` would have to be read inside it,
-is not read either.
+scope, and VS Code reads its merged value (`chatInputPart.ts`), so a project's `.vscode/settings.json`
+sets it too: section 2 lists such a project's copy under "Project settings that act as soon as the
+folder is opened", as a setting a cloned project brings (it does not lower the score), and a project
+at the default level is not listed. `chat.defaultConfiguration`, an object whose `approvals` and
+`mode` would have to be read inside it, is not read either.
 
 Not built: Gemini CLI (its YOLO mode cannot be saved in settings), the Cursor editor (stored in
 SQLite), Cursor CLI (the docs do not say what `unrestricted` does), Kiro (YAML rules need a parser),
@@ -173,8 +176,8 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   `openvsx` line is not looked for.
 - Comments in a JSONC settings file are `flat`'s to remove; a setting the comment removal leaves in
   place is read if it sits at a boundary (`/*, "key": true */`).
-- Codex values written in single quotes, and a `[profiles.x]` table made the default by
-  `profile = "x"`, are not read.
+- A `[profiles.x]` table made the default by `profile = "x"` is not read. Codex 0.134.0 and later
+  support neither: a profile is its own file, `~/.codex/<name>.config.toml`, used with `--profile`.
 - A link to a link whose own text does not end in `authorized_keys` (`keys -> notes.txt`, where
   `notes.txt -> ../.ssh/authorized_keys`): `notes.txt` is listed, `keys` is not. On Windows,
   PowerShell does not resolve a linked folder on the way. Before `authorized_keys` exists, a link that

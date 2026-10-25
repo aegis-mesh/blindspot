@@ -1,6 +1,6 @@
 # Tests in tests/run.sh that have no twin in tests/run-ps.sh, one per line: the test's name as
-# tests/parity.sh reads it, a tab, and why it can't or need not run for gird-check.ps1. A name
-# listed twice covers two of its uses. "Not written yet" is not a reason: write the twin.
+# tests/parity.sh reads it, a tab, and why it can't or need not run for gird-check.ps1. Each name
+# once, however often run.sh writes it. "Not written yet" is not a reason: write the twin.
 a Python incident that is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a Python name with a hyphen	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a Python version with another os	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
@@ -86,6 +86,7 @@ the text backstop fails on a test that only fails	tests tests/parity-text.sh, th
 the text backstop fails on a bash test with no twin	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
 the text backstop fails on a deleted twin	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
 the text backstop fails on a file that ends inside a quote	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a bash-only line listed twice	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
 the text backstop finds a twin for every test	tests/parity-text.sh is a bash backstop to tests/parity.sh, which the PowerShell job runs on both suites' names
 parity.sh passes two lists that agree	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 parity.sh fails on a bash test with no twin	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once

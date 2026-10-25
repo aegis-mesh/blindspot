@@ -193,39 +193,19 @@ while IFS= read -r l; do
     *) echo "  bash-only.txt needs the name, a tab and the reason: $l"; FAIL=1 ;;
   esac
 done < "$W/only-lines"
-cut -f1 "$W/only-lines" | LC_ALL=C sort > "$W/only"
-counts() { LC_ALL=C uniq -c "$1" | sed "s/^ *\([0-9][0-9]*\) /\1$T/"; }
-counts "$W/bash" > "$W/bash.c"; counts "$W/ps" > "$W/ps.c"; counts "$W/only" > "$W/only.c"
-LC_ALL=C awk -F'\t' -v OFS='\t' '
-  FILENAME == ARGV[1] { b[$2] = $1; next }
-  FILENAME == ARGV[2] { p[$2] = $1; next }
-  { o[$2] = $1 }
-  END {
-    for (n in b) {
-      ob = 0; if (n in o) ob = o[n]
-      pb = 0; if (n in p) pb = p[n]
-      if (b[n] - ob > pb) print "missing", n, b[n], pb, ob
-    }
-    for (n in o) {
-      if (!(n in b)) print "stale", n
-      else if (o[n] > b[n]) print "toomany", n, b[n], 0, o[n]
-      else if ((n in p) && p[n] >= b[n]) print "twinned", n
-    }
-    for (n in p) if (!(n in b)) print "psonly", n
-  }' "$W/bash.c" "$W/ps.c" "$W/only.c" | LC_ALL=C sort > "$W/report"
-while IFS="$T" read -r kind n bc pc oc; do
-  case "$kind" in
-    missing) FAIL=1
-      if [ "$bc" -gt 1 ]; then echo "  no PowerShell twin: $n (run.sh has it $bc times, run-ps.sh $pc, bash-only.txt $oc)"; else echo "  no PowerShell twin: $n"; fi ;;
-    stale)   FAIL=1; echo "  bash-only.txt names a test run.sh does not have: $n" ;;
-    toomany) FAIL=1; echo "  bash-only.txt lists $n $oc times, run.sh has it $bc times" ;;
-    twinned) FAIL=1; echo "  bash-only.txt lists $n, but run-ps.sh has it: remove the line" ;;
-  esac
-done < "$W/report"
-NB=$(grep -c . "$W/bash"); NP=$(grep -c . "$W/ps"); NO=$(grep -c . "$W/only"); NPO=$(grep -c '^psonly' "$W/report")
+# Sets, as in tests/parity.sh: one name written twice in a suite (a test and its skip in an if and an
+# else, or a name the per-bash loop runs) is one test.
+cut -f1 "$W/only-lines" | LC_ALL=C sort > "$W/only-all"; LC_ALL=C uniq "$W/only-all" > "$W/only"
+LC_ALL=C uniq -d "$W/only-all" | sed 's/^/  bash-only.txt lists twice: /' > "$W/report"
+LC_ALL=C comm -23 "$W/bash" "$W/ps" | LC_ALL=C comm -23 - "$W/only" | sed 's/^/  no PowerShell twin: /' >> "$W/report"
+LC_ALL=C comm -23 "$W/only" "$W/bash" | sed 's/^/  bash-only.txt names a test run.sh does not have: /' >> "$W/report"
+LC_ALL=C comm -12 "$W/only" "$W/ps" | LC_ALL=C comm -12 - "$W/bash" | sed 's/^\(.*\)$/  bash-only.txt lists \1, but run-ps.sh has it: remove the line/' >> "$W/report"
+if [ -s "$W/report" ]; then FAIL=1; cat "$W/report"; fi
+LC_ALL=C comm -13 "$W/bash" "$W/ps" > "$W/psonly"
+NB=$(grep -c . "$W/bash"); NP=$(grep -c . "$W/ps"); NO=$(grep -c . "$W/only"); NPO=$(grep -c . "$W/psonly")
 echo "  $NB tests in run.sh, $NP in run-ps.sh, $NO of them bash-only"
 if [ "$NPO" -gt 0 ]; then
   echo "  $NPO PowerShell tests with no bash twin:"
-  grep '^psonly' "$W/report" | cut -f2 | sed 's/^/    /'
+  sed 's/^/    /' "$W/psonly"
 fi
 exit "$FAIL"

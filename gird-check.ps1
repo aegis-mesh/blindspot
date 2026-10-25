@@ -1150,9 +1150,10 @@ function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) 
 # file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
 # a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts.
 # A .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
-# (so a setting inside an inline table, a profile written as one, does not count), and only the
-# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
-# is used.
+# (so a setting inside an inline table, a profile written as one, does not count), a value in double
+# quotes also matches the same value in single quotes (a TOML literal string), and only the lines
+# before the first [table] count: a setting under [profiles.x] applies only when that profile is
+# used, and Codex 0.134.0 and later read no such table from config.toml.
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
   if ($toml) { $t = Read-Text $f } else { $t = Flat-Text $f }
@@ -1166,12 +1167,17 @@ function Aa-Hit([string]$f, $pats) {
     if ($toml -and $l.StartsWith('[')) { break }
     for ($i = 0; $i -lt $pp.Count; $i++) {
       if ($got[$i]) { continue }
+      if ($toml) {
+        foreach ($q in @($pp[$i], $pp[$i].Replace('"', "'"))) {
+          if ($l.StartsWith($q, [StringComparison]::Ordinal) -and ($l.Length -eq $q.Length -or [string]$l[$q.Length] -eq '#')) { $got[$i] = $true }
+        }
+        continue
+      }
       $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
       while ($k -ge 0) {
         $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
         $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
-        if ($toml) { $hit = ($b -eq '' -and ($a -eq '' -or $a -eq '#')) }
-        else { $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a))) }
+        $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a)))
         if ($hit) { $got[$i] = $true; break }
         $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
       }
@@ -1211,15 +1217,22 @@ foreach ($f in $TaskFiles) {
   $t = Flat-Text $f
   if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
 }
-# A project's .vscode/settings.json with "chat.tools.autoApprove": true, the setting the
-# CVE-2025-53773 prompt injection made Copilot write so it could run commands without asking. VS Code
-# 1.104 renamed it without migration, so current VS Code ignores it: a sign of that attack, or of an
-# old VS Code, not a setting in force. A thing to look at, not an agent set to run without asking.
+# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" (Allow all) or
+# "autopilot" starts new Copilot chats that run every tool call without asking, and the setting
+# declares no scope, so VS Code takes it from a project too: a cloned repo can bring it.
+# "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
+# write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
+# current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
+# Both are things to look at in a project, not an agent set to run without asking.
 foreach ($f in $VscSettings) {
   if (-not (Is-File $f)) { continue }
+  $w = New-Object System.Collections.Generic.List[string]
+  if (Aa-Hit $f @('"chat.permissions.default": "autopilot"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot') }
+  elseif (Aa-Hit $f @('"chat.permissions.default": "autoApprove"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove') }
   if (Aa-Hit $f @('"chat.tools.autoApprove": true')) {
-    Auto-Row $f 'auto-approve Copilot''s tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it' ([string](Flat-Text $f))
+    $w.Add('auto-approve Copilot''s tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it')
   }
+  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') ([string](Flat-Text $f)) }
 }
 $N_AUTO = $AutoRows.Count
 # Row 02 counts projects: the folders holding these settings.
@@ -1270,8 +1283,15 @@ function Key-Place([string]$f) {
 $KeyRows = New-Object System.Collections.Generic.List[object]
 $KEY_FILES = 0; $HIST_KEYS = 0; $ProvIds = New-Object System.Collections.Generic.List[string]; $KeyFirst = $null
 $KeyPlaces = New-Object System.Collections.Generic.List[string]; $ProvTally = New-Object System.Collections.Generic.List[string]
+# A file that is there but can't be read (a root-owned .env a container wrote, a file made 000, one
+# another program holds open) was not checked: section 3 names it and the check is partial, never
+# "no keys". A link to nothing is not one, as in gird-check.sh.
+$KeyUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $Candidates) {
-  if (-not (Has-Match $f $RxKeys)) { continue }
+  if (-not (Has-Match $f $RxKeys)) {
+    if ((Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $KeyUnread.Add($f) }
+    continue
+  }
   $p = @(Providers-In $f)
   if ($p.Count -eq 0) { continue }
   $ptxt = $p -join ', '
@@ -1286,7 +1306,8 @@ foreach ($f in $Candidates) {
   }
   $KeyRows.Add(@($f, $ptxt))
 }
-if ($KEY_FILES -eq 0) { Progress 'No keys in shell profiles, history, agent configs or .env files' }
+if ($KEY_FILES -eq 0 -and $KeyUnread.Count -gt 0) { Progress "No keys in the files read, but $(Plural $KeyUnread.Count 'file' 'files') could not be read" }
+elseif ($KEY_FILES -eq 0) { Progress 'No keys in shell profiles, history, agent configs or .env files' }
 
 # Login files any agent you run can read.
 $Logins = New-Object System.Collections.Generic.List[string]; $LoginIds = New-Object System.Collections.Generic.List[string]
@@ -2769,9 +2790,9 @@ if (-not $OptOffline) {
 # has every detail.
 # ===========================================================================
 # A check that was not done in full never leaves the headline green: the sessions were partly
-# checked, part of npm's cache or an extension folder could not be read, or a file took too long.
-# The headline then says what it can: no findings in the paths checked.
-$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
+# checked, a key file, part of npm's cache or an extension folder could not be read, or a file took
+# too long. The headline then says what it can: no findings in the paths checked.
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -2872,11 +2893,22 @@ if ($N_AK -gt 0) {
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
-if ($KEY_FILES -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
-elseif ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
+# With files that could not be read, this line comes below, with them.
+if ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
+elseif ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
 $shown = 0
 foreach ($r in $KeyRows) { $shown++; if ($shown -le 20) { Pair "$cRed$gX$cRst" (Short $r[0]) 44 $r[1] } }
 if ($KEY_FILES -gt 20) { Emit "        ${cDim}and $($KEY_FILES - 20) more$cRst" }
+# The files that could not be read, named, so none of them is taken for one without keys.
+if ($KeyUnread.Count -gt 0) {
+  $ku = Plural $KeyUnread.Count 'file' 'files'
+  if ($KEY_FILES -gt 0) { $kt = "$ku could not be read, so this is not the full list:" }
+  elseif ($HOME_PARTIAL -eq 1) { $kt = "No AI or cloud keys in the files read, but $ku and some folders in your home could not be read:" }
+  else { $kt = "No AI or cloud keys in the files read, but $ku could not be read:" }
+  Wrap $kt 8 "     $cYel!$cRst  " '        '
+  foreach ($f in ($KeyUnread | Select-Object -First 20)) { Emit "        $(Short $f)" }
+  if ($KeyUnread.Count -gt 20) { Emit "        ${cDim}and $($KeyUnread.Count - 20) more$cRst" }
+}
 if ($SlowFiles.Count -gt 0) {
   Blank
   Emit "     $cYel!$cRst  $cBold$SlowText$cRst"
@@ -3104,6 +3136,7 @@ else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
 elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) holds $($KeyFirst[1]) keys" }
 elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session file' 'agent session files'): $($SessRows[0][0])" }
+elseif ($KeyUnread.Count -gt 0) { $G3 = "$cYel!$cRst"; $D3 = "none found, but $(Plural $KeyUnread.Count 'file' 'files') could not be read" }
 elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessions partly checked' }
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
 elseif ($HOME_PARTIAL -eq 1) { $G3 = "$cYel!$cRst"; $D3 = 'none found, but some folders were not read' }
