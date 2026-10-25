@@ -2345,7 +2345,10 @@ done
 # the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
 # before any token is revoked. A file in the shared /tmp counts only if this person owns it.
 # A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
-# is that incident's sign, shown with the extensions (EXT_PERSIST), never called npm malware.
+# is that incident's sign, shown with the extensions (EXT_PERSIST), never called npm malware, and only
+# next to an extension that shipped malware: GlassWorm's is named com.user.nodestart.plist, the kind
+# of name people give their own LaunchAgents, and Socket gives the name as an example. Alone, it is a
+# file to check (EXT_CHECK), not a compromised machine.
 EXT_INCS=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""
@@ -2374,10 +2377,14 @@ fi
 "
 [ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_REFS" | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\t%s\n' "$(rowsafe "$_f")" "$WORM_REF_NOTE"; done)
 "
+EXT_CHECK=""; EXT_CHECK_TAGS=""
+if [ -z "$EXT_ROWS" ] && [ -n "$EXT_PERSIST" ]; then
+  EXT_CHECK=$EXT_PERSIST; EXT_CHECK_TAGS=$EXT_PERSIST_TAGS; EXT_PERSIST=""; EXT_PERSIST_TAGS=""
+fi
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
-# extension incident's startup file is its sign too.
+# extension incident's startup file next to it is its sign too.
 EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
 EXT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST_TAGS"; } | grep -v '^$' | sort -u)
 ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
@@ -2386,6 +2393,7 @@ elif [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="malware in an editor extension"; MAL_S
 else MAL_WHAT="npm malware"; MAL_SHORT="npm"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "A wiper waits for a GitHub token to be revoked: gh-token-monitor"
 elif [ "$ANY_MAL" -eq 1 ]; then progress x "Signs of $MAL_WHAT found"
+elif [ -n "$EXT_CHECK" ]; then progress w "A startup file to check: $(short "$(printf '%s\n' "$EXT_CHECK" | head -n 1 | cut -f1)")"
 else progress o "No npm malware in $(plural "$N_LOCK" lockfile lockfiles), global installs or npm's cache"; fi
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
 # file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
@@ -2526,9 +2534,8 @@ todo() { # section text
 [ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
 if [ "$EXT_HIT" -eq 1 ]; then
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
-  if [ -n "$EXT_ROWS" ] && [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
-  elif [ -n "$EXT_ROWS" ]; then _edo="Uninstall the extensions listed in section 5 and"
-  else _edo="Delete the startup file listed in section 5 and"; fi
+  if [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
+  else _edo="Uninstall the extensions listed in section 5 and"; fi
   todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
 fi
 # An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
@@ -2544,6 +2551,7 @@ advice_todos() { # level
     todo 5 "$_a"
   done
 }
+[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
@@ -3025,6 +3033,17 @@ EOF
 $EXT_PERSIST
 EOF
   for _t in $EXT_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
+elif [ -n "$EXT_CHECK" ]; then
+  pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}a startup file to check${RST}"
+  while IFS="$TAB" read -r f p; do
+    [ -n "$f" ] || continue
+    emit "        $(short "$f")"
+    emit "          has the name of a file that $p"
+  done <<EOF
+$EXT_CHECK
+EOF
+  wrap "No editor extension that shipped malware was found. Open the file and check what it starts: if you did not set it up yourself, treat this machine as compromised." 8 "        " "        "
+  for _t in $EXT_CHECK_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 fi
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
@@ -3151,6 +3170,7 @@ elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5=
 elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
+elif [ -n "$EXT_CHECK" ]; then G5="${YEL}!${RST}"; D5="a startup file to check, see section 5"
 elif [ "$NPM_UPD" -eq 1 ] && [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="npm and Python packages to update, see section 5"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
 elif [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="a Python package to update, see section 5"

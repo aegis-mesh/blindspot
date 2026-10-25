@@ -1852,7 +1852,10 @@ foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } e
 $Wiper = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
 # A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
-# is that incident's sign, shown with the extensions ($ExtPersist), never called npm malware.
+# is that incident's sign, shown with the extensions ($ExtPersist), never called npm malware, and only
+# next to an extension that shipped malware: GlassWorm's is named com.user.nodestart.plist, the kind
+# of name people give their own LaunchAgents, and Socket gives the name as an example. Alone, it is a
+# file to check ($ExtCheck), not a compromised machine.
 $ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
 $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
@@ -1876,10 +1879,14 @@ if ($OnWindows) {
 }
 foreach ($f in $WormFiles) { $Persist.Add(@($f, (Planted-Note ([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) + '/' + [IO.Path]::GetFileName($f))))) }
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
+$ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
+if ($ExtRows.Count -eq 0 -and $ExtPersist.Count -gt 0) {
+  $ExtCheck.AddRange($ExtPersist); $ExtCheckTags.AddRange($ExtPersistTags); $ExtPersist.Clear(); $ExtPersistTags.Clear()
+}
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
-# extension incident's startup file is its sign too.
+# extension incident's startup file next to it is its sign too.
 $EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
 $ExtTags = @((@(foreach ($r in $ExtRows) { $r[2] }) + @($ExtPersistTags)) | Sort-Object -Unique -CaseSensitive)
 $ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
@@ -1888,6 +1895,7 @@ elseif ($EXT_HIT -eq 1) { $MalWhat = 'malware in an editor extension'; $MalShort
 else { $MalWhat = 'npm malware'; $MalShort = 'npm' }
 if ($WIPER_HIT -eq 1) { Progress 'A wiper waits for a GitHub token to be revoked: gh-token-monitor' }
 elseif ($ANY_MAL -eq 1) { Progress "Signs of $MalWhat found" }
+elseif ($ExtCheck.Count -gt 0) { Progress "A startup file to check: $(Short $ExtCheck[0][0])" }
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH, a
 # file or a folder.
 # >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1974,9 +1982,8 @@ if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First st
 if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
 if ($EXT_HIT -eq 1) {
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
-  if ($ExtRows.Count -gt 0 -and $ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
-  elseif ($ExtRows.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5 and' }
-  else { $edo = 'Delete the startup file listed in section 5 and' }
+  if ($ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
+  else { $edo = 'Uninstall the extensions listed in section 5 and' }
   Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
 }
 # An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
@@ -1991,6 +1998,7 @@ function Add-Advice([string]$level) {
     Add-Todo 5 $a
   }
 }
+if ($ExtCheck.Count -gt 0) { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
@@ -2330,6 +2338,11 @@ if ($EXT_HIT -eq 1) {
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
   foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   foreach ($t in $ExtTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
+} elseif ($ExtCheck.Count -gt 0) {
+  Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}a startup file to check$cRst"
+  foreach ($r in $ExtCheck) { Emit "        $(Short $r[0])"; Emit "          has the name of a file that $($r[1])" }
+  Wrap 'No editor extension that shipped malware was found. Open the file and check what it starts: if you did not set it up yourself, treat this machine as compromised.' 8 '        ' '        '
+  foreach ($t in $ExtCheckTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 }
 foreach ($p in $Platforms) {
   if ($PlatFound -contains $p.Id) {
@@ -2403,6 +2416,7 @@ elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalS
 elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
+elseif ($ExtCheck.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'a startup file to check, see section 5' }
 elseif ($NPM_UPD -eq 1 -and $PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'npm and Python packages to update, see section 5' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
 elseif ($PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'a Python package to update, see section 5' }

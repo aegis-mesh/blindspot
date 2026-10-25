@@ -730,12 +730,17 @@ hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the
 has    "extensions alone: their own fix names the extensions and the startup file" 'Treat this machine as compromised\. Uninstall the extensions listed in section 5, delete the startup file listed there, and rotate every key this machine could reach\.' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own summary row"      'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-ext-sum.txt"
 has    "extensions alone: the link says ex, not nm"   '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-ext.txt"
-# The LaunchAgent with the extension already gone is still GlassWorm's sign, and the fix says what is listed.
-rm -rf "$WORK/dz-la"; cp -R "$WORK/clean" "$WORK/dz-la"; mkdir -p "$WORK/dz-la/Library/LaunchAgents"; : > "$WORK/dz-la/Library/LaunchAgents/com.user.nodestart.plist"
+# GlassWorm's LaunchAgent name alone, with no extension that shipped malware, is a file to check, not
+# malware: com.user. is how people name their own LaunchAgents, and this one starts a node server.
+rm -rf "$WORK/dz-la"; cp -R "$WORK/clean" "$WORK/dz-la"; mkdir -p "$WORK/dz-la/Library/LaunchAgents"
+printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n\t<key>Label</key>\n\t<string>com.user.nodestart</string>\n\t<key>ProgramArguments</key>\n\t<array>\n\t\t<string>/opt/homebrew/bin/node</string>\n\t\t<string>/Users/me/projects/homelab/server.js</string>\n\t</array>\n</dict>\n</plist>\n' > "$WORK/dz-la/Library/LaunchAgents/com.user.nodestart.plist"
 dzrun "$WORK/dz-la" | tr -s ' \n' '  ' > "$WORK/dz-la.txt"
-has    "the LaunchAgent alone: GlassWorm's row, with its sourced line" 'Editor extensions signs of the malware found ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login GlassWorm extensions, January 2026:' "$WORK/dz-la.txt"
-has    "the LaunchAgent alone: the fix names the startup file, not extensions" 'Treat this machine as compromised\. Delete the startup file listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-la.txt"
-has    "the LaunchAgent alone: the link says ex, not nm" '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-la.txt"
+dzrun "$WORK/dz-la" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-la-sum.txt"
+has    "the LaunchAgent alone: a startup file to check, with its sourced line" 'Editor extensions a startup file to check ~/Library/LaunchAgents/com\.user\.nodestart\.plist has the name of a file that starts the GlassWorm malware at login No editor extension that shipped malware was found\. Open the file and check what it starts: if you did not set it up yourself, treat this machine as compromised\. GlassWorm extensions, January 2026:' "$WORK/dz-la.txt"
+hasnot "the LaunchAgent alone: no act-now headline, malware row or compromised verdict" 'ACT NOW|SIGNS OF MALWARE|signs of the malware found|Treat this machine as compromised\.' "$WORK/dz-la.txt"
+has    "the LaunchAgent alone: the fix says to check it" 'Open the startup file listed in section 5 and check what it starts at login\. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach\.' "$WORK/dz-la.txt"
+has    "the LaunchAgent alone: row 05 asks to check it" 'Recent leaks +a startup file to check, see section 5' "$WORK/dz-la-sum.txt"
+has    "the LaunchAgent alone: the link says neither ex nor nm" '&nm=0&py=0&ex=0&wp=0' "$WORK/dz-la.txt"
 cp -R "$WORK/dz-ext" "$WORK/dz-both"; mkdir -p "$WORK/dz-both/code/ax"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/dz-both/code/ax/package-lock.json"
 dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"

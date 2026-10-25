@@ -17,7 +17,8 @@
 # Mastra: Socket. mistralai: its advisory. LiteLLM: its advisory, and the GitHub issue the advisory links for
 # the attack's details (BerriAI/litellm#47826), which names the .pc_ temp files and PRIVCOLLECT_ACTIVE.
 # GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
-# extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware.
+# extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware,
+# and only when an extension that shipped malware is found: alone, it is a file to check.
 # incident	os	kind	owner	path	note
 tanstack	all	wiper	no	~/Library/LaunchAgents/com.user.gh-token-monitor.plist	-
 tanstack	all	wiper	no	~/.config/systemd/user/gh-token-monitor.service	-
