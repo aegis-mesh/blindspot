@@ -1503,11 +1503,20 @@ HOME="$WORK/lmark" TMPDIR="$WORK/lmark/tmp" bash "$SCRIPT" --offline 2>&1 | tr -
 has    "finds a malware marker in TEMP"               'LiteLLM 1\.107\.0 +signs of the malware found ~/tmp/\.pc_once_1' "$WORK/lmark.txt"
 has    "with LiteLLM's own advice"                    'These files mean the malware ran here, and a \.pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
 hasnot "a marker alone names no environment to stop"  "Don't run Python or pip in these environments" "$WORK/lmark.txt"
-# Another user's file in the shared temp folder is not this person's sign: a link to a root-owned file stands in for one.
+# A link in the shared temp folder to another user's file is not this person's sign.
 cp -R "$WORK/clean" "$WORK/lmo"; mkdir -p "$WORK/lmo/tmp"; ln -s /etc/passwd "$WORK/lmo/tmp/.pc_once_1"
 HOME="$WORK/lmo" TMPDIR="$WORK/lmo/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmo.txt"
-has    "a temp file owned by someone else is not this person's hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmo.txt"
+has    "a link in the temp folder to another user's file is not this person's hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmo.txt"
 hasnot "and the file is not listed"                   'pc_once' "$WORK/lmo.txt"
+# Nor is another user's own file there, not a link: only where a file another user owns can be made
+# (CI, with passwordless sudo), so the owner check itself is what the test reaches.
+SKIPPING=""; { [ "${CI:-}" = true ] && sudo -n true 2>/dev/null; } || SKIPPING="needs passwordless sudo, as CI runners have, to make a file another user owns"
+if [ -z "$SKIPPING" ]; then
+  cp -R "$WORK/clean" "$WORK/lmr"; mkdir -p "$WORK/lmr/tmp"; sudo -n install -m 644 /dev/null "$WORK/lmr/tmp/.pc_once_1"
+  HOME="$WORK/lmr" TMPDIR="$WORK/lmr/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmr.txt"
+fi
+has    "another user's own file in the temp folder is not this person's hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmr.txt"
+SKIPPING=""
 # Nor is a file of this person's put under a marker's name by a link, hard or symbolic: in a shared
 # temp folder anyone can make one.
 cp -R "$WORK/clean" "$WORK/lmh"; mkdir -p "$WORK/lmh/tmp"; : > "$WORK/lmh/notes.txt"; ln "$WORK/lmh/notes.txt" "$WORK/lmh/tmp/.pc_once_1"
