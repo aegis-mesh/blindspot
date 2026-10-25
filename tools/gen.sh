@@ -76,7 +76,12 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if ($3 ~ /^(startup|temp)$/) ok = ok && $6 != "-" && $6 != "" && $6 !~ /["`$|\\]/; else ok = ok && $6 == "-"
           if ($3 == "temp") { if (($1 in tn) && tn[$1] != $6) ok = 0; tn[$1] = $6 }
           if (!ok) print "data/indicators.tsv: " $0 }'
-      rows data/planted.tsv | awk -F '\t' -v ids="$IDS" 'NF != 4 || $1 !~ /^\.(claude|vscode)$/ || $2 !~ /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/ || index(ids, " " $3 " ") == 0 || $4 == "" || $4 ~ /[\047"`$|\\]/ || seen[$1 "/" $2]++ { print "data/planted.tsv: " $0 }'
+      # A planted file's alone is yes or no, and its sha256 a comma-separated list of SHA-256 values
+      # or -; a yes file counts on its name, so it carries none.
+      rows data/planted.tsv | awk -F '\t' -v ids="$IDS" '
+        function shas_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ","); for (i = 1; i <= n; i++) if (a[i] !~ /^[0-9a-f]+$/ || length(a[i]) != 64) return 0; return 1 }
+        NF != 6 || $1 !~ /^\.(claude|vscode)$/ || $2 !~ /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/ || index(ids, " " $3 " ") == 0 || $4 == "" || $4 ~ /[\047"`$|\\]/ ||
+        $5 !~ /^(yes|no)$/ || !shas_ok($6) || ($5 == "yes" && $6 != "-") || seen[$1 "/" $2]++ { print "data/planted.tsv: " $0 }'
       rows data/auto-approve.tsv | awk -F '\t' "$PATH_OK"'
         function pat_ok(s) { return s ~ /[^[:space:]]/ && s !~ /[\047`$|\\]/ }
         { ok = NF >= 5 && $1 != "" && $1 !~ /[\047"`$|\\]/ && $2 ~ /^(all|mac|linux|win)$/ && $4 != "" && $4 !~ /[\047"`$|\\]/
@@ -268,28 +273,39 @@ rows data/indicators.tsv | awk -F '\t' "$PATH_PS"'
   END { print ")"; print "# <<< indicators" }' > "$WORK/indicators.ps1"
 
 # --- files planted in a project ----------------------------------------------
-# PLANTED_ERE matches the planted paths; WORM_RUN any planted file name in either folder, as a
-# hook or a task names it. A settings file that runs one is shown with "runs" and the note, or a
-# general line when the notes differ.
+# PLANTED_ERE matches the planted paths. WORM_RUN_ALONE matches, in either folder, the names only a
+# worm uses (alone yes) and WORM_RUN_WEAK the names projects use too (alone no), as a hook or a task
+# names them; either is empty when no line has that kind, and the scripts skip an empty one.
+# PLANTED_ALONE lists the alone paths, planted_sha a file's published SHA-256 values. A settings
+# file that runs one is shown with "runs" and the note, or a general line when the notes differ.
 rows data/planted.tsv | awk -F '\t' '
   function ere(s) { gsub(/\./, "\\.", s); return s }
-  { p[NR] = $1 "/" $2; nt[NR] = $4; n = NR
+  function run(f) { return f == "" ? "" : "\\.(" fo ")[/\\\\]+(" f ")" }
+  { p[NR] = $1 "/" $2; nt[NR] = $4; al[NR] = $5; sh[NR] = $6; n = NR
     if (!sf[$1]++) fo = fo (fo == "" ? "" : "|") substr($1, 2)
-    if (!sn[$2]++) fi = fi (fi == "" ? "" : "|") ere($2)
+    if ($5 == "yes" && !sa[$2]++) fa = fa (fa == "" ? "" : "|") ere($2)
+    if ($5 == "no" && !sw[$2]++) fw = fw (fw == "" ? "" : "|") ere($2)
     if (NR == 1) note = $4; else if (note != $4) note = "" }
   END {
     ref = note == "" ? "runs a file a worm plants" : "runs " note
     print "# >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it."
     printf "PLANTED=\047"; for (i = 1; i <= n; i++) printf "%s%s", (i > 1 ? "\n" : ""), p[i]; print "\047"
     printf "PLANTED_ERE=\047"; for (i = 1; i <= n; i++) printf "%s%s", (i > 1 ? "|" : ""), ere(p[i]); print "\047"
-    print "WORM_RUN=\047\\.(" fo ")[/\\\\]+(" fi ")\047"
+    printf "PLANTED_ALONE=\047"; k = 0; for (i = 1; i <= n; i++) if (al[i] == "yes") printf "%s%s", (k++ ? "\n" : ""), p[i]; print "\047"
+    print "WORM_RUN_ALONE=\047" run(fa) "\047"
+    print "WORM_RUN_WEAK=\047" run(fw) "\047"
     printf "planted_note() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " */%s) printf \047%%s\047 \047%s\047 ;;", p[i], nt[i]; print " esac; }"
+    printf "planted_sha() { case \"$1\" in"; for (i = 1; i <= n; i++) if (sh[i] != "-") { s = sh[i]; gsub(/,/, " ", s); printf " */%s) printf \047%%s\047 \047%s\047 ;;", p[i], s }; print " esac; }"
     print "WORM_REF_NOTE=\047" ref "\047"
     print "# <<< planted"
     print "# >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it." > "/dev/stderr"
-    print "$WormName = \047\\.(" fo ")[/\\\\]+(" fi ")\047" > "/dev/stderr"
+    print "$WormNameAlone = \047" run(fa) "\047" > "/dev/stderr"
+    print "$WormNameWeak = \047" run(fw) "\047" > "/dev/stderr"
     printf "function Planted-Note([string]$p) { switch -CaseSensitive ($p) {" > "/dev/stderr"
     for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", p[i], nt[i] > "/dev/stderr"; print " default { $null } } }" > "/dev/stderr"
+    printf "function Planted-Sha([string]$p) { switch -CaseSensitive ($p) {" > "/dev/stderr"
+    for (i = 1; i <= n; i++) if (sh[i] != "-") { s = sh[i]; gsub(/,/, " ", s); printf " \047%s\047 { \047%s\047 }", p[i], s > "/dev/stderr" }; print " default { \047\047 } } }" > "/dev/stderr"
+    printf "$PlantedAlone = @(" > "/dev/stderr"; k = 0; for (i = 1; i <= n; i++) if (al[i] == "yes") printf "%s\047%s\047", (k++ ? ", " : ""), p[i] > "/dev/stderr"; print ")" > "/dev/stderr"
     print "$WormRefNote = \047" ref "\047" > "/dev/stderr"
     print "# <<< planted" > "/dev/stderr"
   }' > "$WORK/planted.sh" 2> "$WORK/planted.ps1"

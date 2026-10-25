@@ -512,6 +512,8 @@ $AaFiles = New-Object System.Collections.Generic.List[string]
 $VscSettings = New-Object System.Collections.Generic.List[string]
 $AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
+# Folders the scan could not read: the files in them were not checked (sections 2 to 5 say so).
+$UnreadDirs = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
   foreach ($n in $PruneNames) { if ($name -ceq $n) { return $true } }
@@ -520,9 +522,12 @@ function Is-Pruned([string]$path, [string]$name, [int]$depth) {
 }
 # Files worms plant in a project, from data/planted.tsv.
 # >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it.
-$WormName = '\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
-function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack and keyv worms plant' } '.claude/tanstack_runner.js' { 'a file the TanStack and keyv worms plant' } '.vscode/router_runtime.js' { 'a file the TanStack and keyv worms plant' } '.vscode/tanstack_runner.js' { 'a file the TanStack and keyv worms plant' } '.claude/setup.mjs' { 'a file the TanStack and keyv worms plant' } '.claude/math_init.js' { 'a file the TanStack and keyv worms plant' } '.vscode/setup.mjs' { 'a file the TanStack and keyv worms plant' } default { $null } } }
-$WormRefNote = 'runs a file the TanStack and keyv worms plant'
+$WormNameAlone = '\.(claude|vscode)[/\\]+(router_runtime\.js|math_init\.js)'
+$WormNameWeak = '\.(claude|vscode)[/\\]+(setup\.mjs)'
+function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack worm plants' } '.vscode/router_runtime.js' { 'a file the TanStack worm plants' } '.claude/setup.mjs' { 'a file the TanStack and keyv worms plant' } '.claude/math_init.js' { 'a file the keyv worm plants' } '.vscode/setup.mjs' { 'a file the TanStack and keyv worms plant' } default { $null } } }
+function Planted-Sha([string]$p) { switch -CaseSensitive ($p) { '.claude/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' } '.vscode/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' } default { '' } } }
+$PlantedAlone = @('.claude/router_runtime.js', '.vscode/router_runtime.js', '.claude/math_init.js')
+$WormRefNote = 'runs a file a worm plants'
 # <<< planted
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
@@ -536,6 +541,23 @@ $AaTable = @(
 $AaProject = @()
 # <<< auto-approve
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
+# Whether a link ends at a regular file. Off Windows a repo can link a settings file to /dev/zero or
+# /dev/tty, which .NET would read for ever; UnixMode (PowerShell 7.1 and up) starts with - for a
+# regular file and l for a link, which is followed. Windows has no such files in a profile.
+function Is-RegularFile([string]$p) {
+  if (-not (Is-File $p)) { return $false }
+  if ($OnWindows) { return $true }
+  $t = $p
+  for ($i = 0; $i -lt 40; $i++) {
+    try { $it = Get-Item -LiteralPath $t -Force -ErrorAction Stop } catch { return $false }
+    $m = [string]$it.UnixMode
+    if (-not $m.StartsWith('l')) { return $m.StartsWith('-') }
+    $lt = [string](@($it.Target)[0]); if (-not $lt) { return $false }
+    if (-not [IO.Path]::IsPathRooted($lt)) { $lt = J ([IO.Path]::GetDirectoryName($t)) $lt }
+    $t = $lt
+  }
+  $false
+}
 function Is-AaProject([string]$path) {
   $ps = $path -replace '\\', '/'
   foreach ($r in $AaProject) { if ($ps.EndsWith('/' + $r, [StringComparison]::Ordinal)) { return $true } }
@@ -579,7 +601,8 @@ function Is-AkLink([string]$dir, [string]$target) {
   } catch { return $false }
 }
 function Scan-Home([string]$dir, [int]$depth) {
-  foreach ($e in (Entries $dir)) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
     $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
     if (Is-DirInfo $e) {
       if ($link -or (Is-Pruned $path $name $d)) { continue }
@@ -589,11 +612,12 @@ function Scan-Home([string]$dir, [int]$depth) {
     }
     $parent = [IO.Path]::GetFileName($dir)
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
-    # A linked settings, tasks or worm file is followed; any other link is not.
+    # A linked settings, tasks or worm file is followed when it ends at a regular file; any other
+    # link is not.
     if ($link) {
-      if ($isSettings) { $LinkSettings.Add($path) }
-      elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
-      elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
+      if ($isSettings) { if (Is-RegularFile $path) { $LinkSettings.Add($path) } }
+      elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { if (Is-RegularFile $path) { $TaskFiles.Add($path) } }
+      elseif (Is-WormFile $parent $name) { if (Is-RegularFile $path) { $WormFiles.Add($path) } }
       if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
@@ -922,6 +946,34 @@ function Sess-Stop([bool]$wait) {
 }
 
 Scan-Home $HomeDir 0
+$HOME_PARTIAL = 0; if ($UnreadDirs.Count -gt 0) { $HOME_PARTIAL = 1 }
+# Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
+# name projects use too (setup.mjs) counts in a project that also holds one of those, or when the file
+# is the very one the sources publish the SHA-256 of; anywhere else section 2 lists it as a file to
+# read ($WormLook). $WormProj holds the projects that count, each the folder holding .claude or
+# .vscode: there a hook that runs such a file counts too.
+function Worm-Project([string]$f) { [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($f)) }
+function Planted-Rel([string]$f) { [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) + '/' + [IO.Path]::GetFileName($f) }
+function File-Sha256([string]$f) {
+  try {
+    $fs = [IO.File]::OpenRead($f)
+    try { $hb = [Security.Cryptography.SHA256]::Create().ComputeHash($fs) } finally { $fs.Dispose() }
+    -join ($hb | ForEach-Object { $_.ToString('x2') })
+  } catch { '' }
+}
+$WormProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($f in $WormFiles) { if ($PlantedAlone -ccontains (Planted-Rel $f)) { [void]$WormProj.Add((Worm-Project $f)) } }
+foreach ($f in $WormFiles) {
+  $wpr = Worm-Project $f
+  if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains($wpr)) { continue }
+  $wok = $false
+  foreach ($wal in $PlantedAlone) { if (Exists (J $wpr $wal)) { $wok = $true; break } }
+  if (-not $wok) { $wsh = File-Sha256 $f; if ($wsh -and (@((Planted-Sha (Planted-Rel $f)) -split ' ') -ccontains $wsh)) { $wok = $true } }
+  if ($wok) { [void]$WormProj.Add($wpr) }
+}
+$WormHit = New-Object System.Collections.Generic.List[string]; $WormLook = New-Object System.Collections.Generic.List[string]
+foreach ($f in $WormFiles) { if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains((Worm-Project $f))) { $WormHit.Add($f) } else { $WormLook.Add($f) } }
+$N_LOOK = $WormLook.Count
 $EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
 $AllowFiles = @(@($Found) + @($LinkSettings) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
 $ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
@@ -1054,15 +1106,34 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 # each string and drops each comment, so the time is linear whatever the input.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
 $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
-# Worms plant a file in the folder ($WormName, from data/planted.tsv) and run it from a hook or a task.
-# A worm file counts only when a command runs it (an interpreter given its path, the path as the
-# command itself, or a task's argument), not when a rule or a guard merely names it.
-$RxWormRun = New-Object regex(('"command"\s*:\s*"(?:[^"\\]|\\.)*\b(node|bun|deno|tsx)(\.exe)?\s(?:[^"\\]|\\.)*' + $WormName +
-  '|"command"\s*:\s*"\s*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?[/\\]|\.[/\\])?' + $WormName + '|"args"\s*:\s*\[[^\]]*' + $WormName), $RxOpt, $RxTimeout)
+# Worms plant a file in the folder (data/planted.tsv) and run it from a hook or a task. A command runs
+# one when the file is the script an interpreter runs: the first word after node, bun, deno or tsx
+# and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
+# option word starting with e or p ends the match); when the file is the command itself; or when a
+# task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
+# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
+# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
+# The same expression as gird-check.sh's worm_cmd.
+function Worm-Cmd([string]$name) {
+  if (-not $name) { return $null }
+  $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $name + '(\\"|["''\s;&|)])'
+  $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
+  $co = '(--|--[A-DF-OQ-Za-df-oq-z0-9][^\s"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)\s+'
+  $cs = '"command"\s*:\s*"\s*(([^"\\]|\\.)*(;|&&?|\|\|?)\s*)?'
+  $ci = '"command"\s*:\s*"' + $cp + '(node|bun|deno|tsx)(\.exe)?"'
+  $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $name + '"'
+  $cb = '([^{}]|\{[^{}]*\})*'
+  New-Object regex(($cs + $cp + '((node|tsx)(\.exe)?\s+(' + $co + ')*|(bun|deno)(\.exe)?\s+(' + $co + ')*(run\s+(' + $co + ')*)?)' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
+}
+$RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # Keys that make Claude Code run a command: hooks and its helper commands.
 $RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper)"\s*:', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
-$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
+# An empty ANTHROPIC_BASE_URL sets nothing.
+$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
+# Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
+# versions take it only from the person's own or managed settings (Claude Code's settings docs).
+$RxBypass = New-Object regex('"defaultMode"\s*:\s*"bypassPermissions"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
 # A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
 $RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
@@ -1105,7 +1176,9 @@ function Aa-Hit([string]$f, $pats) {
   -not ($got -contains $false)
 }
 function Auto-Row([string]$f, [string]$what, [string]$t) {
-  if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
+  # A worm file counts only when a command runs it (Worm-Cmd), and a file projects use too only in a
+  # project that counts ($WormProj).
+  if (($RxWormAlone -and (Flat-Match $f $t $RxWormAlone)) -or ($RxWormWeak -and $WormProj.Contains((Worm-Project $f)) -and (Flat-Match $f $t $RxWormWeak))) { $WormRefs.Add($f) }
   # A repo's worktrees carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
@@ -1126,6 +1199,7 @@ foreach ($f in $AllowFiles) {
   if (Flat-Match $f $t $RxHooks) { $w.Add('run commands while the agent works') }
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
+  if (Flat-Match $f $t $RxBypass) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
   if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
 }
 foreach ($f in $TaskFiles) {
@@ -1296,12 +1370,12 @@ if ($env:ProgramData) { $PyRoots += @((J $env:ProgramData 'miniconda3'), (J $env
 foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
-function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'mastra' { 'Mastra worm, June 2026: started itself at login and sent browser history to the attackers. socket.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' } 'glasswormmar' { 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm. socket.dev' } 'injective' { 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' } default { $t } } }
-function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'opencode' { 'leak' } 'railway' { 'leak' } 'zeabur' { 'leak' } 'injective' { 'update' } default { 'act' } } }
-function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'injective' { 'Injective SDK' } default { $t } } }
-function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
-function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'glasswormvsix' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormapr' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
+function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
+function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'uipath' { 'UiPath npm packages, May 2026: published with malware that a bug in its payload kept from working, Wiz says. wiz.io' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'mastra' { 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'keyvscope' { 'keyv account takeover, August 2026: published from the compromised keyv account, but without the malicious install hook, Socket says. socket.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026: published by the SANDWORM_MODE attackers with no malware in them yet, Socket says. socket.dev' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' } 'glasswormmar' { 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm. socket.dev' } 'injective' { 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' } default { $t } } }
+function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'uipath' { 'update' } 'keyvscope' { 'update' } 'sandsleep' { 'update' } 'opencode' { 'leak' } 'railway' { 'leak' } 'zeabur' { 'leak' } 'injective' { 'update' } default { 'act' } } }
+function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'uipath' { 'UiPath npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra npm packages' } 'keyv' { 'keyv worm' } 'keyvscope' { 'keyv account takeover' } 'sandworm' { 'SANDWORM_MODE worm' } 'sandsleep' { 'SANDWORM_MODE sleeper packages' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'injective' { 'Injective SDK' } default { $t } } }
+function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'uipath' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'keyvscope' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'sandsleep' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
+function Incident-Advice([string]$t) { switch ($t) { 'keyvscope' { 'Pin each @keyv package listed in section 5 to its version before 6.0.0, as Socket advises.' } 'sandsleep' { 'Uninstall the SANDWORM_MODE sleeper packages listed in section 5: the attackers published every version of them.' } 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'glasswormvsix' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormapr' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
 function Incident-Summary([string]$t) { switch ($t) { 'injective' { 'Injective SDK: move the funds out of its wallets' } default { '' } } }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1523,6 +1597,247 @@ plain-crypto-js * axios
 @tanstack/vue-start-server 1.166.53 tanstack
 @tanstack/zod-adapter 1.166.12 tanstack
 @tanstack/zod-adapter 1.166.15 tanstack
+@beproduct/nestjs-auth 0.1.2 tanstack
+@beproduct/nestjs-auth 0.1.3 tanstack
+@beproduct/nestjs-auth 0.1.4 tanstack
+@beproduct/nestjs-auth 0.1.5 tanstack
+@beproduct/nestjs-auth 0.1.6 tanstack
+@beproduct/nestjs-auth 0.1.7 tanstack
+@beproduct/nestjs-auth 0.1.8 tanstack
+@beproduct/nestjs-auth 0.1.9 tanstack
+@beproduct/nestjs-auth 0.1.10 tanstack
+@beproduct/nestjs-auth 0.1.11 tanstack
+@beproduct/nestjs-auth 0.1.12 tanstack
+@beproduct/nestjs-auth 0.1.13 tanstack
+@beproduct/nestjs-auth 0.1.14 tanstack
+@beproduct/nestjs-auth 0.1.15 tanstack
+@beproduct/nestjs-auth 0.1.16 tanstack
+@beproduct/nestjs-auth 0.1.17 tanstack
+@beproduct/nestjs-auth 0.1.18 tanstack
+@beproduct/nestjs-auth 0.1.19 tanstack
+@dirigible-ai/sdk 0.6.2 tanstack
+@dirigible-ai/sdk 0.6.3 tanstack
+@draftauth/client 0.2.1 tanstack
+@draftauth/client 0.2.2 tanstack
+@draftauth/core 0.13.1 tanstack
+@draftauth/core 0.13.2 tanstack
+@draftlab/auth 0.24.1 tanstack
+@draftlab/auth 0.24.2 tanstack
+@draftlab/auth-router 0.5.1 tanstack
+@draftlab/auth-router 0.5.2 tanstack
+@draftlab/db 0.16.1 tanstack
+@draftlab/db 0.16.2 tanstack
+@mesadev/rest 0.28.3 tanstack
+@mesadev/saguaro 0.4.22 tanstack
+@mesadev/sdk 0.28.3 tanstack
+@ml-toolkit-ts/preprocessing 1.0.2 tanstack
+@ml-toolkit-ts/preprocessing 1.0.3 tanstack
+@ml-toolkit-ts/xgboost 1.0.3 tanstack
+@ml-toolkit-ts/xgboost 1.0.4 tanstack
+@squawk/airport-data 0.7.4 tanstack
+@squawk/airport-data 0.7.5 tanstack
+@squawk/airport-data 0.7.6 tanstack
+@squawk/airport-data 0.7.7 tanstack
+@squawk/airport-data 0.7.8 tanstack
+@squawk/airports 0.6.2 tanstack
+@squawk/airports 0.6.3 tanstack
+@squawk/airports 0.6.4 tanstack
+@squawk/airports 0.6.5 tanstack
+@squawk/airports 0.6.6 tanstack
+@squawk/airspace 0.8.1 tanstack
+@squawk/airspace 0.8.2 tanstack
+@squawk/airspace 0.8.3 tanstack
+@squawk/airspace 0.8.4 tanstack
+@squawk/airspace 0.8.5 tanstack
+@squawk/airspace-data 0.5.3 tanstack
+@squawk/airspace-data 0.5.4 tanstack
+@squawk/airspace-data 0.5.5 tanstack
+@squawk/airspace-data 0.5.6 tanstack
+@squawk/airspace-data 0.5.7 tanstack
+@squawk/airway-data 0.5.4 tanstack
+@squawk/airway-data 0.5.5 tanstack
+@squawk/airway-data 0.5.6 tanstack
+@squawk/airway-data 0.5.7 tanstack
+@squawk/airway-data 0.5.8 tanstack
+@squawk/airways 0.4.2 tanstack
+@squawk/airways 0.4.3 tanstack
+@squawk/airways 0.4.4 tanstack
+@squawk/airways 0.4.5 tanstack
+@squawk/airways 0.4.6 tanstack
+@squawk/fix-data 0.6.4 tanstack
+@squawk/fix-data 0.6.5 tanstack
+@squawk/fix-data 0.6.6 tanstack
+@squawk/fix-data 0.6.7 tanstack
+@squawk/fix-data 0.6.8 tanstack
+@squawk/fixes 0.3.2 tanstack
+@squawk/fixes 0.3.3 tanstack
+@squawk/fixes 0.3.4 tanstack
+@squawk/fixes 0.3.5 tanstack
+@squawk/fixes 0.3.6 tanstack
+@squawk/flight-math 0.5.4 tanstack
+@squawk/flight-math 0.5.5 tanstack
+@squawk/flight-math 0.5.6 tanstack
+@squawk/flight-math 0.5.7 tanstack
+@squawk/flight-math 0.5.8 tanstack
+@squawk/flightplan 0.5.2 tanstack
+@squawk/flightplan 0.5.3 tanstack
+@squawk/flightplan 0.5.4 tanstack
+@squawk/flightplan 0.5.5 tanstack
+@squawk/flightplan 0.5.6 tanstack
+@squawk/geo 0.4.4 tanstack
+@squawk/geo 0.4.5 tanstack
+@squawk/geo 0.4.6 tanstack
+@squawk/geo 0.4.7 tanstack
+@squawk/geo 0.4.8 tanstack
+@squawk/icao-registry 0.5.2 tanstack
+@squawk/icao-registry 0.5.3 tanstack
+@squawk/icao-registry 0.5.4 tanstack
+@squawk/icao-registry 0.5.5 tanstack
+@squawk/icao-registry 0.5.6 tanstack
+@squawk/icao-registry-data 0.8.4 tanstack
+@squawk/icao-registry-data 0.8.5 tanstack
+@squawk/icao-registry-data 0.8.6 tanstack
+@squawk/icao-registry-data 0.8.7 tanstack
+@squawk/icao-registry-data 0.8.8 tanstack
+@squawk/mcp 0.9.1 tanstack
+@squawk/mcp 0.9.2 tanstack
+@squawk/mcp 0.9.3 tanstack
+@squawk/mcp 0.9.4 tanstack
+@squawk/mcp 0.9.5 tanstack
+@squawk/navaid-data 0.6.4 tanstack
+@squawk/navaid-data 0.6.5 tanstack
+@squawk/navaid-data 0.6.6 tanstack
+@squawk/navaid-data 0.6.7 tanstack
+@squawk/navaid-data 0.6.8 tanstack
+@squawk/navaids 0.4.2 tanstack
+@squawk/navaids 0.4.3 tanstack
+@squawk/navaids 0.4.4 tanstack
+@squawk/navaids 0.4.5 tanstack
+@squawk/navaids 0.4.6 tanstack
+@squawk/notams 0.3.6 tanstack
+@squawk/notams 0.3.7 tanstack
+@squawk/notams 0.3.8 tanstack
+@squawk/notams 0.3.9 tanstack
+@squawk/notams 0.3.10 tanstack
+@squawk/procedure-data 0.7.3 tanstack
+@squawk/procedure-data 0.7.4 tanstack
+@squawk/procedure-data 0.7.5 tanstack
+@squawk/procedure-data 0.7.6 tanstack
+@squawk/procedure-data 0.7.7 tanstack
+@squawk/procedures 0.5.2 tanstack
+@squawk/procedures 0.5.3 tanstack
+@squawk/procedures 0.5.4 tanstack
+@squawk/procedures 0.5.5 tanstack
+@squawk/procedures 0.5.6 tanstack
+@squawk/types 0.8.1 tanstack
+@squawk/types 0.8.2 tanstack
+@squawk/types 0.8.3 tanstack
+@squawk/types 0.8.4 tanstack
+@squawk/types 0.8.5 tanstack
+@squawk/units 0.4.3 tanstack
+@squawk/units 0.4.4 tanstack
+@squawk/units 0.4.5 tanstack
+@squawk/units 0.4.6 tanstack
+@squawk/units 0.4.7 tanstack
+@squawk/weather 0.5.6 tanstack
+@squawk/weather 0.5.7 tanstack
+@squawk/weather 0.5.8 tanstack
+@squawk/weather 0.5.9 tanstack
+@squawk/weather 0.5.10 tanstack
+@supersurkhet/cli 0.0.2 tanstack
+@supersurkhet/cli 0.0.3 tanstack
+@supersurkhet/cli 0.0.4 tanstack
+@supersurkhet/cli 0.0.5 tanstack
+@supersurkhet/cli 0.0.6 tanstack
+@supersurkhet/cli 0.0.7 tanstack
+@supersurkhet/sdk 0.0.2 tanstack
+@supersurkhet/sdk 0.0.3 tanstack
+@supersurkhet/sdk 0.0.4 tanstack
+@supersurkhet/sdk 0.0.5 tanstack
+@supersurkhet/sdk 0.0.6 tanstack
+@supersurkhet/sdk 0.0.7 tanstack
+@tallyui/components 1.0.1 tanstack
+@tallyui/components 1.0.2 tanstack
+@tallyui/components 1.0.3 tanstack
+@tallyui/connector-medusa 1.0.1 tanstack
+@tallyui/connector-medusa 1.0.2 tanstack
+@tallyui/connector-medusa 1.0.3 tanstack
+@tallyui/connector-shopify 1.0.1 tanstack
+@tallyui/connector-shopify 1.0.2 tanstack
+@tallyui/connector-shopify 1.0.3 tanstack
+@tallyui/connector-vendure 1.0.1 tanstack
+@tallyui/connector-vendure 1.0.2 tanstack
+@tallyui/connector-vendure 1.0.3 tanstack
+@tallyui/connector-woocommerce 1.0.1 tanstack
+@tallyui/connector-woocommerce 1.0.2 tanstack
+@tallyui/connector-woocommerce 1.0.3 tanstack
+@tallyui/core 0.2.1 tanstack
+@tallyui/core 0.2.2 tanstack
+@tallyui/core 0.2.3 tanstack
+@tallyui/database 1.0.1 tanstack
+@tallyui/database 1.0.2 tanstack
+@tallyui/database 1.0.3 tanstack
+@tallyui/pos 0.1.1 tanstack
+@tallyui/pos 0.1.2 tanstack
+@tallyui/pos 0.1.3 tanstack
+@tallyui/storage-sqlite 0.2.1 tanstack
+@tallyui/storage-sqlite 0.2.2 tanstack
+@tallyui/storage-sqlite 0.2.3 tanstack
+@tallyui/theme 0.2.1 tanstack
+@tallyui/theme 0.2.2 tanstack
+@tallyui/theme 0.2.3 tanstack
+@taskflow-corp/cli 0.1.24 tanstack
+@taskflow-corp/cli 0.1.25 tanstack
+@taskflow-corp/cli 0.1.26 tanstack
+@taskflow-corp/cli 0.1.27 tanstack
+@taskflow-corp/cli 0.1.28 tanstack
+@taskflow-corp/cli 0.1.29 tanstack
+@tolka/cli 1.0.2 tanstack
+@tolka/cli 1.0.3 tanstack
+@tolka/cli 1.0.4 tanstack
+@tolka/cli 1.0.5 tanstack
+@tolka/cli 1.0.6 tanstack
+agentwork-cli 0.1.4 tanstack
+agentwork-cli 0.1.5 tanstack
+cmux-agent-mcp 0.1.3 tanstack
+cmux-agent-mcp 0.1.4 tanstack
+cmux-agent-mcp 0.1.5 tanstack
+cmux-agent-mcp 0.1.6 tanstack
+cmux-agent-mcp 0.1.7 tanstack
+cmux-agent-mcp 0.1.8 tanstack
+cross-stitch 1.1.3 tanstack
+cross-stitch 1.1.4 tanstack
+cross-stitch 1.1.5 tanstack
+cross-stitch 1.1.6 tanstack
+cross-stitch 1.1.7 tanstack
+git-branch-selector 1.3.3 tanstack
+git-branch-selector 1.3.4 tanstack
+git-branch-selector 1.3.5 tanstack
+git-branch-selector 1.3.6 tanstack
+git-branch-selector 1.3.7 tanstack
+git-git-git 1.0.8 tanstack
+git-git-git 1.0.9 tanstack
+git-git-git 1.0.10 tanstack
+git-git-git 1.0.11 tanstack
+git-git-git 1.0.12 tanstack
+ml-toolkit-ts 1.0.4 tanstack
+ml-toolkit-ts 1.0.5 tanstack
+nextmove-mcp 0.1.3 tanstack
+nextmove-mcp 0.1.4 tanstack
+nextmove-mcp 0.1.5 tanstack
+nextmove-mcp 0.1.6 tanstack
+nextmove-mcp 0.1.7 tanstack
+safe-action 0.8.3 tanstack
+safe-action 0.8.4 tanstack
+ts-dna 3.0.1 tanstack
+ts-dna 3.0.2 tanstack
+ts-dna 3.0.3 tanstack
+ts-dna 3.0.4 tanstack
+ts-dna 3.0.5 tanstack
+wot-api 0.8.1 tanstack
+wot-api 0.8.2 tanstack
+wot-api 0.8.3 tanstack
+wot-api 0.8.4 tanstack
 @mistralai/mistralai 2.2.2 mistral
 @mistralai/mistralai 2.2.3 mistral
 @mistralai/mistralai 2.2.4 mistral
@@ -1532,11 +1847,165 @@ plain-crypto-js * axios
 @mistralai/mistralai-gcp 1.7.1 mistral
 @mistralai/mistralai-gcp 1.7.2 mistral
 @mistralai/mistralai-gcp 1.7.3 mistral
+@uipath/access-policy-sdk 0.3.1 uipath
+@uipath/access-policy-tool 0.3.1 uipath
+@uipath/admin-tool 0.1.1 uipath
+@uipath/agent-sdk 1.0.2 uipath
+@uipath/agent-tool 1.0.1 uipath
+@uipath/agent.sdk 0.0.18 uipath
+@uipath/aops-policy-tool 0.3.1 uipath
+@uipath/ap-chat 1.5.7 uipath
+@uipath/api-workflow-tool 1.0.1 uipath
+@uipath/apollo-core 5.9.2 uipath
+@uipath/apollo-react 4.24.5 uipath
+@uipath/apollo-wind 2.16.2 uipath
+@uipath/auth 1.0.1 uipath
+@uipath/case-tool 1.0.1 uipath
+@uipath/cli 1.0.1 uipath
+@uipath/codedagent-tool 1.0.1 uipath
+@uipath/codedagents-tool 0.1.12 uipath
+@uipath/codedapp-tool 1.0.1 uipath
+@uipath/common 1.0.1 uipath
+@uipath/context-grounding-tool 0.1.1 uipath
+@uipath/data-fabric-tool 1.0.2 uipath
+@uipath/docsai-tool 1.0.1 uipath
+@uipath/filesystem 1.0.1 uipath
+@uipath/flow-tool 1.0.2 uipath
+@uipath/functions-tool 1.0.1 uipath
+@uipath/gov-tool 0.3.1 uipath
+@uipath/identity-tool 0.1.1 uipath
+@uipath/insights-sdk 1.0.1 uipath
+@uipath/insights-tool 1.0.1 uipath
+@uipath/integrationservice-sdk 1.0.2 uipath
+@uipath/integrationservice-tool 1.0.2 uipath
+@uipath/llmgw-tool 1.0.1 uipath
+@uipath/maestro-sdk 1.0.1 uipath
+@uipath/maestro-tool 1.0.1 uipath
+@uipath/orchestrator-tool 1.0.1 uipath
+@uipath/packager-tool-apiworkflow 0.0.19 uipath
+@uipath/packager-tool-bpmn 0.0.9 uipath
+@uipath/packager-tool-case 0.0.9 uipath
+@uipath/packager-tool-connector 0.0.19 uipath
+@uipath/packager-tool-flow 0.0.19 uipath
+@uipath/packager-tool-functions 0.1.1 uipath
+@uipath/packager-tool-webapp 1.0.6 uipath
+@uipath/packager-tool-workflowcompiler 0.0.16 uipath
+@uipath/packager-tool-workflowcompiler-browser 0.0.34 uipath
+@uipath/platform-tool 1.0.1 uipath
+@uipath/project-packager 1.1.16 uipath
+@uipath/resource-tool 1.0.1 uipath
+@uipath/resourcecatalog-tool 0.1.1 uipath
+@uipath/resources-tool 0.1.11 uipath
+@uipath/robot 1.3.4 uipath
+@uipath/rpa-legacy-tool 1.0.1 uipath
+@uipath/rpa-tool 0.9.5 uipath
+@uipath/solution-packager 0.0.35 uipath
+@uipath/solution-tool 1.0.1 uipath
+@uipath/solutionpackager-sdk 1.0.11 uipath
+@uipath/solutionpackager-tool-core 0.0.34 uipath
+@uipath/tasks-tool 1.0.1 uipath
+@uipath/telemetry 0.0.7 uipath
+@uipath/test-manager-tool 1.0.2 uipath
+@uipath/tool-workflowcompiler 0.0.12 uipath
+@uipath/traces-tool 1.0.1 uipath
+@uipath/ui-widgets-multi-file-upload 1.0.1 uipath
+@uipath/uipath-python-bridge 1.0.1 uipath
+@uipath/vertical-solutions-tool 1.0.1 uipath
+@uipath/vss 0.1.6 uipath
+@uipath/widget.sdk 1.2.3 uipath
 @bitwarden/cli 2026.4.0 bitwarden
 @mastra/core 1.42.1 mastra
 mastra 1.13.1 mastra
 create-mastra 1.13.1 mastra
 easy-day-js 1.11.22 mastra
+@mastra/agent-browser 0.3.2 mastra
+@mastra/agent-builder 1.0.42 mastra
+@mastra/ai-sdk 1.4.6 mastra
+@mastra/arize 1.2.3 mastra
+@mastra/auth 1.0.3 mastra
+@mastra/auth-auth0 1.0.2 mastra
+@mastra/auth-better-auth 1.0.4 mastra
+@mastra/auth-clerk 1.0.3 mastra
+@mastra/auth-supabase 1.0.2 mastra
+@mastra/auth-workos 1.5.3 mastra
+@mastra/blaxel 0.4.2 mastra
+@mastra/braintrust 1.1.4 mastra
+@mastra/chroma 1.0.2 mastra
+@mastra/claude 1.0.3 mastra
+@mastra/clickhouse 1.10.1 mastra
+@mastra/client-js 1.24.1 mastra
+@mastra/cloudflare 1.4.2 mastra
+@mastra/cloudflare-d1 1.0.7 mastra
+@mastra/convex 1.2.2 mastra
+@mastra/couchbase 1.0.4 mastra
+@mastra/cursor 0.2.1 mastra
+@mastra/datadog 1.2.5 mastra
+@mastra/daytona 0.4.2 mastra
+@mastra/deployer 1.42.1 mastra
+@mastra/deployer-cloudflare 1.1.44 mastra
+@mastra/deployer-netlify 1.1.20 mastra
+@mastra/deployer-vercel 1.1.38 mastra
+@mastra/docker 0.3.1 mastra
+@mastra/dsql 1.0.3 mastra
+@mastra/duckdb 1.4.3 mastra
+@mastra/dynamodb 1.0.9 mastra
+@mastra/e2b 0.3.4 mastra
+@mastra/editor 0.11.3 mastra
+@mastra/evals 1.3.1 mastra
+@mastra/express 1.3.31 mastra
+@mastra/fastembed 1.1.3 mastra
+@mastra/fastify 1.3.31 mastra
+@mastra/gcs 0.2.3 mastra
+@mastra/github-signals 0.1.2 mastra
+@mastra/google-cloud-pubsub 1.0.6 mastra
+@mastra/hono 1.4.26 mastra
+@mastra/inngest 1.5.2 mastra
+@mastra/koa 1.5.14 mastra
+@mastra/langfuse 1.3.6 mastra
+@mastra/langsmith 1.2.4 mastra
+@mastra/libsql 1.13.1 mastra
+@mastra/loggers 1.1.3 mastra
+@mastra/longmemeval 1.0.50 mastra
+@mastra/mcp 1.10.1 mastra
+@mastra/mcp-docs-server 1.1.47 mastra
+@mastra/mcp-registry-registry 1.0.2 mastra
+@mastra/mem0 0.1.14 mastra
+@mastra/memory 1.20.4 mastra
+@mastra/mongodb 1.9.3 mastra
+@mastra/mssql 1.3.2 mastra
+@mastra/nestjs 0.1.15 mastra
+@mastra/node-audio 0.1.8 mastra
+@mastra/node-speaker 0.1.1 mastra
+@mastra/observability 1.14.2 mastra
+@mastra/otel-bridge 1.2.3 mastra
+@mastra/otel-exporter 1.2.3 mastra
+@mastra/pg 1.13.1 mastra
+@mastra/pinecone 1.0.2 mastra
+@mastra/playground-ui 33.0.1 mastra
+@mastra/posthog 1.0.29 mastra
+@mastra/qdrant 1.0.3 mastra
+@mastra/rag 2.2.2 mastra
+@mastra/react 1.0.1 mastra
+@mastra/redis 1.1.3 mastra
+@mastra/s3 0.5.3 mastra
+@mastra/s3vectors 1.0.7 mastra
+@mastra/schema-compat 1.2.12 mastra
+@mastra/sentry 1.1.4 mastra
+@mastra/server 2.1.1 mastra
+@mastra/stagehand 0.2.5 mastra
+@mastra/tavily 1.0.3 mastra
+@mastra/temporal 0.1.14 mastra
+@mastra/turbopuffer 1.0.3 mastra
+@mastra/upstash 1.1.3 mastra
+@mastra/vectorize 1.0.3 mastra
+@mastra/voice-aws-nova-sonic 0.1.4 mastra
+@mastra/voice-deepgram 0.12.2 mastra
+@mastra/voice-elevenlabs 0.12.2 mastra
+@mastra/voice-google 0.12.3 mastra
+@mastra/voice-google-gemini-live 0.12.2 mastra
+@mastra/voice-openai 0.12.3 mastra
+@mastra/voice-openai-realtime 0.12.6 mastra
+@mastra/voice-playai 0.12.2 mastra
 keyv 6.0.0 keyv
 cacheable 2.5.1 keyv
 cache-manager 7.2.10 keyv
@@ -1553,25 +2022,25 @@ cloude-code * sandworm
 rimarf * sandworm
 naniod * sandworm
 suport-color * sandworm
-@keyv/bigmap 6.0.0 keyv
-@keyv/cloudflare-kv 6.0.0 keyv
-@keyv/compress-brotli 6.0.0 keyv
-@keyv/compress-gzip 6.0.0 keyv
-@keyv/compress-lz4 6.0.0 keyv
-@keyv/dynamo 6.0.0 keyv
-@keyv/encrypt-node 6.0.0 keyv
-@keyv/encrypt-web 6.0.0 keyv
-@keyv/etcd 6.0.0 keyv
-@keyv/memcache 6.0.0 keyv
-@keyv/mongo 6.0.0 keyv
-@keyv/mysql 6.0.0 keyv
-@keyv/postgres 6.0.0 keyv
-@keyv/redis 6.0.0 keyv
-@keyv/serialize-msgpackr 6.0.0 keyv
-@keyv/serialize-superjson 6.0.0 keyv
-@keyv/sqlite 6.0.0 keyv
-@keyv/test-suite 6.0.0 keyv
-@keyv/valkey 6.0.0 keyv
+@keyv/bigmap 6.0.0 keyvscope
+@keyv/cloudflare-kv 6.0.0 keyvscope
+@keyv/compress-brotli 6.0.0 keyvscope
+@keyv/compress-gzip 6.0.0 keyvscope
+@keyv/compress-lz4 6.0.0 keyvscope
+@keyv/dynamo 6.0.0 keyvscope
+@keyv/encrypt-node 6.0.0 keyvscope
+@keyv/encrypt-web 6.0.0 keyvscope
+@keyv/etcd 6.0.0 keyvscope
+@keyv/memcache 6.0.0 keyvscope
+@keyv/mongo 6.0.0 keyvscope
+@keyv/mysql 6.0.0 keyvscope
+@keyv/postgres 6.0.0 keyvscope
+@keyv/redis 6.0.0 keyvscope
+@keyv/serialize-msgpackr 6.0.0 keyvscope
+@keyv/serialize-superjson 6.0.0 keyvscope
+@keyv/sqlite 6.0.0 keyvscope
+@keyv/test-suite 6.0.0 keyvscope
+@keyv/valkey 6.0.0 keyvscope
 @opensearch-project/opensearch 3.5.3 opensearch
 @opensearch-project/opensearch 3.6.2 opensearch
 @opensearch-project/opensearch 3.7.0 opensearch
@@ -1582,10 +2051,19 @@ opencraw * sandworm
 crypto-reader-info * sandworm
 format-defaults * sandworm
 hardhta * sandworm
-iru-caches * sandworm
-iruchache * sandworm
+iru-caches * sandsleep
+iruchache * sandsleep
 node-native-bridge * sandworm
 secp256 * sandworm
+crypto-locale * sandworm
+detect-cache * sandworm
+locale-loader-pro * sandworm
+parse-compat * sandworm
+scan-store * sandworm
+veim * sandworm
+yarsg * sandworm
+ethres * sandsleep
+uudi * sandsleep
 @injectivelabs/sdk-ts 1.20.21 injective
 '@
 # <<< bad-npm
@@ -1763,8 +2241,9 @@ function Npm-Scan([string]$where, [string]$text, [string]$kind) {
   } catch { if (-not $SlowFiles.Contains($where)) { $script:NpmSlow++ }; Mark-Slow $where }
 }
 # Read directly rather than through Read-Text, so big lockfiles are not kept in memory.
-$N_LOCK = 0; $NpmSlow = 0; $NpmUnread = 0
-foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { continue }; $N_LOCK++; Npm-Scan $f $t ([IO.Path]::GetFileName($f)) }
+# A lockfile the scan found but can't read leaves npm not fully checked, as the cache does.
+$N_LOCK = 0; $NpmSlow = 0; $NpmUnread = 0; $LockUnread = New-Object System.Collections.Generic.List[string]
+foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { $LockUnread.Add($f); continue }; $N_LOCK++; Npm-Scan $f $t ([IO.Path]::GetFileName($f)) }
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv,
 # nvm-windows), pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
 $NpmRoots = New-Object System.Collections.Generic.List[string]
@@ -1950,6 +2429,21 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
 $NPM_HIT = 0; $NPM_UPD = 0
 $NpmTags = @($NpmRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } else { $NPM_UPD = 1 } }
+# A lockfile records what some machine resolved, not what ran here. An act-level hit was installed
+# when npm's cache or a global install has it, or node_modules next to the lockfile holds that
+# version. A hit in a lockfile alone ($LockProj holds their folders) leaves the headline and the fix
+# depending on whether that project was installed; the score and the link stay as they are.
+$NpmInst = 0; $LockProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($r in $NpmRows) {
+  if ((Incident-Level $r[2]) -ne 'act') { continue }
+  if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
+    $isp = $r[1].LastIndexOf(' '); $ipn = $r[1].Substring(0, $isp); $ipv = $r[1].Substring($isp + 1)
+    $ipj = J (J (J ([IO.Path]::GetDirectoryName($r[0])) 'node_modules') $ipn) 'package.json'
+    $iiv = ''; if (Is-File $ipj) { $im = [regex]::Match([string](Read-Text $ipj), '"version"\s*:\s*"([^"]+)"'); if ($im.Success) { $iiv = $im.Groups[1].Value } }
+    if ($iiv -and $iiv -ceq $ipv) { $NpmInst = 1 } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
+  } else { $NpmInst = 1 }
+}
+$N_LOCKPROJ = $LockProj.Count
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
 # when the stolen GitHub token stops working (in the TanStack wave it tries to run rm -rf ~/, Wiz; in
 # the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
@@ -1982,7 +2476,7 @@ if ($OnWindows) {
     if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra worm at login')) }; $rk.Close() }
   } catch { }
 }
-foreach ($f in $WormFiles) { $Persist.Add(@($f, (Planted-Note ([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) + '/' + [IO.Path]::GetFileName($f))))) }
+foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
 if ($ExtRows.Count -eq 0 -and $ExtPersist.Count -gt 0) {
@@ -1990,6 +2484,7 @@ if ($ExtRows.Count -eq 0 -and $ExtPersist.Count -gt 0) {
 }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
+$MAL_LOCKONLY = 0; if ($MAL_HIT -eq 1 -and $NpmInst -eq 0 -and $Persist.Count -eq 0 -and $WIPER_HIT -eq 0) { $MAL_LOCKONLY = 1 }
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
 # extension incident's startup file next to it is its sign too.
 $EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
@@ -2103,7 +2598,12 @@ function Add-Todo([int]$sec, [string]$text) {
   $Todo.Add($text); $Fixes[$sec].Add($text)
 }
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
-if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
+# A bad version found only in lockfiles: whether this machine is compromised depends on whether
+# that project was installed here.
+if ($MAL_LOCKONLY -eq 1) {
+  if ($N_LOCKPROJ -eq 1) { $lp = 'the project'; $ll = 'its lockfile' } else { $lp = 'the projects'; $ll = 'their lockfiles' }
+  Add-Todo 5 "If you ran an install in $lp section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach. If not, update $ll to a version without the malware."
+} elseif ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
 if ($EXT_HIT -eq 1) {
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
   if ($ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
@@ -2145,6 +2645,7 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
+if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
 if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
@@ -2263,7 +2764,7 @@ if (-not $OptOffline) {
 # A check that was not done in full never leaves the headline green: the sessions were partly
 # checked, part of npm's cache or an extension folder could not be read, or a file took too long.
 # The headline then says what it can: no findings in the paths checked.
-$Partial = [bool]($SESS_PARTIAL -or $NpmUnread -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -2278,8 +2779,11 @@ if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
 }
 $Act = ''
 if ($WIPER_HIT -eq 1) { $Act = 'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' }
-elseif ($ANY_MAL -eq 1) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
+elseif ($ANY_MAL -eq 1 -and ($MAL_LOCKONLY -eq 0 -or $EXT_HIT -eq 1)) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
 elseif ($PY_HIT -eq 1) { $Act = "ACT NOW: SIGNS OF THE $((@($PyHits | ForEach-Object { Incident-Name $_ }) -join ' AND ').ToUpperInvariant()) MALWARE" }
+elseif ($MAL_LOCKONLY -eq 1) {
+  if ($N_LOCKPROJ -eq 1) { $Act = 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' } else { $Act = 'ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE' }
+}
 if ($Act) {
   Emit "  $Sev$gBar$cRst $cBold$Act$cRst"
   if ($PctTxt) { Emit "  $Sev$gBar$cRst $cBold$PctTxt.$cRst $FixN." } else { Emit "  $Sev$gBar$cRst $FixN." }
@@ -2291,6 +2795,13 @@ if ($Act) {
 }
 $HeadShort = Take-Cap
 Wrap $Stats 4 "  $Sev$gBar$cRst " "  $Sev$gBar$cRst " $cDim
+# Folders the home scan could not read, so sections 2 to 5 did not read the files in them.
+function Dir-List($dirs) { $da = @($dirs); $dl = (@($da | Select-Object -First 3 | ForEach-Object { Short $_ })) -join ', '; if ($da.Count -gt 3) { $dl += " and $($da.Count - 3) more" }; $dl }
+if ($UnreadDirs.Count -gt 0) {
+  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 2 to 5 did not check the files in it' }
+  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 2 to 5 did not check the files in them" }
+  Wrap "$($udText): $(Dir-List $UnreadDirs)." 4 "  $cYel$gBar$cRst " "  $cYel$gBar$cRst " $cYel
+}
 $HeadFull = $HeadShort + (Take-Cap)
 
 Section '01' 'CODING AGENTS' "$N_AG found, $N_IDLE idle"
@@ -2338,6 +2849,14 @@ if ($N_AUTO -gt 0) {
     Wrap "Set to $($r.What).$more" 8 '        ' '        ' $cDim
   }
 }
+if ($N_LOOK -gt 0) {
+  Blank
+  Emit "     ${cBold}Files named like the ones worms plant$cRst"
+  foreach ($f in $WormLook) {
+    Emit "     $cYel!$cRst  $(Short $f)"
+    Wrap "Named like $(Planted-Note (Planted-Rel $f)), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
+  }
+}
 if ($N_AK -gt 0) {
   Blank
   Emit "     ${cBold}Files that link to your SSH logins$cRst"
@@ -2346,7 +2865,8 @@ if ($N_AK -gt 0) {
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
-if ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
+if ($KEY_FILES -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
+elseif ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
 $shown = 0
 foreach ($r in $KeyRows) { $shown++; if ($shown -le 20) { Pair "$cRed$gX$cRst" (Short $r[0]) 44 $r[1] } }
 if ($KEY_FILES -gt 20) { Emit "        ${cDim}and $($KEY_FILES - 20) more$cRst" }
@@ -2400,7 +2920,8 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
 }
 $Sec3 = Take-Cap
 Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
-if ($N_ALLOW -eq 0) { Emit "     $cGrn$gOk$cRst  No saved commands with keys." }
+if ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No saved commands with keys, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
+elseif ($N_ALLOW -eq 0) { Emit "     $cGrn$gOk$cRst  No saved commands with keys." }
 foreach ($r in $AllowRows) {
   Emit "     $cRed$gX$cRst  $(Short $r[0])"
   Emit '        A saved command contains a key.'
@@ -2464,19 +2985,33 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   }
   foreach ($r in $Persist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   foreach ($t in $NpmTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
-} elseif ($WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $NpmUnread -gt 0)) {
+}
+# What of npm's places could not be read: part of its cache, lockfiles, folders the scan could not
+# enter. The row is never green over them, and findings above them are not the full list.
+$npParts = New-Object System.Collections.Generic.List[string]
+if ($NpmUnread -gt 0) { $npParts.Add("part of npm's cache") }
+if ($LockUnread.Count -gt 0) { $npParts.Add((Plural $LockUnread.Count 'lockfile' 'lockfiles')) }
+if ($HOME_PARTIAL -eq 1) { $npParts.Add('some folders in your home') }
+$npText = ''
+if ($npParts.Count -eq 1) { $npText = $npParts[0] } elseif ($npParts.Count -eq 2) { $npText = $npParts[0] + ' and ' + $npParts[1] } elseif ($npParts.Count -eq 3) { $npText = $npParts[0] + ', ' + $npParts[1] + ' and ' + $npParts[2] }
+$npFound = ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1)
+if (-not $npFound -and $WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $npText)) {
   $why = New-Object System.Collections.Generic.List[string]
   if ($NpmSlow -gt 0) { $why.Add("$(Plural $NpmSlow 'file' 'files') took too long") }
-  if ($NpmUnread -gt 0) { $why.Add("part of npm's cache could not be read") }
+  if ($npText) { $why.Add("$npText could not be read") }
   Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
-} elseif ($WIPER_HIT -eq 0) {
+  foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
+} elseif (-not $npFound -and $WIPER_HIT -eq 0) {
   Pair "$cGrn$gOk$cRst" 'npm malware' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
   Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
 }
 # With findings above, a part of the check that did not finish still has to be said.
-if (($NpmSlow -gt 0 -or $NpmUnread -gt 0) -and ($WIPER_HIT -eq 1 -or $NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1)) {
+if (($NpmSlow -gt 0 -or $npText) -and ($WIPER_HIT -eq 1 -or $npFound)) {
   if ($NpmSlow -gt 0) { Wrap "$(Plural $NpmSlow 'file' 'files') took too long to check, so this is not the full list." 8 '        ' '        ' $cYel }
-  if ($NpmUnread -gt 0) { Wrap "Part of npm's cache could not be read, so this is not the full list." 8 '        ' '        ' $cYel }
+  if ($npText) {
+    Wrap "$($npText.Substring(0, 1).ToUpperInvariant())$($npText.Substring(1)) could not be read, so this is not the full list." 8 '        ' '        ' $cYel
+    foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
+  }
 }
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
@@ -2555,6 +3090,8 @@ if ($N_AK -gt 0) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, $(Plural $N_AK 'file l
 elseif ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
 elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
+elseif ($N_LOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_LOOK 'project file' 'project files') to read" }
+elseif ($HOME_PARTIAL -eq 1) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, but some folders were not read" }
 elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
@@ -2562,8 +3099,10 @@ elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) 
 elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session file' 'agent session files'): $($SessRows[0][0])" }
 elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessions partly checked' }
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
+elseif ($HOME_PARTIAL -eq 1) { $G3 = "$cYel!$cRst"; $D3 = 'none found, but some folders were not read' }
 else { $G3 = "$cGrn$gOk$cRst"; $D3 = 'no AI or cloud keys in plain text' }
-if ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
+if ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { $G4 = "$cYel!$cRst"; $D4 = 'none found, but some folders were not read' }
+elseif ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
 elseif ($N_ALLOW_NPM -gt 0 -and $N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = '1 saved key, and an npm publish would ship it' }
 elseif ($N_ALLOW_NPM -gt 0) { $G4 = "$cRed$gX$cRst"; $D4 = "$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship" }
 elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $AllowFirst)" }
@@ -2571,6 +3110,7 @@ else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
 $leaks = @($Platforms | Where-Object { $PlatFound -contains $_.Id })
 if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it before revoking tokens' }
 elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
+elseif ($MAL_LOCKONLY -eq 1 -and $EXT_HIT -eq 0) { $G5 = "$cRed$gX$cRst"; $D5 = 'npm malware in a lockfile: act if installed' }
 elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
 elseif ($UpdSum) { $G5 = "$cYel!$cRst"; $D5 = $UpdSum }
@@ -2588,8 +3128,10 @@ elseif ($leaks.Count -ge 2) {
 elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
 # A partial check comes after every finding someone has to act on, and before the green line.
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
+elseif ($LockUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: files unreadable' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($ExtUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'extensions not fully checked: folder unreadable' }
+elseif ($HOME_PARTIAL -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'none found, but some folders were not read' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1

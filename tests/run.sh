@@ -58,7 +58,7 @@ for B in $BASHES; do
   has    "finds a bad keyv in a yarn berry lock" 'keyv 6\.0\.0 \(keyv worm' "$OUT"
   hasnot "ignores near-miss versions and names" 'axios 1\.14\.10|my-axios|keyv 6\.0\.0-|keyv 6\.0\.1|code/lib/package-lock' "$OUT"
   has    "finds a bad version in a pnpm 8 lockfile" '@tanstack/history 1\.161\.9 \(TanStack worm' "$OUT"
-  has    "finds a planted worm file"            'code/planted/\.vscode/tanstack_runner\.js' "$OUT"
+  has    "finds a planted worm file"            'code/planted/\.vscode/router_runtime\.js' "$OUT"
   hasnot "a worktree with the same settings is not listed again" 'worktrees/w1' "$OUT"
   has    "and is counted under its repo's row" 'The same settings are in' "$OUT"
   has    "a localhost name with a login prefix is not local" 'code/sneaky/\.claude/settings\.json' "$OUT"
@@ -600,7 +600,7 @@ tr -s ' \n' '  ' < "$WORK/rv.txt" > "$WORK/rv-flat.txt"
 hasnot "a pnpm override pinning away is not a hit"     'code/pin/' "$WORK/rv.txt"
 has    "an npm lock entry without a URL is read"       'keyv 6\.0\.0 \(keyv worm' "$WORK/rv.txt"
 has    "a nested lock entry without a URL is read"     '~/code/nested/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$WORK/rv-flat.txt"
-has    "and a scoped one inside a scoped tool"         '~/code/nested/package-lock\.json @keyv/redis 6\.0\.0 \(keyv worm' "$WORK/rv-flat.txt"
+has    "and a scoped one inside a scoped tool"         '~/code/nested/package-lock\.json @keyv/redis 6\.0\.0 \(keyv account takeover' "$WORK/rv-flat.txt"
 has    "npm-shrinkwrap.json is read"                   'code/shrink/npm-shrinkwrap\.json' "$WORK/rv.txt"
 has    "a pnpm 5 lockfile is read"                     'cacheable 2\.5\.1' "$WORK/rv.txt"
 has    "a bad dependency inside a global tool is found" 'sometool/node_modules/axios' "$WORK/rv.txt"
@@ -612,7 +612,7 @@ has    "pretty-printed enabledMcpjsonServers is flagged" 'p/pretty/\.claude/sett
 has    "a project settings.local.json is flagged"      'p/local/\.claude/settings\.local\.json' "$WORK/rv.txt"
 has    "awsAuthRefresh counts as running a command"    'p/aws/\.claude/settings\.json' "$WORK/rv.txt"
 has    "a symlinked settings file is checked"          'p/link/\.claude/settings\.json' "$WORK/rv.txt"
-hasnot "a deny rule naming a worm file is not malware" 'runs a file the TanStack and keyv worms plant' "$WORK/rv.txt"
+hasnot "a deny rule naming a worm file is not malware" 'runs a file' "$WORK/rv.txt"
 hasnot "plugin marketplace clones are not projects"    'plugins/marketplaces' "$WORK/rv.txt"
 hasnot "a commented-out folderOpen task is not flagged" 'p/comment/' "$WORK/rv.txt"
 has    "a // inside a task label does not hide a folderOpen task" 'p/hide/\.vscode/tasks\.json' "$WORK/rv.txt"
@@ -640,16 +640,56 @@ has    "the repo's own settings file is named instead"  '~/r/\.claude/settings\.
 has    "and so is the repo's own tasks file"            '~/r/\.vscode/tasks\.json Set to run a task when the folder opens in VS Code or Cursor\. The same settings are in 1 more folder' "$WORK/wto.txt"
 mkdir -p "$WORK/escq/p/.claude" "$WORK/vsp/p/.vscode"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node \\"$CLAUDE_PROJECT_DIR\\"/.claude/router_runtime.js"}]}]}}\n' > "$WORK/escq/p/.claude/settings.json"
+# q and w hold the keyv worm's own math_init.js, so the setup.mjs their hooks run counts there.
 mkdir -p "$WORK/escq/q/.claude" "$WORK/escq/w/.claude"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node.exe .claude/setup.mjs"}]}]}}\n' > "$WORK/escq/q/.claude/settings.json"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude\\\\setup.mjs"}]}]}}\n' > "$WORK/escq/w/.claude/settings.json"
+printf 'x\n' | tee "$WORK/escq/q/.claude/math_init.js" > "$WORK/escq/w/.claude/math_init.js"
 HOME="$WORK/escq" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/escq.txt"
-has    "a hook running a worm file through an escaped path is malware" '~/p/\.claude/settings\.json runs a file the TanStack' "$WORK/escq.txt"
-has    "node.exe counts as running it"                 '~/q/\.claude/settings\.json runs a file the TanStack' "$WORK/escq.txt"
-has    "a Windows backslash path counts"               '~/w/\.claude/settings\.json runs a file the TanStack' "$WORK/escq.txt"
-printf 'x\n' > "$WORK/vsp/p/.vscode/setup.mjs"
+has    "a hook running a worm file through an escaped path is malware" '~/p/\.claude/settings\.json runs a file a worm plants' "$WORK/escq.txt"
+has    "node.exe counts as running it"                 '~/q/\.claude/settings\.json runs a file a worm plants' "$WORK/escq.txt"
+has    "a Windows backslash path counts"               '~/w/\.claude/settings\.json runs a file a worm plants' "$WORK/escq.txt"
+mkdir -p "$WORK/vsp/p/.claude"; printf 'x\n' > "$WORK/vsp/p/.vscode/setup.mjs"; printf 'x\n' > "$WORK/vsp/p/.claude/math_init.js"
 HOME="$WORK/vsp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.txt"
 has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack and keyv worms plant' "$WORK/vsp.txt"
+# A command counts only when it runs the file: a guard in node -e code, a script given the file to
+# block, and a task whose first argument is another script are not malware; a task that runs node
+# on the file is.
+mkdir -p "$WORK/grd/p/g1/.claude" "$WORK/grd/p/g2/.claude" "$WORK/grd/p/t1/.vscode" "$WORK/grd/p/t2/.vscode"
+printf '{\n  "hooks": {\n    "SessionStart": [{"hooks": [{"type": "command",\n      "command": "node -e \\"if (require(%s).existsSync(%s)) { console.error(%s); process.exit(2) }\\""}]}]\n  }\n}\n' "'fs'" "'.claude/router_runtime.js'" "'TanStack worm file found'" > "$WORK/grd/p/g1/.claude/settings.json"
+printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"node scripts/guard.js --block .claude/router_runtime.js"}]}]}}\n' > "$WORK/grd/p/g2/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"setup","command":"node","args":[".vscode/router_runtime.js"],"runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/grd/p/t1/.vscode/tasks.json"
+printf '{"version":"2.0.0","tasks":[{"label":"check","command":"node","args":["scripts/check.js",".vscode/router_runtime.js"],"runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/grd/p/t2/.vscode/tasks.json"
+HOME="$WORK/grd" bash "$SCRIPT" --offline > "$WORK/grd.txt" 2>&1
+sed -n '/05  RECENT KEY LEAKS/,/WHAT TO DO/p' "$WORK/grd.txt" | tr -s ' \n' '  ' > "$WORK/grd-05.txt"
+hasnot "a node -e guard naming a worm file is not malware" 'p/g1/' "$WORK/grd-05.txt"
+hasnot "a script given a worm file to block is not malware" 'p/g2/' "$WORK/grd-05.txt"
+has    "a task that runs node on a worm file is malware" '~/p/t1/\.vscode/tasks\.json runs a file a worm plants' "$WORK/grd-05.txt"
+hasnot "a task whose first argument is another script is not malware" 'p/t2/' "$WORK/grd-05.txt"
+# setup.mjs is a name projects use too: alone it is a file to read, in section 2, and the hook that
+# runs it is not malware either.
+mkdir -p "$WORK/stp/code/site/.vscode" "$WORK/stp/code/tool/.claude"
+printf '// installs dev certs for the local server\nimport { execSync } from "node:child_process";\nexecSync("mkcert -install");\n' > "$WORK/stp/code/site/.vscode/setup.mjs"
+printf 'console.log("project ready")\n' > "$WORK/stp/code/tool/.claude/setup.mjs"
+printf '{\n  "hooks": {\n    "SessionStart": [{"hooks": [{"type": "command", "command": "node .claude/setup.mjs"}]}]\n  }\n}\n' > "$WORK/stp/code/tool/.claude/settings.json"
+HOME="$WORK/stp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp.txt"
+hasnot "a setup.mjs alone is not called malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/stp.txt"
+has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack and keyv worms plant, with nothing else of theirs beside it\.' "$WORK/stp.txt"
+has    "section 2 lists it as a file to read (2)" '! ~/code/tool/\.claude/setup\.mjs Named like a file the TanStack and keyv worms plant' "$WORK/stp.txt"
+has    "with a fix to read it"                        'Read the files section 2 lists as named like files worms plant, and delete any you' "$WORK/stp.txt"
+rm -rf "$WORK/stp/code/tool"
+HOME="$WORK/stp" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp-c.txt"
+has    "the summary row names a project file to read" 'MCP servers 0 servers, 1 project file to read' "$WORK/stp-c.txt"
+# Project settings: bypassPermissions, which Claude Code before 2.1.257 took from a project, and two
+# that are not settings: the same words inside a rule's string, and an empty ANTHROPIC_BASE_URL.
+mkdir -p "$WORK/byp/p/byp/.claude" "$WORK/byp/p/str/.claude" "$WORK/byp/p/empty/.claude"
+printf '{\n  "permissions": {\n    "defaultMode": "bypassPermissions"\n  }\n}\n' > "$WORK/byp/p/byp/.claude/settings.json"
+printf '{"permissions":{"allow":["Bash(echo \\"defaultMode\\": \\"bypassPermissions\\")"]}}\n' > "$WORK/byp/p/str/.claude/settings.local.json"
+printf '{"env":{"ANTHROPIC_BASE_URL":""}}\n' > "$WORK/byp/p/empty/.claude/settings.json"
+HOME="$WORK/byp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/byp.txt"
+has    "a project that turns on bypassPermissions is flagged" '~/p/byp/\.claude/settings\.json Set to skip permission prompts with bypassPermissions\. Claude Code applies it from a project only before version 2\.1\.257\.' "$WORK/byp.txt"
+hasnot "the words inside a rule's string are not the setting" 'p/str/' "$WORK/byp.txt"
+hasnot "an empty ANTHROPIC_BASE_URL is not flagged" 'p/empty/' "$WORK/byp.txt"
 # One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
 mkdir -p "$WORK/bigjs/p/.vscode"
 python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'
@@ -673,6 +713,19 @@ PY3
 T0=$(date +%s); HOME="$WORK/aabig" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/aabig.txt"; T=$(( $(date +%s) - T0 ))
 has    "a large settings file full of near misses is read whole" 'p/\.vscode/settings\.json Set to auto-approve Copilot' "$WORK/aabig.txt"
 if [ "$T" -le 30 ]; then ok "and in linear time" "${T}s"; else bad "and in linear time" "took ${T}s"; fi
+# A project file can hold one huge line: a string of 100,000 backslashes in settings.json, 100,000
+# letters on one line of a yarn.lock. Each is read in time that grows with its size, and the
+# hooks after the backslashes and the bad version after the letters are still found.
+mkdir -p "$WORK/longln/p/.claude" "$WORK/longln/code/y"
+python3 - "$WORK/longln/p/.claude/settings.json" "$WORK/longln/code/y/yarn.lock" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('{"permissions":{"allow":["Bash(echo ' + '\\\\' * 100000 + 'a)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make"}]}]}}\n')
+open(sys.argv[2], 'w').write('a' * 100000 + '\n"axios@^1.14.0":\n  version "1.14.1"\n  resolved "https://registry.yarnpkg.com/axios/-/axios-1.14.1.tgz#abc"\n')
+PY3
+T0=$(date +%s); HOME="$WORK/longln" bash "$SCRIPT" --offline > "$WORK/longln.txt" 2>&1; T=$(( $(date +%s) - T0 ))
+has    "a settings file of 100,000 backslashes is read whole" 'p/\.claude/settings\.json' "$WORK/longln.txt"
+has    "a lockfile line of 100,000 letters does not hide the next" 'axios 1\.14\.1 \(Axios takeover' "$WORK/longln.txt"
+if [ "$T" -le 30 ]; then ok "and both in reasonable time" "${T}s"; else bad "and both in reasonable time" "took ${T}s"; fi
 HOME="$WORK/clean" bash "$SCRIPT" --offline > "$WORK/clean-npm.txt" 2>&1
 has    "the clean line counts versions and packages apart" 'none of [0-9]+ bad versions or [0-9]+ bad packages' "$WORK/clean-npm.txt"
 # npm's cache that can't be read in full: a folder inside it, _cacache itself, or an index file. Nothing
@@ -742,6 +795,41 @@ has    "a LiteLLM hit leads the summary"               'ACT NOW: SIGNS OF THE LI
 has    "a lockfile hit says it is listed there"      'axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile' "$WORK/out-flat-incidents.txt"
 has    "an install hit says it is installed"         'claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed' "$WORK/out-flat-incidents.txt"
 has    "a cache hit says it was downloaded"          "@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI, April 2026\), downloaded into npm's cache" "$WORK/out-flat-incidents.txt"
+# A lockfile records what some machine resolved, not what ran here: a bad version in a lockfile alone
+# makes the headline and the fix depend on whether the project was installed. node_modules next to it
+# holding that version is an install; another version there is not. The score and the link's nm stay.
+for lk in lko lki lkd; do
+  rm -rf "${WORK:?}/$lk"; cp -R "$WORK/clean" "$WORK/$lk"; rm -rf "$WORK/$lk/.config/opencode" "$WORK/$lk/.local/share/opencode"; mkdir -p "$WORK/$lk/code/cloned"
+  printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/$lk/code/cloned/package-lock.json"
+done
+mkdir -p "$WORK/lki/code/cloned/node_modules/axios" "$WORK/lkd/code/cloned/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/lki/code/cloned/node_modules/axios/package.json"
+printf '{"name":"axios","version":"1.14.2"}\n' > "$WORK/lkd/code/cloned/node_modules/axios/package.json"
+for lk in lko lki lkd; do HOME="$WORK/$lk" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$lk.txt"; done
+HOME="$WORK/lko" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lko-c.txt"
+has    "a lockfile alone: the headline depends on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lko.txt"
+has    "and so does the fix" "If you ran an install in the project section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach\. If not, update its lockfile to a version without the malware\." "$WORK/lko.txt"
+has    "and the summary row" 'Recent leaks npm malware in a lockfile: act if installed' "$WORK/lko-c.txt"
+_s1=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lko.txt"); _s2=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lki.txt")
+if [ -n "$_s1" ] && [ "$_s1" = "$_s2" ] && grep -q '&nm=1&' "$WORK/lko.txt"; then ok "a lockfile alone keeps the score and the link's nm"; else bad "a lockfile alone keeps the score and the link's nm" "${_s1:-no link} / ${_s2:-no link}"; fi
+has    "a bad version installed next to its lockfile is act-now" 'ACT NOW: SIGNS OF NPM MALWARE .*Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/lki.txt"
+has    "another version in node_modules leaves it depending on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lkd.txt"
+# With no key file, the snapshot note under the Argus offer speaks of the lockfile, on a Mac.
+rm -rf "$WORK/lke"; mkdir -p "$WORK/lke/code/cloned"; cp "$WORK/lko/code/cloned/package-lock.json" "$WORK/lke/code/cloned/"
+HOME="$WORK/lke" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lke.txt"
+[ "$(uname -s)" = Darwin ] || SKIPPING="the snapshot note with the Argus offer is printed on a Mac only"
+has    "on a Mac, the snapshot note does not say the malware took anything" 'It found npm malware listed in a lockfile, with no sign it was' "$WORK/lke.txt"
+SKIPPING=""
+# A lockfile the scan found but can't read leaves npm not fully checked, as an unreadable cache does.
+rm -rf "$WORK/lkr"; cp -R "$WORK/clean" "$WORK/lkr"; rm -rf "$WORK/lkr/.config/opencode" "$WORK/lkr/.local/share/opencode"; mkdir -p "$WORK/lkr/code/cloned"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/lkr/code/cloned/package-lock.json"
+chmod 000 "$WORK/lkr/code/cloned/package-lock.json"
+HOME="$WORK/lkr" bash "$SCRIPT" --offline > "$WORK/lkr.txt" 2>&1
+HOME="$WORK/lkr" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lkr-c.txt"
+chmod 644 "$WORK/lkr/code/cloned/package-lock.json"
+tr -s ' \n' '  ' < "$WORK/lkr.txt" > "$WORK/lkr-flat.txt"
+has    "an unreadable lockfile is not called clean"  'npm malware not fully checked: 1 lockfile could not be read ~/code/cloned/package-lock\.json' "$WORK/lkr-flat.txt"
+has    "and the summary row names unreadable files"  'Recent leaks npm packages not fully checked: files unreadable' "$WORK/lkr-c.txt"
 cp -R "$WORK/clean" "$WORK/ph2"; mkdir -p "$WORK/ph2/code/ph"
 printf '{"lockfileVersion":3,"packages":{"node_modules/plain-crypto-js":{"version":"0.0.1-security","resolved":"https://registry.npmjs.org/plain-crypto-js/-/plain-crypto-js-0.0.1-security.tgz"}}}\n' > "$WORK/ph2/code/ph/package-lock.json"
 HOME="$WORK/ph2" bash "$SCRIPT" --offline > "$WORK/ph2.txt" 2>&1
@@ -773,6 +861,23 @@ has    "the summary row says so in yellow"           'Recent leaks an npm packag
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
+# Versions the sources say carried no working malware are versions to update, each with its own
+# line: the @keyv 6.0.0 builds published without the install hook, SANDWORM_MODE's sleeper packages
+# and the UiPath builds whose payload had a bug. Packages the TanStack worm spread to, GitHub's second
+# SANDWORM_MODE batch and the Mastra packages besides @mastra/core are found, Mastra named as Socket does.
+for np in npd npa; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x"; done
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    },\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
+for np in npd npa; do HOME="$WORK/$np" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
+has    "a payload-less @keyv build is a version to update" 'npm malware a bad version to update .*keyv account takeover, August 2026: published from the compromised keyv account, but without the malicious install hook, Socket says\.' "$WORK/npd.txt"
+has    "with Socket's advice to pin it"               'Pin each @keyv package listed in section 5 to its version before 6\.0\.0, as Socket advises\.' "$WORK/npd.txt"
+has    "a SANDWORM_MODE sleeper package is a version to update" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: published by the SANDWORM_MODE attackers with no malware in them yet, Socket says\.' "$WORK/npd.txt"
+has    "with a fix to uninstall it"                   'Uninstall the SANDWORM_MODE sleeper packages listed in section 5: the attackers published every version of them\.' "$WORK/npd.txt"
+has    "a UiPath build whose payload could not run is a version to update" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware that a bug in its payload kept from working, Wiz says\.' "$WORK/npd.txt"
+hasnot "none of them is a compromised machine"        'ACT NOW|Treat this machine as compromised' "$WORK/npd.txt"
+has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
+has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
+has    "a Mastra package is named as its sources name it" '@mastra/mcp 1\.10\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
 # A version to update outranks an unreadable cache in row 05: a partial check never hides a finding to act on.
 cp -R "$WORK/mis" "$WORK/misno"; mkdir -p "$WORK/misno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/misno/.npm/_cacache/index-v5/aa"
 HOME="$WORK/misno" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/misno.txt"
@@ -1147,6 +1252,8 @@ has    "the LaunchAgent alone: row 05 asks to check it" 'Recent leaks +a startup
 has    "the LaunchAgent alone: the link says neither ex nor nm" '&nm=0&py=0&ex=0&wp=0' "$WORK/dz-la.txt"
 cp -R "$WORK/dz-ext" "$WORK/dz-both"; mkdir -p "$WORK/dz-both/code/ax"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/dz-both/code/ax/package-lock.json"
+# Installed next to its lockfile: a lockfile alone would leave the npm fix depending on an install.
+mkdir -p "$WORK/dz-both/code/ax/node_modules/axios"; printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/dz-both/code/ax/node_modules/axios/package.json"
 dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"
 has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map' "$WORK/dz-both.txt"
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
@@ -1255,6 +1362,8 @@ has    "made-up update-level npm incident: its line"  'Made npm slip, October 20
 has    "made-up Python package: the link flags it"    '&ll=0&.*&py=1&' "$WORK/mu.txt"
 has    "made-up planted file and its note"            '~/code/made/\.vscode/madeplant\.js a file the Made worm plants' "$WORK/mu.txt"
 has    "a hook that runs it, with the general note"   '~/code/made/\.claude/settings\.json runs a file a worm plants' "$WORK/mu.txt"
+has    "a made-up planted file with its published SHA-256 counts on its own" '~/code/made/hash/\.claude/madeboot\.mjs a file the Made worm plants' "$WORK/mu.txt"
+has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, with nothing else of theirs beside it' "$WORK/mu.txt"
 has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/tmp/\.madepy_1 ' "$WORK/mu.txt"
 has    "made-up Python package: its advisory"         'Advisory: example\.com/madepy/advisory' "$WORK/mu.txt"
 has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.9 package\. Clear it with: uv cache clean madepkg' "$WORK/mu.txt"
@@ -1279,6 +1388,7 @@ has    "a made-up update-level hit is a version to update" 'npm malware a bad ve
 hasnot "and not a compromised machine"                'ACT NOW|Treat this machine as compromised' "$WORK/mu-upd.txt"
 rm -rf "$WORK/mu-act"; cp -R "$WORK/clean" "$WORK/mu-act"; mkdir -p "$WORK/mu-act/code/a"
 printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":"1.2.3","resolved":"https://registry.npmjs.org/made-npm-pkg/-/made-npm-pkg-1.2.3.tgz"}}}\n' > "$WORK/mu-act/code/a/package-lock.json"
+mkdir -p "$WORK/mu-act/code/a/node_modules/made-npm-pkg"; printf '{"name":"made-npm-pkg","version":"1.2.3"}\n' > "$WORK/mu-act/code/a/node_modules/made-npm-pkg/package.json"
 mu "$WORK/mu-act" "$WORK/mu-act.txt"
 has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
 has    "and the link says npm malware"                '&nm=1&py=0&ex=0&wp=0' "$WORK/mu-act.txt"
@@ -1323,8 +1433,11 @@ gen_refuses "an ENV token with no fallback"             indicators.tsv "mastra${
 gen_refuses "an ENV token whose fallback is not a path" indicators.tsv "mastra${T}all${T}startup${T}no${T}{ENV:X:y}/x.cjs${T}note"
 gen_refuses "a session path with an unknown token"      sessions.tsv "all${T}read${T}X${T}{FOO}/x${T}docs"
 gen_refuses "an ENV token alone whose fallback is the home folder" sessions.tsv "all${T}read${T}X${T}{ENV:X:~}${T}docs"
-gen_refuses "a planted file in another folder"          planted.tsv ".git${T}x.js${T}tanstack${T}note"
-gen_refuses "a planted file listed twice"               planted.tsv ".claude${T}setup.mjs${T}keyv${T}note"
+gen_refuses "a planted file in another folder"          planted.tsv ".git${T}x.js${T}tanstack${T}note${T}yes${T}-"
+gen_refuses "a planted file listed twice"               planted.tsv ".claude${T}setup.mjs${T}keyv${T}note${T}no${T}-"
+gen_refuses "a planted file that is neither alone nor not" planted.tsv ".claude${T}x.js${T}keyv${T}note${T}maybe${T}-"
+gen_refuses "a planted SHA-256 that is not one"         planted.tsv ".claude${T}x.mjs${T}keyv${T}note${T}no${T}abc123"
+gen_refuses "a SHA-256 on a file that counts alone"     planted.tsv ".claude${T}x.js${T}keyv${T}note${T}yes${T}$(printf 'a%.0s' $(seq 1 64))"
 gen_refuses "an npm package with an unknown incident"   bad-npm.tsv "left-pad${T}1.0.0${T}nosuch"
 gen_refuses "an incident listed twice"                  incidents.tsv "litellm${T}X${T}October 2026${T}x${T}https://example.com${T}act"
 gen_refuses "an incident advice with a quote"          incidents.tsv "newone${T}X${T}October 2026${T}x${T}https://example.com${T}update${T}Don't"
@@ -1427,7 +1540,7 @@ X='\?\?\[2J\?\]0;pwned\?x'
 has    "a TAB in a folder name: project settings keep their row"     "code/auto$X/\.claude/settings\.json Set to run commands" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a project's VS Code settings keep their row" "p/yolo$X/\.vscode/settings\.json Set to auto-approve" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a lockfile hit keeps its package and source" "code/lock$X/package-lock\.json axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile" "$WORK/hostile-flat.txt"
-has    "a TAB in a folder name: a planted file keeps its note"       "code/plant$X/\.vscode/tanstack_runner\.js a file the TanStack and keyv worms plant" "$WORK/hostile-flat.txt"
+has    "a TAB in a folder name: a planted file keeps its note"       "code/plant$X/\.vscode/router_runtime\.js a file the TanStack worm plants" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a key in an Aider history is found"  "code/aider$X/\.aider\.chat\.history\.md" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a link to authorized_keys is listed" "code/link$X/notes\.txt" "$WORK/hostile-flat.txt"
 has    "a | in a folder name: an MCP config keeps its count and token" "code/mcp\|\?\[2Jpipe$X/\.mcp\.json 1 server, token in the file" "$WORK/hostile-flat.txt"
@@ -1435,6 +1548,31 @@ has    "a | in a folder name: a key file keeps its provider"         "code/key\|
 has    "a | in a folder name: an allow list keeps its finding"       "code/allow\|\?\[2Jpipe$X/\.claude/settings\.local\.json A saved command contains a key" "$WORK/hostile-flat.txt"
 nokeys "hostile folder names: no planted key is printed" "$WORK/keys-hostile.txt" "$WORK/hostile.txt"
 hasnot "hostile folder names: no shell error" 'integer expected|bad substitution|syntax error|unbound variable|command not found' "$WORK/hostile.txt"
+
+echo "folders the home scan can't read"
+# A folder that can't be read, holding a bad lockfile: it is named as not checked, and the rows the
+# home scan feeds are not green.
+rm -rf "$WORK/ud"; mkdir -p "$WORK/ud/code/locked/app"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/ud/code/locked/app/package-lock.json"
+chmod 000 "$WORK/ud/code/locked"
+HOME="$WORK/ud" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud.txt"
+HOME="$WORK/ud" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-c.txt"
+chmod 755 "$WORK/ud/code/locked"
+has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
+has    "and the npm row is not green"                 'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud.txt"
+has    "and the keys row is not green"                'Keys in plain text none found, but some folders were not read' "$WORK/ud-c.txt"
+has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
+has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
+hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
+# A folder whose name holds a line break is not entered, so no part of a path under it is taken for a
+# file: it is named as not checked, and the rows the home scan feeds are not green.
+rm -rf "$WORK/nl"; mkdir -p "$WORK/nl/code/proj${_nl}x"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/nl/code/proj${_nl}x/package-lock.json"
+HOME="$WORK/nl" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/nl.txt"
+HOME="$WORK/nl" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/nl-c.txt"
+has    "a folder with a line break in its name is named as not checked" '1 folder has a line break in its name, so sections 2 to 5 did not .*the files in it: ~/code/proj\?x,' "$WORK/nl.txt"
+has    "and the rows it feeds are not green"          'Recent leaks none found, but some folders were not read' "$WORK/nl-c.txt"
+hasnot "and the headline does not call that scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/nl-c.txt"
 
 echo "saving the report"
 mkdir -p "$WORK/cwd"
@@ -1588,6 +1726,25 @@ PY
   has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
   HOME="$WORK/fcount" bash "$SCRIPT" --offline > "$WORK/fcount.txt" 2>&1
   has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
+  # files_found counts files: a site-packages folder the scan lists is not one.
+  mkdir -p "$WORK/fcount/v/lib/python3.12/site-packages"; printf 'home = /usr\n' > "$WORK/fcount/v/pyvenv.cfg"
+  report_of "$WORK/report-fsite.json" env HOME="$WORK/fcount" GIRD_CHECK_API="$API" bash "$SCRIPT"
+  has    "files_found counts no site-packages folder" '"files_found":3,' "$WORK/report-fsite.json"
+  rm -rf "$WORK/fcount/v"
+  # A settings file a repo links to a device: /dev/zero never ends and /dev/tty waits for the
+  # keyboard. Only a link that ends at a regular file is a settings file, and the allow list after it
+  # is still read. A stand-in grep refuses device files, so a regression fails here instead of hanging.
+  mkdir -p "$WORK/devbin"
+  printf '#!/bin/sh\nfor a in "$@"; do [ -c "$a" ] && exit 2; done\nexec %s "$@"\n' "$(command -v grep)" > "$WORK/devbin/grep"; chmod +x "$WORK/devbin/grep"
+  for dv in zero tty; do
+    rm -rf "${WORK:?}/dev$dv"; mkdir -p "$WORK/dev$dv/code/a-repo/.claude" "$WORK/dev$dv/code/b-mine/.claude"
+    ln -s "/dev/$dv" "$WORK/dev$dv/code/a-repo/.claude/settings.local.json"
+    printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=%s npm run eval)"]}}\n' "$(sed -n 2p "$WORK/keys.txt")" > "$WORK/dev$dv/code/b-mine/.claude/settings.local.json"
+    report_of "$WORK/report-dev$dv.json" env HOME="$WORK/dev$dv" GIRD_CHECK_API="$API" PATH="$WORK/devbin:$PATH" bash "$SCRIPT"
+    has    "a settings link to /dev/$dv is not a settings file" '"allow_list_files":1,' "$WORK/report-dev$dv.json"
+    HOME="$WORK/dev$dv" PATH="$WORK/devbin:$PATH" bash "$SCRIPT" --offline > "$WORK/dev$dv.txt" 2>&1
+    has    "and the allow list after a /dev/$dv link is still read" '~/code/b-mine/\.claude/settings\.local\.json' "$WORK/dev$dv.txt"
+  done
   # --all reaches the report as all_folders 1.
   report_of "$WORK/report-all.json" env HOME="$WORK/fcount" GIRD_CHECK_API="$API" bash "$SCRIPT" --all
   has    "--all is all_folders 1 in the report" '"all_folders":1,' "$WORK/report-all.json"

@@ -147,7 +147,7 @@ fleet_ok() { # file: 0 when it may be read; outside an account run, always
 fleet_filter() { # the paths on stdin that may be read; folders and the scan's "L path" lines pass
   if [ "$ACCTRUN" -ne 1 ]; then cat; return; fi
   while IFS= read -r _ff; do
-    case "$_ff" in '') continue ;; 'L '*) printf '%s\n' "$_ff"; continue ;; esac
+    case "$_ff" in '') continue ;; 'L '*|'N '*) printf '%s\n' "$_ff"; continue ;; esac
     # A linked settings, tasks or planted file comes as "S path": the file it leads to is the one read.
     case "$_ff" in 'S '*) fleet_ok "${_ff#S }" && printf '%s\n' "$_ff"; continue ;; esac
     if [ -d "$_ff" ] || fleet_ok "$_ff"; then printf '%s\n' "$_ff"; fi
@@ -208,6 +208,7 @@ short() {
 rowsafe() { _r=${1//$'\xc2'[$'\x80'-$'\x9f']/?}; printf '%s' "${_r//[[:cntrl:]]/?}"; }
 plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s' "$1" "$3"; fi; }
 count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf 0; fi; }
+sha_hex() { if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum 2>/dev/null; fi | cut -c1-64; }
 # 1234567 -> 1,234,567
 commas() {
   _cn=$1; _co=""
@@ -876,16 +877,19 @@ npm_would_ship() {
 
 # >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it.
 PLANTED='.claude/router_runtime.js
-.claude/tanstack_runner.js
 .vscode/router_runtime.js
-.vscode/tanstack_runner.js
 .claude/setup.mjs
 .claude/math_init.js
 .vscode/setup.mjs'
-PLANTED_ERE='\.claude/router_runtime\.js|\.claude/tanstack_runner\.js|\.vscode/router_runtime\.js|\.vscode/tanstack_runner\.js|\.claude/setup\.mjs|\.claude/math_init\.js|\.vscode/setup\.mjs'
-WORM_RUN='\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
-planted_note() { case "$1" in */.claude/router_runtime.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/tanstack_runner.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/router_runtime.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/tanstack_runner.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/math_init.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; esac; }
-WORM_REF_NOTE='runs a file the TanStack and keyv worms plant'
+PLANTED_ERE='\.claude/router_runtime\.js|\.vscode/router_runtime\.js|\.claude/setup\.mjs|\.claude/math_init\.js|\.vscode/setup\.mjs'
+PLANTED_ALONE='.claude/router_runtime.js
+.vscode/router_runtime.js
+.claude/math_init.js'
+WORM_RUN_ALONE='\.(claude|vscode)[/\\]+(router_runtime\.js|math_init\.js)'
+WORM_RUN_WEAK='\.(claude|vscode)[/\\]+(setup\.mjs)'
+planted_note() { case "$1" in */.claude/router_runtime.js) printf '%s' 'a file the TanStack worm plants' ;; */.vscode/router_runtime.js) printf '%s' 'a file the TanStack worm plants' ;; */.claude/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/math_init.js) printf '%s' 'a file the keyv worm plants' ;; */.vscode/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; esac; }
+planted_sha() { case "$1" in */.claude/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' ;; */.vscode/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' ;; esac; }
+WORM_REF_NOTE='runs a file a worm plants'
 # <<< planted
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
@@ -934,7 +938,12 @@ EOF
       -o -path "$H/Videos" -o -path "$H/Saved Games" -o -path "$H/3D Objects" -o -path "$H/scoop"
   fi
   if [ "$ALL" -eq 0 ]; then set -- "$@" -o -path "$H/Desktop" -o -path "$H/Documents" -o -path "$H/Downloads"; fi
-  find "$H" -maxdepth 6 \( -type d \( "$@" \) -prune \) -o \
+  # A folder whose name holds a line break would split every path under it in two, so the scan
+  # does not enter it. It is printed as "N path", the line break shown as ?, and named as not checked.
+  _nl=$'\n'
+  # shellcheck disable=SC2016  # $1 is the folder, for the sh that find starts
+  find "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
+    \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
@@ -955,7 +964,7 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
   while IFS= read -r _l; do
     printf '%s\n' "$_l"
     _n=$((_n + 1)); [ $((_n % 4)) -eq 1 ] || continue
-    _s=${_l#[LS] }; _s=${_s//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
+    _s=${_l#[LSN] }; _s=${_s//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
     # shellcheck disable=SC2088  # a literal ~ for home paths, as short() prints
     case "$_s" in "$H"/*) _s="~/${_s#"$H"/}" ;; esac
     progress i "Checking $_s"
@@ -984,12 +993,12 @@ Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/global
 Continue||$H/.continue|$H/.continue/sessions|continue"
 # <<< agents
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; mastra) printf '%s' 'Mastra worm, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, October 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; esac; }
-incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; mastra) printf '%s' 'Mastra worm, June 2026: started itself at login and sent browser history to the attackers. socket.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' ;; esac; }
-incident_level() { case "$1" in mistral) printf update ;; opencode) printf leak ;; railway) printf leak ;; zeabur) printf leak ;; injective) printf update ;; *) printf act ;; esac; }
-incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
-incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; uipath) printf '%s' 'UiPath npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; mastra) printf '%s' 'Mastra npm packages, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, October 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; esac; }
+incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; uipath) printf '%s' 'UiPath npm packages, May 2026: published with malware that a bug in its payload kept from working, Wiz says. wiz.io' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; mastra) printf '%s' 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026: published from the compromised keyv account, but without the malicious install hook, Socket says. socket.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026: published by the SANDWORM_MODE attackers with no malware in them yet, Socket says. socket.dev' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' ;; esac; }
+incident_level() { case "$1" in mistral) printf update ;; uipath) printf update ;; keyvscope) printf update ;; sandsleep) printf update ;; opencode) printf leak ;; railway) printf leak ;; zeabur) printf leak ;; injective) printf update ;; *) printf act ;; esac; }
+incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; uipath) printf '%s' 'UiPath npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra npm packages' ;; keyv) printf '%s' 'keyv worm' ;; keyvscope) printf '%s' 'keyv account takeover' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
+incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; uipath) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; keyvscope) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; sandsleep) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
+incident_advice() { case "$1" in keyvscope) printf '%s' 'Pin each @keyv package listed in section 5 to its version before 6.0.0, as Socket advises.' ;; sandsleep) printf '%s' 'Uninstall the SANDWORM_MODE sleeper packages listed in section 5: the attackers published every version of them.' ;; glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
 incident_summary() { case "$1" in injective) printf '%s' 'Injective SDK: move the funds out of its wallets' ;; esac; }
 # <<< incidents
 # >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1342,9 +1351,19 @@ SCAN_FAILED=0; SCAN_WHY=""
 if [ -z "$FOUND" ] && [ -n "$SCAN_ERR" ] && grep -qiE '^find: .*(unrecognized|unknown|invalid|illegal|not a valid|bad option|usage)' "$SCAN_ERR" 2>/dev/null; then
   SCAN_FAILED=1; SCAN_WHY=$(grep -m 1 '^find: ' "$SCAN_ERR" | tr -d '\r' | cut -c 1-120)
 fi
+# Folders the scan could not enter, and so did not check: the ones find could not read (its errors,
+# the path quoted or not), and the ones whose name holds a line break ("N path"). Rows the home scan
+# feeds never read clean while there are any (HOME_PARTIAL).
+NL_DIRS=$(printf '%s\n' "$FOUND" | sed -n 's/^N //p')
+UNREAD_DIRS=""
+[ -n "$SCAN_ERR" ] && UNREAD_DIRS=$(grep -E '^find: .*: (Permission denied|Operation not permitted)$' "$SCAN_ERR" 2>/dev/null |
+  sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
+N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
+HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS)) -gt 0 ] && HOME_PARTIAL=1
 # Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
-# files_found counts files, as it always has.
-LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p')
+# files_found counts files, as it always has. A link counts only when it ends at a regular file: a
+# repo can link a settings file to /dev/zero or /dev/tty, which a reader would never get to the end of.
+LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p' | while IFS= read -r _f; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
 # Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
 # outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
 # .ssh/authorized_keys fixture does not count. Before the file exists, a link that resolves to its
@@ -1358,11 +1377,61 @@ ak_link() { # link
   [ "$_d" = "$(cd "$H/.ssh" 2>/dev/null && pwd -P)" ]
 }
 AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) ak_link "$_f" && printf '%s\n' "$_f" ;; esac; done)
-FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LS] ')
+FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LSN] ')
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/tasks\.json$')
-# Files worms plant in a project, from data/planted.tsv.
+# Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
+# name projects use too (setup.mjs) counts in a project that also holds one of those, or when the file
+# is the very one the sources publish the SHA-256 of; anywhere else section 2 lists it as a file to
+# read (WORM_LOOK). WORM_PROJ lists the projects that count, each the folder holding .claude or
+# .vscode: there a hook that runs such a file counts too.
 WORM_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E "/($PLANTED_ERE)\$")
+planted_alone() { # file: is it at a path only a worm uses?
+  case "
+$PLANTED_ALONE
+" in *"
+${1#"${1%/*/*}"/}
+"*) return 0 ;; esac; return 1
+}
+worm_proj() { # file in a .claude or .vscode folder: is its project one that counts?
+  case "
+$WORM_PROJ" in *"
+${1%/*/*}
+"*) return 0 ;; esac; return 1
+}
+WORM_PROJ=""; WORM_HIT=""; WORM_LOOK=""
+while IFS= read -r _f; do
+  [ -n "$_f" ] && planted_alone "$_f" && ! worm_proj "$_f" && WORM_PROJ="$WORM_PROJ${_f%/*/*}
+"
+done <<EOF
+$WORM_FILES
+EOF
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  planted_alone "$_f" && continue
+  worm_proj "$_f" && continue
+  _pp=${_f%/*/*}; _ok=0
+  while IFS= read -r _a; do [ -n "$_a" ] && [ -e "$_pp/$_a" ] && _ok=1; done <<EOF
+$PLANTED_ALONE
+EOF
+  if [ "$_ok" -eq 0 ] && [ -f "$_f" ]; then
+    _sh=$(sha_hex < "$_f" 2>/dev/null)
+    case " $(planted_sha "$_f") " in *" $_sh "*) [ -n "$_sh" ] && _ok=1 ;; esac
+  fi
+  [ "$_ok" -eq 1 ] && WORM_PROJ="$WORM_PROJ$_pp
+"
+done <<EOF
+$WORM_FILES
+EOF
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  if planted_alone "$_f" || worm_proj "$_f"; then WORM_HIT="$WORM_HIT$_f
+"; else WORM_LOOK="$WORM_LOOK$_f
+"; fi
+done <<EOF
+$WORM_FILES
+EOF
+N_LOOK=$(count_lines "$WORM_LOOK")
 AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.(chat\.history\.md|input\.history)$')
 # The project files of data/auto-approve.tsv, and every project's .vscode/settings.json (section 2).
 AA_FILES=""; AA_ERE=""
@@ -1525,19 +1594,43 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 # settings.json and settings.local.json are read, since repos commit either. Each file is read as
 # one line, so pretty-printed JSON matches too, with JSONC comments removed first.
 AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
-# Worms plant a file in the folder (WORM_RUN, from data/planted.tsv) and run it from a hook or a task.
-# A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
-WORM_CMD='"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*([^A-Za-z0-9_"\\]|\\"))?(node|bun|deno|tsx)(\.exe)?[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
+# Worms plant a file in the folder (data/planted.tsv) and run it from a hook or a task. A command runs
+# one when the file is the script an interpreter runs: the first word after node, bun, deno or tsx
+# and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
+# option word starting with e or p ends the match); when the file is the command itself; or when a
+# task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
+# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
+# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
+worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these files
+  _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$1"'(\\"|["'"'"'[:space:];&|)])'
+  _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
+  _wo='(--|--[A-DF-OQ-Za-df-oq-z0-9][^[:space:]"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)[[:space:]]+'
+  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(([^"\\]|\\.)*(;|&&?|\|\|?)[[:space:]]*)?'
+  _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp"'(node|bun|deno|tsx)(\.exe)?"'
+  _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
+  _wb='([^{}]|\{[^{}]*\})*'
+  printf '%s' "$_ws$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
+}
+WORM_CMD_ALONE=""; [ -n "$WORM_RUN_ALONE" ] && WORM_CMD_ALONE=$(worm_cmd "$WORM_RUN_ALONE")
+WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN_WEAK")
 TAB=$(printf '\t')
 # One line of text, with comments removed first: // to the end of the line and /* */, outside
 # strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
 # JSONC parser reads it). tasks.json and VS Code's settings.json are JSONC, and a commented-out
 # setting in any other file is not active either. Each line is split on its quotes, and each piece
 # outside a string on its slashes, both with a one-character separator, and every chunk is looked at
-# a bounded number of times: linear whatever the input, where a loop over single characters, or a
-# regex split or gsub with many matches, is quadratic on macOS's awk for a long minified line.
+# a bounded number of times, so the time grows with the size of the file: a loop over single
+# characters (substr measures the whole string on macOS's awk), a regex split or gsub with many
+# matches, or a match that can restart inside a long run would be quadratic on a long minified line.
 flat() {
   tr '\r\t' '\n ' < "$1" 2>/dev/null | awk '
+    # How many backslashes s ends with. A match anchored at the last other character starts once per
+    # run of backslashes, where /\\+$/ restarts at every backslash of a long run.
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
     # A piece between two quotes, in code (st 0) or inside a block comment (st 2). Split on /,
     # // is an empty chunk between two slashes, /* a chunk starting with *, and */ a chunk ending
     # in * before a slash; the * that opened the comment (a /*/) closes nothing. Returns 1 on a // comment.
@@ -1557,7 +1650,7 @@ flat() {
     { nq = split($0, q, "\"")
       for (i = 1; i <= nq; i++) {
         if (st == 1) {            # in a string: kept as it is; an odd run of \ escapes the quote or the line break
-          printf "%s", q[i]; esc = (match(q[i], /\\+$/) && RLENGTH % 2 == 1)
+          printf "%s", q[i]; esc = (trail(q[i]) % 2 == 1)
           if (i < nq) printf "\""
           if (!esc) st = 0
           continue
@@ -1570,9 +1663,13 @@ flat() {
     }'
 }
 auto_row() { # file what flattened-text
-  # A worm file counts only when a command runs it, not when a rule or a guard merely names it.
-  printf '%s' "$3" | grep -qE "$WORM_CMD" && WORM_REFS="$WORM_REFS$1
+  # A worm file counts only when a command runs it (worm_cmd), and a file projects use too only in a
+  # project that counts (WORM_PROJ).
+  if { [ -n "$WORM_CMD_ALONE" ] && printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; } ||
+     { [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1" && printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; }; then
+    WORM_REFS="$WORM_REFS$1
 "
+  fi
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   # The path goes into TAB-separated rows and the list of settings seen, so it is made row-safe first.
@@ -1628,8 +1725,14 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
   fi
-  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -qvE ':[[:space:]]*"[A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/[^"]*)?"$'; then
+  # An empty ANTHROPIC_BASE_URL sets nothing.
+  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*[^"[:space:]][^"]*"' | grep -qvE ':[[:space:]]*"[A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/[^"]*)?"$'; then
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
+  fi
+  # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
+  # versions take it only from the person's own or managed settings (Claude Code's settings docs).
+  if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"'; then
+    _w="${_w:+$_w, }skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257"
   fi
   [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
 done <<EOF
@@ -2069,6 +2172,247 @@ plain-crypto-js * axios
 @tanstack/vue-start-server 1.166.53 tanstack
 @tanstack/zod-adapter 1.166.12 tanstack
 @tanstack/zod-adapter 1.166.15 tanstack
+@beproduct/nestjs-auth 0.1.2 tanstack
+@beproduct/nestjs-auth 0.1.3 tanstack
+@beproduct/nestjs-auth 0.1.4 tanstack
+@beproduct/nestjs-auth 0.1.5 tanstack
+@beproduct/nestjs-auth 0.1.6 tanstack
+@beproduct/nestjs-auth 0.1.7 tanstack
+@beproduct/nestjs-auth 0.1.8 tanstack
+@beproduct/nestjs-auth 0.1.9 tanstack
+@beproduct/nestjs-auth 0.1.10 tanstack
+@beproduct/nestjs-auth 0.1.11 tanstack
+@beproduct/nestjs-auth 0.1.12 tanstack
+@beproduct/nestjs-auth 0.1.13 tanstack
+@beproduct/nestjs-auth 0.1.14 tanstack
+@beproduct/nestjs-auth 0.1.15 tanstack
+@beproduct/nestjs-auth 0.1.16 tanstack
+@beproduct/nestjs-auth 0.1.17 tanstack
+@beproduct/nestjs-auth 0.1.18 tanstack
+@beproduct/nestjs-auth 0.1.19 tanstack
+@dirigible-ai/sdk 0.6.2 tanstack
+@dirigible-ai/sdk 0.6.3 tanstack
+@draftauth/client 0.2.1 tanstack
+@draftauth/client 0.2.2 tanstack
+@draftauth/core 0.13.1 tanstack
+@draftauth/core 0.13.2 tanstack
+@draftlab/auth 0.24.1 tanstack
+@draftlab/auth 0.24.2 tanstack
+@draftlab/auth-router 0.5.1 tanstack
+@draftlab/auth-router 0.5.2 tanstack
+@draftlab/db 0.16.1 tanstack
+@draftlab/db 0.16.2 tanstack
+@mesadev/rest 0.28.3 tanstack
+@mesadev/saguaro 0.4.22 tanstack
+@mesadev/sdk 0.28.3 tanstack
+@ml-toolkit-ts/preprocessing 1.0.2 tanstack
+@ml-toolkit-ts/preprocessing 1.0.3 tanstack
+@ml-toolkit-ts/xgboost 1.0.3 tanstack
+@ml-toolkit-ts/xgboost 1.0.4 tanstack
+@squawk/airport-data 0.7.4 tanstack
+@squawk/airport-data 0.7.5 tanstack
+@squawk/airport-data 0.7.6 tanstack
+@squawk/airport-data 0.7.7 tanstack
+@squawk/airport-data 0.7.8 tanstack
+@squawk/airports 0.6.2 tanstack
+@squawk/airports 0.6.3 tanstack
+@squawk/airports 0.6.4 tanstack
+@squawk/airports 0.6.5 tanstack
+@squawk/airports 0.6.6 tanstack
+@squawk/airspace 0.8.1 tanstack
+@squawk/airspace 0.8.2 tanstack
+@squawk/airspace 0.8.3 tanstack
+@squawk/airspace 0.8.4 tanstack
+@squawk/airspace 0.8.5 tanstack
+@squawk/airspace-data 0.5.3 tanstack
+@squawk/airspace-data 0.5.4 tanstack
+@squawk/airspace-data 0.5.5 tanstack
+@squawk/airspace-data 0.5.6 tanstack
+@squawk/airspace-data 0.5.7 tanstack
+@squawk/airway-data 0.5.4 tanstack
+@squawk/airway-data 0.5.5 tanstack
+@squawk/airway-data 0.5.6 tanstack
+@squawk/airway-data 0.5.7 tanstack
+@squawk/airway-data 0.5.8 tanstack
+@squawk/airways 0.4.2 tanstack
+@squawk/airways 0.4.3 tanstack
+@squawk/airways 0.4.4 tanstack
+@squawk/airways 0.4.5 tanstack
+@squawk/airways 0.4.6 tanstack
+@squawk/fix-data 0.6.4 tanstack
+@squawk/fix-data 0.6.5 tanstack
+@squawk/fix-data 0.6.6 tanstack
+@squawk/fix-data 0.6.7 tanstack
+@squawk/fix-data 0.6.8 tanstack
+@squawk/fixes 0.3.2 tanstack
+@squawk/fixes 0.3.3 tanstack
+@squawk/fixes 0.3.4 tanstack
+@squawk/fixes 0.3.5 tanstack
+@squawk/fixes 0.3.6 tanstack
+@squawk/flight-math 0.5.4 tanstack
+@squawk/flight-math 0.5.5 tanstack
+@squawk/flight-math 0.5.6 tanstack
+@squawk/flight-math 0.5.7 tanstack
+@squawk/flight-math 0.5.8 tanstack
+@squawk/flightplan 0.5.2 tanstack
+@squawk/flightplan 0.5.3 tanstack
+@squawk/flightplan 0.5.4 tanstack
+@squawk/flightplan 0.5.5 tanstack
+@squawk/flightplan 0.5.6 tanstack
+@squawk/geo 0.4.4 tanstack
+@squawk/geo 0.4.5 tanstack
+@squawk/geo 0.4.6 tanstack
+@squawk/geo 0.4.7 tanstack
+@squawk/geo 0.4.8 tanstack
+@squawk/icao-registry 0.5.2 tanstack
+@squawk/icao-registry 0.5.3 tanstack
+@squawk/icao-registry 0.5.4 tanstack
+@squawk/icao-registry 0.5.5 tanstack
+@squawk/icao-registry 0.5.6 tanstack
+@squawk/icao-registry-data 0.8.4 tanstack
+@squawk/icao-registry-data 0.8.5 tanstack
+@squawk/icao-registry-data 0.8.6 tanstack
+@squawk/icao-registry-data 0.8.7 tanstack
+@squawk/icao-registry-data 0.8.8 tanstack
+@squawk/mcp 0.9.1 tanstack
+@squawk/mcp 0.9.2 tanstack
+@squawk/mcp 0.9.3 tanstack
+@squawk/mcp 0.9.4 tanstack
+@squawk/mcp 0.9.5 tanstack
+@squawk/navaid-data 0.6.4 tanstack
+@squawk/navaid-data 0.6.5 tanstack
+@squawk/navaid-data 0.6.6 tanstack
+@squawk/navaid-data 0.6.7 tanstack
+@squawk/navaid-data 0.6.8 tanstack
+@squawk/navaids 0.4.2 tanstack
+@squawk/navaids 0.4.3 tanstack
+@squawk/navaids 0.4.4 tanstack
+@squawk/navaids 0.4.5 tanstack
+@squawk/navaids 0.4.6 tanstack
+@squawk/notams 0.3.6 tanstack
+@squawk/notams 0.3.7 tanstack
+@squawk/notams 0.3.8 tanstack
+@squawk/notams 0.3.9 tanstack
+@squawk/notams 0.3.10 tanstack
+@squawk/procedure-data 0.7.3 tanstack
+@squawk/procedure-data 0.7.4 tanstack
+@squawk/procedure-data 0.7.5 tanstack
+@squawk/procedure-data 0.7.6 tanstack
+@squawk/procedure-data 0.7.7 tanstack
+@squawk/procedures 0.5.2 tanstack
+@squawk/procedures 0.5.3 tanstack
+@squawk/procedures 0.5.4 tanstack
+@squawk/procedures 0.5.5 tanstack
+@squawk/procedures 0.5.6 tanstack
+@squawk/types 0.8.1 tanstack
+@squawk/types 0.8.2 tanstack
+@squawk/types 0.8.3 tanstack
+@squawk/types 0.8.4 tanstack
+@squawk/types 0.8.5 tanstack
+@squawk/units 0.4.3 tanstack
+@squawk/units 0.4.4 tanstack
+@squawk/units 0.4.5 tanstack
+@squawk/units 0.4.6 tanstack
+@squawk/units 0.4.7 tanstack
+@squawk/weather 0.5.6 tanstack
+@squawk/weather 0.5.7 tanstack
+@squawk/weather 0.5.8 tanstack
+@squawk/weather 0.5.9 tanstack
+@squawk/weather 0.5.10 tanstack
+@supersurkhet/cli 0.0.2 tanstack
+@supersurkhet/cli 0.0.3 tanstack
+@supersurkhet/cli 0.0.4 tanstack
+@supersurkhet/cli 0.0.5 tanstack
+@supersurkhet/cli 0.0.6 tanstack
+@supersurkhet/cli 0.0.7 tanstack
+@supersurkhet/sdk 0.0.2 tanstack
+@supersurkhet/sdk 0.0.3 tanstack
+@supersurkhet/sdk 0.0.4 tanstack
+@supersurkhet/sdk 0.0.5 tanstack
+@supersurkhet/sdk 0.0.6 tanstack
+@supersurkhet/sdk 0.0.7 tanstack
+@tallyui/components 1.0.1 tanstack
+@tallyui/components 1.0.2 tanstack
+@tallyui/components 1.0.3 tanstack
+@tallyui/connector-medusa 1.0.1 tanstack
+@tallyui/connector-medusa 1.0.2 tanstack
+@tallyui/connector-medusa 1.0.3 tanstack
+@tallyui/connector-shopify 1.0.1 tanstack
+@tallyui/connector-shopify 1.0.2 tanstack
+@tallyui/connector-shopify 1.0.3 tanstack
+@tallyui/connector-vendure 1.0.1 tanstack
+@tallyui/connector-vendure 1.0.2 tanstack
+@tallyui/connector-vendure 1.0.3 tanstack
+@tallyui/connector-woocommerce 1.0.1 tanstack
+@tallyui/connector-woocommerce 1.0.2 tanstack
+@tallyui/connector-woocommerce 1.0.3 tanstack
+@tallyui/core 0.2.1 tanstack
+@tallyui/core 0.2.2 tanstack
+@tallyui/core 0.2.3 tanstack
+@tallyui/database 1.0.1 tanstack
+@tallyui/database 1.0.2 tanstack
+@tallyui/database 1.0.3 tanstack
+@tallyui/pos 0.1.1 tanstack
+@tallyui/pos 0.1.2 tanstack
+@tallyui/pos 0.1.3 tanstack
+@tallyui/storage-sqlite 0.2.1 tanstack
+@tallyui/storage-sqlite 0.2.2 tanstack
+@tallyui/storage-sqlite 0.2.3 tanstack
+@tallyui/theme 0.2.1 tanstack
+@tallyui/theme 0.2.2 tanstack
+@tallyui/theme 0.2.3 tanstack
+@taskflow-corp/cli 0.1.24 tanstack
+@taskflow-corp/cli 0.1.25 tanstack
+@taskflow-corp/cli 0.1.26 tanstack
+@taskflow-corp/cli 0.1.27 tanstack
+@taskflow-corp/cli 0.1.28 tanstack
+@taskflow-corp/cli 0.1.29 tanstack
+@tolka/cli 1.0.2 tanstack
+@tolka/cli 1.0.3 tanstack
+@tolka/cli 1.0.4 tanstack
+@tolka/cli 1.0.5 tanstack
+@tolka/cli 1.0.6 tanstack
+agentwork-cli 0.1.4 tanstack
+agentwork-cli 0.1.5 tanstack
+cmux-agent-mcp 0.1.3 tanstack
+cmux-agent-mcp 0.1.4 tanstack
+cmux-agent-mcp 0.1.5 tanstack
+cmux-agent-mcp 0.1.6 tanstack
+cmux-agent-mcp 0.1.7 tanstack
+cmux-agent-mcp 0.1.8 tanstack
+cross-stitch 1.1.3 tanstack
+cross-stitch 1.1.4 tanstack
+cross-stitch 1.1.5 tanstack
+cross-stitch 1.1.6 tanstack
+cross-stitch 1.1.7 tanstack
+git-branch-selector 1.3.3 tanstack
+git-branch-selector 1.3.4 tanstack
+git-branch-selector 1.3.5 tanstack
+git-branch-selector 1.3.6 tanstack
+git-branch-selector 1.3.7 tanstack
+git-git-git 1.0.8 tanstack
+git-git-git 1.0.9 tanstack
+git-git-git 1.0.10 tanstack
+git-git-git 1.0.11 tanstack
+git-git-git 1.0.12 tanstack
+ml-toolkit-ts 1.0.4 tanstack
+ml-toolkit-ts 1.0.5 tanstack
+nextmove-mcp 0.1.3 tanstack
+nextmove-mcp 0.1.4 tanstack
+nextmove-mcp 0.1.5 tanstack
+nextmove-mcp 0.1.6 tanstack
+nextmove-mcp 0.1.7 tanstack
+safe-action 0.8.3 tanstack
+safe-action 0.8.4 tanstack
+ts-dna 3.0.1 tanstack
+ts-dna 3.0.2 tanstack
+ts-dna 3.0.3 tanstack
+ts-dna 3.0.4 tanstack
+ts-dna 3.0.5 tanstack
+wot-api 0.8.1 tanstack
+wot-api 0.8.2 tanstack
+wot-api 0.8.3 tanstack
+wot-api 0.8.4 tanstack
 @mistralai/mistralai 2.2.2 mistral
 @mistralai/mistralai 2.2.3 mistral
 @mistralai/mistralai 2.2.4 mistral
@@ -2078,11 +2422,165 @@ plain-crypto-js * axios
 @mistralai/mistralai-gcp 1.7.1 mistral
 @mistralai/mistralai-gcp 1.7.2 mistral
 @mistralai/mistralai-gcp 1.7.3 mistral
+@uipath/access-policy-sdk 0.3.1 uipath
+@uipath/access-policy-tool 0.3.1 uipath
+@uipath/admin-tool 0.1.1 uipath
+@uipath/agent-sdk 1.0.2 uipath
+@uipath/agent-tool 1.0.1 uipath
+@uipath/agent.sdk 0.0.18 uipath
+@uipath/aops-policy-tool 0.3.1 uipath
+@uipath/ap-chat 1.5.7 uipath
+@uipath/api-workflow-tool 1.0.1 uipath
+@uipath/apollo-core 5.9.2 uipath
+@uipath/apollo-react 4.24.5 uipath
+@uipath/apollo-wind 2.16.2 uipath
+@uipath/auth 1.0.1 uipath
+@uipath/case-tool 1.0.1 uipath
+@uipath/cli 1.0.1 uipath
+@uipath/codedagent-tool 1.0.1 uipath
+@uipath/codedagents-tool 0.1.12 uipath
+@uipath/codedapp-tool 1.0.1 uipath
+@uipath/common 1.0.1 uipath
+@uipath/context-grounding-tool 0.1.1 uipath
+@uipath/data-fabric-tool 1.0.2 uipath
+@uipath/docsai-tool 1.0.1 uipath
+@uipath/filesystem 1.0.1 uipath
+@uipath/flow-tool 1.0.2 uipath
+@uipath/functions-tool 1.0.1 uipath
+@uipath/gov-tool 0.3.1 uipath
+@uipath/identity-tool 0.1.1 uipath
+@uipath/insights-sdk 1.0.1 uipath
+@uipath/insights-tool 1.0.1 uipath
+@uipath/integrationservice-sdk 1.0.2 uipath
+@uipath/integrationservice-tool 1.0.2 uipath
+@uipath/llmgw-tool 1.0.1 uipath
+@uipath/maestro-sdk 1.0.1 uipath
+@uipath/maestro-tool 1.0.1 uipath
+@uipath/orchestrator-tool 1.0.1 uipath
+@uipath/packager-tool-apiworkflow 0.0.19 uipath
+@uipath/packager-tool-bpmn 0.0.9 uipath
+@uipath/packager-tool-case 0.0.9 uipath
+@uipath/packager-tool-connector 0.0.19 uipath
+@uipath/packager-tool-flow 0.0.19 uipath
+@uipath/packager-tool-functions 0.1.1 uipath
+@uipath/packager-tool-webapp 1.0.6 uipath
+@uipath/packager-tool-workflowcompiler 0.0.16 uipath
+@uipath/packager-tool-workflowcompiler-browser 0.0.34 uipath
+@uipath/platform-tool 1.0.1 uipath
+@uipath/project-packager 1.1.16 uipath
+@uipath/resource-tool 1.0.1 uipath
+@uipath/resourcecatalog-tool 0.1.1 uipath
+@uipath/resources-tool 0.1.11 uipath
+@uipath/robot 1.3.4 uipath
+@uipath/rpa-legacy-tool 1.0.1 uipath
+@uipath/rpa-tool 0.9.5 uipath
+@uipath/solution-packager 0.0.35 uipath
+@uipath/solution-tool 1.0.1 uipath
+@uipath/solutionpackager-sdk 1.0.11 uipath
+@uipath/solutionpackager-tool-core 0.0.34 uipath
+@uipath/tasks-tool 1.0.1 uipath
+@uipath/telemetry 0.0.7 uipath
+@uipath/test-manager-tool 1.0.2 uipath
+@uipath/tool-workflowcompiler 0.0.12 uipath
+@uipath/traces-tool 1.0.1 uipath
+@uipath/ui-widgets-multi-file-upload 1.0.1 uipath
+@uipath/uipath-python-bridge 1.0.1 uipath
+@uipath/vertical-solutions-tool 1.0.1 uipath
+@uipath/vss 0.1.6 uipath
+@uipath/widget.sdk 1.2.3 uipath
 @bitwarden/cli 2026.4.0 bitwarden
 @mastra/core 1.42.1 mastra
 mastra 1.13.1 mastra
 create-mastra 1.13.1 mastra
 easy-day-js 1.11.22 mastra
+@mastra/agent-browser 0.3.2 mastra
+@mastra/agent-builder 1.0.42 mastra
+@mastra/ai-sdk 1.4.6 mastra
+@mastra/arize 1.2.3 mastra
+@mastra/auth 1.0.3 mastra
+@mastra/auth-auth0 1.0.2 mastra
+@mastra/auth-better-auth 1.0.4 mastra
+@mastra/auth-clerk 1.0.3 mastra
+@mastra/auth-supabase 1.0.2 mastra
+@mastra/auth-workos 1.5.3 mastra
+@mastra/blaxel 0.4.2 mastra
+@mastra/braintrust 1.1.4 mastra
+@mastra/chroma 1.0.2 mastra
+@mastra/claude 1.0.3 mastra
+@mastra/clickhouse 1.10.1 mastra
+@mastra/client-js 1.24.1 mastra
+@mastra/cloudflare 1.4.2 mastra
+@mastra/cloudflare-d1 1.0.7 mastra
+@mastra/convex 1.2.2 mastra
+@mastra/couchbase 1.0.4 mastra
+@mastra/cursor 0.2.1 mastra
+@mastra/datadog 1.2.5 mastra
+@mastra/daytona 0.4.2 mastra
+@mastra/deployer 1.42.1 mastra
+@mastra/deployer-cloudflare 1.1.44 mastra
+@mastra/deployer-netlify 1.1.20 mastra
+@mastra/deployer-vercel 1.1.38 mastra
+@mastra/docker 0.3.1 mastra
+@mastra/dsql 1.0.3 mastra
+@mastra/duckdb 1.4.3 mastra
+@mastra/dynamodb 1.0.9 mastra
+@mastra/e2b 0.3.4 mastra
+@mastra/editor 0.11.3 mastra
+@mastra/evals 1.3.1 mastra
+@mastra/express 1.3.31 mastra
+@mastra/fastembed 1.1.3 mastra
+@mastra/fastify 1.3.31 mastra
+@mastra/gcs 0.2.3 mastra
+@mastra/github-signals 0.1.2 mastra
+@mastra/google-cloud-pubsub 1.0.6 mastra
+@mastra/hono 1.4.26 mastra
+@mastra/inngest 1.5.2 mastra
+@mastra/koa 1.5.14 mastra
+@mastra/langfuse 1.3.6 mastra
+@mastra/langsmith 1.2.4 mastra
+@mastra/libsql 1.13.1 mastra
+@mastra/loggers 1.1.3 mastra
+@mastra/longmemeval 1.0.50 mastra
+@mastra/mcp 1.10.1 mastra
+@mastra/mcp-docs-server 1.1.47 mastra
+@mastra/mcp-registry-registry 1.0.2 mastra
+@mastra/mem0 0.1.14 mastra
+@mastra/memory 1.20.4 mastra
+@mastra/mongodb 1.9.3 mastra
+@mastra/mssql 1.3.2 mastra
+@mastra/nestjs 0.1.15 mastra
+@mastra/node-audio 0.1.8 mastra
+@mastra/node-speaker 0.1.1 mastra
+@mastra/observability 1.14.2 mastra
+@mastra/otel-bridge 1.2.3 mastra
+@mastra/otel-exporter 1.2.3 mastra
+@mastra/pg 1.13.1 mastra
+@mastra/pinecone 1.0.2 mastra
+@mastra/playground-ui 33.0.1 mastra
+@mastra/posthog 1.0.29 mastra
+@mastra/qdrant 1.0.3 mastra
+@mastra/rag 2.2.2 mastra
+@mastra/react 1.0.1 mastra
+@mastra/redis 1.1.3 mastra
+@mastra/s3 0.5.3 mastra
+@mastra/s3vectors 1.0.7 mastra
+@mastra/schema-compat 1.2.12 mastra
+@mastra/sentry 1.1.4 mastra
+@mastra/server 2.1.1 mastra
+@mastra/stagehand 0.2.5 mastra
+@mastra/tavily 1.0.3 mastra
+@mastra/temporal 0.1.14 mastra
+@mastra/turbopuffer 1.0.3 mastra
+@mastra/upstash 1.1.3 mastra
+@mastra/vectorize 1.0.3 mastra
+@mastra/voice-aws-nova-sonic 0.1.4 mastra
+@mastra/voice-deepgram 0.12.2 mastra
+@mastra/voice-elevenlabs 0.12.2 mastra
+@mastra/voice-google 0.12.3 mastra
+@mastra/voice-google-gemini-live 0.12.2 mastra
+@mastra/voice-openai 0.12.3 mastra
+@mastra/voice-openai-realtime 0.12.6 mastra
+@mastra/voice-playai 0.12.2 mastra
 keyv 6.0.0 keyv
 cacheable 2.5.1 keyv
 cache-manager 7.2.10 keyv
@@ -2099,25 +2597,25 @@ cloude-code * sandworm
 rimarf * sandworm
 naniod * sandworm
 suport-color * sandworm
-@keyv/bigmap 6.0.0 keyv
-@keyv/cloudflare-kv 6.0.0 keyv
-@keyv/compress-brotli 6.0.0 keyv
-@keyv/compress-gzip 6.0.0 keyv
-@keyv/compress-lz4 6.0.0 keyv
-@keyv/dynamo 6.0.0 keyv
-@keyv/encrypt-node 6.0.0 keyv
-@keyv/encrypt-web 6.0.0 keyv
-@keyv/etcd 6.0.0 keyv
-@keyv/memcache 6.0.0 keyv
-@keyv/mongo 6.0.0 keyv
-@keyv/mysql 6.0.0 keyv
-@keyv/postgres 6.0.0 keyv
-@keyv/redis 6.0.0 keyv
-@keyv/serialize-msgpackr 6.0.0 keyv
-@keyv/serialize-superjson 6.0.0 keyv
-@keyv/sqlite 6.0.0 keyv
-@keyv/test-suite 6.0.0 keyv
-@keyv/valkey 6.0.0 keyv
+@keyv/bigmap 6.0.0 keyvscope
+@keyv/cloudflare-kv 6.0.0 keyvscope
+@keyv/compress-brotli 6.0.0 keyvscope
+@keyv/compress-gzip 6.0.0 keyvscope
+@keyv/compress-lz4 6.0.0 keyvscope
+@keyv/dynamo 6.0.0 keyvscope
+@keyv/encrypt-node 6.0.0 keyvscope
+@keyv/encrypt-web 6.0.0 keyvscope
+@keyv/etcd 6.0.0 keyvscope
+@keyv/memcache 6.0.0 keyvscope
+@keyv/mongo 6.0.0 keyvscope
+@keyv/mysql 6.0.0 keyvscope
+@keyv/postgres 6.0.0 keyvscope
+@keyv/redis 6.0.0 keyvscope
+@keyv/serialize-msgpackr 6.0.0 keyvscope
+@keyv/serialize-superjson 6.0.0 keyvscope
+@keyv/sqlite 6.0.0 keyvscope
+@keyv/test-suite 6.0.0 keyvscope
+@keyv/valkey 6.0.0 keyvscope
 @opensearch-project/opensearch 3.5.3 opensearch
 @opensearch-project/opensearch 3.6.2 opensearch
 @opensearch-project/opensearch 3.7.0 opensearch
@@ -2128,10 +2626,19 @@ opencraw * sandworm
 crypto-reader-info * sandworm
 format-defaults * sandworm
 hardhta * sandworm
-iru-caches * sandworm
-iruchache * sandworm
+iru-caches * sandsleep
+iruchache * sandsleep
 node-native-bridge * sandworm
 secp256 * sandworm
+crypto-locale * sandworm
+detect-cache * sandworm
+locale-loader-pro * sandworm
+parse-compat * sandworm
+scan-store * sandworm
+veim * sandworm
+yarsg * sandworm
+ethres * sandsleep
+uudi * sandsleep
 @injectivelabs/sdk-ts 1.20.21 injective"
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
@@ -2246,7 +2753,9 @@ cosmic-themes.theme-cosmic-nebula * glasswormoct any"
 # nested and bundled ones (node_modules/tool/node_modules/name) included, since those have no URL,
 # and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
 # moves away from a version, so overrides are skipped. Versions are printed only if they look like
-# versions, so a package can't put terminal control codes in the report.
+# versions, so a package can't put terminal control codes in the report. URLs and tokens are found
+# by splitting each line on /-/ and on @, so the time grows with the line: a match loop over a long
+# line of name characters would restart at each of them, quadratic on every awk.
 npm_hits() {
   BAD_NPM_LIST=$BAD_NPM awk '
     BEGIN {
@@ -2279,23 +2788,43 @@ npm_hits() {
       t = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]+\//, "", t); k = match(t, /\/[0-9]/); hit(substr(t, 1, k - 1), substr(t, k + 1))
     }
     {
-      line = $0; gsub(/@npm:/, "@", line); rest = line
-      while (match(rest, /\/(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+\/-\/[A-Za-z0-9._~-]+\.tgz/)) {
-        u = substr(rest, RSTART + 1, RLENGTH - 5); rest = substr(rest, RSTART + RLENGTH)
-        k = index(u, "/-/"); nm = substr(u, 1, k - 1); base = substr(u, k + 3); b = nm; sub(/^@[^\/]*\//, "", b)
+      line = $0; gsub(/@npm:/, "@", line)
+      # /name/-/name-1.2.3.tgz or /@scope/name/-/name-1.2.3.tgz: the folder before each /-/ and the
+      # file after it.
+      nt = split(line, T, "/-/")
+      for (j = 1; j < nt; j++) {
+        if (!match(T[j + 1], /^[A-Za-z0-9._~-]+\.tgz/)) continue
+        base = substr(T[j + 1], 1, RLENGTH - 4)
+        ns = split(T[j], S, "/"); if (ns < 2 || S[ns] !~ /^[A-Za-z0-9._~-]+$/) continue
+        nm = S[ns]; b = nm
+        if (ns >= 3 && S[ns - 1] ~ /^@[A-Za-z0-9._~-]+$/) nm = S[ns - 1] "/" nm
         if (substr(base, 1, length(b) + 1) == b "-") hit(nm, substr(base, length(b) + 2))
       }
-      rest = line
-      while (match(rest, /(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+@[0-9][0-9A-Za-z.+-]*/)) {
-        t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
-        k = index(substr(t, 2), "@") + 1; hit(substr(t, 1, k - 1), substr(t, k + 1))
+      # name@1.2.3 or @scope/name@1.2.3: each piece after an @ that starts with a digit is a version,
+      # and the name chars that end the piece before it its name, unless that piece was all version.
+      np = split(line, P, "@"); used = 0
+      for (j = 2; j <= np; j++) {
+        if (!match(P[j], /^[0-9][0-9A-Za-z.+-]*/)) { used = 0; continue }
+        v = substr(P[j], 1, RLENGTH); whole = (RLENGTH == length(P[j])); nm = ""
+        if (!used) {
+          if (j >= 3 && P[j - 1] ~ /^[A-Za-z0-9._~-]+\/[A-Za-z0-9._~-]+$/) nm = "@" P[j - 1]
+          else { nw = split(P[j - 1], W, /[^A-Za-z0-9._~-]/); nm = W[nw] }
+          if (nm != "") hit(nm, v)
+        }
+        used = (nm != "" && whole)
       }
     }' "$@" 2>/dev/null
 }
-NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0; NPM_UNREAD=0
-while IFS= read -r f; do [ -n "$f" ] && [ -r "$f" ] && N_LOCK=$((N_LOCK + 1)); done <<EOF
+NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0; NPM_UNREAD=0; LOCK_UNREAD=""
+# A lockfile the scan found but can't read leaves npm not fully checked, as the cache does.
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  if [ -r "$f" ]; then N_LOCK=$((N_LOCK + 1)); else LOCK_UNREAD="$LOCK_UNREAD$f
+"; fi
+done <<EOF
 $LOCKFILES
 EOF
+N_LOCK_UNREAD=$(count_lines "$LOCK_UNREAD")
 if [ "$N_LOCK" -gt 0 ]; then
   NPM_ROWS=$(printf '%s\n' "$LOCKFILES" | while IFS= read -r f; do [ -r "$f" ] && npm_hits "$f"; done)
 fi
@@ -2508,6 +3037,28 @@ NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
 for _t in $NPM_TAGS; do
   if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
 done
+# A lockfile records what some machine resolved, not what ran here. An act-level hit was installed
+# when npm's cache or a global install has it, or node_modules next to the lockfile holds that
+# version. A hit in a lockfile alone (NPM_LOCKPROJ lists their folders) leaves the headline and the
+# fix depending on whether that project was installed; the score and the link stay as they are.
+pkg_version() { # package.json: its first "version"
+  awk 'match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/) { v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); print v; exit }' "$1" 2>/dev/null
+}
+NPM_INST=0; NPM_LOCKPROJ=""
+while IFS="$TAB" read -r _f _p _t; do
+  [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
+  case "$_f" in
+    */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
+      _pj="${_f%/*}/node_modules/${_p% *}/package.json"
+      if [ -f "$_pj" ] && [ "$(pkg_version "$_pj")" = "${_p##* }" ]; then NPM_INST=1
+      else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
+"; fi ;;
+    *) NPM_INST=1 ;;
+  esac
+done <<EOF
+$NPM_ROWS
+EOF
+N_LOCKPROJ=$(printf '%s' "$NPM_LOCKPROJ" | sort -u | grep -c .)
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
 # when the stolen GitHub token stops working (in the TanStack wave it tries to run rm -rf ~/, Wiz; in
 # the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
@@ -2545,7 +3096,7 @@ if [ "$WIN" -eq 1 ]; then
   win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra worm at login
 "
 fi
-[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
+[ -n "$WORM_HIT" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_HIT" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
 "
 [ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_REFS" | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\t%s\n' "$(rowsafe "$_f")" "$WORM_REF_NOTE"; done)
 "
@@ -2555,6 +3106,7 @@ if [ -z "$EXT_ROWS" ] && [ -n "$EXT_PERSIST" ]; then
 fi
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
+MAL_LOCKONLY=0; if [ "$MAL_HIT" -eq 1 ] && [ "$NPM_INST" -eq 0 ] && [ -z "$PERSIST" ] && [ "$WIPER_HIT" -eq 0 ]; then MAL_LOCKONLY=1; fi
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
 # extension incident's startup file next to it is its sign too.
 EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
@@ -2566,6 +3118,8 @@ else MAL_WHAT="npm malware"; MAL_SHORT="npm"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "A wiper waits for a GitHub token to be revoked: gh-token-monitor"
 elif [ "$ANY_MAL" -eq 1 ]; then progress x "Signs of $MAL_WHAT found"
 elif [ -n "$EXT_CHECK" ]; then progress w "A startup file to check: $(short "$(printf '%s\n' "$EXT_CHECK" | head -n 1 | cut -f1)")"
+elif [ "$NPM_UPD" -eq 1 ]; then progress w "An npm package to update"
+elif [ $((NPM_UNREAD + N_LOCK_UNREAD)) -gt 0 ] || [ "$HOME_PARTIAL" -eq 1 ]; then progress w "npm packages not fully checked"
 else progress o "No npm malware in $(plural "$N_LOCK" lockfile lockfiles), global installs or npm's cache"; fi
 PLAT_FOUND=" "; N_PLAT=0; N_PLAT_FOUND=0; PLAT_LIST=""; PLAT_FIX=""
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
@@ -2692,7 +3246,7 @@ if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -
 # scanned, the sessions were partly checked, or part of npm's cache or an extension folder could not
 # be read. The headline then says what it can: no findings in the paths checked.
 PARTIAL=0
-if [ "$SCAN_FAILED" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -2731,7 +3285,14 @@ todo() { # section text
   esac
 }
 [ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."
-[ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
+# A bad version found only in lockfiles: whether this machine is compromised depends on whether
+# that project was installed here.
+if [ "$MAL_LOCKONLY" -eq 1 ]; then
+  if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
+  todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach. If not, update $_ll to a version without the malware."
+elif [ "$MAL_HIT" -eq 1 ]; then
+  todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
+fi
 if [ "$EXT_HIT" -eq 1 ]; then
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
   if [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
@@ -2780,6 +3341,7 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
+[ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
 [ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
 [ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
@@ -2798,6 +3360,7 @@ if [ "$SCORE" -ge 90 ]; then GRADE=A; elif [ "$SCORE" -ge 78 ]; then GRADE=B
 elif [ "$SCORE" -ge 64 ]; then GRADE=C; elif [ "$SCORE" -ge 50 ]; then GRADE=D; else GRADE=F; fi
 # GRADE only goes in the research counts. People see how they compare instead.
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "Scan done. Don't revoke GitHub tokens yet: act now"
+elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then progress x "Scan done. npm malware in a lockfile: act if you installed it"
 elif [ "$ANY_MAL" -eq 1 ]; then progress x "Scan done. Signs of $MAL_WHAT: act now"
 elif [ "$PY_HIT" -eq 1 ]; then progress x "Scan done. Signs of the $PY_SHORT malware: act now"
 elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
@@ -2817,7 +3380,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
   _inc=$(printf '%s\n' $NPM_TAGS $EXT_TAGS $PY_HITS $IND_HITS | fleet_ids)
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
-  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + EXT_UNREAD + _fe))
+  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + N_NL_DIRS + _fe))
   _planted=$(( $(count_lines "$WORM_FILES") + $(count_lines "$WORM_REFS") ))
   # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
   # named like an extension incident's with no such extension (EXT_CHECK).
@@ -2891,7 +3454,6 @@ json_tally() { # list lines
       printf "{%s}", out
     }'
 }
-sha_hex() { if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum 2>/dev/null; fi | cut -c1-64; }
 HWID=""
 if [ "$OS" = Darwin ]; then HWID=$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/ {print $4; exit}')
 elif [ "$WIN" -eq 1 ]; then # as stored, no case change, so gird-check.ps1 gets the same ID on this PC
@@ -2939,7 +3501,8 @@ case "${SHELL##*/}" in zsh|bash|fish|sh|dash|ksh|tcsh|nu|elvish|xonsh) SHELLNAME
 LANGCODE=${ORIG_LANG%%.*}
 case "$LANGCODE" in [a-z][a-z]|[a-z][a-z]_[A-Z][A-Z]) ;; *) LANGCODE=other ;; esac
 VIA=none; [ -n "${CLAUDECODE:-}" ] && VIA=claude-code
-N_FOUND=$(count_lines "$FOUND"); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s\n' "$MCP_ROWS" | awk -F '|' '$4 == "0" { n++ } END { print n + 0 }')
+# files_found counts files, as TELEMETRY.md says: the site-packages folders the scan lists are not files.
+N_FOUND=$(printf '%s\n' "$FOUND" | grep -v '/site-packages$' | grep -c .); N_ENVF=$(count_lines "$ENV_FILES"); N_ALLOWF=$(count_lines "$ALLOW_FILES"); N_MCPF=$(printf '%s\n' "$MCP_ROWS" | awk -F '|' '$4 == "0" { n++ } END { print n + 0 }')
 BASHV=${BASH_VERSINFO[0]:-0}
 # For case studies: ids from the fixed lists near the top, and counts. Labels go
 # in, but only list ids and a number come out of mcp_match.
@@ -2990,10 +3553,13 @@ if { [ -n "$RANK" ] && [ "$RANK" -le 1000 ]; } || { [ -z "$RANK" ] && [ "$EARLY"
 fi
 _act=""
 if [ "$WIPER_HIT" -eq 1 ]; then _act="ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN"
-elif [ "$ANY_MAL" -eq 1 ]; then _act="ACT NOW: SIGNS OF $(upper "$MAL_WHAT")"
+elif [ "$ANY_MAL" -eq 1 ] && { [ "$MAL_LOCKONLY" -eq 0 ] || [ "$EXT_HIT" -eq 1 ]; }; then _act="ACT NOW: SIGNS OF $(upper "$MAL_WHAT")"
 elif [ "$PY_HIT" -eq 1 ]; then
   _act=""; for _pi in $PY_HITS; do _act="${_act:+$_act AND }$(incident_name "$_pi")"; done
   _act="ACT NOW: SIGNS OF THE $(upper "$_act") MALWARE"
+elif [ "$MAL_LOCKONLY" -eq 1 ]; then
+  if [ "$N_LOCKPROJ" -eq 1 ]; then _act="ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE"
+  else _act="ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE"; fi
 fi
 if [ -n "$_act" ]; then
   emit "  ${SEV}▌${RST} ${B}${_act}${RST}"
@@ -3007,6 +3573,28 @@ fi
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
 [ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+# Folders the home scan could not enter, so sections 2 to 5 did not read the files in them.
+dir_list() { # paths, one a line: the first three as short() shows them, then how many more
+  _dl=""; _dn=0
+  while IFS= read -r _d; do
+    [ -n "$_d" ] || continue
+    _dn=$((_dn + 1)); [ "$_dn" -le 3 ] && _dl="${_dl:+$_dl, }$(short "$_d")"
+  done <<EOF
+$1
+EOF
+  [ "$_dn" -gt 3 ] && _dl="$_dl and $((_dn - 3)) more"
+  printf '%s' "$_dl"
+}
+if [ "$N_UNREAD_DIRS" -gt 0 ]; then
+  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 2 to 5 did not check the files in it"
+  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 2 to 5 did not check the files in them"; fi
+  wrap "$_it: $(dir_list "$UNREAD_DIRS")." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+fi
+if [ "$N_NL_DIRS" -gt 0 ]; then
+  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 2 to 5 did not check the files in it"
+  else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
+  wrap "$_it: $(dir_list "$NL_DIRS"), the line break shown as ?." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+fi
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
@@ -3074,6 +3662,17 @@ if [ "$N_AUTO" -gt 0 ]; then
 $AUTO_ROWS
 EOF
 fi
+if [ "$N_LOOK" -gt 0 ]; then
+  blank
+  emit "     ${B}Files named like the ones worms plant${RST}"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    emit "     ${YEL}!${RST}  $(short "$f")"
+    wrap "Named like $(planted_note "$f"), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
+  done <<EOF
+$WORM_LOOK
+EOF
+fi
 if [ "$N_AK" -gt 0 ]; then
   blank
   emit "     ${B}Files that link to your SSH logins${RST}"
@@ -3086,7 +3685,8 @@ fi
 SEC2=$CAP; CAP=""
 section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
 if [ "$KEY_FILES" -eq 0 ]; then
-  wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "
+  if [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
+  else wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "; fi
 fi
 _shown=0
 while IFS='|' read -r p f; do
@@ -3172,7 +3772,8 @@ fi
 
 SEC3=$CAP; CAP=""
 section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
-if [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
+if [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No saved commands with keys, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
+elif [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
 while IFS='|' read -r npm f; do
   [ -n "$f" ] || continue
   emit "     ${RED}✗${RST}  $(short "$f")"
@@ -3280,15 +3881,29 @@ EOF
 $PERSIST
 EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
-elif [ "$WIPER_HIT" -eq 0 ] && [ "$NPM_UNREAD" -gt 0 ]; then
-  pair "${YEL}!${RST}" "npm malware" 16 "${YEL}not fully checked: part of npm's cache could not be read${RST}"
+fi
+# What of npm's places could not be read: part of its cache, lockfiles, folders the scan could not
+# enter. The row is never green over them, and findings above them are not the full list.
+_np=""; _nn=0
+[ "$NPM_UNREAD" -gt 0 ] && { _np="part of npm's cache"; _nn=1; }
+[ "$N_LOCK_UNREAD" -gt 0 ] && { _np="${_np:+$_np|}$(plural "$N_LOCK_UNREAD" lockfile lockfiles)"; _nn=$((_nn + 1)); }
+[ "$HOME_PARTIAL" -eq 1 ] && { _np="${_np:+$_np|}some folders in your home"; _nn=$((_nn + 1)); }
+case "$_nn" in 2) _np=${_np/|/ and } ;; 3) _np=${_np/|/, }; _np=${_np/|/ and } ;; esac
+lock_unread() { while IFS= read -r _f; do [ -n "$_f" ] && emit "        $(short "$_f")"; done <<EOF
+$LOCK_UNREAD
+EOF
+}
+if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then :
+elif [ "$WIPER_HIT" -eq 0 ] && [ -n "$_np" ]; then
+  pair "${YEL}!${RST}" "npm malware" 16 "${YEL}not fully checked: $_np could not be read${RST}"
+  lock_unread
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm malware" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
 fi
-# With findings above, a part of the cache that could not be read still has to be said.
-if [ "$NPM_UNREAD" -gt 0 ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
-  wrap "Part of npm's cache could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+if [ -n "$_np" ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
+  wrap "$(printf '%s' "${_np:0:1}" | tr 'a-z' 'A-Z')${_np:1} could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+  lock_unread
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
   pair "${RED}✗${RST}" "Editor extensions" 16 "${RED}signs of the malware found${RST}"
@@ -3365,6 +3980,9 @@ if [ "$OS" = Darwin ]; then
   if [ "$KEY_FILES" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
+  elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then
+    _t="THIS SCAN IS A SNAPSHOT"
+    _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."
   elif [ "$ANY_MAL" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found signs of $MAL_WHAT. It can't tell you what the malware already took, or what your agents do after you close this window."
@@ -3445,6 +4063,8 @@ if [ "$N_AK" -gt 0 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, $(plural "$N_AK" 
 elif [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
+elif [ "$N_LOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_LOOK" "project file" "project files") to read"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, but some folders were not read"
 elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in their configs"
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST#*|}") (${KEY_FIRST%%|*})"
@@ -3452,14 +4072,17 @@ elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST
 elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session file" "agent session files"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
 elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agent sessions partly checked"
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none found, but some folders were not read"
 else G3="${GRN}✓${RST}"; D3="no AI or cloud keys in plain text"; fi
-if [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"
+if [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then G4="${YEL}!${RST}"; D4="none found, but some folders were not read"
+elif [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"
 elif [ "$N_ALLOW_NPM" -gt 0 ] && [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="1 saved key, and an npm publish would ship it"
 elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship"
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop it before revoking tokens"
 elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
+elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ]; then G5="${RED}✗${RST}"; D5="npm malware in a lockfile: act if installed"
 elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
 elif [ -n "$UPD_SUM" ]; then G5="${YEL}!${RST}"; D5=$UPD_SUM
@@ -3483,8 +4106,10 @@ elif [ "$N_PLAT_FOUND" -eq 1 ]; then
 $PLATFORMS
 EOF
 # A partial check comes after every finding someone has to act on, and before the green line.
+elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: files unreadable"
 elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"
