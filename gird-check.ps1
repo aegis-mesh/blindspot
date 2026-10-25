@@ -1275,8 +1275,8 @@ foreach ($f in $TaskFiles) {
   $t = Flat-Text $f
   if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
 }
-# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" (Allow all) or
-# "autopilot" starts new Copilot chats that run every tool call without asking, and the setting
+# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" or "autopilot"
+# starts new Copilot chats that run every tool call without asking, and the setting
 # declares no scope, so VS Code takes it from a project too: a cloned repo can bring it.
 # "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so

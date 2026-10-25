@@ -1483,7 +1483,7 @@ hasnot "a defaultMode at the top of the file is not Claude Code's setting" '! Cl
 hasnot "nor one in an object inside permissions"  '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-deep.txt"
 hasnot "nor one under a permissions key below the top" '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-env.txt"
 has    "one after rules with brackets in their strings is" '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-dm-rules.txt"
-# chat.permissions.default: autoApprove ("Allow all") and autopilot run every tool call without asking.
+# chat.permissions.default: autoApprove and autopilot run every tool call without asking.
 # In the user settings the agent is set to run without asking; the default level and a commented line
 # are not reported. The setting declares no scope, so a project's copy is in force too: section 2 lists
 # it, as a setting a cloned project brings, and a project at the default level is not counted.

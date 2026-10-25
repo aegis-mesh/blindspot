@@ -47,7 +47,7 @@ sign of that attack (or of an old VS Code) that VS Code 1.104 and later ignore; 
 the score.
 
 VS Code added `chat.permissions.default`, the permission level new chats start with. Its values
-`autoApprove` ("Allow all") and `autopilot` run every tool call without asking, so in the user
+`autoApprove` (Bypass Approvals in the picker, VS Code 1.143) and `autopilot` run every tool call without asking, so in the user
 settings they are an agent set to run without asking, like the global setting. The setting declares no
 scope, and VS Code reads its merged value (`chatInputPart.ts`), so a project's `.vscode/settings.json`
 sets it too: section 2 lists such a project's copy under "Project settings that act as soon as the
