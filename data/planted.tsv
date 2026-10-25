@@ -12,7 +12,10 @@
 # Wiz on the TanStack wave: "Check .claude/ and .vscode/ directories for router_runtime.js or
 # setup.mjs", and setup.mjs 2258284d. Socket on the keyv wave: .claude/math_init.js, and setup.mjs
 # fd3ca400 (the loader in .claude and .vscode, identical in both) and 54dc7ea5 (the loader in the
-# npm packages). A hook counts when it runs any of these file names from either folder.
+# npm packages). A hook counts when it runs any of these file names from either folder. The commit that
+# planted the keyv files in its source repository (jaredwray/keyv d8c850c7) has math_init.js in .claude
+# only, with the same setup.mjs in .claude and .vscode, so .vscode/math_init.js has no line: the loader
+# there counts by its SHA-256, and a task that runs math_init.js from either folder counts.
 # folder	file	incident	note	alone	sha256
 .claude	router_runtime.js	tanstack	a file the TanStack worm plants	yes	-
 .vscode	router_runtime.js	tanstack	a file the TanStack worm plants	yes	-
