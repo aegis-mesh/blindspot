@@ -2074,113 +2074,113 @@ uudi * sandsleep
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
 $BadExt = @'
-oorzc.ssh-tools * glassworm openvsx
-oorzc.i18n-tools-plus 1.6.8 glassworm openvsx
-oorzc.mind-map 1.0.61 glassworm openvsx
-oorzc.scss-to-css-compile 1.3.4 glassworm openvsx
-Angular-studio.ng-angular-extension * glassworm openvsx
-awesome-codebase.codebase-dart-pro * glassworm openvsx
-cudra-production.vsce-prettier-pro * glassworm openvsx
-dev-studio-sense.php-comp-tools-vscode * glassworm openvsx
-ko-zu-gun-studio.synchronization-settings-vscode * glassworm openvsx
-littensy-studio.magical-icons * glassworm openvsx
-pretty-studio-advisor.prettyxml-formatter * glassworm openvsx
-sol-studio.solidity-extension * glassworm openvsx
-studio-jjalaire-team.professional-quarto-extension * glassworm openvsx
-studio-velte-distributor.pro-svelte-extension * glassworm openvsx
-sun-shine-studio.shiny-extension-for-vscode * glassworm openvsx
-tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx
-vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx
-aadarkcode.one-dark-material * glasswormmar openvsx
-aligntool.extension-align-professional-tool * glasswormmar openvsx
-awesomeco.wonder-for-vscode-icons * glasswormmar openvsx
-bhbpbarn.vsce-python-indent-extension * glasswormmar openvsx
-blockstoks.easily-gitignore-manage * glasswormmar openvsx
-brategmaqendaalar-studio.pro-prettyxml-formatter * glasswormmar openvsx
-codbroks.compile-runnner-extension * glasswormmar openvsx
-codevunmis.csv-sql-tsv-rainbow * glasswormmar openvsx
-codwayexten.code-way-extension * glasswormmar openvsx
-cosmic-themes.sql-formatter * glasswormmar openvsx
-craz2team.vscode-todo-extension * glasswormmar openvsx
-crotoapp.vscode-xml-extension * glasswormmar openvsx
-daeumer-web.es-linter-for-vs-code * glasswormmar openvsx
-dark-code-studio.flutter-extension * glasswormmar openvsx
-densy-little-studio.wonder-for-vscode-icons * glasswormmar openvsx
-dep-labs-studio.dep-proffesinal-extension * glasswormmar openvsx
-devmidu-studio.svg-better-extension * glasswormmar openvsx
-dopbop-studio.vscode-tailwindcss-extension-toolkit * glasswormmar any
-errlenscre.error-lens-finder-ex * glasswormmar openvsx
-exss-studio.yaml-professional-extension * glasswormmar openvsx
-federicanc.dotenv-syntax-highlighting * glasswormmar openvsx
-flutxvs.vscode-kuberntes-extension * glasswormmar openvsx
-gvotcha.claude-code-extension * glasswormmar openvsx
-gvotcha.claude-code-extensions * glasswormmar openvsx
-intellipro.extension-json-intelligence * glasswormmar openvsx
-kharizma.vscode-extension-wakatime * glasswormmar openvsx
-kwitch-studio.auto-run-command-extension * glasswormmar any
-lavender-studio.theme-lavender-dreams * glasswormmar any
-lyu-wen-studio-web-han.better-formatter-vscode * glasswormmar openvsx
-markvalid.vscode-mdvalidator-extension * glasswormmar openvsx
-mecreation-studio.pyrefly-pro-extension * glasswormmar openvsx
-mswincx.antigravity-cockpit * glasswormmar openvsx
-mswincx.antigravity-cockpit-extension * glasswormmar openvsx
-namopins.prettier-pro-vscode-extension * glasswormmar openvsx
-oigotm.my-command-palette-extension * glasswormmar openvsx
-otoboss.autoimport-extension * glasswormmar openvsx
-ovixcode.vscode-better-comments * glasswormmar openvsx
-pessa07tm.my-js-ts-auto-commands * glasswormmar openvsx
-potstok.dotnet-runtime-extension * glasswormmar any
-prismapp.prisma-vs-code-extension * glasswormmar openvsx
-projmanager.your-project-manager-extension * glasswormmar openvsx
-pubruncode.ccoderunner * glasswormmar openvsx
-pyflowpyr.py-flowpyright-extension * glasswormmar openvsx
-pyscopexte.pyscope-extension * glasswormmar openvsx
-redcapcollective.vscode-quarkus-elite-suite * glasswormmar openvsx
-rubyideext.ruby-ide-extension * glasswormmar openvsx
-runnerpost.runner-your-code * glasswormmar openvsx
-shinypy.shiny-extension-for-vscode * glasswormmar openvsx
-ssgwysc.volar-vscode * glasswormmar openvsx
-sxatvo.jinja-extension * glasswormmar openvsx
-tamokill12.foundry-pdf-extension * glasswormmar openvsx
-thing-mn.your-flow-extension-for-icons * glasswormmar openvsx
-tima-web-wang.shell-check-utils * glasswormmar openvsx
-tokcodes.import-cost-extension * glasswormmar openvsx
-toowespace.worksets-extension * glasswormmar openvsx
-treedotree.tree-do-todoextension * glasswormmar openvsx
-turbobase.sql-turbo-tool * glasswormmar openvsx
-twilkbilk.color-highlight-css * glasswormmar openvsx
-yamaprolas.revature-labs-extension * glasswormmar openvsx
-lauracode.wrap-selected-code 0.0.2 glasswormvsix openvsx
-96-studio.json-formatter 0.0.2 glasswormvsix openvsx
-96-studio.json-formatter 0.0.4 glasswormvsix openvsx
-spacetoow.vsc-python-indent 1.21.1 glasswormvsix openvsx
-spacetoow.vsc-python-indent 1.21.3 glasswormvsix openvsx
-spacetoow.vsc-python-indent 1.21.4 glasswormvsix openvsx
-spacetoow.vsc-python-indent 1.21.5 glasswormvsix openvsx
-spacetoow.vsc-python-indent 1.21.6 glasswormvsix openvsx
-spacetoow.vsc-python-indent 1.21.7 glasswormvsix openvsx
-namop-dex.claude-code-assistant 2.1.47 glasswormvsix openvsx
-msw-tm.component-vetur-toolkit 0.37.4 glasswormvsix openvsx
-cod-vok.arko-dev-devsecops 1.0.4 glasswormvsix openvsx
-oxigener-tmp.sql-turbo-manager 0.28.10 glasswormvsix openvsx
-otobo-vs.csv-query-tsv-rainbow 3.3.4 glasswormvsix openvsx
-awesome-codespace.jinja-language-support 0.3.2 glasswormvsix openvsx
-yamal-dext.wonder-workspace-icons 0.10.4 glasswormvsix openvsx
-daeumer-web.align-format-tool 1.4.6 glasswormvsix openvsx
-baksmink.vscode-quokka-extension 1.0.756 glasswormvsix openvsx
-bansheejust22.retro-vhs-theme 1.0.1 glasswormvsix openvsx
-quickrunn.auto-run-command-quick 1.6.2 glasswormvsix openvsx
-outsidestormcommand.monochromator-theme * glasswormapr openvsx
-keyacrosslaud.auto-loop-for-antigravity * glasswormapr openvsx
-krundoven.ironplc-fast-hub * glasswormapr openvsx
-boulderzitunnel.vscode-buddies * glasswormapr openvsx
-cubedivervolt.html-code-validate * glasswormapr openvsx
-winnerdomain17.version-lens-tool * glasswormapr openvsx
-microsoftvs.microsoftvs * glasswormoct any
-cosmic-themes.theme-cosmic-nebula * glasswormoct any
-charcoal-mint-studio.theme-charcoal-mint * glasswormoct any
-lohsebhipolg2s.theme-aurora-borealis * glasswormoct any
-holiday-themes.theme-coca-cola-christmas * glasswormoct any
+oorzc.ssh-tools * glassworm openvsx all
+oorzc.i18n-tools-plus 1.6.8 glassworm openvsx all
+oorzc.mind-map 1.0.61 glassworm openvsx all
+oorzc.scss-to-css-compile 1.3.4 glassworm openvsx all
+Angular-studio.ng-angular-extension * glassworm openvsx all
+awesome-codebase.codebase-dart-pro * glassworm openvsx all
+cudra-production.vsce-prettier-pro * glassworm openvsx all
+dev-studio-sense.php-comp-tools-vscode * glassworm openvsx all
+ko-zu-gun-studio.synchronization-settings-vscode * glassworm openvsx all
+littensy-studio.magical-icons * glassworm openvsx all
+pretty-studio-advisor.prettyxml-formatter * glassworm openvsx all
+sol-studio.solidity-extension * glassworm openvsx all
+studio-jjalaire-team.professional-quarto-extension * glassworm openvsx all
+studio-velte-distributor.pro-svelte-extension * glassworm openvsx all
+sun-shine-studio.shiny-extension-for-vscode * glassworm openvsx all
+tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx all
+vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx all
+aadarkcode.one-dark-material * glasswormmar openvsx all
+aligntool.extension-align-professional-tool * glasswormmar openvsx all
+awesomeco.wonder-for-vscode-icons * glasswormmar openvsx all
+bhbpbarn.vsce-python-indent-extension * glasswormmar openvsx all
+blockstoks.easily-gitignore-manage * glasswormmar openvsx all
+brategmaqendaalar-studio.pro-prettyxml-formatter * glasswormmar openvsx all
+codbroks.compile-runnner-extension * glasswormmar openvsx all
+codevunmis.csv-sql-tsv-rainbow * glasswormmar openvsx all
+codwayexten.code-way-extension * glasswormmar openvsx all
+cosmic-themes.sql-formatter * glasswormmar openvsx all
+craz2team.vscode-todo-extension * glasswormmar openvsx all
+crotoapp.vscode-xml-extension * glasswormmar openvsx all
+daeumer-web.es-linter-for-vs-code * glasswormmar openvsx all
+dark-code-studio.flutter-extension * glasswormmar openvsx all
+densy-little-studio.wonder-for-vscode-icons * glasswormmar openvsx all
+dep-labs-studio.dep-proffesinal-extension * glasswormmar openvsx all
+devmidu-studio.svg-better-extension * glasswormmar openvsx all
+dopbop-studio.vscode-tailwindcss-extension-toolkit * glasswormmar any all
+errlenscre.error-lens-finder-ex * glasswormmar openvsx all
+exss-studio.yaml-professional-extension * glasswormmar openvsx all
+federicanc.dotenv-syntax-highlighting * glasswormmar openvsx all
+flutxvs.vscode-kuberntes-extension * glasswormmar openvsx all
+gvotcha.claude-code-extension * glasswormmar openvsx all
+gvotcha.claude-code-extensions * glasswormmar openvsx all
+intellipro.extension-json-intelligence * glasswormmar openvsx all
+kharizma.vscode-extension-wakatime * glasswormmar openvsx all
+kwitch-studio.auto-run-command-extension * glasswormmar any all
+lavender-studio.theme-lavender-dreams * glasswormmar any all
+lyu-wen-studio-web-han.better-formatter-vscode * glasswormmar openvsx all
+markvalid.vscode-mdvalidator-extension * glasswormmar openvsx all
+mecreation-studio.pyrefly-pro-extension * glasswormmar openvsx all
+mswincx.antigravity-cockpit * glasswormmar openvsx all
+mswincx.antigravity-cockpit-extension * glasswormmar openvsx all
+namopins.prettier-pro-vscode-extension * glasswormmar openvsx all
+oigotm.my-command-palette-extension * glasswormmar openvsx all
+otoboss.autoimport-extension * glasswormmar openvsx all
+ovixcode.vscode-better-comments * glasswormmar openvsx all
+pessa07tm.my-js-ts-auto-commands * glasswormmar openvsx all
+potstok.dotnet-runtime-extension * glasswormmar any all
+prismapp.prisma-vs-code-extension * glasswormmar openvsx all
+projmanager.your-project-manager-extension * glasswormmar openvsx all
+pubruncode.ccoderunner * glasswormmar openvsx all
+pyflowpyr.py-flowpyright-extension * glasswormmar openvsx all
+pyscopexte.pyscope-extension * glasswormmar openvsx all
+redcapcollective.vscode-quarkus-elite-suite * glasswormmar openvsx all
+rubyideext.ruby-ide-extension * glasswormmar openvsx all
+runnerpost.runner-your-code * glasswormmar openvsx all
+shinypy.shiny-extension-for-vscode * glasswormmar openvsx all
+ssgwysc.volar-vscode * glasswormmar openvsx all
+sxatvo.jinja-extension * glasswormmar openvsx all
+tamokill12.foundry-pdf-extension * glasswormmar openvsx all
+thing-mn.your-flow-extension-for-icons * glasswormmar openvsx all
+tima-web-wang.shell-check-utils * glasswormmar openvsx all
+tokcodes.import-cost-extension * glasswormmar openvsx all
+toowespace.worksets-extension * glasswormmar openvsx all
+treedotree.tree-do-todoextension * glasswormmar openvsx all
+turbobase.sql-turbo-tool * glasswormmar openvsx all
+twilkbilk.color-highlight-css * glasswormmar openvsx all
+yamaprolas.revature-labs-extension * glasswormmar openvsx all
+lauracode.wrap-selected-code 0.0.2 glasswormvsix openvsx all
+96-studio.json-formatter 0.0.2 glasswormvsix openvsx all
+96-studio.json-formatter 0.0.4 glasswormvsix openvsx all
+spacetoow.vsc-python-indent 1.21.1 glasswormvsix openvsx all
+spacetoow.vsc-python-indent 1.21.3 glasswormvsix openvsx all
+spacetoow.vsc-python-indent 1.21.4 glasswormvsix openvsx all
+spacetoow.vsc-python-indent 1.21.5 glasswormvsix openvsx all
+spacetoow.vsc-python-indent 1.21.6 glasswormvsix openvsx all
+spacetoow.vsc-python-indent 1.21.7 glasswormvsix openvsx all
+namop-dex.claude-code-assistant 2.1.47 glasswormvsix openvsx all
+msw-tm.component-vetur-toolkit 0.37.4 glasswormvsix openvsx all
+cod-vok.arko-dev-devsecops 1.0.4 glasswormvsix openvsx all
+oxigener-tmp.sql-turbo-manager 0.28.10 glasswormvsix openvsx all
+otobo-vs.csv-query-tsv-rainbow 3.3.4 glasswormvsix openvsx all
+awesome-codespace.jinja-language-support 0.3.2 glasswormvsix openvsx all
+yamal-dext.wonder-workspace-icons 0.10.4 glasswormvsix openvsx all
+daeumer-web.align-format-tool 1.4.6 glasswormvsix openvsx all
+baksmink.vscode-quokka-extension 1.0.756 glasswormvsix openvsx all
+bansheejust22.retro-vhs-theme 1.0.1 glasswormvsix openvsx all
+quickrunn.auto-run-command-quick 1.6.2 glasswormvsix openvsx all
+outsidestormcommand.monochromator-theme * glasswormapr openvsx all
+keyacrosslaud.auto-loop-for-antigravity * glasswormapr openvsx all
+krundoven.ironplc-fast-hub * glasswormapr openvsx all
+boulderzitunnel.vscode-buddies * glasswormapr openvsx all
+cubedivervolt.html-code-validate * glasswormapr openvsx all
+winnerdomain17.version-lens-tool * glasswormapr openvsx all
+microsoftvs.microsoftvs * glasswormoct any win
+cosmic-themes.theme-cosmic-nebula * glasswormoct any all
+charcoal-mint-studio.theme-charcoal-mint * glasswormoct any all
+lohsebhipolg2s.theme-aurora-borealis * glasswormoct any all
+holiday-themes.theme-coca-cola-christmas * glasswormoct any all
 '@
 # <<< bad-extensions
 $NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
@@ -2416,8 +2416,11 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
 # same id is the Marketplace's own build. A folder that can't be read leaves the check not
 # done in full ($ExtUnread), never clean.
-$ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
-$BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 4 })
+# Where its malware could run (the os column), an extension that shipped malware means a compromised
+# machine ($ExtRows). Elsewhere it is a malicious extension to remove ($ExtUpd, with the os), with no
+# part in EXT_HIT, the score or the link's ex.
+$ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUpd = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
+$BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 5 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions', '.antigravity-ide/extensions', '.antigravity/extensions')) {
   $reg = 'openvsx'; if ($er -eq '.vscode/extensions') { $reg = 'marketplace' }
   $xdir = J $HomeDir $er
@@ -2431,7 +2434,11 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
       if (-not $e.Name.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) { continue }
       $m = [regex]::Match($e.Name.Substring($pre.Length), '^([0-9]+(?:\.[0-9]+)*)(-.*)?$')
       if (-not $m.Success) { continue }
-      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[1].Value) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])); break }
+      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[1].Value) {
+        if ($x[4] -eq 'all' -or $x[4] -eq $IndOs) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])) }
+        else { $ExtUpd.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2], $x[4])) }
+        break
+      }
     }
   }
 }
@@ -2500,7 +2507,10 @@ $MAL_LOCKONLY = 0; if ($MAL_HIT -eq 1 -and $NpmInst -eq 0 -and $Persist.Count -e
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
 # extension incident's startup file next to it is its sign too.
 $EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
+# The incidents of what EXT_HIT counts ($ExtTags), for their advice and lines, and of the extensions to
+# remove ($ExtUpdTags).
 $ExtTags = @((@(foreach ($r in $ExtRows) { $r[2] }) + @($ExtPersistTags)) | Sort-Object -Unique -CaseSensitive)
+$ExtUpdTags = @(@(foreach ($r in $ExtUpd) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
 $ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
 if ($MAL_HIT -eq 1 -and $EXT_HIT -eq 1) { $MalWhat = 'npm and editor extension malware'; $MalShort = 'npm and editor extension' }
 elseif ($EXT_HIT -eq 1) { $MalWhat = 'malware in an editor extension'; $MalShort = 'editor extension' }
@@ -2508,6 +2518,7 @@ else { $MalWhat = 'npm malware'; $MalShort = 'npm' }
 if ($WIPER_HIT -eq 1) { Progress 'A wiper waits for a GitHub token to be revoked: gh-token-monitor' }
 elseif ($ANY_MAL -eq 1) { Progress "Signs of $MalWhat found" }
 elseif ($ExtCheck.Count -gt 0) { Progress "A startup file to check: $(Short $ExtCheck[0][0])" }
+elseif ($ExtUpd.Count -gt 0) { Progress 'An editor extension to remove: its malware could not run on this system' }
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH, a
 # file or a folder.
 # >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
@@ -2660,6 +2671,7 @@ if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an
 if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
 if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
+if ($EXT_HIT -eq 0 -and $ExtUpd.Count -gt 0) { Add-Todo 5 'Uninstall the editor extensions listed in section 5. Their malware could not run on this system.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
 $ISSUES = $Todo.Count
 
@@ -3025,11 +3037,31 @@ if (($NpmSlow -gt 0 -or $npText) -and ($WIPER_HIT -eq 1 -or $npFound)) {
     foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
   }
 }
+# Extensions whose malware could not run on this OS (data/bad-extensions.tsv's os): each, and why it is
+# one to remove, not a sign of a compromised machine.
+function Ext-Upd-Rows {
+  $oss = @()
+  foreach ($r in $ExtUpd) {
+    Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst"
+    $osn = Os-Name $r[3]; if ($oss -notcontains $osn) { $oss += $osn }
+  }
+  if ($ExtUpd.Count -eq 1) { Wrap "Its malware runs on $($oss -join ' and ') only, so it did not run here. Uninstall it." 8 '        ' '        ' }
+  else { Wrap "Their malware runs on $($oss -join ' and ') only, so it did not run here. Uninstall them." 8 '        ' '        ' }
+}
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
   foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
-  foreach ($t in $ExtTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
+  if ($ExtUpd.Count -gt 0) { Ext-Upd-Rows }
+  foreach ($t in @(@($ExtTags) + @($ExtUpdTags) | Sort-Object -Unique -CaseSensitive)) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
+} elseif ($ExtUpd.Count -gt 0) {
+  Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}a malicious extension to remove$cRst"
+  Ext-Upd-Rows
+  if ($ExtCheck.Count -gt 0) {
+    foreach ($r in $ExtCheck) { Emit "        $(Short $r[0])"; Emit "          has the name of a file that $($r[1])" }
+    Wrap 'No editor extension whose malware could run here was found. Open the file and check what it starts: if you did not set it up yourself, treat this machine as compromised.' 8 '        ' '        '
+  }
+  foreach ($t in @(@($ExtUpdTags) + @($ExtCheckTags) | Sort-Object -Unique -CaseSensitive)) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 } elseif ($ExtCheck.Count -gt 0) {
   Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}a startup file to check$cRst"
   foreach ($r in $ExtCheck) { Emit "        $(Short $r[0])"; Emit "          has the name of a file that $($r[1])" }
@@ -3042,7 +3074,7 @@ if ($EXT_HIT -eq 1) {
   Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' 26 $ind26 $ind26 $cDim
 }
 # With findings above, a folder that could not be read still has to be said.
-if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0)) {
+if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0 -or $ExtUpd.Count -gt 0)) {
   if ($ExtUnread -eq 1) { $xmsg = 'An extension folder' } else { $xmsg = 'Some extension folders' }
   Wrap "$xmsg could not be read, so this is not the full list." 8 '        ' '        ' $cYel
 }
@@ -3128,6 +3160,7 @@ elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort mal
 elseif ($UpdSum) { $G5 = "$cYel!$cRst"; $D5 = $UpdSum }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($ExtCheck.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'a startup file to check, see section 5' }
+elseif ($ExtUpd.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'an editor extension to remove, see section 5' }
 elseif ($NPM_UPD -eq 1 -and $PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'npm and Python packages to update, see section 5' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
 elseif ($PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'a Python package to update, see section 5' }

@@ -150,7 +150,10 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
     are left out, and so are the 17 extensions of its 29 April update, whose pack pointed to an
     extension Open VSX had removed two days before.
   - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
-    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too), and
+    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too; the
+    first hid a Windows downloader, so its `os` is `win`: on a Mac or Linux it is a yellow "malicious
+    extension to remove", with its own fix and row 05, and leaves the headline, score and link alone),
+    and
     three more of the cluster's themes, on both registries, that Microsoft's list removes as malware:
     Charcoal Mint, Aurora Borealis and Coca-Cola Christmas. Socket found no payload in the versions
     of those three it read; Microsoft's classification governs.

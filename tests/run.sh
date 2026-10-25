@@ -1039,6 +1039,11 @@ has    "Windows: keys in the shell's own home too"      'msyshome/\.bash_history
 has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
 has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
 has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/AppData/Local/Programs/Python/Python312/Lib/site-packages: mistralai 2\.4\.6' "$WORK/win1.txt"
+# An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
+mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
+rm -rf "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/win-ext.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
@@ -1305,6 +1310,20 @@ has    "a theme Microsoft removed from its Marketplace as malware, in VS Code's 
 has    "one it removed as impersonation, in VS Code's own folder too" '~/\.vscode/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
 has    "any oorzc.ssh-tools version in an Open VSX editor's folder, as Open VSX removed them all" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.2 oorzc\.ssh-tools 0\.5\.2 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
 has    "a theme of the October cluster that Microsoft removed as malware" '~/\.cursor/extensions/holiday-themes\.theme-coca-cola-christmas-1\.0\.2 holiday-themes\.theme-coca-cola-christmas 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-ms.txt"
+# microsoftvs.microsoftvs hid a Windows downloader (Socket): elsewhere it is a malicious extension to
+# remove, not a compromised machine. Next to an extension whose malware could run here, both are listed.
+rm -rf "$WORK/dz-os"; cp -R "$WORK/clean" "$WORK/dz-os"; mkdir -p "$WORK/dz-os/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os.txt"
+dzrun "$WORK/dz-os" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-os-sum.txt"
+has    "an extension whose malware runs on Windows only is one to remove elsewhere" 'Editor extensions a malicious extension to remove ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os.txt"
+hasnot "and is not a compromised machine there"     'ACT NOW|Treat this machine as compromised|signs of the malware found' "$WORK/dz-os.txt"
+has    "with a fix to uninstall the extension"      'Uninstall the editor extensions listed in section 5\. Their malware could not run on this system\.' "$WORK/dz-os.txt"
+has    "row 05 says an editor extension to remove"  'Recent leaks +an editor extension to remove, see section 5' "$WORK/dz-os-sum.txt"
+has    "the link does not flag an extension hit"    '&nm=0&py=0&ex=0&wp=0' "$WORK/dz-os.txt"
+mkdir -p "$WORK/dz-os/.cursor/extensions/oorzc.mind-map-1.0.61"
+dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
+has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
+hasnot "and the fix to uninstall it alone is not given then" 'Their malware could not run on this system' "$WORK/dz-os2.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, 4 security fixes to install' "$WORK/dz-hit-sum.txt"
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
@@ -1397,7 +1416,7 @@ has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.
 has    "made-up Python package: its fix"              "follow Madepkg's advisory" "$WORK/mu.txt"
 hasnot "LiteLLM is not blamed for it"                 'LITELLM 1\.107\.0 MALWARE|signs of the LiteLLM malware' "$WORK/mu.txt"
 # Without the wiper and the npm files, the Python package leads; with only the platform, it does.
-cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/gh-token-monitor-made" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json" "$WORK/mu-py/.vscode/extensions/made.ext-1.0.0"
+cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/gh-token-monitor-made" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json" "$WORK/mu-py/.vscode/extensions/made.ext-1.0.0" "$WORK/mu-py/.cursor/extensions/made.winext-2.0.0"
 mu "$WORK/mu-py" "$WORK/mu-py.txt" compact
 has    "made-up Python package leads the summary"     'ACT NOW: SIGNS OF THE MADEPKG 9\.9\.9 MALWARE' "$WORK/mu-py.txt"
 has    "and row 05 names it"                          'signs of the Madepkg malware\. Act now' "$WORK/mu-py.txt"
@@ -1422,6 +1441,7 @@ has    "and the link says npm malware"                '&nm=1&py=0&ex=0&wp=0' "$W
 has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagent/config\.json madeMode' "$WORK/mu.txt"
 has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 2\.0\.0 or later A made-up hole for the tests\. example\.com/madetool' "$WORK/mu.txt"
 has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
+has    "a made-up extension whose malware runs on Windows only is one to remove here" '~/\.cursor/extensions/made\.winext-2\.0\.0 made\.winext 2\.0\.0 \(Made extension, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/mu.txt"
 
 echo "gen.sh refuses what it cannot write safely"
 gen_refuses() { # what file line, or what file edit:awk-program to change the file's lines in place
@@ -1485,11 +1505,13 @@ gen_refuses "an outdated line of another kind"         outdated.tsv "newtool${T}
 gen_refuses "an outdated range that does not parse"    outdated.tsv "newtool${T}New${T}all${T}npm${T}new-tool${T}<=1.0${T}a hole${T}https://example.com"
 gen_refuses "an outdated line that disagrees with its tool" outdated.tsv "cursor${T}Cursor${T}mac${T}plist${T}~/x/Info.plist${T}<4.0${T}a malicious agent could escape the sandbox${T}https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw"
 gen_refuses "an outdated plist that is not Info.plist" outdated.tsv "newtool${T}New${T}mac${T}plist${T}~/x/Other.plist${T}<1.0${T}a hole${T}https://example.com"
-gen_refuses "an extension with an unknown incident"    bad-extensions.tsv "pub.ext${T}1.0.0${T}nosuch${T}any"
-gen_refuses "an extension whose incident is only an update" bad-extensions.tsv "pub.ext${T}1.0.0${T}injective${T}any"
-gen_refuses "an extension version that is not a version" bad-extensions.tsv "pub.ext${T}1.0.0-beta${T}glassworm${T}any"
-gen_refuses "an extension listed twice, in another case" bad-extensions.tsv "OORZC.ssh-tools${T}0.5.1${T}glassworm${T}openvsx"
-gen_refuses "an extension registry that is not openvsx or any" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}marketplace"
+gen_refuses "an extension with an unknown incident"    bad-extensions.tsv "pub.ext${T}1.0.0${T}nosuch${T}any${T}all"
+gen_refuses "an extension whose incident is only an update" bad-extensions.tsv "pub.ext${T}1.0.0${T}injective${T}any${T}all"
+gen_refuses "an extension version that is not a version" bad-extensions.tsv "pub.ext${T}1.0.0-beta${T}glassworm${T}any${T}all"
+gen_refuses "an extension listed twice, in another case" bad-extensions.tsv "OORZC.ssh-tools${T}*${T}glassworm${T}openvsx${T}all"
+gen_refuses "an extension registry that is not openvsx or any" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}marketplace${T}all"
+gen_refuses "an extension os that is not all, mac, linux or win" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any${T}windows"
+gen_refuses "an extension line without its os"         bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any"
 gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
 gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}"
 gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}"
