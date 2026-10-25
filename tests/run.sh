@@ -734,6 +734,31 @@ has    "Windows: a bad package under mise"               'AppData/Local/mise/ins
 has    "Windows: a bad package in pnpm's global folder"  'AppData/Local/pnpm/global/5/node_modules/cloude ' "$WORK/win1.txt"
 has    "Windows: a bad package in npx's cache"           'AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache' "$WORK/win1.txt"
 if grep -aqF -f "$WORK/keys.txt" "$WORK/win.txt"; then bad "Windows: never prints a planted key"; else ok "Windows: never prints a planted key"; fi
+# Git Bash hands a native rg.exe Windows paths, and rg.exe prints them back (C:\Users\...): a session
+# hit is written the shell's way again and keeps its agent. A stand-in rg turns the real one's paths
+# into C:\ paths, keeping its exit code; the profile is a copy, so the tests above keep theirs.
+SKIPPING=$NORG
+if [ -z "$SKIPPING" ]; then
+  RW=$WORK/winrg; RB=$WORK/winrgbin; cp -R "$WR" "$RW"; mkdir -p "$RB"; cp "$WB"/* "$RB/"
+  printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$RW/Users/me/.claude/projects/p/k.jsonl"
+  cat > "$RB/rgwin.py" <<'PY'
+import os, subprocess, sys
+root = os.environb[b"FAKE_ROOT"]
+p = subprocess.Popen(sys.argv[1:], stdout=subprocess.PIPE)
+for line in p.stdout:
+    if b"\0" in line and line.startswith(root):
+        path, rest = line.split(b"\0", 1)
+        line = b"C:" + path[len(root):].replace(b"/", b"\\") + b"\0" + rest
+    sys.stdout.buffer.write(line)
+sys.exit(p.wait())
+PY
+  printf '#!/bin/sh\nexec "%s" "%s" "%s" "$@"\n' "$(command -v python3)" "$RB/rgwin.py" "$(command -v rg)" > "$RB/rg"; chmod +x "$RB/rg"
+  _wr=$WR; _wb=$WB; WR=$RW; WB=$RB
+  GIRD_CHECK_SESSIONS_ENGINE=rg winrun --offline --all-sessions > "$WORK/winrg.txt" 2>&1
+  WR=$_wr; WB=$_wb
+fi
+has    "Windows: a session hit from a native rg.exe keeps its agent" 'Claude Code +1 file: AWS' "$WORK/winrg.txt"
+SKIPPING=""
 
 echo "WSL"
 mkdir -p "$WORK/proc-wsl/sys/kernel" "$WORK/proc-linux/sys/kernel"

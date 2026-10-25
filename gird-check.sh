@@ -2343,6 +2343,14 @@ if [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
 SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""; SESS_UNREAD=0; SESS_UNREAD_FILES=0; SESS_NOTRUN=0
 if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
   SESS_HITS=$(awk -F '\t' '$1 == "H" { print $2 "\t" $3 }' "$SESS_FILE")
+  # Under Git Bash a native rg.exe is handed Windows paths and prints them back (C:/Users/...\...):
+  # each is written the shell's way again, as the session locations are, so it keeps its agent.
+  if [ "$SESS_WIN" -eq 1 ] && [ -n "$SESS_HITS" ]; then
+    SESS_HITS=$(printf '%s\n' "$SESS_HITS" | while IFS="$(printf '\t')" read -r _f _p; do
+      case "$_f" in ([A-Za-z]:*) _f=$(winpath "$_f") ;; esac
+      printf '%s\t%s\n' "$_f" "$_p"
+    done)
+  fi
   if [ "$SESS_ENGINE" = perl ]; then
     SESS_TOTAL=$(awk -F '\t' '$1 == "T" { print $2; exit }' "$SESS_FILE")
     SESS_DONE=$(grep -c '^D' "$SESS_FILE")

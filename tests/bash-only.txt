@@ -102,3 +102,4 @@ HUP leaves no engine or filter process	the filter process the keys pass through,
 INT leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 HUP leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 INT leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
+Windows: a session hit from a native rg.exe keeps its agent	Git Bash hands a native rg.exe Windows paths: a fake uname, cygpath and rg.exe stand in for Windows; gird-check.ps1 gives rg.exe Windows paths itself and reads them back as they are

@@ -81,7 +81,9 @@ machines will differ:
    `rg -a --hidden --no-ignore --no-config -o`: `-a` because SQLite files look binary, `--hidden`
    and `--no-ignore` because `~/.claude` and `~/.codex` are hidden and may be gitignored, and
    `--no-config` against a person's ripgrep settings. Exit 2 (a file it could not read) means
-   partly checked.
+   partly checked. Under Git Bash a native `rg.exe` is handed Windows paths and prints them back
+   (`C:/Users/...\...`); each hit is written the shell's way again with the script's own
+   `cygpath` conversion, so it keeps its agent and its place.
 2. Otherwise perl, which macOS, most Linux and Git Bash include, newest sessions first. One perl
    parent forks the workers, and each worker prints a done line for a file only after finishing
    it.
