@@ -1025,10 +1025,14 @@ mistralpy|linux|temp|yes|transformers.pyz|Kill any python process started from t
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a malicious agent could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
 cursor|Cursor|mac|plist|$H/Applications/Cursor.app/Contents/Info.plist|-|3.0|a malicious agent could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
+cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.1.2|an agent could replace the Python of a virtual environment to run commands outside the sandbox|github.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c
+cursor|Cursor|mac|plist|$H/Applications/Cursor.app/Contents/Info.plist|-|3.1.2|an agent could replace the Python of a virtual environment to run commands outside the sandbox|github.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c
 amazonq|Amazon Q language server|mac|folder|$H/Library/Caches/aws/toolkits/language-servers/AmazonQ|-|1.69.0|a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
 amazonq|Amazon Q language server|linux|folder|$H/.cache/aws/toolkits/language-servers/AmazonQ|-|1.69.0|a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
 amazonq|Amazon Q language server|win|folder|$WLAPP/aws/toolkits/language-servers/AmazonQ|-|1.69.0|a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands|aws.amazon.com/security/security-bulletins/2026-047-aws/
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web page could reach the editor connection|github.com/advisories/GHSA-9f65-56v6-gxw7
+claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.1.38|2.1.163|a malicious repository could run code outside the sandbox|github.com/advisories/GHSA-7835-87q9-rgvv
+claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|-|2.1.179|a plugin repository could install code that bypasses its pinned hash|github.com/advisories/GHSA-pq7j-f95f-qfcv
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
 # <<< outdated
@@ -2974,10 +2978,20 @@ EOF
 done <<EOF
 $OUT_TABLE
 EOF
-# One row per tool: name<TAB>versions<TAB>fixed<TAB>hole<TAB>advisory.
-OLD_LIST=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '!($1 in o) { o[$1] = ++n; r[n] = $2; v[n] = $3; rest[n] = $4 "\t" $5 "\t" $6; seen[$1 "|" $3] = 1; next }
-  !(($1 "|" $3) in seen) { seen[$1 "|" $3] = 1; v[o[$1]] = v[o[$1]] ", " $3 }
-  END { for (i = 1; i <= n; i++) print r[i] "\t" v[i] "\t" rest[i] }')
+# One row per tool: name<TAB>versions<TAB>fixed<TAB>holes. A tool's lines can name several advisories:
+# the row says to update to the highest fixed version among those its versions fall under, and holes
+# holds each of their holes with its advisory, as hole|advisory|hole|advisory (gen.sh refuses a | in
+# either).
+OLD_LIST=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '
+  function newer(a, b,   x, y, p, q, k, i) { p = split(a, x, "."); q = split(b, y, "."); k = p > q ? p : q
+    for (i = 1; i <= k; i++) if (x[i] + 0 != y[i] + 0) return ((x[i] + 0) > (y[i] + 0))
+    return 0 }
+  !($1 in o) { o[$1] = ++n; r[n] = $2; v[n] = $3; fx[n] = $4; h[n] = $5 "|" $6; seen[$1 "|" $3] = 1; hs[$1 "|" $5 "|" $6] = 1; next }
+  { i = o[$1]
+    if (!(($1 "|" $3) in seen)) { seen[$1 "|" $3] = 1; v[i] = v[i] ", " $3 }
+    if (newer($4, fx[i])) fx[i] = $4
+    if (!(($1 "|" $5 "|" $6) in hs)) { hs[$1 "|" $5 "|" $6] = 1; h[i] = h[i] "|" $5 "|" $6 } }
+  END { for (i = 1; i <= n; i++) print r[i] "\t" v[i] "\t" fx[i] "\t" h[i] }')
 N_OLD=$(count_lines "$OLD_LIST")
 [ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
@@ -3655,10 +3669,14 @@ fi
 if [ "$N_OLD" -gt 0 ]; then
   blank
   emit "     ${B}Tools with a security fix to install${RST}"
-  while IFS="$TAB" read -r nm vs fx hole src; do
+  while IFS="$TAB" read -r nm vs fx holes; do
     [ -n "$nm" ] || continue
     pair "${YEL}!${RST}" "$nm" 20 "$vs, update to $fx or later"
-    wrap "$(printf '%s' "${hole:0:1}" | tr 'a-z' 'A-Z')${hole:1}. $src" 8 "        " "        " "$DIM"
+    while [ -n "$holes" ]; do
+      hole=${holes%%|*}; holes=${holes#*|}; src=${holes%%|*}
+      case "$holes" in *"|"*) holes=${holes#*|} ;; *) holes="" ;; esac
+      wrap "$(printf '%s' "${hole:0:1}" | tr 'a-z' 'A-Z')${hole:1}. $src" 8 "        " "        " "$DIM"
+    done
   done <<EOF
 $OLD_LIST
 EOF

@@ -33,7 +33,7 @@ MADE_SHA=$(printf 'made loader\n' | { shasum -a 256 2>/dev/null || sha256sum; } 
 printf '.vscode\tmadeplant.js\tmadeworm\ta file the Made worm plants\tyes\t-\n.claude\tmadeboot.mjs\tmadeworm\ta file the Made worm plants\tno\t%s\n' "$MADE_SHA" >> "$R/data/planted.tsv"
 printf 'madepkg\t9.9.9\tmadepy\tall\n' >> "$R/data/bad-pypi.tsv"
 printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >> "$R/data/auto-approve.tsv"
-printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\n' >> "$R/data/outdated.tsv"
+printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\nmadetool\tMade Tool\tall\tnpm\tmade-tool\t<3.0.0\ta second made-up hole\thttps://example.com/madetool2\n' >> "$R/data/outdated.tsv"
 printf 'made.ext\t1.0.0\tmadeext\tany\tall\nmade.winext\t2.0.0\tmadeext\tany\twin\n' >> "$R/data/bad-extensions.tsv"
 bash "$R/tools/gen.sh" > /dev/null
 # Outside the generated blocks, both scripts are unchanged.

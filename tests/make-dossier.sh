@@ -27,11 +27,11 @@ if [ "$MODE" = miss ]; then
   printf '{"chat.tools.autoApproveEdits": true, "chat.tools.global.autoApprove": "true"}\n' > "$F/p/calm/.vscode/settings.json"
   # The current setting in a project: VS Code reads it from the user settings only.
   mkdir -p "$F/p/global/.vscode"; printf '{"chat.tools.global.autoApprove": true}\n' > "$F/p/global/.vscode/settings.json"
-  plist 3.0
+  plist 3.1.2
   mkdir -p "$F/Library/Caches/$L/1.69.0" "$F/Library/Caches/$L/1.10.0" "$F/.cache/$L/1.69.0" "$F/.cache/$L/1.10.0"
-  pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 1.0.24
+  pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 2.1.179
   pkg "$F/.npm-global/lib/node_modules/mcp-remote" mcp-remote 0.1.16-beta.1
-  mkdir -p "$F/.npm/_npx/a1/node_modules/@anthropic-ai/claude-code"; pkg "$F/.npm/_npx/a1/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 0.2.115
+  mkdir -p "$F/.npm/_npx/a1/node_modules/mcp-remote"; pkg "$F/.npm/_npx/a1/node_modules/mcp-remote" mcp-remote 0.0.4
   mkdir -p "$F/code/mr"
   # mcp-remote@0.1 is a range npx resolves when it runs, not a version.
   printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.16"]},"s":{"command":"npx","args":["my-mcp-remote@0.0.9"]},"t":{"command":"npx","args":["mcp-remote@0.1"]}}}\n' > "$F/code/mr/.mcp.json"

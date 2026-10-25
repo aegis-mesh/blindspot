@@ -89,7 +89,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           else ok = ok && path_ok($3)
           for (i = 5; i <= NF; i++) if (!pat_ok($i)) ok = 0
           if (!ok) print "data/auto-approve.tsv: " $0 }'
-      # Lines of one tool must agree on its name, range, hole and advisory.
+      # Lines of one tool must agree on its name, and lines of one advisory of a tool on its range and hole.
       rows data/outdated.tsv | awk -F '\t' "$PATH_OK"'
         function ver(s) { return s ~ /^[0-9]+(\.[0-9]+)*$/ }
         { ok = NF == 8 && $1 ~ /^[a-z0-9]+$/ && $2 != "" && $2 !~ /[\047"`$|\\]/ && $3 ~ /^(all|mac|linux|win)$/ && $4 ~ /^(plist|folder|npm|mcparg)$/
@@ -98,7 +98,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           n = split($6, r, " ")
           ok = ok && ((n == 1 && r[1] ~ /^</ && ver(substr(r[1], 2))) || (n == 2 && r[1] ~ /^>=/ && ver(substr(r[1], 3)) && r[2] ~ /^</ && ver(substr(r[2], 2))))
           ok = ok && $7 != "" && $7 !~ /[\047"`$|\\]/ && $8 ~ /^https:\/\/[^ \047"`$|\\]+$/
-          k = $2 "\t" $6 "\t" $7 "\t" $8; if (($1 in same) && same[$1] != k) ok = 0; same[$1] = k
+          if (($1 in same) && same[$1] != $2) ok = 0; same[$1] = $2
+          a = $1 "\t" $8; k = $6 "\t" $7; if ((a in adv) && adv[a] != k) ok = 0; adv[a] = k
           if (!ok) print "data/outdated.tsv: " $0 }'
       # An extension that shipped malware means a compromised machine: an update-level incident is refused.
       # The os column says where its malware could run; elsewhere it is a malicious extension to remove.
