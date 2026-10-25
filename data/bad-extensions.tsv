@@ -3,8 +3,8 @@
 #   version   the exact version, or * when every version is malware
 #   incident  an id from data/incidents.tsv, whose level must be act
 #   registry  openvsx: the bad build was only ever published to Open VSX, so it is looked for in the
-#             extension folders of the editors that install from there (Cursor, Windsurf, VSCodium
-#             and Kiro) and not in VS Code's own, where the same id is the Marketplace's extension:
+#             extension folders of the editors that install from there (Cursor, Windsurf and Devin
+#             Desktop, VSCodium and Kiro) and not in VS Code's own, where the same id is the Marketplace's extension:
 #             a clean build, or another publisher's. any: looked for in every folder
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
 # GlassWorm, from Socket's posts, each wave its own incident. A version where the post gives one, every

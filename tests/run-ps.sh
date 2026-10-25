@@ -750,10 +750,12 @@ has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$W
 rm -rf "$WORK/dz-waves"; cp -R "$WORK/clean" "$WORK/dz-waves"
 mkdir -p "$WORK/dz-waves/.cursor/extensions/aadarkcode.one-dark-material-3.20.1" "$WORK/dz-waves/.windsurf/extensions/spacetoow.vsc-python-indent-1.21.4" \
   "$WORK/dz-waves/.kiro/extensions/boulderzitunnel.vscode-buddies-1.35.3" "$WORK/dz-waves/.vscode/extensions/cosmic-themes.theme-cosmic-nebula-1.0.0" \
-  "$WORK/dz-waves/.vscode-oss/extensions/spacetoow.vsc-python-indent-1.21.0" "$WORK/dz-waves/.vscode/extensions/aadarkcode.one-dark-material-3.20.1"
+  "$WORK/dz-waves/.vscode-oss/extensions/spacetoow.vsc-python-indent-1.21.0" "$WORK/dz-waves/.vscode/extensions/aadarkcode.one-dark-material-3.20.1" \
+  "$WORK/dz-waves/.devin/extensions/oorzc.i18n-tools-plus-1.6.8"
 dzrun "$WORK/dz-waves" | tr -s ' \n' '  ' > "$WORK/dz-waves.txt"
 has    "a GlassWorm extension of Socket's 13 March list, at any version" '~/\.cursor/extensions/aadarkcode\.one-dark-material-3\.20\.1 aadarkcode\.one-dark-material 3\.20\.1 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-waves.txt"
 has    "a version the 18 March post shows delivering malware" '~/\.windsurf/extensions/spacetoow\.vsc-python-indent-1\.21\.4 spacetoow\.vsc-python-indent 1\.21\.4 \(GlassWorm sleeper extensions, March 2026\), installed' "$WORK/dz-waves.txt"
+has    "Devin Desktop's extension folder is read, as an Open VSX editor's" '~/\.devin/extensions/oorzc\.i18n-tools-plus-1\.6\.8 oorzc\.i18n-tools-plus 1\.6\.8 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-waves.txt"
 has    "one of the six the April post confirms"      '~/\.kiro/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-waves.txt"
 has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-waves.txt"
 has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"

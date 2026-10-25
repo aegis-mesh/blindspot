@@ -859,7 +859,7 @@ EOF
     -o -name .zsh_sessions -o -name .codeium -o -name .vscode-server \
     -o -path "$H/Library" -o -path "$H/Applications" -o -path "$H/Pictures" -o -path "$H/Movies" \
     -o -path "$H/Music" -o -path "$H/Public" -o -path "$H/go" -o -path "$H/.vscode" -o -path "$H/.cursor" \
-    -o -path "$H/.windsurf" -o -path "$H/.local/share" -o -path "$H/Dropbox" -o -path "$H/Google Drive" \
+    -o -path "$H/.windsurf" -o -path "$H/.devin" -o -path "$H/.local/share" -o -path "$H/Dropbox" -o -path "$H/Google Drive" \
     -o -path "$H/OneDrive*"
   if [ "$WIN" -eq 1 ]; then
     set -- "$@" -o -path "$H/AppData" -o -path "$H/Application Data" -o -path "$H/Local Settings" \
@@ -2312,10 +2312,12 @@ NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" |
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
 # with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
-# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. A line whose bad build
+# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. Windsurf became Devin
+# Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads the old
+# folder (its FAQ: only the name changed), so both are read. A line whose bad build
 # was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
 # same version is the Marketplace's clean build.
-EXT_ROWS=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; do
+EXT_ROWS=$(for r in "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.devin/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; do
     [ -d "$r" ] || continue
     case "$r" in ("$H/.vscode/extensions") _rg=marketplace ;; (*) _rg=openvsx ;; esac
     for d in "$r"/*; do [ -d "$d" ] && printf '%s\t%s\n' "$_rg" "$d"; done

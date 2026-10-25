@@ -480,7 +480,7 @@ $PruneNames = @('node_modules', '.git', '.Trash', '.cache', '.npm', '.pnpm-store
   '.codeium', '.vscode-server', '.nuget', '.dotnet')
 $PrunePaths = New-Object System.Collections.Generic.List[string]
 foreach ($p in @('AppData', 'Library', 'Applications', 'Pictures', 'Videos', 'Movies', 'Music', 'Public', 'go', '.vscode', '.cursor',
-    '.windsurf', '.local/share', 'Dropbox', 'Google Drive', 'Saved Games', 'Favorites', 'Contacts', 'Links', 'Searches',
+    '.windsurf', '.devin', '.local/share', 'Dropbox', 'Google Drive', 'Saved Games', 'Favorites', 'Contacts', 'Links', 'Searches',
     '3D Objects', 'scoop')) { $PrunePaths.Add((J $HomeDir $p)) }
 if (-not $OptAll) { foreach ($p in @('Desktop', 'Documents', 'Downloads')) { $PrunePaths.Add((J $HomeDir $p)) } }
 $Found = New-Object System.Collections.Generic.List[string]
@@ -1818,12 +1818,14 @@ $byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x
 $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
 # with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
-# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. A line whose bad build
+# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. Windsurf became Devin
+# Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads the old
+# folder (its FAQ: only the name changed), so both are read. A line whose bad build
 # was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
 # same version is the Marketplace's clean build.
 $ExtRows = New-Object System.Collections.Generic.List[object]
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 4 })
-foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
+foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
   $reg = 'openvsx'; if ($er -eq '.vscode/extensions') { $reg = 'marketplace' }
   foreach ($e in (Entries (J $HomeDir $er))) {
     if (-not (Is-DirInfo $e)) { continue }
