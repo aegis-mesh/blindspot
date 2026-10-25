@@ -885,6 +885,11 @@ psrun "$WORK/sw" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WO
 has    "SANDWORM_MODE's fix: remove its git hooks and MCP servers first" ' 1\. First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init\.templateDir names and in the \.git/hooks and \.husky folders of your repositories, and MCP servers you did not add to your AI assistants\. Its pre-push hook sends npm tokens out on every push\. 2\. Treat this machine as compromised\.' "$WORK/sw.txt"
 has    "ahead of an incident's own advice to rotate"  'Its pre-push hook sends npm tokens out on every push\. .*Rotate the secrets this machine held from another computer' "$WORK/sw.txt"
 has    "and the summary's first fix is to remove them" 'First fix: First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
+# wot-api 0.8.5, published an hour after 0.8.4, is malware by OpenSSF's entry, which Wiz's list leaves out.
+rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/w" "$WORK/npw/AppData/Roaming" "$WORK/npw/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/wot-api":{"version":"0.8.5","resolved":"https://registry.npmjs.org/wot-api/-/wot-api-0.8.5.tgz"}}}\n' > "$WORK/npw/code/w/package-lock.json"
+psrun "$WORK/npw" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npw.txt"
+has    "wot-api 0.8.5, which OpenSSF adds to the TanStack wave, is found" 'wot-api 0\.8\.5 \(TanStack worm, May 2026\), listed in this lockfile' "$WORK/npw.txt"
 # With gh-token-monitor there too, its fix leaves the rotating to the fixes after SANDWORM_MODE's.
 cp -R "$WORK/sw" "$WORK/sww"; mkdir -p "$WORK/sww/.config/gh-token-monitor"
 psrun "$WORK/sww" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sww.txt"

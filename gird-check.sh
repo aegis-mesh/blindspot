@@ -2420,6 +2420,7 @@ wot-api 0.8.1 tanstack
 wot-api 0.8.2 tanstack
 wot-api 0.8.3 tanstack
 wot-api 0.8.4 tanstack
+wot-api 0.8.5 tanstack
 @mistralai/mistralai 2.2.2 mistral
 @mistralai/mistralai 2.2.3 mistral
 @mistralai/mistralai 2.2.4 mistral

@@ -11,8 +11,12 @@
 #     (GHSA-g7cv-rxg3-hmpx) and the packages the worm spread to (tanstack), the @mistralai builds
 #     (GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc) and @uipath builds, whose
 #     payload could not run (mistral, uipath: versions to update), and OpenSearch
-#     (GHSA-298w-vvm4-ww55). Not the @cap-js, mbt and intercom-client versions Wiz's list also
-#     names, which were compromised in April.
+#     (GHSA-298w-vvm4-ww55). And wot-api 0.8.5, which Wiz's list leaves out: OpenSSF's MAL-2026-3591
+#     adds it to GitHub's 0.8.1 to 0.8.4, and npm's registry shows it published an hour after 0.8.4.
+#     Not the five versions Wiz's list also names from April's SAP and Intercom compromise, which
+#     this list does not cover: @cap-js/db-service 2.10.1, @cap-js/postgres 2.2.2, @cap-js/sqlite
+#     2.2.2, mbt 1.2.48 and intercom-client 7.0.4 (malware advisories of 29 and 30 April 2026, and the
+#     advisories of cap-js/cds-dbs and intercom/intercom-node).
 #   Mastra, June 2026: the 89 @mastra packages, mastra and create-mastra that GitHub lists, and
 #     easy-day-js 1.11.22, which Socket says each of the 141 compromised @mastra packages pulled in.
 #   keyv, August 2026: keyv 6.0.0, the nine cacheable versions and ecto 5.0.1, which carried the
@@ -24,9 +28,11 @@
 #     the same day name every version of each (GHSA-9w7p-hqx2-pjjx, GHSA-m47j-9qfx-6jh4,
 #     GHSA-56j5-62q9-cj2c, GHSA-w9hv-7gxr-9f8f) and say a machine that installed one is compromised,
 #     and those govern.
-# Not listed: the AntV and Red Hat waves. tensorlake's advisory also lists every version, but
-# names only 0.5.144 as malicious.
+# Not listed: the AntV and Red Hat waves, and April's SAP and Intercom wave. tensorlake's advisory also
+# lists every version, but names only 0.5.144 as malicious. GitHub's advisory for @tallyui/components
+# spans every version, but OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3.
 #! skip tensorlake * the advisory also lists every version, but names only 0.5.144 as malicious
+#! skip @tallyui/components * GitHub's advisory spans every version, but OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3, published on the day of the wave; 2.0.0 and later came months after
 # name	version	incident
 axios	1.14.1	axios
 axios	0.30.4	axios
@@ -356,6 +362,7 @@ wot-api	0.8.1	tanstack
 wot-api	0.8.2	tanstack
 wot-api	0.8.3	tanstack
 wot-api	0.8.4	tanstack
+wot-api	0.8.5	tanstack
 @mistralai/mistralai	2.2.2	mistral
 @mistralai/mistralai	2.2.3	mistral
 @mistralai/mistralai	2.2.4	mistral
