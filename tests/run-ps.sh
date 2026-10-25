@@ -216,7 +216,8 @@ has    "more than 20 places end with how many more" '^ +and 3 more$' "$SE/g4.blo
 if [ "$(grep -acE '^ +~/code/p[0-9]+/\.aider\.chat\.history\.md +1 file$' "$SE/g4.block")" -eq 20 ]; then ok "and show 20 of them"; else bad "and show 20 of them"; fi
 if cat "$SE"/g?.block | grep -av '✗' | LC_ALL=C awk 'length($0) > 80 { bad = 1 } END { exit bad }'; then ok "no session row is wider than 80 columns"; else bad "no session row is wider than 80 columns"; fi
 for _g in g1 g2 g3 g4; do
-  HOME="$SE/$_g" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/$_g.bash"
+  _ev=(); [ "$_g" = g3 ] && _ev=(CLAUDE_CONFIG_DIR="$SE/g3/$LONGP")
+  env HOME="$SE/$_g" ${_ev[@]+"${_ev[@]}"} PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/$_g.bash"
 done
 if cat "$SE"/g?.bash | diff -q - <(cat "$SE"/g?.block) >/dev/null; then ok "the same folder rows as gird-check.sh"; else bad "the same folder rows as gird-check.sh"; fi
 psrun "$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
