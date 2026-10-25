@@ -84,3 +84,6 @@ parity.sh passes a PowerShell skip that ps-skips.txt explains	tests tests/parity
 parity.sh fails on a stale ps-skips line	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 parity.sh passes a test both suites skipped	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+both scripts carry the same version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+every banner shows that version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+the newest CHANGELOG release is that version	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
