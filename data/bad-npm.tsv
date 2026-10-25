@@ -41,7 +41,7 @@
 #   Red Hat Cloud Services, June 2026 (redhat): the 32 @redhat-cloud-services packages whose OpenSSF
 #     entries name the worm's takeover of the trusted publisher they share, 96 versions. GitHub's malware
 #     advisories (such as GHSA-942v-f47r-w9c3) name the same versions for 22, and for 10 OpenSSF's entry
-#     adds one GitHub's leaves out.
+#     adds one or two GitHub's leaves out.
 #   keyv, August 2026: keyv 6.0.0, the nine cacheable versions and ecto 5.0.1, which carried the
 #     payload, and hamus.js 0.4.1, which OpenSSF's MAL-2026-11974 puts in the same account's compromise
 #     (keyv); the 19 @keyv 6.0.0 builds (keyvscope): Socket says they were published without the install
