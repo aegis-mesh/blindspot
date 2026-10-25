@@ -283,3 +283,5 @@ and its PowerShell does not end itself	only gird-check.sh's Git Bash stop starts
 a not-set pattern in a .json file	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a not-set pattern that is not a key	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a line of not-set patterns only	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python incident's startup file outside the home folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python incident's startup file that must be its owner's	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

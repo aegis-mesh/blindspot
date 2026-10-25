@@ -1051,6 +1051,7 @@ antv|all|startup|no|$H/.codex/package/index.js|a copy of the AntV wave's payload
 litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
 litellmmar|all|site|no|litellm_init.pth|-
+litellmmar|all|startup|no|$H/.config/sysmon/sysmon.py|the backdoor the March LiteLLM malware leaves, which a systemd service starts at login on Linux
 litellm|all|temp|yes|remote_code_loader.lock|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 litellm|all|temp|yes|.pc_once_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 litellm|all|temp|yes|.pc_sq_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
@@ -2188,6 +2189,19 @@ done
 # LiteLLM's advisory links, BerriAI/litellm#47826, names both).
 [ -n "${PRIVCOLLECT_ACTIVE:-}" ] && MARKS="${MARKS}litellm${TAB}PRIVCOLLECT_ACTIVE is set in this shell
 "
+# A startup file of a Python incident (data/indicators.tsv) is a sign of its malware, shown in its row
+# with its note and never as npm malware: PY_START holds "incident<TAB>file<TAB>note". gen.sh keeps
+# such a file in the home folder, the person's own.
+PY_START=""
+while IFS='|' read -r _ii _io _ik _iown _ip _in; do
+  [ "$_ik" = startup ] || continue
+  case " $PY_INCIDENTS " in *" $_ii "*) ;; *) continue ;; esac
+  case "$_io" in all|"$_os") ;; *) continue ;; esac
+  [ -n "$_ip" ] && [ -e "$_ip" ] && PY_START="$PY_START$_ii$TAB$(rowsafe "$_ip")$TAB$_in
+"
+done <<EOF
+$IND_TABLE
+EOF
 LOADER=0
 if [ "$ACCTRUN" -eq 0 ] && [ -e /tmp/remote_code_loader.lock ] && command -v lsof >/dev/null 2>&1; then
   [ -n "$(lsof -t /tmp/remote_code_loader.lock 2>/dev/null)" ] && LOADER=1
@@ -2225,7 +2239,7 @@ $BAD_PYPI
 EOF
 PY_HITS=""
 for _pi in $PY_INCIDENTS; do
-  if printf '%s' "$LITE_BAD$MARKS" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
+  if printf '%s' "$LITE_BAD$MARKS$PY_START" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
     PY_HITS="${PY_HITS:+$PY_HITS }$_pi"
   fi
 done
@@ -6263,6 +6277,8 @@ NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' '
 WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; IND_HITS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
+  # A Python incident's startup file is shown in its row (PY_START).
+  [ "$_ik" = startup ] && case " $PY_INCIDENTS " in *" $_ii "*) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
   # Shared places are root's, except a marker that must be this person's own (checked just below).
   # A link there could point at any account's file, so an account run never counts one.
@@ -7095,9 +7111,15 @@ for _pi in $PY_INCIDENTS; do
       done <<EOF
 $LITE_BAD$MARKS
 EOF
+      while IFS="$TAB" read -r _t l _n; do
+        [ "$_t" = "$_pi" ] && [ -n "$l" ] && { emit "        $(short "$l")"; emit "          $_n"; }
+      done <<EOF
+$PY_START
+EOF
       [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
       printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && _do="Don't run Python or pip in these environments."
       if printf '%s' "$MARKS" | grep -q "^$_pi$TAB" || [ -z "$_do" ]; then _do="${_do:+$_do }$(temp_advice "$_pi")"; fi
+      [ -z "$_do" ] && printf '%s' "$PY_START" | grep -q "^$_pi$TAB" && _do="Stop any process started from the file listed and delete it."
       ;;
     *)
       if [ -n "$_upd" ]; then

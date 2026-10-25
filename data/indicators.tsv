@@ -3,8 +3,10 @@
 #   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
 #   kind      wiper    a file of gh-token-monitor (its path must name it), the wiper that runs a destructive command when a
 #                      stolen GitHub token is revoked. Section 5 tells people to stop it first.
-#             startup  a file that starts malware at login, or a copy of malware that hooks it adds to an
-#                      agent run at each session; the note is shown under it
+#             startup  a file that starts malware at login, or the malware such a file starts, or a copy of
+#                      malware that hooks it adds to an agent run at each session; the note is shown under it.
+#                      A Python incident's (data/bad-pypi.tsv) is shown in that incident's row, never as npm
+#                      malware, and must be in the home folder (~) with owner no
 #             site     a file in any Python environment's site-packages: a Python incident's hit
 #             temp     an entry in /tmp, TMPDIR or %TEMP%: a Python incident's hit. May end in *
 #   owner     yes: counts only if this person owns it (for files in the shared /tmp; %TEMP% on Windows is the
@@ -28,8 +30,12 @@
 # (BerriAI/litellm#47826), which names the .pc_ temp files and PRIVCOLLECT_ACTIVE: the .pc_once_ marker is
 # written only once the data was sent, the advisory's "the exfil is confirmed".
 # LiteLLM 1.82.7 and 1.82.8: LiteLLM's March post, which says to look for litellm_init.pth in
-# site-packages and remove it (1.82.8). Wiz says the payload kept the persistence of the attack it
-# continued, without naming files for LiteLLM, so no other file has a line.
+# site-packages and remove it (1.82.8). And ~/.config/sysmon/sysmon.py, the backdoor its payload writes:
+# Wiz says the payload uses the persistence of the KICS attack, whose post names ~/.config/sysmon and
+# sysmon.py on a Linux host; HuskyHacks' teardown of 1.82.8 shows the code that writes the file and a
+# systemd user service, sysmon.service, to start it; NovaSky's hunt saw the file written on an affected
+# host. HuskyHacks finds the write fails on a machine with no Kubernetes service account token, so a
+# missing file proves nothing. The service has no line: monitoring tools can use that name.
 # AntV wave: SafeDep, which names the kitty-monitor backdoor's systemd unit and LaunchAgent, the cat.py
 # they start at login, and the payload copies in ~/.claude/package and ~/.codex/package that the
 # SessionStart hooks it adds to Claude Code and Codex settings run. Its /var/tmp/.gh_update_state, the
@@ -60,6 +66,7 @@ antv	all	startup	no	~/.codex/package/index.js	a copy of the AntV wave's payload,
 litellm	all	site	no	cook.pth	-
 litellm	all	site	no	cook.py	-
 litellmmar	all	site	no	litellm_init.pth	-
+litellmmar	all	startup	no	~/.config/sysmon/sysmon.py	the backdoor the March LiteLLM malware leaves, which a systemd service starts at login on Linux
 litellm	all	temp	yes	remote_code_loader.lock	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 litellm	all	temp	yes	.pc_once_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 litellm	all	temp	yes	.pc_sq_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.

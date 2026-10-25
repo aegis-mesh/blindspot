@@ -1101,6 +1101,13 @@ hasnot "the version LiteLLM says to pin, 1.82.6, is not flagged" 'litellm 1\.82\
 has    "the link flags a Python incident, not LiteLLM 1.107.0" '&ll=0&.*&py=1&' "$WORK/llm8.txt"
 has    "with both LiteLLM incidents found, row 05 names LiteLLM once" 'Recent leaks +signs of the LiteLLM malware\. Act now' "$WORK/llm8-c.txt"
 hasnot "and never twice"                              'LiteLLM and LiteLLM' "$WORK/llm8-c.txt"
+# The backdoor LiteLLM 1.82.7 and 1.82.8 leave, ~/.config/sysmon/sysmon.py (HuskyHacks' teardown, NovaSky's hunt,
+# and Wiz, which ties it to the KICS attack's persistence): a sign of that incident in its row, never npm malware.
+cp -R "$WORK/clean" "$WORK/llsys"; mkdir -p "$WORK/llsys/.config/sysmon"; : > "$WORK/llsys/.config/sysmon/sysmon.py"
+psrun "$WORK/llsys" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/llsys.txt"
+has    "the March LiteLLM backdoor is a sign of that incident, in its row" 'LiteLLM 1\.82\.7 and 1\.82\.8 +signs of the malware found ~/\.config/sysmon/sysmon\.py the backdoor the March LiteLLM malware leaves, which a systemd service starts at login on Linux' "$WORK/llsys.txt"
+has    "with its fix and the incident's source"       'Stop any process started from the file listed and delete it\. Advisory: docs\.litellm\.ai/blog/security-update-march-2026' "$WORK/llsys.txt"
+hasnot "and it is not called npm malware"             'npm malware +signs of the malware found|SIGNS OF NPM MALWARE' "$WORK/llsys.txt"
 # transformers.pyz in the temp folder is a Linux-only sign of mistralai 2.4.6.
 cp -R "$WORK/clean" "$WORK/mpyt"; : > "$WORK/mpyt/AppData/Local/Temp/transformers.pyz"
 psrun "$WORK/mpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt.txt"
@@ -1730,6 +1737,8 @@ has    "a hook that runs it, with the general note"   '~/code/made/\.claude/sett
 has    "a made-up planted file with its published SHA-256 counts on its own" '~/code/made/hash/\.claude/madeboot\.mjs a file the Made worm plants' "$WORK/mu.txt"
 has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, with nothing else of theirs beside it' "$WORK/mu.txt"
 has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/AppData/Local/Temp/\.madepy_1 ' "$WORK/mu.txt"
+has    "made-up Python incident: its startup file is in its row, with its note" 'Madepkg 9\.9\.9 +signs of the malware found .*~/\.config/madepy/boot\.py the Madepkg backdoor, started at login' "$WORK/mu.txt"
+if [ "$(grep -o 'madepy/boot\.py' "$WORK/mu.txt" | grep -c .)" -eq 1 ]; then ok "and it is not listed as npm malware too"; else bad "and it is not listed as npm malware too"; fi
 has    "made-up Python package: its advisory"         'Advisory: example\.com/madepy/advisory' "$WORK/mu.txt"
 has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.9 package\. Clear it with: uv cache clean madepkg' "$WORK/mu.txt"
 has    "made-up Python package: its fix"              "follow Madepkg's advisory" "$WORK/mu.txt"

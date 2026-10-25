@@ -1530,6 +1530,7 @@ $IndTable = @(
   ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
   ,@('litellm', 'all', 'site', 'no', 'cook.py', '-')
   ,@('litellmmar', 'all', 'site', 'no', 'litellm_init.pth', '-')
+  ,@('litellmmar', 'all', 'startup', 'no', (J $HomeDir '.config/sysmon/sysmon.py'), 'the backdoor the March LiteLLM malware leaves, which a systemd service starts at login on Linux')
   ,@('litellm', 'all', 'temp', 'yes', 'remote_code_loader.lock', 'These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
   ,@('litellm', 'all', 'temp', 'yes', '.pc_once_*', 'These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
   ,@('litellm', 'all', 'temp', 'yes', '.pc_sq_*', 'These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
@@ -1599,6 +1600,11 @@ foreach ($t in $TempDirs) {
 # LiteLLM's advisory links, BerriAI/litellm#47826, names both). The hourly loader that holds
 # remote_code_loader.lock only runs on macOS and Linux.
 if ($env:PRIVCOLLECT_ACTIVE) { $Marks.Add(@('litellm', 'PRIVCOLLECT_ACTIVE is set in this shell')) }
+# A startup file of a Python incident (data/indicators.tsv) is a sign of its malware, shown in its row
+# with its note and never as npm malware: $PyStart holds @(incident, file, note). gen.sh keeps such a
+# file in the home folder, the person's own.
+$PyStart = New-Object System.Collections.Generic.List[object]
+foreach ($r in $IndOn) { if ($r[2] -eq 'startup' -and $PyIncidents -contains $r[0] -and $r[4] -and (Exists $r[4])) { $PyStart.Add(@($r[0], $r[4], $r[5])) } }
 $LOADER = 0
 # A bad version in uv's cache: the row of each one found, in the list's order. The cache is walked
 # once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or 2.4.6.post1.
@@ -1624,6 +1630,7 @@ foreach ($pi in $PyIncidents) {
   $hit = $pi -eq 'litellm' -and $LOADER -eq 1
   foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { $hit = $true } }
   foreach ($l in $Marks) { if ($l[0] -ceq $pi) { $hit = $true } }
+  foreach ($l in $PyStart) { if ($l[0] -ceq $pi) { $hit = $true } }
   if ($hit) { $PyHits.Add($pi) }
 }
 $PY_HIT = 0; if ($PyHits.Count -gt 0) { $PY_HIT = 1 }
@@ -5615,6 +5622,8 @@ $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 foreach ($r in $IndOn) {
   if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
+  # A Python incident's startup file is shown in its row ($PyStart).
+  if ($r[2] -eq 'startup' -and $PyIncidents -contains $r[0]) { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
   if ($r[3] -eq 'yes') {
     if ($OnWindows) { continue }
@@ -6150,8 +6159,10 @@ foreach ($pi in $PyIncidents) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
     foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    foreach ($l in $PyStart) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])"; Emit "          $($l[2])" } }
     if (@($LiteBad | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = "Don't run Python or pip in these environments." }
     if (@($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0 -or -not $do) { $do = (@($do, (Temp-Advice $pi)) | Where-Object { $_ }) -join ' ' }
+    if (-not $do -and @($PyStart | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = 'Stop any process started from the file listed and delete it.' }
   } elseif ($upd.Count -gt 0) {
     Pair "$cYel!$cRst" $pl 16 "${cYel}a bad version to update$cRst"
   } elseif ($pi -eq 'litellm' -and $LitePyc.Count -gt 0) {

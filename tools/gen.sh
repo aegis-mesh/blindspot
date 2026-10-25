@@ -23,6 +23,8 @@ ACT_IDS=" $(rows data/incidents.tsv | awk -F '\t' '$6 == "act" { printf "%s ", $
 # names only a leak, a leak is a platform's, and no package, extension or file of a leak is looked for.
 LEAK_IDS=" $(rows data/incidents.tsv | awk -F '\t' '$6 == "leak" { printf "%s ", $1 }')"
 PLAT_IDS=" $(rows data/platforms.tsv | cut -f1 | tr '\n' ' ')"
+# The Python incidents: those with a bad version or a site or temp line, as PY_INCIDENTS lists them.
+PY_IDS=" $( { rows data/bad-pypi.tsv | cut -f3; rows data/indicators.tsv | awk -F '\t' '$3 ~ /^(site|temp)$/ { print $1 }'; } | sort -u | tr '\n' ' ')"
 # What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
@@ -66,10 +68,13 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(all|mac|linux|win)$/ { print "data/bad-pypi.tsv: " $0 }'
       # A startup line carries a note, a temp line the advice of its incident (the same on each of its
       # temp lines); wiper and site lines carry -. PowerShell gets the note quoted, so it may hold a quote.
-      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" -v leaks="$LEAK_IDS" "$PATH_OK"'
+      # A Python incident's startup file is shown in its row in section 5, checked before the ownership
+      # rules: it must be in the home folder, the person's own, with owner no.
+      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" -v leaks="$LEAK_IDS" -v py="$PY_IDS" "$PATH_OK"'
         { ok = NF == 6 && index(ids, " " $1 " ") > 0 && index(leaks, " " $1 " ") == 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
           if ($3 ~ /^(wiper|startup)$/) ok = ok && path_ok($5)
           if ($3 == "wiper") ok = ok && $5 ~ /gh-token-monitor/
+          if ($3 == "startup" && index(py, " " $1 " ") > 0) ok = ok && $4 == "no" && $5 ~ /^~\//
           if ($3 == "site") ok = ok && $5 ~ /^[A-Za-z0-9._-]+$/
           if ($3 == "temp") ok = ok && $5 ~ /^[A-Za-z0-9._-]+\*?$/
           if ($3 ~ /^(site|temp)$/) ok = ok && $5 !~ /^\.+\*?$/ && index(acts, " " $1 " ") > 0
