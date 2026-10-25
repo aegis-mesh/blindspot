@@ -1680,6 +1680,17 @@ has    "the full access profile in TOML's literal strings counts too" '! Codex ~
 hasnot "the workspace profile is not full access" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ws.txt"
 hasnot "the full access profile with approvals on is not reported" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ask.txt"
 hasnot "the full access profile under a [table] is not the top level" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-tbl.txt"
+# For a file that sets default_permissions beside sandbox_mode, Codex's code (0.164.0) uses the profile, though its
+# docs say sandbox_mode wins: the sandbox line does not count then. A default_permissions that is commented out
+# or under a [table] does not stop it.
+for L in both cmt tblp; do rm -rf "$WORK/dz-cx-$L"; cp -R "$WORK/clean" "$WORK/dz-cx-$L"; mkdir -p "$WORK/dz-cx-$L/.codex"; done
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\ndefault_permissions = ":workspace"\n' > "$WORK/dz-cx-both/.codex/config.toml"
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n# default_permissions = ":workspace"\n' > "$WORK/dz-cx-cmt/.codex/config.toml"
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n[profiles.x]\ndefault_permissions = ":workspace"\n' > "$WORK/dz-cx-tblp/.codex/config.toml"
+for L in both cmt tblp; do dzrun "$WORK/dz-cx-$L" | tr -s ' \n' '  ' > "$WORK/dz-cx-$L.txt"; done
+hasnot "a file that also sets default_permissions follows the profile, as Codex's code does" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-both.txt"
+has    "a commented default_permissions does not stop the full access line" '! Codex ~/\.codex/config\.toml never asks, full access( |$)' "$WORK/dz-cx-cmt.txt"
+has    "nor one under a [table]"                      '! Codex ~/\.codex/config\.toml never asks, full access( |$)' "$WORK/dz-cx-tblp.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 HOME="$WORK/dz-calm" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
@@ -1854,6 +1865,9 @@ gen_refuses "an auto-approve pattern with a quote"     auto-approve.tsv "X${T}al
 gen_refuses "an auto-approve line with no pattern"     auto-approve.tsv "X${T}all${T}~/.x/settings.json${T}s"
 gen_refuses "an auto-approve path with a glob"         auto-approve.tsv "X${T}all${T}~/.x/*.json${T}s${T}\"a\": true"
 gen_refuses "an auto-approve project path that climbs" auto-approve.tsv "X${T}all${T}{PROJECT}/../.x/settings.json${T}s${T}\"a\": true"
+gen_refuses "a not-set pattern in a .json file"         auto-approve.tsv "X${T}all${T}~/.x/settings.json${T}s${T}\"a\": true${T}!b"
+gen_refuses "a not-set pattern that is not a key"       auto-approve.tsv "X${T}all${T}~/.x/config.toml${T}s${T}a = 1${T}!b = 2"
+gen_refuses "a line of not-set patterns only"           auto-approve.tsv "X${T}all${T}~/.x/config.toml${T}s${T}!b"
 gen_refuses "an outdated line of another kind"         outdated.tsv "newtool${T}New${T}all${T}exe${T}new-tool${T}<1.0${T}a hole${T}https://example.com"
 gen_refuses "an outdated range that does not parse"    outdated.tsv "newtool${T}New${T}all${T}npm${T}new-tool${T}<=1.0${T}a hole${T}https://example.com"
 gen_refuses "an outdated line that disagrees with its tool" outdated.tsv "cursor${T}Cursor${T}mac${T}plist${T}~/x/Info.plist${T}<4.0${T}a malicious agent could escape the sandbox${T}https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw"

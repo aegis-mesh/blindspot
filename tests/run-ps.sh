@@ -1549,6 +1549,17 @@ has    "the full access profile in TOML's literal strings counts too" '! Codex ~
 hasnot "the workspace profile is not full access" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ws.txt"
 hasnot "the full access profile with approvals on is not reported" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ask.txt"
 hasnot "the full access profile under a [table] is not the top level" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-tbl.txt"
+# For a file that sets default_permissions beside sandbox_mode, Codex's code (0.164.0) uses the profile, though its
+# docs say sandbox_mode wins: the sandbox line does not count then. A default_permissions that is commented out
+# or under a [table] does not stop it.
+for L in both cmt tblp; do rm -rf "$WORK/dz-cx-$L"; cp -R "$WORK/clean" "$WORK/dz-cx-$L"; mkdir -p "$WORK/dz-cx-$L/.codex"; done
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\ndefault_permissions = ":workspace"\n' > "$WORK/dz-cx-both/.codex/config.toml"
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n# default_permissions = ":workspace"\n' > "$WORK/dz-cx-cmt/.codex/config.toml"
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n[profiles.x]\ndefault_permissions = ":workspace"\n' > "$WORK/dz-cx-tblp/.codex/config.toml"
+for L in both cmt tblp; do dzrun "$WORK/dz-cx-$L" | tr -s ' \n' '  ' > "$WORK/dz-cx-$L.txt"; done
+hasnot "a file that also sets default_permissions follows the profile, as Codex's code does" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-both.txt"
+has    "a commented default_permissions does not stop the full access line" '! Codex ~/\.codex/config\.toml never asks, full access( |$)' "$WORK/dz-cx-cmt.txt"
+has    "nor one under a [table]"                      '! Codex ~/\.codex/config\.toml never asks, full access( |$)' "$WORK/dz-cx-tblp.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 dzrun "$WORK/dz-calm" | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"

@@ -542,7 +542,7 @@ $WormRefNote = 'runs a file a worm plants'
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 $AaTable = @(
   ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"permissions": {"defaultMode": "bypassPermissions"'))
-  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access profile', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
@@ -1222,6 +1222,9 @@ function Aa-Hit([string]$f, $pats) {
   $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
   $got = New-Object bool[] $pp.Count
   $par = New-Object string[] $pp.Count
+  # !key in a .toml file: the line counts only when no line sets that key.
+  $neg = New-Object bool[] $pp.Count
+  if ($toml) { for ($i = 0; $i -lt $pp.Count; $i++) { if ($pp[$i].StartsWith('!')) { $neg[$i] = $true; $pp[$i] = $pp[$i].Substring(1) + '=' } } }
   if (-not $toml) {
     for ($i = 0; $i -lt $pp.Count; $i++) {
       $m = [regex]::Match($pp[$i], '^("[A-Za-z0-9_.-]+"):\{')
@@ -1237,6 +1240,7 @@ function Aa-Hit([string]$f, $pats) {
     for ($i = 0; $i -lt $pp.Count; $i++) {
       if ($got[$i]) { continue }
       if ($toml) {
+        if ($neg[$i]) { if ($l.StartsWith($pp[$i], [StringComparison]::Ordinal)) { $got[$i] = $true }; continue }
         foreach ($q in @($pp[$i], $pp[$i].Replace('"', "'"))) {
           if ($l.StartsWith($q, [StringComparison]::Ordinal) -and ($l.Length -eq $q.Length -or [string]$l[$q.Length] -eq '#')) { $got[$i] = $true }
         }
@@ -1260,7 +1264,8 @@ function Aa-Hit([string]$f, $pats) {
       }
     }
   }
-  -not ($got -contains $false)
+  for ($i = 0; $i -lt $pp.Count; $i++) { if ($neg[$i] -eq $got[$i]) { return $false } }
+  $true
 }
 function Auto-Row([string]$f, [string]$what, [string]$t) {
   # A worm file counts only when a command runs it (Worm-Cmd), and a file projects use too only in a
