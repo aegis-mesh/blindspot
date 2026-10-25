@@ -51,6 +51,8 @@ an npm package with an unknown incident	tools/gen.sh is one bash tool that write
 an outdated line of another kind	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated line that disagrees with its tool	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated line whose name disagrees with its tool	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an advice that starts with First on an update-level incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an advice that starts with First and says to rotate	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated plist that is not Info.plist	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated range that does not parse	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 npm's -security placeholder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

@@ -757,7 +757,7 @@ has    "the wiper's warning says it tries to erase the home folder, as Wiz says"
 hasnot "and never that it erased one"                  'erased the home folder' "$WORK/out-flat-incidents.txt"
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
-hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/wl.txt"
+hasnot "the wiper's own fix does not wait for itself"  'stops working\.( Then rotate every key this machine could reach\.)? Only once' "$WORK/wl.txt"
 # Sentences of a report that say to rotate or revoke without waiting for gh-token-monitor. A sentence
 # passes if it names gh-token-monitor, if the wait for it follows within two sentences (a platform's
 # advice ends with it), or if it is the wiper's own fix, whose next sentence says to stop it first.
@@ -877,6 +877,21 @@ has    "a UiPath build whose payload could not run is a version to update" '@uip
 hasnot "none of them is a compromised machine"        'ACT NOW|Treat this machine as compromised' "$WORK/npd.txt"
 has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
 has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
+# SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
+# to remove them comes ahead of every fix that says to rotate, an incident's own advice to rotate too.
+rm -rf "$WORK/sw"; mkdir -p "$WORK/sw/code/s/node_modules/suport-color" "$WORK/sw/code/s/node_modules/@keyv/redis" "$WORK/sw/AppData/Roaming" "$WORK/sw/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/suport-color":{"version":"1.0.1","resolved":"https://registry.npmjs.org/suport-color/-/suport-color-1.0.1.tgz"},"node_modules/@keyv/redis":{"version":"6.0.0","resolved":"https://registry.npmjs.org/@keyv/redis/-/redis-6.0.0.tgz"}}}\n' > "$WORK/sw/code/s/package-lock.json"
+printf '{"name":"suport-color","version":"1.0.1"}\n' > "$WORK/sw/code/s/node_modules/suport-color/package.json"
+printf '{"name":"@keyv/redis","version":"6.0.0"}\n' > "$WORK/sw/code/s/node_modules/@keyv/redis/package.json"
+HOME="$WORK/sw" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sw.txt"
+HOME="$WORK/sw" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sw-sum.txt"
+has    "SANDWORM_MODE's fix: remove its git hooks and MCP servers first" ' 1\. First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init\.templateDir names and in the \.git/hooks and \.husky folders of your repositories, and MCP servers you did not add to your AI assistants\. Its pre-push hook sends npm tokens out on every push\. 2\. Treat this machine as compromised\.' "$WORK/sw.txt"
+has    "ahead of an incident's own advice to rotate"  'Its pre-push hook sends npm tokens out on every push\. .*Rotate the secrets this machine held from another computer' "$WORK/sw.txt"
+has    "and the summary's first fix is to remove them" 'First fix: First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
+# With gh-token-monitor there too, its fix leaves the rotating to the fixes after SANDWORM_MODE's.
+cp -R "$WORK/sw" "$WORK/sww"; mkdir -p "$WORK/sww/.config/gh-token-monitor"
+HOME="$WORK/sww" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sww.txt"
+has    "with gh-token-monitor too, its fix does not say to rotate before SANDWORM_MODE's" ' 1\. Don.t revoke any GitHub token yet\. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working\. 2\. First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sww.txt"
 has    "a Mastra package is named as its sources name it" '@mastra/mcp 1\.10\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
 # A version to update outranks an unreadable cache in row 05: a partial check never hides a finding to act on.
 cp -R "$WORK/mis" "$WORK/misno"; mkdir -p "$WORK/misno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/misno/.npm/_cacache/index-v5/aa"
@@ -1514,6 +1529,8 @@ gen_refuses "an outdated line of another kind"         outdated.tsv "newtool${T}
 gen_refuses "an outdated range that does not parse"    outdated.tsv "newtool${T}New${T}all${T}npm${T}new-tool${T}<=1.0${T}a hole${T}https://example.com"
 gen_refuses "an outdated line that disagrees with its tool" outdated.tsv "cursor${T}Cursor${T}mac${T}plist${T}~/x/Info.plist${T}<4.0${T}a malicious agent could escape the sandbox${T}https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw"
 gen_refuses "an outdated line whose name disagrees with its tool" outdated.tsv "cursor${T}Cursor IDE${T}mac${T}plist${T}~/x/Info.plist${T}<3.0${T}a malicious agent could escape the sandbox${T}https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw"
+gen_refuses "an advice that starts with First on an update-level incident" incidents.tsv 'edit:$1 == "injective" { $7 = "First move the funds out." } { print }'
+gen_refuses "an advice that starts with First and says to rotate" incidents.tsv 'edit:$1 == "sandworm" { $7 = "First rotate every key." } { print }'
 gen_refuses "an outdated plist that is not Info.plist" outdated.tsv "newtool${T}New${T}mac${T}plist${T}~/x/Other.plist${T}<1.0${T}a hole${T}https://example.com"
 gen_refuses "an extension with an unknown incident"    bad-extensions.tsv "pub.ext${T}1.0.0${T}nosuch${T}any${T}all"
 gen_refuses "an extension whose incident is only an update" bad-extensions.tsv "pub.ext${T}1.0.0${T}injective${T}any${T}all"
