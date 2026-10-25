@@ -5779,13 +5779,15 @@ function Lock-Installed([string]$f, [string]$n, [string]$v) {
   }
   $false
 }
+# $NpmInstTags: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
 $NpmInst = 0; $LockProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+$NpmInstTags = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($r in $NpmRows) {
   if ((Incident-Level $r[2]) -ne 'act') { continue }
   if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
     $isp = $r[1].LastIndexOf(' ')
-    if (Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)) { $NpmInst = 1 } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
-  } else { $NpmInst = 1 }
+    if (Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)) { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
+  } else { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) }
 }
 $N_LOCKPROJ = $LockProj.Count
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
@@ -5953,16 +5955,35 @@ function Add-Todo([int]$sec, [string]$text) {
 # the act-now fixes, then update-level ones, ahead of every other fix (the Injective SDK's: move the
 # funds out of a wallet whose seed phrase may have been sent out). Two incidents can share a fix (two
 # waves of one malware): it is said once.
+# An act-level npm incident found only in lockfiles (Adv-LockOnly) reached this machine only if that
+# project was installed, so its own fix is worded for that (Adv-If), and comes after the fixes for
+# what was found installed (lock), with the other fixes that depend on an install. A fix any incident
+# found installed shares is worded as fact.
+function Adv-LockOnly([string]$t) {
+  if ((Incident-Level $t) -ne 'act') { return $false }
+  if ($NpmInstTags.Contains($t) -or @($ExtTags) -ccontains $t -or @($PyHits) -ccontains $t) { return $false }
+  @($NpmTags) -ccontains $t
+}
+function Adv-If([string]$t, [string]$a) {
+  $w = ($a -split ' ')[0]
+  if ($w.Length -le 1 -or $w.Substring(1) -cnotmatch '[A-Z]') { $a = $a.Substring(0, 1).ToLowerInvariant() + $a.Substring(1) }
+  "If you installed the $(Incident-Name $t) packages section 5 lists, $a"
+}
+$AdvSaid = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 function Add-Advice([string]$mode) {
-  $seen = @{}; $said = @{}
+  $seen = @{}
   foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) {
     if ($seen.ContainsKey($t)) { continue }; $seen[$t] = 1
-    $a = Incident-Advice $t; if (-not $a -or $said.ContainsKey($a)) { continue }
+    $a = Incident-Advice $t; if (-not $a -or $AdvSaid.Contains($a)) { continue }
     $lv = Incident-Level $t; $isFirst = $a.StartsWith('First ', [StringComparison]::Ordinal)
     if ($mode -eq 'first') { if ($lv -ne 'act' -or -not $isFirst) { continue } }
-    elseif ($lv -ne $mode -or ($mode -eq 'act' -and $isFirst)) { continue }
-    $said[$a] = 1
-    Add-Todo 5 $a
+    elseif ($mode -eq 'act' -or $mode -eq 'lock') { if ($lv -ne 'act' -or $isFirst) { continue } }
+    elseif ($lv -ne $mode) { continue }
+    $lo = $true
+    foreach ($u in (@($NpmTags) + @($ExtTags) + @($PyHits))) { if ((Incident-Advice $u) -ceq $a -and -not (Adv-LockOnly $u)) { $lo = $false } }
+    if (($mode -eq 'act' -and $lo) -or ($mode -eq 'lock' -and -not $lo)) { continue }
+    [void]$AdvSaid.Add($a)
+    if ($lo) { Add-Todo 5 (Adv-If $t $a) } else { Add-Todo 5 $a }
   }
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
@@ -5982,26 +6003,31 @@ function Rotate-Wait([string]$text) {
 if ($WIPER_HIT -eq 1 -and $HasFirstFix) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working.' }
 elseif ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
 Add-Advice 'first'
-# A bad version found only in lockfiles: whether this machine is compromised depends on whether
-# that project was installed here.
-if ($MAL_LOCKONLY -eq 1) {
-  if ($N_LOCKPROJ -eq 1) { $lp = 'the project'; $ll = 'its lockfile' } else { $lp = 'the projects'; $ll = 'their lockfiles' }
-  Add-Todo 5 "If you ran an install in $lp section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach. If not, update $ll to a version without the malware."
-} elseif ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
+# The fixes for what was found, first. A compromised machine's keys are rotated from another computer,
+# then the malware is removed, as GitHub's malware advisories say.
+if ($MAL_HIT -eq 1 -and $MAL_LOCKONLY -eq 0) { Add-Todo 5 'Treat this machine as compromised. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm''s cache with npm cache clean --force.' }
 if ($EXT_HIT -eq 1) {
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
   if ($ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
   else { $edo = 'Uninstall the extensions listed in section 5 and' }
   Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
 }
-if ($ExtCheck.Count -gt 0) { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
-if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 $PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
-if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
-elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $adv, and rotate every key the machine could reach." }
+if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments. From another computer, rotate every key the machine could reach, then follow $adv to remove the malware." }
+elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5. From another computer, rotate every key the machine could reach, then delete those files and follow $adv." }
 Add-Advice 'act'
+# Then the fixes that depend on an install, or on a file you set up: a bad version found only in
+# lockfiles (whether this machine is compromised depends on whether that project was installed here),
+# a startup file to check, a leftover cook.pyc, and the own fixes of incidents found only in lockfiles.
+if ($MAL_LOCKONLY -eq 1) {
+  if ($N_LOCKPROJ -eq 1) { $lp = 'the project'; $ll = 'its lockfile' } else { $lp = 'the projects'; $ll = 'their lockfiles' }
+  Add-Todo 5 "If you ran an install in $lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $ll to a version without the malware."
+}
+if ($ExtCheck.Count -gt 0) { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
+if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
+Add-Advice 'lock'
 Add-Advice 'update'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 $N_AK = $AkLinks.Count

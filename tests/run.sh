@@ -851,7 +851,7 @@ hasnot "Linux is not given the Mac command"            'launchctl bootout' "$WOR
 has    "the wiper's warning says it tries to erase the home folder, as Wiz says" 'and in the TanStack wave it tries to erase the home folder\.' "$WORK/out-flat-incidents.txt"
 hasnot "and never that it erased one"                  'erased the home folder' "$WORK/out-flat-incidents.txt"
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
-has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
+has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm.s cache with npm cache clean --force\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 hasnot "the wiper's own fix does not wait for itself"  'stops working\.( Then rotate every key this machine could reach\.)? Only once' "$WORK/wl.txt"
 # Sentences of a report that say to rotate or revoke without waiting for gh-token-monitor. A sentence
 # passes if it names gh-token-monitor, if the wait for it follows within two sentences (a platform's
@@ -959,11 +959,11 @@ printf '{"name":"axios","version":"1.14.2"}\n' > "$WORK/lkd/code/cloned/node_mod
 for lk in lko lki lkd; do HOME="$WORK/$lk" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$lk.txt"; done
 HOME="$WORK/lko" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lko-c.txt"
 has    "a lockfile alone: the headline depends on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lko.txt"
-has    "and so does the fix" "If you ran an install in the project section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach\. If not, update its lockfile to a version without the malware\." "$WORK/lko.txt"
+has    "and so does the fix" "If you ran an install in the project section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force\. If not, update its lockfile to a version without the malware\." "$WORK/lko.txt"
 has    "and the summary row" 'Recent leaks npm malware in a lockfile: act if installed' "$WORK/lko-c.txt"
 _s1=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lko.txt"); _s2=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lki.txt")
 if [ -n "$_s1" ] && [ "$_s1" = "$_s2" ] && grep -q '&nm=1&' "$WORK/lko.txt"; then ok "a lockfile alone keeps the score and the link's nm"; else bad "a lockfile alone keeps the score and the link's nm" "${_s1:-no link} / ${_s2:-no link}"; fi
-has    "a bad version installed next to its lockfile is act-now" 'ACT NOW: SIGNS OF NPM MALWARE .*Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/lki.txt"
+has    "a bad version installed next to its lockfile is act-now" 'ACT NOW: SIGNS OF NPM MALWARE .*Treat this machine as compromised\. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5' "$WORK/lki.txt"
 has    "another version in node_modules leaves it depending on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lkd.txt"
 # Each entry is looked for where its lockfile installs it: the folder npm's lockfile names (nested, or a
 # workspace's own node_modules), a nested node_modules (yarn 1 here), bun's key, pnpm's node_modules/.pnpm,
@@ -1086,7 +1086,7 @@ printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/red
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    },\n    "node_modules/intercom-client": {\n      "version": "7.0.4"\n    },\n    "node_modules/@cap-js/openapi": {\n      "version": "1.4.1"\n    },\n    "node_modules/mastraqqq": {\n      "version": "1.13.1"\n    },\n    "node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.2"\n    },\n    "node_modules/tool/node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.5"\n    },\n    "node_modules/hamus.js": {\n      "version": "0.4.1"\n    },\n    "node_modules/echarts-for-react": {\n      "version": "3.1.7"\n    },\n    "node_modules/chart/node_modules/echarts-for-react": {\n      "version": "3.1.6"\n    },\n    "node_modules/chart/node_modules/@antv/a8": {\n      "version": "0.0.1"\n    },\n    "node_modules/@redhat-cloud-services/chrome": {\n      "version": "2.3.4"\n    },\n    "node_modules/tensorlake-native-linux-x64-gnu": {\n      "version": "0.5.144"\n    },\n    "node_modules/tensorlake-native-darwin-arm64": {\n      "version": "0.5.143"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
 for np in npd npa npk; do HOME="$WORK/$np" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
 has    "a @keyv 6.0.0 build is npm malware, as GitHub's advisory says" '@keyv/redis 6\.0\.0 \(keyv account takeover, August 2026\).*keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised\.' "$WORK/npk.txt"
-has    "with its advice to rotate from another computer" 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says\.' "$WORK/npk.txt"
+has    "with its advice to rotate from another computer" 'If you installed the keyv account takeover packages section 5 lists, rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says\.' "$WORK/npk.txt"
 hasnot "and no pin to a version before 6.0.0, which the advisory does not say" 'version before 6\.0\.0' "$WORK/npk.txt"
 has    "a SANDWORM_MODE sleeper package is malware, as GitHub's advisories say" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised\.' "$WORK/npd.txt"
 hasnot "and no fix says its attackers published every version" 'the attackers published every version' "$WORK/npd.txt"
@@ -1136,6 +1136,26 @@ has    "wot-api 0.8.5, which OpenSSF adds to the TanStack wave, is found" 'wot-a
 cp -R "$WORK/sw" "$WORK/sww"; mkdir -p "$WORK/sww/.config/gh-token-monitor"
 HOME="$WORK/sww" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sww.txt"
 has    "with gh-token-monitor too, its fix does not say to rotate before SANDWORM_MODE's" ' 1\. Don.t revoke any GitHub token yet\. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working\. 2\. First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sww.txt"
+# A bad version found only in a lockfile, beside malware found for sure (LiteLLM here): the confirmed fix
+# comes first. An incident's own fix for a hit found only in a lockfile (SANDWORM_MODE's cleanup, the
+# @keyv builds' rotate) is for if it was installed; found installed, it is said as fact, and the act-now
+# fix and the @keyv builds' fix agree: rotate from another computer, then remove.
+for g2 in g2py g2sw g2mix; do rm -rf "${WORK:?}/$g2"; mkdir -p "$WORK/$g2/code/a" "$WORK/$g2/AppData/Roaming" "$WORK/$g2/AppData/Local/Temp"; done
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/g2py/code/a/package-lock.json"
+mkdir -p "$WORK/g2py/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/g2py/code/py/.venv/pyvenv.cfg"
+printf "lockfileVersion: '9.0'\n\npackages:\n\n  claud-code@1.0.3:\n    resolution: {integrity: sha512-x}\n" > "$WORK/g2sw/code/a/pnpm-lock.yaml"
+mkdir -p "$WORK/g2mix/code/a/node_modules/axios" "$WORK/g2mix/code/k"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/g2mix/code/a/package-lock.json"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/g2mix/code/a/node_modules/axios/package.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$WORK/g2mix/code/k/package-lock.json"
+for g2 in g2py g2sw g2mix; do HOME="$WORK/$g2" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$g2.txt"; done
+has    "a lockfile-only hit beside malware found for sure: the confirmed fix comes first" ' 1\. Treat this machine as compromised\. Don.t run Python in the affected environments\. .* 2\. If you ran an install in the project section 5 lists' "$WORK/g2py.txt"
+[ "$(uname -s)" = Darwin ] || SKIPPING="the snapshot note with the Argus offer is printed on a Mac only"
+has    "and on a Mac the closing note names both" 'It found signs of the LiteLLM malware, and npm malware listed' "$WORK/g2py.txt"
+SKIPPING=""
+has    "SANDWORM_MODE's cleanup for a hit only in a lockfile is for if it was installed" ' 1\. If you installed the SANDWORM_MODE worm packages section 5 lists, first find and remove what the SANDWORM_MODE worm leaves' "$WORK/g2sw.txt"
+has    "an incident only in a lockfile beside one installed keeps its fix for if it was installed" ' 1\. Treat this machine as compromised\. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 .* 2\. If you installed the keyv account takeover packages section 5 lists, rotate the secrets' "$WORK/g2mix.txt"
+has    "found installed, the act-now fix and the @keyv builds' fix agree: rotate from another computer, then remove" 'From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5.* Rotate the secrets this machine held from another computer, then remove each @keyv package' "$WORK/sw.txt"
 has    "a Mastra package is named as its sources name it" '@mastra/mcp 1\.10\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
 # A version to update outranks an unreadable cache in row 05: a partial check never hides a finding to act on.
 cp -R "$WORK/mis" "$WORK/misno"; mkdir -p "$WORK/misno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/misno/.npm/_cacache/index-v5/aa"
@@ -1152,7 +1172,7 @@ printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else exec /usr/bin/uname 
 cp -R "$WORK/clean" "$WORK/mpy"; mkdir -p "$WORK/mpy/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"
 HOME="$WORK/mpy" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy.txt"
 has    "mistralai 2.4.6 from PyPI is its own act-now row" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6' "$WORK/mpy.txt"
-has    "with its fix"                                "Treat this machine as compromised\. Don't run Python in the affected environments, follow mistralai's advisory" "$WORK/mpy.txt"
+has    "with its fix"                                "Treat this machine as compromised\. Don't run Python in the affected environments\. From another computer, rotate every key the machine could reach, then follow mistralai's advisory" "$WORK/mpy.txt"
 has    "the link flags a Python incident, not LiteLLM" '&ll=0&.*&py=1&' "$WORK/mpy.txt"
 HOME="$WORK/mpy" PATH="$WORK/macbin2:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy-mac.txt"
 HOME="$WORK/mpy" PATH="$WORK/macbin2:$PATH" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpy-mac-c.txt"
@@ -1167,7 +1187,7 @@ cp -R "$WORK/clean" "$WORK/gpy"; mkdir -p "$WORK/gpy/code/venv/lib/site-packages
 HOME="$WORK/gpy" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy.txt"
 HOME="$WORK/gpy" PATH="$WORK/macbin2:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy-mac.txt"
 has    "guardrails-ai 0.10.1 is its own act-now row on Linux" 'guardrails-ai 0\.10\.1 +signs of the malware found ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1' "$WORK/gpy.txt"
-has    "with its fix, naming it"                      "Don't run Python in the affected environments, follow guardrails-ai's advisory" "$WORK/gpy.txt"
+has    "with its fix, naming it"                      "Don't run Python in the affected environments\. From another computer, rotate every key the machine could reach, then follow guardrails-ai's advisory" "$WORK/gpy.txt"
 has    "on a Mac, guardrails-ai 0.10.1 is a version to update" 'guardrails-ai 0\.10\.1 +a bad version to update ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1 Its malware runs on Linux only, so it did not run here\. Update to a version without it\. Advisory: www\.wiz\.io/blog/' "$WORK/gpy-mac.txt"
 hasnot "and is not 'compromised' there"               'ACT NOW|Treat this machine as compromised' "$WORK/gpy-mac.txt"
 # lightning 2.6.2 and 2.6.3, the PyPI release of April's Mini Shai-Hulud wave, start a stealer when
@@ -1175,7 +1195,7 @@ hasnot "and is not 'compromised' there"               'ACT NOW|Treat this machin
 cp -R "$WORK/clean" "$WORK/lpy"; mkdir -p "$WORK/lpy/code/venv/lib/site-packages/lightning-2.6.3.dist-info" "$WORK/lpy/code/old/lib/site-packages/lightning-2.6.1.dist-info"
 HOME="$WORK/lpy" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lpy.txt"
 has    "lightning 2.6.3 from PyPI is its own act-now row" 'lightning 2\.6\.2 and 2\.6\.3 +signs of the malware found ~/code/venv/lib/site-packages: lightning 2\.6\.3' "$WORK/lpy.txt"
-has    "with its fix, naming lightning"               "Treat this machine as compromised\. Don't run Python in the affected environments, follow lightning's advisory" "$WORK/lpy.txt"
+has    "with its fix, naming lightning"               "Treat this machine as compromised\. Don't run Python in the affected environments\. From another computer, rotate every key the machine could reach, then follow lightning's advisory" "$WORK/lpy.txt"
 hasnot "the version Lightning AI says to pin is not flagged" 'lightning 2\.6\.1' "$WORK/lpy.txt"
 # litellm 1.82.7 and 1.82.8, March 2026 (OpenSSF's MAL-2026-2144, GitHub's GHSA-5mg7-485q-xm76), on any OS: a row
 # of their own beside LiteLLM 1.107.0's, with the litellm_init.pth 1.82.8 leaves (LiteLLM's post). 1.82.6, the
@@ -1202,7 +1222,7 @@ has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +sig
 has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt-linux.txt"
 has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt-mac.txt"
 has    "a temp file alone: the incident's own advice, in section 5" 'Mistral lists this file, and a process started through python /tmp/transformers\.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
-has    "and in the fix"                               'Stop any process started from the files listed in section 5, delete them, follow mistralai.s advisory' "$WORK/mpyt-linux.txt"
+has    "and in the fix"                               'Stop any process started from the files listed in section 5\. From another computer, rotate every key the machine could reach, then delete those files and follow mistralai.s advisory' "$WORK/mpyt-linux.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mpyt-linux.txt"
 # A LiteLLM marker alone: the row carries LiteLLM's own advice (data/indicators.tsv), not the environment one.
 cp -R "$WORK/clean" "$WORK/lmark"; mkdir -p "$WORK/lmark/tmp"; : > "$WORK/lmark/tmp/.pc_once_1"
@@ -1327,7 +1347,7 @@ tr -s ' \n' '  ' < "$WORK/wlad.txt" > "$WORK/wlad1.txt"
 has    "Windows: gh-token-monitor's folder in LOCALAPPDATA is a waiting wiper" 'a wiper is waiting ~/AppData/Local/gh-token-monitor Don' "$WORK/wlad1.txt"
 has    "Windows: the stop deletes its scheduled task first" "one command at a time: powershell -NoProfile -Command 'schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance" "$WORK/wlad1.txt"
 _u=$(unwaited "$WORK/wlad.txt")
-if grep -q 'ACT NOW: REMOVE GH-TOKEN-MONITOR' "$WORK/wlad.txt" && grep -q 'rotate every key this machine could reach\. Only once gh-token-monitor' "$WORK/wlad1.txt" && [ -z "$_u" ]; then
+if grep -q 'ACT NOW: REMOVE GH-TOKEN-MONITOR' "$WORK/wlad.txt" && grep -q 'rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm.s cache with npm cache clean --force\. Only once gh-token-monitor' "$WORK/wlad1.txt" && [ -z "$_u" ]; then
   ok "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait"
 else bad "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait" "$(printf '%s' "${_u:-the report lost its headline or its rotate fixes}" | head -n 3 | tr '\n' '|')"; fi
 has    "Windows: finds Claude Desktop in AppData"       'Claude Desktop +used in the last 30 days' "$WORK/win.txt"
@@ -1607,7 +1627,7 @@ has    "extensions alone: their own row"              'Editor extensions signs o
 has    "extensions alone: the LaunchAgent GlassWorm leaves is listed with the extension" 'littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own headline"         'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-ext.txt"
 hasnot "extensions alone: no npm in the headline"     'ACT NOW.*NPM' "$WORK/dz-ext.txt"
-hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the malware|Delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
+hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the malware|then delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
 has    "extensions alone: their own fix names the extensions and the startup file" 'Treat this machine as compromised\. Uninstall the extensions listed in section 5, delete the startup file listed there, and rotate every key this machine could reach\.' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own summary row"      'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-ext-sum.txt"
 has    "extensions alone: the link says ex, not nm"   '&nm=0&py=0&ex=1&wp=0' "$WORK/dz-ext.txt"
@@ -1629,7 +1649,7 @@ mkdir -p "$WORK/dz-both/code/ax/node_modules/axios"; printf '{"name":"axios","ve
 dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"
 has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons' "$WORK/dz-both.txt"
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
-has    "npm and extensions: both fixes"               'Delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
+has    "npm and extensions: both fixes"               'then delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
 has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
 # GlassWorm's later waves, one extension of each in another editor's folder: Socket's 13 March list
 # (every version), a version the 18 March post shows delivering malware, one of the six the April post
@@ -1940,7 +1960,7 @@ rm -rf "$WORK/mu-act"; cp -R "$WORK/clean" "$WORK/mu-act"; mkdir -p "$WORK/mu-ac
 printf '{"lockfileVersion":3,"packages":{"node_modules/made-npm-pkg":{"version":"1.2.3","resolved":"https://registry.npmjs.org/made-npm-pkg/-/made-npm-pkg-1.2.3.tgz"}}}\n' > "$WORK/mu-act/code/a/package-lock.json"
 mkdir -p "$WORK/mu-act/code/a/node_modules/made-npm-pkg"; printf '{"name":"made-npm-pkg","version":"1.2.3"}\n' > "$WORK/mu-act/code/a/node_modules/made-npm-pkg/package.json"
 mu "$WORK/mu-act" "$WORK/mu-act.txt"
-has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
+has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5' "$WORK/mu-act.txt"
 has    "and the link says npm malware"                '&nm=1&py=0&ex=0&wp=0' "$WORK/mu-act.txt"
 has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagent/config\.json madeMode' "$WORK/mu.txt"
 has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 3\.0\.0 or later A made-up hole for the tests\. example\.com/madetool A second made-up hole\. example\.com/madetool2' "$WORK/mu.txt"

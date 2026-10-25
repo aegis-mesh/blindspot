@@ -6419,15 +6419,16 @@ EOF
   esac
   return 1
 }
-NPM_INST=0; NPM_LOCKPROJ=""
+# NPM_INST_TAGS: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
+NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
   case "$_f" in
     */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
-      if lock_installed "$_f" "${_p% *}" "${_p##* }"; then NPM_INST=1
+      if lock_installed "$_f" "${_p% *}" "${_p##* }"; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
       else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
 "; fi ;;
-    *) NPM_INST=1 ;;
+    *) NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t " ;;
   esac
 done <<EOF
 $NPM_ROWS
@@ -6691,14 +6692,33 @@ todo() { # section text
 # the act-now fixes, then update-level ones, ahead of every other fix (the Injective SDK's: move the
 # funds out of a wallet whose seed phrase may have been sent out). Two incidents can share a fix (two
 # waves of one malware): it is said once.
-advice_todos() { # first, act or update
-  _seen=" "; _said="$TAB"
+# An act-level npm incident found only in lockfiles (adv_lockonly) reached this machine only if that
+# project was installed, so its own fix is worded for that (adv_if), and comes after the fixes for
+# what was found installed (lock), with the other fixes that depend on an install. A fix any incident
+# found installed shares is worded as fact.
+adv_lockonly() { # incident: 0 for an act-level npm incident with no hit found installed
+  [ "$(incident_level "$1")" = act ] || return 1
+  case "$NPM_INST_TAGS $(printf '%s ' $EXT_ACT_TAGS $PY_HITS)" in *" $1 "*) return 1 ;; esac
+  case " $(printf '%s ' $NPM_TAGS)" in *" $1 "*) return 0 ;; esac
+  return 1
+}
+adv_if() { # incident advice: that advice, for if the incident's packages were installed
+  _a2=$2; _aw=${2%% *}
+  case "${_aw#?}" in *[A-Z]*) ;; *) _a2="$(printf '%s' "${2:0:1}" | tr 'A-Z' 'a-z')${2:1}" ;; esac
+  printf 'If you installed the %s packages section 5 lists, %s' "$(incident_name "$1")" "$_a2"
+}
+ADV_SAID="$TAB"
+advice_todos() { # first, act, lock or update
+  _seen=" "
   for _t in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do
     case "$_seen" in *" $_t "*) continue ;; esac; _seen="$_seen$_t "
     _a=$(incident_advice "$_t"); [ -n "$_a" ] || continue
-    case "$1:$(incident_level "$_t"):$_a" in first:act:First\ *) ;; act:act:First\ *) continue ;; act:act:*|update:update:*) ;; *) continue ;; esac
-    case "$_said" in *"$TAB$_a$TAB"*) continue ;; esac; _said="$_said$_a$TAB"
-    todo 5 "$_a"
+    case "$1:$(incident_level "$_t"):$_a" in first:act:First\ *|update:update:*) ;; act:act:First\ *|lock:act:First\ *) continue ;; act:act:*|lock:act:*) ;; *) continue ;; esac
+    case "$ADV_SAID" in *"$TAB$_a$TAB"*) continue ;; esac
+    _lo=1; for _u in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do if [ "$(incident_advice "$_u")" = "$_a" ] && ! adv_lockonly "$_u"; then _lo=0; fi; done
+    case "$1:$_lo" in act:1|lock:0) continue ;; esac
+    ADV_SAID="$ADV_SAID$_a$TAB"
+    if [ "$_lo" -eq 1 ]; then todo 5 "$(adv_if "$_t" "$_a")"; else todo 5 "$_a"; fi
   done
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
@@ -6713,13 +6733,10 @@ done
 if [ "$WIPER_HIT" -eq 1 ] && [ "$FIRST_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working."
 elif [ "$WIPER_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."; fi
 advice_todos first
-# A bad version found only in lockfiles: whether this machine is compromised depends on whether
-# that project was installed here.
-if [ "$MAL_LOCKONLY" -eq 1 ]; then
-  if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
-  todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach. If not, update $_ll to a version without the malware."
-elif [ "$MAL_HIT" -eq 1 ]; then
-  todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
+# The fixes for what was found, first. A compromised machine's keys are rotated from another computer,
+# then the malware is removed, as GitHub's malware advisories say.
+if [ "$MAL_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then
+  todo 5 "Treat this machine as compromised. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm's cache with npm cache clean --force."
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
@@ -6727,14 +6744,22 @@ if [ "$EXT_HIT" -eq 1 ]; then
   else _edo="Uninstall the extensions listed in section 5 and"; fi
   todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
 fi
-[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
-[ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
-if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
-elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
+if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments. From another computer, rotate every key the machine could reach, then follow $_adv to remove the malware."
+elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5. From another computer, rotate every key the machine could reach, then delete those files and follow $_adv."; fi
 advice_todos act
+# Then the fixes that depend on an install, or on a file you set up: a bad version found only in
+# lockfiles (whether this machine is compromised depends on whether that project was installed here),
+# a startup file to check, a leftover cook.pyc, and the own fixes of incidents found only in lockfiles.
+if [ "$MAL_LOCKONLY" -eq 1 ]; then
+  if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
+  todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $_ll to a version without the malware."
+fi
+[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
+[ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
+advice_todos lock
 advice_todos update
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
@@ -7513,12 +7538,16 @@ if [ "$OS" = Darwin ]; then
   elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."
-  elif [ "$ANY_MAL" -eq 1 ]; then
+  elif [ "$ANY_MAL" -eq 1 ] || [ "$PY_HIT" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found signs of $MAL_WHAT. It can't tell you what the malware already took, or what your agents do after you close this window."
-  elif [ "$PY_HIT" -eq 1 ]; then
-    _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found signs of the $PY_SHORT malware. It can't tell you what the malware already took, or what your agents do after you close this window."
+    # Each kind of malware it found, and npm malware found only in a lockfile named as that, last.
+    _sig=""
+    if [ "$EXT_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 1 ]; then _sig="malware in an editor extension"
+    elif [ "$ANY_MAL" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then _sig=$MAL_WHAT; fi
+    [ "$PY_HIT" -eq 1 ] && _sig="${_sig:+$_sig and of }the $PY_SHORT malware"
+    if [ -z "$_sig" ]; then _sig="npm malware"
+    elif [ "$MAL_LOCKONLY" -eq 1 ]; then _sig="$_sig, and npm malware listed in a lockfile"; fi
+    _p1="It found signs of $_sig. It can't tell you what the malware already took, or what your agents do after you close this window."
   elif [ "$N_IDLE" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="$(plural "$N_IDLE" "agent you haven't used in 30 days is" "agents you haven't used in 30 days are") still installed. A poisoned package can drive an installed agent, and nothing on your Mac would tell you."

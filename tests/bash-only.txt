@@ -242,6 +242,7 @@ a folder with a line break in its name is named as not checked	gird-check.sh's h
 and the rows it feeds are not green	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
 and the headline does not call that scan clean	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
 on a Mac, the snapshot note does not say the malware took anything	gird-check.ps1 prints a one-line Argus note and has no Mac snapshot paragraph
+and on a Mac the closing note names both	gird-check.ps1 prints a one-line Argus note and has no Mac snapshot paragraph
 fleet: project settings that act when a folder opens reach the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and a file named like the ones worms plant	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: so that account is to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
