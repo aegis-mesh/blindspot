@@ -117,9 +117,12 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   without case), a version or `*`, the incident, and the registry: `openvsx` when the bad build was
   only ever published to Open VSX, `any` otherwise. Looked for as `<id>-<version>` folders in
   `~/.vscode/extensions` (VS Code, which installs from the Marketplace) and in `~/.cursor/extensions`,
-  `~/.windsurf/extensions`, `~/.devin/extensions`, `~/.vscode-oss/extensions` and `~/.kiro/extensions`
-  (Cursor, Windsurf, VSCodium and Kiro, which install from Open VSX; Windsurf became Devin Desktop
-  on 2 June 2026, which keeps extensions in `~/.devin/extensions` and only reads the old folder); an
+  `~/.windsurf/extensions`, `~/.devin/extensions`, `~/.vscode-oss/extensions`, `~/.kiro/extensions`,
+  `~/.antigravity-ide/extensions` and `~/.antigravity/extensions` (Cursor, Windsurf, VSCodium, Kiro
+  and Antigravity, which install from Open VSX; Windsurf became Devin Desktop on 2 June 2026, which
+  keeps extensions in `~/.devin/extensions` and only reads the old folder; Antigravity IDE's
+  product.json names the data folder `.antigravity-ide` and Open VSX's gallery, and the Antigravity
+  before it used `~/.antigravity`); an
   `openvsx` line is not looked for in VS Code's own folder, where the same version is the
   Marketplace's clean build. A hit is its own section 5 row, "Editor extensions", with the incident
   line, level `act`, its own headline and fix, never called npm malware. With nothing found the row

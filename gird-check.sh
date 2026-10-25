@@ -3006,13 +3006,15 @@ NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" |
               printf '%s\n' "$NPM_ROWS" | grep "(npm's download cache)$TAB" | sort -u; } )
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
 # with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
-# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. Windsurf became Devin
-# Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads the old
-# folder (its FAQ: only the name changed), so both are read. A line whose bad build
+# the Marketplace; Cursor, Windsurf, VSCodium, Kiro and Antigravity install from Open VSX. Windsurf
+# became Devin Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads
+# the old folder (its FAQ: only the name changed), so both are read. Antigravity IDE keeps them in
+# ~/.antigravity-ide/extensions (its product.json: data folder .antigravity-ide, Open VSX's gallery),
+# and the Antigravity before it in ~/.antigravity/extensions. A line whose bad build
 # was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
 # same version is the Marketplace's clean build. A folder that can't be read leaves the check not
 # done in full (EXT_UNREAD), never clean.
-ext_roots() { printf '%s\n' "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.devin/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions"; }
+ext_roots() { printf '%s\n' "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.devin/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions" "$H/.antigravity-ide/extensions" "$H/.antigravity/extensions"; }
 EXT_UNREAD=0
 while IFS= read -r r; do
   if [ -d "$r" ] && { [ ! -r "$r" ] || [ ! -x "$r" ]; }; then EXT_UNREAD=$((EXT_UNREAD + 1)); fi
@@ -3950,7 +3952,7 @@ elif [ "$EXT_UNREAD" -gt 0 ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: $(plural "$EXT_UNREAD" "extension folder" "extension folders") could not be read${RST}"
 else
   pair "${GRN}✓${RST}" "Editor extensions" 16 "none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
-  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium and Kiro" 26 "                          " "                          " "$DIM"
+  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity" 26 "                          " "                          " "$DIM"
 fi
 # With findings above, a folder that could not be read still has to be said.
 if [ "$EXT_UNREAD" -gt 0 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ]; }; then

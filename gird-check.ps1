@@ -2405,15 +2405,17 @@ $byWhere = [Comparison[object]] { param($x, $y) $o = [string]::CompareOrdinal($x
 $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCacheRows)
 # Editor extensions that shipped malware (data/bad-extensions.tsv): <id>-<version> folders, perhaps
 # with a platform suffix such as -darwin-arm64, the id compared without case. VS Code installs from
-# the Marketplace; Cursor, Windsurf, VSCodium and Kiro install from Open VSX. Windsurf became Devin
-# Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads the old
-# folder (its FAQ: only the name changed), so both are read. A line whose bad build
+# the Marketplace; Cursor, Windsurf, VSCodium, Kiro and Antigravity install from Open VSX. Windsurf
+# became Devin Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads
+# the old folder (its FAQ: only the name changed), so both are read. Antigravity IDE keeps them in
+# ~/.antigravity-ide/extensions (its product.json: data folder .antigravity-ide, Open VSX's gallery),
+# and the Antigravity before it in ~/.antigravity/extensions. A line whose bad build
 # was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
 # same version is the Marketplace's clean build. A folder that can't be read leaves the check not
 # done in full ($ExtUnread), never clean.
 $ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 4 })
-foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
+foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions', '.antigravity-ide/extensions', '.antigravity/extensions')) {
   $reg = 'openvsx'; if ($er -eq '.vscode/extensions') { $reg = 'marketplace' }
   $xdir = J $HomeDir $er
   if (-not (Is-Dir $xdir)) { continue }
@@ -3034,7 +3036,7 @@ if ($EXT_HIT -eq 1) {
   Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}not fully checked: $(Plural $ExtUnread 'extension folder' 'extension folders') could not be read$cRst"
 } else {
   Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
-  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium and Kiro' 26 $ind26 $ind26 $cDim
+  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' 26 $ind26 $ind26 $cDim
 }
 # With findings above, a folder that could not be read still has to be said.
 if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0)) {
