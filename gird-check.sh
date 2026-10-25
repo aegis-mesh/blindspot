@@ -1915,6 +1915,12 @@ CANDIDATES=$(
       printf '%s\n' "$H/$f"
     done
     printf '%s\n' "$AS/Claude/claude_desktop_config.json"
+    # Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
+    # .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
+    # under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data.
+    for _cd in "${CLINE_DATA_DIR:-$H/.cline/data}" "${CLINE_DIR:-$H/.cline}/data"; do
+      printf '%s\n%s\n' "$_cd/secrets.json" "$_cd/settings/providers.json"
+    done
     if [ "$WIN" -eq 1 ]; then
       printf '%s\n' "$GOOSE_CFG/config.yaml"
       for f in "$PSRL"/*_history.txt; do [ -f "$f" ] && printf '%s\n' "$f"; done
@@ -1948,6 +1954,7 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
   case "$1" in
     "$H"/.claude/*|"$H"/.codex/*|"$H"/.gemini/*|"$H"/.cursor/*|"$H"/.codeium/*|"$H"/.continue/*) KP=agent_config; return 0 ;;
     "$H"/.copilot/*|"$H"/.config/goose/*|"$H"/.config/opencode/*|"$H"/.local/share/opencode/*|"$H"/.aider*|"$AS"/Claude/*|"$GOOSE_CFG"/*) KP=agent_config; return 0 ;;
+    "$H"/.cline/*|"${CLINE_DATA_DIR:-$H/.cline/data}"/*|"${CLINE_DIR:-$H/.cline}"/*) KP=agent_config; return 0 ;;
   esac
   case "$PROJECT_SET" in *"|$1|"*) KP=project_file; return 0 ;; esac
   KP=other

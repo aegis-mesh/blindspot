@@ -1373,19 +1373,24 @@ foreach ($f in @('.zsh_history', '.bash_history', '.local/share/fish/fish_histor
 $PsrlDir = J $AppData 'Microsoft/Windows/PowerShell/PSReadLine'
 if (Is-Dir $PsrlDir) { try { foreach ($f in ([IO.Directory]::GetFiles($PsrlDir, '*_history.txt') | Sort-Object)) { $ShellHist.Add($f) } } catch { } }
 $ProjectFiles = @($EnvFiles) + @($ProjectMcp)
+# Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
+# .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
+# under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data.
+$ClineData = @((Env-Or 'CLINE_DATA_DIR' (J $HomeDir '.cline/data')), (J (Env-Or 'CLINE_DIR' (J $HomeDir '.cline')) 'data'))
+$ClineKeys = @(foreach ($d in $ClineData) { (J $d 'secrets.json'); (J $d 'settings/providers.json') })
 $Candidates = New-Object System.Collections.Generic.List[string]
 $cset = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $cands = @($ShellRc) + @((J $HomeDir '.env'), (J $HomeDir '.envrc')) + @($ShellHist) + @(
   '.claude.json', '.claude/settings.json', '.claude/settings.local.json', '.codex/config.toml', '.gemini/settings.json', '.gemini/.env',
   '.cursor/mcp.json', '.codeium/windsurf/mcp_config.json', '.continue/config.json', '.continue/config.yaml', '.config/goose/config.yaml',
   '.config/opencode/opencode.json', '.aider.conf.yml' | ForEach-Object { J $HomeDir $_ }) +
-  @((J $AppData 'Block/goose/config/config.yaml'), (J $AppData 'Claude/claude_desktop_config.json')) + $ProjectFiles
+  @((J $AppData 'Block/goose/config/config.yaml'), (J $AppData 'Claude/claude_desktop_config.json')) + $ClineKeys + $ProjectFiles
 foreach ($f in $cands) { if ($f -and $cset.Add($f)) { $Candidates.Add($f) } }
 
 function In-List([string]$f, $list) { foreach ($x in $list) { if ($f.Equals($x, $PathCmp)) { return $true } }; $false }
 function Under([string]$f, [string]$dir) { $f.StartsWith($dir + $Sep, $PathCmp) }
-$AgentDirs = @('.claude', '.codex', '.gemini', '.cursor', '.codeium', '.continue', '.copilot', '.config/goose', '.config/opencode', '.local/share/opencode' | ForEach-Object { J $HomeDir $_ }) +
-  @((J $AppData 'Block/goose'), (J $AppData 'Claude'))
+$AgentDirs = @('.claude', '.codex', '.gemini', '.cursor', '.codeium', '.continue', '.copilot', '.config/goose', '.config/opencode', '.local/share/opencode', '.cline' | ForEach-Object { J $HomeDir $_ }) +
+  @((J $AppData 'Block/goose'), (J $AppData 'Claude'), (Env-Or 'CLINE_DIR' (J $HomeDir '.cline'))) + $ClineData
 function Key-Place([string]$f) {
   if (In-List $f $ShellRc) { return 'shell_rc' }
   if (In-List $f $ShellHist) { return 'shell_history' }

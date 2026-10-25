@@ -176,6 +176,17 @@ has    "and in a .env file" '~/code/u1/\.env +OpenAI$' "$SE/skn.txt"
 has    "and in its longer shape" '~/code/u2/\.env +OpenAI$' "$SE/skn.txt"
 hasnot "near misses of sk-None- are not keys" 'code/nm/' "$SE/skn.txt"
 nokeys "and no sk-None- key is printed" "$SE/skn.keys" "$SE/skn.txt"
+# Cline 4.x keeps API keys in plain JSON: ~/.cline/data/secrets.json and settings/providers.json, or
+# the same files under CLINE_DATA_DIR.
+hexr() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-f0-9' | head -c "$1"; }
+mkdir -p "$SE/cln/.cline/data/settings" "$SE/cdd"
+printf '{"apiKey":"%s"}\n' "sk""-ant-api03-$(rnd 95)" | tee "$SE/cln/.cline/data/secrets.json" "$SE/cdd/secrets.json" > /dev/null
+printf '{"providers":{"openrouter":{"settings":{"apiKey":"%s"}}}}\n' "sk""-or-v1-$(hexr 64)" > "$SE/cln/.cline/data/settings/providers.json"
+HOME="$SE/cln" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$SE/cln.txt" 2>&1
+HOME="$SE/cln" CLINE_DATA_DIR="$SE/cdd" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$SE/cdd.txt"   # a long path puts the provider on its own line
+has    "a key in Cline's secrets.json is found" '~/\.cline/data/secrets\.json +Anthropic$' "$SE/cln.txt"
+has    "and in its settings/providers.json" '~/\.cline/data/settings/providers\.json +OpenRouter$' "$SE/cln.txt"
+has    "and in secrets.json under CLINE_DATA_DIR" 'cdd/secrets\.json Anthropic ' "$SE/cdd.txt"
 # Session files are listed by place, one row each with how many of its files had keys. A place is
 # the session folder an agent keeps, or the file when the location is one file.
 HFK="hf""_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu"

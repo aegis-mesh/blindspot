@@ -246,6 +246,17 @@ has    "and in a .env file" '~/code/u1/\.env +OpenAI$' "$SE/skn.txt"
 has    "and in its longer shape" '~/code/u2/\.env +OpenAI$' "$SE/skn.txt"
 hasnot "near misses of sk-None- are not keys" 'code/nm/' "$SE/skn.txt"
 nokeys "and no sk-None- key is printed" "$SE/skn.keys" "$SE/skn.txt"
+# Cline 4.x keeps API keys in plain JSON: ~/.cline/data/secrets.json and settings/providers.json, or
+# the same files under CLINE_DATA_DIR.
+hexr() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-f0-9' | head -c "$1"; }
+mkdir -p "$SE/cln/.cline/data/settings" "$SE/cdd" "$SE/cln/AppData/Roaming" "$SE/cln/AppData/Local/Temp"
+printf '{"apiKey":"%s"}\n' "sk""-ant-api03-$(rnd 95)" | tee "$SE/cln/.cline/data/secrets.json" "$SE/cdd/secrets.json" > /dev/null
+printf '{"providers":{"openrouter":{"settings":{"apiKey":"%s"}}}}\n' "sk""-or-v1-$(hexr 64)" > "$SE/cln/.cline/data/settings/providers.json"
+psrun "$SE/cln" -- -Offline -Full > "$SE/cln.txt" 2>&1
+psrun "$SE/cln" CLINE_DATA_DIR="$SE/cdd" -- -Offline -Full 2>&1 | tr -s ' \n' '  ' > "$SE/cdd.txt"   # a long path puts the provider on its own line
+has    "a key in Cline's secrets.json is found" '~/\.cline/data/secrets\.json +Anthropic$' "$SE/cln.txt"
+has    "and in its settings/providers.json" '~/\.cline/data/settings/providers\.json +OpenRouter$' "$SE/cln.txt"
+has    "and in secrets.json under CLINE_DATA_DIR" 'cdd/secrets\.json Anthropic ' "$SE/cdd.txt"
 bash tests/make-fixture.sh "$SE/bh" "$SE/bk" >/dev/null
 # --all-sessions: without it a fast machine can finish the rest first, stop the session check
 # part-way and list nothing, which is the script working as designed but not a comparison.
