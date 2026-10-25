@@ -1,7 +1,7 @@
 # Agent versions with a published security fix. One line each, tab separated. After editing, run: bash tools/gen.sh
-#   id        what lines of the same tool share: they make one row in the report, which says to update
-#             to the highest fixed version among the lines the installed version falls under, and
-#             shows each of their holes
+#   id        what lines of the same tool share: they make one row in the report, which shows the hole
+#             of each line the installed version falls under and says to update to the highest of
+#             their fixed versions, or to a later fix when another line of the tool covers that one
 #   name      as the report shows it
 #   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
 #   kind      plist   an Info.plist's CFBundleShortVersionString (an XML plist; a binary one is not read)
@@ -14,14 +14,19 @@
 #   hole      what the hole allows, a few words from the advisory
 #   advisory  the advisory's https link
 # Lines of one tool agree on its name, and lines of one advisory on its range and hole. Each tool has a
-# line for its newest fix, so the version the report says to update to has no published fix of its
-# own; an older advisory may have a line too, for what its hole allows.
+# line for its newest fix, and the version a row says to update to is never in another line's range, so
+# it has no published fix of its own; an older advisory may have a line too, for what its hole allows.
 # Versions compare part by part as numbers. A version that is not numbers and dots is not reported.
+# Each tool's advisories were read in October 2026 from its vendor's repository, GitHub's global
+# database and OSV: a repository can publish one that neither of the other two lists.
 # Cursor is read on macOS only: its version file on the other systems was not verified. Its newest fix
-# with a version is 3.1.2, for Cursor on macOS (GHSA-p9g2-cr55-cw9c, of the advisories in
-# cursor/cursor, October 2026). Claude Code: OSV lists 29 advisories for the npm package, each fixed by
-# 2.1.179 (GHSA-pq7j-f95f-qfcv) at the latest; GHSA-9f65-56v6-gxw7 and the sandbox escape
-# GHSA-7835-87q9-rgvv have lines for what their holes allow.
+# with a version is 3.1.2, for Cursor on macOS (GHSA-p9g2-cr55-cw9c, of the 33 advisories in
+# cursor/cursor). Claude Code: anthropics/claude-code publishes 31 advisories for the npm package, and
+# two of them are in neither GitHub's global database nor OSV. The newest fix is 2.1.260, from 2.0.68
+# (GHSA-gfvf-j8jh-jxxw, one of the two); below 2.0.68 the highest fix is 2.1.179 (GHSA-pq7j-f95f-qfcv),
+# in its range, so the row says 2.1.260 there too. GHSA-9f65-56v6-gxw7 and the sandbox escape
+# GHSA-7835-87q9-rgvv have lines for what their holes allow. mcp-remote: GHSA-6xpm-ggf7-wc3p is its
+# only advisory, and its repository publishes none.
 # Amazon Q: the version folder is the language server's (Language Servers for AWS), which the bulletin
 # fixes in 1.69.0. The extension's own version is not read.
 # id	name	os	kind	where	affected	hole	advisory
@@ -35,5 +40,6 @@ amazonq	Amazon Q language server	win	folder	{LOCALAPPDATA}/aws/toolkits/language
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=0.2.116 <1.0.24	a web page could reach the editor connection	https://github.com/advisories/GHSA-9f65-56v6-gxw7
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=2.1.38 <2.1.163	a malicious repository could run code outside the sandbox	https://github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	<2.1.179	a plugin repository could install code that bypasses its pinned hash	https://github.com/advisories/GHSA-pq7j-f95f-qfcv
+claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=2.0.68 <2.1.260	a stored API key could start sessions without the managed settings of an Enterprise or Team organization	https://github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
 mcpremote	mcp-remote	all	npm	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p

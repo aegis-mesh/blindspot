@@ -1033,6 +1033,7 @@ amazonq|Amazon Q language server|win|folder|$WLAPP/aws/toolkits/language-servers
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web page could reach the editor connection|github.com/advisories/GHSA-9f65-56v6-gxw7
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.1.38|2.1.163|a malicious repository could run code outside the sandbox|github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|-|2.1.179|a plugin repository could install code that bypasses its pinned hash|github.com/advisories/GHSA-pq7j-f95f-qfcv
+claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.0.68|2.1.260|a stored API key could start sessions without the managed settings of an Enterprise or Team organization|github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
 # <<< outdated
@@ -3015,17 +3016,29 @@ EOF
 # One row per tool: name<TAB>versions<TAB>fixed<TAB>holes. A tool's lines can name several advisories:
 # the row says to update to the highest fixed version among those its versions fall under, and holes
 # holds each of their holes with its advisory, as hole|advisory|hole|advisory (gen.sh refuses a | in
-# either).
-OLD_LIST=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '
+# either). When that version is in the range of another of the tool's lines, the row takes that line's
+# fix, until no line covers it: the version it names has no published fix of its own. A line's range
+# and fix are its fields counted from the end, which a | in a path cannot shift.
+OLD_LIST=$(printf '%s' "$OLD_ROWS" | OT="$OUT_TABLE" OO="$_os" awk -F "$TAB" '
   function newer(a, b,   x, y, p, q, k, i) { p = split(a, x, "."); q = split(b, y, "."); k = p > q ? p : q
     for (i = 1; i <= k; i++) if (x[i] + 0 != y[i] + 0) return ((x[i] + 0) > (y[i] + 0))
     return 0 }
-  !($1 in o) { o[$1] = ++n; r[n] = $2; v[n] = $3; fx[n] = $4; h[n] = $5 "|" $6; seen[$1 "|" $3] = 1; hs[$1 "|" $5 "|" $6] = 1; next }
+  !($1 in o) { o[$1] = ++n; id[n] = $1; r[n] = $2; v[n] = $3; fx[n] = $4; h[n] = $5 "|" $6; seen[$1 "|" $3] = 1; hs[$1 "|" $5 "|" $6] = 1; next }
   { i = o[$1]
     if (!(($1 "|" $3) in seen)) { seen[$1 "|" $3] = 1; v[i] = v[i] ", " $3 }
     if (newer($4, fx[i])) fx[i] = $4
     if (!(($1 "|" $5 "|" $6) in hs)) { hs[$1 "|" $5 "|" $6] = 1; h[i] = h[i] "|" $5 "|" $6 } }
-  END { for (i = 1; i <= n; i++) print r[i] "\t" v[i] "\t" fx[i] "\t" h[i] }')
+  END { nt = split(ENVIRON["OT"], t, "\n")
+    for (i = 1; i <= n; i++) {
+      do { ch = 0
+        for (j = 1; j <= nt; j++) {
+          m = split(t[j], c, "|")
+          if (m < 9 || c[1] != id[i] || (c[3] != "all" && c[3] != ENVIRON["OO"])) continue
+          if ((c[m - 3] == "-" || !newer(c[m - 3], fx[i])) && newer(c[m - 2], fx[i])) { fx[i] = c[m - 2]; ch = 1 }
+        }
+      } while (ch)
+      print r[i] "\t" v[i] "\t" fx[i] "\t" h[i]
+    } }')
 N_OLD=$(count_lines "$OLD_LIST")
 [ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded

@@ -29,7 +29,7 @@ if [ "$MODE" = miss ]; then
   mkdir -p "$F/p/global/.vscode"; printf '{"chat.tools.global.autoApprove": true}\n' > "$F/p/global/.vscode/settings.json"
   plist 3.1.2
   mkdir -p "$F/Library/Caches/$L/1.69.0" "$F/Library/Caches/$L/1.10.0" "$F/.cache/$L/1.69.0" "$F/.cache/$L/1.10.0"
-  pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 2.1.179
+  pkg "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code" @anthropic-ai/claude-code 2.1.260
   pkg "$F/.npm-global/lib/node_modules/mcp-remote" mcp-remote 0.1.16-beta.1
   mkdir -p "$F/.npm/_npx/a1/node_modules/mcp-remote"; pkg "$F/.npm/_npx/a1/node_modules/mcp-remote" mcp-remote 0.0.4
   mkdir -p "$F/code/mr"

@@ -80,7 +80,7 @@ range, what the hole allows (a few words, from the advisory) and the advisory.
 |---|---|---|---|
 | Cursor | `Cursor.app/Contents/Info.plist` `CFBundleShortVersionString`, in `/Applications` and `~/Applications` (macOS only: the other platforms' version files were not verified) | `< 3.0`; `< 3.1.2` | GHSA-3p48-7v9f-v5cw, GHSA-3v8f-48vw-3mjx (sandbox escape); GHSA-p9g2-cr55-cw9c (sandbox escape through a virtual environment's Python, Cursor for macOS, its newest fix) |
 | Amazon Q language server | the highest version folder under `aws/toolkits/language-servers/AmazonQ/` in `~/Library/Caches`, `~/.cache` or `%LOCALAPPDATA%` | `< 1.69.0` | AWS-2026-047 (a link in a workspace reaches files outside it; before 1.65.0 a trusted workspace runs its commands) |
-| Claude Code | `@anthropic-ai/claude-code/package.json` in global npm installs | `>= 0.2.116 < 1.0.24`; `>= 2.1.38 < 2.1.163`; `< 2.1.179` | GHSA-9f65-56v6-gxw7 (a web page can talk to the IDE connection); GHSA-7835-87q9-rgvv (sandbox escape); GHSA-pq7j-f95f-qfcv (a plugin's pinned hash is bypassed; its fix, 2.1.179, is the newest of the 29 advisories OSV lists) |
+| Claude Code | `@anthropic-ai/claude-code/package.json` in global npm installs | `>= 0.2.116 < 1.0.24`; `>= 2.1.38 < 2.1.163`; `< 2.1.179`; `>= 2.0.68 < 2.1.260` | GHSA-9f65-56v6-gxw7 (a web page can talk to the IDE connection); GHSA-7835-87q9-rgvv (sandbox escape); GHSA-pq7j-f95f-qfcv (a plugin's pinned hash is bypassed; its fix, 2.1.179, is the newest of the 29 advisories OSV lists); GHSA-gfvf-j8jh-jxxw (a stored API key skips an organization's managed settings; published only in anthropics/claude-code, its fix, 2.1.260, is the newest of the 31 there) |
 | mcp-remote | `mcp-remote/package.json` in global installs and npx's cache, and `mcp-remote@<version>` in MCP config args | `>= 0.0.5 < 0.1.16` | GHSA-6xpm-ggf7-wc3p (a hostile MCP server runs commands) |
 
 Versions are compared numerically, part by part. A version that does not parse is not reported, and
@@ -94,7 +94,8 @@ Report, section 01, a block "Tools with a security fix to install": one `!` row 
 installed version, "update to <fixed> or later", what the hole allows and the advisory. A tool can
 have a line per advisory: each tool's newest fix has one, so the version the row says to update to
 has no published fix of its own. The row takes the highest fixed version among the lines its
-versions fall under, and shows each of their holes with its advisory. Fix (yellow): "Update the
+versions fall under, or a later fix when another line of the tool covers that one, and shows each
+of their holes with its advisory. Fix (yellow): "Update the
 tools listed in section 1 that have a security fix."
 
 ## 3. Project files that link to `~/.ssh/authorized_keys`

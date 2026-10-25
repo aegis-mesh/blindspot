@@ -1270,7 +1270,7 @@ has    "with the advice"                              'A prompt injection in any
 has    "and the fix"                                  'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox\.' "$D"
 has    "Cursor below the fixed version"               '! Cursor 2\.9\.1, update to 3\.1\.2 or later A malicious agent could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$D"
 has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can reach files outside it' "$D"
-has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.179 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
+has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.260 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
@@ -1385,7 +1385,17 @@ printf '{\n  "name": "@anthropic-ai/claude-code",\n  "version": "2.1.100"\n}\n' 
 dzrun "$WORK/dz-old" | tr -s ' \n' '  ' > "$WORK/dz-old.txt"
 has    "Cursor between two fixes is told the newest" '! Cursor 3\.0\.5, update to 3\.1\.2 or later An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$WORK/dz-old.txt"
 hasnot "and not the hole its version already has the fix for" 'update to 3\.1\.2 or later A malicious agent' "$WORK/dz-old.txt"
-has    "Claude Code in a sandbox escape's range: its hole, the newest fix's, and that fix" '! Claude Code 2\.1\.100, update to 2\.1\.179 or later A malicious repository could run code outside the sandbox\. github\.com/advisories/GHSA-7835-87q9-rgvv A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-old.txt"
+has    "Claude Code in a sandbox escape's range: its hole, the newest fix's, and that fix" '! Claude Code 2\.1\.100, update to 2\.1\.260 or later A malicious repository could run code outside the sandbox\. github\.com/advisories/GHSA-7835-87q9-rgvv A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-old.txt"
+# The newest fix covers 2.0.68 and later: 2.1.259 has only its hole. Below 2.0.68 the highest fix of the
+# lines a version falls under is 2.1.179, which that range covers, so the row names 2.1.260 there too.
+for V in 2.1.259 2.0.67; do
+  rm -rf "$WORK/dz-cc$V"; cp -R "$WORK/clean" "$WORK/dz-cc$V"; mkdir -p "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code"
+  printf '{\n  "name": "@anthropic-ai/claude-code",\n  "version": "%s"\n}\n' "$V" > "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code/package.json"
+  dzrun "$WORK/dz-cc$V" | tr -s ' \n' '  ' > "$WORK/dz-cc$V.txt"
+done
+has    "Claude Code past 2.1.179 is told the newest fix, with its hole" '! Claude Code 2\.1\.259, update to 2\.1\.260 or later A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-cc2.1.259.txt"
+has    "below the newest fix's range the row still names it, not 2.1.179, which has a hole of its own" '! Claude Code 2\.0\.67, update to 2\.1\.260 or later A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-cc2.0.67.txt"
+hasnot "and it does not show the newest fix's hole, which that version does not have" 'A stored API key could start sessions' "$WORK/dz-cc2.0.67.txt"
 mkdir -p "$WORK/dz-os/.cursor/extensions/oorzc.mind-map-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
 has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
