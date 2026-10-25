@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Blindspot, the GIRD AI key check, version 1.1.0 (22 October 2026)
+# Blindspot, the GIRD AI key check, version 1.2.0 (25 October 2026)
 # https://gird.ai/blindspot
 #
 # Shows the AI coding agents and MCP servers on this machine, AI and cloud keys
@@ -225,7 +225,7 @@ banner() {
   done <<EOF
 $_wm
 EOF
-  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.1.0 · 22 Oct 2026 · gird.ai/blindspot${RST}"
+  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.2.0 · 25 Oct 2026 · gird.ai/blindspot${RST}"
   blank
   emit "  ${DIM}Read-only. Prints paths and counts, never a key.${RST}"
   if [ "$OFFLINE" -eq 0 ]; then

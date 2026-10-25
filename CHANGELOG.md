@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0, 25 October 2026
 
 - Keys in agent sessions: the plain-text keys check also reads the session transcripts of coding agents (Claude Code, Claude Desktop agent mode, Codex, Gemini CLI, Qwen Code, OpenCode, Copilot CLI, Roo Code, Cline, Continue, Goose, Kiro, Amazon Q, Factory, Cursor and Aider). A key there was read by an agent or given to it, so section 3 lists the agents and providers and says to rotate. It runs alongside the rest of the scan: ripgrep checks every session; without ripgrep, perl (or .NET in PowerShell) checks the newest first and the report says how many it checked. `--all-sessions` (`-AllSessions`) waits for all of them. Windsurf and Antigravity store sessions encrypted and are named as not checked. Nothing new is shared.
 - The key types and the agent session locations live in `data/keys.tsv` and `data/sessions.tsv`. `tools/gen.sh` writes them into both scripts, and the tests fail if a script drifts from them.
