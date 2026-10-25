@@ -932,6 +932,14 @@ cp -R "$WORK/clean" "$WORK/lmo"; mkdir -p "$WORK/lmo/tmp"; ln -s /etc/passwd "$W
 HOME="$WORK/lmo" TMPDIR="$WORK/lmo/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmo.txt"
 has    "a temp file owned by someone else is not this person's hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmo.txt"
 hasnot "and the file is not listed"                   'pc_once' "$WORK/lmo.txt"
+# Nor is a file of this person's put under a marker's name by a link, hard or symbolic: in a shared
+# temp folder anyone can make one.
+cp -R "$WORK/clean" "$WORK/lmh"; mkdir -p "$WORK/lmh/tmp"; : > "$WORK/lmh/notes.txt"; ln "$WORK/lmh/notes.txt" "$WORK/lmh/tmp/.pc_once_1"
+HOME="$WORK/lmh" TMPDIR="$WORK/lmh/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmh.txt"
+has    "a hard link to this person's own file under a marker's name is not a hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmh.txt"
+cp -R "$WORK/clean" "$WORK/lms"; mkdir -p "$WORK/lms/tmp"; : > "$WORK/lms/notes.txt"; ln -s "$WORK/lms/notes.txt" "$WORK/lms/tmp/.pc_once_1"
+HOME="$WORK/lms" TMPDIR="$WORK/lms/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lms.txt"
+has    "nor a symbolic link to it" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lms.txt"
 # A version read from a folder name is printed with control characters replaced.
 cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"
 HOME="$WORK/esc" bash "$SCRIPT" --offline --full > "$WORK/esc.txt" 2>&1
@@ -2068,10 +2076,12 @@ PY
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --stale-days=3 > "$FL/inv2.out" 2>&1
 has    "fleet: --inventory says stale when the last run is too old" '^stale: last run 2001-09-09T' "$FL/inv2.out"
 FLU=(); for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14; do FLU+=("person$i:$U:$FL/many$i:/bin/zsh"); fl_home "many$i"; done
+FLU+=("person15:$U:$FL/gone15:/bin/zsh")   # its home is missing: not_checked, listed last
 users "${FLU[@]}"
 fl_run many --deadline=600
 if grep -qE ' \+more$' "$FL/many.out" 2>/dev/null || grep -qE '^inventory=.* \+more$' "$FL/many.flat"; then ok "fleet: a long inventory value ends with +more"; else bad "fleet: a long inventory value ends with +more" "$(grep '^inventory' "$FL/many.flat")"; fi
 if [ "$(sed -n 's/^inventory=//p' "$FL/many.flat" | wc -c)" -le 256 ]; then ok "fleet: and still fits"; else bad "fleet: and still fits"; fi
+has    "fleet: and keeps the accounts that need attention" '^inventory=.*person15: not_checked' "$FL/many.flat"
 
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
@@ -2093,6 +2103,30 @@ has    "fleet: and its account is to review, not act now" '^gw\.outcome=review$'
 has    "fleet: a malware marker in the account's own temp folder counts for that account" '^tm\.incidents=litellm$' "$FL/own.flat"
 hasnot "fleet: and not for the Mac" '^machine\.incidents=.*litellm' "$FL/own.flat"
 rm -rf "$FL/usertmp-tm"
+
+# Project settings that act when a folder opens, a file named like a worm's, a version to update and
+# the gh-token-monitor wiper reach the account's row, as they reach the one-person report.
+for h in proj upd2 wip; do fl_home "$h"; done
+mkdir -p "$FL/proj/code/p/.claude" "$FL/proj/code/q/.claude" "$FL/upd2/Library/Python/3.9/lib/python/site-packages/mistralai-2.4.6.dist-info" "$FL/wip/Library/LaunchAgents"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FL/proj/code/p/.claude/settings.json"
+: > "$FL/proj/code/q/.claude/setup.mjs"; : > "$FL/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
+users "proj:$U:$FL/proj:/bin/zsh" "upd2:$U:$FL/upd2:/bin/zsh" "wip:$U:$FL/wip:/bin/zsh"
+fl_run rows --json
+has    "fleet: project settings that act when a folder opens reach the account's row" '^proj\.project_settings_on_open=1$' "$FL/rows.flat"
+has    "fleet: and a file named like the ones worms plant" '^proj\.files_to_read=1$' "$FL/rows.flat"
+has    "fleet: so that account is to review" '^proj\.outcome=review$' "$FL/rows.flat"
+has    "fleet: a package version to update reaches the account's row" '^upd2\.versions_to_update=mistralpy$' "$FL/rows.flat"
+has    "fleet: and that account is to review too" '^upd2\.outcome=review$' "$FL/rows.flat"
+has    "fleet: the gh-token-monitor wiper reaches the account's row" '^wip\.wiper=true$' "$FL/rows.flat"
+users "wip:$U:$FL/wip:/bin/zsh"
+fl_run wipterm
+if awk '/gh-token-monitor is installed/ && !w { w = NR } /TanStack worm/ && !t { t = NR } END { exit !(w && t && w < t) }' "$FL/wipterm.out"; then ok "fleet: and stopping it comes before the incident's other advice"; else bad "fleet: and stopping it comes before the incident's other advice" "$(grep -n 'gh-token-monitor\|TanStack' "$FL/wipterm.out" | head -n 3)"; fi
+
+# Every test setting gird-fleet.sh reads is behind the not-root guard, so a real root run never reads
+# one. A test can't run as root, so the reads are checked where they are written.
+_unguarded=$(awk '/^[[:space:]]*#/ { next } /GIRD_CHECK_FLEET_/ { if (/GIRD_CHECK_FLEET_REAL_ROOT/ && /FLEET_REAL=1/) next; if (/FLEET_REAL/ || /_own/) next; if (inblk) next; print NR ": " $0 }
+  /^if \[ "\$EUID" -ne 0 \] && \[ "\$FLEET_REAL" -eq 0 \]; then$/ { inblk = 1 } /^fi$/ { inblk = 0 }' "$FLEETSH")
+if [ -z "$_unguarded" ]; then ok "fleet: every test setting is read only behind the not-root guard"; else bad "fleet: every test setting is read only behind the not-root guard" "$_unguarded"; fi
 
 # Refusals.
 bash "$FLEETSH" --all-users > "$FL/noroot.out" 2> "$FL/noroot.err"; RC=$?

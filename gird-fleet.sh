@@ -186,12 +186,12 @@ tanstack|all|wiper|no|$H/.local/bin/gh-token-monitor.sh|-
 tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
-mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra worm at login
+mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra malware at login
 glassworm|all|startup|no|$H/Library/LaunchAgents/com.user.nodestart.plist|starts the GlassWorm malware at login
-mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra worm at login
-mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra worm at login
-mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra worm at login
-mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
+mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra malware at login
+mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra malware at login
+mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra malware at login
+mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra malware at login
 litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
 litellm|all|temp|yes|remote_code_loader.lock|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
@@ -353,7 +353,7 @@ FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms not_read protected end"
+FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper not_read protected end"
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -391,8 +391,8 @@ fl_parse() {
       key_providers) fl_ids_ok "$_v" "$PROVIDER_IDS" || return 1 ;;
       platforms) fl_ids_ok "$_v" "$FL_PLAT_IDS" || return 1 ;;
       incidents) fl_incidents_ok "$_v" || return 1 ;;
-      possible) fl_incidents_ok "$_v" || return 1 ;;
-      sessions_partial) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
+      possible|updates) fl_incidents_ok "$_v" || return 1 ;;
+      sessions_partial|wiper) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
       protected) case "$_v" in ok|refused|unknown) ;; *) return 1 ;; esac ;;
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
@@ -402,6 +402,7 @@ fl_parse() {
       history_keys) FA_history_keys=$_v ;; session_files) FA_session_files=$_v ;; sessions_partial) FA_sessions_partial=$_v ;;
       allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;;
       planted) FA_planted=$_v ;; possible) FA_possible=$_v ;; incidents) FA_incidents=$_v ;; platforms) FA_platforms=$_v ;;
+      on_open) FA_on_open=$_v ;; to_read) FA_to_read=$_v ;; updates) FA_updates=$_v ;; wiper) FA_wiper=$_v ;;
       not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;;
     esac
     shift
@@ -592,6 +593,9 @@ fleet_main() {
     else
       _act=0; _upd=0; _complete=true; _lines=""; _inv=""
       _ia=""; _iu=""; for _x in $FA_incidents; do if [ "$(incident_level "$_x")" = act ]; then _ia="$_ia $_x"; else _iu="$_iu $_x"; fi; done
+      # gh-token-monitor runs a destructive command when the stolen token stops working, so stopping it
+      # comes before any rotate or revoke the lines below call for, as in the one-person report.
+      if [ "$FA_wiper" -eq 1 ]; then _act=1; _lines="$_lines$NL    x  gh-token-monitor is installed: stop and remove it before anyone revokes a GitHub token"; _inv="$_inv; wiper"; fi
       [ -n "$_ia" ] && _act=1
       for _x in $_ia; do _lines="$_lines$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
       [ -n "$_ia" ] && _inv="$_inv; act$(printf ' %s' $_ia | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
@@ -612,6 +616,10 @@ fleet_main() {
       if [ "$FA_ssh_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  $(fl_plural "$FA_ssh_open" "SSH key" "SSH keys") without a passphrase"; _inv="$_inv; ssh-open $FA_ssh_open"; fi
       if [ -n "$FA_update" ]; then _upd=1; _tn=""; for _x in $FA_update; do _tn="${_tn:+$_tn, }$(printf '%s\n' "$OUT_TABLE" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $2; exit }')"; done; _lines="$_lines$NL    !  Tools with a security fix to install: $_tn"; _inv="$_inv; update-tools $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; fi
       if [ -n "$FA_platforms" ]; then _upd=1; _tn=""; for _x in $FA_platforms; do _tn="${_tn:+$_tn, }$(incident_name "$_x")"; done; _lines="$_lines$NL    !  Uses a platform that leaked stored secrets: $_tn"; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
+      if [ "$FA_on_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Project settings that act when an agent or editor opens the folder: $FA_on_open"; _inv="$_inv; on-open $FA_on_open"; fi
+      if [ "$FA_to_read" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Files named like the ones worms plant, to read: $FA_to_read"; _inv="$_inv; to-read $FA_to_read"; fi
+      for _x in $FA_updates; do _upd=1; _lines="$_lines$NL    !  A version to update: $(incident_name "$_x")"; done
+      [ -n "$FA_updates" ] && _inv="$_inv; update $(printf '%s' "$FA_updates" | /usr/bin/tr ' ' ',')"
       for _x in $FA_possible; do
         _upd=1
         if [ "$_x" = litellm ]; then _lines="$_lines$NL    !  A leftover file that can come from the LiteLLM malware"
@@ -628,7 +636,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
@@ -654,11 +662,17 @@ fleet_main() {
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
   SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
   # The inventory value: one line for an MDM's inventory field, no path, file name or key. Too
-  # long, it keeps each account's outcome and ends with +more; the saved file has the rest.
+  # long, it keeps the accounts that need attention first and ends with +more; the saved file has the rest.
   INVENTORY_V="v1 $OUTCOME $_short$INV"; [ "$N_ACC" -eq 0 ] && INVENTORY_V="$INVENTORY_V | no accounts"
   if [ "${#INVENTORY_V}" -gt 250 ]; then
     _iv="v1 $OUTCOME $_short"
-    _iv=$(printf '%s' "$INV" | /usr/bin/awk -v head="$_iv" -F ' [|] ' '{ out = head; for (i = 2; i <= NF; i++) { split($i, p, " "); s = out " | " p[1] " " p[2]; if (length(s) > 243) break; out = s } print out " +more" }')
+    # The accounts that need attention come first, act, then not_checked, then review, then as many
+    # clear ones as fit.
+    _iv=$(printf '%s' "$INV" | /usr/bin/awk -v head="$_iv" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
+      { n = 0; for (i = 2; i <= NF; i++) { split($i, p, " "); s[++n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5 }
+        out = head; stop = 0
+        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) { t = out " | " s[j]; if (length(t) > 243) stop = 1; else out = t }
+        print out " +more" }')
     INVENTORY_V=$_iv
   fi
   JSON_DOC="{

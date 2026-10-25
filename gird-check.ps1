@@ -480,6 +480,10 @@ function Owns-File([string]$p) {
     return [bool]($owner -and $owner -ceq [Environment]::UserName)
   } catch { return $false }
 }
+# A file with more than one name, or a link: PowerShell gives LinkType HardLink to a file with more
+# than one name, and SymbolicLink to a link. In a shared folder either could put another person's file
+# under a marker's name.
+function Multi-Name([string]$p) { try { return [bool]((Get-Item -LiteralPath $p -Force -ErrorAction Stop).LinkType) } catch { return $true } }
 # Children of these patterns, by name, under the folders named.
 function Glob-Dirs([string]$parent, [string]$pattern) {
   if (-not (Is-Dir $parent)) { return @() }
@@ -1394,12 +1398,12 @@ $IndTable = @(
   ,@('tanstack', 'all', 'wiper', 'no', (J $HomeDir '.config/gh-token-monitor'), '-')
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.out.log', '-')
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.err.log', '-')
-  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), 'starts the Mastra worm at login')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), 'starts the Mastra malware at login')
   ,@('glassworm', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.nodestart.plist'), 'starts the GlassWorm malware at login')
-  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/NodePackages/protocal.cjs'), 'starts the Mastra worm at login')
-  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/nvmconf.service'), 'starts the Mastra worm at login')
-  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'), 'starts the Mastra worm at login')
-  ,@('mastra', 'win', 'startup', 'no', $(if ($env:ProgramData) { J $env:ProgramData 'NodePackages/protocal.cjs' } else { '' }), 'starts the Mastra worm at login')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/NodePackages/protocal.cjs'), 'starts the Mastra malware at login')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/nvmconf.service'), 'starts the Mastra malware at login')
+  ,@('mastra', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/nvmconf/protocal.cjs'), 'starts the Mastra malware at login')
+  ,@('mastra', 'win', 'startup', 'no', $(if ($env:ProgramData) { J $env:ProgramData 'NodePackages/protocal.cjs' } else { '' }), 'starts the Mastra malware at login')
   ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
   ,@('litellm', 'all', 'site', 'no', 'cook.py', '-')
   ,@('litellm', 'all', 'temp', 'yes', 'remote_code_loader.lock', 'Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
@@ -1460,8 +1464,9 @@ foreach ($t in $TempDirs) {
     elseif (Exists (J $t $r[4])) { $tempHits = @((J $t $r[4])) }
     foreach ($m in $tempHits) {
       # Another user's file in the shared /tmp is not this person's sign (owner yes in
-      # data/indicators.tsv); %TEMP% on Windows is the person's own folder.
-      if ($r[3] -eq 'yes' -and -not $OnWindows -and -not (Owns-File $m)) { continue }
+      # data/indicators.tsv), and nor is one linked, symbolically or hard, under a marker's name;
+      # %TEMP% on Windows is the person's own folder.
+      if ($r[3] -eq 'yes' -and -not $OnWindows -and (-not (Owns-File $m) -or (Multi-Name $m))) { continue }
       $Marks.Add(@($r[0], $m))
     }
   }
@@ -2463,17 +2468,19 @@ foreach ($r in $IndOn) {
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
   if ($r[3] -eq 'yes') {
     if ($OnWindows) { continue }
-    if (-not (Owns-File $m)) { continue }
+    # Only under its one name, outside the home folder: a link, symbolic or hard, could put another
+    # person's file under it.
+    if (-not (Owns-File $m) -or (-not $m.StartsWith("$HomeDir/") -and (Multi-Name $m))) { continue }
   }
   if ($r[2] -eq 'wiper') { $Wiper.Add($m) }
   elseif ($ExtIncs -contains $r[0] -and -not ($NpmIncs -contains $r[0])) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
   else { $Persist.Add(@($m, $r[5])) }
 }
-# A registry value is not a file, so the Mastra worm's Run key stays code.
+# A registry value is not a file, so the Mastra malware's Run key stays code.
 if ($OnWindows) {
   try {
     $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
-    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra worm at login')) }; $rk.Close() }
+    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')) }; $rk.Close() }
   } catch { }
 }
 foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }

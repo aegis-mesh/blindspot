@@ -26,12 +26,12 @@ tanstack	all	wiper	no	~/.local/bin/gh-token-monitor.sh	-
 tanstack	all	wiper	no	~/.config/gh-token-monitor	-
 tanstack	all	wiper	yes	/tmp/gh-token-monitor.out.log	-
 tanstack	all	wiper	yes	/tmp/gh-token-monitor.err.log	-
-mastra	all	startup	no	~/Library/LaunchAgents/com.nvm.protocal.plist	starts the Mastra worm at login
+mastra	all	startup	no	~/Library/LaunchAgents/com.nvm.protocal.plist	starts the Mastra malware at login
 glassworm	all	startup	no	~/Library/LaunchAgents/com.user.nodestart.plist	starts the GlassWorm malware at login
-mastra	all	startup	no	~/Library/NodePackages/protocal.cjs	starts the Mastra worm at login
-mastra	all	startup	no	~/.config/systemd/user/nvmconf.service	starts the Mastra worm at login
-mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	starts the Mastra worm at login
-mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	starts the Mastra worm at login
+mastra	all	startup	no	~/Library/NodePackages/protocal.cjs	starts the Mastra malware at login
+mastra	all	startup	no	~/.config/systemd/user/nvmconf.service	starts the Mastra malware at login
+mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	starts the Mastra malware at login
+mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	starts the Mastra malware at login
 litellm	all	site	no	cook.pth	-
 litellm	all	site	no	cook.py	-
 litellm	all	temp	yes	remote_code_loader.lock	Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.

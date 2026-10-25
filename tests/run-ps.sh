@@ -1394,6 +1394,14 @@ cp -R "$WORK/clean" "$WORK/lmo"; ln -s /etc/passwd "$WORK/lmo/AppData/Local/Temp
 psrun "$WORK/lmo" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmo.txt"
 has    "a temp file owned by someone else is not this person's hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmo.txt"
 hasnot "and the file is not listed"            'pc_once' "$WORK/lmo.txt"
+# Nor is a file of this person's put under a marker's name by a link, hard or symbolic: in a shared
+# temp folder anyone can make one.
+cp -R "$WORK/clean" "$WORK/lmh"; : > "$WORK/lmh/notes.txt"; ln "$WORK/lmh/notes.txt" "$WORK/lmh/AppData/Local/Temp/.pc_once_1"
+psrun "$WORK/lmh" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmh.txt"
+has    "a hard link to this person's own file under a marker's name is not a hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmh.txt"
+cp -R "$WORK/clean" "$WORK/lms"; : > "$WORK/lms/notes.txt"; ln -s "$WORK/lms/notes.txt" "$WORK/lms/AppData/Local/Temp/.pc_once_1"
+psrun "$WORK/lms" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lms.txt"
+has    "nor a symbolic link to it" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lms.txt"
 
 echo "saving the report"
 mkdir -p "$WORK/cwd"

@@ -145,7 +145,8 @@ today, and no file paths, file names or key values:
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
   `v1 act 2026-10-25T09:12Z | asha: act tanstack; run-without-asking claude-code; keys 2
   anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. If it would not fit, it keeps the
-  outcome and the accounts' outcomes and ends with `+more`; the full result is in the saved file.
+  outcome, then the accounts that need attention first (act, not_checked, review), then as many
+  clear ones as fit, and ends with `+more`; the full result is in the saved file.
 - The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
   `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
   stopped running never shows an old `clear`.
@@ -299,10 +300,10 @@ real Mac.
   secret is never on a command line: the options line sets it inside the script, and the hash is
   computed with the secret in perl's environment, which only root can read. The install step is untested on a
   real Mac.
-- `review` means something to change or confirm, not urgent. It covers a tool with a security fix and an incident at the update level, and also an agent set to run without asking, an SSH key without a passphrase, a
+- `review` means something to change or confirm, not urgent. It covers a tool with a security fix, an incident or a package version at the update level, project settings that act when a folder opens and files named like the ones worms plant, and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
   covers keys in shell history, MCP configs and Claude Code allow lists, links to
-  `authorized_keys` and files a worm plants. An account with a protected folder refused, a file not
+  `authorized_keys`, files a worm plants and the gh-token-monitor wiper, whose stop-it-first line comes before any other. An account with a protected folder refused, a file not
   read or agent sessions not all checked is partly checked: `act` if it found something to act on,
   otherwise `not_checked`.
 - The size limit for a file an account run reads is 16 MB; session files are read in 1 MB pieces at
@@ -317,8 +318,9 @@ real Mac.
   other running processes are not checked yet.
 - From an IT team's review of both files: an account name the account check does not read shows
   as `invalid-name` (not checked), so the inventory value stays readable; in an account run a file
-  or folder the account can't read counts as not checked; markers that must be the person's own
-  (data/indicators.tsv) are the account's finding only, never the Mac's, and never through a link;
+  the account can't read, and a folder the home scan, npm's cache, the extension folders or the
+  session check can't open, count as not checked; markers that must be the person's own
+  (data/indicators.tsv) are the account's finding only, never the Mac's, and never through a link, symbolic or hard;
   shared temp entries are looked at as links first and never followed; an `lsof` that does not
   answer in time leaves the Mac's row not complete; agents in the account's own install folders
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A

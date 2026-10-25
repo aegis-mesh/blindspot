@@ -1008,12 +1008,12 @@ tanstack|all|wiper|no|$H/.local/bin/gh-token-monitor.sh|-
 tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
-mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra worm at login
+mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra malware at login
 glassworm|all|startup|no|$H/Library/LaunchAgents/com.user.nodestart.plist|starts the GlassWorm malware at login
-mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra worm at login
-mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra worm at login
-mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra worm at login
-mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra worm at login
+mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra malware at login
+mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra malware at login
+mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra malware at login
+mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra malware at login
 litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
 litellm|all|temp|yes|remote_code_loader.lock|Kill the detached python process that holds remote_code_loader.lock, then delete these files. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
@@ -2018,8 +2018,11 @@ for t in /tmp "${TMPDIR%/}" "$WTEMP" "$_utmp"; do
     for m in "$t"/$_g; do
       [ -e "$m" ] || continue
       # Another user's file in the shared /tmp is not this person's sign (owner yes in
-      # data/indicators.tsv); %TEMP% on Windows is the person's own folder.
-      if [ "$_own" = yes ] && [ "$WIN" -eq 0 ] && [ ! -O "$m" ]; then continue; fi
+      # data/indicators.tsv), and nor is one linked, symbolically or hard, under a marker's name; %TEMP%
+      # on Windows is the person's own folder.
+      if [ "$_own" = yes ] && [ "$WIN" -eq 0 ]; then
+        [ -O "$m" ] && [ ! -L "$m" ] && [ -n "$(find "$m" -prune -links 1 -print 2>/dev/null)" ] || continue
+      fi
       MARKS="$MARKS$_i$TAB$(rowsafe "$m")
 "
     done
@@ -3078,7 +3081,12 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   # A link there could point at any account's file, so an account run never counts one.
   if [ "$ACCTRUN" -eq 1 ]; then case "$_ip" in "$H"/*) ;; *) [ "$_iown" = yes ] && [ ! -L "$_ip" ] || continue ;; esac; fi
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
-  if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
+  # A marker that must be this person's own counts only under its one name: in a shared folder, a link,
+  # symbolic or hard, could put another person's file under it.
+  if [ "$_iown" = yes ]; then
+    [ -O "$_ip" ] || continue
+    case "$_ip" in "$H"/*) ;; *) { [ ! -L "$_ip" ] && [ -n "$(find "$_ip" -prune -links 1 -print 2>/dev/null)" ]; } || continue ;; esac
+  fi
   _ext=0; case "$EXT_INCS" in *" $_ii "*) case "$NPM_INCS" in *" $_ii "*) ;; *) _ext=1 ;; esac ;; esac
   [ "$_ext" -eq 1 ] || IND_HITS="$IND_HITS $_ii"
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
@@ -3091,9 +3099,9 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
 done <<EOF
 $IND_TABLE
 EOF
-# A registry value is not a file, so the Mastra worm's Run key stays code.
+# A registry value is not a file, so the Mastra malware's Run key stays code.
 if [ "$WIN" -eq 1 ]; then
-  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra worm at login
+  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra malware at login
 "
 fi
 [ -n "$WORM_HIT" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_HIT" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
@@ -3405,6 +3413,10 @@ if [ "$ACCTRUN" -eq 1 ]; then
     echo "possible=$_poss"
     echo "incidents=$_inc"
     echo "platforms=$(printf '%s' "$PLAT_FOUND" | fleet_ids)"
+    echo "on_open=$N_AUTO"
+    echo "to_read=$N_LOOK"
+    echo "updates=$(printf '%s\n' "$PY_UPD" | cut -f1 | fleet_ids)"
+    echo "wiper=$WIPER_HIT"
     echo "not_read=$_nr"
     echo "protected=$FLEET_PROT"
     echo "end=1"

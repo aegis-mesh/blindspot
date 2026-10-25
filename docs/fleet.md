@@ -1,8 +1,8 @@
 # Blindspot for IT teams
 
-`gird-fleet.sh --all-users` checks every account on a Mac for the same things Blindspot shows one
-person: coding agents, keys in plain text, keys in agent sessions, agents set to run commands without
-asking, and signs of recent malware incidents. It runs as root from your MDM, checks each account as
+`gird-fleet.sh --all-users` checks every account on a Mac for what Blindspot shows one person: coding
+agents, keys in plain text and in agent sessions, agents and project settings that run commands
+without asking, and signs of recent malware incidents. It leaves out which agents have gone unused. It runs as root from your MDM, checks each account as
 that account with `gird-check.sh`, the script each person runs, and keeps a short result on the Mac
 for your MDM to read. `gird-check.sh` holds no root code; all of it is in `gird-fleet.sh`.
 
@@ -195,9 +195,9 @@ Each run has one outcome, the worst of these, in this order:
 | Outcome | Means | Exit code |
 |---|---|---|
 | `failed` | The run could not finish safely, such as a changed script copy or a result it could not save. | 13 |
-| `act` | Something to act on now: malware signs, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
+| `act` | Something to act on now: malware signs (the gh-token-monitor wiper is named first), or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
-| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
+| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, a file named like the ones worms plant, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
 | `clear` | Every account was checked in full and nothing was found. | 0 |
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
@@ -218,7 +218,8 @@ name or key:
 v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
 ```
 
-If it would be too long, it keeps each account's outcome and ends with `+more`. The full result is
+If it would be too long, it keeps the accounts that need attention first (`act`, then `not_checked`,
+then `review`), then as many clear ones as fit, and ends with `+more`. The full result is
 in `/var/db/blindspot/last.json`. The inventory field shows `stale: last run <time>` when the last run
 is older than `--stale-days`, `failed: the run started <time> did not finish` when a later run
 stopped part-way (your MDM's time limit, a restart), `none` before the first run, and `unreadable`
@@ -234,14 +235,16 @@ Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to s
 
 | Finding | What to ask them to do |
 |---|---|
-| A malware incident at `act` | Treat the Mac as compromised. Follow the incident's advisory, linked in their report, and rotate every key the Mac could reach. If their report names `gh-token-monitor`, remove it before revoking any GitHub token. |
+| A malware incident at `act` | Treat the Mac as compromised. Follow the incident's advisory, linked in their report, and rotate every key the Mac could reach. If the account's row says `gh-token-monitor` is installed, have them stop and remove it before anyone revokes a GitHub token: it runs a destructive command when the token stops working. |
 | Keys in plain text | Move them into the macOS Keychain or a secrets manager, then rotate them. |
 | Keys in shell history or agent sessions | Rotate them: they were typed into a command or read by an agent. |
 | Tokens in MCP configs | Replace them with environment variable references, then rotate them. |
 | Keys in Claude Code allow lists | Delete those saved commands and rotate the keys. |
 | Files a worm plants in a project | Treat the Mac as compromised, as for malware. |
 | An agent set to run without asking | Turn it off, unless the agent runs in a sandbox. |
-| A tool with a security fix | Update it. |
+| A tool with a security fix, or a package version to update | Update it. |
+| Project settings that act when a folder opens | Have them read those settings in each project section 2 of their report lists. |
+| Files named like the ones worms plant | Have them read the files section 2 lists, and delete any they didn't put there. |
 | An SSH key without a passphrase | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets | If they used it, rotate the keys stored there. |
 | A finding under "This Mac" | Found in the shared temp folder, which any account can write to, or a running LiteLLM loader. Treat the Mac as compromised. |
@@ -269,11 +272,11 @@ The same places as a normal run of `gird-check.sh`, without Desktop, Documents a
 can hold cloud files that download when read). Each account's check runs through
 `sudo -n -u <account>` with a clean environment and only that account's rights. It reads regular
 files only, and leaves out any file over 16 MB, except agent session files, which it reads in 1 MB
-pieces whatever their size. A file or folder the account can't read counts as not checked, never as
-holding nothing. With its fixed PATH, it looks for agents in the account's own install folders
+pieces whatever their size. A file it can't read, and a folder the home scan, npm's cache, the
+extension folders or the session check can't open, count as not checked, never as holding nothing. With its fixed PATH, it looks for agents in the account's own install folders
 (`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. The
 gh-token-monitor logs in `/tmp`, which must be the person's own, count for the account that owns
-them, never for the Mac, and never through a link. It looks for the malware markers in the account's
+them, never for the Mac, and never through a link, symbolic or hard. It looks for the malware markers in the account's
 own temp folder, the one macOS gives each account under `/var/folders`. `sudo` writes one line to the system log for each account.
 
 What root checks once for the Mac:
