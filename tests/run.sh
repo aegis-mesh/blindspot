@@ -1293,11 +1293,16 @@ hasnot "fleet: a marker that must be its owner's never counts for the Mac" '^mac
 if [ -e /tmp/gh-token-monitor.out.log ] || [ -L /tmp/gh-token-monitor.out.log ]; then
   skip "fleet: and counts for the account that owns it" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
   skip "fleet: but a link there never counts" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
+  skip "fleet: nor a hard link there" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
 else
   : > /tmp/gh-token-monitor.out.log; fl_run ownmark2; rm -f /tmp/gh-token-monitor.out.log
   has  "fleet: and counts for the account that owns it" '^itadmin\.incidents=.*tanstack' "$FL/ownmark2.flat"
   : > "$FL/itadmin-file"; ln -s "$FL/itadmin-file" /tmp/gh-token-monitor.out.log; fl_run ownmark3; rm -f /tmp/gh-token-monitor.out.log
   hasnot "fleet: but a link there never counts" '^itadmin\.incidents=.*tanstack' "$FL/ownmark3.flat"
+  : > "$FL/itadmin-file2"; ln "$FL/itadmin-file2" /tmp/gh-token-monitor.out.log 2>/dev/null; HL=$?
+  fl_run ownmark4; rm -f /tmp/gh-token-monitor.out.log
+  if [ "$HL" -ne 0 ]; then skip "fleet: nor a hard link there" "can't make a hard link into /tmp from the test folder here"
+  else hasnot "fleet: nor a hard link there" '^itadmin\.incidents=.*tanstack' "$FL/ownmark4.flat"; fi
 fi
 # A machine check that does not answer in time leaves the Mac partly checked.
 users "clean:$U:$FL/clean:/bin/zsh"
@@ -1314,7 +1319,7 @@ s = open(d + '/last.json').read(); open(d + '/last.json', 'w').write(re.sub(r'"c
 open(d + '/attempt', 'w').write('%d 10\n' % (now - 50))
 PY2
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/attempt-old.out" 2>&1
-has    "fleet: --inventory says failed when a later run did not finish by its deadline" '^failed: the run started 20[0-9-]{8}T[0-9:]{5}Z did not finish$' "$FL/attempt-old.out"
+has    "fleet: --inventory says failed when a later run did not finish by its deadline" '^failed: the run started 20[0-9-]{8}T[0-9:]{5}Z did not finish or could not save its result$' "$FL/attempt-old.out"
 python3 -c "import sys, time; open(sys.argv[1], 'w').write('%d 3000\n' % (int(time.time()) - 5))" "$FL/state/attempt"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/attempt-run.out" 2>&1
 has    "fleet: and the last result while that run still has time" '^v1 ' "$FL/attempt-run.out"
@@ -1339,6 +1344,17 @@ if chmod +a "everyone allow add_file,delete_child" "$FL/acl" 2>/dev/null; then
 else skip "fleet: a folder whose ACL lets anyone write is refused" "chmod +a is not available here"; fi
 }
 SKIPPING=""
+# Root tests a path anyone could make as a link before anything that would follow it.
+if python3 - "$FLEETSH" > "$FL/linkorder.txt" <<'PY2'
+import re, sys
+src = open(sys.argv[1]).read()
+bad = []
+for m in re.finditer(r'\[ (!? ?)-[efdrO] "(\$[A-Za-z_][A-Za-z0-9_/.$"{}-]*?)" \] (&&|\|\|) \[ !? ?-L "\2" \]', src):
+    bad.append(m.group(0))
+print("\n".join(bad))
+sys.exit(1 if bad else 0)
+PY2
+then ok "fleet: gird-fleet.sh tests a path for a link before it stats it"; else bad "fleet: gird-fleet.sh tests a path for a link before it stats it" "$(head -n 3 "$FL/linkorder.txt")"; fi
 # gird-check.sh, the script each person runs, carries no root work.
 if grep -v '^[[:space:]]*#' "$SCRIPT" | grep -qE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)'; then bad "gird-check.sh runs no sudo or dscl" "$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -nE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)' | head -n 3)"; else ok "gird-check.sh runs no sudo or dscl"; fi
 bash "$SCRIPT" --all-users > "$FL/cs-all.out" 2> "$FL/cs-all.err"; RC=$?

@@ -78,7 +78,8 @@ fi
   if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
     fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13
   fi
-  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || [ ! -f "$FL_SELF" ]; }; then
+  # Each path an account or admin could make is tested as a link first and never followed.
+  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || { [ ! -L "$FL_SELF" ] && [ ! -f "$FL_SELF" ]; }; }; then
     fleet_usage "run it from a file: it copies gird-check.sh from its own folder for each account" 13
   fi
   # What root runs, and copies for every account, must be root's alone: gird-fleet.sh, gird-check.sh
@@ -91,7 +92,7 @@ fi
     _bad=""; [ -n "$_d" ] && [ ! -L "$FL_SELF" ] || _bad=1
     if [ -z "$_bad" ]; then
       FL_SELF="${_d%/}/${FL_SELF##*/}"; FL_CHECK="${_d%/}/gird-check.sh"
-      [ -f "$FL_CHECK" ] && [ ! -L "$FL_CHECK" ] || fleet_usage "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link" 13
+      [ ! -L "$FL_CHECK" ] && [ -f "$FL_CHECK" ] || fleet_usage "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link" 13
       set -- "$FL_SELF" "$FL_CHECK"; _p=$_d
       while :; do set -- "$@" "$_p"; [ "$_p" = / ] && break; _p=${_p%/*}; [ -n "$_p" ] || _p=/; done
       # tests only: a path whose mode a test run can't give the script or a folder it must reach
@@ -102,7 +103,9 @@ fi
         case "${_m#* }" in [0-7][0-7][0-7]) ;; *) _bad=1 ;; esac
         case "${_m#* }" in ?[2367]?|??[2367]) _bad=1 ;; esac
         # An ACL entry that lets anyone write, add or delete counts as writable by someone else.
-        /bin/ls -lde "$_q" 2>/dev/null | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && _bad=1
+        # A path whose ACL can't be read is refused too.
+        _acl=$(/bin/ls -lde "$_q" 2>/dev/null) || _bad=1
+        printf '%s\n' "$_acl" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && _bad=1
       done
     fi
     [ -z "$_bad" ] || fleet_usage "gird-fleet.sh, gird-check.sh and every folder above them must be owned by root and writable by no one else: install them in such a folder and run them from there" 13
@@ -407,7 +410,7 @@ fl_parse() {
   [ $# -eq 0 ]
 }
 fl_copy_ok() { # the copy each account runs: owned by root, nobody else can change it
-  [ -d "$FL_COPYDIR" ] && [ ! -L "$FL_COPYDIR" ] && [ -f "$FL_COPY" ] && [ ! -L "$FL_COPY" ] || return 1
+  [ ! -L "$FL_COPYDIR" ] && [ -d "$FL_COPYDIR" ] && [ ! -L "$FL_COPY" ] && [ -f "$FL_COPY" ] || return 1
   [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPYDIR" 2>/dev/null)" = "$FL_OWNER 755" ] || return 1
   [ "$(/usr/bin/stat -f '%u %Lp %l' "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644 1" ]
 }
@@ -441,8 +444,8 @@ fl_machine() {
   while IFS='|' read -r _nm _bins _paths _acts _id; do
     [ -n "$_nm" ] || continue
     _hit=0; _ifs=$IFS; IFS=';'
-    for _p in $_paths; do case "$_p" in /Applications/*) [ -e "$_p" ] && _hit=1 ;; esac; done
-    for _b in $_bins; do [ -n "$_b" ] && { [ -e "/usr/local/bin/$_b" ] || [ -e "/opt/homebrew/bin/$_b" ]; } && _hit=1; done
+    for _p in $_paths; do case "$_p" in /Applications/*) { [ -L "$_p" ] || [ -e "$_p" ]; } && _hit=1 ;; esac; done
+    for _b in $_bins; do [ -n "$_b" ] && { [ -L "/usr/local/bin/$_b" ] || [ -e "/usr/local/bin/$_b" ] || [ -L "/opt/homebrew/bin/$_b" ] || [ -e "/opt/homebrew/bin/$_b" ]; } && _hit=1; done
     IFS=$_ifs
     [ "$_hit" -eq 1 ] && FM_AGENTS="$FM_AGENTS $_id"
   done <<EOF
@@ -465,7 +468,7 @@ $IND_TABLE
 EOF
   # The LiteLLM loader holds its lock file open while it runs.
   _lk="$FL_SHARED_TMP/remote_code_loader.lock"
-  if [ -f "$_lk" ] && [ ! -L "$_lk" ]; then
+  if [ ! -L "$_lk" ] && [ -f "$_lk" ]; then
     fl_timed 10 "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk"
     [ -s "$FL_TMP/lsof" ] && FM_INC="$FM_INC litellm"
     [ "$FL_TIMEOUT" -eq 1 ] && FM_COMPLETE=false
@@ -476,10 +479,10 @@ EOF
 
 # The saved result: /var/db/blindspot/last.json, readable by root only. A folder that is a link,
 # not a folder, or not root's with mode 0700 is moved aside and made again.
-fl_state_ok() { [ -d "$FL_STATE" ] && [ ! -L "$FL_STATE" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$FL_STATE" 2>/dev/null)" = "$FL_OWNER 700" ]; }
+fl_state_ok() { [ ! -L "$FL_STATE" ] && [ -d "$FL_STATE" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$FL_STATE" 2>/dev/null)" = "$FL_OWNER 700" ]; }
 fl_state_prep() {
   if ! fl_state_ok; then
-    if [ -e "$FL_STATE" ] || [ -L "$FL_STATE" ]; then
+    if [ -L "$FL_STATE" ] || [ -e "$FL_STATE" ]; then
       /bin/mv -f -- "$FL_STATE" "$FL_STATE.replaced-$(/bin/date -u +%Y%m%d%H%M%S)-$$" 2>/dev/null || return 1
     fi
     /bin/mkdir -m 700 -- "$FL_STATE" 2>/dev/null || return 1
@@ -499,19 +502,19 @@ fl_attempt() { fl_write attempt "$FL_EPOCH ${DEADLINE:-3000}"; }
 # --inventory: reads the saved result, never scans. An MDM's inventory field shows the line it
 # prints: the inventory value, "stale" when the last run is older than --stale-days (3 by
 # default, at most 30), "none" before the first run, "unreadable" when the file is not root's own,
-# and "failed" when a later run started and did not finish by its deadline.
+# and "failed" when a later run started and did not finish, or could not save, by its deadline.
 # --result-tags puts it between <result> tags.
 fl_inv_out() { if [ "$RESULTTAGS" -eq 1 ]; then printf '<result>%s</result>\n' "$1"; else printf '%s\n' "$1"; fi; }
 fl_unfinished() { # epoch of the last finished run, 0 for none: prints "failed" when a later run stopped part-way
   _a="$FL_STATE/attempt"
-  [ -f "$_a" ] && [ ! -L "$_a" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
+  [ ! -L "$_a" ] && [ -f "$_a" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
   _at=$(/usr/bin/head -c 64 "$_a" | /usr/bin/sed -n '1s/^\([0-9]\{1,12\}\) \([0-9]\{1,5\}\)$/\1 \2/p')
   [ -n "$_at" ] && [ "${_at% *}" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - ${_at% *} )) -gt "${_at#* }" ] || return 1
-  fl_inv_out "failed: the run started $(/bin/date -u -r "${_at% *}" +%Y-%m-%dT%H:%MZ) did not finish"
+  fl_inv_out "failed: the run started $(/bin/date -u -r "${_at% *}" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
 }
 fl_inventory() {
   _f="$FL_STATE/last.json"
-  if [ ! -e "$_f" ] && [ ! -L "$_f" ]; then fl_state_ok && fl_unfinished 0 && return 0; fl_inv_out none; return 0; fi
+  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then fl_state_ok && fl_unfinished 0 && return 0; fl_inv_out none; return 0; fi
   if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(/usr/bin/stat -f '%u %Lp' "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
   _ep=$(/usr/bin/sed -n 's/^  "checked_epoch": \([0-9]\{1,12\}\),$/\1/p' "$_f" | /usr/bin/head -n 1)
   _iv=$(/usr/bin/sed -n 's/^  "inventory": "\([A-Za-z0-9 ._:;,|+-]*\)",$/\1/p' "$_f" | /usr/bin/head -n 1)

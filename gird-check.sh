@@ -2107,8 +2107,14 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
   # Shared places are root's, except a marker that must be this person's own (checked just below).
-  # A link there could point at any account's file, so an account run never counts one.
-  if [ "$ACCTRUN" -eq 1 ]; then case "$_ip" in "$H"/*) ;; *) [ "$_iown" = yes ] && [ ! -L "$_ip" ] || continue ;; esac; fi
+  # A link there, symbolic or hard, could be any account's file: an account run counts only a
+  # regular file with one name.
+  if [ "$ACCTRUN" -eq 1 ]; then
+    case "$_ip" in
+      "$H"/*) ;;
+      *) [ "$_iown" = yes ] && [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(/usr/bin/stat -f %l -- "$_ip" 2>/dev/null)" = 1 ] || continue ;;
+    esac
+  fi
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
   if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
   IND_HITS="$IND_HITS $_ii"
