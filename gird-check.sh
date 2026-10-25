@@ -1469,7 +1469,7 @@ while IFS= read -r _f; do
 $PLANTED_ALONE
 EOF
   if [ "$_ok" -eq 0 ] && [ -f "$_f" ]; then
-    _sh=$(sha_hex < "$_f" 2>/dev/null)
+    _sh=$({ sha_hex < "$_f"; } 2>/dev/null)
     case " $(planted_sha "$_f") " in *" $_sh "*) [ -n "$_sh" ] && _ok=1 ;; esac
   fi
   [ "$_ok" -eq 1 ] && WORM_PROJ="$WORM_PROJ$_pp
@@ -1678,8 +1678,11 @@ TAB=$(printf '\t')
 # a bounded number of times, so the time grows with the size of the file: a loop over single
 # characters (substr measures the whole string on macOS's awk), a regex split or gsub with many
 # matches, or a match that can restart inside a long run would be quadratic on a long minified line.
+# A file that can't be opened reads as nothing, and silently: bash reports a failed < itself, with the
+# raw path, before a 2>/dev/null after it takes effect, so the redirect sits inside the braces. The
+# same goes for every read of a scanned path below.
 flat() {
-  tr '\r\t' '\n ' < "$1" 2>/dev/null | awk '
+  { tr '\r\t' '\n ' < "$1"; } 2>/dev/null | awk '
     # How many backslashes s ends with. A match anchored at the last other character starts once per
     # run of backslashes, where /\\+$/ restarts at every backslash of a long run.
     function trail(s) {
@@ -1811,7 +1814,7 @@ aa_keys() { # pattern|pattern...
 # every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
+  if [ "$_tm" -eq 1 ]; then { tr -d ' \t\r\f\v' < "$1"; } 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
     # A pattern as a regex that matches only its own text: every character a regex reads is quoted.
     function lit(s,   o, c, j) {
       o = ""
@@ -1879,7 +1882,7 @@ EOF
 # setting's name stays as written.
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
-  tr -d '[:space:]' < "$f" 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)' || continue
+  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)' || continue
   _w=""
   if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
   elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
@@ -6094,7 +6097,7 @@ while IFS='|' read -r _oid _onm _oos _okind _ow _olo _ohi _ohole _osrc; do
   [ -n "$_oid" ] || continue
   case "$_oos" in all|"$_os") ;; *) continue ;; esac
   case "$_okind" in
-    plist) _vs=""; fleet_ok "$_ow" && [ -f "$_ow" ] && _vs=$(tr '\n\r\t' '   ' < "$_ow" 2>/dev/null | sed -n 's#.*<key>CFBundleShortVersionString</key> *<string>\([^<]*\)</string>.*#\1#p') ;;
+    plist) _vs=""; fleet_ok "$_ow" && [ -f "$_ow" ] && _vs=$({ tr '\n\r\t' '   ' < "$_ow"; } 2>/dev/null | sed -n 's#.*<key>CFBundleShortVersionString</key> *<string>\([^<]*\)</string>.*#\1#p') ;;
     folder) _vs=""
       for _d in "$_ow"/*/; do
         _d=${_d%/}; _d=${_d##*/}; ver_ok "$_d" || continue

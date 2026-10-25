@@ -1194,8 +1194,10 @@ rm -rf "$EVIL"
 # folders through gird-check.ps1, which must list every finding the same way and send nothing raw.
 bash tests/make-hostile.sh "$WORK/hostile" "$WORK/keys-hostile.txt"
 mkdir -p "$WORK/hostile/AppData/Roaming" "$WORK/hostile/AppData/Local/Temp"
-psrun "$WORK/hostile" -- -Offline -AllSessions > "$WORK/hostile.txt" 2>&1
+psrun "$WORK/hostile" -- -Offline -AllSessions > "$WORK/hostile.txt" 2> "$WORK/hostile-err.txt"
+cat "$WORK/hostile-err.txt" >> "$WORK/hostile.txt"
 if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')" "$WORK/hostile.txt"; then bad "a TAB in a folder name: no control character reaches the terminal"; else ok "a TAB in a folder name: no control character reaches the terminal"; fi
+if LC_ALL=C grep -aq "$(printf '\033')\|$(printf '\007')" "$WORK/hostile-err.txt"; then bad "hostile folder names: a file that can't be read sends no escape code to stderr"; else ok "hostile folder names: a file that can't be read sends no escape code to stderr"; fi
 tr -s ' \n' '  ' < "$WORK/hostile.txt" > "$WORK/hostile-flat.txt"
 X='\?\?\[2J\?\]0;pwned\?x'
 has    "a TAB in a folder name: project settings keep their row"     "code/auto$X/\.claude/settings\.json Set to run commands" "$WORK/hostile-flat.txt"
@@ -1207,6 +1209,7 @@ has    "a TAB in a folder name: a link to authorized_keys is listed" "code/link$
 has    "a | in a folder name: an MCP config keeps its count and token" "code/mcp\|\?\[2Jpipe$X/\.mcp\.json 1 server, token in the file" "$WORK/hostile-flat.txt"
 has    "a | in a folder name: a key file keeps its provider"         "code/key\|\?\[2Jpipe$X/\.env OpenAI" "$WORK/hostile-flat.txt"
 has    "a | in a folder name: an allow list keeps its finding"       "code/allow\|\?\[2Jpipe$X/\.claude/settings\.local\.json A saved command contains a key" "$WORK/hostile-flat.txt"
+has    "hostile folder names: a linked settings file that can't be read is named as not read" "could not be read, so the servers, tokens and settings in them were not checked: .*code/unread$X/\.claude/settings\.json" "$WORK/hostile-flat.txt"
 nokeys "hostile folder names: no planted key is printed" "$WORK/keys-hostile.txt" "$WORK/hostile.txt"
 hasnot "hostile folder names: no shell error" 'Exception|ParserError|At line:|is not recognized' "$WORK/hostile.txt"
 
