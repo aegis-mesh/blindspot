@@ -178,8 +178,12 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   `notes.txt -> ../.ssh/authorized_keys`): `notes.txt` is listed, `keys` is not. On Windows,
   PowerShell does not resolve a linked folder on the way. Before `authorized_keys` exists, a link that
   spells `.ssh` in another case on a volume that ignores case is listed by PowerShell, not by bash.
-- An agent run with a flag on the command line (`--dangerously-skip-permissions`, `--yolo`):
-  nothing on disk records it.
+- An agent run with a flag on the command line (Claude Code's `--dangerously-skip-permissions`,
+  Gemini CLI's `--yolo`). Gemini CLI's leaves nothing on disk. Claude Code's does: the first
+  interactive session in bypass mode shows a warning, and accepting it writes
+  `skipDangerousModePermissionPrompt: true` to `~/.claude/settings.json` (its permission-modes
+  page), so later bypass sessions skip the warning. That records that bypass mode was accepted once,
+  not that it is in use, so it is not read yet.
 
 ## Tests
 
