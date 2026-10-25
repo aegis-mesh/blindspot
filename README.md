@@ -124,7 +124,7 @@ irm https://gird.ai/blindspot/gird-check.ps1 -OutFile gird-check.ps1
 powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 ```
 
-`-ExecutionPolicy Bypass` applies to that one run. The switches are `-All`, `-Full`, `-Offline` and `-Save`, and `DO_NOT_TRACK=1` works too. It also reads PowerShell's command history. It has no game. A file that takes too long to check is listed as skipped, never counted as clean. On the same PC, Git Bash and PowerShell send the same device ID.
+`-ExecutionPolicy Bypass` applies to that one run. The switches are `-All`, `-Full`, `-Offline`, `-Save` and `-AllSessions`, and `DO_NOT_TRACK=1` works too. It also reads PowerShell's command history. It has no game. A file that takes too long to check is listed as skipped, never counted as clean. On the same PC, Git Bash and PowerShell send the same device ID.
 
 ## For IT teams
 
