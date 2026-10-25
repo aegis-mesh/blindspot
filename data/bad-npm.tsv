@@ -35,12 +35,20 @@
 #     caspian-day-js ^1.11.22 dependency resolves to.
 #   AntV, May 2026 (antv): every version of every OpenSSF malware entry, not withdrawn, that names the
 #     takeover of the npm account atool in the Mini Shai-Hulud campaign (OSV's npm export of 25 October
-#     2026), 638 versions of 317 packages: @antv's and others that account published, such as
-#     echarts-for-react, size-sensor and timeago.js, the 317 of SafeDep's list of the wave. GitHub's malware
-#     advisories name the same versions for 145 and have none for 120; for 51, OpenSSF's entry adds
-#     versions GitHub's leaves out, and @antv/a8's spans every version (below). And @cap-js/openapi 1.4.1,
+#     2026), 638 versions of 317 packages, less @antv/li-sam-assets 0.1.4, skipped below: 637, as SafeDep
+#     counts them. @antv's and others that account published, such as echarts-for-react, size-sensor and
+#     timeago.js, the 317 of SafeDep's list of the wave. GitHub's malware advisories name the same
+#     versions for 145 and have none for 120; for 50, OpenSSF's entry adds versions GitHub's leaves out,
+#     @antv/a8's spans every version and @antv/li-sam-assets's names only 0.1.4 (below). And the six packages of a
+#     second account, jiulingyun, published in the same wave (02:53 to 02:55 UTC on 19 May by npm's
+#     registry), each in Wiz's list of the wave, with a GitHub malware advisory of that day (such as
+#     GHSA-w2fv-p53h-wcph) and an OpenSSF entry that puts it in the same worm: openclaw-cn 0.3.0,
+#     @openclaw-cn/cli 1.4.1, @openclaw-cn/feishu 0.2.11, @openclaw-cn/libsignal 2.1.1,
+#     @openclaw-cn/toutiao-ops 1.2.4 and @starmind/collector-cli 0.3.10. And @cap-js/openapi 1.4.1,
 #     published on 18 May by npm's registry: its OpenSSF entry, MAL-2026-4161, and GitHub's
 #     GHSA-qj5h-p6mj-66pf cite only the AntV wave's posts, though SafeDep's list of the wave leaves it out.
+#     Nothing else of the wave is named by Wiz's list, by GitHub's malware advisories of 18 to 21 May or
+#     by an OpenSSF entry.
 #   Red Hat Cloud Services, June 2026 (redhat): the 32 @redhat-cloud-services packages whose OpenSSF
 #     entries name the worm's takeover of the trusted publisher they share, 96 versions. GitHub's malware
 #     advisories (such as GHSA-942v-f47r-w9c3) name the same versions for 22, and for 10 OpenSSF's entry
@@ -60,12 +68,23 @@
 #     four it lists as sleeper packages, not malicious yet (sandsleep): GitHub's malware advisories of
 #     the same day name every version of each (GHSA-9w7p-hqx2-pjjx, GHSA-m47j-9qfx-6jh4,
 #     GHSA-56j5-62q9-cj2c, GHSA-w9hv-7gxr-9f8f) and say a machine that installed one is compromised,
-#     and those govern.
-# Not listed: every version of three names. tensorlake's advisory also lists every version, but names
-# only 0.5.144 as malicious. GitHub's advisory for @tallyui/components spans every version, but
-# OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3. GitHub's advisory for @antv/a8 spans every
-# version, but OpenSSF's entry names only 0.1.1 and 0.2.1, and npm's registry keeps only 0.0.1, from
-# December 2023.
+#     and those govern. All but yarsg's: its advisory, GHSA-xw78-h8vv-phcj, also spans a 1000.0.0 that
+#     npm's registry dates 2019-04-04, so it is listed at the 18.0.0 and 18.0.1 of 17 February 2026
+#     (Socket's list names 18.0.1).
+#   GlassWorm's invisible-code wave, March 2026 (glasswormuni): the two npm packages Aikido's post on it
+#     names, at the versions GitHub's malware advisories name: @aifabrix/miso-client 4.7.2
+#     (GHSA-5w47-93jc-5w3g) and @iflow-mcp/watercrawl-watercrawl-mcp 1.3.0 to 1.3.4 (GHSA-rg84-r52h-2rgw).
+#     No other malware entry names that wave. Its VS Code extension is in data/bad-extensions.tsv.
+# npm's registry dates every listed version of the AntV, Red Hat and Mini Shai-Hulud waves to its wave's
+# days (19 May, 1 June, and 29 and 30 April 2026), except @cap-js/openapi 1.4.1 (above). A version it
+# dates before a wave is not listed and has a skip line below.
+# Not listed: every version of four names. tensorlake's advisory also lists every version, but names
+# only 0.5.144 as malicious. GitHub's advisory for @tallyui/components spans every version, and
+# OpenSSF's entry carries that range too, but the versions it lists, like Wiz's list, are only 1.0.1
+# to 1.0.3. GitHub's advisory for @antv/a8 spans every version, and OpenSSF's entry carries that range
+# too, but the versions it lists are only 0.1.1 and 0.2.1, and npm's registry keeps only 0.0.1, from
+# December 2023. GitHub's advisory and OpenSSF's entry for yarsg span every version, but npm's registry
+# dates its 1000.0.0 to 2019-04-04, before the worm.
 #! skip tensorlake * the advisory also lists every version, but names only 0.5.144 as malicious
 #! skip tensorlake-native-darwin-arm64 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
 #! skip tensorlake-native-linux-arm64-gnu 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
@@ -73,8 +92,10 @@
 #! skip tensorlake-native-linux-x64-gnu 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
 #! skip tensorlake-native-linux-x64-musl 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
 #! skip tensorlake-native-win32-x64 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
-#! skip @tallyui/components * GitHub's advisory spans every version, but OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3, published on the day of the wave; 2.0.0 and later came months after
-#! skip @antv/a8 * GitHub's advisory spans every version, but OpenSSF's entry names only 0.1.1 and 0.2.1, published in the wave; npm's registry keeps only 0.0.1, from December 2023
+#! skip @tallyui/components * GitHub's advisory spans every version, and OpenSSF's entry carries that range, but the versions OpenSSF's entry lists and Wiz's list names are only 1.0.1 to 1.0.3, published on the day of the wave; 2.0.0 and later came months after
+#! skip @antv/a8 * GitHub's advisory spans every version, and OpenSSF's entry carries that range, but the versions it lists are only 0.1.1 and 0.2.1, published in the wave; npm's registry keeps only 0.0.1, from December 2023
+#! skip @antv/li-sam-assets 0.1.4 npm's registry dates it 2023-07-10, before the wave; of the sources only GitHub's advisory names it, and its package.json has no install hook
+#! skip yarsg * GitHub's advisory and OpenSSF's entry span every version, but npm's registry dates 1000.0.0 to 2019-04-04, before the worm; 18.0.0 and 18.0.1 came out on 17 February 2026
 #! skip @servicetitan/suppress-warnings * GitHub's advisory and OpenSSF's entry also list versions npm's registry dates before the worm (OpenSSF's 25, from 3 February to 29 July 2026); only 38.1.1 to 38.1.7 came out on 4 August
 #! skip @servicetitan/suppress-warnings 34.0.1 npm's registry dates it 2026-02-03, before the worm
 #! skip @servicetitan/suppress-warnings 34.1.0 npm's registry dates it 2026-02-25, before the worm
@@ -1042,7 +1063,6 @@ caspian-day-js	1.11.23	mastra
 @antv/li-editor	1.8.1	antv
 @antv/li-p2	1.9.2	antv
 @antv/li-p2	1.10.2	antv
-@antv/li-sam-assets	0.1.4	antv
 @antv/li-sam-assets	0.2.4	antv
 @antv/li-sam-assets	0.3.4	antv
 @antv/li-sdk	1.6.1	antv
@@ -1172,6 +1192,11 @@ caspian-day-js	1.11.23	mastra
 @lint-md/core	2.2.0	antv
 @lint-md/parser	0.1.14	antv
 @lint-md/parser	0.2.14	antv
+@openclaw-cn/cli	1.4.1	antv
+@openclaw-cn/feishu	0.2.11	antv
+@openclaw-cn/libsignal	2.1.1	antv
+@openclaw-cn/toutiao-ops	1.2.4	antv
+@starmind/collector-cli	0.3.10	antv
 ai-figure	0.5.0	antv
 ai-figure	0.6.0	antv
 amapcn	0.2.2	antv
@@ -1225,6 +1250,7 @@ miz	1.1.1	antv
 miz	1.2.1	antv
 onfire.js	2.1.1	antv
 onfire.js	2.2.1	antv
+openclaw-cn	0.3.0	antv
 react-adsense	0.2.0	antv
 react-adsense	0.3.0	antv
 relationship.js	1.3.9	antv
@@ -3627,7 +3653,14 @@ locale-loader-pro	*	sandworm
 parse-compat	*	sandworm
 scan-store	*	sandworm
 veim	*	sandworm
-yarsg	*	sandworm
+yarsg	18.0.0	sandworm
+yarsg	18.0.1	sandworm
 ethres	*	sandsleep
 uudi	*	sandsleep
 @injectivelabs/sdk-ts	1.20.21	injective
+@aifabrix/miso-client	4.7.2	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.0	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.1	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.2	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.3	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.4	glasswormuni

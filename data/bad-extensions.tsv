@@ -4,17 +4,18 @@
 #   incident  an id from data/incidents.tsv, whose level must be act
 #   registry  openvsx: the bad build was only ever published to Open VSX, so it is looked for in the
 #             extension folders of the editors that install from there (Cursor, Windsurf and Devin
-#             Desktop, VSCodium, Kiro and Antigravity) and not in VS Code's own, where the same id is the
+#             Desktop, VSCodium, Kiro, Antigravity and Positron) and not in VS Code's own, where the same id is the
 #             Marketplace's extension, or another publisher's. any: looked for in every folder. An id
 #             that Microsoft's list of extensions removed from the Marketplace names
 #             (github.com/microsoft/vsmarketplace, RemovedPackages.md) was on the Marketplace too, so it
-#             is any. Of the openvsx ids, the Marketplace offers only the oorzc extensions (October 2026).
+#             is any. Of the openvsx ids, the Marketplace offers the oorzc extensions and the clean
+#             originals of the GlassWASM pair (October 2026).
 #   os        all, mac, linux or win, or two of them separated by a comma (mac,win): where the
 #             extension's malware could run, as its source says. It is looked for on every OS; on one
 #             where its malware could not run, the report shows it as a malicious extension to remove,
 #             not a compromised machine (as data/bad-pypi.tsv's os does)
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
-# GlassWorm, from Socket's posts and one of Aikido's, each its own incident. A version where the post gives one, every
+# GlassWorm, from Socket's posts and two of Aikido's, each its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
 # update themselves, so a version from before an extension was turned counts too. Left out: what a post
 # calls a sleeper (not malicious yet), the 17 extensions turned on 29 April, whose payload Open VSX
@@ -23,7 +24,10 @@
 # lohsebhipolg2s.theme-aurora-borealis and holiday-themes.theme-coca-cola-christmas. Socket found no
 # payload in the versions it read and calls Coca-Cola Christmas malware for its cluster, not a payload;
 # a removal from the Marketplace does not say what ran on a machine, nor anything of the Open VSX
-# builds; and Charcoal Mint's three builds on Open VSX hold colors and, in 1.0.2, a welcome page.
+# builds; and Charcoal Mint's three builds on Open VSX hold colors and, in 1.0.2, a welcome page. Nor
+# the cluster's two other Open VSX extensions, aurora-them-creator.theme-aurora-nocturne (which Microsoft's
+# list removes as impersonation, 30 January 2026) and solidity-syntax.deep-focus: Socket shows no payload
+# in either.
 #   January 2026: the four oorzc extensions, Open VSX only: Socket's findings concern the Open VSX
 #     builds, and it does not suggest the publisher's Marketplace listings were compromised. The
 #     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026, after that post:
@@ -55,6 +59,22 @@
 #     machine with either as compromised, and gives no version: every version.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
 #     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe).
+#   Aikido, March 2026 (glasswormuni, its post of 13 March on GlassWorm's invisible-code wave):
+#     quartz.quartz-markdown-editor 0.3.0, a VS Code extension the post names, which Microsoft's list removes
+#     (11 March 2026, as untrustworthy): any. Its loader is JavaScript: all. The two npm packages of that
+#     post are in data/bad-npm.tsv.
+# GlassWASM, June 2026 (glasswasm): the two Open VSX extensions of Socket's post, which it ties to GlassWorm,
+#   exargd.vsblack 0.0.1 and noellee-doc.flint-debug 0.1.1. They clone Marketplace extensions under the same
+#   ids and versions, and Socket says those Marketplace builds are clean: openvsx. Their loader picks a
+#   download command for each OS: all.
+# The 18 March post's payload, autoimport-smart-tool-2.5.8.vsix, a clone of the Auto Import extension that
+#   its droppers install from GitHub into every editor, has no line: the post names the file, not the id
+#   its folder takes, and the release that held it is gone. The droppers are listed, and so is
+#   floktokbok.autoimport, the dropper Aikido's April post names, at every version.
+# Nx Console 18.95.0, May 2026 (nxconsole): the compromised extension Wiz's post on the AntV wave names.
+#   Nx's own advisory, GHSA-c9j4-9m59-847w, says that build was on the VS Code Marketplace for 18
+#   minutes and on Open VSX for 36 (any), and gives its signs on macOS, Linux and Windows (all). The
+#   kitty-monitor files it leaves are the AntV wave's lines in data/indicators.tsv.
 # id	version	incident	registry	os
 oorzc.ssh-tools	*	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
@@ -162,3 +182,7 @@ specstudio.code-wakatime-activity-tracker	*	glasswormzig	openvsx	mac,win
 floktokbok.autoimport	*	glasswormzig	any	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win
 cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any	all
+quartz.quartz-markdown-editor	0.3.0	glasswormuni	any	all
+exargd.vsblack	0.0.1	glasswasm	openvsx	all
+noellee-doc.flint-debug	0.1.1	glasswasm	openvsx	all
+nrwl.angular-console	18.95.0	nxconsole	any	all

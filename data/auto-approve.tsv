@@ -2,7 +2,7 @@
 #   agent     as the report shows it
 #   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
 #   path      the settings file, with the path tokens data/sessions.tsv uses, or {PROJECT}/folder/file
-#             for that file in every project folder the home scan finds
+#             for that file in every project folder the home scan finds (the home folder is not one)
 #   setting   as the report shows it
 #   pattern   one or more, each in its own field, and every one must match. Spaces are ignored. A
 #             .json file is read as one line (the scripts' flat): a match starts at the text, a { or
@@ -22,7 +22,10 @@
 # older sandbox_mode. For a file that sets both, Codex's docs and code disagree: the permissions page
 # says sandbox_mode then wins and not to set both, while the code (0.164.0, resolve_permission_config_syntax)
 # uses the profile when one file sets both. The lines follow the code: the sandbox_mode line counts only
-# in a file that sets no default_permissions.
+# in a file that sets no default_permissions. Codex reads a project's .codex/config.toml once that project
+# is trusted, above the user's file (its basic configuration page; 0.164.0's loader keeps it disabled
+# while untrusted), and the keys a project may not set (PROJECT_LOCAL_CONFIG_DENYLIST) do not include
+# approval_policy, sandbox_mode or default_permissions: a project's file has the same two lines.
 # TOML's literal strings: toml.io. VS Code:
 # the Copilot settings reference and the 1.104 release notes. VS Code 1.104 renamed chat.tools.autoApprove
 # to chat.tools.global.autoApprove without migrating it, so the old name is ignored, and it reads the
@@ -49,6 +52,8 @@
 Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"permissions": {"defaultMode": "bypassPermissions"
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"	!default_permissions
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access profile	approval_policy = "never"	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	never asks, full access, when the project is trusted	approval_policy = "never"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	never asks, full access profile, when the project is trusted	approval_policy = "never"	default_permissions = ":danger-full-access"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"

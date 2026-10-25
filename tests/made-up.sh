@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proves that a new incident of each data-only kind (and a new gh-token-monitor file, agent setting,
-# agent version, extension, and extension whose malware runs on another OS) needs nothing but data lines: copies the repo
+# agent version, extension, extension whose malware runs on another OS, and Python incident's startup file) needs nothing but data lines: copies the repo
 # to REPO, appends a made-up incident of each kind to the data files, runs tools/gen.sh there, and
 # checks that only the generated blocks changed. Then plants matching files in HOME (a copy of a
 # clean fixture home) and in HOME/tmp for the temp folder. The suites run the copy's scripts.
@@ -25,6 +25,7 @@ cat >> "$R/data/indicators.tsv" <<EOF
 madeworm${T}all${T}startup${T}no${T}~/.config/madeworm/boot.cjs${T}starts the Made worm at login
 tanstack${T}all${T}wiper${T}no${T}~/.config/gh-token-monitor-made${T}-
 madepy${T}all${T}site${T}no${T}madepy_boot.pth${T}-
+madepy${T}all${T}startup${T}no${T}~/.config/madepy/boot.py${T}the Madepkg backdoor, started at login
 madepy${T}all${T}temp${T}yes${T}.madepy_*${T}Stop any process started from these files, then delete them.
 EOF
 # A name only the Made worm uses, and one projects use too, which counts only as the file whose
@@ -47,9 +48,9 @@ done
 rm -rf "$F"; cp -R "$C" "$F"
 rm -rf "$F/.config/opencode" "$F/.local/share/opencode" "$F/.railway"
 : > "$F/.madeplat.json"
-mkdir -p "$F/.config/madeworm" "$F/.config/gh-token-monitor-made" "$F/code/venv/lib/site-packages/madepkg-9.9.9.dist-info" \
+mkdir -p "$F/.config/madeworm" "$F/.config/madepy" "$F/.config/gh-token-monitor-made" "$F/code/venv/lib/site-packages/madepkg-9.9.9.dist-info" \
   "$F/tmp" "$F/AppData/Local/Temp" "$F/.cache/uv/wheels/madepkg-9.9.9-py3-none-any" "$F/code/made/.vscode" "$F/code/made/.claude"
-: > "$F/.config/madeworm/boot.cjs"
+: > "$F/.config/madeworm/boot.cjs"; : > "$F/.config/madepy/boot.py"
 : > "$F/code/venv/lib/site-packages/madepy_boot.pth"
 : > "$F/tmp/.madepy_1"; : > "$F/AppData/Local/Temp/.madepy_1"
 printf 'x\n' > "$F/code/made/.vscode/madeplant.js"

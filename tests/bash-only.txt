@@ -296,3 +296,6 @@ fleet: a session check that runs long is stopped in time, and the findings still
 and the summary says so too	gird-check.ps1 lists folders through .NET, with no find to reject the scan
 and its rows are not green	gird-check.ps1 lists folders through .NET, with no find to reject the scan
 fleet: +more only when an account was left out	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a Python incident's startup file outside the home folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python incident's startup file that must be its owner's	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+on a Mac, Gemini CLI's sandbox sessions under GEMINI_CLI_HOME are found	the line is macOS-only, for Gemini CLI's sandbox on a Mac, and gird-check.ps1 reads the Windows folders
