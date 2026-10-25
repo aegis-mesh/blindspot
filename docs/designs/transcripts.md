@@ -56,8 +56,8 @@ still a key that was sent.
   non-alphanumeric character before the key (OpenAI's legacy `sk-` keys, `hf_`, `AQ.`), so the
   transcript check also accepts `\n`, `\t`, `\r` and `\"` as that boundary.
 - A match that looks made up is dropped inside the matching stage: eight or more of the same
-  character in a row, fewer than 12 distinct characters, or `EXAMPLE`, `xxxx`, `0123456789`,
-  `abcdef` in it. Shell history is not filtered this way, because its matches come from commands
+  character in a row, fewer than 12 distinct characters (fewer than 8 in a key under 30
+  characters), or `EXAMPLE`, `xxxx`, `0123456789`, `abcdef` in it. Shell history is not filtered this way, because its matches come from commands
   the person typed; transcripts also hold tool output such as test fixtures.
 - Amazon Q CLI caches temporary AWS credentials for its own telemetry in its `data.sqlite3` (the
   `telemetry-cognito-credentials` entry of its `state` table, an `ASIA` key id from Cognito), and
