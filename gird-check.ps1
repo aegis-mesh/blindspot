@@ -1505,6 +1505,7 @@ $IndTable = @(
   ,@('tanstack', 'all', 'wiper', 'no', (J $HomeDir '.config/gh-token-monitor'), '-')
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.out.log', '-')
   ,@('tanstack', 'all', 'wiper', 'yes', '/tmp/gh-token-monitor.err.log', '-')
+  ,@('tanstack', 'win', 'wiper', 'no', (J $LocalAppData 'gh-token-monitor'), '-')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.nvm.protocal.plist'), 'starts the Mastra malware at login')
   ,@('glassworm', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.nodestart.plist'), 'starts the GlassWorm malware at login')
   ,@('mastra', 'all', 'startup', 'no', (J $HomeDir 'Library/NodePackages/protocal.cjs'), 'starts the Mastra malware at login')
@@ -5403,7 +5404,9 @@ foreach ($pi in $PyIncidents) {
 if ($WIPER_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}a wiper is waiting$cRst"
   foreach ($l in $Wiper) { Emit "        $(Short $l)" }
-  if ($OnWindows) { $stop = 'Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate, then ' }
+  # On Windows a scheduled task named gh-token-monitor starts it at logon (Tensorlake's advisory). Deleting the
+  # task does not end its running program, so the process is ended too.
+  if ($OnWindows) { $stop = 'schtasks /Delete /TN gh-token-monitor /F, then Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate, then ' }
   elseif (Is-Dir '/System/Library/CoreServices') { $uidv = ''; try { $uidv = [string](& id -u 2>$null) } catch { }; $stop = "launchctl bootout gui/$uidv/com.user.gh-token-monitor, then pkill -f gh-token-monitor, then " }
   else { $stop = 'systemctl --user disable --now gh-token-monitor.service, then pkill -f gh-token-monitor, then ' }
   Wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and in the TanStack wave it tries to erase the home folder." 8 '        ' '        ' $cRed

@@ -1147,8 +1147,20 @@ tr -s ' \n' '  ' < "$WORK/win.txt" > "$WORK/win1.txt"
 mkdir -p "$WP/.config/gh-token-monitor"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
 rm -rf "${WP:?}/.config/gh-token-monitor"
-has    "Windows is told how to stop the wiper"         'Stop it with powershell -NoProfile -Command "Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate", then delete the files above' "$WORK/wwin.txt"
+has    "Windows is told how to stop the wiper"         'Stop it with powershell -NoProfile -Command "schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate", then delete the files above' "$WORK/wwin.txt"
 hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl|pkill' "$WORK/wwin.txt"
+# On Windows it lives in %LOCALAPPDATA%\gh-token-monitor, started at logon by a scheduled task of that name
+# (Tensorlake's advisory GHSA-8g63-53c9-65j2): found there, the stop deletes the task, and every rotate waits.
+mkdir -p "$WP/AppData/Local/gh-token-monitor"; : > "$WP/AppData/Local/gh-token-monitor/monitor.ps1"
+winrun --offline --full > "$WORK/wlad.txt" 2>&1
+rm -rf "${WP:?}/AppData/Local/gh-token-monitor"
+tr -s ' \n' '  ' < "$WORK/wlad.txt" > "$WORK/wlad1.txt"
+has    "Windows: gh-token-monitor's folder in LOCALAPPDATA is a waiting wiper" 'a wiper is waiting ~/AppData/Local/gh-token-monitor Don' "$WORK/wlad1.txt"
+has    "Windows: the stop deletes its scheduled task first" 'Stop it with powershell -NoProfile -Command "schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance' "$WORK/wlad1.txt"
+_u=$(unwaited "$WORK/wlad.txt")
+if grep -q 'ACT NOW: REMOVE GH-TOKEN-MONITOR' "$WORK/wlad.txt" && grep -q 'rotate every key this machine could reach\. Only once gh-token-monitor' "$WORK/wlad1.txt" && [ -z "$_u" ]; then
+  ok "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait"
+else bad "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait" "$(printf '%s' "${_u:-the report lost its headline or its rotate fixes}" | head -n 3 | tr '\n' '|')"; fi
 has    "Windows: finds Claude Desktop in AppData"       'Claude Desktop +used in the last 30 days' "$WORK/win.txt"
 has    "Windows: finds Cursor and its use in AppData"   'Cursor +used in the last 30 days' "$WORK/win.txt"
 has    "Windows: finds Goose in its Windows config"     'Goose +installed' "$WORK/win.txt"

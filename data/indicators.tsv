@@ -13,9 +13,11 @@
 #   note      startup: what the file does, as shown under it. temp: what to do about the files, from the
 #             incident's advisory, shown under the incident's row when they are found (the temp lines of one
 #             incident carry the same note). - for wiper and site
-# gh-token-monitor: Wiz (TanStack wave: the LaunchAgent and the systemd unit) and Socket (keyv wave: all six).
-# All six carry the tanstack id, though four come only from Socket's keyv post: the report and fleet mode
-# name a wiper line as gh-token-monitor, never as its incident.
+# gh-token-monitor: Wiz (TanStack wave: the LaunchAgent and the systemd unit), Socket (keyv wave: the
+# first six) and Tensorlake's own advisory, GHSA-8g63-53c9-65j2 (the Windows folder, which a scheduled
+# task named gh-token-monitor starts at logon). All seven carry the tanstack id, though four come only
+# from Socket's keyv post and one from Tensorlake's: the report and fleet mode name a wiper line as
+# gh-token-monitor, never as its incident.
 # Mastra: Socket. It also names the implant's config (~/.config/NodePackages/config.json on Linux, a
 # config.json beside protocal.cjs on Windows) and the loader's temp markers, .pkg_history and .pkg_logs:
 # no kind fits them, since a config starts nothing and a temp line is a Python incident's hit (it gives
@@ -34,6 +36,7 @@ tanstack	all	wiper	no	~/.local/bin/gh-token-monitor.sh	-
 tanstack	all	wiper	no	~/.config/gh-token-monitor	-
 tanstack	all	wiper	yes	/tmp/gh-token-monitor.out.log	-
 tanstack	all	wiper	yes	/tmp/gh-token-monitor.err.log	-
+tanstack	win	wiper	no	{LOCALAPPDATA}/gh-token-monitor	-
 mastra	all	startup	no	~/Library/LaunchAgents/com.nvm.protocal.plist	starts the Mastra malware at login
 glassworm	all	startup	no	~/Library/LaunchAgents/com.user.nodestart.plist	starts the GlassWorm malware at login
 mastra	all	startup	no	~/Library/NodePackages/protocal.cjs	starts the Mastra malware at login

@@ -187,6 +187,7 @@ tanstack|all|wiper|no|$H/.local/bin/gh-token-monitor.sh|-
 tanstack|all|wiper|no|$H/.config/gh-token-monitor|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.out.log|-
 tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
+tanstack|win|wiper|no|$WLAPP/gh-token-monitor|-
 mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra malware at login
 glassworm|all|startup|no|$H/Library/LaunchAgents/com.user.nodestart.plist|starts the GlassWorm malware at login
 mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra malware at login
