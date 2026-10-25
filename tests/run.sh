@@ -11,6 +11,10 @@ WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 . tests/lib.sh
+# The fixture homes decide every place the script looks: variables that move an agent's folders
+# elsewhere are cleared (GitHub's Ubuntu runners set XDG_CONFIG_HOME, for one).
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
+  QWEN_HOME COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
 command -v python3 >/dev/null 2>&1 || { echo "tests/run.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt"
@@ -99,7 +103,7 @@ for E in perl rg; do
   has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
   has    "$E: a compressed session is named as not checked" '1 compressed session file was not checked' "$SE/$E.block"
   has    "$E: says to rotate them"                 'Treat these keys as exposed and rotate them' "$SE/$E.txt"
-  has    "$E: names encrypted sessions as not checked" 'Windsurf conversation files are encrypted, so they were not checked' "$SE/$E.flat"
+  has    "$E: names encrypted sessions as not checked" '1 Windsurf conversation file is encrypted, so it was not checked' "$SE/$E.flat"
   if grep -aqF -f "$WORK/keys.txt" "$SE/$E.txt"; then bad "$E: never prints a key"; else ok "$E: never prints a key"; fi
 done
 SKIPPING=$NORG
@@ -286,6 +290,90 @@ for E in perl rg; do
   has    "$E: a link to a pipe or a device, or a pipe in a session folder, is not read" 'No keys in 1 agent session file\.' "$SE/lnkp-$E.txt"
 done
 SKIPPING=""
+# Antigravity keeps newer conversations as SQLite files (.db, and their -wal) beside the older .pb
+# files: the SQLite files are read and nothing else in the folder is, only the .pb files are named
+# as encrypted, and a folder with none is never called encrypted.
+_ag="$SE/ag/.gemini/antigravity/conversations"; mkdir -p "$_ag" "$SE/ag2/.gemini/antigravity-cli/conversations"
+printf 'x' > "$_ag/a.pb"
+mkdb() { # database text
+  python3 -c '
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1]); c.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, body BLOB)")
+c.execute("INSERT INTO items (body) VALUES (?)", (sys.argv[2].encode(),)); c.commit(); c.close()' "$1" "$2"
+}
+mkdb "$_ag/b.db" "run with AK""IA$(upper 16)"
+printf 'x %s y\n' "g""hp_$(rnd 36)" > "$_ag/b.db-wal"
+printf 'x %s y\n' "sk""-ant-api03-$(rnd 95)" > "$_ag/notes.txt"
+mkdb "$SE/ag2/.gemini/antigravity-cli/conversations/c.db" "hello"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$SE/ag" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/ag-$E.block"
+  tr -s ' \n' '  ' < "$SE/ag-$E.block" > "$SE/ag-$E.flat"
+  has    "$E: Antigravity's SQLite conversations and their -wal files are read" 'Antigravity +2 files: (AWS, GitHub|GitHub, AWS)$' "$SE/ag-$E.block"
+  hasnot "$E: nothing else in that folder is read"   'Anthropic' "$SE/ag-$E.block"
+  has    "$E: its .pb files are counted and named as encrypted" '1 Antigravity conversation file is encrypted, so it was not checked' "$SE/ag-$E.flat"
+  HOME="$SE/ag2" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/ag2-$E.txt" 2>&1
+  has    "$E: a folder of SQLite conversations alone is read" 'No keys in 1 agent session file\.' "$SE/ag2-$E.txt"
+  hasnot "$E: and never called encrypted"            'encrypted' "$SE/ag2-$E.txt"
+done
+SKIPPING=""
+# A conversations folder that can't be listed is named as a folder not read, never skipped.
+mkdir -p "$SE/ag3/.gemini/antigravity/conversations"; mkdb "$SE/ag3/.gemini/antigravity/conversations/d.db" "hello"; chmod 000 "$SE/ag3/.gemini/antigravity/conversations"
+HOME="$SE/ag3" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/ag3.txt"
+has    "perl: an Antigravity conversations folder that can't be listed is named as not read" 'Agent sessions were partly checked: 1 folder could not be read' "$SE/ag3.txt"
+chmod 755 "$SE/ag3/.gemini/antigravity/conversations"
+# Session places found in the agents' source and docs: Codex's thread history database and its
+# -wal, Claude Desktop on Linux and in its mode for Bedrock and other providers (Claude-3p),
+# Copilot CLI's session store and command history, and the prompts typed into Aider, Amazon Q,
+# Continue, Factory Droid and Goose. A key in each is found under its agent. Codex names its
+# database's folder two ways; with neither set, the one file counts once.
+if [ "$(uname -s)" = Darwin ]; then _as="Library/Application Support"; else _as=".config"; fi
+mkdir -p "$SE/new/.codex" "$SE/new/$_as/Claude/local-agent-mode-sessions" "$SE/new/$_as/Claude-3p/local-agent-mode-sessions" \
+  "$SE/new/.aws/amazonq" "$SE/new/.continue/dev_data/0.2.0" "$SE/new/.factory/state" "$SE/new/.local/state/goose" \
+  "$SE/cx1/.codex" "$SE/csq" "$SE/groot/state" "$SE/xs/goose" "$SE/gx"
+mkdb "$SE/new/.codex/thread_history_1.sqlite" "{\"text\":\"use AK""IA$(upper 16)\"}"
+printf 'x %s y\n' "AK""IA$(upper 16)" > "$SE/new/.codex/thread_history_1.sqlite-wal"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/new/$_as/Claude/local-agent-mode-sessions/local_b.json"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/new/$_as/Claude-3p/local-agent-mode-sessions/local_a.json"
+printf 'export AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$SE/new/.aws/amazonq/.cli_bash_history"
+printf '{"prompt":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/new/.continue/dev_data/0.2.0/chatInteraction.jsonl"
+printf '[{"command": "use %s"}]\n' "AK""IA$(upper 16)" > "$SE/new/.factory/state/history.json"
+printf '#V2\nuse %s\n' "AK""IA$(upper 16)" > "$SE/new/.local/state/goose/history.txt"
+mkdir -p "$SE/new/.copilot/command-history-state"; printf '["use %s"]\n' "AK""IA$(upper 16)" > "$SE/new/.copilot/command-history-state/history.json"
+mkdb "$SE/new/.copilot/session-store.db" "{\"text\":\"use AK""IA$(upper 16)\"}"
+mkdir -p "$SE/new/code/a"; printf '\n# 2026-10-25 06:00:00.000000\n+use %s\n' "AK""IA$(upper 16)" > "$SE/new/code/a/.aider.input.history"
+mkdb "$SE/cx1/.codex/thread_history_1.sqlite" "hello"
+mkdb "$SE/csq/thread_history_1.sqlite" "{\"text\":\"use AK""IA$(upper 16)\"}"
+printf '#V2\nuse %s\n' "AK""IA$(upper 16)" | tee "$SE/groot/state/history.txt" "$SE/xs/goose/history.txt" > /dev/null
+HOME="$SE/new" XDG_STATE_HOME="" XDG_CONFIG_HOME="" GOOSE_PATH_ROOT="" CODEX_SQLITE_HOME="" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/new.block"
+has    "a key in Codex's thread history database and its -wal is found" 'Codex +2 files: AWS$' "$SE/new.block"
+has    "a key in Claude Desktop's sessions, there and in its Claude-3p mode, is found" 'Claude Desktop +2 files: AWS$' "$SE/new.block"
+has    "a key typed into Amazon Q is found"        'Amazon Q +1 file: AWS$' "$SE/new.block"
+has    "a key in Continue's chat log is found"     'Continue +1 file: AWS$' "$SE/new.block"
+has    "a key typed into Factory Droid is found"   'Factory Droid +1 file: AWS$' "$SE/new.block"
+has    "a key typed into Goose is found"           'Goose +1 file: AWS$' "$SE/new.block"
+has    "a key typed into Aider is found"           'Aider +1 file: AWS$' "$SE/new.block"
+has    "a key in Copilot CLI's session store and command history is found" 'GitHub Copilot CLI +2 files: AWS$' "$SE/new.block"
+HOME="$SE/cx1" CODEX_SQLITE_HOME="" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/cx1.txt" 2>&1
+has    "a place two lines name is counted once"   'No keys in 1 agent session file\.' "$SE/cx1.txt"
+HOME="$SE/gx" CODEX_SQLITE_HOME="$SE/csq" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/csq.txt" 2>&1
+has    "Codex's thread history under CODEX_SQLITE_HOME is found" 'Codex +1 file: AWS$' "$SE/csq.txt"
+mkdir -p "$SE/cdir/data/sessions/s1" "$SE/csd/s2"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cdir/data/sessions/s1/m.json"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/csd/s2/m.json"
+HOME="$SE/gx" CLINE_DIR="$SE/cdir" CLINE_SESSION_DATA_DIR="$SE/csd" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/cline.txt" 2>&1
+has    "Cline's sessions under CLINE_DIR and CLINE_SESSION_DATA_DIR are found" 'Cline +2 files: AWS$' "$SE/cline.txt"
+# VS Code and the other Electron apps keep their folders in XDG_CONFIG_HOME on Linux (a stand-in
+# uname says Linux here).
+mkdir -p "$SE/linbin" "$SE/xc/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/t1"
+printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Linux; else exec /usr/bin/uname "$@"; fi\n' > "$SE/linbin/uname"; chmod +x "$SE/linbin/uname"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/xc/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/t1/ui_messages.json"
+HOME="$SE/gx" XDG_CONFIG_HOME="$SE/xc" PATH="$SE/linbin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/xc.txt" 2>&1
+has    "on Linux, a VS Code extension's sessions under XDG_CONFIG_HOME are found" 'Cline +1 file: AWS$' "$SE/xc.txt"
+HOME="$SE/gx" GOOSE_PATH_ROOT="$SE/groot" XDG_STATE_HOME="$SE/xs" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/groot.block"
+has    "Goose's prompts under GOOSE_PATH_ROOT are found" 'groot/state/history\.txt$' "$SE/groot.block"
+has    "ahead of XDG_STATE_HOME"                    'Goose +1 file: AWS$' "$SE/groot.block"
+HOME="$SE/gx" GOOSE_PATH_ROOT="" XDG_STATE_HOME="$SE/xs" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/xs.txt" 2>&1
+has    "Goose's prompts under XDG_STATE_HOME are found" 'Goose +1 file: AWS$' "$SE/xs.txt"
 # A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
 mkdir -p "$SE/aidtab/code/a${_tab}b"
 printf '> export GROQ_API_KEY=%s\n' "gs""k_$(rnd 52)" > "$SE/aidtab/code/a${_tab}b/.aider.chat.history.md"
@@ -1044,6 +1132,7 @@ gen_refuses "a path with an unknown token"              indicators.tsv "mastra${
 gen_refuses "an ENV token with no fallback"             indicators.tsv "mastra${T}all${T}startup${T}no${T}{ENV:X}/x.cjs${T}note"
 gen_refuses "an ENV token whose fallback is not a path" indicators.tsv "mastra${T}all${T}startup${T}no${T}{ENV:X:y}/x.cjs${T}note"
 gen_refuses "a session path with an unknown token"      sessions.tsv "all${T}read${T}X${T}{FOO}/x${T}docs"
+gen_refuses "an ENV token alone whose fallback is the home folder" sessions.tsv "all${T}read${T}X${T}{ENV:X:~}${T}docs"
 gen_refuses "a planted file in another folder"          planted.tsv ".git${T}x.js${T}tanstack${T}note"
 gen_refuses "a planted file listed twice"               planted.tsv ".claude${T}setup.mjs${T}keyv${T}note"
 gen_refuses "an npm package with an unknown incident"   bad-npm.tsv "left-pad${T}1.0.0${T}nosuch"

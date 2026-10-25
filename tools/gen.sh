@@ -22,11 +22,12 @@ ACT_IDS=" $(rows data/incidents.tsv | awk -F '\t' '$6 == "act" { printf "%s ", $
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
 # A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
-# first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {PROGRAMDATA}, or {ENV:NAME:fallback} whose
-# fallback is ~ or a path), at least one folder or file after it, and nothing a shell or PowerShell
-# string would read as code, a glob or a separator. Anything else, such as a token the generators do
-# not know or {ENV:NAME} with no fallback, would come out as a PowerShell parse error or a bash "bad
-# substitution" for everyone, so it is refused.
+# first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {GOOSE_STATE}, {PROGRAMDATA}, or
+# {ENV:NAME:fallback} whose fallback is ~ or a path), at least one folder or file after it (an ENV
+# token may stand alone when its fallback is a folder below ~ or /: the variable names the place),
+# and nothing a shell or PowerShell string would read as code, a glob or a separator. Anything else,
+# such as a token the generators do not know or {ENV:NAME} with no fallback, would come out as a
+# PowerShell parse error or a bash "bad substitution" for everyone, so it is refused.
 PATH_OK='function path_ok(p,   r, k, v) {
     if (p ~ /[\047"`$|\\*?[;]/ || p ~ /\{ENV:[^}]*\{/) return 0
     if (p ~ /^\{ENV:/) {
@@ -35,8 +36,9 @@ PATH_OK='function path_ok(p,   r, k, v) {
       if (v !~ /^[A-Za-z_][A-Za-z0-9_]*:/) return 0
       v = substr(v, index(v, ":") + 1)
       if (v != "~" && v !~ /^~\/[^\/]/ && v !~ /^\/[^\/]/) return 0
+      if (r == "" && v != "~") return 1
     } else if (p ~ /^\{/) {
-      if (p !~ /^\{(AS|LOCALAPPDATA|XDG_DATA|GOOSE_DATA|PROGRAMDATA)\}/) return 0
+      if (p !~ /^\{(AS|LOCALAPPDATA|XDG_DATA|GOOSE_DATA|GOOSE_STATE|PROGRAMDATA)\}/) return 0
       r = substr(p, index(p, "}") + 1)
     } else if (p ~ /^~/) r = substr(p, 2)
     else if (p ~ /^\//) r = p
@@ -52,7 +54,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       # npm's placeholder for a removed package (0.0.1-security, or 0.0.1-security.0 for a few names) is never malware, and the scripts skip it.
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /^0\.0\.1-security(\.[0-9]+)?$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' "$PATH_OK"'
-        NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || !path_ok($4) { print "data/sessions.tsv: " $0 }'
+        NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|db|sealed)$/ || $3 ~ /[\047"`$|\\]/ || !path_ok($4) { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused. The os
       # column says where the malware of that version could run; elsewhere it is a version to update.
       rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(all|mac|linux|win)$/ { print "data/bad-pypi.tsv: " $0 }'
@@ -108,7 +110,7 @@ PATH_SH='function sh(p,   v, fb, rest, k) {
     }
     if (p ~ /^\{PROGRAMDATA\}/) return "${_pd:+$_pd" substr(p, 14) "}"
     sub(/^~/, "$H", p); sub(/^\{AS\}/, "$AS", p); sub(/^\{LOCALAPPDATA\}/, "$WLAPP", p)
-    sub(/^\{XDG_DATA\}/, "${XDG_DATA_HOME:-$H/.local/share}", p); sub(/^\{GOOSE_DATA\}/, "$GOOSE_DATA", p)
+    sub(/^\{XDG_DATA\}/, "${XDG_DATA_HOME:-$H/.local/share}", p); sub(/^\{GOOSE_DATA\}/, "$GOOSE_DATA", p); sub(/^\{GOOSE_STATE\}/, "$GOOSE_STATE", p)
     return p
   }'
 PATH_PS='function ps(p,   v, fb, rest, k, base) {
@@ -122,7 +124,8 @@ PATH_PS='function ps(p,   v, fb, rest, k, base) {
     else if (p ~ /^\{AS\}/) { base = "$AppData"; rest = substr(p, 5) }
     else if (p ~ /^\{LOCALAPPDATA\}/) { base = "$LocalAppData"; rest = substr(p, 15) }
     else if (p ~ /^\{XDG_DATA\}/) { base = "(Env-Or \047XDG_DATA_HOME\047 (J $HomeDir \047.local/share\047))"; rest = substr(p, 11) }
-    else if (p ~ /^\{GOOSE_DATA\}/) { base = "(J $AppData \047Block/goose/data\047)"; rest = substr(p, 13) }
+    else if (p ~ /^\{GOOSE_DATA\}/) { base = "$GooseData"; rest = substr(p, 13) }
+    else if (p ~ /^\{GOOSE_STATE\}/) { base = "$GooseState"; rest = substr(p, 14) }
     sub(/^\//, "", rest)
     return rest == "" ? base : "(J " base " \047" rest "\047)"
   }

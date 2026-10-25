@@ -81,13 +81,24 @@ if [ "$WIN" -eq 1 ]; then
   # follows the Windows layout rather than ~/.config.
   APP_CLAUDE="$WLAPP/AnthropicClaude"; APP_CURSOR="$WLAPP/Programs/cursor"
   APP_WINDSURF="$WLAPP/Programs/Windsurf"; APP_ANTIGRAVITY="$WLAPP/Programs/Antigravity"
-  GOOSE_CFG="$WAPP/Block/goose/config"; GOOSE_DATA="$WAPP/Block/goose/data"
+  GOOSE_CFG="$WAPP/Block/goose/config"; GOOSE_DATA="$WAPP/Block/goose/data"; GOOSE_STATE=$GOOSE_DATA
+  # Goose keeps its data and state under GOOSE_PATH_ROOT instead when that is an absolute path
+  # (crates/goose/src/config/paths.rs).
+  case "${GOOSE_PATH_ROOT:-}" in [A-Za-z]:[\\/]*) _gr=$(winpath "$GOOSE_PATH_ROOT"); GOOSE_DATA="${_gr%/}/data"; GOOSE_STATE="${_gr%/}/state" ;; esac
   PSRL="$WAPP/Microsoft/Windows/PowerShell/PSReadLine"
 else
   if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"; else AS="$H/.config"; fi
   APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
   APP_WINDSURF=/Applications/Windsurf.app; APP_ANTIGRAVITY=/Applications/Antigravity.app
-  GOOSE_CFG="$H/.config/goose"; GOOSE_DATA="$H/.local/share/goose"
+  GOOSE_CFG="$H/.config/goose"
+  # Goose keeps its data and state under GOOSE_PATH_ROOT when that is an absolute path, else in the
+  # XDG folders, on a Mac too, each taken only when absolute (crates/goose/src/config/paths.rs).
+  _gd=${XDG_DATA_HOME:-}; case "$_gd" in /*) ;; *) _gd="$H/.local/share" ;; esac
+  _gs=${XDG_STATE_HOME:-}; case "$_gs" in /*) ;; *) _gs="$H/.local/state" ;; esac
+  case "${GOOSE_PATH_ROOT:-}" in
+    /*) GOOSE_DATA="${GOOSE_PATH_ROOT%/}/data"; GOOSE_STATE="${GOOSE_PATH_ROOT%/}/state" ;;
+    *) GOOSE_DATA="$_gd/goose"; GOOSE_STATE="$_gs/goose" ;;
+  esac
   WAPP=""; WLAPP=""; WTEMP=""; PSRL=""
 fi
 
@@ -872,7 +883,7 @@ EOF
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
-       -o -name .aider.chat.history.md -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
+       -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        "${_pf[@]}" \) "${_ls[@]}" \) -o \
     \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
@@ -929,12 +940,19 @@ SCAN_T0=$SECONDS
 SESS_TABLE="all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/projects
 all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/history.jsonl
 all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/paste-cache
-mac|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
-win|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
+all|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
+linux|read|Claude Desktop|${XDG_CONFIG_HOME:-$H/.config}/Claude/local-agent-mode-sessions
 win|read|Claude Desktop|$WLAPP/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions
+all|read|Claude Desktop|$AS/Claude-3p/local-agent-mode-sessions
+linux|read|Claude Desktop|${XDG_CONFIG_HOME:-$H/.config}/Claude-3p/local-agent-mode-sessions
+win|read|Claude Desktop|$WLAPP/Claude-3p/local-agent-mode-sessions
 all|read|Codex|${CODEX_HOME:-$H/.codex}/sessions
 all|read|Codex|${CODEX_HOME:-$H/.codex}/archived_sessions
 all|read|Codex|${CODEX_HOME:-$H/.codex}/history.jsonl
+all|read|Codex|${CODEX_HOME:-$H/.codex}/thread_history_1.sqlite
+all|read|Codex|${CODEX_HOME:-$H/.codex}/thread_history_1.sqlite-wal
+all|read|Codex|${CODEX_SQLITE_HOME:-$H/.codex}/thread_history_1.sqlite
+all|read|Codex|${CODEX_SQLITE_HOME:-$H/.codex}/thread_history_1.sqlite-wal
 all|read|Gemini CLI|${GEMINI_CLI_HOME:-$H}/.gemini/tmp
 mac|read|Gemini CLI|$H/.cache/.gemini/tmp
 all|read|Qwen Code|${QWEN_HOME:-$H/.qwen}/projects
@@ -944,17 +962,25 @@ all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/opencode.db-wal
 all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/storage
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-state
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/history-session-state
+all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/command-history-state
+all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-store.db
 all|read|Roo Code|$AS/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
+linux|read|Roo Code|${XDG_CONFIG_HOME:-$H/.config}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 all|read|Roo Code|$AS/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks
+linux|read|Roo Code|${XDG_CONFIG_HOME:-$H/.config}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 all|read|Cline|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks
+linux|read|Cline|${XDG_CONFIG_HOME:-$H/.config}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks
 all|read|Cline|$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks
+linux|read|Cline|${XDG_CONFIG_HOME:-$H/.config}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks
 all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/sessions
 all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/tasks
+all|read|Cline|${CLINE_DIR:-$H/.cline}/data/sessions
+all|read|Cline|${CLINE_SESSION_DATA_DIR:-$H/.cline/data/sessions}
 all|read|Continue|${CONTINUE_GLOBAL_DIR:-$H/.continue}/sessions
+all|read|Continue|${CONTINUE_GLOBAL_DIR:-$H/.continue}/dev_data/0.2.0/chatInteraction.jsonl
 all|read|Goose|$GOOSE_DATA/sessions
-mac|read|Goose|$H/.local/state/goose/logs
-linux|read|Goose|$H/.local/state/goose/logs
-win|read|Goose|$GOOSE_DATA/logs
+all|read|Goose|$GOOSE_STATE/logs
+all|read|Goose|$GOOSE_STATE/history.txt
 all|read|Kiro CLI|${KIRO_HOME:-$H/.kiro}/sessions
 mac|read|Kiro CLI|$AS/kiro-cli
 linux|read|Kiro CLI|${XDG_DATA_HOME:-$H/.local/share}/kiro-cli
@@ -962,26 +988,46 @@ win|read|Kiro CLI|$WLAPP/kiro-cli
 mac|read|Amazon Q|$AS/amazon-q
 linux|read|Amazon Q|${XDG_DATA_HOME:-$H/.local/share}/amazon-q
 win|read|Amazon Q|$WLAPP/amazon-q
+all|read|Amazon Q|$H/.aws/amazonq/.cli_bash_history
 all|read|Factory Droid|$H/.factory/sessions
 all|read|Factory Droid|$H/.factory/projects
+all|read|Factory Droid|$H/.factory/state/history.json
 all|read|Cursor|$AS/Cursor/User/globalStorage/state.vscdb
+linux|read|Cursor|${XDG_CONFIG_HOME:-$H/.config}/Cursor/User/globalStorage/state.vscdb
 all|read|Cursor|$H/.cursor/projects
 all|read|Cursor|$H/.cursor/chats
 all|read|Windsurf|$H/.windsurf/transcripts
 all|read|Antigravity|$H/.gemini/antigravity/brain
 all|read|Antigravity|$H/.gemini/antigravity-cli/brain
 all|read|Antigravity|$H/.gemini/antigravity-ide/brain
+all|db|Antigravity|$H/.gemini/antigravity/conversations
+all|db|Antigravity|$H/.gemini/antigravity-cli/conversations
+all|db|Antigravity|$H/.gemini/antigravity-ide/conversations
 all|sealed|Windsurf|$H/.codeium/windsurf/cascade
 all|sealed|Antigravity|$H/.gemini/antigravity/conversations
 all|sealed|Antigravity|$H/.gemini/antigravity-cli/conversations
 all|sealed|Antigravity|$H/.gemini/antigravity-ide/conversations"
 # <<< sessions
 case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
-SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "read" { print $3 "|" $4 }')
-# Agents whose sessions are stored encrypted, named as not checked.
+SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && ($2 == "read" || $2 == "db") { print $3 "|" $4 }')
+# Folders whose .pb conversation files are stored encrypted: those files are counted and named as
+# not checked.
 SESS_SEALED=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && $2 == "sealed" { print $3 "|" $4 }')
 # Files and folders only: ripgrep reads a pipe or a device given as a root, and waits on it forever.
-SESS_ROOTS=$(printf '%s\n' "$SESS_SOURCES" | while IFS='|' read -r _a _p; do { [ -f "$_p" ] || [ -d "$_p" ]; } && printf '%s\n' "$_p"; done)
+# A db folder gives its SQLite files, *.db and their *.db-wal, and nothing else in it; one that
+# can't be listed is given as it is, so the engine names it as a folder not read. Such a file
+# whose name holds a newline can't be a root line and is left out: only the agent writes there.
+# Two lines can name one place (Codex's CODEX_HOME and CODEX_SQLITE_HOME when neither is set): it
+# is listed once.
+SESS_ROOTS=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && ($2 == "read" || $2 == "db") { print $2 "|" $4 }' | while IFS='|' read -r _k _p; do
+  if [ "$_k" = db ]; then
+    if [ -d "$_p" ] && { [ ! -r "$_p" ] || [ ! -x "$_p" ]; }; then printf '%s\n' "$_p"; continue; fi
+    for _f in "$_p"/*.db "$_p"/*.db-wal; do
+      case "$_f" in (*"$NL"*) continue ;; esac
+      [ -f "$_f" ] && printf '%s\n' "$_f"
+    done
+  else { [ -f "$_p" ] || [ -d "$_p" ]; } && printf '%s\n' "$_p"; fi
+done | awk '!seen[$0]++')
 # Lines without a key's start are skipped cheaply.
 SESS_PRE=$KEY_STARTS
 # A location given as a file is read as it is, following a link as ripgrep follows one, but only to
@@ -1187,7 +1233,7 @@ LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwra
 TASK_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv.
 WORM_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E "/($PLANTED_ERE)\$")
-AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
+AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.(chat\.history\.md|input\.history)$')
 # The project files of data/auto-approve.tsv, and every project's .vscode/settings.json (section 2).
 AA_FILES=""; AA_ERE=""
 if [ -n "$AA_PROJECT" ]; then
@@ -1198,7 +1244,7 @@ VSC_SETTINGS=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/settings\.json$')
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
-FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -2382,9 +2428,10 @@ fi
 case "$SESS_TOTAL" in ''|*[!0-9]*) SESS_TOTAL=0 ;; esac
 case "$SESS_UNREAD" in ''|*[!0-9-]*) SESS_UNREAD=0 ;; esac
 case "$SESS_UNREAD_FILES" in ''|*[!0-9]*) SESS_UNREAD_FILES=0 ;; esac
-# Aider keeps its history in each project, found by the home scan, and is checked here. The file
-# name and the match are cleaned of control characters as the perl engine cleans its own, so a
-# tab in a cloned repo's folder name can't shift the fields.
+# Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
+# in each project, found by the home scan, and they are checked here. The file name and the match
+# are cleaned of control characters as the perl engine cleans its own, so a tab in a cloned repo's
+# folder name can't shift the fields.
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   SESS_TOTAL=$((SESS_TOTAL + 1))
@@ -2402,7 +2449,7 @@ EOF
 # Code keeps sessions under one named after the project's full path), which would put a username
 # and a project into a report pasted into an issue.
 sess_where() { # file: sets S_AGENT and S_PLACE
-  case "$1" in */.aider.chat.history.md) S_AGENT=Aider; S_PLACE=$1; return ;; esac
+  case "$1" in */.aider.chat.history.md|*/.aider.input.history) S_AGENT=Aider; S_PLACE=$1; return ;; esac
   while IFS='|' read -r _a _p; do
     case "$1" in "$_p"|"$_p"/*) S_AGENT=$_a; S_PLACE=$_p; return ;; esac
   done <<EOF
@@ -2429,7 +2476,12 @@ fi
 # check was stopped), or a folder that could not be read.
 SESS_PARTIAL=0
 if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
-SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done | awk '!seen[$0]++')
+# The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
+# holds none (Antigravity's newer conversations are SQLite, read above) is never named.
+SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
+  [ -d "$_p" ] || continue
+  printf '%s|%s\n' "$_a" "$(find "$_p/" -type f -name '*.pb' -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')"
+done | awk -F '|' '$2 > 0 { if (!($1 in n)) o[++k] = $1; n[$1] += $2 } END { for (i = 1; i <= k; i++) print o[i] "|" n[o[i]] }')
 if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent session file" "agent session files")"; fi
 
 # --- What to do, and the score -----------------------------------------------
@@ -2818,7 +2870,12 @@ EOF
     wrap "Agent sessions were partly checked: some files or folders could not be read." 8 "     ${YEL}!${RST}  " "        "
   fi
   [ "$SESS_ZST" -gt 0 ] && wrap "$(plural "$SESS_ZST" "compressed session file was" "compressed session files were") not checked." 8 "     ${YEL}!${RST}  " "        "
-  [ -n "$SESS_SEALED_FOUND" ] && wrap "$(printf '%s' "$SESS_SEALED_FOUND" | tr '\n' ',' | sed -e 's/,$//' -e 's/,/ and /g') conversation files are encrypted, so they were not checked." 8 "        " "        " "$DIM"
+  if [ -n "$SESS_SEALED_FOUND" ]; then
+    _sn=$(printf '%s\n' "$SESS_SEALED_FOUND" | awk -F '|' '{ s += $2 } END { print s + 0 }')
+    _sa=$(printf '%s\n' "$SESS_SEALED_FOUND" | cut -d'|' -f1 | tr '\n' ',' | sed -e 's/,$//' -e 's/,/ and /g')
+    if [ "$_sn" -eq 1 ]; then _sv="conversation file is encrypted, so it was"; else _sv="conversation files are encrypted, so they were"; fi
+    wrap "$_sn $_sa $_sv not checked." 8 "        " "        " "$DIM"
+  fi
 fi
 
 SEC3=$CAP; CAP=""

@@ -55,3 +55,8 @@ rg: a long-term AWS key or another provider's in that database still counts	need
 rg: a session location that is a link to a file is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: and counted as read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: a link to a pipe or a device, or a pipe in a session folder, is not read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: Antigravity's SQLite conversations and their -wal files are read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: nothing else in that folder is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: its .pb files are counted and named as encrypted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a folder of SQLite conversations alone is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and never called encrypted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
