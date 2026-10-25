@@ -6245,19 +6245,124 @@ for _t in $NPM_TAGS; do
   if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
 done
 # A lockfile records what some machine resolved, not what ran here. An act-level hit was installed
-# when npm's cache or a global install has it, or node_modules next to the lockfile holds that
-# version. A hit in a lockfile alone (NPM_LOCKPROJ lists their folders) leaves the headline and the
-# fix depending on whether that project was installed; the score and the link stay as they are.
+# when npm's cache or a global install has it, or the place that lockfile's entry installs to holds
+# that version (lock_installed). A hit in a lockfile alone (NPM_LOCKPROJ lists their folders) leaves
+# the headline and the fix depending on whether that project was installed; the score and the link
+# stay as they are.
 pkg_version() { # package.json: its first "version"
   awk 'match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/) { v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); print v; exit }' "$1" 2>/dev/null
+}
+pkg_at() { [ -f "$1/package.json" ] && [ "$(pkg_version "$1/package.json")" = "$2" ]; } # folder version
+# The folders, relative to the lockfile, that npm's lockfile (its packages section, lockfile 2 and 3)
+# or bun's names for an entry: node_modules/a/node_modules/b, or a workspace's packages/w/node_modules/b.
+# bun's key is that path without the node_modules (a/b), and its value starts with the name@version.
+lock_paths() { # lockfile name version
+  awk -v N="$2" -v V="$3" '
+    FILENAME ~ /bun\.lock$/ {
+      if (!match($0, /^[[:space:]]*"[^"]+"[[:space:]]*:[[:space:]]*\[[[:space:]]*"[^"]*"/)) next
+      s = substr($0, RSTART, RLENGTH); k = s; sub(/^[[:space:]]*"/, "", k); sub(/".*$/, "", k)
+      v = s; sub(/^.*\[[[:space:]]*"/, "", v); sub(/"$/, "", v)
+      if (v != N "@" V) next
+      n = split(k, c, "/"); p = ""
+      for (i = 1; i <= n; i++) { s = c[i]; if (s ~ /^@/ && i < n) { i++; s = s "/" c[i] }; p = p (p == "" ? "" : "/") "node_modules/" s }
+      print p; next
+    }
+    match($0, /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/) {
+      k = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*"/, "", k); sub(/".*$/, "", k)
+      pend = ""; ok = 0
+      if (k ~ /(^|\/)node_modules\//) { pend = k; nm = k; sub(/^.*node_modules\//, "", nm); ok = (nm == N) }
+      next
+    }
+    pend != "" && match($0, /"name"[[:space:]]*:[[:space:]]*"[^"]*"/) {
+      x = substr($0, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x); if (x == N) ok = 1
+    }
+    pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]*"/) {
+      x = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x)
+      if (ok && x == V) print pend
+      pend = ""
+    }' "$1" 2>/dev/null
+}
+# node_modules folders nested in a project's, 16 levels deep: npm, yarn 1, yarn's node-modules linker,
+# bun and pnpm's hoisted layout all put a package in one. A linked package is followed only at the top,
+# where workspaces are linked, and a linked node_modules never.
+lock_nm_walk() { # project folder, name, version
+  _wq=("$1/node_modules"); _wl=0
+  while [ "${#_wq[@]}" -gt 0 ] && [ "$_wl" -lt 16 ]; do
+    _wn=()
+    for _wm in "${_wq[@]}"; do
+      pkg_at "$_wm/$2" "$3" && return 0
+      for _wc in "$_wm"/*/node_modules "$_wm"/@*/*/node_modules; do
+        [ -d "$_wc" ] && [ ! -L "$_wc" ] || continue
+        [ "$_wl" -eq 0 ] || [ ! -L "${_wc%/node_modules}" ] || continue
+        _wn+=("$_wc")
+      done
+    done
+    _wq=(${_wn[@]+"${_wn[@]}"}); _wl=$((_wl + 1))
+  done
+  return 1
+}
+# A cache zip of yarn 2 and later at that version: <name>-npm-<version>-<10 hex>-<checksum or cache
+# key>.zip, a scoped name written @scope-name (yarn's slugifyLocator and getVersionFilename).
+yarn_zip() { # folder, name as the file spells it, version
+  for _z in "$1/$2-npm-$3-"*.zip; do
+    [ -f "$_z" ] || continue
+    _zt=${_z##*/}; _zt=${_zt#"$2-npm-$3-"}; _zt=${_zt%.zip}
+    case "$_zt" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-?*) ;; *) continue ;; esac
+    case "${_zt#??????????-}" in *[!0-9a-z]*) continue ;; esac
+    return 0
+  done
+  return 1
+}
+# The shared cache yarn 4 uses unless a project turns it off: <global folder>/cache, the global folder
+# being %LOCALAPPDATA%/Yarn/Berry on Windows, $XDG_DATA_HOME/yarn/berry when that is set, or
+# ~/.yarn/berry (yarn's getDefaultGlobalFolder and enableGlobalCache).
+YARN_GCACHE="$H/.yarn/berry/cache"
+case "${XDG_DATA_HOME:-}" in /*) YARN_GCACHE="${XDG_DATA_HOME%/}/yarn/berry/cache" ;; esac
+[ "$WIN" -eq 1 ] && YARN_GCACHE="$WLAPP/Yarn/Berry/cache"
+# The offline mirror a .yarnrc names for yarn 1, resolved from that file's folder, as yarn resolves it.
+yarn_mirror() { # .yarnrc
+  fleet_ok "$1" && [ -f "$1" ] || return 1
+  _ym=$(awk 'match($0, /^[ \t]*"?yarn-offline-mirror"?[ \t]+/) { v = substr($0, RLENGTH + 1); sub(/[ \t\r]+$/, "", v); gsub(/^"|"$/, "", v); print v; exit }' "$1" 2>/dev/null)
+  [ "$WIN" -eq 1 ] && case "$_ym" in [A-Za-z]:[\\/]*) _ym=$(winpath "$_ym") ;; esac
+  case "$_ym" in ''|false) return 1 ;; /*) ;; *) _ym="${1%/*}/$_ym" ;; esac
+  printf '%s' "$_ym"
+}
+# Whether a lockfile's entry is installed where that lockfile puts it, at its version: the folder npm's
+# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm,
+# yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's offline mirror
+# when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz, a scoped name
+# written @scope-name (yarn 1's tarball-fetcher).
+lock_installed() { # lockfile name version
+  _ld=${1%/*}
+  [ "$3" != "?" ] || return 1
+  case "$1" in
+    */package-lock.json|*/npm-shrinkwrap.json|*/bun.lock)
+      while IFS= read -r _lp; do [ -n "$_lp" ] && pkg_at "$_ld/$_lp" "$3" && return 0; done <<EOF
+$(lock_paths "$1" "$2" "$3")
+EOF
+      ;;
+  esac
+  lock_nm_walk "$_ld" "$2" "$3" && return 0
+  case "$1" in
+    */pnpm-lock.yaml)
+      for _lp in "$_ld"/node_modules/.pnpm/*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done ;;
+    */yarn.lock)
+      _ly=$2; case "$2" in @*/*) _ly="${2%%/*}-${2#*/}" ;; esac
+      yarn_zip "$_ld/.yarn/cache" "$_ly" "$3" && return 0
+      yarn_zip "$YARN_GCACHE" "$_ly" "$3" && return 0
+      for _yr in "$_ld/.yarnrc" "$H/.yarnrc"; do
+        _ym=$(yarn_mirror "$_yr") || continue
+        [ -f "$_ym/$_ly-$3.tgz" ] && return 0
+      done ;;
+  esac
+  return 1
 }
 NPM_INST=0; NPM_LOCKPROJ=""
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
   case "$_f" in
     */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
-      _pj="${_f%/*}/node_modules/${_p% *}/package.json"
-      if [ -f "$_pj" ] && [ "$(pkg_version "$_pj")" = "${_p##* }" ]; then NPM_INST=1
+      if lock_installed "$_f" "${_p% *}" "${_p##* }"; then NPM_INST=1
       else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
 "; fi ;;
     *) NPM_INST=1 ;;

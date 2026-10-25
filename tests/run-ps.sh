@@ -922,6 +922,36 @@ _s1=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lko.txt"); _s2=$(grep -o '#v=2&s=[0-9]*&' 
 if [ -n "$_s1" ] && [ "$_s1" = "$_s2" ] && grep -q '&nm=1&' "$WORK/lko.txt"; then ok "a lockfile alone keeps the score and the link's nm"; else bad "a lockfile alone keeps the score and the link's nm" "${_s1:-no link} / ${_s2:-no link}"; fi
 has    "a bad version installed next to its lockfile is act-now" 'ACT NOW: SIGNS OF NPM MALWARE .*Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/lki.txt"
 has    "another version in node_modules leaves it depending on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lkd.txt"
+# Each entry is looked for where its lockfile installs it: the folder npm's lockfile names (nested, or a
+# workspace's own node_modules), a nested node_modules (yarn 1 here), bun's key, pnpm's node_modules/.pnpm,
+# a yarn 2 zip in the project's cache or the shared one yarn 4 uses, and the offline mirror a yarn 1
+# .yarnrc names. That version there is an install; another version in each place (miss) is not.
+LI=$WORK/li; rm -rf "$LI"
+for d in npm ws y1 bun pnpm pnp gc mir miss; do mkdir -p "$LI/$d/code/a" "$LI/$d/AppData/Roaming" "$LI/$d/AppData/Local/Temp"; done
+li_pkg() { mkdir -p "$1"; printf '{"name":"axios","version":"%s"}\n' "$2" > "$1/package.json"; }
+for d in npm miss; do printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.7.0"\n    },\n    "node_modules/foo": {\n      "version": "1.0.0"\n    },\n    "node_modules/foo/node_modules/axios": {\n      "version": "0.30.4"\n    }\n  }\n}\n' > "$LI/$d/code/a/package-lock.json"; done
+li_pkg "$LI/npm/code/a/node_modules/axios" 1.7.0; li_pkg "$LI/npm/code/a/node_modules/foo/node_modules/axios" 0.30.4; li_pkg "$LI/miss/code/a/node_modules/foo/node_modules/axios" 0.30.5
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "packages/web/node_modules/axios": {\n      "version": "0.30.4",\n      "resolved": "https://registry.npmjs.org/axios/-/axios-0.30.4.tgz"\n    }\n  }\n}\n' > "$LI/ws/code/a/package-lock.json"; li_pkg "$LI/ws/code/a/packages/web/node_modules/axios" 0.30.4
+for d in y1 miss; do mkdir -p "$LI/$d/code/y"; printf '# yarn lockfile v1\n\n\naxios@^0.30.0:\n  version "0.30.4"\n  resolved "https://registry.yarnpkg.com/axios/-/axios-0.30.4.tgz#ab"\n' > "$LI/$d/code/y/yarn.lock"; done
+li_pkg "$LI/y1/code/y/node_modules/foo/node_modules/axios" 0.30.4; li_pkg "$LI/miss/code/y/node_modules/foo/node_modules/axios" 0.30.3
+printf '{\n  "lockfileVersion": 1,\n  "packages": {\n    "axios": ["axios@1.7.0", "", {}, "sha512-x"],\n    "@scope/tool/axios": ["axios@0.30.4", "", {}, "sha512-y"],\n  }\n}\n' > "$LI/bun/code/a/bun.lock"; li_pkg "$LI/bun/code/a/node_modules/@scope/tool/node_modules/axios" 0.30.4
+for d in pnpm miss; do mkdir -p "$LI/$d/code/p"; printf "lockfileVersion: '9.0'\n\npackages:\n\n  axios@0.30.4:\n    resolution: {integrity: sha512-x}\n" > "$LI/$d/code/p/pnpm-lock.yaml"; done
+li_pkg "$LI/pnpm/code/p/node_modules/.pnpm/axios@0.30.4/node_modules/axios" 0.30.4; li_pkg "$LI/miss/code/p/node_modules/.pnpm/axios@0.30.40/node_modules/axios" 0.30.40
+for d in pnp gc miss; do mkdir -p "$LI/$d/code/b/.yarn/cache"; printf '__metadata:\n  version: 8\n\n"axios@npm:^1.14.0":\n  version: 1.14.1\n  resolution: "axios@npm:1.14.1"\n' > "$LI/$d/code/b/yarn.lock"; done
+: > "$LI/pnp/code/b/.yarn/cache/axios-npm-1.14.1-3f2a9b1c4d-10c0.zip"; : > "$LI/miss/code/b/.yarn/cache/axios-npm-1.14.1-rc.1-3f2a9b1c4d-10c0.zip"
+mkdir -p "$LI/gc/.yarn/berry/cache"; : > "$LI/gc/.yarn/berry/cache/axios-npm-1.14.1-3f2a9b1c4d-0a1b2c3d4e.zip"
+for d in mir miss; do mkdir -p "$LI/$d/code/m/offline"; printf '# yarn lockfile v1\n\n\naxios@^1.14.0:\n  version "1.14.1"\n  resolved "https://registry.yarnpkg.com/axios/-/axios-1.14.1.tgz#ab"\n' > "$LI/$d/code/m/yarn.lock"; printf 'yarn-offline-mirror "./offline"\n' > "$LI/$d/code/m/.yarnrc"; done
+: > "$LI/mir/code/m/offline/axios-1.14.1.tgz"; : > "$LI/miss/code/m/offline/axios-1.14.2.tgz"
+for d in npm ws y1 bun pnpm pnp gc mir miss; do psrun "$LI/$d" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LI/$d.txt"; done
+has    "an npm lockfile's nested entry installed where it names is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/npm.txt"
+has    "so is one in a workspace's own node_modules, as its lockfile names it" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/ws.txt"
+has    "a yarn 1 entry installed in a nested node_modules is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/y1.txt"
+has    "a bun lockfile's nested entry installed where its key says is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/bun.txt"
+has    "a pnpm entry in node_modules/.pnpm is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/pnpm.txt"
+has    "a yarn 2 entry's zip in the project's cache is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/pnp.txt"
+has    "so is its zip in the shared cache yarn 4 uses" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/gc.txt"
+has    "a yarn 1 entry's tarball in the offline mirror its .yarnrc names is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/mir.txt"
+has    "another version in each of those places is not an install" 'ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE' "$LI/miss.txt"
 # A lockfile the scan found but can't read leaves npm not fully checked, as an unreadable cache does.
 rm -rf "$WORK/lkr"; cp -R "$WORK/clean" "$WORK/lkr"; mkdir -p "$WORK/lkr/code/cloned"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/lkr/code/cloned/package-lock.json"

@@ -5601,17 +5601,127 @@ $NPM_HIT = 0; $NPM_UPD = 0
 $NpmTags = @($NpmRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } else { $NPM_UPD = 1 } }
 # A lockfile records what some machine resolved, not what ran here. An act-level hit was installed
-# when npm's cache or a global install has it, or node_modules next to the lockfile holds that
-# version. A hit in a lockfile alone ($LockProj holds their folders) leaves the headline and the fix
-# depending on whether that project was installed; the score and the link stay as they are.
+# when npm's cache or a global install has it, or the place that lockfile's entry installs to holds
+# that version (Lock-Installed). A hit in a lockfile alone ($LockProj holds their folders) leaves the
+# headline and the fix depending on whether that project was installed; the score and the link stay
+# as they are.
+function Pkg-At([string]$d, [string]$v) {
+  $pj = J $d 'package.json'; if (-not (Is-File $pj)) { return $false }
+  $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"')
+  $m.Success -and $m.Groups[1].Value -ceq $v
+}
+# The folders, relative to the lockfile, that npm's lockfile (its packages section, lockfile 2 and 3)
+# or bun's names for an entry: node_modules/a/node_modules/b, or a workspace's packages/w/node_modules/b.
+# bun's key is that path without the node_modules (a/b), and its value starts with the name@version.
+$RxBunKey = New-Object regex('^\s*"([^"]+)"\s*:\s*\[\s*"([^"]*)"')
+$RxLockOpen = New-Object regex('^\s*"([^"]*)"\s*:\s*\{')
+$RxLockName = New-Object regex('"name"\s*:\s*"([^"]*)"')
+$RxLockVer = New-Object regex('"version"\s*:\s*"([^"]*)"')
+function Lock-Paths([string]$f, [string]$n, [string]$v) {
+  try { $t = [IO.File]::ReadAllText($f) } catch { return }
+  $bun = $f.EndsWith('bun.lock', [StringComparison]::Ordinal); $pend = ''; $ok = $false
+  foreach ($l in $t.Split("`n")) {
+    if ($bun) {
+      $m = $RxBunKey.Match($l)
+      if ($m.Success -and $m.Groups[2].Value -ceq "$n@$v") {
+        $seg = $m.Groups[1].Value.Split('/'); $p = New-Object System.Collections.Generic.List[string]
+        for ($i = 0; $i -lt $seg.Count; $i++) { $s = $seg[$i]; if ($s.StartsWith('@') -and $i + 1 -lt $seg.Count) { $i++; $s = "$s/$($seg[$i])" }; $p.Add("node_modules/$s") }
+        $p -join '/'
+      }
+      continue
+    }
+    $m = $RxLockOpen.Match($l)
+    if ($m.Success) {
+      $k = $m.Groups[1].Value; $pend = ''; $ok = $false
+      if ($k -cmatch '(^|/)node_modules/') { $pend = $k; $ok = (($k -creplace '^.*node_modules/', '') -ceq $n) }
+      continue
+    }
+    if (-not $pend) { continue }
+    $m = $RxLockName.Match($l); if ($m.Success -and $m.Groups[1].Value -ceq $n) { $ok = $true }
+    $m = $RxLockVer.Match($l)
+    if ($m.Success) { if ($ok -and $m.Groups[1].Value -ceq $v) { $pend }; $pend = '' }
+  }
+}
+# node_modules folders nested in a project's, 16 levels deep: npm, yarn 1, yarn's node-modules linker,
+# bun and pnpm's hoisted layout all put a package in one. A linked package is followed only at the top,
+# where workspaces are linked, and a linked node_modules never.
+function Lock-NmWalk([string]$d, [string]$n, [string]$v) {
+  $q = @(J $d 'node_modules'); $lv = 0
+  while ($q.Count -gt 0 -and $lv -lt 16) {
+    $nq = New-Object System.Collections.Generic.List[string]
+    foreach ($m in $q) {
+      if (Pkg-At (J $m $n) $v) { return $true }
+      foreach ($c in (Glob-Dirs $m '*')) {
+        $cn = [IO.Path]::GetFileName($c); if ($cn.StartsWith('.')) { continue }
+        if ($cn.StartsWith('@')) { $kids = @(foreach ($k in (Glob-Dirs $c '*')) { if (-not [IO.Path]::GetFileName($k).StartsWith('.')) { $k } }) } else { $kids = @($c) }
+        foreach ($p in $kids) {
+          $pn = J $p 'node_modules'
+          if (-not (Is-Dir $pn)) { continue }
+          try { if (Is-Link (Get-Item -LiteralPath $pn -Force)) { continue }; if ($lv -gt 0 -and (Is-Link (Get-Item -LiteralPath $p -Force))) { continue } } catch { continue }
+          $nq.Add($pn)
+        }
+      }
+    }
+    $q = @($nq); $lv++
+  }
+  $false
+}
+# A cache zip of yarn 2 and later at that version: <name>-npm-<version>-<10 hex>-<checksum or cache
+# key>.zip, a scoped name written @scope-name (yarn's slugifyLocator and getVersionFilename).
+function Yarn-Zip([string]$dir, [string]$slug, [string]$v) {
+  if (-not (Is-Dir $dir)) { return $false }
+  try { $zs = [IO.Directory]::GetFiles($dir, "$slug-npm-$v-*.zip") } catch { return $false }
+  $rx = '^' + [regex]::Escape("$slug-npm-$v-") + '[0-9a-f]{10}-[0-9a-z]+\.zip\z'
+  foreach ($z in $zs) { if ([IO.Path]::GetFileName($z) -cmatch $rx) { return $true } }
+  $false
+}
+# The shared cache yarn 4 uses unless a project turns it off: <global folder>/cache, the global folder
+# being %LOCALAPPDATA%/Yarn/Berry on Windows, $XDG_DATA_HOME/yarn/berry when that is set, or
+# ~/.yarn/berry (yarn's getDefaultGlobalFolder and enableGlobalCache).
+$YarnGCache = J $HomeDir '.yarn/berry/cache'
+if ($env:XDG_DATA_HOME -and $env:XDG_DATA_HOME.StartsWith('/')) { $YarnGCache = J $env:XDG_DATA_HOME 'yarn/berry/cache' }
+if ($OnWindows) { $YarnGCache = J $LocalAppData 'Yarn/Berry/cache' }
+# The offline mirror a .yarnrc names for yarn 1, resolved from that file's folder, as yarn resolves it.
+function Yarn-Mirror([string]$rc) {
+  if (-not (Is-File $rc)) { return '' }
+  $t = Read-Text $rc; if ($null -eq $t) { return '' }
+  $m = [regex]::Match($t, '(?m)^[ \t]*"?yarn-offline-mirror"?[ \t]+([^\r\n]*)')
+  if (-not $m.Success) { return '' }
+  $mv = $m.Groups[1].Value.TrimEnd(); if ($mv.StartsWith('"')) { $mv = $mv.Substring(1) }; if ($mv.EndsWith('"')) { $mv = $mv.Substring(0, $mv.Length - 1) }
+  if (-not $mv -or $mv -ceq 'false') { return '' }
+  if ([IO.Path]::IsPathRooted($mv)) { return $mv }
+  J ([IO.Path]::GetDirectoryName($rc)) $mv
+}
+# Whether a lockfile's entry is installed where that lockfile puts it, at its version: the folder npm's
+# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm,
+# yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's offline mirror
+# when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz, a scoped name
+# written @scope-name (yarn 1's tarball-fetcher).
+function Lock-Installed([string]$f, [string]$n, [string]$v) {
+  if ($v -ceq '?') { return $false }
+  $ld = [IO.Path]::GetDirectoryName($f); $kind = [IO.Path]::GetFileName($f)
+  if ($kind -ceq 'package-lock.json' -or $kind -ceq 'npm-shrinkwrap.json' -or $kind -ceq 'bun.lock') {
+    foreach ($lp in @(Lock-Paths $f $n $v)) { if (Pkg-At (J $ld $lp) $v) { return $true } }
+  }
+  if (Lock-NmWalk $ld $n $v) { return $true }
+  if ($kind -ceq 'pnpm-lock.yaml') {
+    foreach ($x in (Glob-Dirs (J $ld 'node_modules/.pnpm') '*')) { if (Pkg-At (J (J $x 'node_modules') $n) $v) { return $true } }
+  } elseif ($kind -ceq 'yarn.lock') {
+    $slug = $n; if ($n.StartsWith('@') -and $n.Contains('/')) { $slug = $n.Replace('/', '-') }
+    if ((Yarn-Zip (J $ld '.yarn/cache') $slug $v) -or (Yarn-Zip $YarnGCache $slug $v)) { return $true }
+    foreach ($rc in @((J $ld '.yarnrc'), (J $HomeDir '.yarnrc'))) {
+      $mir = Yarn-Mirror $rc
+      if ($mir -and (Is-File (J $mir "$slug-$v.tgz"))) { return $true }
+    }
+  }
+  $false
+}
 $NpmInst = 0; $LockProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($r in $NpmRows) {
   if ((Incident-Level $r[2]) -ne 'act') { continue }
   if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
-    $isp = $r[1].LastIndexOf(' '); $ipn = $r[1].Substring(0, $isp); $ipv = $r[1].Substring($isp + 1)
-    $ipj = J (J (J ([IO.Path]::GetDirectoryName($r[0])) 'node_modules') $ipn) 'package.json'
-    $iiv = ''; if (Is-File $ipj) { $im = [regex]::Match([string](Read-Text $ipj), '"version"\s*:\s*"([^"]+)"'); if ($im.Success) { $iiv = $im.Groups[1].Value } }
-    if ($iiv -and $iiv -ceq $ipv) { $NpmInst = 1 } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
+    $isp = $r[1].LastIndexOf(' ')
+    if (Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)) { $NpmInst = 1 } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
   } else { $NpmInst = 1 }
 }
 $N_LOCKPROJ = $LockProj.Count
