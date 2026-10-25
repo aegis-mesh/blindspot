@@ -21,8 +21,10 @@
 # task named gh-token-monitor starts at logon). All seven carry the tanstack id, though four come only
 # from Socket's keyv post and one from Tensorlake's: the report and fleet mode name a wiper line as
 # gh-token-monitor, never as its incident.
-# Mastra: Socket. It also names the implant's config (~/.config/NodePackages/config.json on Linux, a
-# config.json beside protocal.cjs on Windows) and the loader's temp markers, .pkg_history and .pkg_logs:
+# Mastra: Socket, whose protocal.cjs is the implant itself, which its LaunchAgent, its systemd unit and,
+# on Windows, a Run key start at login. It also names the implant's config
+# (~/.config/NodePackages/config.json on Linux, a config.json beside protocal.cjs on Windows) and the
+# loader's temp markers, .pkg_history and .pkg_logs:
 # no kind fits them, since a config starts nothing and a temp line is a Python incident's hit (it gives
 # its incident a Python row in section 5), so they have no line.
 # mistralai: its advisory, which lists the file and a process started through it as signs.
@@ -54,10 +56,10 @@ tanstack	all	wiper	yes	/tmp/gh-token-monitor.err.log	-
 tanstack	win	wiper	no	{LOCALAPPDATA}/gh-token-monitor	-
 mastra	all	startup	no	~/Library/LaunchAgents/com.nvm.protocal.plist	starts the Mastra malware at login
 glassworm	all	startup	no	~/Library/LaunchAgents/com.user.nodestart.plist	starts the GlassWorm malware at login
-mastra	all	startup	no	~/Library/NodePackages/protocal.cjs	starts the Mastra malware at login
+mastra	all	startup	no	~/Library/NodePackages/protocal.cjs	the Mastra malware itself, set to run at every login
 mastra	all	startup	no	~/.config/systemd/user/nvmconf.service	starts the Mastra malware at login
-mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	starts the Mastra malware at login
-mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	starts the Mastra malware at login
+mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	the Mastra malware itself, set to run at every login
+mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	the Mastra malware itself, set to run at every login
 antv	all	startup	no	~/.config/systemd/user/kitty-monitor.service	starts the AntV wave's kitty-monitor backdoor at login
 antv	all	startup	no	~/Library/LaunchAgents/com.user.kitty-monitor.plist	starts the AntV wave's kitty-monitor backdoor at login
 antv	all	startup	no	~/.local/share/kitty/cat.py	the AntV wave's kitty-monitor backdoor, which its service starts at login

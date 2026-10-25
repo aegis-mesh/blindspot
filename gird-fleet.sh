@@ -192,10 +192,10 @@ tanstack|all|wiper|yes|/tmp/gh-token-monitor.err.log|-
 tanstack|win|wiper|no|$WLAPP/gh-token-monitor|-
 mastra|all|startup|no|$H/Library/LaunchAgents/com.nvm.protocal.plist|starts the Mastra malware at login
 glassworm|all|startup|no|$H/Library/LaunchAgents/com.user.nodestart.plist|starts the GlassWorm malware at login
-mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra malware at login
+mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|the Mastra malware itself, set to run at every login
 mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra malware at login
-mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra malware at login
-mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra malware at login
+mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|the Mastra malware itself, set to run at every login
+mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|the Mastra malware itself, set to run at every login
 antv|all|startup|no|$H/.config/systemd/user/kitty-monitor.service|starts the AntV wave's kitty-monitor backdoor at login
 antv|all|startup|no|$H/Library/LaunchAgents/com.user.kitty-monitor.plist|starts the AntV wave's kitty-monitor backdoor at login
 antv|all|startup|no|$H/.local/share/kitty/cat.py|the AntV wave's kitty-monitor backdoor, which its service starts at login

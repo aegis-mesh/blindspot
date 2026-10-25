@@ -749,6 +749,13 @@ has    "and the backdoor they start"                   '~/\.local/share/kitty/ca
 has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
 has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
 hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
+# Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
+# on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
+mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents"
+: > "$WORK/mst/Library/NodePackages/protocal.cjs"; : > "$WORK/mst/Library/LaunchAgents/com.nvm.protocal.plist"
+HOME="$WORK/mst" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mst.txt"
+has    "the Mastra implant is named as the malware itself" '~/Library/NodePackages/protocal\.cjs the Mastra malware itself, set to run at every login' "$WORK/mst.txt"
+has    "and its LaunchAgent as what starts it"         '~/Library/LaunchAgents/com\.nvm\.protocal\.plist starts the Mastra malware at login' "$WORK/mst.txt"
 # A command counts only when it runs the file: a guard in node -e code, a script given the file to
 # block, and a task whose first argument is another script are not malware; a task that runs node
 # on the file is.
