@@ -220,8 +220,8 @@ v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws; sessions 3;
 
 If it would be too long, it keeps each account's outcome and ends with `+more`. The full result is
 in `/var/db/blindspot/last.json`. The inventory field shows `stale: last run <time>` when the last run
-is older than `--stale-days`, `failed: the run started <time> did not finish` when a later run
-stopped part-way (your MDM's time limit, a restart), `none` before the first run, and `unreadable`
+is older than `--stale-days`, `failed: the run started <time> did not finish or could not save its
+result` when a later run stopped part-way (your MDM's time limit, a restart) or could not save, `none` before the first run, and `unreadable`
 when the saved file is not root's own. Treat each of those, and any outcome your MDM does not show,
 as not checked. An account whose name Blindspot does not read shows as `invalid-name`, not checked.
 
@@ -273,7 +273,8 @@ pieces whatever their size. A file or folder the account can't read counts as no
 holding nothing. With its fixed PATH, it looks for agents in the account's own install folders
 (`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. The
 gh-token-monitor logs in `/tmp`, which must be the person's own, count for the account that owns
-them, never for the Mac, and never through a link. `sudo` writes one line to the system log for each account.
+them, never for the Mac, and only as a regular file with one name: a symbolic or hard link there
+is not counted. `sudo` writes one line to the system log for each account.
 
 What root checks once for the Mac:
 

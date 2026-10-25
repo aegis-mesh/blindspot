@@ -245,6 +245,9 @@ real Mac.
   as a process left running; one that let go of the pipe is not seen.
 - A run as `bash /dev/fd/0 < gird-fleet.sh` reads its own source from a path that is not the file;
   it is not refused by name, and is left to the "run it from a file" and ownership checks.
+- The saved result has no lock. Two runs at once can make a finished run read `failed`; a step in
+  the clock can delay or hide `failed`; and a run that was killed leaves the previous result
+  reading as it was until the killed run's deadline passes.
 - Collecting results from many machines in one place. The result is for the MDM's own inventory.
 - Containers, servers and CI runners.
 
@@ -286,7 +289,7 @@ real Mac.
 - The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
   value, `stale: last run <time>` past `--stale-days` (3 by default, at most 30), `none` before the
   first run, `unreadable` when the saved file is not root's own 0600 file in a 0700 folder, and
-  `failed: the run started <time> did not finish` when a later run's start, saved as
+  `failed: the run started <time> did not finish or could not save its result` when a later run's start, saved as
   `/var/db/blindspot/attempt` with its deadline, is past that deadline with no newer result.
   `--result-tags` wraps it for Jamf Pro.
 - Deployment: the MDM installs both files once in `/Library/Application Support/Blindspot`
@@ -318,12 +321,12 @@ real Mac.
 - From an IT team's review of both files: an account name the account check does not read shows
   as `invalid-name` (not checked), so the inventory value stays readable; in an account run a file
   or folder the account can't read counts as not checked; markers that must be the person's own
-  (data/indicators.tsv) are the account's finding only, never the Mac's, and never through a link;
-  shared temp entries are looked at as links first and never followed; an `lsof` that does not
+  (data/indicators.tsv) are the account's finding only, never the Mac's, and only as a regular file with one name (no symbolic or hard link);
+  every path an account or admin could make is tested as a link first and never followed; an `lsof` that does not
   answer in time leaves the Mac's row not complete; agents in the account's own install folders
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A
-  normal run of `gird-check.sh` still counts a profile it can't read as no keys; that is a separate
-  issue, not changed here.
+  normal run of `gird-check.sh` still counts a profile it can't read as no keys:
+  https://github.com/aegis-mesh/blindspot/issues/24.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
 - Two files. `gird-fleet.sh` holds all the root work: the fixed PATH, the ownership checks, the
