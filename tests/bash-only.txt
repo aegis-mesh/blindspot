@@ -262,3 +262,14 @@ fleet: an update-level incident with a fix of its own shows that fix	gird-check.
 fleet: and --list only lists	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: an extension whose malware runs only on another system is one to remove	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: so its account is to review, not act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a TMPDIR that can't be written to still names the folder	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
+with no temp folder, the scan says it could not tell	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
+and the rows it feeds are not green either	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
+fleet: a platform found reads as its own summary	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: never that the account uses it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the JSON names the platforms found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a home of / is not checked, and keeps its reason	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a temp folder find that runs out of time leaves the Mac not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the report says what was not looked through	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: 20,000 marker names an account made cost root no time each	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

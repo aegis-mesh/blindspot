@@ -110,6 +110,32 @@ done
 SKIPPING=$NORG
 if diff -q "$SE/perl.block" "$SE/rg.block" >/dev/null; then ok "perl and ripgrep report the same"; else bad "perl and ripgrep report the same" "$(diff "$SE/perl.block" "$SE/rg.block" | head -n 6)"; fi
 SKIPPING=""
+# Amazon Bedrock keys. A short-term key's fixed start alone is text about keys: an agent that read
+# Blindspot's scripts keeps that text in its session. With the signed address after it, it is a key.
+# A long-term key holds + and /, and a 1 MB read must not end just after one of them, inside the key.
+BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
+mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
+cat gird-check.sh gird-check.ps1 gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+printf '{"t":"export AWS_BEARER_TOKEN_BEDROCK=%s%s end"}\n' "$BRS" "$(rnd 160)" > "$SE/brk/.claude/projects/p/s.jsonl"
+BRL="AB""SKQmVkcm9ja0FQSUtleS$(rnd 30)+$(rnd 69)"   # its + at 52, so a read that ends at 63 cuts there
+python3 -I -c 'import sys; k = sys.argv[1]; p = "{\"t\":\"" + "lorem ipsum " * 90000; p = p[:1048576 - 63]; open(sys.argv[2], "w").write(p + k + " end\"}\n")' "$BRL" "$SE/brl/.claude/projects/p/s.jsonl"
+# A pasted image is base64, which can hold AIza or r8_ with enough key characters after them: neither
+# is a key there. After = or a quote, each still is.
+mkdir -p "$SE/b64/.claude/projects/p" "$SE/b64k/.claude/projects/p"
+printf '{"type":"image","source":{"type":"base64","media_type":"image/png","data":"%sAIza%s%sr8_%s%s"}}\n' "$(rnd 400)" "$(rnd 35)" "$(rnd 300)" "$(rnd 37)" "$(rnd 400)" > "$SE/b64/.claude/projects/p/s.jsonl"
+printf '{"t":"GOOGLE_API_KEY=AIza%s and \\"r8_%s\\" end"}\n' "$(rnd 35)" "$(rnd 37)" > "$SE/b64k/.claude/projects/p/s.jsonl"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  for _c in brn brk brl b64 b64k; do HOME="$SE/$_c" PATH=/usr/bin:/bin GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/$_c-$E.txt" 2>&1; done
+  has    "$E: an agent that read Blindspot's scripts has no key in its session" 'No keys in 1 agent session file' "$SE/brn-$E.txt"
+  has    "$E: a Bedrock short-term key counts"     'Claude Code +1 file: AWS' "$SE/brk-$E.txt"
+  has    "$E: a Bedrock long-term key across a 1 MB read counts" 'Claude Code +1 file: AWS' "$SE/brl-$E.txt"
+  has    "$E: a pasted image's base64 holds no Google or Replicate key" 'No keys in 1 agent session file' "$SE/b64-$E.txt"
+  has    "$E: a Google key after = still counts"   'Claude Code +1 file: .*Google' "$SE/b64k-$E.txt"
+  has    "$E: a Replicate key after a quote still counts" 'Claude Code +1 file: .*Replicate' "$SE/b64k-$E.txt"
+done
+SKIPPING=""
 # Session files are listed by place, one row each with how many of its files had keys. A place is
 # the session folder an agent keeps, or the file when the location is one file.
 HFK="hf""_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu"
@@ -773,19 +799,40 @@ for i, x in enumerate(s):
     if x.startswith("Then rotate every key this machine could reach") and i and s[i - 1].startswith("First stop and remove gh-token-monitor"): continue
     print(x)' "$1"
 }
-cp -R "$WORK/home" "$WORK/wwait"; mkdir -p "$WORK/wwait/.config/zeabur" "$WORK/wwait/.railway"; printf '{}\n' > "$WORK/wwait/.railway/config.json"
-HOME="$WORK/wwait" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full --all-sessions > "$WORK/wwait.txt" 2>&1
-HOME="$WORK/wwait" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline --all-sessions >> "$WORK/wwait.txt" 2>&1
-_u=$(unwaited "$WORK/wwait.txt")
-if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sessions' "$WORK/wwait.txt" && [ -z "$_u" ]; then ok "with the wiper present, no rotate or revoke anywhere in the report goes without the wait"
-else bad "with the wiper present, no rotate or revoke anywhere in the report goes without the wait" "$(printf '%s' "${_u:-the fixture lost its sessions or platforms}" | head -n 3 | tr '\n' '|')"; fi
+cp -R "$WORK/home" "$WORK/wwait"; mkdir -p "$WORK/wwait/.config/zeabur" "$WORK/wwait/.railway" "$WORK/wwait-tmp"; printf '{}\n' > "$WORK/wwait/.railway/config.json"
+# Each Python incident's temp marker too, with advice of its own: LiteLLM's anywhere, mistralai's on Linux.
+: > "$WORK/wwait-tmp/.pc_once_1"; : > "$WORK/wwait-tmp/transformers.pyz"
+HOME="$WORK/wwait" TMPDIR="$WORK/wwait-tmp" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full --all-sessions > "$WORK/wwait.txt" 2>&1
+HOME="$WORK/wwait" TMPDIR="$WORK/wwait-tmp" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline --all-sessions >> "$WORK/wwait.txt" 2>&1
+HOME="$WORK/wwait" TMPDIR="$WORK/wwait-tmp" PATH="$WORK/fakebin:/usr/bin:/bin" bash "$SCRIPT" --offline --full >> "$WORK/wwait.txt" 2>&1
 tr -s ' \n' '  ' < "$WORK/wwait.txt" > "$WORK/wwait-flat.txt"
+_u=$(unwaited "$WORK/wwait.txt")
+if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sessions' "$WORK/wwait.txt" && grep -q 'LiteLLM says: rotate' "$WORK/wwait-flat.txt" &&
+   grep -q 'rotate all secrets it could reach' "$WORK/wwait-flat.txt" && [ -z "$_u" ]; then ok "with the wiper present, no rotate or revoke anywhere in the report goes without the wait"
+else bad "with the wiper present, no rotate or revoke anywhere in the report goes without the wait" "$(printf '%s' "${_u:-the fixture lost its sessions, platforms or temp markers}" | head -n 3 | tr '\n' '|')"; fi
 has    "the session keys wait for the wiper"         'Treat these keys as exposed and rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wwait-flat.txt"
+has    "and for SANDWORM_MODE's leftovers too"       'rotate them\. Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone' "$WORK/wwait-flat.txt"
 has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 HOME="$WORK/both" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
 has    "npm and LiteLLM malware together are both named" 'npm and LiteLLM malware found' "$WORK/both.txt"
+# SANDWORM_MODE without the wiper: its hooks would send a new npm token out, so section 3 waits for them.
+HOME="$WORK/both" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full --all-sessions 2>&1 | tr -s ' \n' '  ' > "$WORK/both-full.txt"
+has    "with SANDWORM_MODE's leftovers, the session keys wait for them" 'Treat these keys as exposed and rotate them\. Only once what section 5 says to remove first is gone' "$WORK/both-full.txt"
+hasnot "and nothing waits for a wiper that is not there" 'Only once gh-token-monitor' "$WORK/both-full.txt"
+# Windsurf has been Devin Desktop since June 2026, with its editor data under Devin: that use counts.
+mkdir -p "$WORK/devin/.codeium/windsurf" "$WORK/devin/Library/Application Support/Devin/User/workspaceStorage/w" "$WORK/devin/.config/Devin/User/workspaceStorage/w"
+printf '{}\n' > "$WORK/devin/Library/Application Support/Devin/User/workspaceStorage/w/state.json"; printf '{}\n' > "$WORK/devin/.config/Devin/User/workspaceStorage/w/state.json"
+HOME="$WORK/devin" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/devin.txt"
+has    "Windsurf's use as Devin Desktop counts"       'Windsurf +used in the last 30 days' "$WORK/devin.txt"
+# A pipe named like a file the scan reads is not a file: opening one would wait for a writer for ever.
+mkdir -p "$WORK/pipes/code/pp/.claude"; mkfifo "$WORK/pipes/code/pp/package-lock.json" "$WORK/pipes/code/pp/.env" "$WORK/pipes/code/pp/.claude/settings.json"
+HOME="$WORK/pipes" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/pipes.txt" 2>&1 & BP=$!
+_i=0; while kill -0 "$BP" 2>/dev/null && [ "$_i" -lt 600 ]; do sleep 0.1; _i=$((_i + 1)); done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; bad "a pipe named like a lockfile, .env or settings file is not opened" "the check did not finish in 60 s"
+else ok "a pipe named like a lockfile, .env or settings file is not opened"; fi
+wait "$BP" 2>/dev/null
 # LiteLLM alone still leads the summary.
 cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
 HOME="$WORK/lite" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
@@ -1052,6 +1099,12 @@ winrun() { # runs the script as Git Bash on Windows 11, x64, in Windows Terminal
 }
 winrun --offline > "$WORK/win.txt" 2>&1
 tr -s ' \n' '  ' < "$WORK/win.txt" > "$WORK/win1.txt"
+# gh-token-monitor on Windows: Git for Windows has no pkill, so the stop is PowerShell's, as gird-check.ps1 gives it.
+mkdir -p "$WP/.config/gh-token-monitor"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wwin.txt"
+rm -rf "${WP:?}/.config/gh-token-monitor"
+has    "Windows is told how to stop the wiper"         'Stop it with powershell -NoProfile -Command "Get-CimInstance Win32_Process .* Invoke-CimMethod -MethodName Terminate", then delete the files above' "$WORK/wwin.txt"
+hasnot "Windows is not given launchctl or systemctl"   'launchctl|systemctl|pkill' "$WORK/wwin.txt"
 has    "Windows: finds Claude Desktop in AppData"       'Claude Desktop +used in the last 30 days' "$WORK/win.txt"
 has    "Windows: finds Cursor and its use in AppData"   'Cursor +used in the last 30 days' "$WORK/win.txt"
 has    "Windows: finds Goose in its Windows config"     'Goose +installed' "$WORK/win.txt"
@@ -1416,8 +1469,13 @@ rm -rf "$WORK/ak"; cp -R "$WORK/clean" "$WORK/ak"; mkdir -p "$WORK/ak/.ssh" "$WO
 ln -s ../../.ssh/authorized_keys "$WORK/ak/code/a/plain.txt"; ln -s ../../.ssh/./authorized_keys "$WORK/ak/code/b/dot.txt"
 ln -s ../../.ssh//authorized_keys "$WORK/ak/code/c/dslash.txt"; ln -s ../../.ssh "$WORK/ak/code/repo/sshdir"; ln -s sshdir/authorized_keys "$WORK/ak/code/repo/keys.txt"
 ln -s ../../.SSH/Authorized_Keys "$WORK/ak/code/d/case.txt"; ln -s ../../.ssh/my_authorized_keys "$WORK/ak/code/e/other.txt"
+# Named like a settings or tasks file, which the scan reads, a link to it is still one to list.
+mkdir -p "$WORK/ak/code/f/.claude" "$WORK/ak/code/g/.vscode"
+ln -s ../../../.ssh/authorized_keys "$WORK/ak/code/f/.claude/settings.local.json"; ln -s ../../../.ssh/authorized_keys "$WORK/ak/code/g/.vscode/tasks.json"
 dzrun "$WORK/ak" | tr -s ' \n' '  ' > "$WORK/ak.txt"
 has    "a link to authorized_keys still counts"        '✗ ~/code/a/plain\.txt' "$WORK/ak.txt"
+has    "a link named like a settings file counts"     '✗ ~/code/f/\.claude/settings\.local\.json' "$WORK/ak.txt"
+has    "a link named like a tasks file counts"        '✗ ~/code/g/\.vscode/tasks\.json' "$WORK/ak.txt"
 has    "a link through ./ counts"                     '✗ ~/code/b/dot\.txt' "$WORK/ak.txt"
 has    "a link through // counts"                     '✗ ~/code/c/dslash\.txt' "$WORK/ak.txt"
 has    "a link through a linked folder counts"        '✗ ~/code/repo/keys\.txt' "$WORK/ak.txt"
@@ -1683,7 +1741,8 @@ hasnot "hostile folder names: no shell error" 'integer expected|bad substitution
 echo "folders the home scan can't read"
 # A folder that can't be read, holding a bad lockfile: it is named as not checked, and the rows the
 # home scan feeds are not green.
-rm -rf "$WORK/ud"; mkdir -p "$WORK/ud/code/locked/app"
+rm -rf "$WORK/ud"; mkdir -p "$WORK/ud/code/locked/app" "$WORK/ud/code/py/.venv/lib/python3.12/site-packages"
+printf 'home = /usr\n' > "$WORK/ud/code/py/.venv/pyvenv.cfg"   # a Python environment, so its rows show
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/ud/code/locked/app/package-lock.json"
 chmod 000 "$WORK/ud/code/locked"
 HOME="$WORK/ud" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud.txt"
@@ -1694,7 +1753,18 @@ has    "and the npm row is not green"                 'npm malware not fully che
 has    "and the keys row is not green"                'Keys in plain text none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
+has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
+# The scan keeps find's errors in a temp file: in /tmp when TMPDIR can't be written to, and with no temp
+# folder at all, it can't tell which folders it read, and says so.
+mkdir -p "$WORK/nomk"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomk/mktemp"; chmod +x "$WORK/nomk/mktemp"
+chmod 000 "$WORK/ud/code/locked"
+HOME="$WORK/ud" TMPDIR="$WORK/no-such-folder" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-t.txt"
+HOME="$WORK/ud" PATH="$WORK/nomk:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-nt.txt"
+chmod 755 "$WORK/ud/code/locked"
+has    "a TMPDIR that can't be written to still names the folder" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud-t.txt"
+has    "with no temp folder, the scan says it could not tell" 'No temp folder could be written to, so the home scan could not tell which folders it could not read' "$WORK/ud-nt.txt"
+has    "and the rows it feeds are not green either"   'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud-nt.txt"
 # A folder whose name holds a line break is not entered, so no part of a path under it is taken for a
 # file: it is named as not checked, and the rows the home scan feeds are not green.
 rm -rf "$WORK/nl"; mkdir -p "$WORK/nl/code/proj${_nl}x"
@@ -1945,7 +2015,7 @@ for h in asha itadmin clean upd linker odd shared keeper; do fl_home "$h"; done
 bash tests/make-fixture.sh "$FL/asha" "$FL/keys-asha.txt" > /dev/null; mkdir -p "$FL/asha/Library/Safari"
 # itadmin: one SSH key with no passphrase and nothing else; upd: the same, so it has something to review only.
 for h in itadmin upd; do
-  mkdir -p "$FL/$h/.ssh"; printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH PRIVATE KEY-----\n' > "$FL/$h/.ssh/id_ed25519"
+  mkdir -p "$FL/$h/.ssh"; printf -- '-----BEGIN OPENSSH ''PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH ''PRIVATE KEY-----\n' > "$FL/$h/.ssh/id_ed25519"
 done
 # A key in a file the linking account can't read, and links to it, to a system file and through a linked folder.
 KEYX="AK""IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)"; printf '%s\n' "$KEYX" >> "$FL/keys-asha.txt"
@@ -1997,6 +2067,10 @@ fl_run term
 has    "fleet: the readable report lists each account" '^  asha +act now$' "$FL/term.out"
 has    "fleet: and where the result was saved" "^  Saved: $FL/state/last.json\$" "$FL/term.out"
 hasnot "fleet: no Argus note without a terminal" 'gird\.ai/argus|Argus' "$FL/term.out"
+# OpenCode's CLI files are there, which is not to say the person used the hosted Console its breach hit.
+has    "fleet: a platform found reads as its own summary" '^    !  OpenCode found: got its breach email\? Rotate keys$' "$FL/term.out"
+hasnot "fleet: never that the account uses it"         'Uses a platform' "$FL/term.out"
+has    "fleet: the JSON names the platforms found"     '^asha\.platforms_found=opencode$' "$FL/two.flat"
 if command -v script > /dev/null 2>&1; then
   GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
     GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" script -q /dev/null "$FLBASH" "$FLEETSH" --all-users < /dev/null > "$FL/tty.out" 2>&1
@@ -2008,7 +2082,8 @@ hasnot "fleet: the readable report has no path or file name" '/|~|\.zshrc|\.env'
 
 # Which accounts: from fixtures.
 users "gone:$U:$FL/nothere:/bin/zsh" "linked:$U:$FL/homelink:/bin/zsh" "other:$((U + 1)):$FL/notmine:/bin/zsh" \
-      "first:$U:$FL/clean:/bin/zsh" "second:$U:$FL/clean:/bin/zsh" "noshell:$U:$FL/upd:/usr/bin/false" "sys:$U:/System:/bin/zsh"
+      "first:$U:$FL/clean:/bin/zsh" "second:$U:$FL/clean:/bin/zsh" "noshell:$U:$FL/upd:/usr/bin/false" "sys:$U:/System:/bin/zsh" \
+      "rooted:$U:/:/bin/zsh"
 fl_run list --list
 if grep -q '^first  *will be checked$' "$FL/list.out" && [ ! -s "$FL/argv.log" ]; then ok "fleet: --list says who will be checked, and checks nothing"; else bad "fleet: --list says who will be checked, and checks nothing" "$(cat "$FL/list.out" "$FL/argv.log")"; fi
 fl_run homes
@@ -2018,6 +2093,7 @@ has    "fleet: a home owned by another account is not checked" '^other\.not_chec
 has    "fleet: a home shared with an account above is not checked" '^second\.not_checked=home_shared$' "$FL/homes.flat"
 has    "fleet: an account with no login shell is not checked" '^noshell\.not_checked=no_login_shell$' "$FL/homes.flat"
 has    "fleet: a system folder as a home is not checked" '^sys\.not_checked=home_system$' "$FL/homes.flat"
+has    "fleet: a home of / is not checked, and keeps its reason" '^rooted\.not_checked=home_system$' "$FL/homes.flat"
 has    "fleet: the one good account is checked" '^first\.outcome=clear$' "$FL/homes.flat"
 if [ "$(grep -c . "$FL/argv.log")" -eq 1 ]; then ok "fleet: and only it is started"; else bad "fleet: and only it is started" "$(cat "$FL/argv.log")"; fi
 has    "fleet: accounts not checked make the run not_checked" '^outcome=not_checked$' "$FL/homes.flat"
@@ -2266,11 +2342,13 @@ rm -rf "$FL/usertmp-tm"
 
 # Project settings that act when a folder opens, a file named like a worm's, a version to update and
 # the gh-token-monitor wiper reach the account's row, as they reach the one-person report.
-for h in proj upd2 wip; do fl_home "$h"; done
-mkdir -p "$FL/proj/code/p/.claude" "$FL/proj/code/q/.claude" "$FL/upd2/Library/Python/3.9/lib/python/site-packages/mistralai-2.4.6.dist-info" "$FL/wip/Library/LaunchAgents"
+for h in proj upd2 wip wip1; do fl_home "$h"; done
+mkdir -p "$FL/proj/code/p/.claude" "$FL/proj/code/q/.claude" "$FL/upd2/Library/Python/3.9/lib/python/site-packages/mistralai-2.4.6.dist-info" "$FL/wip/Library/LaunchAgents" \
+  "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core" "$FL/wip1/.config/gh-token-monitor"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FL/proj/code/p/.claude/settings.json"
 : > "$FL/proj/code/q/.claude/setup.mjs"; : > "$FL/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
-users "proj:$U:$FL/proj:/bin/zsh" "upd2:$U:$FL/upd2:/bin/zsh" "wip:$U:$FL/wip:/bin/zsh"
+printf '{"name":"@tanstack/router-core","version":"1.169.5"}\n' > "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core/package.json"
+users "proj:$U:$FL/proj:/bin/zsh" "upd2:$U:$FL/upd2:/bin/zsh" "wip:$U:$FL/wip:/bin/zsh" "wip1:$U:$FL/wip1:/bin/zsh"
 fl_run rows --json
 has    "fleet: project settings that act when a folder opens reach the account's row" '^proj\.project_settings_on_open=1$' "$FL/rows.flat"
 has    "fleet: and a file named like the ones worms plant" '^proj\.files_to_read=1$' "$FL/rows.flat"
@@ -2278,6 +2356,9 @@ has    "fleet: so that account is to review" '^proj\.outcome=review$' "$FL/rows.
 has    "fleet: a package version to update reaches the account's row" '^upd2\.versions_to_update=mistralpy$' "$FL/rows.flat"
 has    "fleet: and that account is to review too" '^upd2\.outcome=review$' "$FL/rows.flat"
 has    "fleet: the gh-token-monitor wiper reaches the account's row" '^wip\.wiper=true$' "$FL/rows.flat"
+# It came with more than one wave (TanStack's in May, keyv's in August): alone, it is the wiper, not an incident.
+if grep -q '^wip1\.wiper=true$' "$FL/rows.flat" && grep -q '^wip1\.incidents=$' "$FL/rows.flat" && grep -q '^wip1\.outcome=act$' "$FL/rows.flat"; then ok "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm"
+else bad "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm" "$(grep '^wip1\.' "$FL/rows.flat" | tr '\n' ' ')"; fi
 users "wip:$U:$FL/wip:/bin/zsh"
 fl_run wipterm
 if awk '/gh-token-monitor is installed/ && !w { w = NR } /TanStack worm/ && !t { t = NR } END { exit !(w && t && w < t) }' "$FL/wipterm.out"; then ok "fleet: and stopping it comes before the incident's other advice"; else bad "fleet: and stopping it comes before the incident's other advice" "$(grep -n 'gh-token-monitor\|TanStack' "$FL/wipterm.out" | head -n 3)"; fi
@@ -2341,15 +2422,27 @@ if [ -e /tmp/gh-token-monitor.out.log ] || [ -L /tmp/gh-token-monitor.out.log ];
   skip "fleet: but a link there never counts" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
 else
   : > /tmp/gh-token-monitor.out.log; fl_run ownmark2; rm -f /tmp/gh-token-monitor.out.log
-  has  "fleet: and counts for the account that owns it" '^itadmin\.incidents=.*tanstack' "$FL/ownmark2.flat"
+  has  "fleet: and counts for the account that owns it" '^itadmin\.wiper=true$' "$FL/ownmark2.flat"
   : > "$FL/itadmin-file"; ln -s "$FL/itadmin-file" /tmp/gh-token-monitor.out.log; fl_run ownmark3; rm -f /tmp/gh-token-monitor.out.log
-  hasnot "fleet: but a link there never counts" '^itadmin\.incidents=.*tanstack' "$FL/ownmark3.flat"
+  hasnot "fleet: but a link there never counts" '^itadmin\.wiper=true$' "$FL/ownmark3.flat"
 fi
 # A machine check that does not answer in time leaves the Mac partly checked.
 users "clean:$U:$FL/clean:/bin/zsh"
 : > "$FL/sharedtmp/remote_code_loader.lock"; printf '#!/bin/sh\nexec /bin/sleep 60\n' > "$FL/slow-lsof"; chmod +x "$FL/slow-lsof"
 GIRD_CHECK_FLEET_LSOF="$FL/slow-lsof" fl_run slowlsof
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
+# The temp folder's names are looked for with timed finds: one that does not answer leaves the Mac partly
+# checked, and a folder an account filled with such names costs root no time for each.
+printf '#!/bin/sh\nexec /bin/sleep 60\n' > "$FL/slow-find"; chmod +x "$FL/slow-find"
+T0=$SECONDS; GIRD_CHECK_FLEET_FIND="$FL/slow-find" fl_run slowfind; T=$((SECONDS - T0))
+if grep -q '^machine\.complete=false$' "$FL/slowfind.flat" && ! grep -q '^outcome=clear$' "$FL/slowfind.flat" && [ "$T" -lt 55 ]; then ok "fleet: a temp folder find that runs out of time leaves the Mac not checked"
+else bad "fleet: a temp folder find that runs out of time leaves the Mac not checked" "${T}s; $(grep -E '^(machine|outcome)' "$FL/slowfind.flat" | tr '\n' ' ')"; fi
+has    "fleet: and the report says what was not looked through" 'Partly checked: the shared temp folder could not be looked through in time' "$FL/slowfind.out"
+: > "$FL/seed"; python3 -I -c 'import os, sys; [os.link(sys.argv[1], "%s/.pc_once_%d" % (sys.argv[2], i)) for i in range(20000)]' "$FL/seed" "$FL/sharedtmp"
+T0=$SECONDS; fl_run manymark --json; T=$((SECONDS - T0))
+python3 -I -c 'import glob, os, sys; [os.unlink(p) for p in glob.glob(sys.argv[1] + "/.pc_once_*")]' "$FL/sharedtmp"; rm -f "$FL/seed"
+if grep -q '^machine\.complete=true$' "$FL/manymark.flat" && ! grep -q '^machine\.incidents=.*litellm' "$FL/manymark.flat" && [ "$T" -lt 60 ]; then ok "fleet: 20,000 marker names an account made cost root no time each"
+else bad "fleet: 20,000 marker names an account made cost root no time each" "${T}s; $(grep '^machine' "$FL/manymark.flat" | tr '\n' ' ')"; fi
 if grep -q '^machine\.complete=false$' "$FL/slowlsof.flat" && ! grep -q '^outcome=clear$' "$FL/slowlsof.flat"; then ok "fleet: a machine check that runs out of time leaves the Mac not checked"; else bad "fleet: a machine check that runs out of time leaves the Mac not checked" "$(grep -E '^(machine|outcome)' "$FL/slowlsof.flat" | tr '\n' ' ')"; fi
 # A run the MDM stopped part-way is not hidden behind the last finished result.
 fl_run attempt1

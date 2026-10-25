@@ -99,8 +99,11 @@ it reports not checked. Leftover home folders with no account are not listed.
 
 Checked once, by root, and reported for the Mac, not for an account: the shared temp folder, startup
 items in shared folders, agents installed in shared folders (found by path, never run), and running
-processes. A malware marker found only in the shared temp folder is reported as a machine finding,
-because any account can create files there. What phase 1 checks of these is under "As built".
+processes. Any account can create files in the shared temp folder, so a malware marker there counts
+for the Mac only when root made it; one an account owns counts on that account's row. Shared install
+folders an account's check reads (npm's global folders outside the home, shared Python, Cursor's
+version in `/Applications`) show on every account's row. What phase 1 checks of these is under
+"As built".
 
 ## The result
 
@@ -281,9 +284,10 @@ real Mac.
   `--summary-to-stdout` prints the readable report, with the Argus note only on a terminal.
 - `--deadline` is 3000 seconds when not given, and the run aims to finish before it. Each account
   gets an equal share of the time left, less the 3 seconds a stop takes, so one stuck account spends
-  only its own share. A tenth of the deadline, at most 10 seconds, is kept in reserve for the steps
+  only its own share. A tenth of the deadline, at most 40 seconds, is kept in reserve for the steps
   outside the shares (the home folder checks, the machine check, saving), which can still overrun it
-  slightly.
+  slightly. The machine check is timed: its temp folder finds share 20 seconds, `lsof` gets 10, and
+  one that runs out leaves the Mac partly checked.
 - The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
   value, `stale: last run <time>` past `--stale-days` (3 by default, at most 30), `none` before the
   first run, `unreadable` when the saved file is not root's own 0600 file in a 0700 folder, and
@@ -312,7 +316,8 @@ real Mac.
   `/opt/homebrew/bin` are the machine's agents, found by path.
 - What root checks for the Mac in phase 1: apps in `/Applications` and agent commands in
   `/usr/local/bin` and `/opt/homebrew/bin`, by name; in the shared temp folder, the malware markers
-  `data/indicators.tsv` lists there, by name; whether a process holds the LiteLLM loader's lock file
+  `data/indicators.tsv` lists there, by name, with one timed `find` for each, so a folder an account
+  filled with such names costs root no time per file; whether a process holds the LiteLLM loader's lock file
   open (`lsof`), the only running process it looks at; and any startup file `data/indicators.tsv`
   lists outside a home folder, of which macOS has none today. Startup items in shared folders and
   other running processes are not checked yet.
@@ -322,8 +327,8 @@ real Mac.
   session check can't open, count as not checked; markers that must be the person's own
   (data/indicators.tsv) are the account's finding only, which its run looks for in `/tmp`, never the
   Mac's unless root made them, and never through a link, symbolic or hard;
-  shared temp entries are looked at as links first and never followed; an `lsof` that does not
-  answer in time leaves the Mac's row not complete; agents in the account's own install folders
+  shared temp entries are looked at as links first and never followed; a `find` or `lsof` that does
+  not answer in time leaves the Mac's row not complete; agents in the account's own install folders
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A
   normal run of `gird-check.sh` now names a key file it can't read and doesn't call the keys check
   clean over it.

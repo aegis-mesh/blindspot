@@ -99,7 +99,8 @@ Checked 2026-10-24:
 - Custom attribute scripts run every 8 hours. The value must be 20 KB or less; Blindspot's is at
   most 250 characters. A script that exits non-zero reads **Failed**.
 - Microsoft's guide does not say which account a custom attribute script runs as. The reader needs
-  root: if the **Result** column shows `needs root`, it did not run as root.
+  root: run as another account, it writes `needs root` to standard error and exits 13, so the
+  attribute gets no value and reads **Failed**.
 - Scripts need the Intune management agent, at `/Library/Intune/Microsoft Intune Agent.app`.
 
 ## Seeing all your Macs, all the time

@@ -131,14 +131,18 @@ for i, x in enumerate(s):
     if x.startswith("Then rotate every key this machine could reach") and i and s[i - 1].startswith("First stop and remove gh-token-monitor"): continue
     print(x)' "$1"
 }
-cp -R "$WORK/home" "$WORK/wwait"; mkdir -p "$WORK/wwait/.config/zeabur" "$WORK/wwait/.railway"; printf '{}\n' > "$WORK/wwait/.railway/config.json"
+cp -R "$WORK/home" "$WORK/wwait"; mkdir -p "$WORK/wwait/.config/zeabur" "$WORK/wwait/.railway" "$WORK/wwait/AppData/Local/Temp"; printf '{}\n' > "$WORK/wwait/.railway/config.json"
+# Each Python incident's temp marker too, with advice of its own: LiteLLM's anywhere, mistralai's on Linux.
+: > "$WORK/wwait/AppData/Local/Temp/.pc_once_1"; : > "$WORK/wwait/AppData/Local/Temp/transformers.pyz"
 psrun "$WORK/wwait" -- -Offline -Full -AllSessions > "$WORK/wwait.txt" 2>&1
 psrun "$WORK/wwait" GIRD_CHECK_COMPACT=1 -- -Offline -AllSessions >> "$WORK/wwait.txt" 2>&1
 _u=$(unwaited "$WORK/wwait.txt")
-if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sessions' "$WORK/wwait.txt" && [ -z "$_u" ]; then ok "with the wiper present, no rotate or revoke anywhere in the report goes without the wait"
+if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sessions' "$WORK/wwait.txt" && tr -s ' \n' '  ' < "$WORK/wwait.txt" | grep -q 'LiteLLM says: rotate' &&
+   [ -z "$_u" ]; then ok "with the wiper present, no rotate or revoke anywhere in the report goes without the wait"
 else bad "with the wiper present, no rotate or revoke anywhere in the report goes without the wait" "$(printf '%s' "${_u:-the fixture lost its sessions or platforms}" | head -n 3 | tr '\n' '|')"; fi
 tr -s ' \n' '  ' < "$WORK/wwait.txt" > "$WORK/wwait-flat.txt"
 has    "the session keys wait for the wiper"         'Treat these keys as exposed and rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wwait-flat.txt"
+has    "and for SANDWORM_MODE's leftovers too"       'rotate them\. Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone' "$WORK/wwait-flat.txt"
 has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1$' "$OUT"
 has    "uses the non-Mac Argus line"           'Argus, our free Mac app, shows what AI coding agents' "$OUT"
 hasnot "never offers the Argus download off a Mac" 'argus/download' "$OUT"
@@ -179,6 +183,32 @@ for E in net rg; do
 done
 SKIPPING=$NORG
 if diff -q "$SE/net.block" "$SE/rg.block" >/dev/null; then ok ".NET and ripgrep report the same"; else bad ".NET and ripgrep report the same" "$(diff "$SE/net.block" "$SE/rg.block" | head -n 6)"; fi
+SKIPPING=""
+# Amazon Bedrock keys. A short-term key's fixed start alone is text about keys: an agent that read
+# Blindspot's scripts keeps that text in its session. With the signed address after it, it is a key.
+# A long-term key holds + and /, and a 1 MB read must not end just after one of them, inside the key.
+BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
+mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
+cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+printf '{"t":"export AWS_BEARER_TOKEN_BEDROCK=%s%s end"}\n' "$BRS" "$(rnd 160)" > "$SE/brk/.claude/projects/p/s.jsonl"
+BRL="AB""SKQmVkcm9ja0FQSUtleS$(rnd 30)+$(rnd 69)"   # its + at 52, so a read that ends at 63 cuts there
+python3 -I -c 'import sys; k = sys.argv[1]; p = "{\"t\":\"" + "lorem ipsum " * 90000; p = p[:1048576 - 63]; open(sys.argv[2], "w").write(p + k + " end\"}\n")' "$BRL" "$SE/brl/.claude/projects/p/s.jsonl"
+# A pasted image is base64, which can hold AIza or r8_ with enough key characters after them: neither
+# is a key there. After = or a quote, each still is.
+mkdir -p "$SE/b64/.claude/projects/p" "$SE/b64k/.claude/projects/p"
+printf '{"type":"image","source":{"type":"base64","media_type":"image/png","data":"%sAIza%s%sr8_%s%s"}}\n' "$(rnd 400)" "$(rnd 35)" "$(rnd 300)" "$(rnd 37)" "$(rnd 400)" > "$SE/b64/.claude/projects/p/s.jsonl"
+printf '{"t":"GOOGLE_API_KEY=AIza%s and \\"r8_%s\\" end"}\n' "$(rnd 35)" "$(rnd 37)" > "$SE/b64k/.claude/projects/p/s.jsonl"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  for _c in brn brk brl b64 b64k; do psrun "$SE/$_c" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/$_c-$E.txt" 2>&1; done
+  has    "$E: an agent that read Blindspot's scripts has no key in its session" 'No keys in 1 agent session file' "$SE/brn-$E.txt"
+  has    "$E: a Bedrock short-term key counts"     'Claude Code +1 file: AWS' "$SE/brk-$E.txt"
+  has    "$E: a Bedrock long-term key across a 1 MB read counts" 'Claude Code +1 file: AWS' "$SE/brl-$E.txt"
+  has    "$E: a pasted image's base64 holds no Google or Replicate key" 'No keys in 1 agent session file' "$SE/b64-$E.txt"
+  has    "$E: a Google key after = still counts"   'Claude Code +1 file: .*Google' "$SE/b64k-$E.txt"
+  has    "$E: a Replicate key after a quote still counts" 'Claude Code +1 file: .*Replicate' "$SE/b64k-$E.txt"
+done
 SKIPPING=""
 bash tests/make-fixture.sh "$SE/bh" "$SE/bk" >/dev/null
 # --all-sessions: without it a fast machine can finish the rest first, stop the session check
@@ -956,6 +986,23 @@ has    "uv's cache: 2.4.6 itself is"                  'uv cache holds the 2\.4\.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 psrun "$WORK/both" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
 has    "npm and LiteLLM malware together are both named" 'npm and LiteLLM malware found' "$WORK/both.txt"
+# SANDWORM_MODE without the wiper: its hooks would send a new npm token out, so section 3 waits for them.
+psrun "$WORK/both" -- -Offline -Full -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/both-full.txt"
+has    "with SANDWORM_MODE's leftovers, the session keys wait for them" 'Treat these keys as exposed and rotate them\. Only once what section 5 says to remove first is gone' "$WORK/both-full.txt"
+hasnot "and nothing waits for a wiper that is not there" 'Only once gh-token-monitor' "$WORK/both-full.txt"
+# Windsurf has been Devin Desktop since June 2026, with its editor data under Devin: that use counts.
+mkdir -p "$WORK/devin/.codeium/windsurf" "$WORK/devin/AppData/Roaming/Devin/User/workspaceStorage/w" "$WORK/devin/AppData/Local/Temp"
+printf '{}\n' > "$WORK/devin/AppData/Roaming/Devin/User/workspaceStorage/w/state.json"
+psrun "$WORK/devin" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/devin.txt"
+has    "Windsurf's use as Devin Desktop counts"       'Windsurf +used in the last 30 days' "$WORK/devin.txt"
+# A pipe named like a file the scan reads is not a file: opening one would wait for a writer for ever.
+mkdir -p "$WORK/pipes/code/pp/.claude" "$WORK/pipes/AppData/Roaming" "$WORK/pipes/AppData/Local/Temp"
+mkfifo "$WORK/pipes/code/pp/package-lock.json" "$WORK/pipes/code/pp/.env" "$WORK/pipes/code/pp/.claude/settings.json"
+psrun "$WORK/pipes" -- -Offline > "$WORK/pipes.txt" 2>&1 & BP=$!
+_i=0; while kill -0 "$BP" 2>/dev/null && [ "$_i" -lt 600 ]; do sleep 0.1; _i=$((_i + 1)); done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; bad "a pipe named like a lockfile, .env or settings file is not opened" "the check did not finish in 60 s"
+else ok "a pipe named like a lockfile, .env or settings file is not opened"; fi
+wait "$BP" 2>/dev/null
 # LiteLLM alone still leads the summary.
 cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
 psrun "$WORK/lite" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
@@ -1019,7 +1066,8 @@ hasnot "hostile folder names: no shell error" 'Exception|ParserError|At line:|is
 echo "folders the home scan can't read"
 # A folder that can't be read, holding a bad lockfile: it is named as not checked, and the rows the
 # home scan feeds are not green.
-rm -rf "$WORK/ud"; mkdir -p "$WORK/ud/code/locked/app" "$WORK/ud/AppData/Roaming" "$WORK/ud/AppData/Local/Temp"
+rm -rf "$WORK/ud"; mkdir -p "$WORK/ud/code/locked/app" "$WORK/ud/AppData/Roaming" "$WORK/ud/AppData/Local/Temp" "$WORK/ud/code/py/.venv/lib/python3.12/site-packages"
+printf 'home = /usr\n' > "$WORK/ud/code/py/.venv/pyvenv.cfg"   # a Python environment, so its rows show
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/ud/code/locked/app/package-lock.json"
 chmod 000 "$WORK/ud/code/locked"
 psrun "$WORK/ud" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud.txt"
@@ -1030,6 +1078,7 @@ has    "and the npm row is not green"                 'npm malware not fully che
 has    "and the keys row is not green"                'Keys in plain text none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
+has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
 # A folder whose name holds a line break: gird-check.ps1 lists folders through .NET, so it reads the
 # files in it (gird-check.sh, which reads find's output a line at a time, names it as not checked).
@@ -1303,8 +1352,13 @@ rm -rf "$WORK/ak"; cp -R "$WORK/clean" "$WORK/ak"; mkdir -p "$WORK/ak/.ssh" "$WO
 ln -s ../../.ssh/authorized_keys "$WORK/ak/code/a/plain.txt"; ln -s ../../.ssh/./authorized_keys "$WORK/ak/code/b/dot.txt"
 ln -s ../../.ssh//authorized_keys "$WORK/ak/code/c/dslash.txt"; ln -s ../../.ssh "$WORK/ak/code/repo/sshdir"; ln -s sshdir/authorized_keys "$WORK/ak/code/repo/keys.txt"
 ln -s ../../.SSH/Authorized_Keys "$WORK/ak/code/d/case.txt"; ln -s ../../.ssh/my_authorized_keys "$WORK/ak/code/e/other.txt"
+# Named like a settings or tasks file, which the scan reads, a link to it is still one to list.
+mkdir -p "$WORK/ak/code/f/.claude" "$WORK/ak/code/g/.vscode"
+ln -s ../../../.ssh/authorized_keys "$WORK/ak/code/f/.claude/settings.local.json"; ln -s ../../../.ssh/authorized_keys "$WORK/ak/code/g/.vscode/tasks.json"
 dzrun "$WORK/ak" | tr -s ' \n' '  ' > "$WORK/ak.txt"
 has    "a link to authorized_keys still counts"        '✗ ~/code/a/plain\.txt' "$WORK/ak.txt"
+has    "a link named like a settings file counts"     '✗ ~/code/f/\.claude/settings\.local\.json' "$WORK/ak.txt"
+has    "a link named like a tasks file counts"        '✗ ~/code/g/\.vscode/tasks\.json' "$WORK/ak.txt"
 has    "a link through ./ counts"                     '✗ ~/code/b/dot\.txt' "$WORK/ak.txt"
 has    "a link through // counts"                     '✗ ~/code/c/dslash\.txt' "$WORK/ak.txt"
 has    "a link through a linked folder counts"        '✗ ~/code/repo/keys\.txt' "$WORK/ak.txt"

@@ -171,7 +171,7 @@ The install step has not yet been run end to end on a real Mac.
 
 Set `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the
 number. Each account gets an equal share of the time left, so one stuck account cannot hold up the
-rest. The run keeps a few seconds in reserve for its own steps, which sit outside the shares, so set
+rest. The run keeps up to 40 seconds in reserve for its own steps, which sit outside the shares, so set
 the deadline a little below the limit, not at it. Run from standard input instead of a file,
 `gird-fleet.sh` stops with `run it from a file`: it copies `gird-check.sh` from its own folder for
 each account.
@@ -196,9 +196,9 @@ Each run has one outcome, the worst of these, in this order:
 | Outcome | Means | Exit code |
 |---|---|---|
 | `failed` | The run could not finish safely, such as a changed script copy or a result it could not save. | 13 |
-| `act` | Something to act on now: malware signs (the gh-token-monitor wiper is named first), or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
+| `act` | Something to act on now: malware signs (the gh-token-monitor wiper is named first), files a worm plants in a project, npm malware listed only in a lockfile (act if that project was installed), a link to `~/.ssh/authorized_keys` outside `.ssh`, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
-| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, a file named like the ones worms plant, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
+| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, an editor extension to remove whose malware was made for another system, a file named like the ones worms plant, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
 | `clear` | Every account was checked in full and nothing was found. | 0 |
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
@@ -244,14 +244,16 @@ or revokes any key below: it runs a destructive command when a stolen token stop
 | Tokens in MCP configs | Replace them with environment variable references, then rotate them. |
 | Keys in Claude Code allow lists | Delete those saved commands and rotate the keys. |
 | Files a worm plants in a project | Treat the Mac as compromised, as for malware. |
+| A link to `~/.ssh/authorized_keys` outside `.ssh` | Delete the link: an agent that edits the linked file adds a login to the Mac. |
 | npm malware only in a lockfile | Ask whether they installed that project. If they did, treat the Mac as compromised; if not, update the lockfile to a version without it. |
 | An agent set to run without asking | Turn it off, unless the agent runs in a sandbox. |
 | A tool with a security fix, or a package version to update | Update it. |
+| An extension to remove | Uninstall it. Its malware was made for another system, so it did not run on this Mac. |
 | Project settings that act when a folder opens | Have them read those settings in each project section 2 of their report lists. |
 | Files named like the ones worms plant | Have them read the files section 2 lists, and delete any they didn't put there. |
 | An SSH key without a passphrase | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets | If they used it, rotate the keys stored there. |
-| A finding under "This Mac" | Found in the shared temp folder, which any account can write to, or a running LiteLLM loader. Treat the Mac as compromised. |
+| A finding under "This Mac" | Files root made in the shared temp folder, named like a malware's markers, or a running LiteLLM loader: the malware ran as root. Treat the Mac as compromised. |
 
 ## 6. Update or remove it
 
@@ -284,6 +286,11 @@ them, never for the Mac, and never through a link, symbolic or hard. It looks fo
 own temp folder, the one macOS gives each account under `/var/folders`, and in `/tmp` for the
 markers that must be the account's own. `sudo` writes one line to the system log for each account.
 
+Some folders outside the home are read by every account's check: npm's global folders in
+`/opt/homebrew/lib` and `/usr/local/lib`, shared Python environments, conda in `/opt`, and Cursor's
+version in `/Applications/Cursor.app`. A finding there shows on every account's row, and whoever can
+write to those folders (Homebrew's belong to the account that installed it) can put one there.
+
 What root checks once for the Mac:
 
 Apps in `/Applications`, and agent commands in `/usr/local/bin` and `/opt/homebrew/bin`, are found
@@ -291,7 +298,8 @@ by name and reported as the Mac's agents. In the shared temp folder, root looks 
 malware markers `data/indicators.tsv` lists, never through a link of either kind: a marker that must
 be a person's own counts for the Mac only when root made it, and one an account owns counts on that
 account's row instead, found by its own check. When root made the LiteLLM loader's lock file, root
-asks `lsof` whether a process holds it open. If `lsof`
+asks `lsof` whether a process holds it open. The temp folder's names are looked for with one timed
+`find` each, so a folder an account filled with such names cannot hold up the run. If `find` or `lsof`
 does not answer in time, the Mac reads partly checked. Those are the only running processes it looks at. It also looks by
 name for any startup file `data/indicators.tsv` lists outside a home folder; for macOS there are none
 today. Nothing in these places is read or run.

@@ -7,6 +7,10 @@
 set -eu
 cd "$(dirname "$0")/.."
 ROOT=$PWD
+# The fixture home decides every place the script looks, as in tests/run.sh: variables that move an
+# agent's folders elsewhere would put this machine's real paths in the images.
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
+  QWEN_HOME COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
 CHROME=${CHROME:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
 WORK=$(mktemp -d); MOCK=""
 trap '[ -n "$MOCK" ] && { kill "$MOCK"; wait "$MOCK"; } 2>/dev/null; rm -rf "$WORK"' EXIT

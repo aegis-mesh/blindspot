@@ -233,7 +233,7 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 $PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
 $KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 $KeyProviderFn = @'
@@ -604,6 +604,16 @@ function Is-AkLink([string]$dir, [string]$target) {
     return ($AkCaseless -and $base.Equals('authorized_keys', [StringComparison]::OrdinalIgnoreCase))
   } catch { return $false }
 }
+# On macOS and Linux a fifo, socket or device can carry a name the scan wants, and reading one blocks
+# or never ends: like bash's find -type f, only a regular file is taken (UnixMode from Get-Item, as
+# Is-PlainFile reads it; where PowerShell gives none, the file is taken as before).
+function Add-Plain($list, $e) {
+  if (-not $OnWindows) {
+    $m = ''; try { $m = [string](Get-Item -LiteralPath $e.FullName -Force -ErrorAction Stop).UnixMode } catch { }
+    if ($m -and -not $m.StartsWith('-')) { return }
+  }
+  $list.Add($e.FullName)
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
@@ -627,16 +637,16 @@ function Scan-Home([string]$dir, [int]$depth) {
     }
     if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or $isSettings -or
       ($name -ceq 'mcp.json' -and ($parent -ceq '.cursor' -or $parent -ceq '.vscode'))) {
-      $Found.Add($path)
+      Add-Plain $Found $e
       $script:ScanN++
       if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
-    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { $LockFiles.Add($path) }
-    elseif ($name -ceq '.aider.chat.history.md' -or $name -ceq '.aider.input.history') { $AiderFiles.Add($path) }
-    elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
-    elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
+    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { Add-Plain $LockFiles $e }
+    elseif ($name -ceq '.aider.chat.history.md' -or $name -ceq '.aider.input.history') { Add-Plain $AiderFiles $e }
+    elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { Add-Plain $TaskFiles $e }
+    elseif (Is-WormFile $parent $name) { Add-Plain $WormFiles $e }
     else {
-      if ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { $VscSettings.Add($path) }
-      if (Is-AaProject $path) { $AaFiles.Add($path) }
+      if ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { Add-Plain $VscSettings $e }
+      if (Is-AaProject $path) { Add-Plain $AaFiles $e }
     }
   }
 }
@@ -849,7 +859,7 @@ $SessWorker = {
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
   $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
   $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
-  $rxSep = New-Object regex('[^A-Za-z0-9_.\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
+  $rxSep = New-Object regex('[^A-Za-z0-9_.+/=\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
@@ -892,8 +902,8 @@ $SessWorker = {
     # An empty file holds nothing and is not opened, so a pipe an older PowerShell could not tell
     # from a file never holds the check up. Never a link: Windows gives a link's own size, 0.
     if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $st.Done++; continue }
-    # Read 1 MB at a time and cut just after the last character that can't be in a key or start an
-    # escape such as \n (a backslash never ends a piece), so a huge database file never loads at
+    # Read 1 MB at a time and cut just after the last character that can't be in a key (Bedrock's
+    # long-term keys hold + and /) or start an escape such as \n (a backslash never ends a piece), so a huge database file never loads at
     # once, a piece never ends inside a token unless one runs past 8 MB, and a stop is seen within
     # one piece.
     $sr = $null; $whole = $true
@@ -984,14 +994,16 @@ $ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 
 # --- 1. Coding agents --------------------------------------------------------
-# name | commands | install paths | folders that change when it is used | id
+# name | commands (separated by ;) | install paths | folders that change when it is used | id
+# Windsurf became Devin Desktop on 2 June 2026: the devin-desktop command, and editor data under Devin,
+# not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
   @('Codex', 'codex', @((J $HomeDir '.codex')), @((J $HomeDir '.codex/sessions')), 'codex'),
   @('Gemini CLI', 'gemini', @((J $HomeDir '.gemini')), @((J $HomeDir '.gemini/tmp')), 'gemini-cli'),
   @('Cursor', 'cursor', @((J $LocalAppData 'Programs/cursor'), (J $HomeDir '.cursor')), @((J $AppData 'Cursor/User/workspaceStorage')), 'cursor'),
-  @('Windsurf', 'windsurf', @((J $LocalAppData 'Programs/Windsurf'), (J $HomeDir '.codeium/windsurf')), @((J $AppData 'Windsurf/User/workspaceStorage')), 'windsurf'),
+  @('Windsurf', 'windsurf;devin-desktop', @((J $LocalAppData 'Programs/Windsurf'), (J $HomeDir '.codeium/windsurf')), @((J $AppData 'Windsurf/User/workspaceStorage'), (J $AppData 'Devin/User/workspaceStorage')), 'windsurf'),
   @('Antigravity', 'antigravity', @((J $LocalAppData 'Programs/Antigravity')), @((J $AppData 'Antigravity/User/workspaceStorage')), 'antigravity'),
   @('GitHub Copilot CLI', 'copilot', @((J $HomeDir '.copilot')), @((J $HomeDir '.copilot')), 'copilot-cli'),
   @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
@@ -1007,7 +1019,7 @@ $IdleNames = New-Object System.Collections.Generic.List[string]; $IdleIds = New-
 $Since = [DateTime]::UtcNow.AddDays(-30)
 foreach ($a in $Agents) {
   $inst = $false
-  if ($a[1] -and (Has-Command $a[1])) { $inst = $true }
+  foreach ($agCmd in ($a[1] -split ';')) { if ($agCmd -and (Has-Command $agCmd)) { $inst = $true } }
   foreach ($p in $a[2]) { if (Exists $p) { $inst = $true } }
   if (-not $inst) { continue }
   $AgentIds.Add($a[4]); $AgNames.Add($a[0])
@@ -2683,6 +2695,15 @@ function Add-Advice([string]$mode) {
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
 $HasFirstFix = @(foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) { if ((Incident-Level $t) -eq 'act' -and (Incident-Advice $t).StartsWith('First ', [StringComparison]::Ordinal)) { $t } }).Count -gt 0
+# A rotate in a section also waits for what an act-level incident says to remove first ($HasFirstFix:
+# SANDWORM_MODE's pre-push hook would send a new npm token out on the next push). The fix list puts
+# that fix ahead of every rotate instead, so its own fixes need no wait for it.
+function Rotate-Wait([string]$text) {
+  if ($text.StartsWith("Don't revoke") -or $text.StartsWith('First ', [StringComparison]::Ordinal) -or $text -cnotmatch '[Rr]otate|[Rr]evoke') { return $text }
+  if ($HasFirstFix -and $WIPER_HIT -eq 1) { return "$text Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone." }
+  if ($HasFirstFix) { return "$text Only once what section 5 says to remove first is gone." }
+  Wiper-Wait $text
+}
 if ($WIPER_HIT -eq 1 -and $HasFirstFix) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working.' }
 elseif ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
 Add-Advice 'first'
@@ -2987,7 +3008,7 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
       Emit ("        $cDim" + $d.PadRight($fw) + '  ' + (Plural $sessPlaceN[$g] 'file' 'files').PadLeft($cw) + $cRst)
     }
     if ($N_PLACES -gt 20) { Emit "        ${cDim}and $($N_PLACES - 20) more$cRst" }
-    Wrap (Wiper-Wait 'Treat these keys as exposed and rotate them.') 8 '        ' '        '
+    Wrap (Rotate-Wait 'Treat these keys as exposed and rotate them.') 8 '        ' '        '
   }
   $allTxt = 'Install ripgrep, or add -AllSessions, to check all of them.'
   if ($SESS_NOTRUN -gt 0) {
@@ -3061,7 +3082,7 @@ foreach ($pi in $PyIncidents) {
     foreach ($u in $upd) { Emit "        $(Short $u[2])"; $osn = Os-Name $u[1]; if ($oss -notcontains $osn) { $oss += $osn } }
     $do = (@($do, "Its malware runs on $($oss -join ' and ') only, so it did not run here. Update to a version without it.") | Where-Object { $_ }) -join ' '
   }
-  if ($do) { Wrap "$(Wiper-Wait $do) Advisory: $(Incident-Source $pi)" 8 '        ' '        ' }
+  if ($do) { Wrap "$(Rotate-Wait $do) Advisory: $(Incident-Source $pi)" 8 '        ' '        ' }
   foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
 }
 if ($WIPER_HIT -eq 1) {
@@ -3157,7 +3178,7 @@ if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0 -or $ExtUpd.
 foreach ($p in $Platforms) {
   if ($PlatFound -contains $p.Id) {
     Pair "$cYel!$cRst" $p.Name 16 $p.Found
-    Wrap (Wiper-Wait $p.Advice) 26 $ind26 $ind26 $cDim
+    Wrap (Rotate-Wait $p.Advice) 26 $ind26 $ind26 $cDim
   } else {
     if ($p.Found.EndsWith(' found')) { $w = $p.Found.Substring(0, $p.Found.Length - 6) + ' not found' } else { $w = 'not ' + $p.Found }
     Pair "$cDim$gMid$cRst" $p.Name 16 "$cDim$w$cRst"

@@ -116,7 +116,7 @@ NL=$'\n'
 # The places the tables below name, for an account that is not there: root reads none of them.
 H=/var/empty; AS="$H/Library/Application Support"; WIN=0; _os=mac; _pd=""; WLAPP=""
 APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
-APP_WINDSURF=/Applications/Windsurf.app; APP_ANTIGRAVITY=/Applications/Antigravity.app
+APP_WINDSURF=/Applications/Windsurf.app; APP_ANTIGRAVITY=/Applications/Antigravity.app; APP_DEVIN=/Applications/Devin.app
 GOOSE_CFG="$H/.config/goose"; GOOSE_DATA="$H/.local/share/goose"
 unset CLAUDE_CONFIG_DIR CODEX_HOME
 : "$WIN" "$_os" "$_pd" "$WLAPP" "$GOOSE_CFG" "$GOOSE_DATA"
@@ -125,7 +125,7 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME
 # The tables gird-check.sh checks with, written here by tools/gen.sh: never edit them here.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
 KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
@@ -161,7 +161,7 @@ Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
 Gemini CLI|gemini|$H/.gemini|$H/.gemini/tmp|gemini-cli
 Cursor|cursor|$APP_CURSOR;$H/.cursor|$AS/Cursor/User/workspaceStorage|cursor
-Windsurf|windsurf|$APP_WINDSURF;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage|windsurf
+Windsurf|windsurf;devin-desktop|$APP_WINDSURF;$APP_DEVIN;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage;$AS/Devin/User/workspaceStorage|windsurf
 Antigravity|antigravity|$APP_ANTIGRAVITY|$AS/Antigravity/User/workspaceStorage|antigravity
 GitHub Copilot CLI|copilot|$H/.copilot|$H/.copilot|copilot-cli
 OpenCode|opencode|$H/.config/opencode;$H/.local/share/opencode|$H/.local/share/opencode|opencode
@@ -224,18 +224,19 @@ zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that
 # Fleet mode, the root side (docs/designs/fleet-mode.md). Root lists the accounts, checks the
 # Mac's shared places, starts one account run at a time as that account, and builds every row
 # itself from lines it has checked. It calls every tool by its full path.
-# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo and lsof. They are
-# read only when the script is not running as root.
+# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof and find. They
+# are read only when the script is not running as root.
 # ===========================================================================
 FL_STATE=/var/db/blindspot; FL_USERS=""; FL_LAUNCH=""; FL_OWNER=0; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
+FL_FIND=/usr/bin/find
 if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
   FL_STATE=${GIRD_CHECK_FLEET_STATE:-$FL_STATE}; FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
   FL_SHARED_TMP=${GIRD_CHECK_FLEET_SHARED_TMP:-$FL_SHARED_TMP}; FL_LSOF=${GIRD_CHECK_FLEET_LSOF:-$FL_LSOF}
-  FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}; FL_OWNER=$EUID
+  FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}; FL_OWNER=$EUID
 fi
 FL_PATH=/usr/bin:/bin:/usr/sbin:/sbin
 FL_OUT_MAX=4096                 # bytes root reads from one account run
-FL_TAB=$(printf '\t'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
+FL_US=$(printf '\037'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
 fl_cleanup() {
   [ -n "$FL_TMP" ] && /bin/rm -rf -- "$FL_TMP"
   [ -n "$FL_COPYDIR" ] && /bin/rm -rf -- "$FL_COPYDIR"
@@ -249,6 +250,8 @@ FL_N=0
 fl_timed() {
   _tl=$1; _to=$2; shift 3
   FL_N=$((FL_N + 1)); _tp="$FL_TMP/p$FL_N"; FL_TIMEOUT=0; FL_LEFT=0
+  # A pipe that can't be made leaves OUT empty, never the last command's output.
+  /bin/rm -f -- "$_to"
   /usr/bin/mkfifo -m 600 "$_tp" || return 1
   set -m
   /usr/bin/head -c $((FL_OUT_MAX + 1)) < "$_tp" > "$_to" 2>/dev/null &
@@ -285,13 +288,14 @@ fl_list_raw() { # name<TAB>uid<TAB>home<TAB>shell for every account
     printf '%s\t%s\t%s\t%s\n' "$_n" "$_u" "$(fl_dscl "$_n" NFSHomeDirectory)" "$(fl_dscl "$_n" UserShell)"
   done
 }
-# The accounts to check, each with why it is or is not checked: name<TAB>uid<TAB>home<TAB>reason,
-# where reason is "ok" or a fixed word. System accounts (UID below 500, a name starting with _)
+# The accounts to check, each with why it is or is not checked: name, uid, home and reason, where
+# reason is "ok" or a fixed word, split by the unit separator (FL_US), which unlike a TAB keeps an
+# empty field a field when read. System accounts (UID below 500, a name starting with _)
 # are left out. A home that does not answer in time is not checked; so is one shared with an
 # account already listed.
 fl_accounts() {
   _seen="|"
-  fl_list_raw | while IFS="$FL_TAB" read -r _n _u _h _s; do
+  fl_list_raw | /usr/bin/tr '\t' '\037' | while IFS="$FL_US" read -r _n _u _h _s; do
     case "$_n" in _*|'') continue ;; esac
     case "$_u" in ''|*[!0-9]*) continue ;; esac
     [ "$_u" -ge 500 ] || continue
@@ -331,7 +335,8 @@ fl_accounts() {
         fi
       fi
     fi
-    printf '%s\t%s\t%s\t%s\n' "$_n" "$_u" "$_h" "$_r"
+    [ "$_r" = ok ] || _h=""   # a home is read only for an account that is checked
+    printf '%s\037%s\037%s\037%s\n' "$_n" "$_u" "$_h" "$_r"
   done
 }
 fl_reason_text() {
@@ -446,7 +451,7 @@ fl_plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s
 
 # The Mac's shared places, checked once, by root, by name only: nothing in them is read or run.
 fl_machine() {
-  FM_AGENTS=""; FM_INC=""; FM_COMPLETE=true
+  FM_AGENTS=""; FM_INC=""; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + 20))
   while IFS='|' read -r _nm _bins _paths _acts _id; do
     [ -n "$_nm" ] || continue
     _hit=0; _ifs=$IFS; IFS=';'
@@ -460,15 +465,18 @@ EOF
   while IFS='|' read -r _ii _io _ik _iown _ip _in; do
     case "$_io" in all|mac) ;; *) continue ;; esac
     case "$_ik" in
-      temp) # shellcheck disable=SC2086  # the name may end in a glob
+      temp)
         # Never through a link, which any account can make. A marker that must be someone's own counts
         # for the Mac only when root made it, under its one name; one an account owns is that
-        # account's finding, which its own run looks for in /tmp.
-        for _m in "$FL_SHARED_TMP"/$_ip; do
-          [ -e "$_m" ] && [ ! -L "$_m" ] || continue
-          if [ "$_iown" = yes ] && [ "$(/usr/bin/stat -f '%u %l' "$_m" 2>/dev/null)" != "$FL_OWNER 1" ]; then continue; fi
-          FM_INC="$FM_INC $_ii"; break
-        done ;;
+        # account's finding, which its own run looks for in /tmp. A find for each name, all of them
+        # within 20 seconds: any account can fill the folder with such names, and they must not cost
+        # root a step each.
+        _tl=$((_tend - SECONDS)); [ "$_tl" -ge 1 ] || { _late=1; continue; }
+        set -- -name "$_ip" ! -type l
+        [ "$_iown" = yes ] && set -- "$@" -user "$FL_OWNER" -links 1
+        fl_timed "$_tl" "$FL_TMP/marker" -- "$FL_FIND" "$FL_SHARED_TMP/" -mindepth 1 -maxdepth 1 "$@" -print -quit || FL_TIMEOUT=1
+        [ -s "$FL_TMP/marker" ] && FM_INC="$FM_INC $_ii"
+        [ "$FL_TIMEOUT" -eq 1 ] && _late=1 ;;
       wiper|startup)
         # A marker that must be the person's own (data/indicators.tsv) is each account's own
         # finding, checked by its account run; any account could leave one in a shared folder.
@@ -479,13 +487,14 @@ EOF
   done <<EOF
 $IND_TABLE
 EOF
+  [ "$_late" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="the shared temp folder could not be looked through in time"; }
   # The LiteLLM loader holds its lock file open while it runs.
   _lk="$FL_SHARED_TMP/remote_code_loader.lock"
   # Only a lock file root made: one an account owns is that account's marker, found by its own run.
   if [ -f "$_lk" ] && [ ! -L "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
-    fl_timed 10 "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk"
+    fl_timed 10 "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
     [ -s "$FL_TMP/lsof" ] && FM_INC="$FM_INC litellm"
-    [ "$FL_TIMEOUT" -eq 1 ] && FM_COMPLETE=false
+    [ "$FL_TIMEOUT" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }a running LiteLLM loader could not be looked for in time"; }
   fi
   FM_AGENTS=$(printf '%s\n' $FM_AGENTS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
   FM_INC=$(printf '%s\n' $FM_INC | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
@@ -550,7 +559,7 @@ fleet_main() {
   if [ "$LISTONLY" -eq 1 ]; then
     fl_accounts > "$FL_TMP/accounts"
     _nl=0
-    while IFS="$FL_TAB" read -r _n _u _h _r; do
+    while IFS="$FL_US" read -r _n _u _h _r; do
       _nl=$((_nl + 1))
       if [ "$_r" = ok ]; then printf '%-24s will be checked\n' "$_n"; else printf '%-24s %s\n' "$_n" "$(fl_reason_text "$_r")"; fi
     done < "$FL_TMP/accounts"
@@ -558,7 +567,9 @@ fleet_main() {
     echo "System accounts (UID below 500, or a name starting with _) are never checked."
     return 0
   fi
-  _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 10 ] && _rs=10
+  # The Mac's own check comes last and takes under 40 seconds: 20 for the temp folder and 10 for
+  # lsof, each stopped within 3 seconds of its limit.
+  _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 40 ] && _rs=40
   FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""
   # One version for both files: gird-check.sh's release, from its header.
   FL_REL=$(/usr/bin/sed -n '1,5{s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p;}' "$FL_CHECK" | /usr/bin/head -n 1)
@@ -573,9 +584,9 @@ fleet_main() {
     { /bin/cp -- "$_src" "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
   else FL_FAILED=copy; fi
   fl_accounts > "$FL_TMP/accounts"
-  _left=$(/usr/bin/grep -c "${FL_TAB}ok\$" "$FL_TMP/accounts")
+  _left=$(/usr/bin/grep -c "${FL_US}ok\$" "$FL_TMP/accounts")
   ROWS=""; OUTS=""; N_NC_RUN=0; N_ACC=0; N_ACT=0; N_UPD=0; N_NC=0; TERM_VIEW=""; INV=""
-  while IFS="$FL_TAB" read -r _n _u _h _r; do
+  while IFS="$FL_US" read -r _n _u _h _r; do
     N_ACC=$((N_ACC + 1))
     _shown=$(fl_name "$_n")
     FA_stop=""; _row=""
@@ -636,7 +647,9 @@ fleet_main() {
       if [ "$FA_ak_links" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Links to authorized_keys outside .ssh: $FA_ak_links"; _inv="$_inv; ssh-links $FA_ak_links"; fi
       if [ "$FA_ssh_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  $(fl_plural "$FA_ssh_open" "SSH key" "SSH keys") without a passphrase"; _inv="$_inv; ssh-open $FA_ssh_open"; fi
       if [ -n "$FA_update" ]; then _upd=1; _tn=""; for _x in $FA_update; do _tn="${_tn:+$_tn, }$(printf '%s\n' "$OUT_TABLE" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $2; exit }')"; done; _lines="$_lines$NL    !  Tools with a security fix to install: $_tn"; _inv="$_inv; update-tools $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; fi
-      if [ -n "$FA_platforms" ]; then _upd=1; _tn=""; for _x in $FA_platforms; do _tn="${_tn:+$_tn, }$(incident_name "$_x")"; done; _lines="$_lines$NL    !  Uses a platform that leaked stored secrets: $_tn"; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
+      # Found means its CLI or files are there, not that the person used the hosted service: each
+      # platform's own summary says what to check, as the person's report does.
+      if [ -n "$FA_platforms" ]; then _upd=1; for _x in $FA_platforms; do _lines="$_lines$NL    !  $(printf '%s\n' "$PLATFORMS" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $7; exit }')"; done; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_on_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Project settings that act when an agent or editor opens the folder: $FA_on_open"; _inv="$_inv; on-open $FA_on_open"; fi
       if [ "$FA_to_read" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Files named like the ones worms plant, to read: $FA_to_read"; _inv="$_inv; to-read $FA_to_read"; fi
       for _x in $FA_updates; do _upd=1; _lines="$_lines$NL    !  A version to update: $(incident_name "$_x")"; done
@@ -662,7 +675,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
@@ -676,9 +689,9 @@ fleet_main() {
     if [ "$(incident_level "$_x")" = act ]; then FM_OUT=act; _ml="$_ml$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"
     else [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; fi
   done
-  [ -n "$_ml" ] && _ml="$_ml$NL    Found in the shared temp folder, where any account can put files, or a running LiteLLM loader."
+  [ -n "$_ml" ] && _ml="$_ml$NL    Found as files root made in the shared temp folder, or a running LiteLLM loader: the malware ran as root."
   # A machine check that did not answer in time leaves the Mac partly checked.
-  [ "$FM_COMPLETE" = true ] || { [ "$FM_OUT" = act ] || FM_OUT=not_checked; _ml="$_ml$NL    ?  Partly checked: a running LiteLLM loader could not be looked for in time"; }
+  [ "$FM_COMPLETE" = true ] || { [ "$FM_OUT" = act ] || FM_OUT=not_checked; _ml="$_ml$NL    ?  Partly checked: $FM_WHY"; }
   MACHINE="{\"complete\":$FM_COMPLETE,\"outcome\":\"$FM_OUT\",\"agents\":$(fl_json_list "$FM_AGENTS"),\"incidents\":$(fl_json_incidents "$FM_INC")}"
   [ "$FM_OUT" != clear ] && INV="$INV | machine: $FM_OUT $(printf '%s' "$FM_INC" | /usr/bin/tr ' ' ',')"
   OUTS="$OUTS$FM_OUT$NL"

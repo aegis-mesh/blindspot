@@ -95,6 +95,7 @@ if [ "$WIN" -eq 1 ]; then
   # follows the Windows layout rather than ~/.config.
   APP_CLAUDE="$WLAPP/AnthropicClaude"; APP_CURSOR="$WLAPP/Programs/cursor"
   APP_WINDSURF="$WLAPP/Programs/Windsurf"; APP_ANTIGRAVITY="$WLAPP/Programs/Antigravity"
+  APP_DEVIN=""   # Devin Desktop's Windows install folder is not documented; ~/.codeium/windsurf finds it
   GOOSE_CFG="$WAPP/Block/goose/config"; GOOSE_DATA="$WAPP/Block/goose/data"; GOOSE_STATE=$GOOSE_DATA
   # Goose keeps its data and state under GOOSE_PATH_ROOT instead when that is an absolute path
   # (crates/goose/src/config/paths.rs).
@@ -104,6 +105,7 @@ else
   if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"; else AS="$H/.config"; fi
   APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
   APP_WINDSURF=/Applications/Windsurf.app; APP_ANTIGRAVITY=/Applications/Antigravity.app
+  APP_DEVIN=/Applications/Devin.app   # Windsurf's name since 2 June 2026
   GOOSE_CFG="$H/.config/goose"
   # Goose keeps its data and state under GOOSE_PATH_ROOT when that is an absolute path, else in the
   # XDG folders, on a Mac too, each taken only when absolute (crates/goose/src/config/paths.rs).
@@ -116,11 +118,13 @@ else
   WAPP=""; WLAPP=""; WTEMP=""; PSRL=""
 fi
 # An account run reads only regular files up to FLEET_MAX bytes: a fifo, socket, device or bigger
-# file is not read and is counted, one line each in FLEET_NR, as not checked. Apps in /Applications
-# and the shared temp folder are the Mac's, checked once by root, never as an account's.
+# file is not read and is counted, one line each in FLEET_NR, as not checked. Agents installed in
+# /Applications and the shared temp folder are the Mac's, checked once by root, never as an account's.
+# Shared install folders it reads (npm's global folders outside the home, shared Python, Cursor's
+# version) count on every account's row, as docs/fleet.md says.
 FLEET_NR=""; FLEET_MAX=16777216; FLEET_PROT=ok
 if [ "$ACCTRUN" -eq 1 ]; then
-  APP_CLAUDE=""; APP_CURSOR=""; APP_WINDSURF=""; APP_ANTIGRAVITY=""
+  APP_CLAUDE=""; APP_CURSOR=""; APP_WINDSURF=""; APP_DEVIN=""; APP_ANTIGRAVITY=""
   case "${GIRD_CHECK_FLEET_MAX_BYTES:-}" in ''|*[!0-9]*) ;; *) FLEET_MAX=$GIRD_CHECK_FLEET_MAX_BYTES ;; esac
   FLEET_NR=$(/usr/bin/mktemp /tmp/blindspot.XXXXXX) || exit 13
   # Full Disk Access: a folder macOS protects is tried first. Refused means the protected folders
@@ -699,7 +703,7 @@ trap 'cleanup; exit 129' HUP
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
 KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
@@ -977,13 +981,15 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
 case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
 _pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-}"); _pd=${_pd%/}; fi
 # Coding agents: name | commands | install paths | folders that change when it is used | id
+# Windsurf became Devin Desktop on 2 June 2026: Devin.app, the devin-desktop command, and editor data
+# under Devin, not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
 # >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.sh.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
 Gemini CLI|gemini|$H/.gemini|$H/.gemini/tmp|gemini-cli
 Cursor|cursor|$APP_CURSOR;$H/.cursor|$AS/Cursor/User/workspaceStorage|cursor
-Windsurf|windsurf|$APP_WINDSURF;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage|windsurf
+Windsurf|windsurf;devin-desktop|$APP_WINDSURF;$APP_DEVIN;$H/.codeium/windsurf|$AS/Windsurf/User/workspaceStorage;$AS/Devin/User/workspaceStorage|windsurf
 Antigravity|antigravity|$APP_ANTIGRAVITY|$AS/Antigravity/User/workspaceStorage|antigravity
 GitHub Copilot CLI|copilot|$H/.copilot|$H/.copilot|copilot-cli
 OpenCode|opencode|$H/.config/opencode;$H/.local/share/opencode|$H/.local/share/opencode|opencode
@@ -1060,7 +1066,10 @@ banner
 proof_line
 blank
 PROG_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || PROG_FILE=""
-SCAN_ERR=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || SCAN_ERR=""   # the home scan's find errors
+# The home scan's find errors, which name the folders it could not read: in /tmp when TMPDIR can't
+# be written to, and with neither, every row it feeds reads partly checked (SCAN_LOST).
+SCAN_ERR=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null || mktemp /tmp/blindspot.XXXXXX 2>/dev/null) || SCAN_ERR=""
+SCAN_LOST=0; [ -n "$SCAN_ERR" ] || SCAN_LOST=1
 # An account run counts each folder the scan could not read as not checked, so it needs the file.
 if [ "$ACCTRUN" -eq 1 ] && [ -z "$SCAN_ERR" ]; then exit 13; fi
 if game_ok; then
@@ -1183,8 +1192,8 @@ SESS_PRE=$KEY_STARTS
 # the total) when there are any. Before printing, control characters become ? in a file name and a
 # space in a match, so neither a hostile folder name nor a newline or tab that happens to be the
 # boundary byte of a match can split a line or shift its fields. Files are read 1 MB at a time and
-# cut just after the last character that can't be in a key or start an escape such as \n (a
-# backslash never ends a piece), so a huge database file never loads at once and a piece never ends
+# cut just after the last character that can't be in a key (Bedrock's long-term keys hold + and /)
+# or start an escape such as \n (a backslash never ends a piece), so a huge database file never loads at once and a piece never ends
 # inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers;
 # a worker exits when its parent or the script that started everything is gone, so a kill -9 of the
 # script stops them at the next piece.
@@ -1222,7 +1231,7 @@ for my $w (0 .. $n - 1) {
         exit 0 unless $alive->();
         select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
         $buf .= $c;
-        my $cut = $buf =~ /[^A-Za-z0-9_.\\-][A-Za-z0-9_.\\-]*\z/ ? $-[0] + 1 : -1;
+        my $cut = $buf =~ /[^A-Za-z0-9_.+\/=\\-][A-Za-z0-9_.+\/=\\-]*\z/ ? $-[0] + 1 : -1;
         next if $cut < 0 && length($buf) < 8388608;
         $scan->(substr($buf, 0, $cut < 0 ? length($buf) : $cut, ""));
       }
@@ -1363,7 +1372,7 @@ UNREAD_DIRS=""
 [ -n "$SCAN_ERR" ] && UNREAD_DIRS=$(grep -E '^find: .*: (Permission denied|Operation not permitted)$' "$SCAN_ERR" 2>/dev/null |
   sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
 N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
-HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS)) -gt 0 ] && HOME_PARTIAL=1
+HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST)) -gt 0 ] && HOME_PARTIAL=1
 # Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
 # files_found counts files, as it always has. A link counts only when it ends at a regular file: a
 # repo can link a settings file to /dev/zero or /dev/tty, which a reader would never get to the end of.
@@ -3146,7 +3155,8 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
     case "$_ip" in "$H"/*) ;; *) { [ ! -L "$_ip" ] && [ -n "$(find "$_ip" -prune -links 1 -print 2>/dev/null)" ]; } || continue ;; esac
   fi
   _ext=0; case "$EXT_INCS" in *" $_ii "*) case "$NPM_INCS" in *" $_ii "*) ;; *) _ext=1 ;; esac ;; esac
-  [ "$_ext" -eq 1 ] || IND_HITS="$IND_HITS $_ii"
+  # gh-token-monitor came with more than one wave, so fleet mode gets it as wiper=1, not as an incident.
+  [ "$_ext" -eq 1 ] || [ "$_ik" = wiper ] || IND_HITS="$IND_HITS $_ii"
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
 "
   elif [ "$_ext" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
@@ -3339,6 +3349,17 @@ wiper_wait() { # text
     *) printf '%s' "$1" ;;
   esac
 }
+# A rotate in a section also waits for what an act-level incident says to remove first (FIRST_HIT:
+# SANDWORM_MODE's pre-push hook would send a new npm token out on the next push). The fix list puts
+# that fix ahead of every rotate instead, so its own fixes need no wait for it.
+rotate_wait() { # text
+  case "$1" in "Don't revoke"*|First\ *) printf '%s' "$1"; return ;; *[Rr]otate*|*[Rr]evoke*) ;; *) printf '%s' "$1"; return ;; esac
+  case "$WIPER_HIT$FIRST_HIT" in
+    11) printf '%s %s' "$1" "Only once gh-token-monitor is stopped and removed, and what section 5 says to remove first is gone." ;;
+    01) printf '%s %s' "$1" "Only once what section 5 says to remove first is gone." ;;
+    *) wiper_wait "$1" ;;
+  esac
+}
 todo() { # section text
   set -- "$1" "$(wiper_wait "$2")"
   TODO="$TODO$2
@@ -3374,8 +3395,8 @@ advice_todos() { # first, act or update
   done
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
-_first=0; for _t in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do [ "$(incident_level "$_t")" = act ] && case "$(incident_advice "$_t")" in First\ *) _first=1 ;; esac; done
-if [ "$WIPER_HIT" -eq 1 ] && [ "$_first" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working."
+FIRST_HIT=0; for _t in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do [ "$(incident_level "$_t")" = act ] && case "$(incident_advice "$_t")" in First\ *) FIRST_HIT=1 ;; esac; done
+if [ "$WIPER_HIT" -eq 1 ] && [ "$FIRST_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working."
 elif [ "$WIPER_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."; fi
 advice_todos first
 # A bad version found only in lockfiles: whether this machine is compromised depends on whether
@@ -3685,6 +3706,9 @@ if [ "$N_UNREAD_DIRS" -gt 0 ]; then
   else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 2 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$UNREAD_DIRS")." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
+if [ "$SCAN_LOST" -eq 1 ]; then
+  wrap "No temp folder could be written to, so the home scan could not tell which folders it could not read, and sections 2 to 5 may have missed files in them." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+fi
 if [ "$N_NL_DIRS" -gt 0 ]; then
   if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 2 to 5 did not check the files in it"
   else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
@@ -3867,7 +3891,7 @@ EOF
 $SESS_PLACES
 EOF
     [ "$N_PLACES" -gt 20 ] && emit "        ${DIM}and $((N_PLACES - 20)) more${RST}"
-    wrap "$(wiper_wait "Treat these keys as exposed and rotate them.")" 8 "        " "        "
+    wrap "$(rotate_wait "Treat these keys as exposed and rotate them.")" 8 "        " "        "
   fi
   _all="Install ripgrep, or add --all-sessions, to check all of them."
   if [ "$SESS_NOTRUN" -gt 0 ]; then
@@ -3974,7 +3998,7 @@ $_upd
 EOF
     _do="${_do:+$_do }Its malware runs on $_oss only, so it did not run here. Update to a version without it."
   fi
-  [ -n "$_do" ] && wrap "$(wiper_wait "$_do") Advisory: $(incident_source "$_pi")" 8 "        " "        "
+  [ -n "$_do" ] && wrap "$(rotate_wait "$_do") Advisory: $(incident_source "$_pi")" 8 "        " "        "
   while IFS="$TAB" read -r _t _un _uv; do
     [ "$_t" = "$_pi" ] && wrap "Your uv cache holds the $_uv package. Clear it with: uv cache clean $_un" 8 "        " "        " "$YEL"
   done <<EOF
@@ -3987,12 +4011,14 @@ if [ "$WIPER_HIT" -eq 1 ]; then
 $WIPER
 EOF
   case "$OS" in
-    Darwin) _stop="launchctl bootout gui/$(id -u 2>/dev/null)/com.user.gh-token-monitor" ;;
-    Linux)  _stop="systemctl --user disable --now gh-token-monitor.service" ;;
-    *)      _stop="" ;;
+    Darwin) _stop="launchctl bootout gui/$(id -u 2>/dev/null)/com.user.gh-token-monitor, then pkill -f gh-token-monitor" ;;
+    Linux)  _stop="systemctl --user disable --now gh-token-monitor.service, then pkill -f gh-token-monitor" ;;
+    *)      _stop="pkill -f gh-token-monitor" ;;
   esac
+  # Git for Windows has no pkill: PowerShell ends the process by its command line, as gird-check.ps1 says.
+  [ "$WIN" -eq 1 ] && _stop="powershell -NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object CommandLine -like '*gh-token-monitor*' | Invoke-CimMethod -MethodName Terminate\""
   wrap "Don't revoke any GitHub token until it is stopped and these files are gone: gh-token-monitor runs a destructive command when the stolen token stops working, and in the TanStack wave it tries to erase the home folder." 8 "        " "        " "$RED"
-  wrap "Stop it with ${_stop:+$_stop, then }pkill -f gh-token-monitor, then delete the files above." 8 "        " "        " "$RED"
+  wrap "Stop it with $_stop, then delete the files above." 8 "        " "        " "$RED"
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
   if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
@@ -4118,7 +4144,7 @@ while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
   if [ "$(plat_hit "$_pid")" = 1 ]; then
     pair "${YEL}!${RST}" "$_pnm" 16 "$_pw"
-    wrap "$(wiper_wait "$_padv")" 26 "                          " "                          " "$DIM"
+    wrap "$(rotate_wait "$_padv")" 26 "                          " "                          " "$DIM"
   else
     case "$_pw" in *" found") _pw="${_pw% found} not found" ;; *) _pw="not $_pw" ;; esac
     pair "${DIM}·${RST}" "$_pnm" 16 "${DIM}$_pw${RST}"
