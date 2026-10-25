@@ -87,3 +87,4 @@ rg: and the sessions are not called clean over it	needs ripgrep on PATH: these t
 two .env files whose folders differ only in case are read apart	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
 and the other keeps its own key	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
 two session files whose names differ only in case are two files	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+where its malware could not run, a bad version in uv's cache is one to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS

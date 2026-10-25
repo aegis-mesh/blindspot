@@ -1670,11 +1670,19 @@ foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
 }
 $UvBad = New-Object System.Collections.Generic.List[object]
 for ($i = 0; $i -lt $BadPypiRows.Count; $i++) { if ($uvFound.ContainsKey($i)) { $UvBad.Add($BadPypiRows[$i]) } }
+# uv keeps what it installs in its cache (and uvx runs a tool from an environment it makes there), so a
+# bad version there counts as its incident's sign ($UvHit), as npm's cache does for npm; where its
+# malware could not run (the os column), it is a version to update ($PyUpd).
+$UvHit = New-Object System.Collections.Generic.List[object]
+foreach ($r in $UvBad) {
+  if ($r[3] -eq 'all' -or $r[3] -eq $IndOs) { $UvHit.Add(@($r[2], "uv's cache: $($r[0]) $($r[1])")) } else { $PyUpd.Add(@($r[2], $r[3], "uv's cache: $($r[0]) $($r[1])")) }
+}
 $PyHits = New-Object System.Collections.Generic.List[string]
 foreach ($pi in $PyIncidents) {
   $hit = $pi -eq 'litellm' -and $LOADER -eq 1
   foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { $hit = $true } }
   foreach ($l in $Marks) { if ($l[0] -ceq $pi) { $hit = $true } }
+  foreach ($l in $UvHit) { if ($l[0] -ceq $pi) { $hit = $true } }
   if ($hit) { $PyHits.Add($pi) }
 }
 $PY_HIT = 0; if ($PyHits.Count -gt 0) { $PY_HIT = 1 }
@@ -5859,6 +5867,7 @@ if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 $PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
 if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
+elseif ($PY_HIT -eq 1 -and $Marks.Count -eq 0 -and $LOADER -eq 0) { Add-Todo 5 "Treat this machine as compromised. Clear the packages section 5 lists from uv's cache, follow $adv, and rotate every key the machine could reach." }
 elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $adv, and rotate every key the machine could reach." }
 Add-Advice 'act'
 Add-Advice 'update'
@@ -6202,8 +6211,12 @@ foreach ($pi in $PyIncidents) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
     foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    foreach ($l in $UvHit) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    $hasMark = @($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0
     if (@($LiteBad | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = "Don't run Python or pip in these environments." }
-    if (@($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0 -or -not $do) { $do = (@($do, (Temp-Advice $pi)) | Where-Object { $_ }) -join ' ' }
+    # Found in uv's cache alone: what uv installs stays there.
+    if (-not $do -and -not $hasMark -and -not ($pi -eq 'litellm' -and $LOADER -eq 1)) { $do = 'uv keeps what it installs in its cache, so treat this version as installed here.' }
+    elseif ($hasMark -or -not $do) { $do = (@($do, (Temp-Advice $pi)) | Where-Object { $_ }) -join ' ' }
   } elseif ($upd.Count -gt 0) {
     Pair "$cYel!$cRst" $pl 16 "${cYel}a bad version to update$cRst"
   } elseif ($pi -eq 'litellm' -and $LitePyc.Count -gt 0) {

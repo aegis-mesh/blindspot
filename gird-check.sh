@@ -2229,7 +2229,9 @@ if [ "$ACCTRUN" -eq 0 ] && [ -e /tmp/remote_code_loader.lock ] && command -v lso
 fi
 # A bad version in uv's cache: "incident<TAB>name<TAB>version" for each one found. The cache is
 # walked once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or
-# 2.4.6.post1.
+# 2.4.6.post1. uv keeps what it installs there (and uvx runs a tool from an environment it makes
+# there), so such a version counts as its incident's sign (UV_HIT), as npm's cache does for npm;
+# where its malware could not run (the os column), it is a version to update (PY_UPD).
 _uvn=()
 while read -r _n _v _i _o; do
   [ -n "$_i" ] || continue
@@ -2246,7 +2248,7 @@ if [ "${#_uvn[@]}" -gt 0 ]; then
 "
   done
 fi
-UV_BAD=""
+UV_BAD=""; UV_HIT=""
 while read -r _n _v _i _o; do
   [ -n "$_i" ] || continue
   if printf '%s\n' "$_uvf" | awk -v n="$_n-$_v" '{ b = $0; sub(/.*\//, "", b)
@@ -2254,13 +2256,16 @@ while read -r _n _v _i _o; do
     END { exit !f }'; then
     UV_BAD="$UV_BAD$_i$TAB$_n$TAB$_v
 "
+    case "$_o" in all|"$_os") UV_HIT="$UV_HIT$_i${TAB}uv's cache: $_n $_v
+" ;; *) PY_UPD="$PY_UPD$_i$TAB$_o${TAB}uv's cache: $_n $_v
+" ;; esac
   fi
 done <<EOF
 $BAD_PYPI
 EOF
 PY_HITS=""
 for _pi in $PY_INCIDENTS; do
-  if printf '%s' "$LITE_BAD$MARKS" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
+  if printf '%s' "$LITE_BAD$MARKS$UV_HIT" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
     PY_HITS="${PY_HITS:+$PY_HITS }$_pi"
   fi
 done
@@ -6577,6 +6582,7 @@ case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHOR
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
 if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
+elif [ "$PY_HIT" -eq 1 ] && [ -z "$MARKS" ] && [ "$LOADER" -eq 0 ]; then todo 5 "Treat this machine as compromised. Clear the packages section 5 lists from uv's cache, follow $_adv, and rotate every key the machine could reach."
 elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
 advice_todos act
 advice_todos update
@@ -7124,11 +7130,14 @@ for _pi in $PY_INCIDENTS; do
       while IFS="$TAB" read -r _t l; do
         [ "$_t" = "$_pi" ] && [ -n "$l" ] && emit "        $(short "$l")"
       done <<EOF
-$LITE_BAD$MARKS
+$LITE_BAD$MARKS$UV_HIT
 EOF
       [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
       printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && _do="Don't run Python or pip in these environments."
-      if printf '%s' "$MARKS" | grep -q "^$_pi$TAB" || [ -z "$_do" ]; then _do="${_do:+$_do }$(temp_advice "$_pi")"; fi
+      # Found in uv's cache alone: what uv installs stays there.
+      if [ -z "$_do" ] && ! printf '%s' "$MARKS" | grep -q "^$_pi$TAB" && ! { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
+        _do="uv keeps what it installs in its cache, so treat this version as installed here."
+      elif printf '%s' "$MARKS" | grep -q "^$_pi$TAB" || [ -z "$_do" ]; then _do="${_do:+$_do }$(temp_advice "$_pi")"; fi
       ;;
     *)
       if [ -n "$_upd" ]; then

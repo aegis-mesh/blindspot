@@ -1168,6 +1168,19 @@ hasnot "uv's cache: 2.4.60 and 2.4.6.post1 are not 2.4.6" 'uv cache holds the 2\
 mkdir -p "$WORK/uvn/.cache/uv/archive-v0/y/mistralai-2.4.6.dist-info"
 psrun "$WORK/uvn" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvn2.txt"
 has    "uv's cache: 2.4.6 itself is"                  'uv cache holds the 2\.4\.6 package\. Clear it with: uv cache clean mistralai' "$WORK/uvn2.txt"
+# uv keeps what it installs in its cache: a bad version there alone is a sign of its malware, as a bad
+# npm version in npm's cache is, with its own advice and fix. Where its malware could not run, it is a
+# version to update, never no findings.
+rm -rf "$WORK/uvo"; mkdir -p "$WORK/uvo/AppData/Local/uv/cache/archive-v0/x1/Lib/site-packages/litellm-1.107.0.dist-info" "$WORK/uvo/AppData/Local/uv/cache/wheels-v5/pypi/mistralai/mistralai-2.4.6-py3-none-any" "$WORK/uvo/AppData/Roaming" "$WORK/uvo/AppData/Local/Temp"
+psrun "$WORK/uvo" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvo.txt"
+psrun "$WORK/uvo" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvo-c.txt"
+has    "a bad version in uv's cache alone is a sign of its malware" "LiteLLM 1\.107\.0 +signs of the malware found uv's cache: litellm 1\.107\.0" "$WORK/uvo.txt"
+has    "with what that means"                         'uv keeps what it installs in its cache, so treat this version as installed here\. Advisory: docs\.litellm\.ai' "$WORK/uvo.txt"
+has    "and its fix says to clear uv's cache"         "Treat this machine as compromised\. Clear the packages section 5 lists from uv's cache, follow LiteLLM's advisory" "$WORK/uvo.txt"
+has    "and the headline says to act"                 'ACT NOW: SIGNS OF THE LITELLM 1\.107\.0 MALWARE' "$WORK/uvo-c.txt"
+SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
+has    "where its malware could not run, a bad version in uv's cache is one to update" "mistralai 2\.4\.6 +a bad version to update uv's cache: mistralai 2\.4\.6 Its malware runs on Linux only" "$WORK/uvo.txt"
+SKIPPING=""
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"
 psrun "$WORK/both" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/both.txt"
