@@ -647,7 +647,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 7 recent leaks or malware it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 8 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -655,6 +655,15 @@ lpf() { psrun "$1" -- -Offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
 hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftover' "$WORK/zb-none.txt"
+# The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
+lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
+has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium and Kiro' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +8 checked' "$WORK/zb-none-full.txt"
+cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
+lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
+chmod 755 "$WORK/zb-ext/.cursor/extensions"
+has    "an extension folder that cannot be read is not called clean" 'Editor extensions +not fully checked: 1 extension folder could not be read' "$WORK/zb-ext.txt"
+has    "and row 05 says so"                           'Recent leaks +extensions not fully checked: folder unreadable' "$WORK/zb-ext-c.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
@@ -833,7 +842,7 @@ mups() { # home out [compact]
 mups "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +9 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +10 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"

@@ -1824,12 +1824,16 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # Desktop on 2 June 2026, which keeps the extensions in ~/.devin/extensions and only reads the old
 # folder (its FAQ: only the name changed), so both are read. A line whose bad build
 # was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folder, where the
-# same version is the Marketplace's clean build.
-$ExtRows = New-Object System.Collections.Generic.List[object]
+# same version is the Marketplace's clean build. A folder that can't be read leaves the check not
+# done in full ($ExtUnread), never clean.
+$ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 4 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions')) {
   $reg = 'openvsx'; if ($er -eq '.vscode/extensions') { $reg = 'marketplace' }
-  foreach ($e in (Entries (J $HomeDir $er))) {
+  $xdir = J $HomeDir $er
+  if (-not (Is-Dir $xdir)) { continue }
+  try { $xents = @(([IO.DirectoryInfo]$xdir).GetFileSystemInfos() | Sort-Object -Property Name -CaseSensitive) } catch { $ExtUnread++; continue }
+  foreach ($e in $xents) {
     if (-not (Is-DirInfo $e)) { continue }
     foreach ($x in $BadExtRows) {
       if ($x[3] -ne 'any' -and $x[3] -ne $reg) { continue }
@@ -2263,7 +2267,7 @@ foreach ($r in $AllowRows) {
 }
 $Sec4 = Take-Cap
 $ind26 = ' ' * 26
-$N_LEAKS = @($PyIncidents).Count + 1 + @($Platforms).Count
+$N_LEAKS = @($PyIncidents).Count + 2 + @($Platforms).Count   # the Python incidents, npm, editor extensions and each platform
 Section '05' 'RECENT KEY LEAKS' "$N_LEAKS checked"
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
 # advice under a hit: for a bad package in an environment, don't run Python there; for its temp
@@ -2343,6 +2347,16 @@ if ($EXT_HIT -eq 1) {
   foreach ($r in $ExtCheck) { Emit "        $(Short $r[0])"; Emit "          has the name of a file that $($r[1])" }
   Wrap 'No editor extension that shipped malware was found. Open the file and check what it starts: if you did not set it up yourself, treat this machine as compromised.' 8 '        ' '        '
   foreach ($t in $ExtCheckTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
+} elseif ($ExtUnread -gt 0) {
+  Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}not fully checked: $(Plural $ExtUnread 'extension folder' 'extension folders') could not be read$cRst"
+} else {
+  Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
+  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium and Kiro' 26 $ind26 $ind26 $cDim
+}
+# With findings above, a folder that could not be read still has to be said.
+if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0)) {
+  if ($ExtUnread -eq 1) { $xmsg = 'An extension folder' } else { $xmsg = 'Some extension folders' }
+  Wrap "$xmsg could not be read, so this is not the full list." 8 '        ' '        ' $cYel
 }
 foreach ($p in $Platforms) {
   if ($PlatFound -contains $p.Id) {
@@ -2430,6 +2444,7 @@ elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
 # A partial check comes after every finding someone has to act on, and before the green line.
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
+elseif ($ExtUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'extensions not fully checked: folder unreadable' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1

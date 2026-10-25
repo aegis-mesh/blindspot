@@ -119,7 +119,8 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   June 2026, which keeps extensions in `~/.devin/extensions` and only reads the old folder); an `openvsx` line is not looked for in VS Code's
   own folder, where the same version is the Marketplace's clean build. A hit is its own section 5
   row, "Editor extensions", with the incident line, level `act`, its own headline and fix, never
-  called npm malware.
+  called npm malware. With nothing found the row is green, and it is one of the checks section 5
+  counts; a folder that can't be read makes it yellow, not fully checked.
 - GlassWorm, from Socket's posts, one incident per post: a version where the post gives one, and
   every version where it names an extension without one (these are the attacker's own extensions,
   which update themselves, so a version from before an extension was turned counts too).
