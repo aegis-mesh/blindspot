@@ -1631,6 +1631,24 @@ has    "a site-packages folder that cannot be read is not counted as checked" '!
 has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
 has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
 has    "a row's detail longer than the line wraps under itself" '^ {26}(could )?not be read$' "$WORK/pyu-raw.txt"
+# A Python environment behind a folder the walks can't enter is not read clean, under each kind of root:
+# a folder in pyenv-win's versions and in pipenv's environments (roots it searches), a venv's own folder
+# past the home scan's depth (a venv found by its pyvenv.cfg), a folder of uv's cache, and Poetry's folder
+# behind one that can't be opened. The home scan skips all five, so only those walks can name them.
+rm -rf "$WORK/pyh"; mkdir -p "$WORK/pyh/.pyenv/pyenv-win/versions/3.11.9/Lib/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.local/share/virtualenvs/p-AbC/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/code/a/b/c/env/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.cache/uv/archive-v0/x1/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.cache/pypoetry/virtualenvs/p-Cd34-py3.12/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/AppData/Roaming" "$WORK/pyh/AppData/Local/Temp"
+printf 'home = /usr\n' > "$WORK/pyh/code/a/b/c/env/pyvenv.cfg"
+_pyh=".pyenv/pyenv-win/versions/3.11.9 .local/share/virtualenvs/p-AbC code/a/b/c/env/lib .cache/uv/archive-v0/x1 .cache/pypoetry"
+for _d in $_pyh; do chmod 000 "$WORK/pyh/$_d"; done
+psrun "$WORK/pyh" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyh.txt"
+psrun "$WORK/pyh" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyh-c.txt"
+for _d in $_pyh; do chmod 755 "$WORK/pyh/$_d"; done
+has    "a Python environment behind a folder the walks can't enter is not read clean" '! LiteLLM 1\.82\.7 and 1\.82\.8 (no signs in [0-9]+ Python environments?, but 5 more|5 Python environments) could not be read' "$WORK/pyh.txt"
+has    "and row 05 says Python was not fully checked either" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyh-c.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
 # A folder whose name holds a line break: gird-check.ps1 lists folders through .NET, so it reads the
 # files in it (gird-check.sh, which reads find's output a line at a time, names it as not checked).

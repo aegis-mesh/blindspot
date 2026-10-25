@@ -721,9 +721,11 @@ function Activity([string]$dir, [int]$depth, $since, $state) {
     if ($e.LastWriteTimeUtc -gt $since) { $state.Recent = $true }
   }
 }
-# Python environments under a folder, a few levels deep, skipping node_modules.
+# Python environments under a folder, a few levels deep, skipping node_modules. A folder it can't list
+# goes in $PyWalkUnread: an environment not read, never one with no signs.
 function Find-Sites([string]$dir, [int]$depth, [int]$max, $out) {
-  foreach ($e in (Entries $dir)) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { [void]$PyWalkUnread.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
     if ((Is-Link $e) -or -not (Is-DirInfo $e)) { continue }
     if ($e.Name -ceq 'node_modules') { continue }
     if ($e.Name -ceq 'site-packages' -or $e.Name -ceq 'dist-packages') { $out.Add($e.FullName); continue }
@@ -1623,6 +1625,17 @@ foreach ($f in $allowAll) {
 # Folders that hold Python environments. Fixed install locations are read by name;
 # the rest are searched a few levels deep, skipping node_modules.
 $SitesAll = New-Object System.Collections.Generic.List[string]
+# The folders the walks below could not enter, and the folder on the way to a root that can't be read:
+# each counts as an environment not read ($PyUnread).
+$PyWalkUnread = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+function Py-Blocked([string]$p) { # the nearest folder on its way that exists, when that can't be read; '' otherwise
+  $d = $p
+  while ($true) {
+    try { $d = [IO.Path]::GetDirectoryName($d) } catch { return '' }
+    if (-not $d) { return '' }
+    if (Is-Dir $d) { try { [void][IO.Directory]::GetFileSystemEntries($d); return '' } catch { return $d } }
+  }
+}
 foreach ($s in $Sites) { $SitesAll.Add($s) }
 foreach ($v in $Venvs) { Find-Sites $v 0 4 $SitesAll }
 $pyParents = New-Object System.Collections.Generic.List[object]
@@ -1656,7 +1669,7 @@ $PoetryCache = [Environment]::GetEnvironmentVariable('POETRY_CACHE_DIR'); $Hatch
 foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH'), $(if ($PoetryCache) { J $PoetryCache 'virtualenvs' }), [Environment]::GetEnvironmentVariable('WORKON_HOME'), $(if ($HatchData) { J $HatchData 'env/virtual' }))) {
   if ($pv -and [IO.Path]::IsPathRooted($pv)) { $PyRoots += $pv }
 }
-foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
+foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } else { $b = Py-Blocked $r; if ($b) { [void]$PyWalkUnread.Add($b) } } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
 function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'minishai' { 'Mini Shai-Hulud worm, April 2026' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'antv' { 'AntV account takeover, May 2026' } 'nxconsole' { 'Nx Console 18.95.0, May 2026' } 'redhat' { 'Red Hat Cloud Services packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'keyvspread' { 'keyv worm spread, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormzig' { 'GlassWorm extensions, April 2026' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026' } 'glasswormuni' { 'GlassWorm invisible code, March 2026' } 'glasswasm' { 'GlassWASM extensions, June 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
@@ -1788,18 +1801,22 @@ $LOADER = 0
 $uvWant = @(); foreach ($r in $BadPypiRows) { $uvWant += ('^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$') }
 $uvFound = @{}
 foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
-  if ($uvFound.Count -ge $uvWant.Count -or -not (Is-Dir $uv)) { continue }
+  if ($uvFound.Count -ge $uvWant.Count) { continue }
+  if (-not (Is-Dir $uv)) { $b = Py-Blocked $uv; if ($b) { [void]$PyWalkUnread.Add($b) }; continue }
   try {
     $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
     while ($q.Count -gt 0 -and $uvFound.Count -lt $uvWant.Count) {
       $it = $q.Dequeue()
-      foreach ($e in (Entries $it[0])) {
+      try { $es = ([IO.DirectoryInfo]$it[0]).GetFileSystemInfos() } catch { [void]$PyWalkUnread.Add($it[0]); continue }
+      foreach ($e in $es) {
         for ($i = 0; $i -lt $uvWant.Count; $i++) { if (-not $uvFound.ContainsKey($i) -and $e.Name -cmatch $uvWant[$i]) { $uvFound[$i] = $true } }
         if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
       }
     }
   } catch { }
 }
+# Each folder the walks could not enter is an environment not read, as an unreadable site-packages is.
+$PyUnread += $PyWalkUnread.Count
 $UvBad = New-Object System.Collections.Generic.List[object]
 for ($i = 0; $i -lt $BadPypiRows.Count; $i++) { if ($uvFound.ContainsKey($i)) { $UvBad.Add($BadPypiRows[$i]) } }
 # uv keeps what it installs in its cache (and uvx runs a tool from an environment it makes there), so a

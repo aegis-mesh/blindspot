@@ -2235,11 +2235,29 @@ lightning 2.6.2 lightning all
 lightning 2.6.3 lightning all"
 PY_INCIDENTS="litellm litellmmar mistralpy guardrails lightning"
 # <<< bad-pypi
+# A folder the walks below could not enter (find's error), or the folder on the way to a root that can't
+# be read, is printed as "?<TAB>folder" and counted as an environment not read (PY_UNREAD), never as one
+# with no signs. find's errors are taken apart from what it prints and read once it has exited, so no
+# line of one can land inside a line of the other.
+py_find() { # find arguments: what find prints, then a "?<TAB>folder" line for each folder it could not enter
+  { _pe=$(find "$@" 2>&1 1>&3 3>&-); } 3>&1
+  [ -n "$_pe" ] || return 0
+  printf '%s\n' "$_pe" | awk '/^find: .*: (Permission denied|Operation not permitted)$/ { p = $0; sub(/^find: /, "", p)
+    sub(/: (Permission denied|Operation not permitted)$/, "", p); if (p ~ /^\047.*\047$/) p = substr(p, 2, length(p) - 2); print "?\t" p }'
+}
+py_blocked() { # root: "?<TAB>folder" for the nearest folder on its way that exists, when that can't be read
+  _bd=$1
+  while :; do
+    case "$_bd" in */*) _bd=${_bd%/*} ;; *) return 0 ;; esac
+    [ -n "$_bd" ] || return 0
+    if [ -d "$_bd" ]; then { [ -r "$_bd" ] && [ -x "$_bd" ]; } || printf '?\t%s\n' "$_bd"; return 0; fi
+  done
+}
 SITES_ALL=$(
   {
     printf '%s\n' "$SITES"
     printf '%s\n' "$VENVS" | while IFS= read -r v; do
-      [ -n "$v" ] && find "$v" -maxdepth 4 -type d -name site-packages -prune -print 2>/dev/null
+      [ -n "$v" ] && py_find "$v" -maxdepth 4 -type d -name site-packages -prune -print
     done
     for sp in /opt/homebrew/lib/python3*/site-packages /usr/local/lib/python3*/site-packages \
               /Library/Frameworks/Python.framework/Versions/*/lib/python3*/site-packages \
@@ -2248,10 +2266,14 @@ SITES_ALL=$(
       [ -d "$sp" ] && printf '%s\n' "$sp"
     done
     printf '%s\n' "$PY_ROOTS" | while IFS= read -r r; do
-      [ -d "$r" ] && find "$r" -maxdepth 6 \( -name node_modules -prune \) -o \( -type d \( -name site-packages -o -name dist-packages \) -prune -print \) 2>/dev/null
+      [ -n "$r" ] || continue
+      if [ -d "$r" ]; then py_find "$r" -maxdepth 6 \( -name node_modules -prune \) -o \( -type d \( -name site-packages -o -name dist-packages \) -prune -print \)
+      else py_blocked "$r"; fi
     done
   } | grep -v '^$' | sort -u
 )
+PY_WALK_UNREAD=$(printf '%s\n' "$SITES_ALL" | sed -n "s/^?$TAB//p")
+SITES_ALL=$(printf '%s\n' "$SITES_ALL" | grep -v "^?$TAB")
 # Python incidents (data/bad-pypi.tsv and the site and temp lines of data/indicators.tsv). LITE_BAD
 # and MARKS hold "incident<TAB>what was found"; PY_UPD holds "incident<TAB>os<TAB>what was found" for
 # a bad version installed where its malware could not run (bad-pypi's os column): a version to
@@ -2314,6 +2336,16 @@ EOF
 "; break; }; done
 done <<EOF
 $SITES_ALL
+EOF
+# Each folder the walks could not enter is an environment not read, as an unreadable site-packages is.
+py_unread() { # "?<TAB>folder" lines: each one counts in PY_UNREAD (an account run counts it as not checked)
+  while IFS= read -r _u; do
+    _u=${_u#\?$TAB}; [ -n "$_u" ] || continue
+    PY_UNREAD=$((PY_UNREAD + 1)); [ -n "$FLEET_NR" ] && printf '%s\n' "$_u" >> "$FLEET_NR"
+  done
+}
+py_unread <<EOF
+$PY_WALK_UNREAD
 EOF
 MARKS=""; _seen_t="|"; FLEET_TMPMARK=""; FLEET_TMPWIPER=0
 # An account run looks in the account's own temp folder, the one macOS gives each account under
@@ -2384,11 +2416,15 @@ EOF
 _uvf=""
 if [ "${#_uvn[@]}" -gt 0 ]; then
   for _uc in "$H/.cache/uv" ${WLAPP:+"$WLAPP/uv/cache"}; do
-    [ -d "$_uc" ] || continue
-    _uvf="$_uvf$(find "$_uc" -maxdepth 6 \( "${_uvn[@]}" \) -print 2>/dev/null)
-"
+    if [ -d "$_uc" ]; then _uvf="$_uvf$(py_find "$_uc" -maxdepth 6 \( "${_uvn[@]}" \) -print)
+"; else _uvf="$_uvf$(py_blocked "$_uc")
+"; fi
   done
 fi
+py_unread <<EOF
+$(printf '%s\n' "$_uvf" | grep "^?$TAB" | sort -u)
+EOF
+_uvf=$(printf '%s\n' "$_uvf" | grep -v "^?$TAB")
 UV_BAD=""; UV_HIT=""
 while read -r _n _v _i _o; do
   [ -n "$_i" ] || continue

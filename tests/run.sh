@@ -13,7 +13,7 @@ trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 . tests/lib.sh
 # The fixture homes decide every place the script looks: variables that move an agent's folders
 # elsewhere are cleared (GitHub's Ubuntu runners set XDG_CONFIG_HOME, for one).
-unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
   QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
 command -v python3 >/dev/null 2>&1 || { echo "tests/run.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
@@ -2586,6 +2586,23 @@ has    "a site-packages folder that cannot be read is not counted as checked" '!
 has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
 has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
 has    "a row's detail longer than the line wraps under itself" '^ {26}(could )?not be read$' "$WORK/pyu-raw.txt"
+# A Python environment behind a folder the walks can't enter is not read clean, under each kind of root:
+# a folder in pyenv's versions and in pipenv's environments (roots it searches), a venv's own folder past
+# the home scan's depth (a venv found by its pyvenv.cfg), a folder of uv's cache, and Poetry's folder
+# behind one that can't be opened. The home scan skips all five, so only those walks can name them.
+rm -rf "$WORK/pyh"; mkdir -p "$WORK/pyh/.pyenv/versions/3.11.9/lib/python3.11/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.local/share/virtualenvs/p-AbC/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/code/a/b/c/env/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.cache/uv/archive-v0/x1/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.cache/pypoetry/virtualenvs/p-Cd34-py3.12/lib/python3.12/site-packages/litellm-1.82.8.dist-info"
+printf 'home = /usr\n' > "$WORK/pyh/code/a/b/c/env/pyvenv.cfg"
+_pyh=".pyenv/versions/3.11.9 .local/share/virtualenvs/p-AbC code/a/b/c/env/lib .cache/uv/archive-v0/x1 .cache/pypoetry"
+for _d in $_pyh; do chmod 000 "$WORK/pyh/$_d"; done
+HOME="$WORK/pyh" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyh.txt"
+HOME="$WORK/pyh" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyh-c.txt"
+for _d in $_pyh; do chmod 755 "$WORK/pyh/$_d"; done
+has    "a Python environment behind a folder the walks can't enter is not read clean" '! LiteLLM 1\.82\.7 and 1\.82\.8 (no signs in [0-9]+ Python environments?, but 5 more|5 Python environments) could not be read' "$WORK/pyh.txt"
+has    "and row 05 says Python was not fully checked either" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyh-c.txt"
 # The scan keeps find's errors in a temp file: in /tmp when TMPDIR can't be written to, and with no temp
 # folder at all, it can't tell which folders it read, and says so.
 mkdir -p "$WORK/nomk"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomk/mktemp"; chmod +x "$WORK/nomk/mktemp"
