@@ -6,7 +6,7 @@
 #
 #   bash tools/ci-local.sh
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 2
 LOGS=$(mktemp -d "${TMPDIR:-/tmp}/blindspot-ci.XXXXXX")
 FAILED=0; SKIPPED=0
 
