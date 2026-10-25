@@ -162,6 +162,20 @@ for _c in ghf escj; do HOME="$SE/$_c" PATH=/usr/bin:/bin bash "$SCRIPT" --offlin
 hasnot "a word holding ghs_ in shell history is not a GitHub token" '~/\.zsh_history +GitHub' "$SE/ghf.txt"
 has    "a classic ghs_ token in a .env still counts" '~/code/a/\.env +GitHub' "$SE/ghf.txt"
 has    "a key right after an escaped newline in a JSON config counts" '~/\.claude\.json +Google, Replicate' "$SE/escj.txt"
+# OpenAI's user keys, made on a person's own keys page, start sk-None- and take both shapes of the
+# project keys: 20, T3BlbkFJ and 20 characters, or about 156. One character short, too short for the
+# longer shape, or with none in lower case, it is not a key.
+lowr() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-z0-9' | head -c "$1"; }
+SKN1="sk""-None-$(rnd 20)T3BlbkFJ$(rnd 20)"; SKN2="sk""-None-$(rnd 156)"; printf '%s\n%s\n' "$SKN1" "$SKN2" > "$SE/skn.keys"
+mkdir -p "$SE/skn/code/u1" "$SE/skn/code/u2" "$SE/skn/code/nm"
+printf 'export OPENAI_API_KEY=%s\n' "$SKN1" > "$SE/skn/.zshrc"; printf 'OPENAI_API_KEY=%s\n' "$SKN1" > "$SE/skn/code/u1/.env"; printf 'OPENAI_API_KEY=%s\n' "$SKN2" > "$SE/skn/code/u2/.env"
+printf 'A=%s\nB=%s\nC=%s\n' "sk""-None-$(lowr 20)T3BlbkFJ$(lowr 19)" "sk""-None-$(lowr 119)" "sk""-none-$(lowr 20)T3BlbkFJ$(lowr 20)" > "$SE/skn/code/nm/.env"
+HOME="$SE/skn" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$SE/skn.txt" 2>&1
+has    "an OpenAI user key (sk-None-) in a shell profile is found" '~/\.zshrc +OpenAI$' "$SE/skn.txt"
+has    "and in a .env file" '~/code/u1/\.env +OpenAI$' "$SE/skn.txt"
+has    "and in its longer shape" '~/code/u2/\.env +OpenAI$' "$SE/skn.txt"
+hasnot "near misses of sk-None- are not keys" 'code/nm/' "$SE/skn.txt"
+nokeys "and no sk-None- key is printed" "$SE/skn.keys" "$SE/skn.txt"
 # Session files are listed by place, one row each with how many of its files had keys. A place is
 # the session folder an agent keeps, or the file when the location is one file.
 HFK="hf""_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu"
