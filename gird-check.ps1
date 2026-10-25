@@ -1977,9 +1977,14 @@ if ($N_SESS -gt 0) { Progress "Keys in $(Plural $N_SESS 'agent session file' 'ag
 $Todo = New-Object System.Collections.Generic.List[string]
 $Fixes = @{ 1 = (New-Object System.Collections.Generic.List[string]); 2 = (New-Object System.Collections.Generic.List[string]);
   3 = (New-Object System.Collections.Generic.List[string]); 4 = (New-Object System.Collections.Generic.List[string]); 5 = (New-Object System.Collections.Generic.List[string]) }
+# With gh-token-monitor present, revoking a token sets it off: every rotate or revoke the report says
+# waits for it, in the sections as in the fix list. The wiper's own fix is the one that says so.
+function Wiper-Wait([string]$text) {
+  if ($WIPER_HIT -eq 1 -and -not $text.StartsWith("Don't revoke") -and $text -cmatch '[Rr]otate|[Rr]evoke') { return "$text Only once gh-token-monitor is stopped and removed (section 5)." }
+  $text
+}
 function Add-Todo([int]$sec, [string]$text) {
-  # With gh-token-monitor present, revoking a token sets it off: every other rotate waits for it.
-  if ($WIPER_HIT -eq 1 -and -not $text.StartsWith("Don't revoke") -and $text -match 'rotate') { $text += ' Only once gh-token-monitor is stopped and removed (section 5).' }
+  $text = Wiper-Wait $text
   $Todo.Add($text); $Fixes[$sec].Add($text)
 }
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
@@ -2242,7 +2247,7 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedFound.Count -gt 0) {
   if ($N_SESS -gt 0) {
     foreach ($f in ($SessPlaces | Select-Object -First 20)) { Emit "        $cDim$(Short $f)$cRst" }
     if ($N_PLACES -gt 20) { Emit "        ${cDim}and $($N_PLACES - 20) more$cRst" }
-    Wrap 'Treat these keys as exposed and rotate them.' 8 '        ' '        '
+    Wrap (Wiper-Wait 'Treat these keys as exposed and rotate them.') 8 '        ' '        '
   }
   $allTxt = 'Install ripgrep, or add -AllSessions, to check all of them.'
   if ($SESS_NOTRUN -gt 0) {
@@ -2361,7 +2366,7 @@ if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0)) {
 foreach ($p in $Platforms) {
   if ($PlatFound -contains $p.Id) {
     Pair "$cYel!$cRst" $p.Name 16 $p.Found
-    Wrap $p.Advice 26 $ind26 $ind26 $cDim
+    Wrap (Wiper-Wait $p.Advice) 26 $ind26 $ind26 $cDim
   } else {
     if ($p.Found.EndsWith(' found')) { $w = $p.Found.Substring(0, $p.Found.Length - 6) + ' not found' } else { $w = 'not ' + $p.Found }
     Pair "$cDim$gMid$cRst" $p.Name 16 "$cDim$w$cRst"

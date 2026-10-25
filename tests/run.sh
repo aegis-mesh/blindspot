@@ -459,6 +459,29 @@ hasnot "and never that it erased one"                  'erased the home folder' 
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/wl.txt"
 hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/wl.txt"
+# Sentences of a report that say to rotate or revoke without waiting for gh-token-monitor. A sentence
+# passes if it names gh-token-monitor, if the wait for it follows within two sentences (a platform's
+# advice ends with it), or if it is the wiper's own fix, whose next sentence says to stop it first.
+unwaited() { # file
+  python3 -I -c '
+import re, sys
+t = re.sub(r"\x1b\[[0-9;]*m", "", open(sys.argv[1], encoding="utf-8", errors="replace").read())
+s = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", t))
+for i, x in enumerate(s):
+    if not re.search(r"[Rr]otate|[Rr]evoke", x) or "gh-token-monitor" in x: continue
+    if any(n.startswith("Only once gh-token-monitor is stopped and removed") for n in s[i + 1:i + 3]): continue
+    if "revoke any GitHub token yet" in x and s[i + 1:i + 2] and s[i + 1].startswith("First stop and remove gh-token-monitor"): continue
+    if x.startswith("Then rotate every key this machine could reach") and i and s[i - 1].startswith("First stop and remove gh-token-monitor"): continue
+    print(x)' "$1"
+}
+cp -R "$WORK/home" "$WORK/wwait"; mkdir -p "$WORK/wwait/.config/zeabur" "$WORK/wwait/.railway"; printf '{}\n' > "$WORK/wwait/.railway/config.json"
+HOME="$WORK/wwait" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full --all-sessions > "$WORK/wwait.txt" 2>&1
+HOME="$WORK/wwait" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline --all-sessions >> "$WORK/wwait.txt" 2>&1
+_u=$(unwaited "$WORK/wwait.txt")
+if grep -qE 'Zeabur +CLI found' "$WORK/wwait.txt" && grep -q 'Keys in agent sessions' "$WORK/wwait.txt" && [ -z "$_u" ]; then ok "with the wiper present, no rotate or revoke anywhere in the report goes without the wait"
+else bad "with the wiper present, no rotate or revoke anywhere in the report goes without the wait" "$(printf '%s' "${_u:-the fixture lost its sessions or platforms}" | head -n 3 | tr '\n' '|')"; fi
+tr -s ' \n' '  ' < "$WORK/wwait.txt" > "$WORK/wwait-flat.txt"
+has    "the session keys wait for the wiper"         'Treat these keys as exposed and rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/wwait-flat.txt"
 has    "the link flags npm malware and the wiper"      'nm=1&py=0&ex=0&wp=1$' "$WORK/out-$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}').txt"
 # npm malware and LiteLLM together, no wiper: the summary keeps both.
 cp -R "$WORK/home" "$WORK/both"; rm -rf "$WORK/both/.config/gh-token-monitor"

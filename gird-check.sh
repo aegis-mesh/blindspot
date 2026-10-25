@@ -2519,10 +2519,17 @@ if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent sessi
 # --- What to do, and the score -----------------------------------------------
 # Each fix also belongs to a section, so that section's details can end with it.
 TODO=""; ISSUES=0; FIX1=""; FIX2=""; FIX3=""; FIX4=""; FIX5=""
+# With gh-token-monitor present, revoking a token sets it off: every rotate or revoke the report says
+# waits for it, in the sections as in the fix list. The wiper's own fix is the one that says so.
+wiper_wait() { # text
+  case "$WIPER_HIT:$1" in
+    "1:Don't revoke"*) printf '%s' "$1" ;;
+    1:*[Rr]otate*|1:*[Rr]evoke*) printf '%s %s' "$1" "Only once gh-token-monitor is stopped and removed (section 5)." ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
 todo() { # section text
-  set -- "$1" "$2"
-  # With gh-token-monitor present, revoking a token sets it off: every other rotate waits for it.
-  case "$WIPER_HIT:$2" in "1:Don't revoke"*) ;; 1:*[Rr]otate*) set -- "$1" "$2 Only once gh-token-monitor is stopped and removed (section 5)." ;; esac
+  set -- "$1" "$(wiper_wait "$2")"
   TODO="$TODO$2
 "; ISSUES=$((ISSUES + 1))
   case "$1" in
@@ -2882,7 +2889,7 @@ EOF
 $SESS_PLACES
 EOF
     [ "$N_PLACES" -gt 20 ] && emit "        ${DIM}and $((N_PLACES - 20)) more${RST}"
-    wrap "Treat these keys as exposed and rotate them." 8 "        " "        "
+    wrap "$(wiper_wait "Treat these keys as exposed and rotate them.")" 8 "        " "        "
   fi
   _all="Install ripgrep, or add --all-sessions, to check all of them."
   if [ "$SESS_NOTRUN" -gt 0 ]; then
@@ -3067,7 +3074,7 @@ while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
   if [ "$(plat_hit "$_pid")" = 1 ]; then
     pair "${YEL}!${RST}" "$_pnm" 16 "$_pw"
-    wrap "$_padv" 26 "                          " "                          " "$DIM"
+    wrap "$(wiper_wait "$_padv")" 26 "                          " "                          " "$DIM"
   else
     case "$_pw" in *" found") _pw="${_pw% found} not found" ;; *) _pw="not $_pw" ;; esac
     pair "${DIM}·${RST}" "$_pnm" 16 "${DIM}$_pw${RST}"
