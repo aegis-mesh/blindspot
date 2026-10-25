@@ -25,8 +25,10 @@
 # two of them are in neither GitHub's global database nor OSV. The newest fix is 2.1.260, from 2.0.68
 # (GHSA-gfvf-j8jh-jxxw, one of the two); below 2.0.68 the highest fix is 2.1.179 (GHSA-pq7j-f95f-qfcv),
 # in its range, so the row says 2.1.260 there too. GHSA-9f65-56v6-gxw7 and the sandbox escape
-# GHSA-7835-87q9-rgvv have lines for what their holes allow. mcp-remote: GHSA-6xpm-ggf7-wc3p is its
-# only advisory, and its repository publishes none.
+# GHSA-7835-87q9-rgvv have lines for what their holes allow. Claude Code's native installer keeps each
+# version as a file in ~/.local/share/claude/versions and links ~/.local/bin/claude to the one in use
+# (Claude Code's setup page): no kind reads that, and the highest version kept need not be the one in
+# use. mcp-remote: GHSA-6xpm-ggf7-wc3p is its only advisory, and its repository publishes none.
 # Amazon Q: the version folder is the language server's (Language Servers for AWS), which the bulletin
 # fixes in 1.69.0 (aws/language-servers publishes the bulletin's two advisories, and no later bulletin
 # names it). The extension's own version is not read. Amazon Q keeps the server in
