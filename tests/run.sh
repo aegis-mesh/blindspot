@@ -1408,6 +1408,15 @@ hasnot "and row 05 does not call the npm malware found" 'npm and LiteLLM malware
 has    "and the npm row says a lockfile lists it, not found" 'npm malware in a lockfile: act if installed ~/code/a/package-lock\.json' "$WORK/g2py.txt"
 [ "$(uname -s)" = Darwin ] || SKIPPING="the snapshot note with the Argus offer is printed on a Mac only"
 has    "and on a Mac the closing note names both" 'It found signs of the LiteLLM malware, and npm malware listed' "$WORK/g2py.txt"
+# A version to update in the same lockfile changes nothing; one installed is said as that.
+rm -rf "$WORK/g2upd" "$WORK/g2inj"; mkdir -p "$WORK/g2upd/code/a" "$WORK/g2inj/code/a" "$WORK/g2inj/code/w/node_modules/@injectivelabs/sdk-ts"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"},"node_modules/@mistralai/mistralai":{"version":"2.2.2","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.2.tgz"}}}\n' > "$WORK/g2upd/code/a/package-lock.json"
+cp "$WORK/g2py/code/a/package-lock.json" "$WORK/g2inj/code/a/package-lock.json"
+printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$WORK/g2inj/code/w/package-lock.json"
+printf '{"name":"@injectivelabs/sdk-ts","version":"1.20.21"}\n' > "$WORK/g2inj/code/w/node_modules/@injectivelabs/sdk-ts/package.json"
+for g2 in g2upd g2inj; do HOME="$WORK/$g2" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$g2.txt"; done
+has    "on a Mac, a lockfile's version to update beside its malware keeps the lockfile note" 'It found npm malware listed in a lockfile, with no sign it was installed' "$WORK/g2upd.txt"
+has    "and one installed is named as that"           'It found a bad npm version to update installed here, and npm malware' "$WORK/g2inj.txt"
 SKIPPING=""
 has    "SANDWORM_MODE's cleanup for a hit only in a lockfile is for if it was installed" ' 1\. If you installed the SANDWORM_MODE worm packages section 5 lists, first find and remove what the SANDWORM_MODE worm leaves' "$WORK/g2sw.txt"
 has    "an incident only in a lockfile beside one installed keeps its fix for if it was installed" ' 1\. Treat this machine as compromised\. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 .* 2\. If you installed the keyv account takeover packages section 5 lists, rotate the secrets' "$WORK/g2mix.txt"

@@ -6636,16 +6636,21 @@ EOF
   return 1
 }
 # NPM_INST_TAGS: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
-NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "
+# NPM_UPD_INST: a version to update (an update-level incident's) found installed, not only in a lockfile.
+NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "; NPM_UPD_INST=0
 while IFS="$TAB" read -r _f _p _t; do
-  [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
+  [ -n "$_t" ] || continue
+  _lv=$(incident_level "$_t")
+  case "$_lv" in act|update) ;; *) continue ;; esac
+  _in=1
   case "$_f" in
     */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
-      if lock_installed "$_f" "${_p% *}" "${_p##* }"; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
-      else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
-"; fi ;;
-    *) NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t " ;;
+      lock_installed "$_f" "${_p% *}" "${_p##* }" || _in=0 ;;
   esac
+  if [ "$_lv" = update ]; then [ "$_in" -eq 1 ] && NPM_UPD_INST=1
+  elif [ "$_in" -eq 1 ]; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
+  else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
+"; fi
 done <<EOF
 $NPM_ROWS
 EOF
@@ -7822,9 +7827,11 @@ if [ "$OS" = Darwin ]; then
   if [ "$KEY_FILES" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
-  elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 0 ]; then
+  elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."
+    # A version to update found installed is said as that: it is no sign the lockfile's malware ran.
+    if [ "$NPM_UPD_INST" -eq 1 ]; then _p1="It found a bad npm version to update installed here, and npm malware listed in a lockfile with no sign it was installed. It can't tell you what your agents do after you close this window."
+    else _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."; fi
   elif [ "$ANY_MAL" -eq 1 ] || [ "$PY_HIT" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     # Each kind of malware it found, and npm malware found only in a lockfile named as that, last.
