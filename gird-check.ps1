@@ -1375,9 +1375,12 @@ if (Is-Dir $PsrlDir) { try { foreach ($f in ([IO.Directory]::GetFiles($PsrlDir, 
 $ProjectFiles = @($EnvFiles) + @($ProjectMcp)
 # Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
 # .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
-# under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data.
+# under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data; providers.json at
+# CLINE_PROVIDER_SETTINGS_PATH when that is set (sdk/packages/shared/src/storage/paths.ts).
 $ClineData = @((Env-Or 'CLINE_DATA_DIR' (J $HomeDir '.cline/data')), (J (Env-Or 'CLINE_DIR' (J $HomeDir '.cline')) 'data'))
 $ClineKeys = @(foreach ($d in $ClineData) { (J $d 'secrets.json'); (J $d 'settings/providers.json') })
+$ClineProv = [Environment]::GetEnvironmentVariable('CLINE_PROVIDER_SETTINGS_PATH')
+if ($ClineProv -and [IO.Path]::IsPathRooted($ClineProv)) { $ClineKeys += $ClineProv } else { $ClineProv = '' }
 $Candidates = New-Object System.Collections.Generic.List[string]
 $cset = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $cands = @($ShellRc) + @((J $HomeDir '.env'), (J $HomeDir '.envrc')) + @($ShellHist) + @(
@@ -1397,6 +1400,7 @@ function Key-Place([string]$f) {
   if ([IO.Path]::GetFileName($f) -cmatch '^\.env(rc|\..*)?$') { return 'env_file' }
   if (In-List $f $McpList) { return 'mcp_config' }
   foreach ($d in $AgentDirs) { if (Under $f $d) { return 'agent_config' } }
+  if ($ClineProv -and $f.Equals($ClineProv, $PathCmp)) { return 'agent_config' }
   if ($f.StartsWith((J $HomeDir '.aider'), $PathCmp)) { return 'agent_config' }
   if (In-List $f $ProjectFiles) { return 'project_file' }
   'other'
@@ -1531,6 +1535,12 @@ if (-not $OnWindows) {
   $xd = [Environment]::GetEnvironmentVariable('XDG_DATA_HOME'); if (-not ($xd -and $xd.StartsWith('/'))) { $xd = J $HomeDir '.local/share' }
   $xc = [Environment]::GetEnvironmentVariable('XDG_CACHE_HOME'); if (-not ($xc -and $xc.StartsWith('/'))) { $xc = J $HomeDir '.cache' }
   $PyRoots += @((J $HomeDir 'Library/Caches/pypoetry/virtualenvs'), (J $HomeDir 'Library/Application Support/hatch/env/virtual'), (J $xc 'pypoetry/virtualenvs'), (J $xd 'virtualenvs'), (J $xd 'hatch/env/virtual'))
+}
+# Each tool's own setting moves its folder: POETRY_VIRTUALENVS_PATH (or POETRY_CACHE_DIR's virtualenvs),
+# pipenv's WORKON_HOME and HATCH_DATA_DIR's env/virtual.
+$PoetryCache = [Environment]::GetEnvironmentVariable('POETRY_CACHE_DIR'); $HatchData = [Environment]::GetEnvironmentVariable('HATCH_DATA_DIR')
+foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH'), $(if ($PoetryCache) { J $PoetryCache 'virtualenvs' }), [Environment]::GetEnvironmentVariable('WORKON_HOME'), $(if ($HatchData) { J $HatchData 'env/virtual' }))) {
+  if ($pv -and [IO.Path]::IsPathRooted($pv)) { $PyRoots += $pv }
 }
 foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
@@ -5346,7 +5356,7 @@ foreach ($l in ($BadNpm -split "`r?`n")) {
   if ($p[1] -ceq '*') { $NpmAny[$p[0]] = $p[2] } else { $NpmBad["$($p[0])@$($p[1])"] = $p[2] }
   [void]$NpmNames.Add($p[0])
 }
-$NpmRows = New-Object System.Collections.Generic.List[object]; $NpmCacheRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = @{}
+$NpmRows = New-Object System.Collections.Generic.List[object]; $NpmCacheRows = New-Object System.Collections.Generic.List[object]; $NpmSeen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
 $NpmCacheTag = " (npm's download cache)"
 # Versions are shown only if they look like versions, so a package can't put terminal control codes in the report.
 function Npm-Hit([string]$where, [string]$nm, [string]$v) {

@@ -1920,10 +1920,12 @@ CANDIDATES=$(
     printf '%s\n' "$AS/Claude/claude_desktop_config.json"
     # Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
     # .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
-    # under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data.
+    # under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data; providers.json at
+    # CLINE_PROVIDER_SETTINGS_PATH when that is set (sdk/packages/shared/src/storage/paths.ts).
     for _cd in "${CLINE_DATA_DIR:-$H/.cline/data}" "${CLINE_DIR:-$H/.cline}/data"; do
       printf '%s\n%s\n' "$_cd/secrets.json" "$_cd/settings/providers.json"
     done
+    case "${CLINE_PROVIDER_SETTINGS_PATH:-}" in (/*) printf '%s\n' "$CLINE_PROVIDER_SETTINGS_PATH" ;; esac
     if [ "$WIN" -eq 1 ]; then
       printf '%s\n' "$GOOSE_CFG/config.yaml"
       for f in "$PSRL"/*_history.txt; do [ -f "$f" ] && printf '%s\n' "$f"; done
@@ -1957,7 +1959,7 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
   case "$1" in
     "$H"/.claude/*|"$H"/.codex/*|"$H"/.gemini/*|"$H"/.cursor/*|"$H"/.codeium/*|"$H"/.continue/*) KP=agent_config; return 0 ;;
     "$H"/.copilot/*|"$H"/.config/goose/*|"$H"/.config/opencode/*|"$H"/.local/share/opencode/*|"$H"/.aider*|"$AS"/Claude/*|"$GOOSE_CFG"/*) KP=agent_config; return 0 ;;
-    "$H"/.cline/*|"${CLINE_DATA_DIR:-$H/.cline/data}"/*|"${CLINE_DIR:-$H/.cline}"/*) KP=agent_config; return 0 ;;
+    "$H"/.cline/*|"${CLINE_DATA_DIR:-$H/.cline/data}"/*|"${CLINE_DIR:-$H/.cline}"/*|"${CLINE_PROVIDER_SETTINGS_PATH:-$H/.cline/data/settings/providers.json}") KP=agent_config; return 0 ;;
   esac
   case "$PROJECT_SET" in *"|$1|"*) KP=project_file; return 0 ;; esac
   KP=other
@@ -2103,6 +2105,12 @@ $_xc/pypoetry/virtualenvs
 $_xd/virtualenvs
 $_xd/hatch/env/virtual"
 fi
+# Each tool's own setting moves its folder: POETRY_VIRTUALENVS_PATH (or POETRY_CACHE_DIR's virtualenvs),
+# pipenv's WORKON_HOME and HATCH_DATA_DIR's env/virtual.
+for _pv in "${POETRY_VIRTUALENVS_PATH:-}" "${POETRY_CACHE_DIR:+$POETRY_CACHE_DIR/virtualenvs}" "${WORKON_HOME:-}" "${HATCH_DATA_DIR:+$HATCH_DATA_DIR/env/virtual}"; do
+  case "$_pv" in /*) PY_ROOTS="$PY_ROOTS
+$_pv" ;; esac
+done
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
 litellm 1.82.7 litellmmar all

@@ -187,6 +187,9 @@ HOME="$SE/cln" CLINE_DATA_DIR="$SE/cdd" PATH=/usr/bin:/bin bash "$SCRIPT" --offl
 has    "a key in Cline's secrets.json is found" '~/\.cline/data/secrets\.json +Anthropic$' "$SE/cln.txt"
 has    "and in its settings/providers.json" '~/\.cline/data/settings/providers\.json +OpenRouter$' "$SE/cln.txt"
 has    "and in secrets.json under CLINE_DATA_DIR" 'cdd/secrets\.json Anthropic ' "$SE/cdd.txt"
+mkdir -p "$SE/cps"; printf '{"providers":{"openrouter":{"settings":{"apiKey":"%s"}}}}\n' "sk""-or-v1-$(hexr 64)" > "$SE/cps/prov.json"
+HOME="$SE/cln" CLINE_PROVIDER_SETTINGS_PATH="$SE/cps/prov.json" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$SE/cps.txt"
+has    "and in the providers file CLINE_PROVIDER_SETTINGS_PATH names" 'cps/prov\.json OpenRouter ' "$SE/cps.txt"
 # Session files are listed by place, one row each with how many of its files had keys. A place is
 # the session folder an agent keeps, or the file when the location is one file.
 HFK="hf""_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu"
@@ -444,6 +447,15 @@ if [ "$(find "$SE/cn/.claude/projects/p" -type f | grep -c .)" -eq 2 ]; then SKI
 has    "two .env files whose folders differ only in case are read apart" '~/code/Up/\.env +Anthropic$' "$SE/cn.txt"
 has    "and the other keeps its own key" '~/code/up/\.env +GitHub$' "$SE/cn.txt"
 has    "two session files whose names differ only in case are two files" 'Claude Code +2 files: AWS$' "$SE/cn.txt"
+SKIPPING=""
+# Rows are told apart exactly too: where the volume tells case apart, two lockfiles whose folders
+# differ only in case are two rows.
+mkdir -p "$SE/cl/code/Lk" "$SE/cl/code/lk"
+for _d in Lk lk; do printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$SE/cl/code/$_d/package-lock.json"; done
+HOME="$SE/cl" bash "$SCRIPT" --offline > "$SE/cl.txt" 2>&1
+if [ "$(find "$SE/cl/code" -name package-lock.json | grep -c .)" -eq 2 ]; then SKIPPING=""; else SKIPPING="this volume ignores case, so two names that differ only in case are one file"; fi
+has    "two lockfiles whose folders differ only in case are two rows" '^ +~/code/Lk/package-lock\.json$' "$SE/cl.txt"
+has    "and the other lockfile's row is there too" '^ +~/code/lk/package-lock\.json$' "$SE/cl.txt"
 SKIPPING=""
 # Antigravity keeps newer conversations as SQLite files (.db, and their -wal) beside the older .pb
 # files: the SQLite files are read and nothing else in the folder is, only the .pb files are named
@@ -2278,6 +2290,17 @@ HOME="$WORK/pyt" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyt.t
 has    "a Python environment in Poetry's folder is checked" 'pypoetry/[^ ]*site-packages: litellm 1\.107\.0' "$WORK/pyt.txt"
 has    "and in pipenv's"                              'share/virtualenvs/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyt.txt"
 has    "and in Hatch's"                               'hatch/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyt.txt"
+# Each tool's own setting that moves its folder is followed, outside the home folder too.
+rm -rf "$WORK/pyo"; mkdir -p "$WORK/pyo/home/AppData/Roaming" "$WORK/pyo/home/AppData/Local/Temp" \
+  "$WORK/pyo/wh/app-Ab12/lib/python3.12/site-packages/litellm-1.107.0.dist-info" \
+  "$WORK/pyo/pv/app-Cd34-py3.12/lib/python3.12/site-packages/litellm-1.82.7.dist-info" \
+  "$WORK/pyo/pc/virtualenvs/app-Gh78-py3.12/lib/python3.12/site-packages/lightning-2.6.3.dist-info" \
+  "$WORK/pyo/hd/env/virtual/app/Ef56/default/lib/python3.12/site-packages/lightning-2.6.2.dist-info"
+HOME="$WORK/pyo/home" WORKON_HOME="$WORK/pyo/wh" POETRY_VIRTUALENVS_PATH="$WORK/pyo/pv" POETRY_CACHE_DIR="$WORK/pyo/pc" HATCH_DATA_DIR="$WORK/pyo/hd" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyo.txt"
+has    "a Python environment under WORKON_HOME is checked" 'pyo/wh/[^ ]*site-packages: litellm 1\.107\.0' "$WORK/pyo.txt"
+has    "and under POETRY_VIRTUALENVS_PATH"            'pyo/pv/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyo.txt"
+has    "and under POETRY_CACHE_DIR's virtualenvs"     'pyo/pc/virtualenvs/[^ ]*site-packages: lightning 2\.6\.3' "$WORK/pyo.txt"
+has    "and under HATCH_DATA_DIR's env/virtual"       'pyo/hd/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyo.txt"
 chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
 HOME="$WORK/pyu" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu.txt"
 HOME="$WORK/pyu" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"   # no idle agents, whose fix would take the headline
