@@ -1101,8 +1101,8 @@ PATH="$FAKE:$PATH" fl_run fakes
 if [ ! -e "$FL/fake-ran" ] && grep -q '^asha\.key_files=4$' "$FL/fakes.flat" && [ "$(cat "$FL/launch-path")" = /usr/bin:/bin:/usr/sbin:/sbin ]; then ok "fleet: a replaced jq, grep or sudo earlier in PATH is never run"; else bad "fleet: a replaced jq, grep or sudo earlier in PATH is never run" "$(cat "$FL/fake-ran" 2>/dev/null | tr '\n' ' ') PATH at sudo: $(cat "$FL/launch-path" 2>/dev/null)"; fi
 # No network request, no browser, no saved report.
 mkdir -p "$FL/cwd"; : > "$WORK/received.log"; : > "$WORK/gets.log"
-( cd "$FL/cwd" && GIRD_CHECK_API="$API" FLL_API="$API" PATH="$FAKE:$PATH" fl_run net --save )
-if [ ! -s "$WORK/received.log" ] && [ ! -s "$WORK/gets.log" ]; then ok "fleet: makes no network request"; else bad "fleet: makes no network request"; fi
+( cd "$FL/cwd" && GIRD_CHECK_API="$API" FLL_API="$API" PATH="$FAKE:$PATH" fl_run net )
+if [ ! -s "$WORK/received.log" ] && [ ! -s "$WORK/gets.log" ] && grep -q '^10$' "$FL/net.rc"; then ok "fleet: makes no network request"; else bad "fleet: makes no network request" "exit $(cat "$FL/net.rc")"; fi
 if [ ! -e "$FL/fake-ran" ] && [ -z "$(ls "$FL/cwd")" ]; then ok "fleet: opens no browser and saves no report"; else bad "fleet: opens no browser and saves no report" "$(ls "$FL/cwd"; cat "$FL/fake-ran" 2>/dev/null)"; fi
 # An MDM-like run: no HOME, a minimal PATH, / as the working folder, no terminal.
 ( cd / && env -i PATH=/usr/bin:/bin GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
