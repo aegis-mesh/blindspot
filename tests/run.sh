@@ -912,25 +912,36 @@ hasnot "it does not outrank moving keys out of plain text" 'First fix: Update th
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
 # The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
-# malware, as GitHub's malware advisories say, and so are the UiPath builds, though Wiz found a bug in
-# their payload. Packages the TanStack worm spread to, GitHub's second
+# malware, as GitHub's malware advisories say; the UiPath builds are versions to update, as UiPath, their
+# maintainer, says a bug left their malware non-functional. Packages the TanStack worm spread to, GitHub's second
 # SANDWORM_MODE batch and the Mastra packages besides @mastra/core are found, Mastra named as Socket does.
 for np in npd npa npk; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x"; done
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$WORK/npk/code/x/package-lock.json"
-printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    },\n    "node_modules/intercom-client": {\n      "version": "7.0.4"\n    },\n    "node_modules/@cap-js/openapi": {\n      "version": "1.4.1"\n    },\n    "node_modules/mastraqqq": {\n      "version": "1.13.1"\n    },\n    "node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.2"\n    },\n    "node_modules/tool/node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.5"\n    },\n    "node_modules/hamus.js": {\n      "version": "0.4.1"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
 for np in npd npa npk; do HOME="$WORK/$np" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
 has    "a @keyv 6.0.0 build is npm malware, as GitHub's advisory says" '@keyv/redis 6\.0\.0 \(keyv account takeover, August 2026\).*keyv account takeover, August 2026: published from the compromised keyv account, and the GitHub advisory says to treat a machine that installed one as compromised\.' "$WORK/npk.txt"
 has    "with its advice to rotate from another computer" 'Rotate the secrets this machine held from another computer, as the GitHub advisory says, then pin each @keyv package listed in section 5 to its version before 6\.0\.0\.' "$WORK/npk.txt"
 has    "a SANDWORM_MODE sleeper package is malware, as GitHub's advisories say" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised\.' "$WORK/npd.txt"
 hasnot "and no fix says its attackers published every version" 'the attackers published every version' "$WORK/npd.txt"
-has    "a UiPath build is malware, as GitHub's advisory says" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware, and the GitHub advisory says to treat a machine that installed one as compromised, though Wiz found a bug kept its payload from working\.' "$WORK/npd.txt"
+has    "a UiPath build is a version to update, as UiPath says" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional\.' "$WORK/npd.txt"
 rm -rf "$WORK/npu"; mkdir -p "$WORK/npu/code/x" "$WORK/npu/AppData/Roaming" "$WORK/npu/AppData/Local/Temp"
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npu/code/x/package-lock.json"
 HOME="$WORK/npu" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npu.txt"
-has    "a UiPath build alone in a lockfile says to act if that project was installed" 'ACT NOW IF YOU INSTALLED IT' "$WORK/npu.txt"
-has    "and its fix says to rotate from another computer" 'Rotate the secrets this machine held from another computer, as the GitHub advisory says, then remove the @uipath packages section 5 lists\.' "$WORK/npu.txt"
+HOME="$WORK/npu" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npu-sum.txt"
+hasnot "a UiPath build alone is not a compromised machine" 'ACT NOW|Treat this machine as compromised|[Rr]otate' "$WORK/npu.txt"
+has    "and is a version to update"                   'npm malware a bad version to update' "$WORK/npu.txt"
+has    "with UiPath's own fix"                        'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional: updating them is all they need\.' "$WORK/npu.txt"
+has    "and row 05 gives UiPath's summary"            'Recent leaks +UiPath builds: update them, UiPath says no risk' "$WORK/npu-sum.txt"
 has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
+has    "a version of April's Mini Shai-Hulud wave is found" 'intercom-client 7\.0\.4 \(Mini Shai-Hulud worm, April 2026\)' "$WORK/npa.txt"
+has    "with that wave's sourced line"                'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens\. wiz\.io' "$WORK/npa.txt"
+has    "a package the TanStack worm reached after Wiz's list is found" '@cap-js/openapi 1\.4\.1 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
+has    "a Mastra typosquat Socket lists is found at any version" 'mastraqqq 1\.13\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
+has    "a package the keyv worm spread to is found"   '@thiennq/docs-viewer 1\.6\.2 \(keyv worm spread, August 2026\)' "$WORK/npa.txt"
+has    "with the spread's sourced line"               'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials\. osv\.dev' "$WORK/npa.txt"
+hasnot "a version of it the advisories do not name is not flagged" '@thiennq/docs-viewer 1\.6\.5' "$WORK/npa.txt"
+has    "a package its advisory ties to the keyv and cacheable account is the keyv worm's" 'hamus\.js 0\.4\.1 \(keyv worm, August 2026\)' "$WORK/npa.txt"
 has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
 # SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
 # to remove them comes ahead of every fix that says to rotate, an incident's own advice to rotate too.
@@ -986,6 +997,13 @@ has    "guardrails-ai 0.10.1 is its own act-now row on Linux" 'guardrails-ai 0\.
 has    "with its fix, naming it"                      "Don't run Python in the affected environments, follow guardrails-ai's advisory" "$WORK/gpy.txt"
 has    "on a Mac, guardrails-ai 0.10.1 is a version to update" 'guardrails-ai 0\.10\.1 +a bad version to update ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1 Its malware runs on Linux only, so it did not run here\. Update to a version without it\. Advisory: www\.wiz\.io/blog/' "$WORK/gpy-mac.txt"
 hasnot "and is not 'compromised' there"               'ACT NOW|Treat this machine as compromised' "$WORK/gpy-mac.txt"
+# lightning 2.6.2 and 2.6.3, the PyPI release of April's Mini Shai-Hulud wave, start a stealer when
+# imported, on any OS; 2.6.1, the version Lightning AI says to pin, is not one of them.
+cp -R "$WORK/clean" "$WORK/lpy"; mkdir -p "$WORK/lpy/code/venv/lib/site-packages/lightning-2.6.3.dist-info" "$WORK/lpy/code/old/lib/site-packages/lightning-2.6.1.dist-info"
+HOME="$WORK/lpy" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lpy.txt"
+has    "lightning 2.6.3 from PyPI is its own act-now row" 'lightning 2\.6\.2 and 2\.6\.3 +signs of the malware found ~/code/venv/lib/site-packages: lightning 2\.6\.3' "$WORK/lpy.txt"
+has    "with its fix, naming lightning"               "Treat this machine as compromised\. Don't run Python in the affected environments, follow lightning's advisory" "$WORK/lpy.txt"
+hasnot "the version Lightning AI says to pin is not flagged" 'lightning 2\.6\.1' "$WORK/lpy.txt"
 # /tmp/transformers.pyz is a Linux-only sign, with mistralai's own advice from data/indicators.tsv.
 cp -R "$WORK/clean" "$WORK/mpyt"; mkdir -p "$WORK/mpyt/tmp"; : > "$WORK/mpyt/tmp/transformers.pyz"
 HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-linux.txt"
@@ -1125,6 +1143,16 @@ mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
 rm -rf "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/win-ext.txt"
+# The January wave's oorzc extensions go on only on macOS (Socket): on Windows, one is an extension to remove.
+mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
+rm -rf "$WP/.vscode-oss"
+has    "Windows: a January GlassWorm extension, whose malware runs on macOS only, is one to remove" 'Editor extensions a malicious extension to remove ~/\.vscode-oss/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed Its malware runs on macOS only, so it did not run here\. Uninstall it\.' "$WORK/win-jan.txt"
+# boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket): on Windows it is malware.
+mkdir -p "$WP/.vscode-oss/extensions/boulderzitunnel.vscode-buddies-1.35.3"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-mw.txt"
+rm -rf "$WP/.vscode-oss"
+has    "Windows: an extension whose malware runs on macOS and Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode-oss/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/win-mw.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
@@ -1201,7 +1229,7 @@ has    "no leaks found: row 05 counts the leaks it checks" 'none of the 8 recent
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +8 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +9 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -1353,13 +1381,15 @@ has    "row 05 names the wallets"                      'Recent leaks +Injective 
 dzrun() { _h=$1; shift; env HOME="$_h" PATH="$WORK/dzbin:/usr/bin:/bin" "$@" bash "$SCRIPT" --offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
 # Editor extensions: a row, headline and fix of their own, never called npm malware. The LaunchAgent
-# GlassWorm leaves is that incident's sign, listed with its extension, never as npm malware.
-rm -rf "$WORK/dz-ext"; cp -R "$WORK/clean" "$WORK/dz-ext"; mkdir -p "$WORK/dz-ext/.cursor/extensions/oorzc.mind-map-1.0.61" "$WORK/dz-ext/Library/LaunchAgents"
+# GlassWorm leaves is that incident's sign, listed with its extension, never as npm malware. The
+# extension is one of January's earlier cluster, whose malware runs on every OS, so this reads the same
+# on any host.
+rm -rf "$WORK/dz-ext"; cp -R "$WORK/clean" "$WORK/dz-ext"; mkdir -p "$WORK/dz-ext/.cursor/extensions/littensy-studio.magical-icons-1.0.61" "$WORK/dz-ext/Library/LaunchAgents"
 : > "$WORK/dz-ext/Library/LaunchAgents/com.user.nodestart.plist"
 dzrun "$WORK/dz-ext" > "$WORK/dz-ext.txt"; tr -s ' \n' '  ' < "$WORK/dz-ext.txt" > "$WORK/dz-ext-flat.txt"
 dzrun "$WORK/dz-ext" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-ext-sum.txt"
-has    "extensions alone: their own row"              'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm' "$WORK/dz-ext-flat.txt"
-has    "extensions alone: the LaunchAgent GlassWorm leaves is listed with the extension" 'oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login' "$WORK/dz-ext-flat.txt"
+has    "extensions alone: their own row"              'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm' "$WORK/dz-ext-flat.txt"
+has    "extensions alone: the LaunchAgent GlassWorm leaves is listed with the extension" 'littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own headline"         'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-ext.txt"
 hasnot "extensions alone: no npm in the headline"     'ACT NOW.*NPM' "$WORK/dz-ext.txt"
 hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the malware|Delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
@@ -1382,7 +1412,7 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1
 # Installed next to its lockfile: a lockfile alone would leave the npm fix depending on an install.
 mkdir -p "$WORK/dz-both/code/ax/node_modules/axios"; printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/dz-both/code/ax/node_modules/axios/package.json"
 dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"
-has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map' "$WORK/dz-both.txt"
+has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons' "$WORK/dz-both.txt"
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
 has    "npm and extensions: both fixes"               'Delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
 has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
@@ -1412,6 +1442,18 @@ mkdir -p "$WORK/dz-ag/.antigravity-ide/extensions/mswincx.antigravity-cockpit-1.
 dzrun "$WORK/dz-ag" | tr -s ' \n' '  ' > "$WORK/dz-ag.txt"
 has    "Antigravity IDE's extension folder is read, as an Open VSX editor's" '~/\.antigravity-ide/extensions/mswincx\.antigravity-cockpit-1\.2\.0-universal mswincx\.antigravity-cockpit 1\.2\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ag.txt"
 has    "and the earlier Antigravity's folder too"     '~/\.antigravity/extensions/keyacrosslaud\.auto-loop-for-antigravity-0\.4\.1 keyacrosslaud\.auto-loop-for-antigravity 0\.4\.1 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-ag.txt"
+# VS Code Insiders and the remote servers keep extensions in folders of their own: VS Code's install
+# from the Marketplace (an Open VSX build's id there is the Marketplace's own), the others from Open VSX.
+rm -rf "$WORK/dz-rem"; cp -R "$WORK/clean" "$WORK/dz-rem"
+mkdir -p "$WORK/dz-rem/.vscode-insiders/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-rem/.vscode-server/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
+  "$WORK/dz-rem/.vscode-server-insiders/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" "$WORK/dz-rem/.vscode-server/extensions/aadarkcode.one-dark-material-3.20.1" \
+  "$WORK/dz-rem/.cursor-server/extensions/aadarkcode.one-dark-material-3.20.1" "$WORK/dz-rem/.windsurf-server/extensions/spacetoow.vsc-python-indent-1.21.4" \
+  "$WORK/dz-rem/.devin-server/extensions/littensy-studio.magical-icons-1.0.61"
+dzrun "$WORK/dz-rem" | tr -s ' \n' '  ' > "$WORK/dz-rem.txt"
+has    "VS Code Insiders' extension folder is read, as VS Code's" '~/\.vscode-insiders/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-rem.txt"
+has    "the VS Code Server folders are read, as VS Code's" '~/\.vscode-server/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed ~/\.vscode-server-insiders/extensions/holiday-themes\.theme-coca-cola-christmas-1\.0\.2 holiday-themes' "$WORK/dz-rem.txt"
+hasnot "an Open VSX build's id in a VS Code Server folder is not flagged" '~/\.vscode-server/extensions/aadarkcode' "$WORK/dz-rem.txt"
+has    "the Cursor, Windsurf and Devin Desktop server folders are read, as Open VSX editors'" '~/\.cursor-server/extensions/aadarkcode\.one-dark-material-3\.20\.1 aadarkcode\.one-dark-material 3\.20\.1 \(GlassWorm extensions, March 2026\), installed ~/\.windsurf-server/extensions/spacetoow\.vsc-python-indent-1\.21\.4 .*~/\.devin-server/extensions/littensy-studio\.magical-icons-1\.0\.61 littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-rem.txt"
 # Microsoft's list of extensions removed from the Marketplace: a GlassWorm theme it removed as malware and
 # an extension it removed as impersonation are looked for in VS Code's own folder too. Open VSX removed
 # every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. And a theme of the
@@ -1453,10 +1495,21 @@ done
 has    "Claude Code past 2.1.179 is told the newest fix, with its hole" '! Claude Code 2\.1\.259, update to 2\.1\.260 or later A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-cc2.1.259.txt"
 has    "below the newest fix's range the row still names it, not 2.1.179, which has a hole of its own" '! Claude Code 2\.0\.67, update to 2\.1\.260 or later A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-cc2.0.67.txt"
 hasnot "and it does not show the newest fix's hole, which that version does not have" 'A stored API key could start sessions' "$WORK/dz-cc2.0.67.txt"
-mkdir -p "$WORK/dz-os/.cursor/extensions/oorzc.mind-map-1.0.61"
+mkdir -p "$WORK/dz-os/.cursor/extensions/littensy-studio.magical-icons-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
-has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
+has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
 hasnot "and the fix to uninstall it alone is not given then" 'Their malware could not run on this system' "$WORK/dz-os2.txt"
+# The January wave's oorzc extensions go on only on macOS (Socket): on a Mac, one means a compromised machine.
+rm -rf "$WORK/dz-jan"; cp -R "$WORK/clean" "$WORK/dz-jan"; mkdir -p "$WORK/dz-jan/.cursor/extensions/oorzc.mind-map-1.0.61"
+dzrun "$WORK/dz-jan" | tr -s ' \n' '  ' > "$WORK/dz-jan.txt"
+has    "on a Mac, a January GlassWorm extension is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-jan.txt"
+# boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket's April post), so
+# its os is mac,win: on Linux it is an extension to remove, on a Mac malware.
+rm -rf "$WORK/dz-mw"; cp -R "$WORK/clean" "$WORK/dz-mw"; mkdir -p "$WORK/dz-mw/.cursor/extensions/boulderzitunnel.vscode-buddies-1.35.3"
+env HOME="$WORK/dz-mw" PATH="$WORK/linbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-mw.txt"
+has    "an extension whose malware runs on macOS and Windows is one to remove on Linux" 'Editor extensions a malicious extension to remove ~/\.cursor/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed Its malware runs on macOS and Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-mw.txt"
+dzrun "$WORK/dz-mw" | tr -s ' \n' '  ' > "$WORK/dz-mw2.txt"
+has    "the same extension on a Mac is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-mw2.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, 4 security fixes to install' "$WORK/dz-hit-sum.txt"
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
@@ -1579,7 +1632,7 @@ mu() { env HOME="$1" TMPDIR="$1/tmp" PATH=/usr/bin:/bin ${3:+GIRD_CHECK_COMPACT=
 mu "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +10 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +11 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -1650,6 +1703,8 @@ gen_refuses "a temp name of dots"                       indicators.tsv "litellm$
 gen_refuses "a Python incident that is only an update"  bad-pypi.tsv "mistralai${T}1.0.0${T}mistral${T}all"
 gen_refuses "a Python name with a hyphen"               bad-pypi.tsv "lite-llm${T}1.0.0${T}litellm${T}all"
 gen_refuses "a Python version with another os"          bad-pypi.tsv "mistralai${T}1.0.0${T}mistralpy${T}bsd"
+gen_refuses "an extension with an OS listed twice"         bad-extensions.tsv "x-pub.y-ext${T}*${T}glasswormapr${T}openvsx${T}mac,mac"
+gen_refuses "an extension with all three OSes, which is all" bad-extensions.tsv "x-pub.y-ext${T}*${T}glasswormapr${T}openvsx${T}mac,linux,win"
 gen_refuses "a temp line with no note"                  indicators.tsv "litellm${T}all${T}temp${T}yes${T}.pc_x_*${T}-"
 gen_refuses "temp lines of one incident that disagree"  indicators.tsv "litellm${T}all${T}temp${T}yes${T}.pc_x_*${T}Another note."
 # Only the path tokens the generators translate, in the syntax they translate: anything else would

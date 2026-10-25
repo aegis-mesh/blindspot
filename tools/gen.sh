@@ -103,7 +103,12 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if (!ok) print "data/outdated.tsv: " $0 }'
       # An extension that shipped malware means a compromised machine: an update-level incident is refused.
       # The os column says where its malware could run; elsewhere it is a malicious extension to remove.
-      rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 5 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || $5 !~ /^(all|mac|linux|win)$/ || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+      # It is all, one OS, or two of them separated by a comma (mac,win): never one twice, and never all
+      # three, which is all.
+      rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" '
+        function os_ok(s,   n, a, i, got) { if (s == "all") return 1; n = split(s, a, ","); if (n < 1 || n > 2) return 0
+          for (i = 1; i <= n; i++) { if (a[i] !~ /^(mac|linux|win)$/ || (a[i] in got)) return 0; got[a[i]] = 1 }; return 1 }
+        NF != 5 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || !os_ok($5) || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
