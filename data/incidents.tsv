@@ -35,6 +35,7 @@ sandworm	SANDWORM_MODE worm	February 2026	stole credentials and AI provider keys
 sandsleep	SANDWORM_MODE sleeper packages	February 2026	GitHub malware advisories say to treat a machine that installed one as compromised	https://github.com/advisories/GHSA-9w7p-hqx2-pjjx	act
 tensorlake	tensorlake package	October 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-rqxj-g25x-4v9v	act
 litellm	LiteLLM 1.107.0	October 2026	stole credentials and loaded remote-code execution tools on machines that installed it	https://docs.litellm.ai/blog/security-incident-oct-21-2026	act
+litellmmar	LiteLLM 1.82.7 and 1.82.8	March 2026	harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out	https://docs.litellm.ai/blog/security-update-march-2026	act
 opencode	OpenCode Console	October 2026	a breach hit 1.4% of Console users, some of those who had linked external providers	https://x.com/opencode/status/2111519637049319818	leak
 railway	Railway	October 2026	an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some	https://blog.railway.com/p/security-disclosure-wednesday-october-21st	leak
 zeabur	Zeabur	October 2026	an attacker read environment variables and secrets stored on the platform	https://zeabur.com/blogs/october-2026-security-incident	leak

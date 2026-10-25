@@ -1013,6 +1013,23 @@ psrun "$WORK/lpy" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lpy.txt"
 has    "lightning 2.6.3 from PyPI is its own act-now row" 'lightning 2\.6\.2 and 2\.6\.3 +signs of the malware found ~/code/venv/lib/site-packages: lightning 2\.6\.3' "$WORK/lpy.txt"
 has    "with its fix, naming lightning"               "Treat this machine as compromised\. Don't run Python in the affected environments, follow lightning's advisory" "$WORK/lpy.txt"
 hasnot "the version Lightning AI says to pin is not flagged" 'lightning 2\.6\.1' "$WORK/lpy.txt"
+# litellm 1.82.7 and 1.82.8, March 2026 (OpenSSF's MAL-2026-2144, GitHub's GHSA-5mg7-485q-xm76), on any OS: a row
+# of their own beside LiteLLM 1.107.0's, with the litellm_init.pth 1.82.8 leaves (LiteLLM's post). 1.82.6, the
+# version LiteLLM says to pin, is not one of them. With both LiteLLM incidents found, row 05 says LiteLLM once.
+cp -R "$WORK/clean" "$WORK/llm8"; mkdir -p "$WORK/llm8/code/venv/lib/site-packages/litellm-1.82.7.dist-info" "$WORK/llm8/code/v8/lib/site-packages" \
+  "$WORK/llm8/code/old/lib/site-packages/litellm-1.82.6.dist-info"
+printf 'import os\n' > "$WORK/llm8/code/v8/lib/site-packages/litellm_init.pth"
+psrun "$WORK/llm8" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/llm8.txt"
+: > "$WORK/llm8/AppData/Local/Temp/.pc_once_1"
+psrun "$WORK/llm8" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/llm8-c.txt"
+has    "litellm 1.82.7 and 1.82.8 are an act-now row of their own" 'LiteLLM 1\.82\.7 and 1\.82\.8 +signs of the malware found .*~/code/venv/lib/site-packages: litellm 1\.82\.7' "$WORK/llm8.txt"
+has    "and the litellm_init.pth that 1.82.8 leaves counts" '~/code/v8/lib/site-packages: litellm_init\.pth' "$WORK/llm8.txt"
+has    "with LiteLLM's March post as the advisory"   "Don't run Python or pip in these environments\. Advisory: docs\.litellm\.ai/blog/security-update-march-2026" "$WORK/llm8.txt"
+has    "the LiteLLM 1.107.0 row stays clean"          'LiteLLM 1\.107\.0 +no signs' "$WORK/llm8.txt"
+hasnot "the version LiteLLM says to pin, 1.82.6, is not flagged" 'litellm 1\.82\.6' "$WORK/llm8.txt"
+has    "the link flags a Python incident, not LiteLLM 1.107.0" '&ll=0&.*&py=1&' "$WORK/llm8.txt"
+has    "with both LiteLLM incidents found, row 05 names LiteLLM once" 'Recent leaks +signs of the LiteLLM malware\. Act now' "$WORK/llm8-c.txt"
+hasnot "and never twice"                              'LiteLLM and LiteLLM' "$WORK/llm8-c.txt"
 # transformers.pyz in the temp folder is a Linux-only sign of mistralai 2.4.6.
 cp -R "$WORK/clean" "$WORK/mpyt"; : > "$WORK/mpyt/AppData/Local/Temp/transformers.pyz"
 psrun "$WORK/mpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt.txt"
@@ -1153,7 +1170,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 9 recent leaks or malware it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 10 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -1164,7 +1181,7 @@ hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftove
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +9 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +10 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -1552,7 +1569,7 @@ mups() { # home out [compact]
 mups "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +11 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +12 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -1574,7 +1591,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
 mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 11 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 12 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
