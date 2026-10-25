@@ -2578,12 +2578,13 @@ has    "and under POETRY_VIRTUALENVS_PATH"            'pyo/pv/[^ ]*site-packages
 has    "and under POETRY_CACHE_DIR's virtualenvs"     'pyo/pc/virtualenvs/[^ ]*site-packages: lightning 2\.6\.3' "$WORK/pyo.txt"
 has    "and under HATCH_DATA_DIR's env/virtual"       'pyo/hd/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyo.txt"
 chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
-HOME="$WORK/pyu" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu.txt"
+HOME="$WORK/pyu" bash "$SCRIPT" --offline > "$WORK/pyu-raw.txt" 2>&1; tr -s ' \n' '  ' < "$WORK/pyu-raw.txt" > "$WORK/pyu.txt"
 HOME="$WORK/pyu" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"   # no idle agents, whose fix would take the headline
 chmod 755 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
 has    "a site-packages folder that cannot be read is not counted as checked" '! LiteLLM 1\.107\.0 (no signs in [0-9]+ Python environments?, but 1 more|1 Python environment) could not be read' "$WORK/pyu.txt"
 has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
 has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
+has    "a row's detail longer than the line wraps under itself" '^ {26}(could )?not be read$' "$WORK/pyu-raw.txt"
 # The scan keeps find's errors in a temp file: in /tmp when TMPDIR can't be written to, and with no temp
 # folder at all, it can't tell which folders it read, and says so.
 mkdir -p "$WORK/nomk"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomk/mktemp"; chmod +x "$WORK/nomk/mktemp"

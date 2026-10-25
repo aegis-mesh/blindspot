@@ -1624,12 +1624,13 @@ has    "and under POETRY_VIRTUALENVS_PATH"            'pyo/pv/[^ ]*site-packages
 has    "and under POETRY_CACHE_DIR's virtualenvs"     'pyo/pc/virtualenvs/[^ ]*site-packages: lightning 2\.6\.3' "$WORK/pyo.txt"
 has    "and under HATCH_DATA_DIR's env/virtual"       'pyo/hd/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyo.txt"
 chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
-psrun "$WORK/pyu" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu.txt"
+psrun "$WORK/pyu" -- -Offline > "$WORK/pyu-raw.txt" 2>&1; tr -s ' \n' '  ' < "$WORK/pyu-raw.txt" > "$WORK/pyu.txt"
 psrun "$WORK/pyu" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"
 chmod 755 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
 has    "a site-packages folder that cannot be read is not counted as checked" '! LiteLLM 1\.107\.0 (no signs in [0-9]+ Python environments?, but 1 more|1 Python environment) could not be read' "$WORK/pyu.txt"
 has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
 has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
+has    "a row's detail longer than the line wraps under itself" '^ {26}(could )?not be read$' "$WORK/pyu-raw.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
 # A folder whose name holds a line break: gird-check.ps1 lists folders through .NET, so it reads the
 # files in it (gird-check.sh, which reads find's output a line at a time, names it as not checked).

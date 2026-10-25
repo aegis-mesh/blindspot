@@ -187,9 +187,20 @@ function Heading([string]$title, [string]$right) {
   Emit "  $cBold$title$cRst$(' ' * $pad)$cDim$right$cRst"
   Emit "  $cDim$Rule$cRst"
 }
-# One aligned row; a long name pushes the detail down.
+# One aligned row; a long name pushes the detail down. A detail longer than the line wraps under
+# itself when it is plain or one colour throughout (Wrap keeps the colour).
 function Pair([string]$glyph, [string]$name, [int]$nw, [string]$detail) {
-  if ($name.Length -gt $nw) { Emit "     $glyph  $name"; Emit "$(' ' * ($nw + 10))$detail" }
+  $plain = $detail; $col = ''; $wrapIt = $false
+  if ($cRst) { foreach ($c in @($cRst, $cBold, $cDim, $cRed, $cGrn, $cYel, $cTeal, $cGold)) { $plain = $plain.Replace($c, '') } }
+  if ($plain.Length -gt ($Width - $nw - 10)) {
+    if ($detail -ceq $plain) { $wrapIt = $true }
+    else { foreach ($c in @($cRed, $cGrn, $cYel, $cDim, $cTeal)) { if ($c -and $detail -ceq ($c + $plain + $cRst)) { $wrapIt = $true; $col = $c } } }
+  }
+  $pad = ' ' * ($nw + 10)
+  if ($name.Length -gt $nw) {
+    Emit "     $glyph  $name"
+    if ($wrapIt) { Wrap $plain ($nw + 10) $pad $pad $col } else { Emit "$pad$detail" }
+  } elseif ($wrapIt) { Wrap $plain ($nw + 10) "     $glyph  $($name.PadRight($nw))  " $pad $col }
   else { Emit "     $glyph  $($name.PadRight($nw))  $detail" }
 }
 # The latest finding, on one line that the next one overwrites. Console only.

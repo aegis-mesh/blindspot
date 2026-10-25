@@ -284,14 +284,22 @@ heading() {
   emit "  ${B}$1${RST}$(printf '%*s' "$_pad" '')${DIM}$2${RST}"
   emit "  ${DIM}${RULE}${RST}"
 }
-# pair GLYPH NAME NAME_WIDTH DETAIL: one aligned row; long names push detail down
+# pair GLYPH NAME NAME_WIDTH DETAIL: one aligned row; long names push detail down. A detail longer
+# than the line wraps under itself when it is plain or one colour throughout (wrap keeps the colour).
 pair() {
+  _pv=$4; _pcol=""; _pwrap=0
+  if [ -n "$RST" ]; then for _c in "$RST" "$B" "$DIM" "$RED" "$GRN" "$YEL" "$TEAL" "$GOLD"; do _pv=${_pv//"$_c"/}; done; fi
+  if [ "${#_pv}" -gt $((W - $3 - 10)) ]; then
+    if [ "$4" = "$_pv" ]; then _pwrap=1
+    else for _c in "$RED" "$GRN" "$YEL" "$DIM" "$TEAL"; do [ -n "$_c" ] && [ "$4" = "$_c$_pv$RST" ] && { _pwrap=1; _pcol=$_c; }; done; fi
+  fi
+  _pad=$(printf '%*s' $(($3 + 10)) '')
   if [ "${#2}" -gt "$3" ]; then
     emit "     $1  $2"
-    emit "$(printf '%*s' $(($3 + 10)) '')$4"
+    if [ "$_pwrap" -eq 1 ]; then wrap "$_pv" $(($3 + 10)) "$_pad" "$_pad" "$_pcol"; else emit "$_pad$4"; fi
   else
     printf -v _x '%-*s' "$3" "$2"
-    emit "     $1  $_x  $4"
+    if [ "$_pwrap" -eq 1 ]; then wrap "$_pv" $(($3 + 10)) "     $1  $_x  " "$_pad" "$_pcol"; else emit "     $1  $_x  $4"; fi
   fi
 }
 
