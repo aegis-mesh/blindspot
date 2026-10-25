@@ -22,8 +22,10 @@
 #     builds, and it does not suggest the publisher's Marketplace listings were compromised (the
 #     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026). Three at their
 #     malicious versions, and oorzc.ssh-tools at every version: Open VSX removed them all and added it
-#     to its malware list, Socket says. And the thirteen earlier extensions it lists, which the
-#     Marketplace does not offer and Microsoft's list does not name.
+#     to its malware list, Socket says. Their os is mac: Socket shows their loader going on only when
+#     os.platform() is darwin, to a second stage that is a macOS implant. And the thirteen earlier
+#     extensions it lists, which the Marketplace does not offer and Microsoft's list does not name
+#     (all: the post does not show what their code checks).
 #   13 March 2026: the 72 extensions listed since that report, less those thirteen. Four were on the
 #     Marketplace too: Microsoft's list removes Lavender-Studio.theme-lavender-dreams as malware (2
 #     October 2026), and the dopbop-studio, kwitch-studio and potstok ones as impersonation (3 March
@@ -37,10 +39,10 @@
 #     the versions of those three it read; Microsoft's classification governs, as GitHub's malware
 #     advisories do for npm.
 # id	version	incident	registry	os
-oorzc.ssh-tools	*	glassworm	openvsx	all
-oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	all
-oorzc.mind-map	1.0.61	glassworm	openvsx	all
-oorzc.scss-to-css-compile	1.3.4	glassworm	openvsx	all
+oorzc.ssh-tools	*	glassworm	openvsx	mac
+oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
+oorzc.mind-map	1.0.61	glassworm	openvsx	mac
+oorzc.scss-to-css-compile	1.3.4	glassworm	openvsx	mac
 Angular-studio.ng-angular-extension	*	glassworm	openvsx	all
 awesome-codebase.codebase-dart-pro	*	glassworm	openvsx	all
 cudra-production.vsce-prettier-pro	*	glassworm	openvsx	all

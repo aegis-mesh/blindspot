@@ -2683,10 +2683,10 @@ uudi * sandsleep
 @injectivelabs/sdk-ts 1.20.21 injective"
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
-BAD_EXT="oorzc.ssh-tools * glassworm openvsx all
-oorzc.i18n-tools-plus 1.6.8 glassworm openvsx all
-oorzc.mind-map 1.0.61 glassworm openvsx all
-oorzc.scss-to-css-compile 1.3.4 glassworm openvsx all
+BAD_EXT="oorzc.ssh-tools * glassworm openvsx mac
+oorzc.i18n-tools-plus 1.6.8 glassworm openvsx mac
+oorzc.mind-map 1.0.61 glassworm openvsx mac
+oorzc.scss-to-css-compile 1.3.4 glassworm openvsx mac
 Angular-studio.ng-angular-extension * glassworm openvsx all
 awesome-codebase.codebase-dart-pro * glassworm openvsx all
 cudra-production.vsce-prettier-pro * glassworm openvsx all

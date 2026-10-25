@@ -1184,13 +1184,15 @@ has    "row 05 names the wallets"                      'Recent leaks +Injective 
 dzrun() { _h=$1; shift; psrun "$_h" "$@" -- -Offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
 # Editor extensions: a row, headline and fix of their own, never called npm malware. The LaunchAgent
-# GlassWorm leaves is that incident's sign, listed with its extension, never as npm malware.
-rm -rf "$WORK/dz-ext"; cp -R "$WORK/clean" "$WORK/dz-ext"; mkdir -p "$WORK/dz-ext/.cursor/extensions/oorzc.mind-map-1.0.61" "$WORK/dz-ext/Library/LaunchAgents"
+# GlassWorm leaves is that incident's sign, listed with its extension, never as npm malware. The
+# extension is one of January's earlier cluster, whose malware runs on every OS, so this reads the same
+# on any host.
+rm -rf "$WORK/dz-ext"; cp -R "$WORK/clean" "$WORK/dz-ext"; mkdir -p "$WORK/dz-ext/.cursor/extensions/littensy-studio.magical-icons-1.0.61" "$WORK/dz-ext/Library/LaunchAgents"
 : > "$WORK/dz-ext/Library/LaunchAgents/com.user.nodestart.plist"
 dzrun "$WORK/dz-ext" > "$WORK/dz-ext.txt"; tr -s ' \n' '  ' < "$WORK/dz-ext.txt" > "$WORK/dz-ext-flat.txt"
 dzrun "$WORK/dz-ext" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-ext-sum.txt"
-has    "extensions alone: their own row"              'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm' "$WORK/dz-ext-flat.txt"
-has    "extensions alone: the LaunchAgent GlassWorm leaves is listed with the extension" 'oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login' "$WORK/dz-ext-flat.txt"
+has    "extensions alone: their own row"              'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm' "$WORK/dz-ext-flat.txt"
+has    "extensions alone: the LaunchAgent GlassWorm leaves is listed with the extension" 'littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed ~/Library/LaunchAgents/com\.user\.nodestart\.plist starts the GlassWorm malware at login' "$WORK/dz-ext-flat.txt"
 has    "extensions alone: their own headline"         'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-ext.txt"
 hasnot "extensions alone: no npm in the headline"     'ACT NOW.*NPM' "$WORK/dz-ext.txt"
 hasnot "extensions alone: no npm malware row or fix"  'npm malware +signs of the malware|Delete the packages and files listed in section 5|signs of npm malware' "$WORK/dz-ext.txt"
@@ -1213,7 +1215,7 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1
 # Installed next to its lockfile: a lockfile alone would leave the npm fix depending on an install.
 mkdir -p "$WORK/dz-both/code/ax/node_modules/axios"; printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/dz-both/code/ax/node_modules/axios/package.json"
 dzrun "$WORK/dz-both" | tr -s ' \n' '  ' > "$WORK/dz-both.txt"
-has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map' "$WORK/dz-both.txt"
+has    "npm and extensions: both rows, each with its own findings" 'npm malware signs of the malware found ~/code/ax/package-lock\.json axios 1\.14\.1 .*Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons' "$WORK/dz-both.txt"
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
 has    "npm and extensions: both fixes"               'Delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
 has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
@@ -1276,10 +1278,16 @@ has    "Cursor between two fixes is told the newest" '! Cursor 3\.0\.5, update t
 hasnot "and not the hole its version already has the fix for" 'update to 3\.1\.2 or later A malicious agent' "$WORK/dz-old.txt"
 SKIPPING=""
 has    "Claude Code in a sandbox escape's range: its hole, the newest fix's, and that fix" '! Claude Code 2\.1\.100, update to 2\.1\.179 or later A malicious repository could run code outside the sandbox\. github\.com/advisories/GHSA-7835-87q9-rgvv A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-old.txt"
-mkdir -p "$WORK/dz-os/.cursor/extensions/oorzc.mind-map-1.0.61"
+mkdir -p "$WORK/dz-os/.cursor/extensions/littensy-studio.magical-icons-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
-has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
+has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
 hasnot "and the fix to uninstall it alone is not given then" 'Their malware could not run on this system' "$WORK/dz-os2.txt"
+# The January wave's oorzc extensions go on only on macOS (Socket): on a Mac, one means a compromised machine.
+rm -rf "$WORK/dz-jan"; cp -R "$WORK/clean" "$WORK/dz-jan"; mkdir -p "$WORK/dz-jan/.cursor/extensions/oorzc.mind-map-1.0.61"
+[ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
+[ -n "$SKIPPING" ] || dzrun "$WORK/dz-jan" | tr -s ' \n' '  ' > "$WORK/dz-jan.txt"
+has    "on a Mac, a January GlassWorm extension is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-jan.txt"
+SKIPPING=""
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, [34] security fixes to install' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
@@ -1801,6 +1809,11 @@ mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
 rm -rf "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/win-ext.txt"
+# The January wave's oorzc extensions go on only on macOS (Socket): on Windows, one is an extension to remove.
+mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
+winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
+rm -rf "$WP/.vscode-oss"
+has    "Windows: a January GlassWorm extension, whose malware runs on macOS only, is one to remove" 'Editor extensions a malicious extension to remove ~/\.vscode-oss/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed Its malware runs on macOS only, so it did not run here\. Uninstall it\.' "$WORK/win-jan.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"

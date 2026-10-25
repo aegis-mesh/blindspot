@@ -66,3 +66,4 @@ rg: nothing else in that folder is read	needs ripgrep on PATH: these tests drive
 rg: its .pb files are counted and named as encrypted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: a folder of SQLite conversations alone is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: and never called encrypted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+on a Mac, a January GlassWorm extension is malware	needs pwsh on macOS: gird-check.ps1 knows macOS by /System/Library/CoreServices, and the January oorzc extensions are malware only there
