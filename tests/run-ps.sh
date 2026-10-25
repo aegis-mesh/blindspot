@@ -1117,7 +1117,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 8 recent leaks or malware it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 9 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -1537,7 +1537,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
 mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 10 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 11 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"

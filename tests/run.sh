@@ -1225,7 +1225,7 @@ lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offlin
 lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 8 recent leaks or malware it checks' "$WORK/zb-none.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 9 recent leaks or malware it checks' "$WORK/zb-none.txt"
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' "$WORK/zb-none-full.txt"
@@ -1655,7 +1655,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.local/share/opencode" "$WORK/mu-plat/.railway"
 mu "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 10 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 11 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mu "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
