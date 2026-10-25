@@ -998,7 +998,7 @@ has    "@cap-js/openapi 1.4.1 is the AntV wave's, as its advisories say" '@cap-j
 has    "a package of the AntV account takeover is found" 'echarts-for-react 3\.1\.7 \(AntV account takeover, May 2026\)' "$WORK/npa.txt"
 has    "with the AntV wave's sourced line"           'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials\. osv\.dev' "$WORK/npa.txt"
 has    "a package of June's Red Hat Cloud Services wave is found" '@redhat-cloud-services/chrome 2\.3\.4 \(Red Hat Cloud Services packages, June 2026\)' "$WORK/npa.txt"
-has    "with the Red Hat wave's sourced line"        'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials\. github\.com' "$WORK/npa.txt"
+has    "with the Red Hat wave's sourced line"        'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials\. osv\.dev' "$WORK/npa.txt"
 hasnot "versions of those packages the entries do not name are not flagged" 'echarts-for-react 3\.1\.6|@antv/a8 0\.0\.1' "$WORK/npa.txt"
 has    "a native package of tensorlake 0.5.144 is found, as Tensorlake's advisory names it" 'tensorlake-native-linux-x64-gnu 0\.5\.144 \(tensorlake package, October 2026\)' "$WORK/npa.txt"
 hasnot "and a native build before it is not"          'tensorlake-native-darwin-arm64' "$WORK/npa.txt"
