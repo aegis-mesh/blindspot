@@ -533,15 +533,33 @@ function Link-Target($info) {
   if (-not $t) { try { $t = @((Get-Item -LiteralPath $info.FullName -Force -ErrorAction Stop).Target)[0] } catch { } }
   [string]$t
 }
-# Does a link in $dir with this target resolve to this user's own ~/.ssh/authorized_keys? The paths
-# are compared resolved, so a link into a repo's own .ssh/authorized_keys fixture does not count,
-# and a link to the file's place counts before the file exists: an agent writing through it creates it.
-$AkPath = $null; try { $AkPath = [IO.Path]::GetFullPath((J $HomeDir '.ssh/authorized_keys')) } catch { }
+# A folder's physical path, with the links on the way resolved, as cd and pwd -P give it: .NET reads
+# the current directory back from the system, which resolves them (Windows keeps the path as given).
+# $null when the folder can't be entered.
+function Real-Dir([string]$d) {
+  $old = [IO.Directory]::GetCurrentDirectory()
+  try { [IO.Directory]::SetCurrentDirectory($d); [IO.Directory]::GetCurrentDirectory() } catch { $null } finally { try { [IO.Directory]::SetCurrentDirectory($old) } catch { } }
+}
+# Does a link in $dir with this target resolve to this user's own ~/.ssh/authorized_keys? As bash's
+# find -ilname '*authorized_keys' and -ef: a target named so, in any case, whose folder resolves to
+# ~/.ssh, so .ssh/./authorized_keys, .ssh//authorized_keys and a link through a linked folder count,
+# and another case of the name counts where the volume ignores case (APFS, NTFS). A link into a repo's
+# own .ssh/authorized_keys fixture does not count, and a link to the file's place counts before the
+# file exists: an agent writing through it creates it.
+$AkDir = $null; $AkCaseless = $false
+if (Is-Dir (J $HomeDir '.ssh')) { $AkDir = Real-Dir (J $HomeDir '.ssh') }
+if ($AkDir) { $AkCaseless = (Is-File (J $AkDir 'authorized_keys')) -and (Is-File (J $AkDir 'AUTHORIZED_KEYS')) }
 function Is-AkLink([string]$dir, [string]$target) {
-  if (-not $target -or -not $AkPath) { return $false }
+  if (-not $target -or -not $AkDir) { return $false }
   try {
-    $t = $target; if (-not [IO.Path]::IsPathRooted($t)) { $t = J $dir $t }
-    return [IO.Path]::GetFullPath($t).Equals($AkPath, $PathCmp)
+    $t = $target -replace '\\', '/'; $cut = $t.LastIndexOf('/'); $base = $t.Substring($cut + 1)
+    if (-not $base.EndsWith('authorized_keys', [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    if ($cut -lt 0) { $parent = $dir } elseif ($cut -eq 0) { $parent = '/' } else { $parent = $t.Substring(0, $cut) }
+    if (-not [IO.Path]::IsPathRooted($parent)) { $parent = J $dir $parent }
+    $real = Real-Dir $parent
+    if (-not $real -or -not $real.Equals($AkDir, $PathCmp)) { return $false }
+    if ($base -ceq 'authorized_keys') { return $true }
+    return ($AkCaseless -and $base.Equals('authorized_keys', [StringComparison]::OrdinalIgnoreCase))
   } catch { return $false }
 }
 function Scan-Home([string]$dir, [int]$depth) {

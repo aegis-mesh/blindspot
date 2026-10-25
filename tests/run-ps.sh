@@ -841,6 +841,22 @@ hasnot "a project's chat.tools.global.autoApprove is not reported: VS Code reads
 cp -R "$WORK/dz-hit" "$WORK/dz-dangle"; rm "$WORK/dz-dangle/.ssh/authorized_keys"
 dzrun "$WORK/dz-dangle" | tr -s ' \n' '  ' > "$WORK/dz-dangle.txt"
 has    "a link to an authorized_keys that does not exist yet still counts" 'Files that link to your SSH logins ✗ ~/code/links/notes\.txt' "$WORK/dz-dangle.txt"
+# Every link that resolves to authorized_keys is listed, whatever its text: through ./ or //, through a
+# linked folder, and in another case where the volume ignores it. A link to another file whose name
+# ends the same way is not.
+rm -rf "$WORK/ak"; cp -R "$WORK/clean" "$WORK/ak"; mkdir -p "$WORK/ak/.ssh" "$WORK/ak/code/a" "$WORK/ak/code/b" "$WORK/ak/code/c" "$WORK/ak/code/d" "$WORK/ak/code/e" "$WORK/ak/code/repo"
+: > "$WORK/ak/.ssh/authorized_keys"; : > "$WORK/ak/.ssh/my_authorized_keys"
+ln -s ../../.ssh/authorized_keys "$WORK/ak/code/a/plain.txt"; ln -s ../../.ssh/./authorized_keys "$WORK/ak/code/b/dot.txt"
+ln -s ../../.ssh//authorized_keys "$WORK/ak/code/c/dslash.txt"; ln -s ../../.ssh "$WORK/ak/code/repo/sshdir"; ln -s sshdir/authorized_keys "$WORK/ak/code/repo/keys.txt"
+ln -s ../../.SSH/Authorized_Keys "$WORK/ak/code/d/case.txt"; ln -s ../../.ssh/my_authorized_keys "$WORK/ak/code/e/other.txt"
+dzrun "$WORK/ak" | tr -s ' \n' '  ' > "$WORK/ak.txt"
+has    "a link to authorized_keys still counts"        '✗ ~/code/a/plain\.txt' "$WORK/ak.txt"
+has    "a link through ./ counts"                     '✗ ~/code/b/dot\.txt' "$WORK/ak.txt"
+has    "a link through // counts"                     '✗ ~/code/c/dslash\.txt' "$WORK/ak.txt"
+has    "a link through a linked folder counts"        '✗ ~/code/repo/keys\.txt' "$WORK/ak.txt"
+if [ -e "$WORK/ak/.SSH/AUTHORIZED_KEYS" ]; then has "a link in another case counts where the volume ignores case" '✗ ~/code/d/case\.txt' "$WORK/ak.txt"
+else skip "a link in another case counts where the volume ignores case" "this volume tells case apart, so the link does not reach the file"; fi
+hasnot "a link to another file named like it does not count" 'code/e/other\.txt' "$WORK/ak.txt"
 # A settings file is read as one line (Flat-Text), so a setting inside a /* */ block comment is not
 # at a boundary and is not read. Known limits (docs/designs/dossier-checks.md, Not covered): Codex
 # values in single quotes, and a profile made the default with profile = "x", are not read.

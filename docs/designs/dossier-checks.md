@@ -95,10 +95,13 @@ installed version, "update to <fixed> or later", what the hole allows and the ad
 
 The home scan also prints symbolic links as candidates, and the shell keeps those that resolve to
 this user's own `~/.ssh/authorized_keys`, outside `~/.ssh` itself: `-ef` in bash (the files
-themselves, so a link into a repo's own `.ssh/authorized_keys` fixture does not count), the resolved
-paths in PowerShell. A link to the file's place counts before the file exists, since an agent writing
-through it creates it. A find with `-lname` (GNU, BSD) narrows the candidates to links whose text
-names `authorized_keys`; BusyBox's find has no `-lname` and rejects the whole expression over it (so
+themselves, so a link into a repo's own `.ssh/authorized_keys` fixture does not count), and in
+PowerShell the target's folder resolved as `cd` and `pwd -P` would (another case of the name counts
+where the volume ignores case). A link to the file's place counts before the file exists, since an
+agent writing through it creates it. A find with `-ilname` (GNU, BSD) narrows the candidates to links
+whose text ends in `authorized_keys`, in any case, so `.ssh/./authorized_keys`, `.ssh//authorized_keys`,
+a link through a linked folder and, on a volume that ignores case, `.SSH/Authorized_Keys` all reach
+`-ef`; BusyBox's find has no `-ilname` and rejects the whole expression over it (so
 on Alpine the scan used to print nothing and every file check read as clean), and its `-exec ... +`
 drops links, so there every link is printed with one `-exec` each. If find still rejects the
 expression, the header says the home folder was not scanned instead of calling it clean. No source
@@ -171,8 +174,10 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   place is read if it sits at a boundary (`/*, "key": true */`).
 - Codex values written in single quotes, and a `[profiles.x]` table made the default by
   `profile = "x"`, are not read.
-- A link that reaches `authorized_keys` through a linked folder: bash resolves it (`-ef`),
-  PowerShell compares the written paths.
+- A link to a link whose own text does not end in `authorized_keys` (`keys -> notes.txt`, where
+  `notes.txt -> ../.ssh/authorized_keys`): `notes.txt` is listed, `keys` is not. On Windows,
+  PowerShell does not resolve a linked folder on the way. Before `authorized_keys` exists, a link that
+  spells `.ssh` in another case on a volume that ignores case is listed by PowerShell, not by bash.
 - An agent run with a flag on the command line (`--dangerously-skip-permissions`, `--yolo`):
   nothing on disk records it.
 

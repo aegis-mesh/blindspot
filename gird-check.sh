@@ -843,12 +843,14 @@ EOF
 $AA_PROJECT
 EOF
   # Links are printed as "L path", candidates for the ~/.ssh/authorized_keys check that ak_link
-  # settles in the shell. A find with -lname (GNU, BSD) keeps only links whose text names
-  # authorized_keys. BusyBox's find has no -lname and rejects the whole expression over it, and its
-  # -exec ... + drops links, so there every link is printed, one -exec each.
+  # settles in the shell with -ef. A find with -ilname (GNU, BSD) keeps only links whose text ends in
+  # authorized_keys, in any case, so .ssh/./authorized_keys, .ssh//authorized_keys, a link through a
+  # linked folder and, on a volume that ignores case, .SSH/Authorized_Keys all reach -ef. BusyBox's
+  # find has no -ilname and rejects the whole expression over it, and its -exec ... + drops links, so
+  # there every link is printed, one -exec each.
   # Linked settings, tasks and planted files are printed as "S path" the same way.
-  if find /dev/null -maxdepth 0 -lname x >/dev/null 2>&1; then
-    _lk=(-lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +)
+  if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
+    _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +)
   else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
