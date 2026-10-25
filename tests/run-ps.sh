@@ -491,6 +491,19 @@ PY3
 T0=$(date +%s); psrun "$WORK/bigjs" -- -Offline > "$WORK/bigjs.txt" 2>&1; T=$(( $(date +%s) - T0 ))
 has    "a huge one-line tasks.json is read whole"      'p/\.vscode/tasks\.json' "$WORK/bigjs.txt"
 if [ "$T" -le 60 ]; then ok "and in reasonable time" "${T}s"; else bad "and in reasonable time" "took ${T}s"; fi
+# A project file can hold one huge line: a string of 100,000 backslashes in settings.json, 100,000
+# letters on one line of a yarn.lock. Each is read in time that grows with its size, and the
+# hooks after the backslashes and the bad version after the letters are still found.
+mkdir -p "$WORK/longln/p/.claude" "$WORK/longln/code/y" "$WORK/longln/AppData/Roaming" "$WORK/longln/AppData/Local/Temp"
+python3 - "$WORK/longln/p/.claude/settings.json" "$WORK/longln/code/y/yarn.lock" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('{"permissions":{"allow":["Bash(echo ' + '\\\\' * 100000 + 'a)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make"}]}]}}\n')
+open(sys.argv[2], 'w').write('a' * 100000 + '\n"axios@^1.14.0":\n  version "1.14.1"\n  resolved "https://registry.yarnpkg.com/axios/-/axios-1.14.1.tgz#abc"\n')
+PY3
+T0=$(date +%s); psrun "$WORK/longln" -- -Offline > "$WORK/longln.txt" 2>&1; T=$(( $(date +%s) - T0 ))
+has    "a settings file of 100,000 backslashes is read whole" 'p/\.claude/settings\.json' "$WORK/longln.txt"
+has    "a lockfile line of 100,000 letters does not hide the next" 'axios 1\.14\.1 \(Axios takeover' "$WORK/longln.txt"
+if [ "$T" -le 60 ]; then ok "and both in reasonable time" "${T}s"; else bad "and both in reasonable time" "took ${T}s"; fi
 awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
 if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
 # The clean line, against gird-check.sh's count, and a folder of npm's cache that can't be read.

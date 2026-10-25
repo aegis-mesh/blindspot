@@ -467,6 +467,19 @@ PY3
 T0=$(date +%s); HOME="$WORK/bigjs" bash "$SCRIPT" --offline > "$WORK/bigjs.txt" 2>&1; T=$(( $(date +%s) - T0 ))
 has    "a huge one-line tasks.json is read whole"      'p/\.vscode/tasks\.json' "$WORK/bigjs.txt"
 if [ "$T" -le 30 ]; then ok "and in reasonable time" "${T}s"; else bad "and in reasonable time" "took ${T}s"; fi
+# A project file can hold one huge line: a string of 100,000 backslashes in settings.json, 100,000
+# letters on one line of a yarn.lock. Each is read in time that grows with its size, and the
+# hooks after the backslashes and the bad version after the letters are still found.
+mkdir -p "$WORK/longln/p/.claude" "$WORK/longln/code/y"
+python3 - "$WORK/longln/p/.claude/settings.json" "$WORK/longln/code/y/yarn.lock" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('{"permissions":{"allow":["Bash(echo ' + '\\\\' * 100000 + 'a)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make"}]}]}}\n')
+open(sys.argv[2], 'w').write('a' * 100000 + '\n"axios@^1.14.0":\n  version "1.14.1"\n  resolved "https://registry.yarnpkg.com/axios/-/axios-1.14.1.tgz#abc"\n')
+PY3
+T0=$(date +%s); HOME="$WORK/longln" bash "$SCRIPT" --offline > "$WORK/longln.txt" 2>&1; T=$(( $(date +%s) - T0 ))
+has    "a settings file of 100,000 backslashes is read whole" 'p/\.claude/settings\.json' "$WORK/longln.txt"
+has    "a lockfile line of 100,000 letters does not hide the next" 'axios 1\.14\.1 \(Axios takeover' "$WORK/longln.txt"
+if [ "$T" -le 30 ]; then ok "and both in reasonable time" "${T}s"; else bad "and both in reasonable time" "took ${T}s"; fi
 HOME="$WORK/clean" bash "$SCRIPT" --offline > "$WORK/clean-npm.txt" 2>&1
 has    "the clean line counts versions and packages apart" 'none of [0-9]+ bad versions or [0-9]+ bad packages' "$WORK/clean-npm.txt"
 # npm's cache that can't be read in full: a folder inside it, _cacache itself, or an index file. Nothing

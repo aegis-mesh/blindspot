@@ -1434,10 +1434,18 @@ TAB=$(printf '\t')
 # JSONC parser reads it). tasks.json and VS Code's settings.json are JSONC, and a commented-out
 # setting in any other file is not active either. Each line is split on its quotes, and each piece
 # outside a string on its slashes, both with a one-character separator, and every chunk is looked at
-# a bounded number of times: linear whatever the input, where a loop over single characters, or a
-# regex split or gsub with many matches, is quadratic on macOS's awk for a long minified line.
+# a bounded number of times, so the time grows with the size of the file: a loop over single
+# characters (substr measures the whole string on macOS's awk), a regex split or gsub with many
+# matches, or a match that can restart inside a long run would be quadratic on a long minified line.
 flat() {
   tr '\r\t' '\n ' < "$1" 2>/dev/null | awk '
+    # How many backslashes s ends with. A match anchored at the last other character starts once per
+    # run of backslashes, where /\\+$/ restarts at every backslash of a long run.
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
     # A piece between two quotes, in code (st 0) or inside a block comment (st 2). Split on /,
     # // is an empty chunk between two slashes, /* a chunk starting with *, and */ a chunk ending
     # in * before a slash; the * that opened the comment (a /*/) closes nothing. Returns 1 on a // comment.
@@ -1457,7 +1465,7 @@ flat() {
     { nq = split($0, q, "\"")
       for (i = 1; i <= nq; i++) {
         if (st == 1) {            # in a string: kept as it is; an odd run of \ escapes the quote or the line break
-          printf "%s", q[i]; esc = (match(q[i], /\\+$/) && RLENGTH % 2 == 1)
+          printf "%s", q[i]; esc = (trail(q[i]) % 2 == 1)
           if (i < nq) printf "\""
           if (!esc) st = 0
           continue
@@ -2489,7 +2497,9 @@ vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx"
 # nested and bundled ones (node_modules/tool/node_modules/name) included, since those have no URL,
 # and pnpm 5 and 7's /name/1.2.3 keys. A pin in an overrides section
 # moves away from a version, so overrides are skipped. Versions are printed only if they look like
-# versions, so a package can't put terminal control codes in the report.
+# versions, so a package can't put terminal control codes in the report. URLs and tokens are found
+# by splitting each line on /-/ and on @, so the time grows with the line: a match loop over a long
+# line of name characters would restart at each of them, quadratic on every awk.
 npm_hits() {
   BAD_NPM_LIST=$BAD_NPM awk '
     BEGIN {
@@ -2522,16 +2532,30 @@ npm_hits() {
       t = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]+\//, "", t); k = match(t, /\/[0-9]/); hit(substr(t, 1, k - 1), substr(t, k + 1))
     }
     {
-      line = $0; gsub(/@npm:/, "@", line); rest = line
-      while (match(rest, /\/(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+\/-\/[A-Za-z0-9._~-]+\.tgz/)) {
-        u = substr(rest, RSTART + 1, RLENGTH - 5); rest = substr(rest, RSTART + RLENGTH)
-        k = index(u, "/-/"); nm = substr(u, 1, k - 1); base = substr(u, k + 3); b = nm; sub(/^@[^\/]*\//, "", b)
+      line = $0; gsub(/@npm:/, "@", line)
+      # /name/-/name-1.2.3.tgz or /@scope/name/-/name-1.2.3.tgz: the folder before each /-/ and the
+      # file after it.
+      nt = split(line, T, "/-/")
+      for (j = 1; j < nt; j++) {
+        if (!match(T[j + 1], /^[A-Za-z0-9._~-]+\.tgz/)) continue
+        base = substr(T[j + 1], 1, RLENGTH - 4)
+        ns = split(T[j], S, "/"); if (ns < 2 || S[ns] !~ /^[A-Za-z0-9._~-]+$/) continue
+        nm = S[ns]; b = nm
+        if (ns >= 3 && S[ns - 1] ~ /^@[A-Za-z0-9._~-]+$/) nm = S[ns - 1] "/" nm
         if (substr(base, 1, length(b) + 1) == b "-") hit(nm, substr(base, length(b) + 2))
       }
-      rest = line
-      while (match(rest, /(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+@[0-9][0-9A-Za-z.+-]*/)) {
-        t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
-        k = index(substr(t, 2), "@") + 1; hit(substr(t, 1, k - 1), substr(t, k + 1))
+      # name@1.2.3 or @scope/name@1.2.3: each piece after an @ that starts with a digit is a version,
+      # and the name chars that end the piece before it its name, unless that piece was all version.
+      np = split(line, P, "@"); used = 0
+      for (j = 2; j <= np; j++) {
+        if (!match(P[j], /^[0-9][0-9A-Za-z.+-]*/)) { used = 0; continue }
+        v = substr(P[j], 1, RLENGTH); whole = (RLENGTH == length(P[j])); nm = ""
+        if (!used) {
+          if (j >= 3 && P[j - 1] ~ /^[A-Za-z0-9._~-]+\/[A-Za-z0-9._~-]+$/) nm = "@" P[j - 1]
+          else { nw = split(P[j - 1], W, /[^A-Za-z0-9._~-]/); nm = W[nw] }
+          if (nm != "") hit(nm, v)
+        }
+        used = (nm != "" && whole)
       }
     }' "$@" 2>/dev/null
 }
