@@ -109,3 +109,4 @@ a SHA-256 on a file that counts alone	tools/gen.sh is one bash tool that writes 
 a folder with a line break in its name is named as not checked	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
 and the rows it feeds are not green	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
 and the headline does not call that scan clean	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
+on a Mac, the snapshot note does not say the malware took anything	gird-check.ps1 prints a one-line Argus note and has no Mac snapshot paragraph

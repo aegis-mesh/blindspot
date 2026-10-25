@@ -2223,6 +2223,21 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
 $NPM_HIT = 0; $NPM_UPD = 0
 $NpmTags = @($NpmRows | ForEach-Object { $_[2] } | Sort-Object -Unique -CaseSensitive)
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'act') { $NPM_HIT = 1 } else { $NPM_UPD = 1 } }
+# A lockfile records what some machine resolved, not what ran here. An act-level hit was installed
+# when npm's cache or a global install has it, or node_modules next to the lockfile holds that
+# version. A hit in a lockfile alone ($LockProj holds their folders) leaves the headline and the fix
+# depending on whether that project was installed; the score and the link stay as they are.
+$NpmInst = 0; $LockProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($r in $NpmRows) {
+  if ((Incident-Level $r[2]) -ne 'act') { continue }
+  if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
+    $isp = $r[1].LastIndexOf(' '); $ipn = $r[1].Substring(0, $isp); $ipv = $r[1].Substring($isp + 1)
+    $ipj = J (J (J ([IO.Path]::GetDirectoryName($r[0])) 'node_modules') $ipn) 'package.json'
+    $iiv = ''; if (Is-File $ipj) { $im = [regex]::Match([string](Read-Text $ipj), '"version"\s*:\s*"([^"]+)"'); if ($im.Success) { $iiv = $im.Groups[1].Value } }
+    if ($iiv -and $iiv -ceq $ipv) { $NpmInst = 1 } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
+  } else { $NpmInst = 1 }
+}
+$N_LOCKPROJ = $LockProj.Count
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
 # when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
 # the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
@@ -2256,6 +2271,7 @@ foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) 
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
+$MAL_LOCKONLY = 0; if ($MAL_HIT -eq 1 -and $NpmInst -eq 0 -and $Persist.Count -eq 0 -and $WIPER_HIT -eq 0) { $MAL_LOCKONLY = 1 }
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
 # extension incident's startup file is its sign too.
 $EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
@@ -2349,7 +2365,12 @@ function Add-Todo([int]$sec, [string]$text) {
   $Todo.Add($text); $Fixes[$sec].Add($text)
 }
 if ($WIPER_HIT -eq 1) { Add-Todo 5 'Don''t revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach.' }
-if ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
+# A bad version found only in lockfiles: whether this machine is compromised depends on whether
+# that project was installed here.
+if ($MAL_LOCKONLY -eq 1) {
+  if ($N_LOCKPROJ -eq 1) { $lp = 'the project'; $ll = 'its lockfile' } else { $lp = 'the projects'; $ll = 'their lockfiles' }
+  Add-Todo 5 "If you ran an install in $lp section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach. If not, update $ll to a version without the malware."
+} elseif ($MAL_HIT -eq 1) { Add-Todo 5 'Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm''s cache with npm cache clean --force, and rotate every key this machine could reach.' }
 if ($EXT_HIT -eq 1) {
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
   if ($ExtRows.Count -gt 0 -and $ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
@@ -2518,8 +2539,11 @@ if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
 }
 $Act = ''
 if ($WIPER_HIT -eq 1) { $Act = 'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' }
-elseif ($ANY_MAL -eq 1) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
+elseif ($ANY_MAL -eq 1 -and ($MAL_LOCKONLY -eq 0 -or $EXT_HIT -eq 1)) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
 elseif ($PY_HIT -eq 1) { $Act = "ACT NOW: SIGNS OF THE $((@($PyHits | ForEach-Object { Incident-Name $_ }) -join ' AND ').ToUpperInvariant()) MALWARE" }
+elseif ($MAL_LOCKONLY -eq 1) {
+  if ($N_LOCKPROJ -eq 1) { $Act = 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' } else { $Act = 'ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE' }
+}
 if ($Act) {
   Emit "  $Sev$gBar$cRst $cBold$Act$cRst"
   if ($PctTxt) { Emit "  $Sev$gBar$cRst $cBold$PctTxt.$cRst $FixN." } else { Emit "  $Sev$gBar$cRst $FixN." }
@@ -2812,6 +2836,7 @@ else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
 $leaks = @($Platforms | Where-Object { $PlatFound -contains $_.Id })
 if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it before revoking tokens' }
 elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
+elseif ($MAL_LOCKONLY -eq 1 -and $EXT_HIT -eq 0) { $G5 = "$cRed$gX$cRst"; $D5 = 'npm malware in a lockfile: act if installed' }
 elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }

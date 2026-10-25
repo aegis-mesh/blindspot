@@ -2742,6 +2742,28 @@ NPM_TAGS=$(printf '%s\n' "$NPM_ROWS" | cut -f3 | grep -v '^$' | sort -u)
 for _t in $NPM_TAGS; do
   if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
 done
+# A lockfile records what some machine resolved, not what ran here. An act-level hit was installed
+# when npm's cache or a global install has it, or node_modules next to the lockfile holds that
+# version. A hit in a lockfile alone (NPM_LOCKPROJ lists their folders) leaves the headline and the
+# fix depending on whether that project was installed; the score and the link stay as they are.
+pkg_version() { # package.json: its first "version"
+  awk 'match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/) { v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); print v; exit }' "$1" 2>/dev/null
+}
+NPM_INST=0; NPM_LOCKPROJ=""
+while IFS="$TAB" read -r _f _p _t; do
+  [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
+  case "$_f" in
+    */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
+      _pj="${_f%/*}/node_modules/${_p% *}/package.json"
+      if [ -f "$_pj" ] && [ "$(pkg_version "$_pj")" = "${_p##* }" ]; then NPM_INST=1
+      else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
+"; fi ;;
+    *) NPM_INST=1 ;;
+  esac
+done <<EOF
+$NPM_ROWS
+EOF
+N_LOCKPROJ=$(printf '%s' "$NPM_LOCKPROJ" | sort -u | grep -c .)
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
 # when the stolen GitHub token stops working (it erased the home folder in the TanStack wave, Wiz; in
 # the keyv wave it runs an attacker-supplied command, SANS), so it must be stopped before any token
@@ -2778,6 +2800,7 @@ fi
 "
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
+MAL_LOCKONLY=0; if [ "$MAL_HIT" -eq 1 ] && [ "$NPM_INST" -eq 0 ] && [ -z "$PERSIST" ] && [ "$WIPER_HIT" -eq 0 ]; then MAL_LOCKONLY=1; fi
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
 # extension incident's startup file is its sign too.
 EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
@@ -2927,7 +2950,14 @@ todo() { # section text
   esac
 }
 [ "$WIPER_HIT" -eq 1 ] && todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."
-[ "$MAL_HIT" -eq 1 ] && todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
+# A bad version found only in lockfiles: whether this machine is compromised depends on whether
+# that project was installed here.
+if [ "$MAL_LOCKONLY" -eq 1 ]; then
+  if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
+  todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach. If not, update $_ll to a version without the malware."
+elif [ "$MAL_HIT" -eq 1 ]; then
+  todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
+fi
 if [ "$EXT_HIT" -eq 1 ]; then
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
   if [ -n "$EXT_ROWS" ] && [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
@@ -2991,6 +3021,7 @@ if [ "$SCORE" -ge 90 ]; then GRADE=A; elif [ "$SCORE" -ge 78 ]; then GRADE=B
 elif [ "$SCORE" -ge 64 ]; then GRADE=C; elif [ "$SCORE" -ge 50 ]; then GRADE=D; else GRADE=F; fi
 # GRADE only goes in the research counts. People see how they compare instead.
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "Scan done. Don't revoke GitHub tokens yet: act now"
+elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then progress x "Scan done. npm malware in a lockfile: act if you installed it"
 elif [ "$ANY_MAL" -eq 1 ]; then progress x "Scan done. Signs of $MAL_WHAT: act now"
 elif [ "$PY_HIT" -eq 1 ]; then progress x "Scan done. Signs of the $PY_SHORT malware: act now"
 elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
@@ -3137,10 +3168,13 @@ if { [ -n "$RANK" ] && [ "$RANK" -le 1000 ]; } || { [ -z "$RANK" ] && [ "$EARLY"
 fi
 _act=""
 if [ "$WIPER_HIT" -eq 1 ]; then _act="ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN"
-elif [ "$ANY_MAL" -eq 1 ]; then _act="ACT NOW: SIGNS OF $(upper "$MAL_WHAT")"
+elif [ "$ANY_MAL" -eq 1 ] && { [ "$MAL_LOCKONLY" -eq 0 ] || [ "$EXT_HIT" -eq 1 ]; }; then _act="ACT NOW: SIGNS OF $(upper "$MAL_WHAT")"
 elif [ "$PY_HIT" -eq 1 ]; then
   _act=""; for _pi in $PY_HITS; do _act="${_act:+$_act AND }$(incident_name "$_pi")"; done
   _act="ACT NOW: SIGNS OF THE $(upper "$_act") MALWARE"
+elif [ "$MAL_LOCKONLY" -eq 1 ]; then
+  if [ "$N_LOCKPROJ" -eq 1 ]; then _act="ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE"
+  else _act="ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE"; fi
 fi
 if [ -n "$_act" ]; then
   emit "  ${SEV}▌${RST} ${B}${_act}${RST}"
@@ -3512,6 +3546,9 @@ if [ "$OS" = Darwin ]; then
   if [ "$KEY_FILES" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
+  elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then
+    _t="THIS SCAN IS A SNAPSHOT"
+    _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."
   elif [ "$ANY_MAL" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found signs of $MAL_WHAT. It can't tell you what the malware already took, or what your agents do after you close this window."
@@ -3602,6 +3639,7 @@ elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop it before revoking tokens"
 elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
+elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ]; then G5="${RED}✗${RST}"; D5="npm malware in a lockfile: act if installed"
 elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"

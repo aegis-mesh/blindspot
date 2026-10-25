@@ -516,6 +516,25 @@ SKIPPING=""
 has    "a lockfile hit says it is listed there"      'axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile' "$WORK/out-flat.txt"
 has    "an install hit says it is installed"         'claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed' "$WORK/out-flat.txt"
 has    "a cache hit says it was downloaded"          "@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI, April 2026\), downloaded into npm's cache" "$WORK/out-flat.txt"
+# A lockfile records what some machine resolved, not what ran here: a bad version in a lockfile alone
+# makes the headline and the fix depend on whether the project was installed. node_modules next to it
+# holding that version is an install; another version there is not. The score and the link's nm stay.
+for lk in lko lki lkd; do
+  rm -rf "${WORK:?}/$lk"; cp -R "$WORK/clean" "$WORK/$lk"; mkdir -p "$WORK/$lk/code/cloned"
+  printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/$lk/code/cloned/package-lock.json"
+done
+mkdir -p "$WORK/lki/code/cloned/node_modules/axios" "$WORK/lkd/code/cloned/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/lki/code/cloned/node_modules/axios/package.json"
+printf '{"name":"axios","version":"1.14.2"}\n' > "$WORK/lkd/code/cloned/node_modules/axios/package.json"
+for lk in lko lki lkd; do psrun "$WORK/$lk" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$lk.txt"; done
+psrun "$WORK/lko" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lko-c.txt"
+has    "a lockfile alone: the headline depends on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lko.txt"
+has    "and so does the fix" "If you ran an install in the project section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach\. If not, update its lockfile to a version without the malware\." "$WORK/lko.txt"
+has    "and the summary row" 'Recent leaks npm malware in a lockfile: act if installed' "$WORK/lko-c.txt"
+_s1=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lko.txt"); _s2=$(grep -o '#v=2&s=[0-9]*&' "$WORK/lki.txt")
+if [ -n "$_s1" ] && [ "$_s1" = "$_s2" ] && grep -q '&nm=1&' "$WORK/lko.txt"; then ok "a lockfile alone keeps the score and the link's nm"; else bad "a lockfile alone keeps the score and the link's nm" "${_s1:-no link} / ${_s2:-no link}"; fi
+has    "a bad version installed next to its lockfile is act-now" 'ACT NOW: SIGNS OF NPM MALWARE .*Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/lki.txt"
+has    "another version in node_modules leaves it depending on an install" 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' "$WORK/lkd.txt"
 # A lockfile the scan found but can't read leaves npm not fully checked, as an unreadable cache does.
 rm -rf "$WORK/lkr"; cp -R "$WORK/clean" "$WORK/lkr"; mkdir -p "$WORK/lkr/code/cloned"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/lkr/code/cloned/package-lock.json"
