@@ -1007,16 +1007,16 @@ $SessWorker = {
       if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
       if ($whole) { $st.Done++ }
     } catch {
-      # A pattern that ran out of time leaves the file not checked, as a stop does. Anything else
-      # (no permission, a range another program has locked, a file that is gone) is a file that
-      # could not be read, counted apart so the report says so.
+      # A pattern that ran out of time leaves the file not checked: it is counted as one that took
+      # too long. Anything else (no permission, a range another program has locked, a file
+      # that is gone) is a file that could not be read, counted apart so the report says so.
       $timedOut = $false; $xe = $_.Exception
       while ($xe) { if ($xe -is [Text.RegularExpressions.RegexMatchTimeoutException]) { $timedOut = $true }; $xe = $xe.InnerException }
-      if (-not $timedOut) { $st.Unread++ }
+      if ($timedOut) { $st.Slow++ } else { $st.Unread++ }
     } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Slow = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -6139,7 +6139,9 @@ foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # in each project, found by the home scan, and they are checked here. One counts as read once the
 # pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
 $rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
-$SESS_SLOW = 0
+# A session file whose pattern ran out of time in the check above is one of them too. It is counted,
+# not listed: a session file's path can spell out a project folder (see Sess-Where below).
+$SESS_SLOW = [int]$SessSt.Slow
 foreach ($f in $AiderFiles) {
   $SESS_TOTAL++
   $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }

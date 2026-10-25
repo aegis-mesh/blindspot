@@ -211,7 +211,9 @@ printf '{"t":"calculate_highs_and_lows_for_each_trading_day_since_2001"}\n' > "$
 printf '{"t":"GH_TOKEN=%s%s_%s.%s.%s end"}\n' "$GHS" "$(rnd 7)" "$(rnd 40)" "$(rnd 300)" "$(rnd 160)" > "$SE/ghk/.claude/projects/p/s.jsonl"
 for E in net rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
-  for _c in brn brk brl b64 b64k ghn ghk; do psrun "$SE/$_c" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/$_c-$E.txt" 2>&1; done
+  # A limit well above the 2 s default: these check what counts as a key, not speed, and the
+  # scripts' own text is close to the default on an emulated CI machine.
+  for _c in brn brk brl b64 b64k ghn ghk; do psrun "$SE/$_c" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E GIRD_CHECK_REGEX_TIMEOUT_MS=30000 -- -Offline -AllSessions > "$SE/$_c-$E.txt" 2>&1; done
   has    "$E: an agent that read Blindspot's scripts has no key in its session" 'No keys in 1 agent session file' "$SE/brn-$E.txt"
   has    "$E: a Bedrock short-term key counts"     'Claude Code +1 file: AWS' "$SE/brk-$E.txt"
   has    "$E: a Bedrock long-term key across a 1 MB read counts" 'Claude Code +1 file: AWS' "$SE/brl-$E.txt"
@@ -2311,6 +2313,14 @@ python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 
 psrun "$WORK/aidslow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/aidslow.txt"
 has    "an Aider history that hits the time limit is named as not checked" 'Agent sessions were partly checked: 1 file took too long to check\.' "$WORK/aidslow.txt"
 hasnot "and the sessions are not called clean over the slow file" 'No keys in' "$WORK/aidslow.txt"
+# So does a session file whose pattern runs out of time in the .NET check: it is named as taking too
+# long, never as one -AllSessions would check.
+mkdir -p "$WORK/sesslow/.claude/projects/p" "$WORK/sesslow/AppData/Roaming" "$WORK/sesslow/AppData/Local/Temp"
+python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/sesslow/.claude/projects/p/s.jsonl"
+psrun "$WORK/sesslow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/sesslow.txt"
+has    "a session file that hits the time limit is named as not checked" 'Agent sessions were partly checked: 1 file took too long to check\.' "$WORK/sesslow.txt"
+hasnot "and is not one -AllSessions would check"     'add -AllSessions|Checked the newest 0' "$WORK/sesslow.txt"
+hasnot "and its path, which names a project, is not printed" 'projects/p/s\.jsonl' "$WORK/sesslow.txt"
 cp -R "$WORK/clean" "$WORK/pyc"
 SP="$WORK/pyc/code/winpy/.venv/Lib/site-packages"; mkdir -p "$SP/__pycache__"; printf 'home = C:\\Python312\n' > "$WORK/pyc/code/winpy/.venv/pyvenv.cfg"
 : > "$SP/__pycache__/cook.cpython-312.pyc"
