@@ -726,7 +726,7 @@ trap 'cleanup; exit 129' HUP
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
 KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
@@ -1202,6 +1202,10 @@ all|sealed|Antigravity|$H/.gemini/antigravity/conversations
 all|sealed|Antigravity|$H/.gemini/antigravity-cli/conversations
 all|sealed|Antigravity|$H/.gemini/antigravity-ide/conversations"
 # <<< sessions
+# A location whose folder variable is written with a doubled or trailing / is spelled with single
+# slashes, as ripgrep prints the paths under it, so each hit keeps its place: otherwise it reads as
+# Other, shown by the folder it is in, whose name can spell out a project and a username.
+SESS_TABLE=$(printf '%s\n' "$SESS_TABLE" | sed -e 's#\([^|]\)//*#\1/#g' -e 's#\([^|]\)/$#\1#')
 SESS_SOURCES=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && ($2 == "read" || $2 == "db") { print $3 "|" $4 }')
 # Folders whose .pb conversation files are stored encrypted: those files are counted and named as
 # not checked.
@@ -1914,6 +1918,12 @@ CANDIDATES=$(
       printf '%s\n' "$H/$f"
     done
     printf '%s\n' "$AS/Claude/claude_desktop_config.json"
+    # Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
+    # .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
+    # under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data.
+    for _cd in "${CLINE_DATA_DIR:-$H/.cline/data}" "${CLINE_DIR:-$H/.cline}/data"; do
+      printf '%s\n%s\n' "$_cd/secrets.json" "$_cd/settings/providers.json"
+    done
     if [ "$WIN" -eq 1 ]; then
       printf '%s\n' "$GOOSE_CFG/config.yaml"
       for f in "$PSRL"/*_history.txt; do [ -f "$f" ] && printf '%s\n' "$f"; done
@@ -1947,6 +1957,7 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
   case "$1" in
     "$H"/.claude/*|"$H"/.codex/*|"$H"/.gemini/*|"$H"/.cursor/*|"$H"/.codeium/*|"$H"/.continue/*) KP=agent_config; return 0 ;;
     "$H"/.copilot/*|"$H"/.config/goose/*|"$H"/.config/opencode/*|"$H"/.local/share/opencode/*|"$H"/.aider*|"$AS"/Claude/*|"$GOOSE_CFG"/*) KP=agent_config; return 0 ;;
+    "$H"/.cline/*|"${CLINE_DATA_DIR:-$H/.cline/data}"/*|"${CLINE_DIR:-$H/.cline}"/*) KP=agent_config; return 0 ;;
   esac
   case "$PROJECT_SET" in *"|$1|"*) KP=project_file; return 0 ;; esac
   KP=other
@@ -2064,6 +2075,10 @@ $H/.local/share/uv
 /opt/homebrew/anaconda3
 /opt/anaconda3
 /opt/miniconda3"
+# Poetry's, pipenv's and Hatch's own folders of environments, as each documents them: Poetry's cache
+# folder's virtualenvs, pipenv's XDG_DATA_HOME/virtualenvs (~/.virtualenvs on Windows, above) and
+# Hatch's data folder's env/virtual, under LOCALAPPDATA on Windows, ~/Library on a Mac and the XDG
+# folders on Linux.
 if [ "$WIN" -eq 1 ]; then
   PY_ROOTS="$PY_ROOTS
 $H/pipx
@@ -2072,10 +2087,21 @@ $WAPP/uv
 $WLAPP/Programs/Python
 $WAPP/Python
 $WLAPP/miniconda3
-$WLAPP/anaconda3"
+$WLAPP/anaconda3
+$WLAPP/pypoetry/Cache/virtualenvs
+$WLAPP/hatch/env/virtual"
   [ -n "$_pd" ] && PY_ROOTS="$PY_ROOTS
 $_pd/miniconda3
 $_pd/anaconda3"
+else
+  _xd=${XDG_DATA_HOME:-}; case "$_xd" in /*) ;; *) _xd="$H/.local/share" ;; esac
+  _xc=${XDG_CACHE_HOME:-}; case "$_xc" in /*) ;; *) _xc="$H/.cache" ;; esac
+  PY_ROOTS="$PY_ROOTS
+$H/Library/Caches/pypoetry/virtualenvs
+$H/Library/Application Support/hatch/env/virtual
+$_xc/pypoetry/virtualenvs
+$_xd/virtualenvs
+$_xd/hatch/env/virtual"
 fi
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
@@ -2127,9 +2153,14 @@ SITE_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "site" && 
 TEMP_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "temp" && ($2 == "all" || $2 == o) { print $1 " " $4 " " $5 }')
 # The advice shown under an incident's row when its temp files are found: the note of its temp lines.
 temp_advice() { printf '%s\n' "$IND_TABLE" | awk -F '|' -v i="$1" '$1 == i && $3 == "temp" { print $6; exit }'; }
-N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""; PY_UPD=""
+N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""; PY_UPD=""; PY_UNREAD=0
 while IFS= read -r sp; do
   [ -n "$sp" ] && [ -d "$sp" ] || continue
+  # One that can't be opened was not checked: it is counted apart (an account run counts it as not
+  # checked), never as an environment with no signs.
+  if [ ! -r "$sp" ] || [ ! -x "$sp" ]; then
+    PY_UNREAD=$((PY_UNREAD + 1)); [ -n "$FLEET_NR" ] && printf '%s\n' "$sp" >> "$FLEET_NR"; continue
+  fi
   N_PY=$((N_PY + 1))
   # The installed LiteLLM versions, shown on a clean row and counted in litellm_installed.
   for d in "$sp"/litellm-*.dist-info; do
@@ -2204,7 +2235,9 @@ if [ "$ACCTRUN" -eq 0 ] && [ -e /tmp/remote_code_loader.lock ] && command -v lso
 fi
 # A bad version in uv's cache: "incident<TAB>name<TAB>version" for each one found. The cache is
 # walked once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or
-# 2.4.6.post1.
+# 2.4.6.post1. uv keeps what it installs there (and uvx runs a tool from an environment it makes
+# there), so such a version counts as its incident's sign (UV_HIT), as npm's cache does for npm;
+# where its malware could not run (the os column), it is a version to update (PY_UPD).
 _uvn=()
 while read -r _n _v _i _o; do
   [ -n "$_i" ] || continue
@@ -2221,7 +2254,7 @@ if [ "${#_uvn[@]}" -gt 0 ]; then
 "
   done
 fi
-UV_BAD=""
+UV_BAD=""; UV_HIT=""
 while read -r _n _v _i _o; do
   [ -n "$_i" ] || continue
   if printf '%s\n' "$_uvf" | awk -v n="$_n-$_v" '{ b = $0; sub(/.*\//, "", b)
@@ -2229,13 +2262,16 @@ while read -r _n _v _i _o; do
     END { exit !f }'; then
     UV_BAD="$UV_BAD$_i$TAB$_n$TAB$_v
 "
+    case "$_o" in all|"$_os") UV_HIT="$UV_HIT$_i${TAB}uv's cache: $_n $_v
+" ;; *) PY_UPD="$PY_UPD$_i$TAB$_o${TAB}uv's cache: $_n $_v
+" ;; esac
   fi
 done <<EOF
 $BAD_PYPI
 EOF
 PY_HITS=""
 for _pi in $PY_INCIDENTS; do
-  if printf '%s' "$LITE_BAD$MARKS" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
+  if printf '%s' "$LITE_BAD$MARKS$UV_HIT" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
     PY_HITS="${PY_HITS:+$PY_HITS }$_pi"
   fi
 done
@@ -6266,15 +6302,25 @@ NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" |
 # ~/.vscode-insiders/extensions, and the remote servers these editors run over SSH, WSL or in a container
 # in their own folders (VS Code's docs and source: ~/.vscode-server and ~/.vscode-server-insiders; the
 # serverDataFolderName of each product.json: ~/.cursor-server, ~/.windsurf-server, and ~/.devin-server
-# since the rename), installing from the same registry as the editor. A line whose bad build
-# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folders, where the
-# same id is the Marketplace's own build. A folder that can't be read leaves the check not
-# done in full (EXT_UNREAD), never clean.
+# since the rename), installing from the same registry as the editor. Positron, which GlassWorm's
+# dropper targets too (Socket's post of 18 March 2026, Aikido's of April), keeps them in
+# ~/.positron/extensions and its server's in ~/.positron-server/extensions, from Posit's mirror of
+# Open VSX (its product.json). A line whose bad build was only ever on Open VSX (registry openvsx)
+# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A
+# folder that can't be read leaves the check not done in full (EXT_UNREAD), never clean, and so does
+# an editor's own folder (~/.windsurf) that can't be opened, which hides its extensions folder.
 ext_roots() { printf '%s\n' "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.devin/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions" "$H/.antigravity-ide/extensions" "$H/.antigravity/extensions" \
-  "$H/.vscode-insiders/extensions" "$H/.vscode-server/extensions" "$H/.vscode-server-insiders/extensions" "$H/.cursor-server/extensions" "$H/.windsurf-server/extensions" "$H/.devin-server/extensions"; }
+  "$H/.vscode-insiders/extensions" "$H/.vscode-server/extensions" "$H/.vscode-server-insiders/extensions" "$H/.cursor-server/extensions" "$H/.windsurf-server/extensions" "$H/.devin-server/extensions" \
+  "$H/.positron/extensions" "$H/.positron-server/extensions"; }
 EXT_UNREAD=0
 while IFS= read -r r; do
-  if [ -d "$r" ] && { [ ! -r "$r" ] || [ ! -x "$r" ]; }; then EXT_UNREAD=$((EXT_UNREAD + 1)); fi
+  _xp=${r%/*}
+  if [ -d "$r" ] && { [ ! -r "$r" ] || [ ! -x "$r" ]; }; then EXT_UNREAD=$((EXT_UNREAD + 1))
+  elif [ ! -d "$r" ] && [ -d "$_xp" ]; then
+    # Its editor's folder can't be listed, or can be listed (a glob reads it) but not entered.
+    if [ ! -r "$_xp" ]; then EXT_UNREAD=$((EXT_UNREAD + 1))
+    elif [ ! -x "$_xp" ]; then for _xe in "$_xp"/extension[s]; do [ "$_xe" = "$_xp/extension[s]" ] || EXT_UNREAD=$((EXT_UNREAD + 1)); done; fi
+  fi
 done <<EOF
 $(ext_roots)
 EOF
@@ -6645,10 +6691,11 @@ fi
 SESS_PARTIAL=0
 if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
 # A check that was not done in full never leaves the headline green: the home folder was not
-# scanned, the sessions were partly checked, or a key file, part of npm's cache or an extension
-# folder could not be read. The headline then says what it can: no findings in the paths checked.
+# scanned, the sessions were partly checked, or a key file, part of npm's cache, a Python environment
+# or an extension folder could not be read. The headline then says what it can: no findings in the
+# paths checked.
 PARTIAL=0
-if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -6763,6 +6810,7 @@ case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHOR
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
 if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments. From another computer, rotate every key the machine could reach, then follow $_adv to remove the malware."
+elif [ "$PY_HIT" -eq 1 ] && [ -n "$UV_HIT" ] && [ -z "$MARKS" ] && [ "$LOADER" -eq 0 ]; then todo 5 "Treat this machine as compromised. From another computer, rotate every key the machine could reach, then clear the packages section 5 lists from uv's cache and follow $_adv."
 elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5. From another computer, rotate every key the machine could reach, then delete those files and follow $_adv."; fi
 advice_todos act
 # Then the fixes that depend on an install, or on a file you set up: a bad version found only in
@@ -7332,11 +7380,14 @@ for _pi in $PY_INCIDENTS; do
       while IFS="$TAB" read -r _t l; do
         [ "$_t" = "$_pi" ] && [ -n "$l" ] && emit "        $(short "$l")"
       done <<EOF
-$LITE_BAD$MARKS
+$LITE_BAD$MARKS$UV_HIT
 EOF
       [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ] && emit "        ${RED}A process holds the loader lock. The backdoor may be running now.${RST}"
       printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && _do="Don't run Python or pip in these environments."
-      if printf '%s' "$MARKS" | grep -q "^$_pi$TAB" || [ -z "$_do" ]; then _do="${_do:+$_do }$(temp_advice "$_pi")"; fi
+      # Found in uv's cache alone: what uv installs stays there.
+      if [ -z "$_do" ] && ! printf '%s' "$MARKS" | grep -q "^$_pi$TAB" && ! { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
+        _do="uv keeps what it installs in its cache, so treat this version as installed here."
+      elif printf '%s' "$MARKS" | grep -q "^$_pi$TAB" || [ -z "$_do" ]; then _do="${_do:+$_do }$(temp_advice "$_pi")"; fi
       ;;
     *)
       if [ -n "$_upd" ]; then
@@ -7350,7 +7401,9 @@ $LITE_PYC
 EOF
         wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(incident_source "$_pi")" 8 "        " "        "
       else
-        if [ "$HOME_PARTIAL" -eq 1 ]; then pair "${YEL}!${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments"), but some folders in your home were not read"
+        if [ "$PY_UNREAD" -gt 0 ] && [ "$N_PY" -gt 0 ]; then pair "${YEL}!${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments"), but $PY_UNREAD more could not be read"
+        elif [ "$PY_UNREAD" -gt 0 ]; then pair "${YEL}!${RST}" "$_pl" 16 "$(plural "$PY_UNREAD" "Python environment" "Python environments") could not be read"
+        elif [ "$HOME_PARTIAL" -eq 1 ]; then pair "${YEL}!${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments"), but some folders in your home were not read"
         else pair "${GRN}✓${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"; fi
         [ "$_pi" = litellm ] && [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $(short "$LITE_VERS")${RST}"
       fi
@@ -7523,7 +7576,7 @@ elif [ "$EXT_UNREAD" -gt 0 ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: $(plural "$EXT_UNREAD" "extension folder" "extension folders") could not be read${RST}"
 else
   pair "${GRN}✓${RST}" "Editor extensions" 16 "none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
-  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity" 26 "                          " "                          " "$DIM"
+  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron" 26 "                          " "                          " "$DIM"
 fi
 # With findings above, a folder that could not be read still has to be said.
 if [ "$EXT_UNREAD" -gt 0 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [ -n "$EXT_UPD" ]; }; then
@@ -7703,6 +7756,7 @@ elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not f
 elif [ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ "$NPM_GUNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: folder unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
+elif [ "$PY_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="Python not fully checked: folder unreadable"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
 blank

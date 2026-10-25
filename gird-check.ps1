@@ -237,7 +237,7 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 $PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
 $KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 $KeyProviderFn = @'
@@ -289,7 +289,9 @@ function Mark-Slow([string]$f) {
   if (-not $SlowFiles.Contains($f)) { $SlowFiles.Add($f); Progress "Skipped, took too long to check: $(Short $f)" }
 }
 
-$TextCache = @{}
+# Keyed by path, compared exactly as gird-check.sh compares: on a volume that tells case apart, two
+# files whose names differ only in case are two files.
+$TextCache = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
 function Read-Text([string]$f) {
   if ($TextCache.ContainsKey($f)) { return $TextCache[$f] }
   $t = $null
@@ -798,16 +800,24 @@ $SessTable = @(
   @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity-cli/conversations')),
   @('sealed', 'Antigravity', (J $HomeDir '.gemini/antigravity-ide/conversations')))
 # <<< sessions
+# Each location spelled as .NET spells the paths it lists (FullName), so every hit keeps its place: a
+# folder variable written with / on Windows, or with a doubled or trailing separator, would leave its
+# hits as Other, shown by the folder they are in, whose name can spell out a project and a username.
+foreach ($sessRow in $SessTable) {
+  try { $sessFull = [IO.Path]::GetFullPath($sessRow[2]) } catch { continue }
+  $sessTrim = $sessFull.TrimEnd('\', '/'); if ($sessTrim -and $sessTrim -notmatch '^[A-Za-z]:$') { $sessFull = $sessTrim }
+  $sessRow[2] = $sessFull
+}
 $SessSources = @($SessTable | Where-Object { $_[0] -eq 'read' -or $_[0] -eq 'db' } | ForEach-Object { , @($_[1], $_[2]) })
 # Folders whose .pb conversation files are stored encrypted: those files are counted and named as
 # not checked.
 $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Object { , @($_[1], $_[2]) })
 # Lists the files under the session roots one folder at a time, so a folder that can't be read is
 # counted in $st.Skipped and the rest are still listed (EnumerateFiles over all folders at once
-# stops at the first one it can't open, and drops the rest of that root). Folders that are links
-# are not followed, as ripgrep and gird-check.sh's perl do not. A pipe, a socket or a device is
-# never listed: opening a pipe waits for a writer, and a device may never end. Text, so the
-# background session check can load it too; it returns the list as one object.
+# stops at the first one it can't open, and drops the rest of that root). Links found inside a
+# folder, to a file or a folder, are not followed, as ripgrep and gird-check.sh's perl do not. A
+# pipe, a socket or a device is never listed: opening a pipe waits for a writer, and a device may
+# never end. Text, so the background session check can load it too; it returns the list as one object.
 $SessListFn = @'
 # A regular file, following a link: what bash's [ -f ] and perl's -f say. PowerShell 7.2 and up
 # say which a file is off Windows (the first letter of UnixMode, from Get-Item); Windows keeps no
@@ -820,6 +830,16 @@ function Is-PlainFile([string]$p) {
     $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode
     return (-not $m) -or $m.StartsWith('-')
   } catch { return $true }
+}
+# An empty file that can't be opened, so was not read. It is opened only where it is known to be a
+# regular file (on Windows, or where PowerShell 7.2 and up says so off Windows), so a pipe an older
+# PowerShell could not tell from a file never holds the check up; there it counts as read unopened.
+function Empty-Unreadable([string]$p) {
+  if ($env:OS -ne 'Windows_NT') {
+    $m = ''; try { $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode } catch { }
+    if (-not $m.StartsWith('-')) { return $false }
+  }
+  try { (New-Object IO.FileStream($p, 'Open', 'Read', 'ReadWrite')).Dispose(); $false } catch { $true }
 }
 function Sess-List($roots, $st) {
   $files = New-Object System.Collections.Generic.List[object]
@@ -834,9 +854,9 @@ function Sess-List($roots, $st) {
     $d = $dirs.Pop()
     try {
       foreach ($f in $d.EnumerateFiles()) {
-        # Only an entry that may not be a regular file is asked about: a link, or an empty one, as
-        # pipes, sockets and devices are.
-        if ((($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $f.Length -eq 0) -and -not (Is-PlainFile $f.FullName)) { continue }
+        # A link is skipped. Only an empty entry is asked about, as pipes, sockets and devices are empty.
+        if (($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+        if ($f.Length -eq 0 -and -not (Is-PlainFile $f.FullName)) { continue }
         $files.Add($f)
       }
       foreach ($sd in $d.EnumerateDirectories()) { if (($sd.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $dirs.Push($sd) } }
@@ -884,14 +904,24 @@ $SessWorker = {
       $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
-      # --null ends the file name with a NUL, the one character a path can't hold. A line without
-      # one is a piece of a file name that holds a newline.
-      $frag = ''
-      while ($null -ne ($l = $st.Proc.StandardOutput.ReadLine())) {
-        $i = $l.IndexOf([char]0)
-        if ($i -lt 0) { $frag += $l + '?'; continue }
-        & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1); $frag = ''
+      # --null ends the file name with a NUL, the one character a path can't hold. ripgrep ends a
+      # match with a newline (LF) alone, and its lines are split there only: a carriage return can be
+      # the byte before a key, and ReadLine would end the line at it, dropping the key or gluing it to
+      # the next file name. So all text after a NUL is the match, and a line without one is a piece
+      # of a file name that holds a newline.
+      $frag = ''; $sb = New-Object Text.StringBuilder; $cb = New-Object char[] 65536; $so = $st.Proc.StandardOutput
+      while (($got = $so.Read($cb, 0, $cb.Length)) -gt 0) {
+        $s = New-Object string($cb, 0, $got); $at = 0
+        while (($nl = $s.IndexOf([char]10, $at)) -ge 0) {
+          [void]$sb.Append($s, $at, $nl - $at); $l = $sb.ToString(); [void]$sb.Clear(); $at = $nl + 1
+          $i = $l.IndexOf([char]0)
+          if ($i -lt 0) { $frag += $l + '?'; continue }
+          & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1); $frag = ''
+        }
+        [void]$sb.Append($s, $at, $s.Length - $at)
       }
+      $l = $sb.ToString(); $i = $l.IndexOf([char]0)
+      if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
       $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
     } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
     return
@@ -907,9 +937,12 @@ $SessWorker = {
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
-    # An empty file holds nothing and is not opened, so a pipe an older PowerShell could not tell
-    # from a file never holds the check up. Never a link: Windows gives a link's own size, 0.
-    if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $st.Done++; continue }
+    # An empty file holds nothing: it counts as read once it opens, as perl's open does, and one that
+    # can't be opened was not read. Never a link: Windows gives a link's own size, 0.
+    if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+      if (Empty-Unreadable $f.FullName) { $st.Unread++ } else { $st.Done++ }
+      continue
+    }
     # Read 1 MB at a time and cut just after the last character that can't be in a key (Bedrock's
     # long-term keys hold + and /) or start an escape such as \n (a backslash never ends a piece), so a huge database file never loads at
     # once, a piece never ends inside a token unless one runs past 8 MB, and a stop is seen within
@@ -941,7 +974,7 @@ $SessWorker = {
     } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -1340,19 +1373,24 @@ foreach ($f in @('.zsh_history', '.bash_history', '.local/share/fish/fish_histor
 $PsrlDir = J $AppData 'Microsoft/Windows/PowerShell/PSReadLine'
 if (Is-Dir $PsrlDir) { try { foreach ($f in ([IO.Directory]::GetFiles($PsrlDir, '*_history.txt') | Sort-Object)) { $ShellHist.Add($f) } } catch { } }
 $ProjectFiles = @($EnvFiles) + @($ProjectMcp)
+# Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
+# .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
+# under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data.
+$ClineData = @((Env-Or 'CLINE_DATA_DIR' (J $HomeDir '.cline/data')), (J (Env-Or 'CLINE_DIR' (J $HomeDir '.cline')) 'data'))
+$ClineKeys = @(foreach ($d in $ClineData) { (J $d 'secrets.json'); (J $d 'settings/providers.json') })
 $Candidates = New-Object System.Collections.Generic.List[string]
 $cset = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $cands = @($ShellRc) + @((J $HomeDir '.env'), (J $HomeDir '.envrc')) + @($ShellHist) + @(
   '.claude.json', '.claude/settings.json', '.claude/settings.local.json', '.codex/config.toml', '.gemini/settings.json', '.gemini/.env',
   '.cursor/mcp.json', '.codeium/windsurf/mcp_config.json', '.continue/config.json', '.continue/config.yaml', '.config/goose/config.yaml',
   '.config/opencode/opencode.json', '.aider.conf.yml' | ForEach-Object { J $HomeDir $_ }) +
-  @((J $AppData 'Block/goose/config/config.yaml'), (J $AppData 'Claude/claude_desktop_config.json')) + $ProjectFiles
+  @((J $AppData 'Block/goose/config/config.yaml'), (J $AppData 'Claude/claude_desktop_config.json')) + $ClineKeys + $ProjectFiles
 foreach ($f in $cands) { if ($f -and $cset.Add($f)) { $Candidates.Add($f) } }
 
 function In-List([string]$f, $list) { foreach ($x in $list) { if ($f.Equals($x, $PathCmp)) { return $true } }; $false }
 function Under([string]$f, [string]$dir) { $f.StartsWith($dir + $Sep, $PathCmp) }
-$AgentDirs = @('.claude', '.codex', '.gemini', '.cursor', '.codeium', '.continue', '.copilot', '.config/goose', '.config/opencode', '.local/share/opencode' | ForEach-Object { J $HomeDir $_ }) +
-  @((J $AppData 'Block/goose'), (J $AppData 'Claude'))
+$AgentDirs = @('.claude', '.codex', '.gemini', '.cursor', '.codeium', '.continue', '.copilot', '.config/goose', '.config/opencode', '.local/share/opencode', '.cline' | ForEach-Object { J $HomeDir $_ }) +
+  @((J $AppData 'Block/goose'), (J $AppData 'Claude'), (Env-Or 'CLINE_DIR' (J $HomeDir '.cline'))) + $ClineData
 function Key-Place([string]$f) {
   if (In-List $f $ShellRc) { return 'shell_rc' }
   if (In-List $f $ShellHist) { return 'shell_history' }
@@ -1484,6 +1522,16 @@ foreach ($d in (Glob-Dirs (J $LocalAppData 'Packages') 'PythonSoftwareFoundation
 $PyRoots = @('.pyenv/pyenv-win/versions', 'miniconda3', 'miniforge3', 'anaconda3', '.conda', '.virtualenvs', 'Envs', '.local/pipx', 'pipx' | ForEach-Object { J $HomeDir $_ }) +
   @((J $LocalAppData 'pipx'), (J $AppData 'uv'), (J $LocalAppData 'miniconda3'), (J $LocalAppData 'anaconda3'))
 if ($env:ProgramData) { $PyRoots += @((J $env:ProgramData 'miniconda3'), (J $env:ProgramData 'anaconda3')) }
+# Poetry's, pipenv's and Hatch's own folders of environments, as each documents them: Poetry's cache
+# folder's virtualenvs, pipenv's XDG_DATA_HOME/virtualenvs (~/.virtualenvs on Windows, above) and
+# Hatch's data folder's env/virtual, under LOCALAPPDATA on Windows, ~/Library on a Mac and the XDG
+# folders on Linux.
+$PyRoots += @((J $LocalAppData 'pypoetry/Cache/virtualenvs'), (J $LocalAppData 'hatch/env/virtual'))
+if (-not $OnWindows) {
+  $xd = [Environment]::GetEnvironmentVariable('XDG_DATA_HOME'); if (-not ($xd -and $xd.StartsWith('/'))) { $xd = J $HomeDir '.local/share' }
+  $xc = [Environment]::GetEnvironmentVariable('XDG_CACHE_HOME'); if (-not ($xc -and $xc.StartsWith('/'))) { $xc = J $HomeDir '.cache' }
+  $PyRoots += @((J $HomeDir 'Library/Caches/pypoetry/virtualenvs'), (J $HomeDir 'Library/Application Support/hatch/env/virtual'), (J $xc 'pypoetry/virtualenvs'), (J $xd 'virtualenvs'), (J $xd 'hatch/env/virtual'))
+}
 foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1555,8 +1603,11 @@ Progress "Checking $(Plural $SitesAll.Count 'Python environment' 'Python environ
 $N_PY = 0; $N_LITE = 0; $LiteVers = New-Object System.Collections.Generic.List[string]
 $LiteBad = New-Object System.Collections.Generic.List[object]; $LitePyc = New-Object System.Collections.Generic.List[string]
 $PyUpd = New-Object System.Collections.Generic.List[object]
+$PyUnread = 0
 foreach ($sp in $SitesAll) {
   if (-not (Is-Dir $sp)) { continue }
+  # One that can't be listed was not checked: it is counted apart, never as an environment with no signs.
+  try { [void][IO.Directory]::EnumerateFileSystemEntries($sp).GetEnumerator().MoveNext() } catch { $PyUnread++; continue }
   $N_PY++
   # The installed LiteLLM versions, shown on a clean row and counted in litellm_installed.
   foreach ($d in (Glob-Dirs $sp 'litellm-*.dist-info')) {
@@ -1619,11 +1670,19 @@ foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
 }
 $UvBad = New-Object System.Collections.Generic.List[object]
 for ($i = 0; $i -lt $BadPypiRows.Count; $i++) { if ($uvFound.ContainsKey($i)) { $UvBad.Add($BadPypiRows[$i]) } }
+# uv keeps what it installs in its cache (and uvx runs a tool from an environment it makes there), so a
+# bad version there counts as its incident's sign ($UvHit), as npm's cache does for npm; where its
+# malware could not run (the os column), it is a version to update ($PyUpd).
+$UvHit = New-Object System.Collections.Generic.List[object]
+foreach ($r in $UvBad) {
+  if ($r[3] -eq 'all' -or $r[3] -eq $IndOs) { $UvHit.Add(@($r[2], "uv's cache: $($r[0]) $($r[1])")) } else { $PyUpd.Add(@($r[2], $r[3], "uv's cache: $($r[0]) $($r[1])")) }
+}
 $PyHits = New-Object System.Collections.Generic.List[string]
 foreach ($pi in $PyIncidents) {
   $hit = $pi -eq 'litellm' -and $LOADER -eq 1
   foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { $hit = $true } }
   foreach ($l in $Marks) { if ($l[0] -ceq $pi) { $hit = $true } }
+  foreach ($l in $UvHit) { if ($l[0] -ceq $pi) { $hit = $true } }
   if ($hit) { $PyHits.Add($pi) }
 }
 $PY_HIT = 0; if ($PyHits.Count -gt 0) { $PY_HIT = 1 }
@@ -5280,7 +5339,7 @@ microsoftvs.microsoftvs * glasswormoct any win
 cosmic-themes.theme-cosmic-nebula * glasswormoct any all
 '@
 # <<< bad-extensions
-$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
+$NpmBad = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)); $NpmAny = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)); $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
 foreach ($l in ($BadNpm -split "`r?`n")) {
   $p = $l -split ' '; if ($p.Count -lt 3) { continue }
   $N_BAD_NPM++
@@ -5504,7 +5563,7 @@ $OutTable = @(
 # , } # or /. Lines starting with // or # are skipped; in a .toml file only the lines before the
 # first [table] count.
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by Aa-Hit (section 2).
-$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}
+$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
 foreach ($r in $AaTable) {
   if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
   if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) }) } else { $files = @($r[2]) }
@@ -5627,20 +5686,29 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # ~/.vscode-insiders/extensions, and the remote servers these editors run over SSH, WSL or in a container
 # in their own folders (VS Code's docs and source: ~/.vscode-server and ~/.vscode-server-insiders; the
 # serverDataFolderName of each product.json: ~/.cursor-server, ~/.windsurf-server, and ~/.devin-server
-# since the rename), installing from the same registry as the editor. A line whose bad build
-# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folders, where the
-# same id is the Marketplace's own build. A folder that can't be read leaves the check not
-# done in full ($ExtUnread), never clean.
+# since the rename), installing from the same registry as the editor. Positron, which GlassWorm's
+# dropper targets too (Socket's post of 18 March 2026, Aikido's of April), keeps them in
+# ~/.positron/extensions and its server's in ~/.positron-server/extensions, from Posit's mirror of
+# Open VSX (its product.json). A line whose bad build was only ever on Open VSX (registry openvsx)
+# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A
+# folder that can't be read leaves the check not done in full ($ExtUnread), never clean, and so does
+# an editor's own folder (~/.windsurf) that can't be opened, which hides its extensions folder.
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
 # shipped malware means a compromised machine ($ExtRows). Elsewhere it is a malicious extension to remove
 # ($ExtUpd, with the os), with no part in EXT_HIT, the score or the link's ex.
 $ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUpd = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 5 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions', '.antigravity-ide/extensions', '.antigravity/extensions',
-                  '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions', '.cursor-server/extensions', '.windsurf-server/extensions', '.devin-server/extensions')) {
+                  '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions', '.cursor-server/extensions', '.windsurf-server/extensions', '.devin-server/extensions',
+                  '.positron/extensions', '.positron-server/extensions')) {
   $reg = 'openvsx'; if (@('.vscode/extensions', '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions') -contains $er) { $reg = 'marketplace' }
   $xdir = J $HomeDir $er
-  if (-not (Is-Dir $xdir)) { continue }
+  if (-not (Is-Dir $xdir)) {
+    # The editor's own folder there but not to be listed, or listing an extensions folder that can't be reached.
+    $xp = [IO.Path]::GetDirectoryName($xdir)
+    if (Is-Dir $xp) { try { if (@([IO.Directory]::GetFileSystemEntries($xp, 'extensions')).Count -gt 0) { $ExtUnread++ } } catch { $ExtUnread++ } }
+    continue
+  }
   try { $xents = @(([IO.DirectoryInfo]$xdir).GetFileSystemInfos() | Sort-Object -Property Name -CaseSensitive) } catch { $ExtUnread++; continue }
   foreach ($e in $xents) {
     if (-not (Is-DirInfo $e)) { continue }
@@ -5891,14 +5959,18 @@ if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
 $sessHits = New-Object System.Collections.Generic.List[string]
 foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
-# in each project, found by the home scan, and they are checked here.
+# in each project, found by the home scan, and they are checked here. One counts as read once the
+# pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
 $rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
+$SESS_SLOW = 0
 foreach ($f in $AiderFiles) {
   $SESS_TOTAL++
   $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }
-  if ($SESS_DONE -ge 0) { $SESS_DONE++ }
   $seenA = @{}
-  try { foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } } } catch { Mark-Slow $f }
+  try {
+    foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
+    if ($SESS_DONE -ge 0) { $SESS_DONE++ }
+  } catch { Mark-Slow $f; $SESS_SLOW++ }
 }
 # Which agent a file belongs to and where it was found: the session folder it is under, or the
 # file itself when the location is one file (Codex's history.jsonl, an Aider history). The report
@@ -6020,6 +6092,7 @@ if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 $PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
 if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments. From another computer, rotate every key the machine could reach, then follow $adv to remove the malware." }
+elseif ($PY_HIT -eq 1 -and $UvHit.Count -gt 0 -and $Marks.Count -eq 0 -and $LOADER -eq 0) { Add-Todo 5 "Treat this machine as compromised. From another computer, rotate every key the machine could reach, then clear the packages section 5 lists from uv's cache and follow $adv." }
 elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5. From another computer, rotate every key the machine could reach, then delete those files and follow $adv." }
 Add-Advice 'act'
 # Then the fixes that depend on an install, or on a file you set up: a bad version found only in
@@ -6167,9 +6240,10 @@ if (-not $OptOffline) {
 # has every detail.
 # ===========================================================================
 # A check that was not done in full never leaves the headline green: the sessions were partly
-# checked, a key file, part of npm's cache or an extension folder could not be read, or a file took
-# too long. The headline then says what it can: no findings in the paths checked.
-$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
+# checked, a key file, part of npm's cache, a Python environment or an extension folder could not
+# be read, or a file took too long. The headline then says what it can: no findings in the paths
+# checked.
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0 -or $PyUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -6324,8 +6398,8 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
     Wrap "$(Plural $SESS_NOTRUN 'agent session file was' 'agent session files were') not checked$why" 8 "     $cYel!$cRst  " '        '
   }
   elseif ($SESS_DONE -lt 0) { Wrap 'Agent sessions were partly checked. Add -AllSessions to check all of them.' 8 "     $cYel!$cRst  " '        ' }
-  elseif (($SESS_DONE + $SESS_UNREAD_FILES) -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
-  elseif ($N_SESS -eq 0 -and $SESS_DONE -gt 0 -and $SESS_UNREAD -eq 0 -and $SESS_UNREAD_FILES -eq 0) {
+  elseif (($SESS_DONE + $SESS_UNREAD_FILES + $SESS_SLOW) -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
+  elseif ($N_SESS -eq 0 -and $SESS_DONE -gt 0 -and $SESS_UNREAD -eq 0 -and $SESS_UNREAD_FILES -eq 0 -and $SESS_SLOW -eq 0) {
     # The files read, not the compressed ones, which are named below.
     Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_DONE) 'agent session file' 'agent session files')."
   }
@@ -6334,6 +6408,7 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
   if ($SESS_UNREAD_FILES -gt 0) { $urParts += (Plural $SESS_UNREAD_FILES 'file' 'files') }
   if ($urParts.Count -gt 0) { Wrap "Agent sessions were partly checked: $($urParts -join ' and ') could not be read." 8 "     $cYel!$cRst  " '        ' }
   elseif ($SESS_UNREAD -lt 0) { Wrap 'Agent sessions were partly checked: some files or folders could not be read.' 8 "     $cYel!$cRst  " '        ' }
+  if ($SESS_SLOW -gt 0) { Wrap "Agent sessions were partly checked: $(Plural $SESS_SLOW 'file' 'files') took too long to check." 8 "     $cYel!$cRst  " '        ' }
   if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 "     $cYel!$cRst  " '        ' }
   if ($SessSealedN -gt 0) {
     $sealVerb = 'conversation files are encrypted, so they were'; if ($SessSealedN -eq 1) { $sealVerb = 'conversation file is encrypted, so it was' }
@@ -6372,8 +6447,12 @@ foreach ($pi in $PyIncidents) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
     foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    foreach ($l in $UvHit) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    $hasMark = @($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0
     if (@($LiteBad | Where-Object { $_[0] -ceq $pi }).Count -gt 0) { $do = "Don't run Python or pip in these environments." }
-    if (@($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0 -or -not $do) { $do = (@($do, (Temp-Advice $pi)) | Where-Object { $_ }) -join ' ' }
+    # Found in uv's cache alone: what uv installs stays there.
+    if (-not $do -and -not $hasMark -and -not ($pi -eq 'litellm' -and $LOADER -eq 1)) { $do = 'uv keeps what it installs in its cache, so treat this version as installed here.' }
+    elseif ($hasMark -or -not $do) { $do = (@($do, (Temp-Advice $pi)) | Where-Object { $_ }) -join ' ' }
   } elseif ($upd.Count -gt 0) {
     Pair "$cYel!$cRst" $pl 16 "${cYel}a bad version to update$cRst"
   } elseif ($pi -eq 'litellm' -and $LitePyc.Count -gt 0) {
@@ -6381,7 +6460,9 @@ foreach ($pi in $PyIncidents) {
     foreach ($l in $LitePyc) { Emit "        $l" }
     Wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(Incident-Source $pi)" 8 '        ' '        '
   } else {
-    if ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments'), but some folders in your home were not read" }
+    if ($PyUnread -gt 0 -and $N_PY -gt 0) { Pair "$cYel!$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments'), but $PyUnread more could not be read" }
+    elseif ($PyUnread -gt 0) { Pair "$cYel!$cRst" $pl 16 "$(Plural $PyUnread 'Python environment' 'Python environments') could not be read" }
+    elseif ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments'), but some folders in your home were not read" }
     else { Pair "$cGrn$gOk$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')" }
     if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $(Short ($LiteVers -join ' '))$cRst" }
   }
@@ -6486,7 +6567,7 @@ if ($EXT_HIT -eq 1) {
   Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}not fully checked: $(Plural $ExtUnread 'extension folder' 'extension folders') could not be read$cRst"
 } else {
   Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
-  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' 26 $ind26 $ind26 $cDim
+  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' 26 $ind26 $ind26 $cDim
 }
 # With findings above, a folder that could not be read still has to be said.
 if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0 -or $ExtUpd.Count -gt 0)) {
@@ -6595,6 +6676,7 @@ elseif ($LockUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not 
 elseif ($NpmUnread - $NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: folder unreadable' }
 elseif ($ExtUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'extensions not fully checked: folder unreadable' }
+elseif ($PyUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'Python not fully checked: folder unreadable' }
 elseif ($HOME_PARTIAL -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'none found, but some folders were not read' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank

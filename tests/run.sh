@@ -162,6 +162,31 @@ for _c in ghf escj; do HOME="$SE/$_c" PATH=/usr/bin:/bin bash "$SCRIPT" --offlin
 hasnot "a word holding ghs_ in shell history is not a GitHub token" '~/\.zsh_history +GitHub' "$SE/ghf.txt"
 has    "a classic ghs_ token in a .env still counts" '~/code/a/\.env +GitHub' "$SE/ghf.txt"
 has    "a key right after an escaped newline in a JSON config counts" '~/\.claude\.json +Google, Replicate' "$SE/escj.txt"
+# OpenAI's user keys, made on a person's own keys page, start sk-None- and take both shapes of the
+# project keys: 20, T3BlbkFJ and 20 characters, or about 156. One character short, too short for the
+# longer shape, or with none in lower case, it is not a key.
+lowr() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-z0-9' | head -c "$1"; }
+SKN1="sk""-None-$(rnd 20)T3BlbkFJ$(rnd 20)"; SKN2="sk""-None-$(rnd 156)"; printf '%s\n%s\n' "$SKN1" "$SKN2" > "$SE/skn.keys"
+mkdir -p "$SE/skn/code/u1" "$SE/skn/code/u2" "$SE/skn/code/nm"
+printf 'export OPENAI_API_KEY=%s\n' "$SKN1" > "$SE/skn/.zshrc"; printf 'OPENAI_API_KEY=%s\n' "$SKN1" > "$SE/skn/code/u1/.env"; printf 'OPENAI_API_KEY=%s\n' "$SKN2" > "$SE/skn/code/u2/.env"
+printf 'A=%s\nB=%s\nC=%s\n' "sk""-None-$(lowr 20)T3BlbkFJ$(lowr 19)" "sk""-None-$(lowr 119)" "sk""-none-$(lowr 20)T3BlbkFJ$(lowr 20)" > "$SE/skn/code/nm/.env"
+HOME="$SE/skn" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$SE/skn.txt" 2>&1
+has    "an OpenAI user key (sk-None-) in a shell profile is found" '~/\.zshrc +OpenAI$' "$SE/skn.txt"
+has    "and in a .env file" '~/code/u1/\.env +OpenAI$' "$SE/skn.txt"
+has    "and in its longer shape" '~/code/u2/\.env +OpenAI$' "$SE/skn.txt"
+hasnot "near misses of sk-None- are not keys" 'code/nm/' "$SE/skn.txt"
+nokeys "and no sk-None- key is printed" "$SE/skn.keys" "$SE/skn.txt"
+# Cline 4.x keeps API keys in plain JSON: ~/.cline/data/secrets.json and settings/providers.json, or
+# the same files under CLINE_DATA_DIR.
+hexr() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-f0-9' | head -c "$1"; }
+mkdir -p "$SE/cln/.cline/data/settings" "$SE/cdd"
+printf '{"apiKey":"%s"}\n' "sk""-ant-api03-$(rnd 95)" | tee "$SE/cln/.cline/data/secrets.json" "$SE/cdd/secrets.json" > /dev/null
+printf '{"providers":{"openrouter":{"settings":{"apiKey":"%s"}}}}\n' "sk""-or-v1-$(hexr 64)" > "$SE/cln/.cline/data/settings/providers.json"
+HOME="$SE/cln" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$SE/cln.txt" 2>&1
+HOME="$SE/cln" CLINE_DATA_DIR="$SE/cdd" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$SE/cdd.txt"   # a long path puts the provider on its own line
+has    "a key in Cline's secrets.json is found" '~/\.cline/data/secrets\.json +Anthropic$' "$SE/cln.txt"
+has    "and in its settings/providers.json" '~/\.cline/data/settings/providers\.json +OpenRouter$' "$SE/cln.txt"
+has    "and in secrets.json under CLINE_DATA_DIR" 'cdd/secrets\.json Anthropic ' "$SE/cdd.txt"
 # Session files are listed by place, one row each with how many of its files had keys. A place is
 # the session folder an agent keeps, or the file when the location is one file.
 HFK="hf""_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu"
@@ -372,6 +397,53 @@ for E in perl rg; do
   has    "$E: and counted as read"                  'No keys in 2 agent session files\.' "$SE/lnkc-$E.txt"
   has    "$E: a link to a pipe or a device, or a pipe in a session folder, is not read" 'No keys in 1 agent session file\.' "$SE/lnkp-$E.txt"
 done
+SKIPPING=""
+# A link inside a session folder is not followed, as ripgrep follows none: the key in the file it
+# points at is not found, and the link is not counted as a file checked. A carriage return right
+# before a key is the first byte of ripgrep's match: the key is found, and the hit on the next line
+# keeps its file and place, with no key printed. A folder variable that ends in / keeps each hit with
+# its agent and place, never the folder under it, whose name can spell out a project. An empty
+# session file that can't be opened was not read.
+mkdir -p "$SE/slnk/.claude/projects/p" "$SE/crk/.codex" "$SE/vsl/cc/projects/-home-someone-work-acme" "$SE/vsl/csd/-home-someone-work-beta" "$SE/emp/.claude/projects/p"
+printf '{}\n' > "$SE/slnk/.claude/projects/p/real.jsonl"; ln -s "$SE/lnkel/key.jsonl" "$SE/slnk/.claude/projects/p/linked.jsonl"
+CRK="AK""IA$(upper 16)"; CRG="gh""p_$(rnd 36)"; printf '%s\n%s\n' "$CRK" "$CRG" > "$SE/crk.keys"
+printf '{"a":"x\r%s y"}\n{"b":"z %s w"}\n' "$CRK" "$CRG" > "$SE/crk/.codex/history.jsonl"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" | tee "$SE/vsl/cc/projects/-home-someone-work-acme/s.jsonl" "$SE/vsl/csd/-home-someone-work-beta/m.json" > /dev/null
+printf '{}\n' > "$SE/emp/.claude/projects/p/a.jsonl"; : > "$SE/emp/.claude/projects/p/b.jsonl"; chmod 000 "$SE/emp/.claude/projects/p/b.jsonl"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$SE/slnk" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/slnk-$E.txt" 2>&1
+  has    "$E: a link inside a session folder is neither read nor counted" 'No keys in 1 agent session file\.' "$SE/slnk-$E.txt"
+  HOME="$SE/crk" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/crk-$E.txt" 2>&1
+  sed -n '/Keys in agent sessions/,/^$/p' "$SE/crk-$E.txt" > "$SE/crk-$E.block"
+  has    "$E: a key right after a carriage return is found" 'Codex +1 file: (AWS, GitHub|GitHub, AWS)$' "$SE/crk-$E.block"
+  has    "$E: and the hit after it keeps its file and place" '^ +~/\.codex/history\.jsonl +1 file$' "$SE/crk-$E.block"
+  nokeys "$E: and neither key is printed" "$SE/crk.keys" "$SE/crk-$E.txt"
+  HOME="$SE/vsl" CLAUDE_CONFIG_DIR="$SE/vsl/cc/" CLINE_SESSION_DATA_DIR="$SE/vsl/csd/" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/vsl-$E.block"
+  has    "$E: a folder variable that ends in / keeps its hit with its agent" 'Claude Code +1 file: AWS$' "$SE/vsl-$E.block"
+  has    "$E: and so does one that names the session folder itself" 'Cline +1 file: AWS$' "$SE/vsl-$E.block"
+  has    "$E: the first hit's place is the session folder" '^ +~/cc/projects +1 file$' "$SE/vsl-$E.block"
+  has    "$E: and the second's is the variable's folder" '^ +~/csd +1 file$' "$SE/vsl-$E.block"
+  hasnot "$E: never a folder under them" 'work-acme|work-beta|Other' "$SE/vsl-$E.block"
+  HOME="$SE/emp" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/emp-$E.txt"
+  has    "$E: an empty session file that cannot be opened is not counted as read" 'Agent sessions were partly checked: (1 file|some files or folders) could not be read' "$SE/emp-$E.txt"
+  hasnot "$E: and the sessions are not called clean over it" 'No keys in' "$SE/emp-$E.txt"
+done
+SKIPPING=""
+chmod 644 "$SE/emp/.claude/projects/p/b.jsonl"
+# Names are compared exactly: a lockfile's package named like a bad one in another case is not that
+# package, and where the volume tells case apart, two .env files or two session files whose names
+# differ only in case are two files, each with its own keys.
+mkdir -p "$SE/cn/code/app" "$SE/cn/code/Up" "$SE/cn/code/up" "$SE/cn/.claude/projects/p"
+printf '{\n  "name": "app",\n  "lockfileVersion": 3,\n  "packages": {\n    "": {"name": "app"},\n    "node_modules/AXIOS": {"version": "1.14.1"},\n    "node_modules/Plain-Crypto-JS": {"version": "4.2.1"}\n  }\n}\n' > "$SE/cn/code/app/package-lock.json"
+printf 'ANTHROPIC_API_KEY=%s\n' "sk""-ant-api03-$(rnd 95)" > "$SE/cn/code/Up/.env"; printf 'GITHUB_TOKEN=%s\n' "gh""p_$(rnd 36)" > "$SE/cn/code/up/.env"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cn/.claude/projects/p/S.jsonl"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cn/.claude/projects/p/s.jsonl"
+HOME="$SE/cn" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --full --all-sessions > "$SE/cn.txt" 2>&1
+hasnot "a package named like a bad one in another case is not that package" 'AXIOS|Plain-Crypto-JS' "$SE/cn.txt"
+if [ "$(find "$SE/cn/.claude/projects/p" -type f | grep -c .)" -eq 2 ]; then SKIPPING=""; else SKIPPING="this volume ignores case, so two names that differ only in case are one file"; fi
+has    "two .env files whose folders differ only in case are read apart" '~/code/Up/\.env +Anthropic$' "$SE/cn.txt"
+has    "and the other keeps its own key" '~/code/up/\.env +GitHub$' "$SE/cn.txt"
+has    "two session files whose names differ only in case are two files" 'Claude Code +2 files: AWS$' "$SE/cn.txt"
 SKIPPING=""
 # Antigravity keeps newer conversations as SQLite files (.db, and their -wal) beside the older .pb
 # files: the SQLite files are read and nothing else in the folder is, only the .pb files are named
@@ -1260,6 +1332,17 @@ hasnot "uv's cache: 2.4.60 and 2.4.6.post1 are not 2.4.6" 'uv cache holds the 2\
 mkdir -p "$WORK/uvn/.cache/uv/archive-v0/y/mistralai-2.4.6.dist-info"
 HOME="$WORK/uvn" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvn2.txt"
 has    "uv's cache: 2.4.6 itself is"                  'uv cache holds the 2\.4\.6 package\. Clear it with: uv cache clean mistralai' "$WORK/uvn2.txt"
+# uv keeps what it installs in its cache: a bad version there alone is a sign of its malware, as a bad
+# npm version in npm's cache is, with its own advice and fix. Where its malware could not run, it is a
+# version to update, never no findings.
+rm -rf "$WORK/uvo"; mkdir -p "$WORK/uvo/.cache/uv/archive-v0/x1/lib/python3.12/site-packages/litellm-1.107.0.dist-info" "$WORK/uvo/.cache/uv/wheels-v5/pypi/mistralai/mistralai-2.4.6-py3-none-any"
+HOME="$WORK/uvo" PATH="$WORK/macbin2:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvo.txt"
+HOME="$WORK/uvo" PATH="$WORK/macbin2:$PATH" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/uvo-c.txt"
+has    "a bad version in uv's cache alone is a sign of its malware" "LiteLLM 1\.107\.0 +signs of the malware found uv's cache: litellm 1\.107\.0" "$WORK/uvo.txt"
+has    "with what that means"                         'uv keeps what it installs in its cache, so treat this version as installed here\. Advisory: docs\.litellm\.ai' "$WORK/uvo.txt"
+has    "and its fix says to clear uv's cache"         "Treat this machine as compromised\. From another computer, rotate every key the machine could reach, then clear the packages section 5 lists from uv's cache and follow LiteLLM's advisory" "$WORK/uvo.txt"
+has    "and the headline says to act"                 'ACT NOW: SIGNS OF THE LITELLM 1\.107\.0 MALWARE' "$WORK/uvo-c.txt"
+has    "where its malware could not run, a bad version in uv's cache is one to update" "mistralai 2\.4\.6 +a bad version to update uv's cache: mistralai 2\.4\.6 Its malware runs on Linux only" "$WORK/uvo.txt"
 
 echo "advice by OS"
 mkdir -p "$WORK/fakebin"
@@ -1468,13 +1551,19 @@ lp "$WORK/zb-none" > "$WORK/zb-none.txt"
 has    "no leaks found: row 05 counts the leaks it checks" 'none of the 10 recent leaks or malware it checks' "$WORK/zb-none.txt"
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
-has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' "$WORK/zb-none-full.txt"
+has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
 has    "and section 5 counts it"                      'RECENT KEY LEAKS +10 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
 has    "an extension folder that cannot be read is not called clean" 'Editor extensions +not fully checked: 1 extension folder could not be read' "$WORK/zb-ext.txt"
 has    "and row 05 says so"                           'Recent leaks +extensions not fully checked: folder unreadable' "$WORK/zb-ext-c.txt"
+# An editor's own folder that can't be opened hides its extensions folder: not called clean either.
+cp -R "$WORK/zb-none" "$WORK/zb-edir"; mkdir -p "$WORK/zb-edir/.windsurf/extensions/Angular-studio.ng-angular-extension-1.0.0"; chmod 000 "$WORK/zb-edir/.windsurf"
+lpf "$WORK/zb-edir" > "$WORK/zb-edir.txt"; lp "$WORK/zb-edir" > "$WORK/zb-edir-c.txt"
+chmod 755 "$WORK/zb-edir/.windsurf"
+has    "an editor's folder that cannot be opened is not called clean" 'Editor extensions +not fully checked: 1 extension folder could not be read' "$WORK/zb-edir.txt"
+has    "and row 05 says its extensions were not fully checked" 'Recent leaks +extensions not fully checked: folder unreadable' "$WORK/zb-edir-c.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
@@ -1692,6 +1781,14 @@ mkdir -p "$WORK/dz-ag/.antigravity-ide/extensions/mswincx.antigravity-cockpit-1.
 dzrun "$WORK/dz-ag" | tr -s ' \n' '  ' > "$WORK/dz-ag.txt"
 has    "Antigravity IDE's extension folder is read, as an Open VSX editor's" '~/\.antigravity-ide/extensions/mswincx\.antigravity-cockpit-1\.2\.0-universal mswincx\.antigravity-cockpit 1\.2\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ag.txt"
 has    "and the earlier Antigravity's folder too"     '~/\.antigravity/extensions/keyacrosslaud\.auto-loop-for-antigravity-0\.4\.1 keyacrosslaud\.auto-loop-for-antigravity 0\.4\.1 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-ag.txt"
+# Positron installs from Open VSX (Posit's mirror of it, its product.json), and GlassWorm's dropper
+# targets it: an Open VSX build's id in its folder, and an extension that is malware everywhere in its
+# server's folder.
+rm -rf "$WORK/dz-pos"; cp -R "$WORK/clean" "$WORK/dz-pos"
+mkdir -p "$WORK/dz-pos/.positron/extensions/Angular-studio.ng-angular-extension-1.0.0" "$WORK/dz-pos/.positron-server/extensions/floktokbok.autoimport-2.7.9"
+dzrun "$WORK/dz-pos" | tr -s ' \n' '  ' > "$WORK/dz-pos.txt"
+has    "Positron's extension folder is read, as an Open VSX editor's" '~/\.positron/extensions/Angular-studio\.ng-angular-extension-1\.0\.0 Angular-studio\.ng-angular-extension 1\.0\.0 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-pos.txt"
+has    "and its server's folder too"                  '~/\.positron-server/extensions/floktokbok\.autoimport-2\.7\.9 floktokbok\.autoimport 2\.7\.9 \(GlassWorm extensions, April 2026\), installed' "$WORK/dz-pos.txt"
 # VS Code Insiders and the remote servers keep extensions in folders of their own: VS Code's install
 # from the Marketplace (an Open VSX build's id there is the Marketplace's own), the others from Open VSX.
 rm -rf "$WORK/dz-rem"; cp -R "$WORK/clean" "$WORK/dz-rem"
@@ -2167,6 +2264,27 @@ has    "and the allow lists row is not green"         'Allow lists none found, b
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
+# Poetry's, pipenv's and Hatch's own folders of environments, which the home scan does not enter, are
+# read: each holds a bad version here. A site-packages folder that can't be read is not counted as an
+# environment checked: the Python rows, the headline and row 05 say so.
+if [ "$(uname -s)" = Darwin ]; then _po="Library/Caches/pypoetry/virtualenvs"; _ha="Library/Application Support/hatch/env/virtual"
+else _po=".cache/pypoetry/virtualenvs"; _ha=".local/share/hatch/env/virtual"; fi
+rm -rf "$WORK/pyt" "$WORK/pyu"; mkdir -p "$WORK/pyt/$_po/app-Xy3kQ9-py3.12/lib/python3.12/site-packages/litellm-1.107.0.dist-info" \
+  "$WORK/pyt/.local/share/virtualenvs/app-Xy3kQ9/lib/python3.12/site-packages/litellm-1.82.7.dist-info" \
+  "$WORK/pyt/$_ha/app/Xy3kQ9/default/lib/python3.12/site-packages/lightning-2.6.2.dist-info" \
+  "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"
+printf 'home = /usr\n' > "$WORK/pyu/code/py/.venv/pyvenv.cfg"
+HOME="$WORK/pyt" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyt.txt"
+has    "a Python environment in Poetry's folder is checked" 'pypoetry/[^ ]*site-packages: litellm 1\.107\.0' "$WORK/pyt.txt"
+has    "and in pipenv's"                              'share/virtualenvs/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyt.txt"
+has    "and in Hatch's"                               'hatch/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyt.txt"
+chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
+HOME="$WORK/pyu" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu.txt"
+HOME="$WORK/pyu" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"   # no idle agents, whose fix would take the headline
+chmod 755 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
+has    "a site-packages folder that cannot be read is not counted as checked" '! LiteLLM 1\.107\.0 (no signs in [0-9]+ Python environments?, but 1 more|1 Python environment) could not be read' "$WORK/pyu.txt"
+has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
+has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
 # The scan keeps find's errors in a temp file: in /tmp when TMPDIR can't be written to, and with no temp
 # folder at all, it can't tell which folders it read, and says so.
 mkdir -p "$WORK/nomk"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomk/mktemp"; chmod +x "$WORK/nomk/mktemp"
