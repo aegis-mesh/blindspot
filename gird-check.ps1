@@ -1136,15 +1136,19 @@ $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([
 # and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
 # option word starting with e or p ends the match); when the file is the command itself; or when a
 # task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
-# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
-# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
-# The same expression as gird-check.sh's worm_cmd.
+# or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
+# echo that names the file. A rule or a guard that only names the file, or passes it to another
+# script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
+# ./, and must end there. The same expression as gird-check.sh's worm_cmd.
 function Worm-Cmd([string]$name) {
   if (-not $name) { return $null }
   $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $name + '(\\"|["''\s;&|)])'
   $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
   $co = '(--|--[A-DF-OQ-Za-df-oq-z0-9][^\s"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)\s+'
-  $cs = '"command"\s*:\s*"\s*(([^"\\]|\\.)*(;|&&?|\|\|?)\s*)?'
+  # One piece of a command before a separator: a character outside quotes, a JSON escape other than
+  # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
+  $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
   $ci = '"command"\s*:\s*"' + $cp + '(node|bun|deno|tsx)(\.exe)?"'
   $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $name + '"'
   $cb = '([^{}]|\{[^{}]*\})*'

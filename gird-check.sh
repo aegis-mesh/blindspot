@@ -1655,13 +1655,18 @@ AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
 # and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
 # option word starting with e or p ends the match); when the file is the command itself; or when a
 # task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
-# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
-# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
+# or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
+# echo that names the file. A rule or a guard that only names the file, or passes it to another
+# script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
+# ./, and must end there.
 worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these files
   _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
   _wo='(--|--[A-DF-OQ-Za-df-oq-z0-9][^[:space:]"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)[[:space:]]+'
-  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(([^"\\]|\\.)*(;|&&?|\|\|?)[[:space:]]*)?'
+  # One piece of a command before a separator: a character outside quotes, a JSON escape other than
+  # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
+  _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp"'(node|bun|deno|tsx)(\.exe)?"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
