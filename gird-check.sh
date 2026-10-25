@@ -145,6 +145,7 @@ short() {
 rowsafe() { _r=${1//$'\xc2'[$'\x80'-$'\x9f']/?}; printf '%s' "${_r//[[:cntrl:]]/?}"; }
 plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s' "$1" "$3"; fi; }
 count_lines() { if [ -n "$1" ]; then printf '%s\n' "$1" | grep -c .; else printf 0; fi; }
+sha_hex() { if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum 2>/dev/null; fi | cut -c1-64; }
 # 1234567 -> 1,234,567
 commas() {
   _cn=$1; _co=""
@@ -812,16 +813,19 @@ npm_would_ship() {
 
 # >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it.
 PLANTED='.claude/router_runtime.js
-.claude/tanstack_runner.js
 .vscode/router_runtime.js
-.vscode/tanstack_runner.js
 .claude/setup.mjs
 .claude/math_init.js
 .vscode/setup.mjs'
-PLANTED_ERE='\.claude/router_runtime\.js|\.claude/tanstack_runner\.js|\.vscode/router_runtime\.js|\.vscode/tanstack_runner\.js|\.claude/setup\.mjs|\.claude/math_init\.js|\.vscode/setup\.mjs'
-WORM_RUN='\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
-planted_note() { case "$1" in */.claude/router_runtime.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/tanstack_runner.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/router_runtime.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/tanstack_runner.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/math_init.js) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.vscode/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; esac; }
-WORM_REF_NOTE='runs a file the TanStack and keyv worms plant'
+PLANTED_ERE='\.claude/router_runtime\.js|\.vscode/router_runtime\.js|\.claude/setup\.mjs|\.claude/math_init\.js|\.vscode/setup\.mjs'
+PLANTED_ALONE='.claude/router_runtime.js
+.vscode/router_runtime.js
+.claude/math_init.js'
+WORM_RUN_ALONE='\.(claude|vscode)[/\\]+(router_runtime\.js|math_init\.js)'
+WORM_RUN_WEAK='\.(claude|vscode)[/\\]+(setup\.mjs)'
+planted_note() { case "$1" in */.claude/router_runtime.js) printf '%s' 'a file the TanStack worm plants' ;; */.vscode/router_runtime.js) printf '%s' 'a file the TanStack worm plants' ;; */.claude/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; */.claude/math_init.js) printf '%s' 'a file the keyv worm plants' ;; */.vscode/setup.mjs) printf '%s' 'a file the TanStack and keyv worms plant' ;; esac; }
+planted_sha() { case "$1" in */.claude/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' ;; */.vscode/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' ;; esac; }
+WORM_REF_NOTE='runs a file a worm plants'
 # <<< planted
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1172,8 +1176,58 @@ AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; d
 FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LS] ')
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/tasks\.json$')
-# Files worms plant in a project, from data/planted.tsv.
+# Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
+# name projects use too (setup.mjs) counts in a project that also holds one of those, or when the file
+# is the very one the sources publish the SHA-256 of; anywhere else section 2 lists it as a file to
+# read (WORM_LOOK). WORM_PROJ lists the projects that count, each the folder holding .claude or
+# .vscode: there a hook that runs such a file counts too.
 WORM_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E "/($PLANTED_ERE)\$")
+planted_alone() { # file: is it at a path only a worm uses?
+  case "
+$PLANTED_ALONE
+" in *"
+${1#"${1%/*/*}"/}
+"*) return 0 ;; esac; return 1
+}
+worm_proj() { # file in a .claude or .vscode folder: is its project one that counts?
+  case "
+$WORM_PROJ" in *"
+${1%/*/*}
+"*) return 0 ;; esac; return 1
+}
+WORM_PROJ=""; WORM_HIT=""; WORM_LOOK=""
+while IFS= read -r _f; do
+  [ -n "$_f" ] && planted_alone "$_f" && ! worm_proj "$_f" && WORM_PROJ="$WORM_PROJ${_f%/*/*}
+"
+done <<EOF
+$WORM_FILES
+EOF
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  planted_alone "$_f" && continue
+  worm_proj "$_f" && continue
+  _pp=${_f%/*/*}; _ok=0
+  while IFS= read -r _a; do [ -n "$_a" ] && [ -e "$_pp/$_a" ] && _ok=1; done <<EOF
+$PLANTED_ALONE
+EOF
+  if [ "$_ok" -eq 0 ] && [ -f "$_f" ]; then
+    _sh=$(sha_hex < "$_f" 2>/dev/null)
+    case " $(planted_sha "$_f") " in *" $_sh "*) [ -n "$_sh" ] && _ok=1 ;; esac
+  fi
+  [ "$_ok" -eq 1 ] && WORM_PROJ="$WORM_PROJ$_pp
+"
+done <<EOF
+$WORM_FILES
+EOF
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  if planted_alone "$_f" || worm_proj "$_f"; then WORM_HIT="$WORM_HIT$_f
+"; else WORM_LOOK="$WORM_LOOK$_f
+"; fi
+done <<EOF
+$WORM_FILES
+EOF
+N_LOOK=$(count_lines "$WORM_LOOK")
 AIDER_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.aider\.chat\.history\.md$')
 # The project files of data/auto-approve.tsv, and every project's .vscode/settings.json (section 2).
 AA_FILES=""; AA_ERE=""
@@ -1340,9 +1394,25 @@ MCP_SUM="$(plural "$N_MCP" server servers)$MCP_CACHE_NOTE"
 # settings.json and settings.local.json are read, since repos commit either. Each file is read as
 # one line, so pretty-printed JSON matches too, with JSONC comments removed first.
 AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
-# Worms plant a file in the folder (WORM_RUN, from data/planted.tsv) and run it from a hook or a task.
-# A command runs one: an interpreter given its path, the path as the command itself, or a task's argument.
-WORM_CMD='"command"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*([^A-Za-z0-9_"\\]|\\"))?(node|bun|deno|tsx)(\.exe)?[[:space:]]([^"\\]|\\.)*'"$WORM_RUN"'|"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?/|\./)?'"$WORM_RUN"'|"args"[[:space:]]*:[[:space:]]*\[[^]]*'"$WORM_RUN"
+# Worms plant a file in the folder (data/planted.tsv) and run it from a hook or a task. A command runs
+# one when the file is the script an interpreter runs: the first word after node, bun, deno or tsx
+# and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
+# option word starting with e or p ends the match); when the file is the command itself; or when a
+# task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
+# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
+# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
+worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these files
+  _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$1"'(\\"|["'"'"'[:space:];&|)])'
+  _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
+  _wo='(--|--[A-DF-OQ-Za-df-oq-z0-9][^[:space:]"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)[[:space:]]+'
+  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(([^"\\]|\\.)*(;|&&?|\|\|?)[[:space:]]*)?'
+  _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp"'(node|bun|deno|tsx)(\.exe)?"'
+  _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
+  _wb='([^{}]|\{[^{}]*\})*'
+  printf '%s' "$_ws$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
+}
+WORM_CMD_ALONE=""; [ -n "$WORM_RUN_ALONE" ] && WORM_CMD_ALONE=$(worm_cmd "$WORM_RUN_ALONE")
+WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN_WEAK")
 TAB=$(printf '\t')
 # One line of text, with comments removed first: // to the end of the line and /* */, outside
 # strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
@@ -1385,9 +1455,13 @@ flat() {
     }'
 }
 auto_row() { # file what flattened-text
-  # A worm file counts only when a command runs it, not when a rule or a guard merely names it.
-  printf '%s' "$3" | grep -qE "$WORM_CMD" && WORM_REFS="$WORM_REFS$1
+  # A worm file counts only when a command runs it (worm_cmd), and a file projects use too only in a
+  # project that counts (WORM_PROJ).
+  if { [ -n "$WORM_CMD_ALONE" ] && printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; } ||
+     { [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1" && printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; }; then
+    WORM_REFS="$WORM_REFS$1
 "
+  fi
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   # The path goes into TAB-separated rows and the list of settings seen, so it is made row-safe first.
@@ -2677,7 +2751,7 @@ if [ "$WIN" -eq 1 ]; then
   win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra worm at login
 "
 fi
-[ -n "$WORM_FILES" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_FILES" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
+[ -n "$WORM_HIT" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_HIT" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
 "
 [ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_REFS" | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\t%s\n' "$(rowsafe "$_f")" "$WORM_REF_NOTE"; done)
 "
@@ -2874,6 +2948,7 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
+[ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
 advice_todos update
 [ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
 [ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
@@ -2941,7 +3016,6 @@ json_tally() { # list lines
       printf "{%s}", out
     }'
 }
-sha_hex() { if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum 2>/dev/null; fi | cut -c1-64; }
 HWID=""
 if [ "$OS" = Darwin ]; then HWID=$(ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null | awk -F'"' '/IOPlatformUUID/ {print $4; exit}')
 elif [ "$WIN" -eq 1 ]; then # as stored, no case change, so gird-check.ps1 gets the same ID on this PC
@@ -3122,6 +3196,17 @@ if [ "$N_AUTO" -gt 0 ]; then
     wrap "Set to $w.$_more" 8 "        " "        " "$DIM"
   done <<EOF
 $AUTO_ROWS
+EOF
+fi
+if [ "$N_LOOK" -gt 0 ]; then
+  blank
+  emit "     ${B}Files named like the ones worms plant${RST}"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    emit "     ${YEL}!${RST}  $(short "$f")"
+    wrap "Named like $(planted_note "$f"), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
+  done <<EOF
+$WORM_LOOK
 EOF
 fi
 if [ "$N_AK" -gt 0 ]; then
@@ -3437,6 +3522,7 @@ if [ "$N_AK" -gt 0 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, $(plural "$N_AK" 
 elif [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
+elif [ "$N_LOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_LOOK" "project file" "project files") to read"
 elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in their configs"
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST#*|}") (${KEY_FIRST%%|*})"

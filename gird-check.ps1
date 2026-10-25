@@ -505,9 +505,12 @@ function Is-Pruned([string]$path, [string]$name, [int]$depth) {
 }
 # Files worms plant in a project, from data/planted.tsv.
 # >>> planted: generated from data/planted.tsv by tools/gen.sh. Edit that file, then run it.
-$WormName = '\.(claude|vscode)[/\\]+(router_runtime\.js|tanstack_runner\.js|setup\.mjs|math_init\.js)'
-function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack and keyv worms plant' } '.claude/tanstack_runner.js' { 'a file the TanStack and keyv worms plant' } '.vscode/router_runtime.js' { 'a file the TanStack and keyv worms plant' } '.vscode/tanstack_runner.js' { 'a file the TanStack and keyv worms plant' } '.claude/setup.mjs' { 'a file the TanStack and keyv worms plant' } '.claude/math_init.js' { 'a file the TanStack and keyv worms plant' } '.vscode/setup.mjs' { 'a file the TanStack and keyv worms plant' } default { $null } } }
-$WormRefNote = 'runs a file the TanStack and keyv worms plant'
+$WormNameAlone = '\.(claude|vscode)[/\\]+(router_runtime\.js|math_init\.js)'
+$WormNameWeak = '\.(claude|vscode)[/\\]+(setup\.mjs)'
+function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack worm plants' } '.vscode/router_runtime.js' { 'a file the TanStack worm plants' } '.claude/setup.mjs' { 'a file the TanStack and keyv worms plant' } '.claude/math_init.js' { 'a file the keyv worm plants' } '.vscode/setup.mjs' { 'a file the TanStack and keyv worms plant' } default { $null } } }
+function Planted-Sha([string]$p) { switch -CaseSensitive ($p) { '.claude/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' } '.vscode/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df' } default { '' } } }
+$PlantedAlone = @('.claude/router_runtime.js', '.vscode/router_runtime.js', '.claude/math_init.js')
+$WormRefNote = 'runs a file a worm plants'
 # <<< planted
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
@@ -821,6 +824,33 @@ function Sess-Stop([bool]$wait) {
 }
 
 Scan-Home $HomeDir 0
+# Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
+# name projects use too (setup.mjs) counts in a project that also holds one of those, or when the file
+# is the very one the sources publish the SHA-256 of; anywhere else section 2 lists it as a file to
+# read ($WormLook). $WormProj holds the projects that count, each the folder holding .claude or
+# .vscode: there a hook that runs such a file counts too.
+function Worm-Project([string]$f) { [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($f)) }
+function Planted-Rel([string]$f) { [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) + '/' + [IO.Path]::GetFileName($f) }
+function File-Sha256([string]$f) {
+  try {
+    $fs = [IO.File]::OpenRead($f)
+    try { $hb = [Security.Cryptography.SHA256]::Create().ComputeHash($fs) } finally { $fs.Dispose() }
+    -join ($hb | ForEach-Object { $_.ToString('x2') })
+  } catch { '' }
+}
+$WormProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($f in $WormFiles) { if ($PlantedAlone -ccontains (Planted-Rel $f)) { [void]$WormProj.Add((Worm-Project $f)) } }
+foreach ($f in $WormFiles) {
+  $wpr = Worm-Project $f
+  if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains($wpr)) { continue }
+  $wok = $false
+  foreach ($wal in $PlantedAlone) { if (Exists (J $wpr $wal)) { $wok = $true; break } }
+  if (-not $wok) { $wsh = File-Sha256 $f; if ($wsh -and (@((Planted-Sha (Planted-Rel $f)) -split ' ') -ccontains $wsh)) { $wok = $true } }
+  if ($wok) { [void]$WormProj.Add($wpr) }
+}
+$WormHit = New-Object System.Collections.Generic.List[string]; $WormLook = New-Object System.Collections.Generic.List[string]
+foreach ($f in $WormFiles) { if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains((Worm-Project $f))) { $WormHit.Add($f) } else { $WormLook.Add($f) } }
+$N_LOOK = $WormLook.Count
 $EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
 $AllowFiles = @(@($Found) + @($LinkSettings) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
 $ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
@@ -953,11 +983,26 @@ if ($N_MCP -eq 0 -and $N_MCP_CACHE -gt 0) { $McpSum = "none set up, $N_MCP_CACHE
 # each string and drops each comment, so the time is linear whatever the input.
 $AutoRows = New-Object System.Collections.Generic.List[object]; $WormRefs = New-Object System.Collections.Generic.List[string]
 $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
-# Worms plant a file in the folder ($WormName, from data/planted.tsv) and run it from a hook or a task.
-# A worm file counts only when a command runs it (an interpreter given its path, the path as the
-# command itself, or a task's argument), not when a rule or a guard merely names it.
-$RxWormRun = New-Object regex(('"command"\s*:\s*"(?:[^"\\]|\\.)*\b(node|bun|deno|tsx)(\.exe)?\s(?:[^"\\]|\\.)*' + $WormName +
-  '|"command"\s*:\s*"\s*(\\?"?\$\{?CLAUDE_PROJECT_DIR\}?(\\?")?[/\\]|\.[/\\])?' + $WormName + '|"args"\s*:\s*\[[^\]]*' + $WormName), $RxOpt, $RxTimeout)
+# Worms plant a file in the folder (data/planted.tsv) and run it from a hook or a task. A command runs
+# one when the file is the script an interpreter runs: the first word after node, bun, deno or tsx
+# and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
+# option word starting with e or p ends the match); when the file is the command itself; or when a
+# task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
+# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
+# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
+# The same expression as gird-check.sh's worm_cmd.
+function Worm-Cmd([string]$name) {
+  if (-not $name) { return $null }
+  $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $name + '(\\"|["''\s;&|)])'
+  $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
+  $co = '(--|--[A-DF-OQ-Za-df-oq-z0-9][^\s"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)\s+'
+  $cs = '"command"\s*:\s*"\s*(([^"\\]|\\.)*(;|&&?|\|\|?)\s*)?'
+  $ci = '"command"\s*:\s*"' + $cp + '(node|bun|deno|tsx)(\.exe)?"'
+  $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $name + '"'
+  $cb = '([^{}]|\{[^{}]*\})*'
+  New-Object regex(($cs + $cp + '((node|tsx)(\.exe)?\s+(' + $co + ')*|(bun|deno)(\.exe)?\s+(' + $co + ')*(run\s+(' + $co + ')*)?)' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
+}
+$RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # Keys that make Claude Code run a command: hooks and its helper commands.
 $RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper)"\s*:', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
@@ -1004,7 +1049,9 @@ function Aa-Hit([string]$f, $pats) {
   -not ($got -contains $false)
 }
 function Auto-Row([string]$f, [string]$what, [string]$t) {
-  if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
+  # A worm file counts only when a command runs it (Worm-Cmd), and a file projects use too only in a
+  # project that counts ($WormProj).
+  if (($RxWormAlone -and (Flat-Match $f $t $RxWormAlone)) -or ($RxWormWeak -and $WormProj.Contains((Worm-Project $f)) -and (Flat-Match $f $t $RxWormWeak))) { $WormRefs.Add($f) }
   # A repo's worktrees carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
@@ -2182,7 +2229,7 @@ if ($OnWindows) {
     if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra worm at login')) }; $rk.Close() }
   } catch { }
 }
-foreach ($f in $WormFiles) { $Persist.Add(@($f, (Planted-Note ([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) + '/' + [IO.Path]::GetFileName($f))))) }
+foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
@@ -2317,6 +2364,7 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
+if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 Add-Advice 'update'
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
 if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
@@ -2507,6 +2555,14 @@ if ($N_AUTO -gt 0) {
     Wrap "Set to $($r.What).$more" 8 '        ' '        ' $cDim
   }
 }
+if ($N_LOOK -gt 0) {
+  Blank
+  Emit "     ${cBold}Files named like the ones worms plant$cRst"
+  foreach ($f in $WormLook) {
+    Emit "     $cYel!$cRst  $(Short $f)"
+    Wrap "Named like $(Planted-Note (Planted-Rel $f)), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
+  }
+}
 if ($N_AK -gt 0) {
   Blank
   Emit "     ${cBold}Files that link to your SSH logins$cRst"
@@ -2690,6 +2746,7 @@ if ($N_AK -gt 0) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, $(Plural $N_AK 'file l
 elseif ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
 elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
+elseif ($N_LOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_LOOK 'project file' 'project files') to read" }
 elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }

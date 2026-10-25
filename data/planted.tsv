@@ -5,13 +5,17 @@
 #   incident  an id from data/incidents.tsv
 #   note      shown under the file when it is found. A settings file that runs any of these
 #             files is shown with "runs" before the note (or a general line, if the notes differ)
-# Wiz (TanStack wave); Snyk: .claude/setup.mjs, .claude/math_init.js and .vscode/setup.mjs.
-# A hook counts when it runs any of these file names from either folder.
-# folder	file	incident	note
-.claude	router_runtime.js	tanstack	a file the TanStack and keyv worms plant
-.claude	tanstack_runner.js	tanstack	a file the TanStack and keyv worms plant
-.vscode	router_runtime.js	tanstack	a file the TanStack and keyv worms plant
-.vscode	tanstack_runner.js	tanstack	a file the TanStack and keyv worms plant
-.claude	setup.mjs	keyv	a file the TanStack and keyv worms plant
-.claude	math_init.js	keyv	a file the TanStack and keyv worms plant
-.vscode	setup.mjs	keyv	a file the TanStack and keyv worms plant
+#   alone     yes: only a worm uses this name, so the file counts wherever it is found. no: projects
+#             use the name too, so the file counts only in a project that holds a yes file, or when
+#             its SHA-256 is one in sha256; anywhere else section 2 lists it as a file to read
+#   sha256    the SHA-256 values the sources publish for this file, separated by commas, or -
+# Wiz on the TanStack wave: "Check .claude/ and .vscode/ directories for router_runtime.js or
+# setup.mjs", and setup.mjs 2258284d. Socket on the keyv wave: .claude/math_init.js, and setup.mjs
+# fd3ca400 (the loader in .claude and .vscode, identical in both) and 54dc7ea5 (the loader in the
+# npm packages). A hook counts when it runs any of these file names from either folder.
+# folder	file	incident	note	alone	sha256
+.claude	router_runtime.js	tanstack	a file the TanStack worm plants	yes	-
+.vscode	router_runtime.js	tanstack	a file the TanStack worm plants	yes	-
+.claude	setup.mjs	keyv	a file the TanStack and keyv worms plant	no	fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb,54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668,2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df
+.claude	math_init.js	keyv	a file the keyv worm plants	yes	-
+.vscode	setup.mjs	keyv	a file the TanStack and keyv worms plant	no	fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb,54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668,2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df

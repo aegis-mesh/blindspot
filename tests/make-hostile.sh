@@ -23,7 +23,7 @@ printf '{"chat.tools.autoApprove": true}\n' > "$H/p/yolo$INJ/.vscode/settings.js
 mkdir -p "$H/code/lock$INJ"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$H/code/lock$INJ/package-lock.json"
 # A file worms plant in a project.
-mkdir -p "$H/code/plant$INJ/.vscode"; : > "$H/code/plant$INJ/.vscode/tanstack_runner.js"
+mkdir -p "$H/code/plant$INJ/.vscode"; : > "$H/code/plant$INJ/.vscode/router_runtime.js"
 # A project MCP config with a token, a key file and a Claude Code allow list, under a | as well.
 mkdir -p "$H/code/mcp$PIPE$INJ" "$H/code/key$PIPE$INJ" "$H/code/allow$PIPE$INJ/.claude"
 printf '{"mcpServers":{"gh":{"command":"npx","env":{"GITHUB_TOKEN":"%s"}}}}\n' "$(key "gh""p_$(rnd 36)")" > "$H/code/mcp$PIPE$INJ/.mcp.json"
