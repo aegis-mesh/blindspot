@@ -68,7 +68,7 @@ WSL says Windows-side files were not checked	WSL: gird-check.sh reads /proc to t
 only WSL, not plain Linux, gets the WSL note and loses the keyring advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 WSL reports os Linux while giving the WSL advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
 a pyc-only run still says the scan is a snapshot	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never shows it
-without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with ConvertFrom-Json
+without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with .NET's System.Text.Json on PowerShell 7 and JavaScriptSerializer on 5.1, never ConvertFrom-Json
 a find that rejects its options is reported, not read as a clean home folder	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
 a find that rejects its options is not called no findings	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
 the text backstop fails on a single-quoted name	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
