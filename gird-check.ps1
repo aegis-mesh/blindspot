@@ -289,7 +289,9 @@ function Mark-Slow([string]$f) {
   if (-not $SlowFiles.Contains($f)) { $SlowFiles.Add($f); Progress "Skipped, took too long to check: $(Short $f)" }
 }
 
-$TextCache = @{}
+# Keyed by path, compared exactly as gird-check.sh compares: on a volume that tells case apart, two
+# files whose names differ only in case are two files.
+$TextCache = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
 function Read-Text([string]$f) {
   if ($TextCache.ContainsKey($f)) { return $TextCache[$f] }
   $t = $null
@@ -972,7 +974,7 @@ $SessWorker = {
     } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -5311,7 +5313,7 @@ microsoftvs.microsoftvs * glasswormoct any win
 cosmic-themes.theme-cosmic-nebula * glasswormoct any all
 '@
 # <<< bad-extensions
-$NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
+$NpmBad = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)); $NpmAny = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)); $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
 foreach ($l in ($BadNpm -split "`r?`n")) {
   $p = $l -split ' '; if ($p.Count -lt 3) { continue }
   $N_BAD_NPM++
@@ -5450,7 +5452,7 @@ $OutTable = @(
 # , } # or /. Lines starting with // or # are skipped; in a .toml file only the lines before the
 # first [table] count.
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by Aa-Hit (section 2).
-$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}
+$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
 foreach ($r in $AaTable) {
   if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
   if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) }) } else { $files = @($r[2]) }

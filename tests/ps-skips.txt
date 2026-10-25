@@ -84,3 +84,6 @@ rg: and the second's is the variable's folder	needs ripgrep on PATH: these tests
 rg: never a folder under them	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: an empty session file that cannot be opened is not counted as read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: and the sessions are not called clean over it	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+two .env files whose folders differ only in case are read apart	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+and the other keeps its own key	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+two session files whose names differ only in case are two files	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file

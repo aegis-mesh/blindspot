@@ -462,6 +462,21 @@ for E in net rg; do
 done
 SKIPPING=""
 chmod 644 "$SE/emp/.claude/projects/p/b.jsonl"
+# Names are compared exactly, as gird-check.sh compares them, never as PowerShell's @{} does: a
+# lockfile's package named like a bad one in another case is not that package, and where the volume
+# tells case apart, two .env files or two session files whose names differ only in case are two
+# files, each with its own keys.
+mkdir -p "$SE/cn/code/app" "$SE/cn/code/Up" "$SE/cn/code/up" "$SE/cn/.claude/projects/p" "$SE/cn/AppData/Roaming" "$SE/cn/AppData/Local/Temp"
+printf '{\n  "name": "app",\n  "lockfileVersion": 3,\n  "packages": {\n    "": {"name": "app"},\n    "node_modules/AXIOS": {"version": "1.14.1"},\n    "node_modules/Plain-Crypto-JS": {"version": "4.2.1"}\n  }\n}\n' > "$SE/cn/code/app/package-lock.json"
+printf 'ANTHROPIC_API_KEY=%s\n' "sk""-ant-api03-$(rnd 95)" > "$SE/cn/code/Up/.env"; printf 'GITHUB_TOKEN=%s\n' "gh""p_$(rnd 36)" > "$SE/cn/code/up/.env"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cn/.claude/projects/p/S.jsonl"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cn/.claude/projects/p/s.jsonl"
+psrun "$SE/cn" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -Full -AllSessions > "$SE/cn.txt" 2>&1
+hasnot "a package named like a bad one in another case is not that package" 'AXIOS|Plain-Crypto-JS' "$SE/cn.txt"
+if [ "$(find "$SE/cn/.claude/projects/p" -type f | grep -c .)" -eq 2 ]; then SKIPPING=""; else SKIPPING="this volume ignores case, so two names that differ only in case are one file"; fi
+has    "two .env files whose folders differ only in case are read apart" '~/code/Up/\.env +Anthropic$' "$SE/cn.txt"
+has    "and the other keeps its own key" '~/code/up/\.env +GitHub$' "$SE/cn.txt"
+has    "two session files whose names differ only in case are two files" 'Claude Code +2 files: AWS$' "$SE/cn.txt"
+SKIPPING=""
 # Antigravity keeps newer conversations as SQLite files (.db, and their -wal) beside the older .pb
 # files: the SQLite files are read and nothing else in the folder is, only the .pb files are named
 # as encrypted, and a folder with none is never called encrypted.
