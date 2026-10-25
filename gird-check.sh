@@ -1158,8 +1158,9 @@ if [ -z "$FOUND" ] && [ -n "$SCAN_ERR" ] && grep -qiE '^find: .*(unrecognized|un
   SCAN_FAILED=1; SCAN_WHY=$(grep -m 1 '^find: ' "$SCAN_ERR" | tr -d '\r' | cut -c 1-120)
 fi
 # Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
-# files_found counts files, as it always has.
-LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p')
+# files_found counts files, as it always has. A link counts only when it ends at a regular file: a
+# repo can link a settings file to /dev/zero or /dev/tty, which a reader would never get to the end of.
+LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p' | while IFS= read -r _f; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
 # Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
 # outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
 # .ssh/authorized_keys fixture does not count. Before the file exists, a link that resolves to its

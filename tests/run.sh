@@ -1245,6 +1245,20 @@ PY
   has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
   HOME="$WORK/fcount" bash "$SCRIPT" --offline > "$WORK/fcount.txt" 2>&1
   has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
+  # A settings file a repo links to a device: /dev/zero never ends and /dev/tty waits for the
+  # keyboard. Only a link that ends at a regular file is a settings file, and the allow list after it
+  # is still read. A stand-in grep refuses device files, so a regression fails here instead of hanging.
+  mkdir -p "$WORK/devbin"
+  printf '#!/bin/sh\nfor a in "$@"; do [ -c "$a" ] && exit 2; done\nexec %s "$@"\n' "$(command -v grep)" > "$WORK/devbin/grep"; chmod +x "$WORK/devbin/grep"
+  for dv in zero tty; do
+    rm -rf "${WORK:?}/dev$dv"; mkdir -p "$WORK/dev$dv/code/a-repo/.claude" "$WORK/dev$dv/code/b-mine/.claude"
+    ln -s "/dev/$dv" "$WORK/dev$dv/code/a-repo/.claude/settings.local.json"
+    printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=%s npm run eval)"]}}\n' "$(sed -n 2p "$WORK/keys.txt")" > "$WORK/dev$dv/code/b-mine/.claude/settings.local.json"
+    report_of "$WORK/report-dev$dv.json" env HOME="$WORK/dev$dv" GIRD_CHECK_API="$API" PATH="$WORK/devbin:$PATH" bash "$SCRIPT"
+    has    "a settings link to /dev/$dv is not a settings file" '"allow_list_files":1,' "$WORK/report-dev$dv.json"
+    HOME="$WORK/dev$dv" PATH="$WORK/devbin:$PATH" bash "$SCRIPT" --offline > "$WORK/dev$dv.txt" 2>&1
+    has    "and the allow list after a /dev/$dv link is still read" '~/code/b-mine/\.claude/settings\.local\.json' "$WORK/dev$dv.txt"
+  done
   # --all reaches the report as all_folders 1.
   report_of "$WORK/report-all.json" env HOME="$WORK/fcount" GIRD_CHECK_API="$API" bash "$SCRIPT" --all
   has    "--all is all_folders 1 in the report" '"all_folders":1,' "$WORK/report-all.json"

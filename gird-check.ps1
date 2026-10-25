@@ -522,6 +522,23 @@ $AaTable = @(
 $AaProject = @()
 # <<< auto-approve
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
+# Whether a link ends at a regular file. Off Windows a repo can link a settings file to /dev/zero or
+# /dev/tty, which .NET would read for ever; UnixMode (PowerShell 7.1 and up) starts with - for a
+# regular file and l for a link, which is followed. Windows has no such files in a profile.
+function Is-RegularFile([string]$p) {
+  if (-not (Is-File $p)) { return $false }
+  if ($OnWindows) { return $true }
+  $t = $p
+  for ($i = 0; $i -lt 40; $i++) {
+    try { $it = Get-Item -LiteralPath $t -Force -ErrorAction Stop } catch { return $false }
+    $m = [string]$it.UnixMode
+    if (-not $m.StartsWith('l')) { return $m.StartsWith('-') }
+    $lt = [string](@($it.Target)[0]); if (-not $lt) { return $false }
+    if (-not [IO.Path]::IsPathRooted($lt)) { $lt = J ([IO.Path]::GetDirectoryName($t)) $lt }
+    $t = $lt
+  }
+  $false
+}
 function Is-AaProject([string]$path) {
   $ps = $path -replace '\\', '/'
   foreach ($r in $AaProject) { if ($ps.EndsWith('/' + $r, [StringComparison]::Ordinal)) { return $true } }
@@ -556,11 +573,12 @@ function Scan-Home([string]$dir, [int]$depth) {
     }
     $parent = [IO.Path]::GetFileName($dir)
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
-    # A linked settings, tasks or worm file is followed; any other link is not.
+    # A linked settings, tasks or worm file is followed when it ends at a regular file; any other
+    # link is not.
     if ($link) {
-      if ($isSettings) { $LinkSettings.Add($path) }
-      elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { $TaskFiles.Add($path) }
-      elseif (Is-WormFile $parent $name) { $WormFiles.Add($path) }
+      if ($isSettings) { if (Is-RegularFile $path) { $LinkSettings.Add($path) } }
+      elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { if (Is-RegularFile $path) { $TaskFiles.Add($path) } }
+      elseif (Is-WormFile $parent $name) { if (Is-RegularFile $path) { $WormFiles.Add($path) } }
       if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
