@@ -275,3 +275,4 @@ fleet: and the report says what was not looked through	gird-check.ps1 has no fle
 fleet: 20,000 marker names an account made cost root no time each	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 an extension with an OS listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension with all three OSes, which is all	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a list of bad npm versions longer than awk gets	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

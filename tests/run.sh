@@ -125,17 +125,35 @@ python3 -I -c 'import sys; k = sys.argv[1]; p = "{\"t\":\"" + "lorem ipsum " * 9
 mkdir -p "$SE/b64/.claude/projects/p" "$SE/b64k/.claude/projects/p"
 printf '{"type":"image","source":{"type":"base64","media_type":"image/png","data":"%sAIza%s%sr8_%s%s"}}\n' "$(rnd 400)" "$(rnd 35)" "$(rnd 300)" "$(rnd 37)" "$(rnd 400)" > "$SE/b64/.claude/projects/p/s.jsonl"
 printf '{"t":"GOOGLE_API_KEY=AIza%s and \\"r8_%s\\" end"}\n' "$(rnd 35)" "$(rnd 37)" > "$SE/b64k/.claude/projects/p/s.jsonl"
+# GitHub's server-to-server tokens: 36 letters and digits after ghs_, or since April 2026 a JWT of about
+# 520 characters with two dots. Words such as highs_ hold ghs_, and are not tokens.
+GHS="gh""s_"
+mkdir -p "$SE/ghn/.claude/projects/p" "$SE/ghk/.claude/projects/p"
+printf '{"t":"calculate_highs_and_lows_for_each_trading_day_since_2001"}\n' > "$SE/ghn/.claude/projects/p/s.jsonl"
+printf '{"t":"GH_TOKEN=%s%s_%s.%s.%s end"}\n' "$GHS" "$(rnd 7)" "$(rnd 40)" "$(rnd 300)" "$(rnd 160)" > "$SE/ghk/.claude/projects/p/s.jsonl"
 for E in perl rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
-  for _c in brn brk brl b64 b64k; do HOME="$SE/$_c" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/$_c-$E.txt" 2>&1; done
+  for _c in brn brk brl b64 b64k ghn ghk; do HOME="$SE/$_c" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/$_c-$E.txt" 2>&1; done
   has    "$E: an agent that read Blindspot's scripts has no key in its session" 'No keys in 1 agent session file' "$SE/brn-$E.txt"
   has    "$E: a Bedrock short-term key counts"     'Claude Code +1 file: AWS' "$SE/brk-$E.txt"
   has    "$E: a Bedrock long-term key across a 1 MB read counts" 'Claude Code +1 file: AWS' "$SE/brl-$E.txt"
   has    "$E: a pasted image's base64 holds no Google or Replicate key" 'No keys in 1 agent session file' "$SE/b64-$E.txt"
   has    "$E: a Google key after = still counts"   'Claude Code +1 file: .*Google' "$SE/b64k-$E.txt"
   has    "$E: a Replicate key after a quote still counts" 'Claude Code +1 file: .*Replicate' "$SE/b64k-$E.txt"
+  has    "$E: a word holding ghs_ is not a GitHub token" 'No keys in 1 agent session file' "$SE/ghn-$E.txt"
+  has    "$E: GitHub's stateless ghs_ token counts"  'Claude Code +1 file: GitHub' "$SE/ghk-$E.txt"
 done
 SKIPPING=""
+# The same in files the keys check reads: a word holding ghs_ in shell history or a .env is not a token,
+# a classic one is, and in a JSON config a key right after an escaped \n still counts.
+mkdir -p "$SE/ghf/code/a" "$SE/ghf/AppData/Roaming" "$SE/ghf/AppData/Local/Temp" "$SE/escj/AppData/Roaming" "$SE/escj/AppData/Local/Temp"
+printf 'python troughs_detection_algorithm_for_time_series.py\n' > "$SE/ghf/.zsh_history"
+printf 'REPORT=weighs_the_options_before_choosing_the_cheapest_route\nGITHUB_TOKEN=%s%s\n' "$GHS" "$(rnd 36)" > "$SE/ghf/code/a/.env"
+printf '{"projects":{"x":{"history":[{"display":"run it\\nAIza%s and \\nr8_%s"}]}}}\n' "$(rnd 35)" "$(rnd 37)" > "$SE/escj/.claude.json"
+for _c in ghf escj; do HOME="$SE/$_c" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$SE/$_c.txt"; done
+hasnot "a word holding ghs_ in shell history is not a GitHub token" '~/\.zsh_history +GitHub' "$SE/ghf.txt"
+has    "a classic ghs_ token in a .env still counts" '~/code/a/\.env +GitHub' "$SE/ghf.txt"
+has    "a key right after an escaped newline in a JSON config counts" '~/\.claude\.json +Google, Replicate' "$SE/escj.txt"
 # Session files are listed by place, one row each with how many of its files had keys. A place is
 # the session folder an agent keeps, or the file when the location is one file.
 HFK="hf""_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu"
@@ -836,6 +854,11 @@ _i=0; while kill -0 "$BP" 2>/dev/null && [ "$_i" -lt 600 ]; do sleep 0.1; _i=$((
 if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; bad "a pipe named like a lockfile, .env or settings file is not opened" "the check did not finish in 60 s"
 else ok "a pipe named like a lockfile, .env or settings file is not opened"; fi
 wait "$BP" 2>/dev/null
+# A link longer than the line is not cut: it stays whole on a line of its own, so it can be copied.
+cp -R "$WORK/clean" "$WORK/longurl"; mkdir -p "$WORK/longurl/code/py/.venv/lib/python3.12/site-packages/guardrails_ai-0.10.1.dist-info"
+printf 'home = /usr\n' > "$WORK/longurl/code/py/.venv/pyvenv.cfg"
+HOME="$WORK/longurl" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$WORK/longurl.txt" 2>&1
+has    "a link longer than the line is not cut"      '^ +www\.wiz\.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised$' "$WORK/longurl.txt"
 # LiteLLM alone still leads the summary.
 cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
 HOME="$WORK/lite" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
@@ -1752,6 +1775,8 @@ gen_refuses "an extension line without its os"         bad-extensions.tsv "pub.e
 gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
 gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}"
 gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}"
+# gird-check.sh hands the bad npm versions to awk in four environment strings of 1,000 lines.
+gen_refuses "a list of bad npm versions longer than awk gets" bad-npm.tsv 'edit:{ print } !/^#/ && $3 == "keyvspread" { print $1, $2 "-x", $3 }'
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

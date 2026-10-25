@@ -238,9 +238,23 @@ jnum() {
   printf '%s' "$_jv"
 }
 # wrap TEXT INDENT_WIDTH FIRST_PREFIX REST_PREFIX [COLOR]
+# Breaks text at the last blank before the width, as fold -s does, but never inside a word: a link
+# longer than the line stays whole on a line of its own, so it can still be copied.
 wrap() {
   _w=$((W - $2 - 3)); [ "$_w" -lt 20 ] && _w=20
-  _folded=$(printf '%s\n' "$1" | fold -s -w "$_w" | sed 's/[[:space:]]*$//')
+  _folded=$(printf '%s\n' "$1" | LC_ALL=C awk -v w="$_w" '
+    function lastblank(s,   k, x) { for (k = length(s); k > 0; k--) { x = substr(s, k, 1); if (x == " " || x == "\t") return k }; return 0 }
+    { buf = ""; n = length($0)
+      for (i = 1; i <= n; i++) {
+        ch = substr($0, i, 1); skip = 0
+        while (length(buf) + 1 > w) {
+          j = lastblank(buf)
+          if (j > 0) { print substr(buf, 1, j); buf = substr(buf, j + 1) }
+          else { if (buf != "" && (ch == " " || ch == "\t")) { print buf; buf = ""; skip = 1 }; break }
+        }
+        if (!skip) buf = buf ch
+      }
+      print buf }' | sed 's/[[:space:]]*$//')
   _n=0
   while IFS= read -r _l; do
     if [ "$_n" -eq 0 ]; then emit "$3${5:-}$_l${5:+$RST}"; else emit "$4${5:-}$_l${5:+$RST}"; fi
@@ -703,7 +717,7 @@ trap 'cleanup; exit 129' HUP
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
 KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
@@ -725,8 +739,8 @@ function prov(s) {
 }'
 prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
 # <<< keys
-# Agent sessions are JSON, where a key often follows an escape such as \n, so a backslash escape
-# also counts as the boundary in front of a key.
+# Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
+# also counts as the boundary in front of a key, in every file the checks read.
 TR_KEYS=$(printf '%s' "$ALL_KEYS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
 
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
@@ -736,7 +750,7 @@ P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:spa
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 
 providers_in() {
-  grep -aoE "$ALL_KEYS" "$1" 2>/dev/null | awk "$PROV_AWK"'
+  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk "$PROV_AWK"'
     { p = prov($0); if (p == "") next
       if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
     END { printf "%s", out }'
@@ -746,10 +760,10 @@ files_matching() { # pattern; list on stdin
   tr '\n' '\0' | xargs -0 grep -alE "$1" 2>/dev/null
 }
 inline_secret() {
-  grep -aoE "$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
+  grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
 }
 command_secret() {
-  grep -aoE "$ALL_KEYS|$P_ASSIGN" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
+  grep -aoE "$TR_KEYS|$P_ASSIGN" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
 }
 
 # ---------------------------------------------------------------------------
@@ -1259,8 +1273,9 @@ while ($sel->count) {
 # a path can't hold) turned into a tab by tr, which turns every real tab into ?, then the match.
 # So a line without a tab is a piece of a file name that holds a newline, and the match may hold
 # any byte but a newline. No key is longer than 300 characters (GitHub's 93-character tokens are
-# the longest fixed format, OpenAI project keys run to about 170): a longer run of key characters
-# is data, not a key, and would make madeup() slow. Always called in a subshell (a pipe or a
+# the longest fixed format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens,
+# about 520 with two dots: a longer run of key characters is data, not a key, and would make madeup()
+# slow. Always called in a subshell (a pipe or a
 # background job): exec makes awk that job's own process, the one sess_stop signals.
 sess_filter() { # [rg]
   exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK"'
@@ -1290,7 +1305,7 @@ sess_filter() { # [rg]
         if (i == 0) { part = part $0 "?"; next }
         f = part substr($0, 1, i - 1); k = substr($0, i + 1); part = ""
       } else if ($1 == "K") { f = $2; k = $3 } else next
-      if (length(k) > 300) next
+      if (length(k) > 1024 || (length(k) > 300 && k !~ /ghs_[A-Za-z0-9_-]+\./)) next
       p = prov(k); if (p == "") next
       sub(/^[^A-Za-z]*\\[ntr"]/, "", k); sub(/^[^A-Za-z]+/, "", k); sub(/[^A-Za-z0-9_.-]+$/, "", k)
       if (madeup(k) || cli_own(f, k) || ((f "|" p) in done)) next
@@ -1549,7 +1564,7 @@ is_plugin_path() {
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
-MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET" | tr '\n' '|')"
+MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" | tr '\n' '|')"
 mcp_row() { # who file client-id
   _f=$2; _c=""; _nm=""
   case "$_f" in
@@ -1883,7 +1898,7 @@ CANDIDATES=$(
 # counts these through fleet_ok, as files not checked, so its not_read leaves them out.
 KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && [ ! -r "$f" ] && printf '%s\n' "$f"; done)
 N_KEY_UNREAD=$(count_lines "$KEY_UNREAD")
-MATCHED=$(printf '%s\n' "$CANDIDATES" | fleet_filter | files_matching "$ALL_KEYS")
+MATCHED=$(printf '%s\n' "$CANDIDATES" | fleet_filter | files_matching "$TR_KEYS")
 # For the report: one place id per file, and one provider id per file and provider.
 KEY_PLACES=""; PROV_TALLY=""
 MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n' "$PROJECT_FILES" | tr '\n' '|')"
@@ -1991,7 +2006,7 @@ SEC2_UNREAD=$(printf '%s\n%s\n%s\n%s\n' "$MCP_LIST" "$ALLOW_FILES" "$TASK_FILES"
 N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
-ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter | files_matching "$ALL_KEYS|$P_ASSIGN")
+ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter | files_matching "$TR_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
@@ -5107,12 +5122,17 @@ holiday-themes.theme-coca-cola-christmas * glasswormoct any all"
 # versions, so a package can't put terminal control codes in the report. URLs and tokens are found
 # by splitting each line on /-/ and on @, so the time grows with the line: a match loop over a long
 # line of name characters would restart at each of them, quadratic on every awk.
+# Linux caps one environment string at 128 KiB, and the list of bad versions comes near that: each
+# awk gets it in four pieces of 1,000 lines (tools/gen.sh refuses a list of more than 4,000).
+BAD_NPM_P1=$(printf '%s\n' "$BAD_NPM" | sed -n '1,1000p'); BAD_NPM_P2=$(printf '%s\n' "$BAD_NPM" | sed -n '1001,2000p')
+BAD_NPM_P3=$(printf '%s\n' "$BAD_NPM" | sed -n '2001,3000p'); BAD_NPM_P4=$(printf '%s\n' "$BAD_NPM" | sed -n '3001,4000p')
+npm_awk() { BAD_NPM_P1=$BAD_NPM_P1 BAD_NPM_P2=$BAD_NPM_P2 BAD_NPM_P3=$BAD_NPM_P3 BAD_NPM_P4=$BAD_NPM_P4 awk "$@"; }
 npm_hits() {
-  BAD_NPM_LIST=$BAD_NPM awk '
+  npm_awk '
     BEGIN {
-      n = split(ENVIRON["BAD_NPM_LIST"], L, "\n")
-      for (i = 1; i <= n; i++) { if (split(L[i], f, " ") < 3) continue
-        if (f[2] == "*") any[f[1]] = f[3]; else bad[f[1] "@" f[2]] = f[3] }
+      for (pc = 1; pc <= 4; pc++) { n = split(ENVIRON["BAD_NPM_P" pc], L, "\n")
+        for (i = 1; i <= n; i++) { if (split(L[i], f, " ") < 3) continue
+          if (f[2] == "*") any[f[1]] = f[3]; else bad[f[1] "@" f[2]] = f[3] } }
     }
     function hit(nm, v,   k, t) {
       if (v !~ /^[0-9A-Za-z.+_-]+$/) v = "?"
@@ -5212,17 +5232,17 @@ NPM_ROOTS=$(
   if [ -n "$_ph" ]; then for r in "$_ph"/global/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done; fi
 )
 npm_global_named() { # package.json paths on stdin; the ones whose folder names a package on the list
-  BAD_NPM_LIST=$BAD_NPM awk '
-    BEGIN { n = split(ENVIRON["BAD_NPM_LIST"], L, "\n"); for (i = 1; i <= n; i++) if (split(L[i], f, " ") >= 3) names[f[1]] = 1 }
+  npm_awk '
+    BEGIN { for (pc = 1; pc <= 4; pc++) { n = split(ENVIRON["BAD_NPM_P" pc], L, "\n"); for (i = 1; i <= n; i++) if (split(L[i], f, " ") >= 3) names[f[1]] = 1 } }
     { d = $0; sub(/\/package\.json$/, "", d); k = split(d, c, "/"); nm = c[k]; if (k > 1 && c[k - 1] ~ /^@/) nm = c[k - 1] "/" nm
       if (nm in names) print }'
 }
 npm_global_hits() { # package.json paths on stdin; prints folder|name version|tag for each bad package
-  BAD_NPM_LIST=$BAD_NPM awk '
+  npm_awk '
     BEGIN {
-      n = split(ENVIRON["BAD_NPM_LIST"], L, "\n")
-      for (i = 1; i <= n; i++) { if (split(L[i], f, " ") < 3) continue
-        names[f[1]] = 1; if (f[2] == "*") any[f[1]] = f[3]; else bad[f[1] "@" f[2]] = f[3] }
+      for (pc = 1; pc <= 4; pc++) { n = split(ENVIRON["BAD_NPM_P" pc], L, "\n")
+        for (i = 1; i <= n; i++) { if (split(L[i], f, " ") < 3) continue
+          names[f[1]] = 1; if (f[2] == "*") any[f[1]] = f[3]; else bad[f[1] "@" f[2]] = f[3] } }
     }
     {
       # The folder names the package: node_modules/<name> or node_modules/@<scope>/<name>.

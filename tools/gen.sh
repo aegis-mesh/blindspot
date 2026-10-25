@@ -117,6 +117,11 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
 }}$_na"
+# gird-check.sh hands the bad npm versions to awk in four environment strings of 1,000 lines each:
+# Linux caps one at 128 KiB, so a longer list needs a fifth piece there first.
+_nn=$(rows data/bad-npm.tsv | grep -c .)
+[ "$_nn" -le 4000 ] || bad="${bad:+$bad
+}data/bad-npm.tsv: $_nn lines, more than the 4,000 gird-check.sh hands to awk (BAD_NPM_P1 to BAD_NPM_P4)"
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
 
 # Path tokens (see data/sessions.tsv) as bash and as PowerShell. A trailing / is kept in bash.

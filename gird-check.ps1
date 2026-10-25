@@ -145,19 +145,23 @@ function JNum([string]$name, [string]$text) {
   $m = [regex]::Match($text, '"' + $name + '":([0-9]{1,12})([,}]|$)')
   if ($m.Success) { $m.Groups[1].Value } else { '' }
 }
-# Breaks text the way fold -s does in gird-check.sh, so both print the same lines.
+# Breaks text the way wrap does in gird-check.sh, so both print the same lines: at the last blank
+# before the width, as fold -s does, but never inside a word, so a long link stays whole.
 function Fold([string]$text, [int]$w) {
   $out = New-Object System.Collections.Generic.List[string]
   foreach ($line in $text.Split("`n")) {
     $buf = New-Object System.Text.StringBuilder
     foreach ($ch in $line.ToCharArray()) {
+      $skip = $false
       while ($buf.Length + 1 -gt $w) {
         $s = $buf.ToString(); $i = $s.LastIndexOfAny([char[]]@(' ', "`t"))
         if ($i -ge 0) { $out.Add($s.Substring(0, $i + 1)); [void]$buf.Remove(0, $i + 1) }
-        elseif ($buf.Length -eq 0) { break }
-        else { $out.Add($s); [void]$buf.Clear() }
+        else {
+          if ($buf.Length -gt 0 -and ($ch -eq ' ' -or $ch -eq "`t")) { $out.Add($s); [void]$buf.Clear(); $skip = $true }
+          break
+        }
       }
-      [void]$buf.Append($ch)
+      if (-not $skip) { [void]$buf.Append($ch) }
     }
     $out.Add($buf.ToString())
   }
@@ -233,7 +237,7 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|ghs_[A-Za-z0-9_.-]{36,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{60}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
 $PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
 $KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 $KeyProviderFn = @'
@@ -256,8 +260,8 @@ function Key-Provider([string]$s) {
 function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } default { $null } } }
 '@
 # <<< keys
-# Agent sessions are JSON, where a key often follows an escape such as \n, so a backslash escape
-# also counts as the boundary in front of a key.
+# Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
+# also counts as the boundary in front of a key, in every file the checks read.
 $TR_KEYS = $ALL_KEYS -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])'
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 # These match what gird-check.sh's patterns match, rewritten so .NET's backtracking
@@ -276,9 +280,9 @@ $P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 $RxOpt = [Text.RegularExpressions.RegexOptions]::Multiline
 $RxTimeout = [TimeSpan]::FromSeconds(2)
 if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS -gt 0) { $RxTimeout = [TimeSpan]::FromMilliseconds([int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS) }
-$RxKeys = New-Object regex($ALL_KEYS, $RxOpt, $RxTimeout)
-$RxInline = New-Object regex("$ALL_KEYS|$P_JSONSECRET|$P_TOMLSECRET", $RxOpt, $RxTimeout)
-$RxCommand = New-Object regex("$ALL_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
+$RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
+$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET", $RxOpt, $RxTimeout)
+$RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
 $SlowFiles = New-Object System.Collections.Generic.List[string]
 function Mark-Slow([string]$f) {
@@ -310,8 +314,9 @@ function Has-RealMatch([string]$f, [regex]$rx) {
 $KeyFns = $KeyProviderFn + @'
 function Made-Up([string]$k) {
   # No key is longer than 300 characters (GitHub's 93-character tokens are the longest fixed
-  # format, OpenAI project keys run to about 170): a longer run of key characters is data.
-  if ($k.Length -gt 300) { return $true }
+  # format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens, about 520 with
+  # two dots: a longer run of key characters is data.
+  if ($k.Length -gt 1024 -or ($k.Length -gt 300 -and $k -cnotmatch 'ghs_[A-Za-z0-9_-]+\.')) { return $true }
   $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' -replace '[^A-Za-z0-9_.-]+$', ''
   if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
   $set = New-Object 'System.Collections.Generic.HashSet[char]'
