@@ -5736,6 +5736,12 @@ workbench-browser-server 0.0.2 keyvspread
 @opensearch-project/opensearch 3.7.0 opensearch
 @opensearch-project/opensearch 3.8.0 opensearch
 tensorlake 0.5.144 tensorlake
+tensorlake-native-darwin-arm64 0.5.144 tensorlake
+tensorlake-native-linux-arm64-gnu 0.5.144 tensorlake
+tensorlake-native-linux-arm64-musl 0.5.144 tensorlake
+tensorlake-native-linux-x64-gnu 0.5.144 tensorlake
+tensorlake-native-linux-x64-musl 0.5.144 tensorlake
+tensorlake-native-win32-x64 0.5.144 tensorlake
 cloude * sandworm
 opencraw * sandworm
 crypto-reader-info * sandworm
