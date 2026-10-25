@@ -1474,6 +1474,13 @@ SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which 
 [ -n "$SKIPPING" ] || dzrun "$WORK/dz-mw" | tr -s ' \n' '  ' > "$WORK/dz-mw2.txt"
 has    "the same extension on a Mac is malware" 'Editor extensions signs of the malware found ~/\.cursor/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-mw2.txt"
 SKIPPING=""
+# Aikido's WakaTime impostor loads win.node on Windows and mac.node anywhere else, so its loader runs on
+# Windows and macOS only: on Linux it is an extension to remove.
+rm -rf "$WORK/dz-zig"; cp -R "$WORK/clean" "$WORK/dz-zig"; mkdir -p "$WORK/dz-zig/.cursor/extensions/specstudio.code-wakatime-activity-tracker-25.5.9"
+SKIPPING=""; [ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux: gird-check.ps1 reads the OS it runs on, and this extension's malware runs on macOS and Windows"
+[ -n "$SKIPPING" ] || dzrun "$WORK/dz-zig" | tr -s ' \n' '  ' > "$WORK/dz-zig.txt"
+has    "on Linux, Aikido's WakaTime impostor is one to remove" 'Editor extensions a malicious extension to remove ~/\.cursor/extensions/specstudio\.code-wakatime-activity-tracker-25\.5\.9 specstudio\.code-wakatime-activity-tracker 25\.5\.9 \(GlassWorm extensions, April 2026\), installed Its malware runs on macOS and Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-zig.txt"
+SKIPPING=""
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, [34] security fixes to install' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
@@ -2039,6 +2046,17 @@ mkdir -p "$WP/.vscode-oss/extensions/boulderzitunnel.vscode-buddies-1.35.3"
 winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-mw.txt"
 rm -rf "$WP/.vscode-oss"
 has    "Windows: an extension whose malware runs on macOS and Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode-oss/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/win-mw.txt"
+# Aikido: specstudio.code-wakatime-activity-tracker, an Open VSX extension, installs floktokbok.autoimport into
+# every editor, VS Code included. Its loader runs on Windows, so here it is malware; it is not looked for in VS
+# Code's own folder, and floktokbok.autoimport is looked for in every folder.
+mkdir -p "$WP/.vscode-oss/extensions/specstudio.code-wakatime-activity-tracker-25.5.9" "$WP/.vscode/extensions/floktokbok.autoimport-2.7.9" \
+  "$WP/.vscode/extensions/specstudio.code-wakatime-activity-tracker-25.5.9"
+winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-zig.txt"
+rm -rf "$WP/.vscode-oss" "$WP/.vscode/extensions/floktokbok.autoimport-2.7.9" "$WP/.vscode/extensions/specstudio.code-wakatime-activity-tracker-25.5.9"
+has    "Windows: Aikido's WakaTime impostor in an Open VSX editor is malware here" 'Editor extensions signs of the malware found .*~/\.vscode-oss/extensions/specstudio\.code-wakatime-activity-tracker-25\.5\.9 specstudio\.code-wakatime-activity-tracker 25\.5\.9 \(GlassWorm extensions, April 2026\), installed' "$WORK/win-zig.txt"
+has    "and the extension it installs, in VS Code's own folder too" '~/\.vscode/extensions/floktokbok\.autoimport-2\.7\.9 floktokbok\.autoimport 2\.7\.9 \(GlassWorm extensions, April 2026\), installed' "$WORK/win-zig.txt"
+hasnot "the impostor's id in VS Code's own folder is not flagged" '~/\.vscode/extensions/specstudio' "$WORK/win-zig.txt"
+has    "with Aikido's sourced line"                  'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found\. aikido\.dev' "$WORK/win-zig.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"
