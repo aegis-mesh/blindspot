@@ -1292,9 +1292,12 @@ rm -f "$FL/sharedtmp/gh-token-monitor.out.log"
 hasnot "fleet: a marker that must be its owner's never counts for the Mac" '^machine\.incidents=.*tanstack' "$FL/ownmark.flat"
 if [ -e /tmp/gh-token-monitor.out.log ] || [ -L /tmp/gh-token-monitor.out.log ]; then
   skip "fleet: and counts for the account that owns it" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
+  skip "fleet: but a link there never counts" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
 else
   : > /tmp/gh-token-monitor.out.log; fl_run ownmark2; rm -f /tmp/gh-token-monitor.out.log
   has  "fleet: and counts for the account that owns it" '^itadmin\.incidents=.*tanstack' "$FL/ownmark2.flat"
+  : > "$FL/itadmin-file"; ln -s "$FL/itadmin-file" /tmp/gh-token-monitor.out.log; fl_run ownmark3; rm -f /tmp/gh-token-monitor.out.log
+  hasnot "fleet: but a link there never counts" '^itadmin\.incidents=.*tanstack' "$FL/ownmark3.flat"
 fi
 # A machine check that does not answer in time leaves the Mac partly checked.
 users "clean:$U:$FL/clean:/bin/zsh"
