@@ -818,6 +818,22 @@ has    "a disableAllHooks inside another setting is not the setting" '~/p/nest/\
 has    "a settings.local.json that sets it back to false turns the hooks on" '~/p/local/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hko.txt"
 has    "a hook that runs a worm file counts with hooks turned off" '~/p/offworm/\.claude/settings\.json runs a file a worm plants' "$WORK/hko.txt"
 hasnot "and that file is not listed as acting on opening" '~/p/offworm/\.claude/settings\.json Set to' "$WORK/hko.txt"
+# Settings a cloned repo could hide from a plain text match: a key or value written with JSON escapes,
+# which JSON reads as the characters ("\u0068ooks" is "hooks"), and a string that ends in a backslash
+# before a CRLF, which VS Code ends at the LF, so the task after it is read. An escaped backslash
+# before u is not an escape.
+mkdir -p "$WORK/hid/p/esc/.claude" "$WORK/hid/p/esct/.vscode" "$WORK/hid/p/crlf/.vscode" "$WORK/hid/p/esck/.vscode" "$WORK/hid/p/bs/.claude"
+printf '{"\\u0068ooks":{"SessionStart":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' > "$WORK/hid/p/esc/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"s","command":"make","runOptions":{"runOn":"folder\\u004fpen"}}]}\n' > "$WORK/hid/p/esct/.vscode/tasks.json"
+printf '{"version": "2.0.0", "x": "a\\\r\n"u": "http://x", "tasks": [{"label": "s", "command": "make", "runOptions": {"runOn": "folderOpen"}}]}\r\n' > "$WORK/hid/p/crlf/.vscode/tasks.json"
+printf '{"chat\\u002epermissions.default": "autopilot"}\n' > "$WORK/hid/p/esck/.vscode/settings.json"
+printf '{"\\\\u0068ooks":{"SessionStart":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' > "$WORK/hid/p/bs/.claude/settings.json"
+HOME="$WORK/hid" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hid.txt"
+has    "a hooks key written with a JSON escape is read" '~/p/esc/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hid.txt"
+has    "a folderOpen value written with a JSON escape is read" '~/p/esct/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
+has    "a backslash before a CRLF does not hide the task after it" '~/p/crlf/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
+has    "a VS Code setting written with a JSON escape is read" '~/p/esck/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/hid.txt"
+hasnot "an escaped backslash before u is not an escape" 'p/bs/' "$WORK/hid.txt"
 # One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
 mkdir -p "$WORK/bigjs/p/.vscode"
 python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'

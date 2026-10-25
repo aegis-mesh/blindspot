@@ -1171,10 +1171,27 @@ $RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?![A-
 $RxBypass = New-Object regex('"defaultMode"\s*:\s*"bypassPermissions"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
 # A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
+# A \ escapes one character, so after \ and CRLF the LF still ends the string, as in VS Code.
 $RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
+# Inside strings, \uXXXX for a printable character other than " and \, and \/, are written as that
+# character, as JSON reads them: "hooks" is "hooks", and a setting can't hide behind its escapes.
+# Each \\ is taken whole, so escapes pair up as in JSON. Only a file with such an escape takes this path.
+$RxJsonEsc = New-Object regex('\\(\\|/|u([0-9A-Fa-f]{4}))', $RxOpt, $RxTimeout)
+$JsonEsc = [Text.RegularExpressions.MatchEvaluator] {
+  param($m)
+  if ($m.Groups[1].Value -ceq '/') { return '/' }
+  if (-not $m.Groups[2].Success) { return $m.Value }
+  $c = [Convert]::ToInt32($m.Groups[2].Value, 16)
+  if ($c -ge 32 -and $c -lt 127 -and $c -ne 34 -and $c -ne 92) { return [string][char]$c }
+  $m.Value
+}
+$JsoncEsc = [Text.RegularExpressions.MatchEvaluator] { param($m) if ($m.Groups[1].Success) { $RxJsonEsc.Replace($m.Groups[1].Value, $JsonEsc) } else { '' } }
 function Flat-Text([string]$f) {
   $t = Read-Text $f; if ($null -eq $t) { return $null }
-  try { $RxJsonc.Replace($t, '$1') -replace '[\r\n\t]', ' ' } catch { Mark-Slow $f; $null }
+  try {
+    if ($t.Contains('\u') -or $t.Contains('\/')) { $o = $RxJsonc.Replace($t, $JsoncEsc) } else { $o = $RxJsonc.Replace($t, '$1') }
+    $o -replace '[\r\n\t]', ' '
+  } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 # The object each top-level key in $keys (written with its quotes) holds, with every value nested in

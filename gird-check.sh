@@ -1678,7 +1678,10 @@ TAB=$(printf '\t')
 # One line of text, with comments removed first: // to the end of the line and /* */, outside
 # strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
 # JSONC parser reads it). tasks.json and VS Code's settings.json are JSONC, and a commented-out
-# setting in any other file is not active either. Each line is split on its quotes, and each piece
+# setting in any other file is not active either. A CR is a line break too, and a \ escapes only one:
+# after \ and CRLF the LF still ends the string. Inside strings, \uXXXX for a printable character
+# other than " and \, and \/, are written as that character, as JSON reads them: "hooks" is
+# "hooks", and a setting can't hide behind its escapes. Each line is split on its quotes, and each piece
 # outside a string on its slashes, both with a one-character separator, and every chunk is looked at
 # a bounded number of times, so the time grows with the size of the file: a loop over single
 # characters (substr measures the whole string on macOS's awk), a regex split or gsub with many
@@ -1710,11 +1713,26 @@ flat() {
       }
       return 0
     }
-    BEGIN { st = 0 }   # 0 code, 1 string, 2 block comment
+    # A piece of a string, its escapes written as JSON reads them (above). Split on \, so each chunk is
+    # looked at once: an empty chunk is an escaped \ (kept as \\), or the lone \ that ends the piece.
+    function str(s,   nb, b, j, h) {
+      if (index(s, "\\") == 0) { printf "%s", s; return }
+      nb = split(s, b, "\\"); printf "%s", b[1]
+      for (j = 2; j <= nb; j++) {
+        if (b[j] == "") { if (j == nb) { printf "\\"; break }; printf "\\\\%s", b[j + 1]; j++; continue }
+        h = tolower(substr(b[j], 2, 4))
+        if (substr(b[j], 1, 1) == "u" && (h in U)) printf "%s%s", U[h], substr(b[j], 6)
+        else if (substr(b[j], 1, 1) == "/") printf "%s", b[j]
+        else printf "\\%s", b[j]
+      }
+    }
+    BEGIN { st = 0   # 0 code, 1 string, 2 block comment
+            for (c = 32; c < 127; c++) if (c != 34 && c != 92) U[sprintf("%04x", c)] = sprintf("%c", c) }
     { nq = split($0, q, "\"")
+      if (nq == 0 && st == 1) st = 0   # an empty line in a string: its line break was not escaped
       for (i = 1; i <= nq; i++) {
         if (st == 1) {            # in a string: kept as it is; an odd run of \ escapes the quote or the line break
-          printf "%s", q[i]; esc = (trail(q[i]) % 2 == 1)
+          str(q[i]); esc = (trail(q[i]) % 2 == 1)
           if (i < nq) printf "\""
           if (!esc) st = 0
           continue
@@ -1927,11 +1945,11 @@ EOF
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
 # Both are things to look at in a project, not an agent set to run without asking. A file that names
-# neither setting (most do not) is skipped before it is flattened: flat only takes comments out, so a
-# setting's name stays as written.
+# neither setting (most do not) is skipped before it is flattened: flat only takes comments out and
+# writes escapes as their characters, so a setting's name stays as written unless it has an escape.
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
-  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)' || continue
+  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)|\\u|\\/' || continue
   _w=""
   if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
   elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
