@@ -1453,13 +1453,19 @@ lp "$WORK/zb-none" > "$WORK/zb-none.txt"
 has    "no leaks found: row 05 counts the leaks it checks" 'none of the 10 recent leaks or malware it checks' "$WORK/zb-none.txt"
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
-has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' "$WORK/zb-none-full.txt"
+has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
 has    "and section 5 counts it"                      'RECENT KEY LEAKS +10 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
 has    "an extension folder that cannot be read is not called clean" 'Editor extensions +not fully checked: 1 extension folder could not be read' "$WORK/zb-ext.txt"
 has    "and row 05 says so"                           'Recent leaks +extensions not fully checked: folder unreadable' "$WORK/zb-ext-c.txt"
+# An editor's own folder that can't be opened hides its extensions folder: not called clean either.
+cp -R "$WORK/zb-none" "$WORK/zb-edir"; mkdir -p "$WORK/zb-edir/.windsurf/extensions/Angular-studio.ng-angular-extension-1.0.0"; chmod 000 "$WORK/zb-edir/.windsurf"
+lpf "$WORK/zb-edir" > "$WORK/zb-edir.txt"; lp "$WORK/zb-edir" > "$WORK/zb-edir-c.txt"
+chmod 755 "$WORK/zb-edir/.windsurf"
+has    "an editor's folder that cannot be opened is not called clean" 'Editor extensions +not fully checked: 1 extension folder could not be read' "$WORK/zb-edir.txt"
+has    "and row 05 says its extensions were not fully checked" 'Recent leaks +extensions not fully checked: folder unreadable' "$WORK/zb-edir-c.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
@@ -1667,6 +1673,14 @@ mkdir -p "$WORK/dz-ag/.antigravity-ide/extensions/mswincx.antigravity-cockpit-1.
 dzrun "$WORK/dz-ag" | tr -s ' \n' '  ' > "$WORK/dz-ag.txt"
 has    "Antigravity IDE's extension folder is read, as an Open VSX editor's" '~/\.antigravity-ide/extensions/mswincx\.antigravity-cockpit-1\.2\.0-universal mswincx\.antigravity-cockpit 1\.2\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ag.txt"
 has    "and the earlier Antigravity's folder too"     '~/\.antigravity/extensions/keyacrosslaud\.auto-loop-for-antigravity-0\.4\.1 keyacrosslaud\.auto-loop-for-antigravity 0\.4\.1 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-ag.txt"
+# Positron installs from Open VSX (Posit's mirror of it, its product.json), and GlassWorm's dropper
+# targets it: an Open VSX build's id in its folder, and an extension that is malware everywhere in its
+# server's folder.
+rm -rf "$WORK/dz-pos"; cp -R "$WORK/clean" "$WORK/dz-pos"
+mkdir -p "$WORK/dz-pos/.positron/extensions/Angular-studio.ng-angular-extension-1.0.0" "$WORK/dz-pos/.positron-server/extensions/floktokbok.autoimport-2.7.9"
+dzrun "$WORK/dz-pos" | tr -s ' \n' '  ' > "$WORK/dz-pos.txt"
+has    "Positron's extension folder is read, as an Open VSX editor's" '~/\.positron/extensions/Angular-studio\.ng-angular-extension-1\.0\.0 Angular-studio\.ng-angular-extension 1\.0\.0 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-pos.txt"
+has    "and its server's folder too"                  '~/\.positron-server/extensions/floktokbok\.autoimport-2\.7\.9 floktokbok\.autoimport 2\.7\.9 \(GlassWorm extensions, April 2026\), installed' "$WORK/dz-pos.txt"
 # VS Code Insiders and the remote servers keep extensions in folders of their own: VS Code's install
 # from the Marketplace (an Open VSX build's id there is the Marketplace's own), the others from Open VSX.
 rm -rf "$WORK/dz-rem"; cp -R "$WORK/clean" "$WORK/dz-rem"

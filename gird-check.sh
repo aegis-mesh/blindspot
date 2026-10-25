@@ -6221,15 +6221,25 @@ NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" |
 # ~/.vscode-insiders/extensions, and the remote servers these editors run over SSH, WSL or in a container
 # in their own folders (VS Code's docs and source: ~/.vscode-server and ~/.vscode-server-insiders; the
 # serverDataFolderName of each product.json: ~/.cursor-server, ~/.windsurf-server, and ~/.devin-server
-# since the rename), installing from the same registry as the editor. A line whose bad build
-# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folders, where the
-# same id is the Marketplace's own build. A folder that can't be read leaves the check not
-# done in full (EXT_UNREAD), never clean.
+# since the rename), installing from the same registry as the editor. Positron, which GlassWorm's
+# dropper targets too (Socket's post of 18 March 2026, Aikido's of April), keeps them in
+# ~/.positron/extensions and its server's in ~/.positron-server/extensions, from Posit's mirror of
+# Open VSX (its product.json). A line whose bad build was only ever on Open VSX (registry openvsx)
+# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A
+# folder that can't be read leaves the check not done in full (EXT_UNREAD), never clean, and so does
+# an editor's own folder (~/.windsurf) that can't be opened, which hides its extensions folder.
 ext_roots() { printf '%s\n' "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.devin/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions" "$H/.antigravity-ide/extensions" "$H/.antigravity/extensions" \
-  "$H/.vscode-insiders/extensions" "$H/.vscode-server/extensions" "$H/.vscode-server-insiders/extensions" "$H/.cursor-server/extensions" "$H/.windsurf-server/extensions" "$H/.devin-server/extensions"; }
+  "$H/.vscode-insiders/extensions" "$H/.vscode-server/extensions" "$H/.vscode-server-insiders/extensions" "$H/.cursor-server/extensions" "$H/.windsurf-server/extensions" "$H/.devin-server/extensions" \
+  "$H/.positron/extensions" "$H/.positron-server/extensions"; }
 EXT_UNREAD=0
 while IFS= read -r r; do
-  if [ -d "$r" ] && { [ ! -r "$r" ] || [ ! -x "$r" ]; }; then EXT_UNREAD=$((EXT_UNREAD + 1)); fi
+  _xp=${r%/*}
+  if [ -d "$r" ] && { [ ! -r "$r" ] || [ ! -x "$r" ]; }; then EXT_UNREAD=$((EXT_UNREAD + 1))
+  elif [ ! -d "$r" ] && [ -d "$_xp" ]; then
+    # Its editor's folder can't be listed, or can be listed (a glob reads it) but not entered.
+    if [ ! -r "$_xp" ]; then EXT_UNREAD=$((EXT_UNREAD + 1))
+    elif [ ! -x "$_xp" ]; then for _xe in "$_xp"/extension[s]; do [ "$_xe" = "$_xp/extension[s]" ] || EXT_UNREAD=$((EXT_UNREAD + 1)); done; fi
+  fi
 done <<EOF
 $(ext_roots)
 EOF
@@ -7320,7 +7330,7 @@ elif [ "$EXT_UNREAD" -gt 0 ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: $(plural "$EXT_UNREAD" "extension folder" "extension folders") could not be read${RST}"
 else
   pair "${GRN}✓${RST}" "Editor extensions" 16 "none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
-  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity" 26 "                          " "                          " "$DIM"
+  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron" 26 "                          " "                          " "$DIM"
 fi
 # With findings above, a folder that could not be read still has to be said.
 if [ "$EXT_UNREAD" -gt 0 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [ -n "$EXT_UPD" ]; }; then

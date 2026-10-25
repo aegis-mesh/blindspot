@@ -5601,20 +5601,29 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # ~/.vscode-insiders/extensions, and the remote servers these editors run over SSH, WSL or in a container
 # in their own folders (VS Code's docs and source: ~/.vscode-server and ~/.vscode-server-insiders; the
 # serverDataFolderName of each product.json: ~/.cursor-server, ~/.windsurf-server, and ~/.devin-server
-# since the rename), installing from the same registry as the editor. A line whose bad build
-# was only ever on Open VSX (registry openvsx) is not looked for in VS Code's own folders, where the
-# same id is the Marketplace's own build. A folder that can't be read leaves the check not
-# done in full ($ExtUnread), never clean.
+# since the rename), installing from the same registry as the editor. Positron, which GlassWorm's
+# dropper targets too (Socket's post of 18 March 2026, Aikido's of April), keeps them in
+# ~/.positron/extensions and its server's in ~/.positron-server/extensions, from Posit's mirror of
+# Open VSX (its product.json). A line whose bad build was only ever on Open VSX (registry openvsx)
+# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A
+# folder that can't be read leaves the check not done in full ($ExtUnread), never clean, and so does
+# an editor's own folder (~/.windsurf) that can't be opened, which hides its extensions folder.
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
 # shipped malware means a compromised machine ($ExtRows). Elsewhere it is a malicious extension to remove
 # ($ExtUpd, with the os), with no part in EXT_HIT, the score or the link's ex.
 $ExtRows = New-Object System.Collections.Generic.List[object]; $ExtUpd = New-Object System.Collections.Generic.List[object]; $ExtUnread = 0
 $BadExtRows = @($BadExt -split "`r?`n" | ForEach-Object { , @($_ -split ' ') } | Where-Object { $_.Count -ge 5 })
 foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensions', '.devin/extensions', '.vscode-oss/extensions', '.kiro/extensions', '.antigravity-ide/extensions', '.antigravity/extensions',
-                  '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions', '.cursor-server/extensions', '.windsurf-server/extensions', '.devin-server/extensions')) {
+                  '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions', '.cursor-server/extensions', '.windsurf-server/extensions', '.devin-server/extensions',
+                  '.positron/extensions', '.positron-server/extensions')) {
   $reg = 'openvsx'; if (@('.vscode/extensions', '.vscode-insiders/extensions', '.vscode-server/extensions', '.vscode-server-insiders/extensions') -contains $er) { $reg = 'marketplace' }
   $xdir = J $HomeDir $er
-  if (-not (Is-Dir $xdir)) { continue }
+  if (-not (Is-Dir $xdir)) {
+    # The editor's own folder there but not to be listed, or listing an extensions folder that can't be reached.
+    $xp = [IO.Path]::GetDirectoryName($xdir)
+    if (Is-Dir $xp) { try { if (@([IO.Directory]::GetFileSystemEntries($xp, 'extensions')).Count -gt 0) { $ExtUnread++ } } catch { $ExtUnread++ } }
+    continue
+  }
   try { $xents = @(([IO.DirectoryInfo]$xdir).GetFileSystemInfos() | Sort-Object -Property Name -CaseSensitive) } catch { $ExtUnread++; continue }
   foreach ($e in $xents) {
     if (-not (Is-DirInfo $e)) { continue }
@@ -6326,7 +6335,7 @@ if ($EXT_HIT -eq 1) {
   Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}not fully checked: $(Plural $ExtUnread 'extension folder' 'extension folders') could not be read$cRst"
 } else {
   Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
-  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' 26 $ind26 $ind26 $cDim
+  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' 26 $ind26 $ind26 $cDim
 }
 # With findings above, a folder that could not be read still has to be said.
 if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0 -or $ExtUpd.Count -gt 0)) {
