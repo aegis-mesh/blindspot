@@ -1213,7 +1213,7 @@ $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeou
 # A \ escapes one character, so after \ and CRLF the LF still ends the string, as in VS Code.
 $RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
 # Inside strings, \uXXXX for a printable character other than " and \, and \/, are written as that
-# character, as JSON reads them: "hooks" is "hooks", and a setting can't hide behind its escapes.
+# character, as JSON reads them: "\u0068ooks" is "hooks", and a setting can't hide behind its escapes.
 # Each \\ is taken whole, so escapes pair up as in JSON. Only a file with such an escape takes this path.
 $RxJsonEsc = New-Object regex('\\(\\|/|u([0-9A-Fa-f]{4}))', $RxOpt, $RxTimeout)
 $JsonEsc = [Text.RegularExpressions.MatchEvaluator] {

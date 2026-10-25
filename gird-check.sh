@@ -1710,7 +1710,7 @@ TAB=$(printf '\t')
 # JSONC parser reads it). tasks.json and VS Code's settings.json are JSONC, and a commented-out
 # setting in any other file is not active either. A CR is a line break too, and a \ escapes only one:
 # after \ and CRLF the LF still ends the string. Inside strings, \uXXXX for a printable character
-# other than " and \, and \/, are written as that character, as JSON reads them: "hooks" is
+# other than " and \, and \/, are written as that character, as JSON reads them: "\u0068ooks" is
 # "hooks", and a setting can't hide behind its escapes. Each line is split on its quotes, and each piece
 # outside a string on its slashes, both with a one-character separator, and every chunk is looked at
 # a bounded number of times, so the time grows with the size of the file: a loop over single
