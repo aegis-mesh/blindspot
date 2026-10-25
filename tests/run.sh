@@ -790,6 +790,17 @@ else
   has  "a pyc-only run keeps the no-guarantee line"        'does not prove nothing leaked' "$WORK/ni-pyc.txt"
 fi
 hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS SCAN' "$WORK/ni-pyc.txt"
+# A check that was not done in full, with nothing found, never gets the green headline: sessions
+# partly checked, or part of npm's cache unreadable.
+rm -rf "$WORK/ni-part"; mkdir -p "$WORK/ni-part/.claude/projects/p"; printf '{}\n' > "$WORK/ni-part/.claude/projects/p/a.jsonl"; printf '{}\n' > "$WORK/ni-part/.claude/projects/p/b.jsonl"
+HOME="$WORK/ni-part" PATH=/usr/bin:/bin GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_STOP_AFTER=0 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-part.txt"
+has    "sessions partly checked: the headline says no findings in the paths checked" 'NO FINDINGS IN THE PATHS CHECKED' "$WORK/ni-part.txt"
+hasnot "and never no findings in this scan"           'NO FINDINGS IN THIS SCAN' "$WORK/ni-part.txt"
+rm -rf "$WORK/ni-npm"; mkdir -p "$WORK/ni-npm/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/ni-npm/.npm/_cacache/index-v5/aa"
+HOME="$WORK/ni-npm" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-npm.txt"
+chmod 755 "$WORK/ni-npm/.npm/_cacache/index-v5/aa"
+has    "npm's cache partly read: the headline says no findings in the paths checked" 'NO FINDINGS IN THE PATHS CHECKED' "$WORK/ni-npm.txt"
+hasnot "and never no findings in this scan either"    'NO FINDINGS IN THIS SCAN' "$WORK/ni-npm.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "checks from the incident dossier"

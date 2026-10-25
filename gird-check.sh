@@ -2513,6 +2513,11 @@ if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
 fi
 SESS_PARTIAL=0
 if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt 0 ] || [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; }; }; then SESS_PARTIAL=1; fi
+# A check that was not done in full never leaves the headline green: the home folder was not
+# scanned, the sessions were partly checked, or part of npm's cache or an extension folder could not
+# be read. The headline then says what it can: no findings in the paths checked.
+PARTIAL=0
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done | awk '!seen[$0]++')
 if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent session file" "agent session files")"; fi
 
@@ -2615,6 +2620,7 @@ if [ "$WIPER_HIT" -eq 1 ]; then progress x "Scan done. Don't revoke GitHub token
 elif [ "$ANY_MAL" -eq 1 ]; then progress x "Scan done. Signs of $MAL_WHAT: act now"
 elif [ "$PY_HIT" -eq 1 ]; then progress x "Scan done. Signs of the $PY_SHORT malware: act now"
 elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
+elif [ "$PARTIAL" -eq 1 ]; then progress w "Scan done: no findings in the paths checked"
 else progress o "Scan done: no findings"; fi
 
 # For demos and tests: keep the scan phase running for at least this many seconds.
@@ -2744,10 +2750,10 @@ fi
 # ===========================================================================
 if [ "$PY_HIT" -eq 1 ] || [ "$ANY_MAL" -eq 1 ]; then SEV=$RED
 elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ] || [ "$N_AK" -gt 0 ]; then SEV=$RED
-elif [ "$ISSUES" -gt 0 ] || [ "$SCAN_FAILED" -eq 1 ]; then SEV=$YEL
+elif [ "$ISSUES" -gt 0 ] || [ "$PARTIAL" -eq 1 ]; then SEV=$YEL
 else SEV=$GRN; fi
 if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"
-elif [ "$SCAN_FAILED" -eq 1 ]; then FIXN="No findings in the paths checked"
+elif [ "$PARTIAL" -eq 1 ]; then FIXN="No findings in the paths checked"
 else FIXN="No findings in this scan"; fi
 PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of AI builders who ran Blindspot"
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
@@ -3118,6 +3124,9 @@ if [ "$OS" = Darwin ]; then
   elif [ "$ISSUES" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found $(plural "$ISSUES" "thing" "things") to fix. It can't tell you whether an agent already used what it found, or what your agents do after you close this window."
+  elif [ "$PARTIAL" -eq 1 ]; then
+    _t="NO FINDINGS IN THE PATHS CHECKED"
+    _p1="Nothing turned up in the places this scan could check, and some it could not check in full. The next leak won't wait for you to run a scan."
   else
     _t="NO FINDINGS IN THIS SCAN"
     _p1="Nothing turned up in the places this scan covers, which is not a guarantee. The next leak won't wait for you to run a scan."

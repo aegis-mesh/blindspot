@@ -2144,10 +2144,14 @@ if (-not $OptOffline) {
 # every detail with -Full or when the output is redirected. A saved report always
 # has every detail.
 # ===========================================================================
+# A check that was not done in full never leaves the headline green: the sessions were partly
+# checked, part of npm's cache or an extension folder could not be read, or a file took too long.
+# The headline then says what it can: no findings in the paths checked.
+$Partial = [bool]($SESS_PARTIAL -or $NpmUnread -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
-elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
-if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
+elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
+if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } elseif ($Partial) { $FixN = 'No findings in the paths checked' } else { $FixN = 'No findings in this scan' }
 $PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of AI builders who ran Blindspot" }
 $SlowText = "$(Plural $SlowFiles.Count 'file' 'files') skipped: took too long to check"
 $Stats = "$(Plural $N_AG 'coding agent' 'coding agents'), $N_IDLE not used in 30 days, $(Plural $N_MCP 'MCP server' 'MCP servers'), $(Plural $KEY_FILES 'file' 'files') with keys in plain text, $(Plural $N_ALLOW 'key' 'keys') in allow lists"

@@ -711,6 +711,22 @@ lpf "$WORK/ni-pyc" > "$WORK/ni-pyc.txt"
 has    "a pyc-only run counts its things to fix"           '[0-9]+ THINGS? TO FIX' "$WORK/ni-pyc.txt"
 has    "a pyc-only run keeps the no-guarantee line"        'does not prove nothing leaked' "$WORK/ni-pyc.txt"
 hasnot "a pyc-only run is not told there are no findings"  'NO FINDINGS IN THIS SCAN' "$WORK/ni-pyc.txt"
+# A check that was not done in full, with nothing found, never gets the green headline: sessions
+# partly checked, or part of npm's cache unreadable.
+rm -rf "$WORK/ni-part"; mkdir -p "$WORK/ni-part/.claude/projects/p"; printf '{}\n' > "$WORK/ni-part/.claude/projects/p/a.jsonl"; printf '{}\n' > "$WORK/ni-part/.claude/projects/p/b.jsonl"
+psrun "$WORK/ni-part" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER=0 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-part.txt"
+has    "sessions partly checked: the headline says no findings in the paths checked" 'NO FINDINGS IN THE PATHS CHECKED' "$WORK/ni-part.txt"
+hasnot "and never no findings in this scan"           'NO FINDINGS IN THIS SCAN' "$WORK/ni-part.txt"
+rm -rf "$WORK/ni-npm"; mkdir -p "$WORK/ni-npm/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/ni-npm/.npm/_cacache/index-v5/aa"
+psrun "$WORK/ni-npm" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-npm.txt"
+chmod 755 "$WORK/ni-npm/.npm/_cacache/index-v5/aa"
+has    "npm's cache partly read: the headline says no findings in the paths checked" 'NO FINDINGS IN THE PATHS CHECKED' "$WORK/ni-npm.txt"
+hasnot "and never no findings in this scan either"    'NO FINDINGS IN THIS SCAN' "$WORK/ni-npm.txt"
+# PowerShell's own partial check: a file that hit the time limit.
+rm -rf "$WORK/ni-slow"; mkdir -p "$WORK/ni-slow/code/s"
+python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/ni-slow/code/s/.env"
+psrun "$WORK/ni-slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-slow.txt"
+has    "a file that took too long: the headline says no findings in the paths checked" 'NO FINDINGS IN THE PATHS CHECKED' "$WORK/ni-slow.txt"
 
 echo "checks from the incident dossier"
 for M in hit miss; do
