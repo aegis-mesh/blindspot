@@ -102,7 +102,10 @@ if [ "$WIN" -eq 1 ]; then
   case "${GOOSE_PATH_ROOT:-}" in [A-Za-z]:[\\/]*) _gr=$(winpath "$GOOSE_PATH_ROOT"); GOOSE_DATA="${_gr%/}/data"; GOOSE_STATE="${_gr%/}/state" ;; esac
   PSRL="$WAPP/Microsoft/Windows/PowerShell/PSReadLine"
 else
-  if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"; else AS="$H/.config"; fi
+  # On Linux the editors and Claude Desktop (Electron apps) keep their folders in XDG_CONFIG_HOME when
+  # it is an absolute path, as data/sessions.tsv's Linux lines already read.
+  if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"
+  else case "${XDG_CONFIG_HOME:-}" in /*) AS=${XDG_CONFIG_HOME%/} ;; *) AS="$H/.config" ;; esac; fi
   APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
   APP_WINDSURF=/Applications/Windsurf.app; APP_ANTIGRAVITY=/Applications/Antigravity.app
   APP_DEVIN=/Applications/Devin.app   # Windsurf's name since 2 June 2026

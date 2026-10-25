@@ -1634,6 +1634,12 @@ for L in pilot allow none proj; do dzrun "$WORK/dz-perm-$L" | tr -s ' \n' '  ' >
 dzrun "$WORK/dz-perm-proj" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-perm-proj-c.txt"
 has    "VS Code set to start chats in Autopilot"      '! VS Code Copilot ~/Library/Application Support/Code/User/settings\.json chat\.permissions\.default: autopilot' "$WORK/dz-perm-pilot.txt"
 has    "VS Code set to start chats allowing all"      '! VS Code Copilot ~/Library/Application Support/Code/User/settings\.json chat\.permissions\.default: autoApprove' "$WORK/dz-perm-allow.txt"
+# On Linux, VS Code keeps its user settings in XDG_CONFIG_HOME when that is set.
+rm -rf "$WORK/dz-xdg"; cp -R "$WORK/clean" "$WORK/dz-xdg"; mkdir -p "$WORK/dz-xdg/xdgconf/Code/User" "$WORK/xdgbin"
+printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Linux; else exec /usr/bin/uname "$@"; fi\n' > "$WORK/xdgbin/uname"; chmod +x "$WORK/xdgbin/uname"
+printf '{\n  "chat.tools.global.autoApprove": true\n}\n' > "$WORK/dz-xdg/xdgconf/Code/User/settings.json"
+HOME="$WORK/dz-xdg" XDG_CONFIG_HOME="$WORK/dz-xdg/xdgconf" PATH="$WORK/xdgbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-xdg.txt"
+has    "on Linux, VS Code's settings in XDG_CONFIG_HOME are read" '! VS Code Copilot ~/xdgconf/Code/User/settings\.json chat\.tools\.global\.autoApprove' "$WORK/dz-xdg.txt"
 hasnot "the default level or a commented one is not reported" 'chat\.permissions\.default' "$WORK/dz-perm-none.txt"
 has    "a project's chat.permissions.default: autoApprove is listed in section 2" '! ~/p/w/\.vscode/settings\.json Set to run every Copilot tool call without asking in new chats, with chat\.permissions\.default: autoApprove\.' "$WORK/dz-perm-proj.txt"
 has    "and a project's autopilot"                    '! ~/p/x/\.vscode/settings\.json Set to run every Copilot tool call without asking in new chats, with chat\.permissions\.default: autopilot\.' "$WORK/dz-perm-proj.txt"
