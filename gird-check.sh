@@ -5918,13 +5918,26 @@ npm_hits() {
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; fn = FILENAME; gsub(/[[:cntrl:]]/, "?", fn); print fn "\t" nm " " v "\t" t }
     }
-    FNR == 1 { over = 0; depth = 0; pend = "" }
+    FNR == 1 { over = 0; depth = 0; pend = ""; yn = "" }
     FILENAME ~ /pnpm-lock\.yaml$/ && /^[^ #]/ { over = ($0 ~ /^overrides:/) }
     FILENAME ~ /bun\.lock$/ {
       if (over) { o = $0; depth += gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
       if ($0 ~ /"overrides"[[:space:]]*:[[:space:]]*\{/) { over = 1; o = $0; depth = gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
     }
     over { next }
+    # A yarn.lock entry starts with what asked for it (axios@1.14.1, axios@1.14.2:), not what was
+    # installed: a resolutions pin can move it to another version. That line only names the entry; its
+    # version comes from its resolved URL or version line (yarn 1), or its resolution line (yarn 2 on).
+    FILENAME ~ /yarn\.lock$/ && /^[^ \t\r#]/ {
+      k = $0; sub(/[ \t\r]*$/, "", k); sub(/:$/, "", k); sub(/,.*$/, "", k); gsub(/"/, "", k)
+      if (index(k, "@npm:")) k = substr(k, index(k, "@npm:") + 5)
+      yn = ""; if (match(k, /^@?[^@]+/)) yn = substr(k, 1, RLENGTH)
+      if (yn !~ /^(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+$/) yn = ""
+      next
+    }
+    FILENAME ~ /yarn\.lock$/ && yn != "" && match($0, /^[ \t]+version "[^"]+"/) {
+      v = substr($0, RSTART, RLENGTH); sub(/^[ \t]+version "/, "", v); sub(/"$/, "", v); hit(yn, v); yn = ""
+    }
     FILENAME ~ /(package-lock|npm-shrinkwrap)\.json$/ {
       if (match($0, /"(node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
         pend = substr($0, RSTART + 1); sub(/"[[:space:]]*:.*/, "", pend); sub(/^.*node_modules\//, "", pend)
@@ -5990,32 +6003,95 @@ fi
 # pnpm's and bun's global folders, and npx's cache. One pass: the package.json of every package
 # under each root (the package itself, or a dependency of a globally installed tool) is listed by
 # its folder, and one awk reads the ones whose folder names a bad package.
-NPM_ROOTS=$(
-  for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
-           "$H"/.nvm/versions/node/*/lib/node_modules "$H"/.volta/tools/image/node/*/lib/node_modules \
-           "$H"/.volta/tools/image/packages/*/lib/node_modules "$H"/.local/share/fnm/node-versions/*/installation/lib/node_modules \
-           "$H"/Library/Application\ Support/fnm/node-versions/*/installation/lib/node_modules \
-           "$H"/.asdf/installs/nodejs/*/lib/node_modules "$H"/.local/share/mise/installs/node/*/lib/node_modules \
-           "$H"/.nodenv/versions/*/lib/node_modules "$H"/Library/pnpm/global/*/node_modules \
-           "$H"/.local/share/pnpm/global/*/node_modules "$H/.bun/install/global/node_modules" "$H"/.npm/_npx/*/node_modules; do
-    [ -d "$r" ] && printf '%s\n' "$r"
+# A root that is not a folder can still be there, behind a folder on its way that can't be read or
+# entered: that folder is printed as "?<TAB>folder" and counts as not read (NPM_GUNREAD).
+npm_blocked() { # path: prints the nearest folder on its way that exists, when that can't be read
+  _bd=$1
+  while :; do
+    case "$_bd" in */*) _bd=${_bd%/*} ;; *) return 1 ;; esac
+    [ -n "$_bd" ] || return 1
+    if [ -d "$_bd" ]; then { [ -r "$_bd" ] && [ -x "$_bd" ]; } && return 1; printf '?\t%s\n' "$_bd"; return 0; fi
   done
+}
+npm_root() { if [ -d "$1" ]; then printf '%s\n' "$1"; else npm_blocked "$1"; fi; }
+npm_roots_in() { # folder holding one folder per version or package, where node_modules sits in each
+  if [ ! -d "$1" ]; then npm_blocked "$1/x"; return; fi
+  if [ ! -r "$1" ] || [ ! -x "$1" ]; then printf '?\t%s\n' "$1"; return; fi
+  for _rv in "$1"/*/; do if [ -d "$_rv" ]; then npm_root "${_rv%/}/$2"; fi; done
+}
+_npm_roots=$(
+  for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
+           "$H/.bun/install/global/node_modules"; do
+    npm_root "$r"
+  done
+  npm_roots_in "$H/.nvm/versions/node" lib/node_modules; npm_roots_in "$H/.volta/tools/image/node" lib/node_modules
+  npm_roots_in "$H/.volta/tools/image/packages" lib/node_modules; npm_roots_in "$H/.local/share/fnm/node-versions" installation/lib/node_modules
+  npm_roots_in "$H/Library/Application Support/fnm/node-versions" installation/lib/node_modules
+  npm_roots_in "$H/.asdf/installs/nodejs" lib/node_modules; npm_roots_in "$H/.local/share/mise/installs/node" lib/node_modules
+  npm_roots_in "$H/.nodenv/versions" lib/node_modules; npm_roots_in "$H/Library/pnpm/global" node_modules
+  npm_roots_in "$H/.local/share/pnpm/global" node_modules; npm_roots_in "$H/.npm/_npx" node_modules
   if [ "$WIN" -eq 1 ]; then
     # The Windows places gird-check.ps1 reads: npm's own folder, nvm-windows (NVM_HOME), fnm (FNM_DIR), Volta, mise, pnpm and npx's cache.
     _nvm=$(winpath "${NVM_HOME:-}"); _nvm=${_nvm%/}; [ -n "$_nvm" ] || _nvm="$WAPP/nvm"
     _fnm=$(winpath "${FNM_DIR:-}"); _fnm=${_fnm%/}; [ -n "$_fnm" ] || _fnm="$WAPP/fnm"
-    for r in "$WAPP/npm/node_modules" "$_nvm"/*/node_modules "$_fnm"/node-versions/*/installation/node_modules \
-             "$WLAPP"/Volta/tools/image/node/*/node_modules "$WLAPP"/Volta/tools/image/packages/*/node_modules \
-             "$WLAPP"/Volta/tools/image/packages/*/lib/node_modules "$WLAPP"/mise/installs/node/*/node_modules \
-             "$WLAPP"/pnpm/global/*/node_modules "$WLAPP"/npm-cache/_npx/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done
+    npm_root "$WAPP/npm/node_modules"; npm_roots_in "$_nvm" node_modules; npm_roots_in "$_fnm/node-versions" installation/node_modules
+    npm_roots_in "$WLAPP/Volta/tools/image/node" node_modules; npm_roots_in "$WLAPP/Volta/tools/image/packages" node_modules
+    npm_roots_in "$WLAPP/Volta/tools/image/packages" lib/node_modules; npm_roots_in "$WLAPP/mise/installs/node" node_modules
+    npm_roots_in "$WLAPP/pnpm/global" node_modules; npm_roots_in "$WLAPP/npm-cache/_npx" node_modules
   fi
   # pnpm's own folder, where its setup points PNPM_HOME.
   _ph=$(winpath "${PNPM_HOME:-}"); _ph=${_ph%/}
-  if [ -n "$_ph" ]; then for r in "$_ph"/global/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done; fi
+  if [ -n "$_ph" ]; then npm_roots_in "$_ph/global" node_modules; fi
 )
-npm_global_named() { # package.json paths on stdin; the ones whose folder names a package on the list
+NPM_ROOTS=$(printf '%s\n' "$_npm_roots" | grep -v "^?$TAB" | grep -v '^$')
+# Each root is read as a node_modules folder: the package.json of every package in it, and of every
+# dependency in the node_modules folders nested in theirs, 16 levels deep, so a tool's dependency's own
+# dependency is read too. A store in a dot folder beside them (pnpm's .pnpm/<id>/node_modules, where a
+# pnpm global folder keeps every package) is read as well, its real folders only: the links in a store,
+# and at the root beside it, lead to those. A linked package is otherwise read but not entered, except
+# at a root without a store (npm link). Each folder that can't be read or entered, deeper than 16
+# levels, or a bad package's package.json that can't be read, is printed as "?<TAB>path".
+npm_global_pkg() { # package folder, kind of the folder it is in: R root, P root with a store, S store, N nested
+  if [ -L "$1" ]; then case "$2" in P|S) return ;; esac; fi
+  if [ -d "$1" ] && [ ! -x "$1" ]; then printf '?\t%s\n' "$1"; return; fi
+  # A regular file; in an account run anything there, so fleet_filter can count what it won't read.
+  if [ -f "$1/package.json" ] || { [ "$ACCTRUN" -eq 1 ] && { [ -e "$1/package.json" ] || [ -L "$1/package.json" ]; }; }; then printf '%s\n' "$1/package.json"; fi
+  if { [ ! -L "$1" ] || [ "$2" = R ]; } && [ -d "$1/node_modules" ] && [ ! -L "$1/node_modules" ]; then _gnq+=("$1/node_modules"); _gnm+=(N); fi
+}
+npm_global_walk() {
+  printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    _gq=(); _gm=()
+    for _s in "$r"/.[!.]*; do
+      [ -d "$_s" ] && [ ! -L "$_s" ] && [ "${_s##*/}" != .bin ] || continue
+      if [ ! -r "$_s" ] || [ ! -x "$_s" ]; then printf '?\t%s\n' "$_s"; continue; fi
+      for _sn in "$_s"/*/node_modules; do if [ -d "$_sn" ] && [ ! -L "$_sn" ]; then _gq+=("$_sn"); _gm+=(S); fi; done
+    done
+    if [ "${#_gq[@]}" -gt 0 ]; then _gq=("$r" "${_gq[@]}"); _gm=(P "${_gm[@]}"); else _gq=("$r"); _gm=(R); fi
+    _gl=0
+    while [ "${#_gq[@]}" -gt 0 ]; do
+      _gnq=(); _gnm=(); _gi=0
+      while [ "$_gi" -lt "${#_gq[@]}" ]; do
+        _m=${_gq[$_gi]}; _md=${_gm[$_gi]}; _gi=$((_gi + 1))
+        if [ "$_gl" -ge 16 ] || [ ! -r "$_m" ] || [ ! -x "$_m" ]; then printf '?\t%s\n' "$_m"; continue; fi
+        for _e in "$_m"/*; do
+          case "${_e##*/}" in
+            @*) [ -d "$_e" ] || continue
+                if [ -L "$_e" ]; then case "$_md" in P|S) continue ;; esac; fi
+                if [ ! -r "$_e" ] || [ ! -x "$_e" ]; then printf '?\t%s\n' "$_e"; continue; fi
+                for _e2 in "$_e"/*; do if [ -e "$_e2" ] || [ -L "$_e2" ]; then npm_global_pkg "$_e2" "$_md"; fi; done ;;
+            *) if [ -e "$_e" ] || [ -L "$_e" ]; then npm_global_pkg "$_e" "$_md"; fi ;;
+          esac
+        done
+      done
+      _gq=(${_gnq[@]+"${_gnq[@]}"}); _gm=(${_gnm[@]+"${_gnm[@]}"}); _gl=$((_gl + 1))
+    done
+  done
+}
+npm_global_named() { # package.json paths on stdin; the ones whose folder names a package on the list, and the "?" lines
   npm_awk '
     BEGIN { for (pc = 1; pc <= 4; pc++) { n = split(ENVIRON["BAD_NPM_P" pc], L, "\n"); for (i = 1; i <= n; i++) if (split(L[i], f, " ") >= 3) names[f[1]] = 1 } }
+    /^\?\t/ { print; next }
     { d = $0; sub(/\/package\.json$/, "", d); k = split(d, c, "/"); nm = c[k]; if (k > 1 && c[k - 1] ~ /^@/) nm = c[k - 1] "/" nm
       if (nm in names) print }'
 }
@@ -6042,18 +6118,17 @@ npm_global_hits() { # package.json paths on stdin; prints folder|name version|ta
       if (t != "") { gsub(/[[:cntrl:]]/, "?", d); print d "\t" nm " " v "\t" t }
     }' 2>/dev/null
 }
-_g=$(
-  printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
-    [ -n "$r" ] || continue
-    for f in "$r"/*/package.json "$r"/@*/*/package.json "$r"/*/node_modules/*/package.json "$r"/*/node_modules/@*/*/package.json \
-             "$r"/@*/*/node_modules/*/package.json "$r"/@*/*/node_modules/@*/*/package.json; do
-      # A regular file; in an account run anything there, so fleet_filter can count what it won't read.
-      if [ -f "$f" ] || { [ "$ACCTRUN" -eq 1 ] && { [ -e "$f" ] || [ -L "$f" ]; }; }; then printf '%s\n' "$f"; fi
-    done
-  done | npm_global_named | fleet_filter | npm_global_hits
-)
+_gw=$(npm_global_walk | npm_global_named)
+_g=$(printf '%s\n' "$_gw" | grep -v "^?$TAB" | grep -v '^$' | fleet_filter | npm_global_hits)
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"
+# What of the global installs could not be read: each folder (or bad package's package.json) once. It
+# counts in NPM_UNREAD, which npm's cache adds to below, so the check is never called clean over it.
+NPM_GUNREAD=$( { printf '%s\n' "$_npm_roots" "$_gw" | grep "^?$TAB"
+  # An account run leaves an unreadable file to fleet_filter, which counts it already.
+  [ "$ACCTRUN" -eq 1 ] || printf '%s\n' "$_gw" | grep -v "^?$TAB" | while IFS= read -r _f; do [ -n "$_f" ] && [ -e "$_f" ] && [ ! -r "$_f" ] && printf '?\t%s\n' "$_f"; done
+  } | sort -u | grep -c .)
+NPM_UNREAD=$((NPM_UNREAD + NPM_GUNREAD))
 # --- 1. Coding agents: settings and versions -------------------------------------
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by aa_hit (section 2).
 AA_ROWS=""
@@ -6210,13 +6285,20 @@ _ext_found=$(ext_roots | while IFS= read -r r; do
   done | BAD_EXT_LIST=$BAD_EXT awk -F '\t' '
   BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4]; os[i] = f[5] } }
   { reg = $1; d = substr($0, length($1) + 2); gsub(/[[:cntrl:]]/, "?", d); b = d; sub(/.*\//, "", b); lb = tolower(b)
+    # Split as VS Code splits a folder name (its ExtensionKey): the id is the longest start that leaves
+    # a version of three numbers, alone or before a -, so oorzc.ssh-tools-2-0.1.0 is oorzc.ssh-tools-2.
+    fid = ""
+    for (p = length(lb); p > 1 && fid == ""; p--) {
+      if (substr(lb, p, 1) != "-" || substr(lb, 1, p - 1) !~ /^[^.]+\../) continue
+      r = substr(lb, p + 1)
+      if (!match(r, /^[0-9]+\.[0-9]+\.[0-9]+/)) continue
+      rest = substr(r, RLENGTH + 1)
+      if (rest == "" || rest ~ /^-./) { fid = substr(lb, 1, p - 1); ver = substr(r, 1, RLENGTH) }
+    }
+    if (fid == "") next
     for (i = 1; i <= n; i++) {
       if (rg[i] != "any" && rg[i] != reg) continue
-      if (substr(lb, 1, length(id[i]) + 1) != id[i] "-") continue
-      r = substr(b, length(id[i]) + 2)
-      if (!match(r, /^[0-9]+(\.[0-9]+)*/)) continue
-      ver = substr(r, 1, RLENGTH); rest = substr(r, RLENGTH + 1)
-      if (rest != "" && rest !~ /^-/) continue
+      if (fid != id[i]) continue
       if (v[i] == "*" || v[i] == ver) { print d "\t" sp[i] " " ver "\t" t[i] "\t" os[i]; break }
     } }')
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
@@ -6231,22 +6313,128 @@ for _t in $NPM_TAGS; do
   if [ "$(incident_level "$_t")" = act ]; then NPM_HIT=1; else NPM_UPD=1; fi
 done
 # A lockfile records what some machine resolved, not what ran here. An act-level hit was installed
-# when npm's cache or a global install has it, or node_modules next to the lockfile holds that
-# version. A hit in a lockfile alone (NPM_LOCKPROJ lists their folders) leaves the headline and the
-# fix depending on whether that project was installed; the score and the link stay as they are.
+# when npm's cache or a global install has it, or the place that lockfile's entry installs to holds
+# that version (lock_installed). A hit in a lockfile alone (NPM_LOCKPROJ lists their folders) leaves
+# the headline and the fix depending on whether that project was installed; the score and the link
+# stay as they are.
 pkg_version() { # package.json: its first "version"
   awk 'match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/) { v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); print v; exit }' "$1" 2>/dev/null
 }
-NPM_INST=0; NPM_LOCKPROJ=""
+pkg_at() { [ -f "$1/package.json" ] && [ "$(pkg_version "$1/package.json")" = "$2" ]; } # folder version
+# The folders, relative to the lockfile, that npm's lockfile (its packages section, lockfile 2 and 3)
+# or bun's names for an entry: node_modules/a/node_modules/b, or a workspace's packages/w/node_modules/b.
+# bun's key is that path without the node_modules (a/b), and its value starts with the name@version.
+lock_paths() { # lockfile name version
+  awk -v N="$2" -v V="$3" '
+    FILENAME ~ /bun\.lock$/ {
+      if (!match($0, /^[[:space:]]*"[^"]+"[[:space:]]*:[[:space:]]*\[[[:space:]]*"[^"]*"/)) next
+      s = substr($0, RSTART, RLENGTH); k = s; sub(/^[[:space:]]*"/, "", k); sub(/".*$/, "", k)
+      v = s; sub(/^.*\[[[:space:]]*"/, "", v); sub(/"$/, "", v)
+      if (v != N "@" V) next
+      n = split(k, c, "/"); p = ""
+      for (i = 1; i <= n; i++) { s = c[i]; if (s ~ /^@/ && i < n) { i++; s = s "/" c[i] }; p = p (p == "" ? "" : "/") "node_modules/" s }
+      print p; next
+    }
+    match($0, /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/) {
+      k = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*"/, "", k); sub(/".*$/, "", k)
+      pend = ""; ok = 0
+      if (k ~ /(^|\/)node_modules\//) { pend = k; nm = k; sub(/^.*node_modules\//, "", nm); ok = (nm == N) }
+      next
+    }
+    pend != "" && match($0, /"name"[[:space:]]*:[[:space:]]*"[^"]*"/) {
+      x = substr($0, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x); if (x == N) ok = 1
+    }
+    pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]*"/) {
+      x = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x)
+      if (ok && x == V) print pend
+      pend = ""
+    }' "$1" 2>/dev/null
+}
+# node_modules folders nested in a project's, 16 levels deep: npm, yarn 1, yarn's node-modules linker,
+# bun and pnpm's hoisted layout all put a package in one. A linked package is followed only at the top,
+# where workspaces are linked, and a linked node_modules never.
+lock_nm_walk() { # project folder, name, version
+  _wq=("$1/node_modules"); _wl=0
+  while [ "${#_wq[@]}" -gt 0 ] && [ "$_wl" -lt 16 ]; do
+    _wn=()
+    for _wm in "${_wq[@]}"; do
+      pkg_at "$_wm/$2" "$3" && return 0
+      for _wc in "$_wm"/*/node_modules "$_wm"/@*/*/node_modules; do
+        [ -d "$_wc" ] && [ ! -L "$_wc" ] || continue
+        [ "$_wl" -eq 0 ] || [ ! -L "${_wc%/node_modules}" ] || continue
+        _wn+=("$_wc")
+      done
+    done
+    _wq=(${_wn[@]+"${_wn[@]}"}); _wl=$((_wl + 1))
+  done
+  return 1
+}
+# A cache zip of yarn 2 and later at that version: <name>-npm-<version>-<10 hex>-<checksum or cache
+# key>.zip, a scoped name written @scope-name (yarn's slugifyLocator and getVersionFilename).
+yarn_zip() { # folder, name as the file spells it, version
+  for _z in "$1/$2-npm-$3-"*.zip; do
+    [ -f "$_z" ] || continue
+    _zt=${_z##*/}; _zt=${_zt#"$2-npm-$3-"}; _zt=${_zt%.zip}
+    case "$_zt" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-?*) ;; *) continue ;; esac
+    case "${_zt#??????????-}" in *[!0-9a-z]*) continue ;; esac
+    return 0
+  done
+  return 1
+}
+# The shared cache yarn 4 uses unless a project turns it off: <global folder>/cache, the global folder
+# being %LOCALAPPDATA%/Yarn/Berry on Windows, $XDG_DATA_HOME/yarn/berry when that is set, or
+# ~/.yarn/berry (yarn's getDefaultGlobalFolder and enableGlobalCache).
+YARN_GCACHE="$H/.yarn/berry/cache"
+case "${XDG_DATA_HOME:-}" in /*) YARN_GCACHE="${XDG_DATA_HOME%/}/yarn/berry/cache" ;; esac
+[ "$WIN" -eq 1 ] && YARN_GCACHE="$WLAPP/Yarn/Berry/cache"
+# The offline mirror a .yarnrc names for yarn 1, resolved from that file's folder, as yarn resolves it.
+yarn_mirror() { # .yarnrc
+  fleet_ok "$1" && [ -f "$1" ] || return 1
+  _ym=$(awk 'match($0, /^[ \t]*"?yarn-offline-mirror"?[ \t]+/) { v = substr($0, RLENGTH + 1); sub(/[ \t\r]+$/, "", v); gsub(/^"|"$/, "", v); print v; exit }' "$1" 2>/dev/null)
+  [ "$WIN" -eq 1 ] && case "$_ym" in [A-Za-z]:[\\/]*) _ym=$(winpath "$_ym") ;; esac
+  case "$_ym" in ''|false) return 1 ;; /*) ;; *) _ym="${1%/*}/$_ym" ;; esac
+  printf '%s' "$_ym"
+}
+# Whether a lockfile's entry is installed where that lockfile puts it, at its version: the folder npm's
+# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm,
+# yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's offline mirror
+# when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz, a scoped name
+# written @scope-name (yarn 1's tarball-fetcher).
+lock_installed() { # lockfile name version
+  _ld=${1%/*}
+  [ "$3" != "?" ] || return 1
+  case "$1" in
+    */package-lock.json|*/npm-shrinkwrap.json|*/bun.lock)
+      while IFS= read -r _lp; do [ -n "$_lp" ] && pkg_at "$_ld/$_lp" "$3" && return 0; done <<EOF
+$(lock_paths "$1" "$2" "$3")
+EOF
+      ;;
+  esac
+  lock_nm_walk "$_ld" "$2" "$3" && return 0
+  case "$1" in
+    */pnpm-lock.yaml)
+      for _lp in "$_ld"/node_modules/.pnpm/*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done ;;
+    */yarn.lock)
+      _ly=$2; case "$2" in @*/*) _ly="${2%%/*}-${2#*/}" ;; esac
+      yarn_zip "$_ld/.yarn/cache" "$_ly" "$3" && return 0
+      yarn_zip "$YARN_GCACHE" "$_ly" "$3" && return 0
+      for _yr in "$_ld/.yarnrc" "$H/.yarnrc"; do
+        _ym=$(yarn_mirror "$_yr") || continue
+        [ -f "$_ym/$_ly-$3.tgz" ] && return 0
+      done ;;
+  esac
+  return 1
+}
+# NPM_INST_TAGS: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
+NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
   case "$_f" in
     */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
-      _pj="${_f%/*}/node_modules/${_p% *}/package.json"
-      if [ -f "$_pj" ] && [ "$(pkg_version "$_pj")" = "${_p##* }" ]; then NPM_INST=1
+      if lock_installed "$_f" "${_p% *}" "${_p##* }"; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
       else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
 "; fi ;;
-    *) NPM_INST=1 ;;
+    *) NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t " ;;
   esac
 done <<EOF
 $NPM_ROWS
@@ -6515,14 +6703,33 @@ todo() { # section text
 # the act-now fixes, then update-level ones, ahead of every other fix (the Injective SDK's: move the
 # funds out of a wallet whose seed phrase may have been sent out). Two incidents can share a fix (two
 # waves of one malware): it is said once.
-advice_todos() { # first, act or update
-  _seen=" "; _said="$TAB"
+# An act-level npm incident found only in lockfiles (adv_lockonly) reached this machine only if that
+# project was installed, so its own fix is worded for that (adv_if), and comes after the fixes for
+# what was found installed (lock), with the other fixes that depend on an install. A fix any incident
+# found installed shares is worded as fact.
+adv_lockonly() { # incident: 0 for an act-level npm incident with no hit found installed
+  [ "$(incident_level "$1")" = act ] || return 1
+  case "$NPM_INST_TAGS $(printf '%s ' $EXT_ACT_TAGS $PY_HITS)" in *" $1 "*) return 1 ;; esac
+  case " $(printf '%s ' $NPM_TAGS)" in *" $1 "*) return 0 ;; esac
+  return 1
+}
+adv_if() { # incident advice: that advice, for if the incident's packages were installed
+  _a2=$2; _aw=${2%% *}
+  case "${_aw#?}" in *[A-Z]*) ;; *) _a2="$(printf '%s' "${2:0:1}" | tr 'A-Z' 'a-z')${2:1}" ;; esac
+  printf 'If you installed the %s packages section 5 lists, %s' "$(incident_name "$1")" "$_a2"
+}
+ADV_SAID="$TAB"
+advice_todos() { # first, act, lock or update
+  _seen=" "
   for _t in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do
     case "$_seen" in *" $_t "*) continue ;; esac; _seen="$_seen$_t "
     _a=$(incident_advice "$_t"); [ -n "$_a" ] || continue
-    case "$1:$(incident_level "$_t"):$_a" in first:act:First\ *) ;; act:act:First\ *) continue ;; act:act:*|update:update:*) ;; *) continue ;; esac
-    case "$_said" in *"$TAB$_a$TAB"*) continue ;; esac; _said="$_said$_a$TAB"
-    todo 5 "$_a"
+    case "$1:$(incident_level "$_t"):$_a" in first:act:First\ *|update:update:*) ;; act:act:First\ *|lock:act:First\ *) continue ;; act:act:*|lock:act:*) ;; *) continue ;; esac
+    case "$ADV_SAID" in *"$TAB$_a$TAB"*) continue ;; esac
+    _lo=1; for _u in $NPM_TAGS $EXT_ACT_TAGS $PY_HITS; do if [ "$(incident_advice "$_u")" = "$_a" ] && ! adv_lockonly "$_u"; then _lo=0; fi; done
+    case "$1:$_lo" in act:1|lock:0) continue ;; esac
+    ADV_SAID="$ADV_SAID$_a$TAB"
+    if [ "$_lo" -eq 1 ]; then todo 5 "$(adv_if "$_t" "$_a")"; else todo 5 "$_a"; fi
   done
 }
 # With a fix that starts with "First" to follow, the wiper's fix leaves the rotating to the act-now fixes.
@@ -6537,13 +6744,10 @@ done
 if [ "$WIPER_HIT" -eq 1 ] && [ "$FIRST_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working."
 elif [ "$WIPER_HIT" -eq 1 ]; then todo 5 "Don't revoke any GitHub token yet. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working. Then rotate every key this machine could reach."; fi
 advice_todos first
-# A bad version found only in lockfiles: whether this machine is compromised depends on whether
-# that project was installed here.
-if [ "$MAL_LOCKONLY" -eq 1 ]; then
-  if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
-  todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: clear npm's cache with npm cache clean --force and rotate every key this machine could reach. If not, update $_ll to a version without the malware."
-elif [ "$MAL_HIT" -eq 1 ]; then
-  todo 5 "Treat this machine as compromised. Delete the packages and files listed in section 5, clear npm's cache with npm cache clean --force, and rotate every key this machine could reach."
+# The fixes for what was found, first. A compromised machine's keys are rotated from another computer,
+# then the malware is removed, as GitHub's malware advisories say.
+if [ "$MAL_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then
+  todo 5 "Treat this machine as compromised. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm's cache with npm cache clean --force."
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
@@ -6551,14 +6755,22 @@ if [ "$EXT_HIT" -eq 1 ]; then
   else _edo="Uninstall the extensions listed in section 5 and"; fi
   todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
 fi
-[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
-[ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
 PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" && PY_ENV=1; done
-if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
-elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
+if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments. From another computer, rotate every key the machine could reach, then follow $_adv to remove the malware."
+elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5. From another computer, rotate every key the machine could reach, then delete those files and follow $_adv."; fi
 advice_todos act
+# Then the fixes that depend on an install, or on a file you set up: a bad version found only in
+# lockfiles (whether this machine is compromised depends on whether that project was installed here),
+# a startup file to check, a leftover cook.pyc, and the own fixes of incidents found only in lockfiles.
+if [ "$MAL_LOCKONLY" -eq 1 ]; then
+  if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
+  todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $_ll to a version without the malware."
+fi
+[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
+[ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
+advice_todos lock
 advice_todos update
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
@@ -7211,13 +7423,15 @@ $PERSIST
 EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 fi
-# What of npm's places could not be read: part of its cache, lockfiles, folders the scan could not
-# enter. The row is never green over them, and findings above them are not the full list.
+# What of npm's places could not be read: part of its cache or of the global installs, lockfiles,
+# folders the scan could not enter. The row is never green over them, and findings above them are not
+# the full list.
 _np=""; _nn=0
-[ "$NPM_UNREAD" -gt 0 ] && { _np="part of npm's cache"; _nn=1; }
+[ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ] && { _np="part of npm's cache"; _nn=1; }
+[ "$NPM_GUNREAD" -gt 0 ] && { _np="${_np:+$_np|}part of the global installs"; _nn=$((_nn + 1)); }
 [ "$N_LOCK_UNREAD" -gt 0 ] && { _np="${_np:+$_np|}$(plural "$N_LOCK_UNREAD" lockfile lockfiles)"; _nn=$((_nn + 1)); }
 [ "$HOME_PARTIAL" -eq 1 ] && { _np="${_np:+$_np|}some folders in your home"; _nn=$((_nn + 1)); }
-case "$_nn" in 2) _np=${_np/|/ and } ;; 3) _np=${_np/|/, }; _np=${_np/|/ and } ;; esac
+case "$_nn" in 2) _np=${_np/|/ and } ;; 3) _np=${_np/|/, }; _np=${_np/|/ and } ;; 4) _np=${_np/|/, }; _np=${_np/|/, }; _np=${_np/|/ and } ;; esac
 lock_unread() { while IFS= read -r _f; do [ -n "$_f" ] && emit "        $(short "$_f")"; done <<EOF
 $LOCK_UNREAD
 EOF
@@ -7347,12 +7561,16 @@ if [ "$OS" = Darwin ]; then
   elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."
-  elif [ "$ANY_MAL" -eq 1 ]; then
+  elif [ "$ANY_MAL" -eq 1 ] || [ "$PY_HIT" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found signs of $MAL_WHAT. It can't tell you what the malware already took, or what your agents do after you close this window."
-  elif [ "$PY_HIT" -eq 1 ]; then
-    _t="THIS SCAN IS A SNAPSHOT"
-    _p1="It found signs of the $PY_SHORT malware. It can't tell you what the malware already took, or what your agents do after you close this window."
+    # Each kind of malware it found, and npm malware found only in a lockfile named as that, last.
+    _sig=""
+    if [ "$EXT_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 1 ]; then _sig="malware in an editor extension"
+    elif [ "$ANY_MAL" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then _sig=$MAL_WHAT; fi
+    [ "$PY_HIT" -eq 1 ] && _sig="${_sig:+$_sig and of }the $PY_SHORT malware"
+    if [ -z "$_sig" ]; then _sig="npm malware"
+    elif [ "$MAL_LOCKONLY" -eq 1 ]; then _sig="$_sig, and npm malware listed in a lockfile"; fi
+    _p1="It found signs of $_sig. It can't tell you what the malware already took, or what your agents do after you close this window."
   elif [ "$N_IDLE" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="$(plural "$N_IDLE" "agent you haven't used in 30 days is" "agents you haven't used in 30 days are") still installed. A poisoned package can drive an installed agent, and nothing on your Mac would tell you."
@@ -7475,7 +7693,8 @@ $PLATFORMS
 EOF
 # A partial check comes after every finding someone has to act on, and before the green line.
 elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: files unreadable"
-elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
+elif [ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
+elif [ "$NPM_GUNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: folder unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
