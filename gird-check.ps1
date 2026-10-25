@@ -1697,6 +1697,7 @@ $IndTable = @(
   ,@('litellm', 'all', 'temp', 'yes', '.pc_sq_*', 'These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
   ,@('litellm', 'all', 'temp', 'yes', '.pc_e_*', 'These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
   ,@('mistralpy', 'linux', 'temp', 'yes', 'transformers.pyz', 'Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.')
+  ,@('guardrails', 'linux', 'temp', 'yes', 'transformers.pyz', 'SafeDep shows guardrails-ai 0.10.1 writing this file on Linux and running it. Guardrails AI says to treat such a machine as compromised: rotate every credential it could reach and check your GitHub account for workflows, repositories or commits you did not make.')
 )
 # <<< indicators
 if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
@@ -1795,6 +1796,23 @@ for ($i = 0; $i -lt $BadPypiRows.Count; $i++) { if ($uvFound.ContainsKey($i)) { 
 $UvHit = New-Object System.Collections.Generic.List[object]
 foreach ($r in $UvBad) {
   if ($r[3] -eq 'all' -or $r[3] -eq $IndOs) { $UvHit.Add(@($r[2], "uv's cache: $($r[0]) $($r[1])")) } else { $PyUpd.Add(@($r[2], $r[3], "uv's cache: $($r[0]) $($r[1])")) }
+}
+# A temp file the lines of more than one Python incident name (mistralai 2.4.6 and guardrails-ai
+# 0.10.1 both write /tmp/transformers.pyz) is listed once, so a hit never names a package that is not
+# there: with the first of those incidents whose package was found, in an environment or uv's cache,
+# else with the first of them, and then $MarksBy (keyed "incident<TAB>file") says it was written by either.
+$MarksBy = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
+$pyFound = @{}; foreach ($l in $LiteBad) { $pyFound[$l[0]] = $true }; foreach ($l in $UvHit) { $pyFound[$l[0]] = $true }
+$markIncs = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
+foreach ($l in $Marks) { if (-not $markIncs.ContainsKey($l[1])) { $markIncs[$l[1]] = New-Object System.Collections.Generic.List[string] }; if (-not $markIncs[$l[1]].Contains($l[0])) { $markIncs[$l[1]].Add($l[0]) } }
+foreach ($mp in @($markIncs.Keys)) {
+  if ($markIncs[$mp].Count -lt 2) { continue }
+  $incs = @($PyIncidents | Where-Object { $markIncs[$mp].Contains($_) })
+  $own = @($incs | Where-Object { $pyFound.ContainsKey($_) }) | Select-Object -First 1
+  if (-not $own) { $own = $incs[0]; $MarksBy["$own`t$mp"] = @($incs | ForEach-Object { Incident-Name $_ }) -join ' or ' }
+  $keep = New-Object System.Collections.Generic.List[object]
+  foreach ($l in $Marks) { if ($l[1] -cne $mp -or $l[0] -ceq $own) { $keep.Add($l) } }
+  $Marks = $keep
 }
 $PyHits = New-Object System.Collections.Generic.List[string]
 foreach ($pi in $PyIncidents) {
@@ -6626,7 +6644,8 @@ foreach ($pi in $PyIncidents) {
   if ($PyHits -contains $pi) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
     foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
-    foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    # A temp file both incidents write, listed with this one while neither package was found.
+    foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])"; $mk = "$pi`t$($l[1])"; if ($MarksBy.ContainsKey($mk)) { Emit "          written by $($MarksBy[$mk])" } } }
     foreach ($l in $UvHit) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     foreach ($l in $PyStart) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])"; Emit "          $($l[2])" } }
     $hasMark = @($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0

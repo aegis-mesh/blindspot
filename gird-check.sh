@@ -1089,7 +1089,8 @@ litellm|all|temp|yes|remote_code_loader.lock|These files mean the malware ran he
 litellm|all|temp|yes|.pc_once_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 litellm|all|temp|yes|.pc_sq_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 litellm|all|temp|yes|.pc_e_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-mistralpy|linux|temp|yes|transformers.pyz|Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity."
+mistralpy|linux|temp|yes|transformers.pyz|Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.
+guardrails|linux|temp|yes|transformers.pyz|SafeDep shows guardrails-ai 0.10.1 writing this file on Linux and running it. Guardrails AI says to treat such a machine as compromised: rotate every credential it could reach and check your GitHub account for workflows, repositories or commits you did not make."
 # <<< indicators
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a malicious agent could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
@@ -2393,6 +2394,33 @@ while read -r _n _v _i _o; do
 done <<EOF
 $BAD_PYPI
 EOF
+# A temp file the lines of more than one Python incident name (mistralai 2.4.6 and guardrails-ai
+# 0.10.1 both write /tmp/transformers.pyz) is listed once, so a hit never names a package that is not
+# there: with the first of those incidents whose package was found, in an environment or uv's cache,
+# else with the first of them, and then MARKS_BY ("incident<TAB>file<TAB>names") says it was written
+# by either.
+MARKS_BY=""
+_mshared=$(printf '%s' "$MARKS" | awk -F '\t' 'NF >= 2 && !s[$1 FS $2]++ { c[$2]++ } END { for (p in c) if (c[p] > 1) print p }')
+if [ -n "$_mshared" ]; then
+  _pyf=" $(printf '%s' "$LITE_BAD$UV_HIT" | cut -f1 | tr '\n' ' ') "
+  while IFS= read -r _mp; do
+    [ -n "$_mp" ] || continue
+    _mown=""; _mfirst=""; _mnames=""
+    for _pi in $PY_INCIDENTS; do
+      printf '%s' "$MARKS" | MP="$_mp" awk -F '\t' -v i="$_pi" '$1 == i && $2 == ENVIRON["MP"] { f = 1; exit } END { exit !f }' || continue
+      [ -n "$_mfirst" ] || _mfirst=$_pi
+      _mnames="${_mnames:+$_mnames or }$(incident_name "$_pi")"
+      [ -z "$_mown" ] && case "$_pyf" in *" $_pi "*) _mown=$_pi ;; esac
+    done
+    [ -n "$_mown" ] || { _mown=$_mfirst; MARKS_BY="$MARKS_BY$_mown$TAB$_mp$TAB$_mnames
+"; }
+    MARKS=$(printf '%s' "$MARKS" | MP="$_mp" awk -F '\t' -v o="$_mown" 'NF < 2 || $2 != ENVIRON["MP"] || $1 == o')
+    [ -n "$MARKS" ] && MARKS="$MARKS
+"
+  done <<EOF
+$_mshared
+EOF
+fi
 PY_HITS=""
 for _pi in $PY_INCIDENTS; do
   if printf '%s' "$LITE_BAD$MARKS$UV_HIT$PY_START" | grep -q "^$_pi$TAB" || { [ "$_pi" = litellm ] && [ "$LOADER" -eq 1 ]; }; then
@@ -7548,7 +7576,12 @@ for _pi in $PY_INCIDENTS; do
     *" $_pi "*)
       pair "${RED}✗${RST}" "$_pl" 16 "${RED}signs of the malware found${RST}"
       while IFS="$TAB" read -r _t l; do
-        [ "$_t" = "$_pi" ] && [ -n "$l" ] && emit "        $(short "$l")"
+        [ "$_t" = "$_pi" ] && [ -n "$l" ] || continue
+        emit "        $(short "$l")"
+        # A temp file both incidents write, listed with this one while neither package was found.
+        [ -n "$MARKS_BY" ] || continue
+        _mb=$(printf '%s' "$MARKS_BY" | MP="$l" awk -F '\t' -v i="$_pi" '$1 == i && $2 == ENVIRON["MP"] { print $3; exit }')
+        [ -z "$_mb" ] || emit "          written by $_mb"
       done <<EOF
 $LITE_BAD$MARKS$UV_HIT
 EOF

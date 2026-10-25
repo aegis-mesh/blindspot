@@ -9,8 +9,10 @@
 # Each line is looked for as a .dist-info folder in every Python environment found and as a
 # name-version entry in uv's cache. Section 5 shows one row per incident, named as incidents.tsv names it.
 # mistralai 2.4.6 is Linux-only by Mistral's advisory. guardrails-ai 0.10.1, published in the same wave
-# (Wiz; GitHub advisory GHSA-xmpw-2vmm-p4p6), is Linux-only by Wiz's post and by Socket's report in the
-# project's issue 1473; no source names a file it leaves, so it has no line in data/indicators.tsv.
+# (Wiz), is linux by the code SafeDep's post on the TanStack wave recovered from it: it runs only when
+# sys.platform starts with linux, writes /tmp/transformers.pyz, the file Mistral lists, and runs it.
+# The maintainer's advisory, GHSA-xmpw-2vmm-p4p6, names no OS; Wiz and Socket (the project's issue
+# 1473) read it as Linux-only too. That file has a line for each of the two in data/indicators.tsv.
 # lightning 2.6.2 and 2.6.3, the PyPI release of April's Mini Shai-Hulud wave (Wiz), start a credential
 # stealer when imported, on any OS (GitHub's malware advisory GHSA-g4wr-mm54-799x); Lightning AI's own
 # advisory (GHSA-w37p-236h-pfx3) says to assume the environment is compromised and to pin 2.6.1. No

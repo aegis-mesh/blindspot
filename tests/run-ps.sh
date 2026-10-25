@@ -1365,7 +1365,7 @@ has    "with a fix to update it"                      'Update the Python package
 has    "the link does not flag a Python incident"     '&ll=0&.*&py=0&' "$WORK/mpy.txt"
 has    "row 05 says a Python package to update"       'Recent leaks a Python package to update, see section 5' "$WORK/mpy-c.txt"
 SKIPPING=""
-# guardrails-ai 0.10.1, published in the same wave, runs its stealer on Linux only too (Wiz).
+# guardrails-ai 0.10.1, published in the same wave, runs its stealer on Linux only too (the code SafeDep recovered).
 cp -R "$WORK/clean" "$WORK/gpy"; mkdir -p "$WORK/gpy/code/venv/lib/site-packages/guardrails_ai-0.10.1.dist-info"
 psrun "$WORK/gpy" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy.txt"
 [ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
@@ -1414,6 +1414,24 @@ has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no sig
 SKIPPING=""; [ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
 has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt.txt"
 has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt.txt"
+# guardrails-ai 0.10.1 writes /tmp/transformers.pyz too (SafeDep): the file is listed once, with the
+# incident whose package was found, so a hit never names a package that is not there; alone, with
+# mistralai's row, as written by either.
+if [ -n "$SKIPPING" ]; then skip "transformers.pyz alone is listed once" "$SKIPPING"
+elif [ "$(grep -o '~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt.txt" | grep -c .)" -eq 1 ]; then ok "transformers.pyz alone is listed once"; else bad "transformers.pyz alone is listed once"; fi
+has    "and said to be written by either package"     'mistralai 2\.4\.6 +signs of the malware found ~/AppData/Local/Temp/transformers\.pyz written by mistralai 2\.4\.6 or guardrails-ai 0\.10\.1' "$WORK/mpyt.txt"
+has    "and guardrails-ai's row does not list it too" 'guardrails-ai 0\.10\.1 +no signs' "$WORK/mpyt.txt"
+cp -R "$WORK/clean" "$WORK/gpyt"; mkdir -p "$WORK/gpyt/code/venv/lib/site-packages/guardrails_ai-0.10.1.dist-info"; : > "$WORK/gpyt/AppData/Local/Temp/transformers.pyz"
+psrun "$WORK/gpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpyt.txt"
+has    "guardrails-ai with transformers.pyz: the file is listed with it" 'guardrails-ai 0\.10\.1 +signs of the malware found ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1 ~/AppData/Local/Temp/transformers\.pyz' "$WORK/gpyt.txt"
+has    "with guardrails-ai's own advice for the file" 'SafeDep shows guardrails-ai 0\.10\.1 writing this file on Linux and running it\. Guardrails AI says to treat such a machine as compromised' "$WORK/gpyt.txt"
+has    "and mistralai's row stays clean"             'mistralai 2\.4\.6 +no signs' "$WORK/gpyt.txt"
+hasnot "and nothing names mistralai as found"        'MISTRALAI|mistralai 2\.4\.6 +signs|written by' "$WORK/gpyt.txt"
+cp -R "$WORK/clean" "$WORK/mpyt2"; mkdir -p "$WORK/mpyt2/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"; : > "$WORK/mpyt2/AppData/Local/Temp/transformers.pyz"
+psrun "$WORK/mpyt2" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt2.txt"
+has    "mistralai with transformers.pyz: the file is listed with it" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6 ~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt2.txt"
+has    "and guardrails-ai's row stays clean"         'guardrails-ai 0\.10\.1 +no signs' "$WORK/mpyt2.txt"
+hasnot "and nothing names guardrails-ai as found"    'GUARDRAILS|guardrails-ai 0\.10\.1 +signs|written by' "$WORK/mpyt2.txt"
 SKIPPING=""
 # A version read from a folder name is printed with control characters replaced.
 cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"

@@ -1418,7 +1418,7 @@ hasnot "a Mac with it is not 'compromised'"           'ACT NOW|Treat this machin
 has    "with a fix to update it"                      'Update the Python packages listed in section 5 to a version without the malware' "$WORK/mpy-mac.txt"
 has    "the link does not flag a Python incident"     '&ll=0&.*&py=0&' "$WORK/mpy-mac.txt"
 has    "row 05 says a Python package to update"       'Recent leaks a Python package to update, see section 5' "$WORK/mpy-mac-c.txt"
-# guardrails-ai 0.10.1, published in the same wave, runs its stealer on Linux only too (Wiz).
+# guardrails-ai 0.10.1, published in the same wave, runs its stealer on Linux only too (the code SafeDep recovered).
 cp -R "$WORK/clean" "$WORK/gpy"; mkdir -p "$WORK/gpy/code/venv/lib/site-packages/guardrails_ai-0.10.1.dist-info"
 HOME="$WORK/gpy" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy.txt"
 HOME="$WORK/gpy" PATH="$WORK/macbin2:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy-mac.txt"
@@ -1467,6 +1467,23 @@ has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no sig
 has    "a temp file alone: the incident's own advice, in section 5" 'Mistral lists this file, and a process started through python /tmp/transformers\.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
 has    "and in the fix"                               'Stop any process started from the files listed in section 5\. From another computer, rotate every key the machine could reach, then delete those files and follow mistralai.s advisory' "$WORK/mpyt-linux.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mpyt-linux.txt"
+# guardrails-ai 0.10.1 writes /tmp/transformers.pyz too (SafeDep): the file is listed once, with the
+# incident whose package was found, so a hit never names a package that is not there; alone, with
+# mistralai's row, as written by either.
+if [ "$(grep -o '~/tmp/transformers\.pyz' "$WORK/mpyt-linux.txt" | grep -c .)" -eq 1 ]; then ok "transformers.pyz alone is listed once"; else bad "transformers.pyz alone is listed once"; fi
+has    "and said to be written by either package"     'mistralai 2\.4\.6 +signs of the malware found ~/tmp/transformers\.pyz written by mistralai 2\.4\.6 or guardrails-ai 0\.10\.1' "$WORK/mpyt-linux.txt"
+has    "and guardrails-ai's row does not list it too" 'guardrails-ai 0\.10\.1 +no signs' "$WORK/mpyt-linux.txt"
+cp -R "$WORK/clean" "$WORK/gpyt"; mkdir -p "$WORK/gpyt/tmp" "$WORK/gpyt/code/venv/lib/site-packages/guardrails_ai-0.10.1.dist-info"; : > "$WORK/gpyt/tmp/transformers.pyz"
+HOME="$WORK/gpyt" TMPDIR="$WORK/gpyt/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpyt.txt"
+has    "guardrails-ai with transformers.pyz: the file is listed with it" 'guardrails-ai 0\.10\.1 +signs of the malware found ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1 ~/tmp/transformers\.pyz' "$WORK/gpyt.txt"
+has    "with guardrails-ai's own advice for the file" 'SafeDep shows guardrails-ai 0\.10\.1 writing this file on Linux and running it\. Guardrails AI says to treat such a machine as compromised' "$WORK/gpyt.txt"
+has    "and mistralai's row stays clean"             'mistralai 2\.4\.6 +no signs' "$WORK/gpyt.txt"
+hasnot "and nothing names mistralai as found"        'MISTRALAI|mistralai 2\.4\.6 +signs|written by' "$WORK/gpyt.txt"
+cp -R "$WORK/clean" "$WORK/mpyt2"; mkdir -p "$WORK/mpyt2/tmp" "$WORK/mpyt2/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"; : > "$WORK/mpyt2/tmp/transformers.pyz"
+HOME="$WORK/mpyt2" TMPDIR="$WORK/mpyt2/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt2.txt"
+has    "mistralai with transformers.pyz: the file is listed with it" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6 ~/tmp/transformers\.pyz' "$WORK/mpyt2.txt"
+has    "and guardrails-ai's row stays clean"         'guardrails-ai 0\.10\.1 +no signs' "$WORK/mpyt2.txt"
+hasnot "and nothing names guardrails-ai as found"    'GUARDRAILS|guardrails-ai 0\.10\.1 +signs|written by' "$WORK/mpyt2.txt"
 # A LiteLLM marker alone: the row carries LiteLLM's own advice (data/indicators.tsv), not the environment one.
 cp -R "$WORK/clean" "$WORK/lmark"; mkdir -p "$WORK/lmark/tmp"; : > "$WORK/lmark/tmp/.pc_once_1"
 HOME="$WORK/lmark" TMPDIR="$WORK/lmark/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmark.txt"

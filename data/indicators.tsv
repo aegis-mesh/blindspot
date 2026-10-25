@@ -28,6 +28,11 @@
 # no kind fits them, since a config starts nothing and a temp line is a Python incident's hit (it gives
 # its incident a Python row in section 5), so they have no line.
 # mistralai: its advisory, which lists the file and a process started through it as signs.
+# guardrails-ai 0.10.1: SafeDep's post on the TanStack wave, whose code recovered from it writes the same
+# /tmp/transformers.pyz on Linux and runs it; its note is the maintainer's advice (GHSA-xmpw-2vmm-p4p6). A
+# temp file the lines of two Python incidents name is listed once: with the first of them whose package
+# was found (in a Python environment or uv's cache), so a hit never names a package that is not there,
+# else with the first of them, as written by either.
 # LiteLLM: its advisory, and the GitHub issue the advisory links for the attack's details
 # (BerriAI/litellm#47826), which names the .pc_ temp files and PRIVCOLLECT_ACTIVE: the .pc_once_ marker is
 # written only once the data was sent, the advisory's "the exfil is confirmed".
@@ -82,3 +87,4 @@ litellm	all	temp	yes	.pc_once_*	These files mean the malware ran here, and a .pc
 litellm	all	temp	yes	.pc_sq_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 litellm	all	temp	yes	.pc_e_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 mistralpy	linux	temp	yes	transformers.pyz	Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.
+guardrails	linux	temp	yes	transformers.pyz	SafeDep shows guardrails-ai 0.10.1 writing this file on Linux and running it. Guardrails AI says to treat such a machine as compromised: rotate every credential it could reach and check your GitHub account for workflows, repositories or commits you did not make.
