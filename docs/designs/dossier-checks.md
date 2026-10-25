@@ -152,7 +152,7 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   "startup file to check": section 5 says no extension was found and to check what the file starts,
   row 05 and the fix say to check it, and the headline, the score and the link do not change. The
   January incident's advice says to check `~/Library/LaunchAgents` for unfamiliar plists such as that
-  one, and for the staging files Socket names (`/tmp/ijewf`, `/tmp/out.zip`), as Socket says it.
+  one, and to look for the staging files Socket names (`/tmp/ijewf`, `/tmp/out.zip`), as Socket says it.
 - Injective: `@injectivelabs/sdk-ts 1.20.21` in `data/bad-npm.tsv`. Only that package carries the
   code (the advisory); the others at 1.20.21 depend on it, so a lockfile with them lists it too.
   Level `update`: the machine is not compromised, but a wallet used with it is, and the incident
