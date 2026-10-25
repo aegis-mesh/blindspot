@@ -55,6 +55,10 @@
 #     machine with either as compromised, and gives no version: every version.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
 #     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe).
+# Nx Console 18.95.0, May 2026 (nxconsole): the compromised extension Wiz's post on the AntV wave names.
+#   Nx's own advisory, GHSA-c9j4-9m59-847w, says that build was on the VS Code Marketplace for 18
+#   minutes and on Open VSX for 36 (any), and gives its signs on macOS, Linux and Windows (all). The
+#   kitty-monitor files it leaves are the AntV wave's lines in data/indicators.tsv.
 # id	version	incident	registry	os
 oorzc.ssh-tools	*	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
@@ -162,3 +166,4 @@ specstudio.code-wakatime-activity-tracker	*	glasswormzig	openvsx	mac,win
 floktokbok.autoimport	*	glasswormzig	any	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win
 cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any	all
+nrwl.angular-console	18.95.0	nxconsole	any	all

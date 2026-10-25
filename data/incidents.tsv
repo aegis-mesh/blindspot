@@ -29,6 +29,7 @@ minishai	Mini Shai-Hulud worm	April 2026	stole GitHub, npm and cloud credentials
 lightning	lightning 2.6.2 and 2.6.3	April 2026	started a credential stealer when imported, then tried to spread itself	https://github.com/advisories/GHSA-g4wr-mm54-799x	act
 mastra	Mastra npm packages	June 2026	pulled in malware that started at login and sent browser history to the attackers	https://socket.dev/blog/mastra-npm-packages-compromised	act
 antv	AntV account takeover	May 2026	published from a hijacked maintainer account with an install hook that steals credentials	https://osv.dev/vulnerability/MAL-2026-3973	act
+nxconsole	Nx Console 18.95.0	May 2026	a malicious build fetched a payload that harvested credentials from disk and memory	https://github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w	act
 redhat	Red Hat Cloud Services packages	June 2026	published by the worm with an install hook that steals cloud, GitHub and npm credentials	https://github.com/advisories/GHSA-942v-f47r-w9c3	act
 keyv	keyv worm	August 2026	stole cloud, GitHub and npm credentials, and planted hooks that run when repos open	https://socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain	act
 keyvscope	keyv account takeover	August 2026	GitHub malware advisories say to treat a computer that installed one as fully compromised	https://github.com/advisories/GHSA-q99r-cjmf-3xrf	act	Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.

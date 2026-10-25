@@ -1449,6 +1449,17 @@ has    "each wave with its own sourced line"         'GlassWorm sleeper extensio
 if [ "$(grep -o 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-waves.txt" | grep -c .)" -eq 1 ]; then ok "the fix two waves share is said once"; else bad "the fix two waves share is said once"; fi
 hasnot "a version the 18 March post does not name is not flagged" 'spacetoow\.vsc-python-indent 1\.21\.0' "$WORK/dz-waves.txt"
 hasnot "an Open VSX extension's id in VS Code's own folder is not flagged" '~/\.vscode/extensions/aadarkcode' "$WORK/dz-waves.txt"
+# Nx Console 18.95.0, the AntV wave's extension, was on the Marketplace and on Open VSX (Nx's advisory):
+# it is malware in VS Code's own folder and in an Open VSX editor's, and its fixed version is not.
+rm -rf "$WORK/dz-nx"; cp -R "$WORK/clean" "$WORK/dz-nx"
+mkdir -p "$WORK/dz-nx/.vscode/extensions/nrwl.angular-console-18.95.0" "$WORK/dz-nx/.cursor/extensions/nrwl.angular-console-18.95.0-darwin-arm64" \
+  "$WORK/dz-nx/.windsurf/extensions/nrwl.angular-console-18.100.0"
+dzrun "$WORK/dz-nx" | tr -s ' \n' '  ' > "$WORK/dz-nx.txt"
+has    "Nx Console 18.95.0 is editor extension malware" 'Editor extensions signs of the malware found' "$WORK/dz-nx.txt"
+has    "in VS Code's own folder"                      '~/\.vscode/extensions/nrwl\.angular-console-18\.95\.0 nrwl\.angular-console 18\.95\.0 \(Nx Console 18\.95\.0, May 2026\), installed' "$WORK/dz-nx.txt"
+has    "and in an Open VSX editor's folder"           '~/\.cursor/extensions/nrwl\.angular-console-18\.95\.0-darwin-arm64 nrwl\.angular-console 18\.95\.0 \(Nx Console 18\.95\.0, May 2026\), installed' "$WORK/dz-nx.txt"
+has    "with Nx's sourced line"                       'Nx Console 18\.95\.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory\. github\.com' "$WORK/dz-nx.txt"
+hasnot "its fixed version is not flagged"             'angular-console-18\.100\.0' "$WORK/dz-nx.txt"
 # Antigravity installs from Open VSX: Antigravity IDE keeps its extensions in ~/.antigravity-ide, the
 # Antigravity before it in ~/.antigravity. A GlassWorm extension that names Antigravity, in each.
 rm -rf "$WORK/dz-ag"; cp -R "$WORK/clean" "$WORK/dz-ag"
