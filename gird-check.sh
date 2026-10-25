@@ -304,8 +304,8 @@ EOF
 }
 # One line of real, public totals under the banner, picked at random from the
 # ones big enough to mean something. Nothing when they don't arrive in time.
-# Below 1,000 developers it shows nothing: the header says you're one of the
-# first 1,000 instead, with your number once the reply brings it.
+# Below 1,000 AI builders it shows nothing: a line above the header says you're
+# one of the first 1,000 instead. The place in line itself is never shown.
 proof_line() {
   [ -n "$SP_PID" ] || return 0
   wait "$SP_PID" 2>/dev/null; SP_PID=""
