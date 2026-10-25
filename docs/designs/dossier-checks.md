@@ -123,21 +123,26 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   keeps extensions in `~/.devin/extensions` and only reads the old folder; Antigravity IDE's
   product.json names the data folder `.antigravity-ide` and Open VSX's gallery, and the Antigravity
   before it used `~/.antigravity`); an
-  `openvsx` line is not looked for in VS Code's own folder, where the same version is the
-  Marketplace's clean build. A hit is its own section 5 row, "Editor extensions", with the incident
+  `openvsx` line is not looked for in VS Code's own folder, where the same id is the Marketplace's
+  own extension. An id that Microsoft's list of extensions removed from the Marketplace names
+  (`RemovedPackages.md` in github.com/microsoft/vsmarketplace) was on the Marketplace too, so it is
+  `any`. A hit is its own section 5 row, "Editor extensions", with the incident
   line, level `act`, its own headline and fix, never called npm malware. With nothing found the row
   is green, and it is one of the checks section 5 counts; a folder that can't be read makes it
   yellow, not fully checked.
 - GlassWorm, from Socket's posts, one incident per post: a version where the post gives one, and
   every version where it names an extension without one (these are the attacker's own extensions,
   which update themselves, so a version from before an extension was turned counts too).
-  - January 2026: the four `oorzc` extensions at their malicious versions, and the thirteen earlier
-    extensions Socket names, at every version, all `openvsx`: Socket says the malicious versions
-    were published to Open VSX and that the publisher's Marketplace listings were not compromised,
-    the Marketplace has a clean `oorzc.ssh-tools` 0.5.1 of March 2026, and the thirteen were never
-    on the Marketplace.
+  - January 2026: three `oorzc` extensions at their malicious versions, every `oorzc.ssh-tools`
+    version (Open VSX removed them all and added it to its malware list, Socket says), and the
+    thirteen earlier extensions Socket names, at every version, all `openvsx`: Socket's findings
+    concern the Open VSX builds and do not suggest the publisher's Marketplace listings were
+    compromised (the Marketplace still offers them, `oorzc.ssh-tools` with a 0.5.1 of 30 March
+    2026), and the Marketplace does not offer the thirteen, nor does Microsoft's list name them.
   - 13 March 2026: the 72 extensions listed since that report (59 besides those thirteen), every
-    version, `openvsx`.
+    version, `openvsx`, except four Microsoft's list removes from the Marketplace too, which are
+    `any`: `Lavender-Studio.theme-lavender-dreams` as malware, and the `dopbop-studio`,
+    `kwitch-studio` and `potstok` extensions as impersonation.
   - 18 March 2026: the versions the post shows delivering malware, themselves or through an
     extension pack (20 versions of 15 extensions), `openvsx`. The first versions of its sleepers,
     which carried nothing yet, are left out.
@@ -145,7 +150,10 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
     are left out, and so are the 17 extensions of its 29 April update, whose pack pointed to an
     extension Open VSX had removed two days before.
   - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
-    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too).
+    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too), and
+    three more of the cluster's themes, on both registries, that Microsoft's list removes as malware:
+    Charcoal Mint, Aurora Borealis and Coca-Cola Christmas. Socket found no payload in the versions
+    of those three it read; Microsoft's classification governs.
   The March and April loaders install a further extension from GitHub into every editor they find,
   VS Code included; no post gives its id, so those incidents' fix says to check every editor for
   extensions the person did not install, said once when both are found.

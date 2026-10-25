@@ -1282,7 +1282,7 @@ has    "a version the 18 March post shows delivering malware" '~/\.windsurf/exte
 has    "Devin Desktop's extension folder is read, as an Open VSX editor's" '~/\.devin/extensions/oorzc\.i18n-tools-plus-1\.6\.8 oorzc\.i18n-tools-plus 1\.6\.8 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-waves.txt"
 has    "one of the six the April post confirms"      '~/\.kiro/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-waves.txt"
 has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-waves.txt"
-has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
+has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
 if [ "$(grep -o 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-waves.txt" | grep -c .)" -eq 1 ]; then ok "the fix two waves share is said once"; else bad "the fix two waves share is said once"; fi
 hasnot "a version the 18 March post does not name is not flagged" 'spacetoow\.vsc-python-indent 1\.21\.0' "$WORK/dz-waves.txt"
 hasnot "an Open VSX extension's id in VS Code's own folder is not flagged" '~/\.vscode/extensions/aadarkcode' "$WORK/dz-waves.txt"
@@ -1293,6 +1293,18 @@ mkdir -p "$WORK/dz-ag/.antigravity-ide/extensions/mswincx.antigravity-cockpit-1.
 dzrun "$WORK/dz-ag" | tr -s ' \n' '  ' > "$WORK/dz-ag.txt"
 has    "Antigravity IDE's extension folder is read, as an Open VSX editor's" '~/\.antigravity-ide/extensions/mswincx\.antigravity-cockpit-1\.2\.0-universal mswincx\.antigravity-cockpit 1\.2\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ag.txt"
 has    "and the earlier Antigravity's folder too"     '~/\.antigravity/extensions/keyacrosslaud\.auto-loop-for-antigravity-0\.4\.1 keyacrosslaud\.auto-loop-for-antigravity 0\.4\.1 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-ag.txt"
+# Microsoft's list of extensions removed from the Marketplace: a GlassWorm theme it removed as malware and
+# an extension it removed as impersonation are looked for in VS Code's own folder too. Open VSX removed
+# every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. And a theme of the
+# October cluster that Microsoft removed as malware.
+rm -rf "$WORK/dz-ms"; cp -R "$WORK/clean" "$WORK/dz-ms"
+mkdir -p "$WORK/dz-ms/.vscode/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-ms/.vscode/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
+  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2"
+dzrun "$WORK/dz-ms" | tr -s ' \n' '  ' > "$WORK/dz-ms.txt"
+has    "a theme Microsoft removed from its Marketplace as malware, in VS Code's own folder" '~/\.vscode/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
+has    "one it removed as impersonation, in VS Code's own folder too" '~/\.vscode/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
+has    "any oorzc.ssh-tools version in an Open VSX editor's folder, as Open VSX removed them all" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.2 oorzc\.ssh-tools 0\.5\.2 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
+has    "a theme of the October cluster that Microsoft removed as malware" '~/\.cursor/extensions/holiday-themes\.theme-coca-cola-christmas-1\.0\.2 holiday-themes\.theme-coca-cola-christmas 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-ms.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, 4 security fixes to install' "$WORK/dz-hit-sum.txt"
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
