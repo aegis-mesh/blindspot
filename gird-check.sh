@@ -968,6 +968,8 @@ all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-state
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/history-session-state
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/command-history-state
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-store.db
+all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-store.db-wal
+all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/command-history-state.json
 all|read|Roo Code|$AS/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 linux|read|Roo Code|${XDG_CONFIG_HOME:-$H/.config}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 all|read|Roo Code|$AS/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks
@@ -979,6 +981,7 @@ linux|read|Cline|${XDG_CONFIG_HOME:-$H/.config}/Cursor/User/globalStorage/saoudr
 all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/sessions
 all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/tasks
 all|read|Cline|${CLINE_DIR:-$H/.cline}/data/sessions
+all|read|Cline|${CLINE_DIR:-$H/.cline}/data/tasks
 all|read|Cline|${CLINE_SESSION_DATA_DIR:-$H/.cline/data/sessions}
 all|read|Continue|${CONTINUE_GLOBAL_DIR:-$H/.continue}/sessions
 all|read|Continue|${CONTINUE_GLOBAL_DIR:-$H/.continue}/dev_data/0.2.0/chatInteraction.jsonl
