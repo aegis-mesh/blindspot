@@ -20,9 +20,17 @@
 # (jaredwray/keyv d8c850c7) has math_init.js in .claude only, with the same setup.mjs in .claude and
 # .vscode, so .vscode/math_init.js has no line: the loader there counts by its SHA-256, and a task that
 # runs math_init.js from either folder counts.
+# Wiz on April's Mini Shai-Hulud wave: the worm places .claude/execution.js, a copy of its payload (its
+# npm packages' execution.js is eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb,
+# 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 or
+# 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac), and setup.mjs 4066781f, its dropper,
+# in .claude and .vscode, run by a SessionStart hook and a folder-open task. Socket on lightning, that
+# wave's PyPI release: its payload plants .claude/router_runtime.js, a copy of itself, with setup.mjs
+# files beside it.
 # folder	file	incident	note	alone	sha256
-.claude	router_runtime.js	tanstack	a file the TanStack worm plants	yes	-
+.claude	router_runtime.js	tanstack	a file the TanStack and Mini Shai-Hulud worms plant	yes	-
 .vscode	router_runtime.js	tanstack	a file the TanStack worm plants	yes	-
-.claude	setup.mjs	keyv	a file the TanStack and keyv worms plant	no	fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb,54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668,2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df
+.claude	setup.mjs	keyv	a file the TanStack, keyv and Mini Shai-Hulud worms plant	no	fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb,54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668,2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df,4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34
 .claude	math_init.js	keyv	a file the keyv worm plants	yes	-
-.vscode	setup.mjs	keyv	a file the TanStack and keyv worms plant	no	fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb,54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668,2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df
+.vscode	setup.mjs	keyv	a file the TanStack, keyv and Mini Shai-Hulud worms plant	no	fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb,54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668,2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df,4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34
+.claude	execution.js	minishai	a file the Mini Shai-Hulud worm plants	yes	-

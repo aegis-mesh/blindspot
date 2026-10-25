@@ -695,7 +695,22 @@ has    "node.exe counts as running it"                 '~/q/\.claude/settings\.j
 has    "a Windows backslash path counts"               '~/w/\.claude/settings\.json runs a file a worm plants' "$WORK/escq.txt"
 mkdir -p "$WORK/vsp/p/.claude"; printf 'x\n' > "$WORK/vsp/p/.vscode/setup.mjs"; printf 'x\n' > "$WORK/vsp/p/.claude/math_init.js"
 HOME="$WORK/vsp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsp.txt"
-has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack and keyv worms plant' "$WORK/vsp.txt"
+has    "a planted .vscode/setup.mjs is found"          'p/\.vscode/setup\.mjs a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/vsp.txt"
+# April's Mini Shai-Hulud wave plants .claude/execution.js, a copy of its payload, beside its setup.mjs dropper in
+# .claude and .vscode, run by a SessionStart hook and a folder-open task (Wiz). Only the worm uses that name in
+# .claude, so it counts on its own and makes the files beside it count. The name elsewhere is not the worm's.
+mkdir -p "$WORK/msh/code/r/.claude" "$WORK/msh/code/r/.vscode" "$WORK/msh/code/other/.vscode" "$WORK/msh/code/other/.claude/hooks"
+printf 'x\n' > "$WORK/msh/code/r/.claude/execution.js"; printf 'y\n' | tee "$WORK/msh/code/r/.claude/setup.mjs" > "$WORK/msh/code/r/.vscode/setup.mjs"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .vscode/setup.mjs"}]}]}}\n' > "$WORK/msh/code/r/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"Environment Setup","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/msh/code/r/.vscode/tasks.json"
+printf 'z\n' | tee "$WORK/msh/code/other/.vscode/execution.js" > "$WORK/msh/code/other/.claude/hooks/execution.js"
+HOME="$WORK/msh" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/msh.txt"
+has    "Mini Shai-Hulud's .claude/execution.js counts on its own" '~/code/r/\.claude/execution\.js a file the Mini Shai-Hulud worm plants' "$WORK/msh.txt"
+has    "and its setup.mjs dropper beside it counts too" '~/code/r/\.vscode/setup\.mjs a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/msh.txt"
+has    "and so does its SessionStart hook"           '~/code/r/\.claude/settings\.json runs a file a worm plants' "$WORK/msh.txt"
+has    "and its folder-open task"                    '~/code/r/\.vscode/tasks\.json runs a file a worm plants' "$WORK/msh.txt"
+hasnot "none of them is a file to read"              'Named like a file' "$WORK/msh.txt"
+hasnot "execution.js in another folder is not the worm's" 'code/other' "$WORK/msh.txt"
 # A command counts only when it runs the file: a guard in node -e code, a script given the file to
 # block, and a task whose first argument is another script are not malware; a task that runs node
 # on the file is.
@@ -718,8 +733,8 @@ printf 'console.log("project ready")\n' > "$WORK/stp/code/tool/.claude/setup.mjs
 printf '{\n  "hooks": {\n    "SessionStart": [{"hooks": [{"type": "command", "command": "node .claude/setup.mjs"}]}]\n  }\n}\n' > "$WORK/stp/code/tool/.claude/settings.json"
 HOME="$WORK/stp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp.txt"
 hasnot "a setup.mjs alone is not called malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/stp.txt"
-has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack and keyv worms plant, with nothing else of theirs beside it\.' "$WORK/stp.txt"
-has    "section 2 lists it as a file to read (2)" '! ~/code/tool/\.claude/setup\.mjs Named like a file the TanStack and keyv worms plant' "$WORK/stp.txt"
+has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant, with nothing else of theirs beside it\.' "$WORK/stp.txt"
+has    "section 2 lists it as a file to read (2)" '! ~/code/tool/\.claude/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/stp.txt"
 has    "with a fix to read it"                        'Read the files section 2 lists as named like files worms plant, and delete any you' "$WORK/stp.txt"
 rm -rf "$WORK/stp/code/tool"
 HOME="$WORK/stp" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp-c.txt"
