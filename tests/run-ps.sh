@@ -1092,6 +1092,20 @@ printf 'AWS_ACCESS_KEY_ID=AK%s\n' "IA$(upper 16)" > "$WORK/ni-key/code/app/.envr
 psrun "$WORK/ni-key" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-key2.txt"
 chmod 644 "$WORK/ni-key/.zshrc"
 has    "next to a key found, a file that can't be read says the list is not full" '~/code/app/\.envrc AWS ! 1 file could not be read, so this is not the full list: ~/\.zshrc ' "$WORK/ni-key2.txt"
+# Section 2's and section 4's files are named too when they can't be read: an MCP config, a project's
+# settings and Claude Code's own settings file, which holds the allow list.
+rm -rf "$WORK/ni-s24"; mkdir -p "$WORK/ni-s24/.claude" "$WORK/ni-s24/code/p/.claude" "$WORK/ni-s24/AppData/Roaming" "$WORK/ni-s24/AppData/Local/Temp"
+printf '{"mcpServers":{}}\n' > "$WORK/ni-s24/.claude.json"; printf '{"hooks":{}}\n' > "$WORK/ni-s24/code/p/.claude/settings.json"
+printf '{"permissions":{"allow":[]}}\n' > "$WORK/ni-s24/.claude/settings.local.json"
+chmod 000 "$WORK/ni-s24/.claude.json" "$WORK/ni-s24/code/p/.claude/settings.json" "$WORK/ni-s24/.claude/settings.local.json"
+psrun "$WORK/ni-s24" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-s24.txt"
+psrun "$WORK/ni-s24" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-s24-c.txt"
+chmod 644 "$WORK/ni-s24/.claude.json" "$WORK/ni-s24/code/p/.claude/settings.json" "$WORK/ni-s24/.claude/settings.local.json"
+has    "an MCP config or a project's settings that can't be read is named in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: .*~/code/p/\.claude/settings\.json' "$WORK/ni-s24.txt"
+has    "and row 02 says files could not be read"       'MCP servers .*but [0-9]+ files? could not be read' "$WORK/ni-s24-c.txt"
+has    "an allow list that can't be read is named in section 4" '! No saved commands with keys in the files read, but [0-9]+ files? could not be read: .*~/\.claude/settings\.local\.json' "$WORK/ni-s24.txt"
+has    "and row 04 says files could not be read"       'Allow lists none found, but [0-9]+ files? could not be read' "$WORK/ni-s24-c.txt"
+hasnot "and neither section reads clean"               '✓ No saved commands with keys' "$WORK/ni-s24.txt"
 # PowerShell's own partial check: a file that hit the time limit.
 rm -rf "$WORK/ni-slow"; mkdir -p "$WORK/ni-slow/code/s"
 python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/ni-slow/code/s/.env"

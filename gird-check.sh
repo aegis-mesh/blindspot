@@ -1904,6 +1904,15 @@ N_LOGIN=0; for _x in $LOGIN_IDS; do N_LOGIN=$((N_LOGIN + 1)); done
 
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
 ALLOW_ROWS=""; N_ALLOW=0; N_ALLOW_NPM=0; ALLOW_FIRST=""
+unread_files() { # files on stdin that are there but can't be read, each once
+  while IFS= read -r _uf; do [ -n "$_uf" ] && [ -f "$_uf" ] && [ ! -r "$_uf" ] && printf '%s\n' "$_uf"; done | awk '!s[$0]++'
+}
+# Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
+# so those sections name them and never read clean, as section 3 does for key files.
+SEC2_UNREAD=$(printf '%s\n%s\n%s\n%s\n' "$MCP_LIST" "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" | unread_files)
+N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
+ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files)
+N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter | files_matching "$ALL_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
@@ -3276,7 +3285,7 @@ if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -
 # scanned, the sessions were partly checked, or a key file, part of npm's cache or an extension
 # folder could not be read. The headline then says what it can: no findings in the paths checked.
 PARTIAL=0
-if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -3724,6 +3733,18 @@ $AK_LINKS
 EOF
   wrap "An agent that edits this file adds a login to this computer. Delete the link." 8 "        " "        " "$RED"
 fi
+if [ "$N_SEC2_UNREAD" -gt 0 ]; then
+  blank
+  wrap "$(plural "$N_SEC2_UNREAD" "config or settings file" "config or settings files") could not be read, so the servers, tokens and settings in them were not checked:" 5 "  ${YEL}!${RST}  " "     "
+  _shown=0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    _shown=$((_shown + 1)); [ "$_shown" -le 20 ] && emit "     $(short "$f")"
+  done <<EOF
+$SEC2_UNREAD
+EOF
+  [ "$N_SEC2_UNREAD" -gt 20 ] && emit "        ${DIM}and $(($N_SEC2_UNREAD - 20)) more${RST}"
+fi
 
 SEC2=$CAP; CAP=""
 section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
@@ -3832,7 +3853,16 @@ fi
 
 SEC3=$CAP; CAP=""
 section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
-if [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No saved commands with keys, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
+if [ "$N_ALLOW" -eq 0 ] && [ "$N_ALLOW_UNREAD" -gt 0 ]; then wrap "No saved commands with keys in the files read, but $(plural "$N_ALLOW_UNREAD" "file" "files") could not be read:" 8 "     ${YEL}!${RST}  " "        "
+  _shown=0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    _shown=$((_shown + 1)); [ "$_shown" -le 20 ] && emit "        $(short "$f")"
+  done <<EOF
+$ALLOW_UNREAD
+EOF
+  [ "$N_ALLOW_UNREAD" -gt 20 ] && emit "        ${DIM}and $(($N_ALLOW_UNREAD - 20)) more${RST}"
+elif [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No saved commands with keys, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
 elif [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
 while IFS='|' read -r npm f; do
   [ -n "$f" ] || continue
@@ -3842,6 +3872,7 @@ while IFS='|' read -r npm f; do
 done <<EOF
 $ALLOW_ROWS
 EOF
+[ "$N_ALLOW" -gt 0 ] && [ "$N_ALLOW_UNREAD" -gt 0 ] && wrap "$(plural "$N_ALLOW_UNREAD" "file" "files") could not be read, so this is not the full list." 8 "     ${YEL}!${RST}  " "        "
 
 SEC4=$CAP; CAP=""
 N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 2 + N_PLAT))   # the Python incidents, npm, editor extensions and each platform
@@ -4124,6 +4155,7 @@ elif [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens i
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
 elif [ "$N_LOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_LOOK" "project file" "project files") to read"
+elif [ "$N_SEC2_UNREAD" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, but $(plural "$N_SEC2_UNREAD" "file" "files") could not be read"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, but some folders were not read"
 elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in their configs"
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
@@ -4135,7 +4167,8 @@ elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agen
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none found, but some folders were not read"
 else G3="${GRN}✓${RST}"; D3="no AI or cloud keys in plain text"; fi
-if [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then G4="${YEL}!${RST}"; D4="none found, but some folders were not read"
+if [ "$N_ALLOW" -eq 0 ] && [ "$N_ALLOW_UNREAD" -gt 0 ]; then G4="${YEL}!${RST}"; D4="none found, but $(plural "$N_ALLOW_UNREAD" "file" "files") could not be read"
+elif [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then G4="${YEL}!${RST}"; D4="none found, but some folders were not read"
 elif [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"
 elif [ "$N_ALLOW_NPM" -gt 0 ] && [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="1 saved key, and an npm publish would ship it"
 elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship"

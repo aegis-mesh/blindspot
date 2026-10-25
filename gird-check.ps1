@@ -1358,8 +1358,17 @@ $LoginsText = $Logins -join ', '
 if ($LoginsText) { Progress "Login files any agent you run can read: $LoginsText" }
 
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
+# Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
+# so those sections name them and never read clean, as section 3 does for key files.
+function Unread-Files($files) {
+  $out = New-Object System.Collections.Generic.List[string]
+  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $out.Add($f) } }
+  ,$out
+}
+$Sec2Unread = Unread-Files (@($McpList) + @($AllowFiles) + @($TaskFiles) + @($VscSettings))
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
 $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
+$AllowUnread = Unread-Files $allowAll
 foreach ($f in $allowAll) {
   if (-not (Is-File $f)) { continue }
   if (-not (Has-RealMatch $f $RxCommand)) { continue }
@@ -2792,7 +2801,7 @@ if (-not $OptOffline) {
 # A check that was not done in full never leaves the headline green: the sessions were partly
 # checked, a key file, part of npm's cache or an extension folder could not be read, or a file took
 # too long. The headline then says what it can: no findings in the paths checked.
-$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -2891,6 +2900,12 @@ if ($N_AK -gt 0) {
   foreach ($f in $AkLinks) { Emit "     $cRed$gX$cRst  $(Short $f)" }
   Wrap 'An agent that edits this file adds a login to this computer. Delete the link.' 8 '        ' '        ' $cRed
 }
+if ($Sec2Unread.Count -gt 0) {
+  Blank
+  Wrap "$(Plural $Sec2Unread.Count 'config or settings file' 'config or settings files') could not be read, so the servers, tokens and settings in them were not checked:" 5 "  $cYel!$cRst  " '     '
+  foreach ($f in ($Sec2Unread | Select-Object -First 20)) { Emit "     $(Short $f)" }
+  if ($Sec2Unread.Count -gt 20) { Emit "     ${cDim}and $($Sec2Unread.Count - 20) more$cRst" }
+}
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
 # With files that could not be read, this line comes below, with them.
@@ -2959,13 +2974,19 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
 }
 $Sec3 = Take-Cap
 Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
-if ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No saved commands with keys, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
+if ($N_ALLOW -eq 0 -and $AllowUnread.Count -gt 0) {
+  Wrap "No saved commands with keys in the files read, but $(Plural $AllowUnread.Count 'file' 'files') could not be read:" 8 "     $cYel!$cRst  " '        '
+  foreach ($f in ($AllowUnread | Select-Object -First 20)) { Emit "        $(Short $f)" }
+  if ($AllowUnread.Count -gt 20) { Emit "        ${cDim}and $($AllowUnread.Count - 20) more$cRst" }
+}
+elseif ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No saved commands with keys, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
 elseif ($N_ALLOW -eq 0) { Emit "     $cGrn$gOk$cRst  No saved commands with keys." }
 foreach ($r in $AllowRows) {
   Emit "     $cRed$gX$cRst  $(Short $r[0])"
   Emit '        A saved command contains a key.'
   if ($r[1]) { Wrap 'An npm publish from this folder would include it.' 8 '        ' '        ' $cRed }
 }
+if ($N_ALLOW -gt 0 -and $AllowUnread.Count -gt 0) { Wrap "$(Plural $AllowUnread.Count 'file' 'files') could not be read, so this is not the full list." 8 "     $cYel!$cRst  " '        ' }
 $Sec4 = Take-Cap
 $ind26 = ' ' * 26
 $N_LEAKS = @($PyIncidents).Count + 2 + @($Platforms).Count   # the Python incidents, npm, editor extensions and each platform
@@ -3130,6 +3151,7 @@ elseif ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
 elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
 elseif ($N_LOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_LOOK 'project file' 'project files') to read" }
+elseif ($Sec2Unread.Count -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, but $(Plural $Sec2Unread.Count 'file' 'files') could not be read" }
 elseif ($HOME_PARTIAL -eq 1) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, but some folders were not read" }
 elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
@@ -3141,7 +3163,8 @@ elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessio
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
 elseif ($HOME_PARTIAL -eq 1) { $G3 = "$cYel!$cRst"; $D3 = 'none found, but some folders were not read' }
 else { $G3 = "$cGrn$gOk$cRst"; $D3 = 'no AI or cloud keys in plain text' }
-if ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { $G4 = "$cYel!$cRst"; $D4 = 'none found, but some folders were not read' }
+if ($N_ALLOW -eq 0 -and $AllowUnread.Count -gt 0) { $G4 = "$cYel!$cRst"; $D4 = "none found, but $(Plural $AllowUnread.Count 'file' 'files') could not be read" }
+elseif ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { $G4 = "$cYel!$cRst"; $D4 = 'none found, but some folders were not read' }
 elseif ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
 elseif ($N_ALLOW_NPM -gt 0 -and $N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = '1 saved key, and an npm publish would ship it' }
 elseif ($N_ALLOW_NPM -gt 0) { $G4 = "$cRed$gX$cRst"; $D4 = "$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship" }
