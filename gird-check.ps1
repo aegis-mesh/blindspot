@@ -1270,8 +1270,15 @@ function Key-Place([string]$f) {
 $KeyRows = New-Object System.Collections.Generic.List[object]
 $KEY_FILES = 0; $HIST_KEYS = 0; $ProvIds = New-Object System.Collections.Generic.List[string]; $KeyFirst = $null
 $KeyPlaces = New-Object System.Collections.Generic.List[string]; $ProvTally = New-Object System.Collections.Generic.List[string]
+# A file that is there but can't be read (a root-owned .env a container wrote, a file made 000, one
+# another program holds open) was not checked: section 3 names it and the check is partial, never
+# "no keys". A link to nothing is not one, as in gird-check.sh.
+$KeyUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $Candidates) {
-  if (-not (Has-Match $f $RxKeys)) { continue }
+  if (-not (Has-Match $f $RxKeys)) {
+    if ((Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $KeyUnread.Add($f) }
+    continue
+  }
   $p = @(Providers-In $f)
   if ($p.Count -eq 0) { continue }
   $ptxt = $p -join ', '
@@ -1286,7 +1293,8 @@ foreach ($f in $Candidates) {
   }
   $KeyRows.Add(@($f, $ptxt))
 }
-if ($KEY_FILES -eq 0) { Progress 'No keys in shell profiles, history, agent configs or .env files' }
+if ($KEY_FILES -eq 0 -and $KeyUnread.Count -gt 0) { Progress "No keys in the files read, but $(Plural $KeyUnread.Count 'file' 'files') could not be read" }
+elseif ($KEY_FILES -eq 0) { Progress 'No keys in shell profiles, history, agent configs or .env files' }
 
 # Login files any agent you run can read.
 $Logins = New-Object System.Collections.Generic.List[string]; $LoginIds = New-Object System.Collections.Generic.List[string]
@@ -2769,9 +2777,9 @@ if (-not $OptOffline) {
 # has every detail.
 # ===========================================================================
 # A check that was not done in full never leaves the headline green: the sessions were partly
-# checked, part of npm's cache or an extension folder could not be read, or a file took too long.
-# The headline then says what it can: no findings in the paths checked.
-$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
+# checked, a key file, part of npm's cache or an extension folder could not be read, or a file took
+# too long. The headline then says what it can: no findings in the paths checked.
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -2872,11 +2880,22 @@ if ($N_AK -gt 0) {
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
-if ($KEY_FILES -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
-elseif ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
+# With files that could not be read, this line comes below, with them.
+if ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
+elseif ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
 $shown = 0
 foreach ($r in $KeyRows) { $shown++; if ($shown -le 20) { Pair "$cRed$gX$cRst" (Short $r[0]) 44 $r[1] } }
 if ($KEY_FILES -gt 20) { Emit "        ${cDim}and $($KEY_FILES - 20) more$cRst" }
+# The files that could not be read, named, so none of them is taken for one without keys.
+if ($KeyUnread.Count -gt 0) {
+  $ku = Plural $KeyUnread.Count 'file' 'files'
+  if ($KEY_FILES -gt 0) { $kt = "$ku could not be read, so this is not the full list:" }
+  elseif ($HOME_PARTIAL -eq 1) { $kt = "No AI or cloud keys in the files read, but $ku and some folders in your home could not be read:" }
+  else { $kt = "No AI or cloud keys in the files read, but $ku could not be read:" }
+  Wrap $kt 8 "     $cYel!$cRst  " '        '
+  foreach ($f in ($KeyUnread | Select-Object -First 20)) { Emit "        $(Short $f)" }
+  if ($KeyUnread.Count -gt 20) { Emit "        ${cDim}and $($KeyUnread.Count - 20) more$cRst" }
+}
 if ($SlowFiles.Count -gt 0) {
   Blank
   Emit "     $cYel!$cRst  $cBold$SlowText$cRst"
@@ -3104,6 +3123,7 @@ else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
 elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) holds $($KeyFirst[1]) keys" }
 elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session file' 'agent session files'): $($SessRows[0][0])" }
+elseif ($KeyUnread.Count -gt 0) { $G3 = "$cYel!$cRst"; $D3 = "none found, but $(Plural $KeyUnread.Count 'file' 'files') could not be read" }
 elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessions partly checked' }
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
 elseif ($HOME_PARTIAL -eq 1) { $G3 = "$cYel!$cRst"; $D3 = 'none found, but some folders were not read' }

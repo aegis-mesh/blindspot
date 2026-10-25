@@ -1185,6 +1185,23 @@ HOME="$WORK/ni-npm" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | 
 chmod 755 "$WORK/ni-npm/.npm/_cacache/index-v5/aa"
 has    "npm's cache partly read: the headline says no findings in the paths checked" 'NO FINDINGS IN THE PATHS CHECKED' "$WORK/ni-npm.txt"
 hasnot "and never no findings in this scan either"    'NO FINDINGS IN THIS SCAN' "$WORK/ni-npm.txt"
+# A key file that is there but can't be read is named, never taken for one with no keys: section 3,
+# row 03 and the headline say the check was partial. A link to nothing is not such a file.
+rm -rf "$WORK/ni-key"; mkdir -p "$WORK/ni-key/code/app"; printf 'export X=1\n' > "$WORK/ni-key/.zshrc"; printf 'A=1\n' > "$WORK/ni-key/code/app/.env"
+ln -s "$WORK/ni-key/nowhere" "$WORK/ni-key/.bashrc"; chmod 000 "$WORK/ni-key/.zshrc" "$WORK/ni-key/code/app/.env"
+HOME="$WORK/ni-key" PATH=/usr/bin:/bin bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-key.txt"
+HOME="$WORK/ni-key" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-key-c.txt"
+chmod 644 "$WORK/ni-key/.zshrc" "$WORK/ni-key/code/app/.env"
+has    "a key file that can't be read is named as not read" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: ~/\.zshrc ' "$WORK/ni-key.txt"
+has    "a link to nothing is not counted as a file that could not be read" 'but 2 files could not be read: ~/\.zshrc ~/code/app/\.env ' "$WORK/ni-key.txt"
+hasnot "and section 3 never says there are no keys"   '✓ No AI or cloud keys' "$WORK/ni-key.txt"
+has    "and row 03 says files could not be read"      'Keys in plain text none found, but 2 files could not be read' "$WORK/ni-key-c.txt"
+has    "a key file that can't be read: the headline says no findings in the paths checked" 'NO FINDINGS IN THE PATHS CHECKED' "$WORK/ni-key.txt"
+# With a key found in another file, the list says it is not the full one.
+printf 'AWS_ACCESS_KEY_ID=AK%s\n' "IA$(upper 16)" > "$WORK/ni-key/code/app/.envrc"; chmod 000 "$WORK/ni-key/.zshrc"
+HOME="$WORK/ni-key" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ni-key2.txt"
+chmod 644 "$WORK/ni-key/.zshrc"
+has    "next to a key found, a file that can't be read says the list is not full" '~/code/app/\.envrc AWS ! 1 file could not be read, so this is not the full list: ~/\.zshrc ' "$WORK/ni-key2.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "checks from the incident dossier"

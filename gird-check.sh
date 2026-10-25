@@ -1786,6 +1786,11 @@ CANDIDATES=$(
     printf '%s\n' "$PROJECT_FILES"
   } | awk 'NF && !seen[$0]++'
 )
+# A file that is there but can't be read (a root-owned .env a container wrote, a file made 000)
+# was not checked: section 3 names it and the check is partial, never "no keys". An account run
+# counts these through fleet_ok, as files not checked, so its not_read leaves them out.
+KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && [ ! -r "$f" ] && printf '%s\n' "$f"; done)
+N_KEY_UNREAD=$(count_lines "$KEY_UNREAD")
 MATCHED=$(printf '%s\n' "$CANDIDATES" | fleet_filter | files_matching "$ALL_KEYS")
 # For the report: one place id per file, and one provider id per file and provider.
 KEY_PLACES=""; PROV_TALLY=""
@@ -1833,7 +1838,8 @@ while IFS= read -r f; do
 done <<EOF
 $MATCHED
 EOF
-[ "$KEY_FILES" -eq 0 ] && progress o "No keys in shell profiles, history, agent configs or .env files"
+if [ "$KEY_FILES" -eq 0 ] && [ "$N_KEY_UNREAD" -gt 0 ]; then progress w "No keys in the files read, but $(plural "$N_KEY_UNREAD" "file" "files") could not be read"
+elif [ "$KEY_FILES" -eq 0 ]; then progress o "No keys in shell profiles, history, agent configs or .env files"; fi
 
 # Login files any agent you run can read.
 LOGINS=""; LOGIN_IDS=""
@@ -3251,10 +3257,10 @@ fi
 SESS_PARTIAL=0
 if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
 # A check that was not done in full never leaves the headline green: the home folder was not
-# scanned, the sessions were partly checked, or part of npm's cache or an extension folder could not
-# be read. The headline then says what it can: no findings in the paths checked.
+# scanned, the sessions were partly checked, or a key file, part of npm's cache or an extension
+# folder could not be read. The headline then says what it can: no findings in the paths checked.
 PARTIAL=0
-if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -3697,7 +3703,8 @@ fi
 
 SEC2=$CAP; CAP=""
 section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
-if [ "$KEY_FILES" -eq 0 ]; then
+# With files that could not be read, this line comes below, with them.
+if [ "$KEY_FILES" -eq 0 ] && [ "$N_KEY_UNREAD" -eq 0 ]; then
   if [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
   else wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "; fi
 fi
@@ -3710,6 +3717,22 @@ done <<EOF
 $KEY_ROWS
 EOF
 [ "$KEY_FILES" -gt 20 ] && emit "        ${DIM}and $((KEY_FILES - 20)) more${RST}"
+# The files that could not be read, named, so none of them is taken for one without keys.
+if [ "$N_KEY_UNREAD" -gt 0 ]; then
+  _ku=$(plural "$N_KEY_UNREAD" "file" "files")
+  if [ "$KEY_FILES" -gt 0 ]; then _kt="$_ku could not be read, so this is not the full list:"
+  elif [ "$HOME_PARTIAL" -eq 1 ]; then _kt="No AI or cloud keys in the files read, but $_ku and some folders in your home could not be read:"
+  else _kt="No AI or cloud keys in the files read, but $_ku could not be read:"; fi
+  wrap "$_kt" 8 "     ${YEL}!${RST}  " "        "
+  _shown=0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    _shown=$((_shown + 1)); [ "$_shown" -le 20 ] && emit "        $(short "$f")"
+  done <<EOF
+$KEY_UNREAD
+EOF
+  [ "$N_KEY_UNREAD" -gt 20 ] && emit "        ${DIM}and $((N_KEY_UNREAD - 20)) more${RST}"
+fi
 if [ -n "$LOGINS" ]; then
   blank
   emit "     ${B}Login files any agent you run can read${RST}"
@@ -4083,6 +4106,7 @@ else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST#*|}") (${KEY_FIRST%%|*})"
 elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST#*|}") holds ${KEY_FIRST%%|*} keys"
 elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session file" "agent session files"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
+elif [ "$N_KEY_UNREAD" -gt 0 ]; then G3="${YEL}!${RST}"; D3="none found, but $(plural "$N_KEY_UNREAD" "file" "files") could not be read"
 elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agent sessions partly checked"
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none found, but some folders were not read"
