@@ -113,7 +113,7 @@ has    "off Windows it points at a secrets manager" 'files into a secrets manage
 hasnot "off Windows it never points at the Keychain" 'macOS Keychain' "$WORK/out-flat.txt"
 has    "other rotate fixes wait for the wiper"         'then rotate them\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
 has    "section 5's rotate fixes wait for it too"      'rotate every key this machine could reach\. Only once gh-token-monitor is stopped and removed' "$WORK/out-flat.txt"
-hasnot "the wiper's own fix does not wait for itself"  'Then rotate every key this machine could reach\. Only once' "$WORK/out-flat.txt"
+hasnot "the wiper's own fix does not wait for itself"  'stops working\.( Then rotate every key this machine could reach\.)? Only once' "$WORK/out-flat.txt"
 has    "the wiper's warning says it tries to erase the home folder, as Wiz says" 'and in the TanStack wave it tries to erase the home folder\.' "$WORK/out-flat.txt"
 hasnot "and never that it erased one"                  'erased the home folder' "$WORK/out-flat.txt"
 # Sentences of a report that say to rotate or revoke without waiting for gh-token-monitor. A sentence
@@ -855,9 +855,9 @@ has    "the summary row says so in yellow"           'Recent leaks an npm packag
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
-# Versions the sources say carried no working malware are versions to update, each with its own
-# line: the @keyv 6.0.0 builds published without the install hook, SANDWORM_MODE's sleeper packages
-# and the UiPath builds whose payload had a bug. Packages the TanStack worm spread to, GitHub's second
+# The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
+# malware, as GitHub's malware advisories say; the UiPath builds whose payload had a bug are versions to
+# update. Packages the TanStack worm spread to, GitHub's second
 # SANDWORM_MODE batch and the Mastra packages besides @mastra/core are found, Mastra named as Socket does.
 for np in npd npa npk; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x" "$WORK/$np/AppData/Roaming" "$WORK/$np/AppData/Local/Temp"; done
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
@@ -866,12 +866,36 @@ printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/m
 for np in npd npa npk; do psrun "$WORK/$np" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
 has    "a @keyv 6.0.0 build is npm malware, as GitHub's advisory says" '@keyv/redis 6\.0\.0 \(keyv account takeover, August 2026\).*keyv account takeover, August 2026: published from the compromised keyv account, and the GitHub advisory says to treat a machine that installed one as compromised\.' "$WORK/npk.txt"
 has    "with its advice to rotate from another computer" 'Rotate the secrets this machine held from another computer, as the GitHub advisory says, then pin each @keyv package listed in section 5 to its version before 6\.0\.0\.' "$WORK/npk.txt"
-has    "a SANDWORM_MODE sleeper package is a version to update" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: published by the SANDWORM_MODE attackers with no malware in them yet, Socket says\.' "$WORK/npd.txt"
-has    "with a fix to uninstall it"                   'Uninstall the SANDWORM_MODE sleeper packages listed in section 5: the attackers published every version of them\.' "$WORK/npd.txt"
+has    "a SANDWORM_MODE sleeper package is malware, as GitHub's advisories say" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised\.' "$WORK/npd.txt"
+hasnot "and no fix says its attackers published every version" 'the attackers published every version' "$WORK/npd.txt"
 has    "a UiPath build whose payload could not run is a version to update" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware that a bug in its payload kept from working, Wiz says\.' "$WORK/npd.txt"
-hasnot "none of them is a compromised machine"        'ACT NOW|Treat this machine as compromised' "$WORK/npd.txt"
+rm -rf "$WORK/npu"; mkdir -p "$WORK/npu/code/x" "$WORK/npu/AppData/Roaming" "$WORK/npu/AppData/Local/Temp"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npu/code/x/package-lock.json"
+psrun "$WORK/npu" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npu.txt"
+hasnot "a UiPath build alone is not a compromised machine" 'ACT NOW|Treat this machine as compromised' "$WORK/npu.txt"
+has    "and is a version to update"                   'npm malware a bad version to update' "$WORK/npu.txt"
 has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
 has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
+# SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
+# to remove them comes ahead of every fix that says to rotate, an incident's own advice to rotate too.
+rm -rf "$WORK/sw"; mkdir -p "$WORK/sw/code/s/node_modules/suport-color" "$WORK/sw/code/s/node_modules/@keyv/redis" "$WORK/sw/AppData/Roaming" "$WORK/sw/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/suport-color":{"version":"1.0.1","resolved":"https://registry.npmjs.org/suport-color/-/suport-color-1.0.1.tgz"},"node_modules/@keyv/redis":{"version":"6.0.0","resolved":"https://registry.npmjs.org/@keyv/redis/-/redis-6.0.0.tgz"}}}\n' > "$WORK/sw/code/s/package-lock.json"
+printf '{"name":"suport-color","version":"1.0.1"}\n' > "$WORK/sw/code/s/node_modules/suport-color/package.json"
+printf '{"name":"@keyv/redis","version":"6.0.0"}\n' > "$WORK/sw/code/s/node_modules/@keyv/redis/package.json"
+psrun "$WORK/sw" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sw.txt"
+psrun "$WORK/sw" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sw-sum.txt"
+has    "SANDWORM_MODE's fix: remove its git hooks and MCP servers first" ' 1\. First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init\.templateDir names and in the \.git/hooks and \.husky folders of your repositories, and MCP servers you did not add to your AI assistants\. Its pre-push hook sends npm tokens out on every push\. 2\. Treat this machine as compromised\.' "$WORK/sw.txt"
+has    "ahead of an incident's own advice to rotate"  'Its pre-push hook sends npm tokens out on every push\. .*Rotate the secrets this machine held from another computer' "$WORK/sw.txt"
+has    "and the summary's first fix is to remove them" 'First fix: First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
+# wot-api 0.8.5, published an hour after 0.8.4, is malware by OpenSSF's entry, which Wiz's list leaves out.
+rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/w" "$WORK/npw/AppData/Roaming" "$WORK/npw/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/wot-api":{"version":"0.8.5","resolved":"https://registry.npmjs.org/wot-api/-/wot-api-0.8.5.tgz"}}}\n' > "$WORK/npw/code/w/package-lock.json"
+psrun "$WORK/npw" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npw.txt"
+has    "wot-api 0.8.5, which OpenSSF adds to the TanStack wave, is found" 'wot-api 0\.8\.5 \(TanStack worm, May 2026\), listed in this lockfile' "$WORK/npw.txt"
+# With gh-token-monitor there too, its fix leaves the rotating to the fixes after SANDWORM_MODE's.
+cp -R "$WORK/sw" "$WORK/sww"; mkdir -p "$WORK/sww/.config/gh-token-monitor"
+psrun "$WORK/sww" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sww.txt"
+has    "with gh-token-monitor too, its fix does not say to rotate before SANDWORM_MODE's" ' 1\. Don.t revoke any GitHub token yet\. First stop and remove gh-token-monitor, as section 5 shows: it runs a destructive command when the stolen token stops working\. 2\. First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sww.txt"
 has    "a Mastra package is named as its sources name it" '@mastra/mcp 1\.10\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
 # A version to update outranks an unreadable cache in row 05: a partial check never hides a finding to act on.
 cp -R "$WORK/mis" "$WORK/misno"; mkdir -p "$WORK/misno/.npm/_cacache/index-v5/aa"; chmod 000 "$WORK/misno/.npm/_cacache/index-v5/aa"
@@ -1033,7 +1057,7 @@ lp "$WORK/zb-none" > "$WORK/zb-none.txt"
 hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftover' "$WORK/zb-none.txt"
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
-has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium and Kiro' "$WORK/zb-none-full.txt"
+has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' "$WORK/zb-none-full.txt"
 has    "and section 5 counts it"                      'RECENT KEY LEAKS +8 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
@@ -1046,7 +1070,7 @@ lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
 has    "Zeabur alone is flagged"               'Zeabur CLI found: rotate secrets stored there' "$WORK/zb-one.txt"
 has    "Zeabur adds a fix naming only what was found" 'If you used Zeabur, rotate the keys stored there' "$WORK/zb-one-full.txt"
 has    "Zeabur has its own detail line"        'Zeabur CLI found' "$WORK/zb-one-full.txt"
-has    "Zeabur's line gives the date of its post" 'Zeabur said on 19 October that an attacker read service environment variables' "$WORK/zb-one-full.txt"
+has    "Zeabur's line gives the date of its post" 'Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there\. Revoke each old key at its provider first\.' "$WORK/zb-one-full.txt"
 cp -R "$WORK/zb-one" "$WORK/zb-two"; mkdir -p "$WORK/zb-two/.railway"; printf '{}\n' > "$WORK/zb-two/.railway/config.json"
 lp "$WORK/zb-two" > "$WORK/zb-two.txt"
 has    "Railway and Zeabur are named together" 'Railway and Zeabur found: rotate their keys' "$WORK/zb-two.txt"
@@ -1128,10 +1152,10 @@ hasnot "a workspace set to false is not listed"       'p/calm/' "$D"
 has    "with the advice"                              'A prompt injection in anything the agent reads can then run commands on this computer\. Turn it off unless the agent runs in a sandbox\.' "$D"
 has    "and the fix"                                  'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox\.' "$D"
 [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS: Cursor's version is read from its app bundle"
-has    "Cursor below the fixed version" '! Cursor 2\.9\.1, update to 3\.0 or later A malicious agent could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw' "$D"
+has    "Cursor below the fixed version" '! Cursor 2\.9\.1, update to 3\.1\.2 or later A malicious agent could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$D"
 SKIPPING=""
 has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can reach files outside it' "$D"
-has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 1\.0\.24 or later A web page could reach the editor connection\.' "$D"
+has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.179 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
@@ -1142,17 +1166,17 @@ has    "with GlassWorm's sourced line"                'GlassWorm extensions, Jan
 has    "the GlassWorm fix names only what section 5 lists: the extensions" 'Treat this machine as compromised\. Uninstall the extensions listed in section 5 and rotate every key this machine could reach\.' "$D"
 has    "the GlassWorm advice says to check the files its source names" 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com\.user\.nodestart\.plist, and look for /tmp/ijewf and /tmp/out\.zip, where the malware collects what it steals\.' "$D"
 hasnot "and never to delete every LaunchAgent not recognized" 'delete [^.]*LaunchAgents|you do not recognize' "$D"
-has    "the Injective fix: move the funds out of its wallets" 'Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
+has    "the Injective fix: move the funds out of its wallets" 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective fix comes before the update it has to come before" 'into a new wallet\. .*Update the npm packages listed in section 5' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
-has    "with its sourced line"                        'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it\. github\.com' "$D"
+has    "with its sourced line"                        'Injective SDK, July 2026: sent out the seed phrases, and the private keys given as hex strings, that apps loaded into it\. github\.com' "$D"
 # Injective alone: moving the funds outranks every fix that is not act-now, and row 05 names the wallets.
 rm -rf "$WORK/dz-inj"; cp -R "$WORK/clean" "$WORK/dz-inj"; mkdir -p "$WORK/dz-inj/code/inj"
 printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$WORK/dz-inj/code/inj/package-lock.json"
 psrun "$WORK/dz-inj" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj.txt"
 psrun "$WORK/dz-inj" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj-sum.txt"
-has    "Injective's wallet fix comes first, ahead of moving keys out of plain text" ' 1\. Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\. 2\. Move keys out of shell profiles' "$WORK/dz-inj.txt"
-has    "and it is the summary's first fix"             'First fix: Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21' "$WORK/dz-inj-sum.txt"
+has    "Injective's wallet fix comes first, ahead of moving keys out of plain text" ' 1\. From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21, into a new wallet\. 2\. Move keys out of shell profiles' "$WORK/dz-inj.txt"
+has    "and it is the summary's first fix"             'First fix: From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21' "$WORK/dz-inj-sum.txt"
 has    "row 05 names the wallets"                      'Recent leaks +Injective SDK: move the funds out of its wallets' "$WORK/dz-inj-sum.txt"
 dzrun() { _h=$1; shift; psrun "$_h" "$@" -- -Offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
@@ -1205,10 +1229,54 @@ has    "a version the 18 March post shows delivering malware" '~/\.windsurf/exte
 has    "Devin Desktop's extension folder is read, as an Open VSX editor's" '~/\.devin/extensions/oorzc\.i18n-tools-plus-1\.6\.8 oorzc\.i18n-tools-plus 1\.6\.8 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-waves.txt"
 has    "one of the six the April post confirms"      '~/\.kiro/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-waves.txt"
 has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-waves.txt"
-has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
+has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
 if [ "$(grep -o 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-waves.txt" | grep -c .)" -eq 1 ]; then ok "the fix two waves share is said once"; else bad "the fix two waves share is said once"; fi
 hasnot "a version the 18 March post does not name is not flagged" 'spacetoow\.vsc-python-indent 1\.21\.0' "$WORK/dz-waves.txt"
 hasnot "an Open VSX extension's id in VS Code's own folder is not flagged" '~/\.vscode/extensions/aadarkcode' "$WORK/dz-waves.txt"
+# Antigravity installs from Open VSX: Antigravity IDE keeps its extensions in ~/.antigravity-ide, the
+# Antigravity before it in ~/.antigravity. A GlassWorm extension that names Antigravity, in each.
+rm -rf "$WORK/dz-ag"; cp -R "$WORK/clean" "$WORK/dz-ag"
+mkdir -p "$WORK/dz-ag/.antigravity-ide/extensions/mswincx.antigravity-cockpit-1.2.0-universal" "$WORK/dz-ag/.antigravity/extensions/keyacrosslaud.auto-loop-for-antigravity-0.4.1"
+dzrun "$WORK/dz-ag" | tr -s ' \n' '  ' > "$WORK/dz-ag.txt"
+has    "Antigravity IDE's extension folder is read, as an Open VSX editor's" '~/\.antigravity-ide/extensions/mswincx\.antigravity-cockpit-1\.2\.0-universal mswincx\.antigravity-cockpit 1\.2\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ag.txt"
+has    "and the earlier Antigravity's folder too"     '~/\.antigravity/extensions/keyacrosslaud\.auto-loop-for-antigravity-0\.4\.1 keyacrosslaud\.auto-loop-for-antigravity 0\.4\.1 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-ag.txt"
+# Microsoft's list of extensions removed from the Marketplace: a GlassWorm theme it removed as malware and
+# an extension it removed as impersonation are looked for in VS Code's own folder too. Open VSX removed
+# every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. And a theme of the
+# October cluster that Microsoft removed as malware.
+rm -rf "$WORK/dz-ms"; cp -R "$WORK/clean" "$WORK/dz-ms"
+mkdir -p "$WORK/dz-ms/.vscode/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-ms/.vscode/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
+  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2"
+dzrun "$WORK/dz-ms" | tr -s ' \n' '  ' > "$WORK/dz-ms.txt"
+has    "a theme Microsoft removed from its Marketplace as malware, in VS Code's own folder" '~/\.vscode/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
+has    "one it removed as impersonation, in VS Code's own folder too" '~/\.vscode/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
+has    "any oorzc.ssh-tools version in an Open VSX editor's folder, as Open VSX removed them all" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.2 oorzc\.ssh-tools 0\.5\.2 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
+has    "a theme of the October cluster that Microsoft removed as malware" '~/\.cursor/extensions/holiday-themes\.theme-coca-cola-christmas-1\.0\.2 holiday-themes\.theme-coca-cola-christmas 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-ms.txt"
+# microsoftvs.microsoftvs hid a Windows downloader (Socket): elsewhere it is a malicious extension to
+# remove, not a compromised machine. Next to an extension whose malware could run here, both are listed.
+rm -rf "$WORK/dz-os"; cp -R "$WORK/clean" "$WORK/dz-os"; mkdir -p "$WORK/dz-os/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os.txt"
+dzrun "$WORK/dz-os" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-os-sum.txt"
+has    "an extension whose malware runs on Windows only is one to remove elsewhere" 'Editor extensions a malicious extension to remove ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os.txt"
+hasnot "and is not a compromised machine there"     'ACT NOW|Treat this machine as compromised|signs of the malware found' "$WORK/dz-os.txt"
+has    "with a fix to uninstall the extension"      'Uninstall the editor extensions listed in section 5\. Their malware could not run on this system\.' "$WORK/dz-os.txt"
+has    "row 05 says an editor extension to remove"  'Recent leaks +an editor extension to remove, see section 5' "$WORK/dz-os-sum.txt"
+has    "the link does not flag an extension hit"    '&nm=0&py=0&ex=0&wp=0' "$WORK/dz-os.txt"
+# A tool's newest fix is what its row says to update to, with each hole its version has: Cursor between
+# its two fixes, and Claude Code in the range of a sandbox escape, which the newest fix covers too.
+rm -rf "$WORK/dz-old"; cp -R "$WORK/clean" "$WORK/dz-old"; mkdir -p "$WORK/dz-old/Applications/Cursor.app/Contents" "$WORK/dz-old/.npm-global/lib/node_modules/@anthropic-ai/claude-code"
+printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n\t<key>CFBundleShortVersionString</key>\n\t<string>3.0.5</string>\n</dict>\n</plist>\n' > "$WORK/dz-old/Applications/Cursor.app/Contents/Info.plist"
+printf '{\n  "name": "@anthropic-ai/claude-code",\n  "version": "2.1.100"\n}\n' > "$WORK/dz-old/.npm-global/lib/node_modules/@anthropic-ai/claude-code/package.json"
+dzrun "$WORK/dz-old" | tr -s ' \n' '  ' > "$WORK/dz-old.txt"
+[ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS: Cursor's version is read from its app bundle"
+has    "Cursor between two fixes is told the newest" '! Cursor 3\.0\.5, update to 3\.1\.2 or later An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$WORK/dz-old.txt"
+hasnot "and not the hole its version already has the fix for" 'update to 3\.1\.2 or later A malicious agent' "$WORK/dz-old.txt"
+SKIPPING=""
+has    "Claude Code in a sandbox escape's range: its hole, the newest fix's, and that fix" '! Claude Code 2\.1\.100, update to 2\.1\.179 or later A malicious repository could run code outside the sandbox\. github\.com/advisories/GHSA-7835-87q9-rgvv A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-old.txt"
+mkdir -p "$WORK/dz-os/.cursor/extensions/oorzc.mind-map-1.0.61"
+dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
+has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
+hasnot "and the fix to uninstall it alone is not given then" 'Their malware could not run on this system' "$WORK/dz-os2.txt"
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, [34] security fixes to install' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
@@ -1319,7 +1387,7 @@ has    "made-up Python package: its advisory"         'Advisory: example\.com/ma
 has    "made-up Python package: in uv's cache"        'uv cache holds the 9\.9\.9 package\. Clear it with: uv cache clean madepkg' "$WORK/mu.txt"
 has    "made-up Python package: its fix"              "follow Madepkg's advisory" "$WORK/mu.txt"
 hasnot "LiteLLM is not blamed for it"                 'LITELLM 1\.107\.0 MALWARE|signs of the LiteLLM malware' "$WORK/mu.txt"
-cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/gh-token-monitor-made" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json" "$WORK/mu-py/.vscode/extensions/made.ext-1.0.0"
+cp -R "$WORK/mu-home" "$WORK/mu-py"; rm -rf "$WORK/mu-py/.config/gh-token-monitor-made" "$WORK/mu-py/.config/madeworm" "$WORK/mu-py/code/made" "$WORK/mu-py/.madeplat.json" "$WORK/mu-py/.vscode/extensions/made.ext-1.0.0" "$WORK/mu-py/.cursor/extensions/made.winext-2.0.0"
 mups "$WORK/mu-py" "$WORK/mu-py.txt" compact
 has    "made-up Python package leads the summary"     'ACT NOW: SIGNS OF THE MADEPKG 9\.9\.9 MALWARE' "$WORK/mu-py.txt"
 has    "and row 05 names it"                          'signs of the Madepkg malware\. Act now' "$WORK/mu-py.txt"
@@ -1342,12 +1410,13 @@ mups "$WORK/mu-act" "$WORK/mu-act.txt"
 has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
 has    "and the link says npm malware"                '&nm=1&py=0&ex=0&wp=0' "$WORK/mu-act.txt"
 has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagent/config\.json madeMode' "$WORK/mu.txt"
-has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 2\.0\.0 or later A made-up hole for the tests\. example\.com/madetool' "$WORK/mu.txt"
+has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 3\.0\.0 or later A made-up hole for the tests\. example\.com/madetool A second made-up hole\. example\.com/madetool2' "$WORK/mu.txt"
 has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
+has    "a made-up extension whose malware runs on Windows only is one to remove here" '~/\.cursor/extensions/made\.winext-2\.0\.0 made\.winext 2\.0\.0 \(Made extension, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/mu.txt"
 # A Python incident's temp file alone: stop and delete, not "don't run Python".
 rm -rf "$WORK/mu-tmp"; cp -R "$WORK/clean" "$WORK/mu-tmp"; mkdir -p "$WORK/mu-tmp/AppData/Local/Temp"; : > "$WORK/mu-tmp/AppData/Local/Temp/.madepy_1"
 mups "$WORK/mu-tmp" "$WORK/mu-tmp.txt"
-has    "a temp file alone: stop and delete, in section 5" 'Stop any process started from these files, then delete them\. Advisory: example\.com' "$WORK/mu-tmp.txt"
+has    "a temp file alone: the incident's own advice, in section 5" 'Stop any process started from these files, then delete them\. Advisory: example\.com' "$WORK/mu-tmp.txt"
 has    "and in the fix"                               "Stop any process started from the files listed in section 5, delete them, follow Madepkg's advisory" "$WORK/mu-tmp.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mu-tmp.txt"
 
@@ -1418,6 +1487,7 @@ hasnot "but it is not an act-now hit"          'Act now|ACT NOW' "$WORK/pyc-full
 cp -R "$WORK/pyc" "$WORK/pyc-oc"; mkdir -p "$WORK/pyc-oc/.config/opencode"
 psrun "$WORK/pyc-oc" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyc-oc.txt"
 has    "a weak pyc and OpenCode both show in the details"  'possible leftover.*OpenCode +installed' "$WORK/pyc-oc.txt"
+has    "OpenCode's line says only the users it emailed were affected" 'OpenCode +installed OpenCode emailed the Console users its breach hit, and says those it did not email were not affected\. If you got that email, rotate every provider key you saved in the Console\. Keys kept only in the CLI never reach OpenCode\.' "$WORK/pyc-oc.txt"
 has    "a weak pyc shows in row 05 and the fix list"       'A leftover cook\.pyc can come from the LiteLLM 1\.107\.0 malware' "$WORK/pyc-oc.txt"
 printf 'import cook\n' > "$SP/cook.pth"
 psrun "$WORK/pyc" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pth.txt"
@@ -1433,7 +1503,7 @@ has    "finds 1.107.0 in the python.org install folder" 'signs of the LiteLLM ma
 cp -R "$WORK/clean" "$WORK/mark"; : > "$WORK/mark/AppData/Local/Temp/.pc_once_1"
 psrun "$WORK/mark" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mark.txt"
 has    "finds a malware marker in TEMP"        'LiteLLM 1\.107\.0 +signs of the malware found ~/AppData/Local/Temp/\.pc_once_1' "$WORK/mark.txt"
-has    "with LiteLLM's own advice"             'These files mean the malware ran and sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/mark.txt"
+has    "with LiteLLM's own advice"             'These files mean the malware ran here, and a \.pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/mark.txt"
 hasnot "a marker alone names no environment to stop" "Don't run Python or pip in these environments" "$WORK/mark.txt"
 # Another user's file in the shared temp folder is not this person's sign: a link to a root-owned file stands in for one.
 cp -R "$WORK/clean" "$WORK/lmo"; ln -s /etc/passwd "$WORK/lmo/AppData/Local/Temp/.pc_once_1"
@@ -1723,6 +1793,11 @@ has    "Windows: flags a key in PowerShell history"     '~/AppData/Roaming/Micro
 has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
 has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
 has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/AppData/Local/Programs/Python/Python312/Lib/site-packages: mistralai 2\.4\.6' "$WORK/win1.txt"
+# An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
+mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
+rm -rf "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/win-ext.txt"
 has    "Windows: finds the bad package in uv's cache"   'uv cache holds the 1\.107\.0 package' "$WORK/win1.txt"
 has    "Windows: finds _netrc"                          'saved passwords in _netrc' "$WORK/win1.txt"
 has    "Windows: finds the GitHub CLI login in AppData" 'GitHub CLI token' "$WORK/win1.txt"

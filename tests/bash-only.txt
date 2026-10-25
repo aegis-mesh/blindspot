@@ -39,6 +39,8 @@ an extension registry that is not openvsx or any	tools/gen.sh is one bash tool t
 an extension version that is not a version	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension whose incident is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension os that is not all, mac, linux or win	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension line without its os	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an incident advice with a quote	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an incident listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an incident source that is not https	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
@@ -48,6 +50,9 @@ an incident with no month	tools/gen.sh is one bash tool that writes the data fil
 an npm package with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated line of another kind	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated line that disagrees with its tool	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated line whose name disagrees with its tool	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an advice that starts with First on an update-level incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an advice that starts with First and says to rotate	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated plist that is not Info.plist	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an outdated range that does not parse	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 npm's -security placeholder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

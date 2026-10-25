@@ -56,7 +56,7 @@ PATH_OK='function path_ok(p,   r, k, v) {
 # names its provider once: gird.ai's counts are keyed on it. The regexes spell out counts
 # ([0-9][0-9][0-9][0-9], not [0-9]{4}): Debian 12's mawk has no {n} intervals and would refuse every line.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[$1]++ || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
-      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF < 6 || NF > 8) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF >= 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || (NF == 8 && ($6 != "update" || $8 == "" || $8 ~ /[\047"`$|\\]/ || length($8) > 49)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
+      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF < 6 || NF > 8) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF >= 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0 || ($7 ~ /^First / && ($6 != "act" || $7 ~ /[Rr]otate|[Rr]evoke/)))) || (NF == 8 && ($6 != "update" || $8 == "" || $8 ~ /[\047"`$|\\]/ || length($8) > 49)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       # npm's placeholder for a removed package (0.0.1-security, or 0.0.1-security.0 for a few names) is never malware, and the scripts skip it.
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" -v leaks="$LEAK_IDS" 'NF != 3 || index(leaks, " " $3 " ") > 0 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /^0\.0\.1-security(\.[0-9]+)?$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' "$PATH_OK"'
@@ -89,7 +89,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           else ok = ok && path_ok($3)
           for (i = 5; i <= NF; i++) if (!pat_ok($i)) ok = 0
           if (!ok) print "data/auto-approve.tsv: " $0 }'
-      # Lines of one tool must agree on its name, range, hole and advisory.
+      # Lines of one tool must agree on its name, and lines of one advisory of a tool on its range and hole.
       rows data/outdated.tsv | awk -F '\t' "$PATH_OK"'
         function ver(s) { return s ~ /^[0-9]+(\.[0-9]+)*$/ }
         { ok = NF == 8 && $1 ~ /^[a-z0-9]+$/ && $2 != "" && $2 !~ /[\047"`$|\\]/ && $3 ~ /^(all|mac|linux|win)$/ && $4 ~ /^(plist|folder|npm|mcparg)$/
@@ -98,10 +98,12 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           n = split($6, r, " ")
           ok = ok && ((n == 1 && r[1] ~ /^</ && ver(substr(r[1], 2))) || (n == 2 && r[1] ~ /^>=/ && ver(substr(r[1], 3)) && r[2] ~ /^</ && ver(substr(r[2], 2))))
           ok = ok && $7 != "" && $7 !~ /[\047"`$|\\]/ && $8 ~ /^https:\/\/[^ \047"`$|\\]+$/
-          k = $2 "\t" $6 "\t" $7 "\t" $8; if (($1 in same) && same[$1] != k) ok = 0; same[$1] = k
+          if (($1 in same) && same[$1] != $2) ok = 0; same[$1] = $2
+          a = $1 "\t" $8; k = $6 "\t" $7; if ((a in adv) && adv[a] != k) ok = 0; adv[a] = k
           if (!ok) print "data/outdated.tsv: " $0 }'
       # An extension that shipped malware means a compromised machine: an update-level incident is refused.
-      rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+      # The os column says where its malware could run; elsewhere it is a malicious extension to remove.
+      rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 5 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || $5 !~ /^(all|mac|linux|win)$/ || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
@@ -365,14 +367,15 @@ rows data/outdated.tsv | awk -F '\t' "$PATH_PS"'
   END { print ")"; print "# <<< outdated" }' > "$WORK/outdated.ps1"
 
 # --- extensions that shipped malware ------------------------------------------------
-# Rows are "id version incident registry", registry openvsx or any (see the data file).
+# Rows are "id version incident registry os", registry openvsx or any and os where the malware could
+# run (see the data file).
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; printf "BAD_EXT=\"" }
-  { printf "%s%s %s %s %s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4 }
+  { printf "%s%s %s %s %s %s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, $5 }
   END { print "\""; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.sh"
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; print "$BadExt = @\047" }
-  { print $1 " " $2 " " $3 " " $4 }
+  { print $1 " " $2 " " $3 " " $4 " " $5 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
 # --- splice -----------------------------------------------------------------

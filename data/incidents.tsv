@@ -9,7 +9,11 @@
 #           only a platform's incident is a leak): rotate what was stored there; never a compromised machine
 #   advice  optional: one more fix, shown in What to do when a package or extension of the incident
 #           is found (bad-npm, bad-pypi, bad-extensions; gen.sh refuses it on any other incident). An
-#           update-level incident's advice comes right after the act-now fixes
+#           act-level incident's advice that starts with "First" is what the incident leaves behind that
+#           must go before any key is rotated (SANDWORM_MODE's git hooks and MCP servers): it comes right
+#           after gh-token-monitor's fix, which then leaves the rotating to the fixes after it, ahead of
+#           every fix that says to rotate, and never says to rotate or revoke itself. Other act-level
+#           advice comes right after the act-now fixes, and an update-level incident's advice after that
 #   summary optional, only for an update-level incident with advice: summary row 05 when the incident
 #           is the most urgent thing section 5 found, at most 49 characters (row 05's room at 80 columns)
 # id	name	when	impact	source	level	advice	summary
@@ -24,16 +28,16 @@ bitwarden	Bitwarden CLI	April 2026	stole SSH keys, npm, GitHub and cloud credent
 mastra	Mastra npm packages	June 2026	pulled in malware that started at login and sent browser history to the attackers	https://socket.dev/blog/mastra-npm-packages-compromised	act
 keyv	keyv worm	August 2026	stole cloud, GitHub and npm credentials, and planted hooks that run when repos open	https://socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain	act
 keyvscope	keyv account takeover	August 2026	published from the compromised keyv account, and the GitHub advisory says to treat a machine that installed one as compromised	https://github.com/advisories/GHSA-q99r-cjmf-3xrf	act	Rotate the secrets this machine held from another computer, as the GitHub advisory says, then pin each @keyv package listed in section 5 to its version before 6.0.0.
-sandworm	SANDWORM_MODE worm	February 2026	stole credentials and AI provider keys, and added an MCP server to AI assistants	https://socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning	act
-sandsleep	SANDWORM_MODE sleeper packages	February 2026	published by the SANDWORM_MODE attackers with no malware in them yet, Socket says	https://socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning	update	Uninstall the SANDWORM_MODE sleeper packages listed in section 5: the attackers published every version of them.
+sandworm	SANDWORM_MODE worm	February 2026	stole credentials and AI provider keys, and added an MCP server to AI assistants	https://socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning	act	First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.
+sandsleep	SANDWORM_MODE sleeper packages	February 2026	GitHub malware advisories say to treat a machine that installed one as compromised	https://github.com/advisories/GHSA-9w7p-hqx2-pjjx	act
 tensorlake	tensorlake package	October 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-rqxj-g25x-4v9v	act
 litellm	LiteLLM 1.107.0	October 2026	stole credentials and loaded remote-code execution tools on machines that installed it	https://docs.litellm.ai/blog/security-incident-oct-21-2026	act
-opencode	OpenCode Console	October 2026	exposed AI provider keys saved in Console workspaces; users reported charges on them	https://techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/	leak
+opencode	OpenCode Console	October 2026	a breach hit 1.4% of Console users, some of those who had linked external providers	https://x.com/opencode/status/2111519637049319818	leak
 railway	Railway	October 2026	an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some	https://blog.railway.com/p/security-disclosure-wednesday-october-21st	leak
 zeabur	Zeabur	October 2026	an attacker read environment variables and secrets stored on the platform	https://zeabur.com/blogs/october-2026-security-incident	leak
 glassworm	GlassWorm extensions	January 2026	stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs	https://socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise	act	On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.
 glasswormmar	GlassWorm extensions	March 2026	ran attacker code in memory that could reach local credentials, tokens and secrets	https://socket.dev/blog/open-vsx-transitive-glassworm-campaign	act
 glasswormvsix	GlassWorm sleeper extensions	March 2026	installed a malicious extension from GitHub into every editor it found	https://socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx	act	Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.
 glasswormapr	GlassWorm sleeper extensions	April 2026	updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf	https://socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm	act	Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.
-glasswormoct	GlassWorm-linked themes	October 2026	VS Code themes that ran hidden loaders, one of them tied to GlassWorm	https://socket.dev/blog/glassworm-vscode-themes	act
-injective	Injective SDK	July 2026	sent the seed phrase or private key of any wallet an app created or imported with it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update	Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.	Injective SDK: move the funds out of its wallets
+glasswormoct	GlassWorm-linked themes	October 2026	a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders	https://socket.dev/blog/glassworm-vscode-themes	act
+injective	Injective SDK	July 2026	sent out the seed phrases, and the private keys given as hex strings, that apps loaded into it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update	From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.	Injective SDK: move the funds out of its wallets

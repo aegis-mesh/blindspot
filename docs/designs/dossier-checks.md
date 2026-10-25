@@ -78,9 +78,9 @@ range, what the hole allows (a few words, from the advisory) and the advisory.
 
 | tool | read from | affected | advisory |
 |---|---|---|---|
-| Cursor | `Cursor.app/Contents/Info.plist` `CFBundleShortVersionString`, in `/Applications` and `~/Applications` (macOS only: the other platforms' version files were not verified) | `< 3.0` | GHSA-3p48-7v9f-v5cw, GHSA-3v8f-48vw-3mjx (sandbox escape) |
-| Amazon Q language server | the highest version folder under `aws/toolkits/language-servers/AmazonQ/` in `~/Library/Caches`, `~/.cache` or `%LOCALAPPDATA%` | `< 1.69.0` | AWS-2026-047 (opening a hostile workspace runs its commands) |
-| Claude Code | `@anthropic-ai/claude-code/package.json` in global npm installs | `>= 0.2.116 < 1.0.24` | GHSA-9f65-56v6-gxw7 (a web page can talk to the IDE connection) |
+| Cursor | `Cursor.app/Contents/Info.plist` `CFBundleShortVersionString`, in `/Applications` and `~/Applications` (macOS only: the other platforms' version files were not verified) | `< 3.0`; `< 3.1.2` | GHSA-3p48-7v9f-v5cw, GHSA-3v8f-48vw-3mjx (sandbox escape); GHSA-p9g2-cr55-cw9c (sandbox escape through a virtual environment's Python, Cursor for macOS, its newest fix) |
+| Amazon Q language server | the highest version folder under `aws/toolkits/language-servers/AmazonQ/` in `~/Library/Caches`, `~/.cache` or `%LOCALAPPDATA%` | `< 1.69.0` | AWS-2026-047 (a link in a workspace reaches files outside it; before 1.65.0 a trusted workspace runs its commands) |
+| Claude Code | `@anthropic-ai/claude-code/package.json` in global npm installs | `>= 0.2.116 < 1.0.24`; `>= 2.1.38 < 2.1.163`; `< 2.1.179` | GHSA-9f65-56v6-gxw7 (a web page can talk to the IDE connection); GHSA-7835-87q9-rgvv (sandbox escape); GHSA-pq7j-f95f-qfcv (a plugin's pinned hash is bypassed; its fix, 2.1.179, is the newest of the 29 advisories OSV lists) |
 | mcp-remote | `mcp-remote/package.json` in global installs and npx's cache, and `mcp-remote@<version>` in MCP config args | `>= 0.0.5 < 0.1.16` | GHSA-6xpm-ggf7-wc3p (a hostile MCP server runs commands) |
 
 Versions are compared numerically, part by part. A version that does not parse is not reported, and
@@ -91,8 +91,11 @@ version folder is the language server's (Language Servers for AWS), which the bu
 (0.11) and the dossier's (0.11.130) differ, and its version file was not verified.
 
 Report, section 01, a block "Tools with a security fix to install": one `!` row per tool, the
-installed version, "update to <fixed> or later", what the hole allows and the advisory. Fix (yellow):
-"Update the tools listed in section 1 that have a security fix."
+installed version, "update to <fixed> or later", what the hole allows and the advisory. A tool can
+have a line per advisory: each tool's newest fix has one, so the version the row says to update to
+has no published fix of its own. The row takes the highest fixed version among the lines its
+versions fall under, and shows each of their holes with its advisory. Fix (yellow): "Update the
+tools listed in section 1 that have a security fix."
 
 ## 3. Project files that link to `~/.ssh/authorized_keys`
 
@@ -120,24 +123,32 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   without case), a version or `*`, the incident, and the registry: `openvsx` when the bad build was
   only ever published to Open VSX, `any` otherwise. Looked for as `<id>-<version>` folders in
   `~/.vscode/extensions` (VS Code, which installs from the Marketplace) and in `~/.cursor/extensions`,
-  `~/.windsurf/extensions`, `~/.devin/extensions`, `~/.vscode-oss/extensions` and `~/.kiro/extensions`
-  (Cursor, Windsurf, VSCodium and Kiro, which install from Open VSX; Windsurf became Devin Desktop
-  on 2 June 2026, which keeps extensions in `~/.devin/extensions` and only reads the old folder); an
-  `openvsx` line is not looked for in VS Code's own folder, where the same version is the
-  Marketplace's clean build. A hit is its own section 5 row, "Editor extensions", with the incident
+  `~/.windsurf/extensions`, `~/.devin/extensions`, `~/.vscode-oss/extensions`, `~/.kiro/extensions`,
+  `~/.antigravity-ide/extensions` and `~/.antigravity/extensions` (Cursor, Windsurf, VSCodium, Kiro
+  and Antigravity, which install from Open VSX; Windsurf became Devin Desktop on 2 June 2026, which
+  keeps extensions in `~/.devin/extensions` and only reads the old folder; Antigravity IDE's
+  product.json names the data folder `.antigravity-ide` and Open VSX's gallery, and the Antigravity
+  before it used `~/.antigravity`); an
+  `openvsx` line is not looked for in VS Code's own folder, where the same id is the Marketplace's
+  own extension. An id that Microsoft's list of extensions removed from the Marketplace names
+  (`RemovedPackages.md` in github.com/microsoft/vsmarketplace) was on the Marketplace too, so it is
+  `any`. A hit is its own section 5 row, "Editor extensions", with the incident
   line, level `act`, its own headline and fix, never called npm malware. With nothing found the row
   is green, and it is one of the checks section 5 counts; a folder that can't be read makes it
   yellow, not fully checked.
 - GlassWorm, from Socket's posts, one incident per post: a version where the post gives one, and
   every version where it names an extension without one (these are the attacker's own extensions,
   which update themselves, so a version from before an extension was turned counts too).
-  - January 2026: the four `oorzc` extensions at their malicious versions, and the thirteen earlier
-    extensions Socket names, at every version, all `openvsx`: Socket says the malicious versions
-    were published to Open VSX and that the publisher's Marketplace listings were not compromised,
-    the Marketplace has a clean `oorzc.ssh-tools` 0.5.1 of March 2026, and the thirteen were never
-    on the Marketplace.
+  - January 2026: three `oorzc` extensions at their malicious versions, every `oorzc.ssh-tools`
+    version (Open VSX removed them all and added it to its malware list, Socket says), and the
+    thirteen earlier extensions Socket names, at every version, all `openvsx`: Socket's findings
+    concern the Open VSX builds and do not suggest the publisher's Marketplace listings were
+    compromised (the Marketplace still offers them, `oorzc.ssh-tools` with a 0.5.1 of 30 March
+    2026), and the Marketplace does not offer the thirteen, nor does Microsoft's list name them.
   - 13 March 2026: the 72 extensions listed since that report (59 besides those thirteen), every
-    version, `openvsx`.
+    version, `openvsx`, except four Microsoft's list removes from the Marketplace too, which are
+    `any`: `Lavender-Studio.theme-lavender-dreams` as malware, and the `dopbop-studio`,
+    `kwitch-studio` and `potstok` extensions as impersonation.
   - 18 March 2026: the versions the post shows delivering malware, themselves or through an
     extension pack (20 versions of 15 extensions), `openvsx`. The first versions of its sleepers,
     which carried nothing yet, are left out.
@@ -145,7 +156,13 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
     are left out, and so are the 17 extensions of its 29 April update, whose pack pointed to an
     extension Open VSX had removed two days before.
   - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
-    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too).
+    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too; the
+    first hid a Windows downloader, so its `os` is `win`: on a Mac or Linux it is a yellow "malicious
+    extension to remove", with its own fix and row 05, and leaves the headline, score and link alone),
+    and
+    three more of the cluster's themes, on both registries, that Microsoft's list removes as malware:
+    Charcoal Mint, Aurora Borealis and Coca-Cola Christmas. Socket found no payload in the versions
+    of those three it read; Microsoft's classification governs.
   The March and April loaders install a further extension from GitHub into every editor they find,
   VS Code included; no post gives its id, so those incidents' fix says to check every editor for
   extensions the person did not install, said once when both are found.

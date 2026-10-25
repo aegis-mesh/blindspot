@@ -14,8 +14,10 @@
 #             incident's advisory, shown under the incident's row when they are found (the temp lines of one
 #             incident carry the same note). - for wiper and site
 # gh-token-monitor: Wiz (TanStack wave: the LaunchAgent and the systemd unit) and Socket (keyv wave: all six).
-# Mastra: Socket. mistralai: its advisory. LiteLLM: its advisory, and the GitHub issue the advisory links for
-# the attack's details (BerriAI/litellm#47826), which names the .pc_ temp files and PRIVCOLLECT_ACTIVE.
+# Mastra: Socket. mistralai: its advisory, which lists the file and a process started through it as signs.
+# LiteLLM: its advisory, and the GitHub issue the advisory links for the attack's details
+# (BerriAI/litellm#47826), which names the .pc_ temp files and PRIVCOLLECT_ACTIVE: the .pc_once_ marker is
+# written only once the data was sent, the advisory's "the exfil is confirmed".
 # GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
 # extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware,
 # and only when an extension that shipped malware is found: alone, it is a file to check.
@@ -34,8 +36,8 @@ mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	starts the Mastra m
 mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	starts the Mastra malware at login
 litellm	all	site	no	cook.pth	-
 litellm	all	site	no	cook.py	-
-litellm	all	temp	yes	remote_code_loader.lock	These files mean the malware ran and sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm	all	temp	yes	.pc_once_*	These files mean the malware ran and sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm	all	temp	yes	.pc_sq_*	These files mean the malware ran and sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm	all	temp	yes	.pc_e_*	These files mean the malware ran and sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-mistralpy	linux	temp	yes	transformers.pyz	Kill any python process started from transformers.pyz, then delete the file.
+litellm	all	temp	yes	remote_code_loader.lock	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm	all	temp	yes	.pc_once_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm	all	temp	yes	.pc_sq_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm	all	temp	yes	.pc_e_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+mistralpy	linux	temp	yes	transformers.pyz	Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.

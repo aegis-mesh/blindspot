@@ -8,7 +8,10 @@
 #   found     the row's word when it is found: installed, or CLI found
 #   advice    the line shown under the row when it is found
 #   summary   the summary row when it is the only platform found
+# OpenCode: its post on X (data/incidents.tsv's source), and its co-founder's that keys kept in the CLI never
+# come to OpenCode. Railway and Zeabur: their disclosures, in Zeabur's words "replace every password and
+# key stored on Zeabur" and "revoke old keys with the provider first".
 # id	name	commands	paths	found	advice	summary
-opencode	OpenCode	opencode	~/.config/opencode/;~/.local/share/opencode/	installed	If you used OpenCode Console, rotate every provider key you saved there. Keys kept only in the CLI were not affected.	OpenCode found: used its Console? Rotate keys
+opencode	OpenCode	opencode	~/.config/opencode/;~/.local/share/opencode/	installed	OpenCode emailed the Console users its breach hit, and says those it did not email were not affected. If you got that email, rotate every provider key you saved in the Console. Keys kept only in the CLI never reach OpenCode.	OpenCode found: got its breach email? Rotate keys
 railway	Railway	railway	~/.railway/config.json	CLI found	Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.	Railway CLI found: rotate secrets stored there
-zeabur	Zeabur	zeabur	~/.config/zeabur/	CLI found	Zeabur said on 19 October that an attacker read service environment variables stored on the platform, and asked every customer to replace all of them. Revoke each key at its provider first.	Zeabur CLI found: rotate secrets stored there
+zeabur	Zeabur	zeabur	~/.config/zeabur/	CLI found	Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.	Zeabur CLI found: rotate secrets stored there
