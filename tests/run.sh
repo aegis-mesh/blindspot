@@ -1029,9 +1029,12 @@ has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, upda
 has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
 
 echo "gen.sh refuses what it cannot write safely"
-gen_refuses() { # what file line
+gen_refuses() { # what file line, or what file edit:awk-program to change the file's lines in place
   rm -rf "$WORK/gr"; mkdir -p "$WORK/gr"; cp -R gird-check.sh gird-check.ps1 tools data "$WORK/gr/"
-  printf '%s\n' "$3" >> "$WORK/gr/data/$2"
+  case "$3" in
+    edit:*) awk -F '\t' -v OFS='\t' "${3#edit:}" "$WORK/gr/data/$2" > "$WORK/gr/x" && mv "$WORK/gr/x" "$WORK/gr/data/$2" ;;
+    *) printf '%s\n' "$3" >> "$WORK/gr/data/$2" ;;
+  esac
   bash "$WORK/gr/tools/gen.sh" > "$WORK/gr.txt" 2>&1; _rc=$?
   if [ "$_rc" -eq 2 ] && grep -q "data/$2" "$WORK/gr.txt"; then ok "$1"; else bad "$1" "exit $_rc"; fi
 }
@@ -1044,15 +1047,8 @@ gen_refuses "a platform whose incident is not a leak"   platforms.tsv "axios${T}
 gen_refuses "a leak that no platform names"           incidents.tsv "madeleak${T}Made Leak${T}October 2026${T}a made-up leak${T}https://example.com/leak${T}leak"
 gen_refuses "an npm package of a platform leak"       bad-npm.tsv "made-pkg${T}1.0.0${T}zeabur"
 gen_refuses "a startup file of a platform leak"       indicators.tsv "zeabur${T}all${T}startup${T}no${T}~/.config/x.cjs${T}starts it"
-# A line of a data file changed in place, by an awk program, instead of one added.
-gen_refuses_edit() { # what file awk-program
-  rm -rf "$WORK/gr"; mkdir -p "$WORK/gr"; cp -R gird-check.sh gird-check.ps1 tools data "$WORK/gr/"
-  awk -F '\t' -v OFS='\t' "$3" "$WORK/gr/data/$2" > "$WORK/gr/x" && mv "$WORK/gr/x" "$WORK/gr/data/$2"
-  bash "$WORK/gr/tools/gen.sh" > "$WORK/gr.txt" 2>&1; _rc=$?
-  if [ "$_rc" -eq 2 ] && grep -q "data/$2" "$WORK/gr.txt"; then ok "$1"; else bad "$1" "exit $_rc"; fi
-}
-gen_refuses_edit "a row 05 summary on an act-level incident" incidents.tsv '$1 == "injective" { $6 = "act" } { print }'
-gen_refuses_edit "a row 05 summary longer than row 05 holds" incidents.tsv '$1 == "injective" { $8 = $8 " and every other wallet" } { print }'
+gen_refuses "a row 05 summary on an act-level incident" incidents.tsv 'edit:$1 == "injective" { $6 = "act" } { print }'
+gen_refuses "a row 05 summary longer than row 05 holds" incidents.tsv 'edit:$1 == "injective" { $8 = $8 " and every other wallet" } { print }'
 gen_refuses "a startup path with a glob"                indicators.tsv "mastra${T}all${T}startup${T}no${T}~/.config/*.cjs${T}note"
 gen_refuses "a startup line with no note"               indicators.tsv "mastra${T}all${T}startup${T}no${T}~/.config/x.cjs${T}-"
 gen_refuses "a site file with a slash"                  indicators.tsv "litellm${T}all${T}site${T}no${T}a/cook.pth${T}-"
