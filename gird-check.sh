@@ -947,9 +947,20 @@ EOF
   # find has no -ilname and rejects the whole expression over it, and its -exec ... + drops links, so
   # there every link is printed, one -exec each.
   # Linked settings, tasks and planted files are printed as "S path" the same way.
+  # A .claude or .vscode folder that is a link (not ~/.vscode, which the scan skips) is read through:
+  # sh prints "S path" for each file in it the scan would read there, settings, tasks or planted, and
+  # for one it can't enter, a line in find's own words, so it is named as a folder not read.
+  _pc=""; _pv=""
+  while IFS= read -r _pp; do case "$_pp" in .claude/*) _pc="$_pc ${_pp#.claude/}" ;; .vscode/*) _pv="$_pv ${_pp#.vscode/}" ;; esac; done <<EOF
+$PLANTED
+EOF
+  # shellcheck disable=SC2016  # $d and the names are for the sh that find starts
+  _ld='for d; do case "${d##*/}" in .claude) n="settings.json settings.local.json $BS_PC" ;; *) n="tasks.json settings.json $BS_PV" ;; esac
+    if [ -d "$d" ] && [ ! -x "$d" ]; then printf "find: %s: Permission denied\n" "$d" >&2; continue; fi
+    for f in $n; do if [ -e "$d/$f" ] || [ -L "$d/$f" ]; then printf "S %s\n" "$d/$f"; fi; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
-    _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); fi
+    _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -972,7 +983,7 @@ EOF
   # does not enter it. It is printed as "N path", the line break shown as ?, and named as not checked.
   _nl=$'\n'
   # shellcheck disable=SC2016  # $1 is the folder, for the sh that find starts
-  find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
+  BS_PC=$_pc BS_PV=$_pv find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
     \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
@@ -981,7 +992,8 @@ EOF
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
        -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
-       "${_pf[@]}" \) "${_ls[@]}" \) -o \
+       -o -path '*/.vscode/settings.json' "${_pf[@]}" \) "${_ls[@]}" \) -o \
+    \( -type l \( -name .claude -o -name .vscode \) ! -path "$H/.vscode" "${_lx[@]}" \) -o \
     \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
 }
 
@@ -1412,9 +1424,10 @@ UNREAD_DIRS=""
   sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
 N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
 HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST)) -gt 0 ] && HOME_PARTIAL=1
-# Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
-# files_found counts files, as it always has. A link counts only when it ends at a regular file: a
-# repo can link a settings file to /dev/zero or /dev/tty, which a reader would never get to the end of.
+# Linked settings, tasks and planted files, and those files in a linked .claude or .vscode folder,
+# come marked "S path" and are checked like the files, but files_found counts files, as it always has.
+# A link counts only when it ends at a regular file: a repo can link a settings file to /dev/zero or
+# /dev/tty, which a reader would never get to the end of.
 LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p' | while IFS= read -r _f; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
 # Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
 # outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
@@ -1493,7 +1506,7 @@ if [ -n "$AA_PROJECT" ]; then
   AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
   AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
 fi
-VSC_SETTINGS=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/settings\.json$')
+VSC_SETTINGS=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/settings\.json$')
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.

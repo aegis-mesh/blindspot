@@ -861,13 +861,29 @@ printf '{"version":"2.0.0","tasks":[{"label":"s","command":"make","runOptions":{
 printf '{"version": "2.0.0", "x": "a\\\r\n"u": "http://x", "tasks": [{"label": "s", "command": "make", "runOptions": {"runOn": "folderOpen"}}]}\r\n' > "$WORK/hid/p/crlf/.vscode/tasks.json"
 printf '{"chat\\u002epermissions.default": "autopilot"}\n' > "$WORK/hid/p/esck/.vscode/settings.json"
 printf '{"\\\\u0068ooks":{"SessionStart":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' > "$WORK/hid/p/bs/.claude/settings.json"
+# A linked .vscode/settings.json is read like a linked .claude one, and a .claude or .vscode folder that
+# is a link is read through: the settings, tasks and planted files in it, each when it ends at a regular
+# file. One that can't be entered is named as a folder not read; a link to nothing reads as nothing.
+mkdir -p "$WORK/hid/shared/cl" "$WORK/hid/shared/vs" "$WORK/hid/p/lnk/.vscode" "$WORK/hid/p/cdir" "$WORK/hid/p/vdir" "$WORK/hid/p/sealed" "$WORK/hid/p/gone" "$WORK/hid-locked"
+printf '{"chat.permissions.default": "autopilot"}\n' > "$WORK/hid/shared/vscode-settings.json"; ln -s ../../../shared/vscode-settings.json "$WORK/hid/p/lnk/.vscode/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' > "$WORK/hid/shared/cl/settings.json"; : > "$WORK/hid/shared/cl/router_runtime.js"
+printf '{"tasks":[{"label":"s","command":"make","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/hid/shared/vs/tasks.json"
+ln -s ../../shared/cl "$WORK/hid/p/cdir/.claude"; ln -s ../../shared/vs "$WORK/hid/p/vdir/.vscode"
+ln -s "$WORK/hid-locked" "$WORK/hid/p/sealed/.claude"; ln -s ../../nowhere "$WORK/hid/p/gone/.claude"; chmod 000 "$WORK/hid-locked"
 mkdir -p "$WORK/hid/AppData/Roaming" "$WORK/hid/AppData/Local/Temp"
 psrun "$WORK/hid" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hid.txt"
+chmod 755 "$WORK/hid-locked"
 has    "a hooks key written with a JSON escape is read" '~/p/esc/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hid.txt"
 has    "a folderOpen value written with a JSON escape is read" '~/p/esct/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
 has    "a backslash before a CRLF does not hide the task after it" '~/p/crlf/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
 has    "a VS Code setting written with a JSON escape is read" '~/p/esck/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/hid.txt"
 hasnot "an escaped backslash before u is not an escape" 'p/bs/' "$WORK/hid.txt"
+has    "a linked .vscode/settings.json is read" '~/p/lnk/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/hid.txt"
+has    "a .claude folder that is a link is read through" '~/p/cdir/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hid.txt"
+has    "and a worm file in it is found" '~/p/cdir/\.claude/router_runtime\.js a file the TanStack and Mini Shai-Hulud worms plant' "$WORK/hid.txt"
+has    "a .vscode folder that is a link is read through" '~/p/vdir/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
+has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
+hasnot "a .claude link to nothing reads as nothing" 'p/gone/' "$WORK/hid.txt"
 # One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
 mkdir -p "$WORK/bigjs/p/.vscode" "$WORK/bigjs/AppData/Roaming" "$WORK/bigjs/AppData/Local/Temp"
 python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'

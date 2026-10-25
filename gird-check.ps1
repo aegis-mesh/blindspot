@@ -622,23 +622,43 @@ function Add-Plain($list, $e) {
   }
   $list.Add($e.FullName)
 }
+# A .claude or .vscode folder that is a link (not ~/.vscode, which the scan skips) is read through: the
+# files the scan reads there, settings, tasks or planted, each when it ends at a regular file, as a
+# linked settings file is. One that can't be listed is named as a folder not read.
+function Scan-LinkedDir([string]$dir, [string]$name) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
+    $n = $e.Name; $p = J $dir $n
+    if ($name -ceq '.claude' -and ($n -ceq 'settings.json' -or $n -ceq 'settings.local.json')) { $l = $LinkSettings }
+    elseif ($name -ceq '.vscode' -and $n -ceq 'tasks.json') { $l = $TaskFiles }
+    elseif ($name -ceq '.vscode' -and $n -ceq 'settings.json') { $l = $VscSettings }
+    elseif (Is-WormFile $name $n) { $l = $WormFiles }
+    else { continue }
+    if (Is-RegularFile $p) { $l.Add($p) }
+  }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
     $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
     if (Is-DirInfo $e) {
-      if ($link -or (Is-Pruned $path $name $d)) { continue }
+      if ($link) {
+        if ($name -ceq '.claude' -or ($name -ceq '.vscode' -and -not $path.Equals((J $HomeDir '.vscode'), $PathCmp))) { Scan-LinkedDir $path $name }
+        continue
+      }
+      if (Is-Pruned $path $name $d) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
       if ($d -lt 6) { Scan-Home $path $d }
       continue
     }
     $parent = [IO.Path]::GetFileName($dir)
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
-    # A linked settings, tasks or worm file is followed when it ends at a regular file; any other
-    # link is not.
+    # A linked settings (.claude's or .vscode's), tasks or worm file is followed when it ends at a
+    # regular file; any other link is not.
     if ($link) {
       if ($isSettings) { if (Is-RegularFile $path) { $LinkSettings.Add($path) } }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { if (Is-RegularFile $path) { $TaskFiles.Add($path) } }
+      elseif ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { if (Is-RegularFile $path) { $VscSettings.Add($path) } }
       elseif (Is-WormFile $parent $name) { if (Is-RegularFile $path) { $WormFiles.Add($path) } }
       if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
