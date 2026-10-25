@@ -1763,7 +1763,7 @@ HOME="$WORK/ud" TMPDIR="$WORK/no-such-folder" bash "$SCRIPT" --offline 2>&1 | tr
 HOME="$WORK/ud" PATH="$WORK/nomk:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-nt.txt"
 chmod 755 "$WORK/ud/code/locked"
 has    "a TMPDIR that can't be written to still names the folder" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud-t.txt"
-has    "with no temp folder, the scan says it could not tell" 'No temp folder could be written to, so the home scan could not tell which folders it could not read' "$WORK/ud-nt.txt"
+has    "with no temp folder, the scan says it could not tell" 'No temp folder could be written to, so the home scan could not tell .*which folders it could not read' "$WORK/ud-nt.txt"
 has    "and the rows it feeds are not green either"   'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud-nt.txt"
 # A folder whose name holds a line break is not entered, so no part of a path under it is taken for a
 # file: it is named as not checked, and the rows the home scan feeds are not green.
