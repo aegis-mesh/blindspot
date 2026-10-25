@@ -28,7 +28,12 @@
 # GHSA-7835-87q9-rgvv have lines for what their holes allow. mcp-remote: GHSA-6xpm-ggf7-wc3p is its
 # only advisory, and its repository publishes none.
 # Amazon Q: the version folder is the language server's (Language Servers for AWS), which the bulletin
-# fixes in 1.69.0. The extension's own version is not read.
+# fixes in 1.69.0 (aws/language-servers publishes the bulletin's two advisories, and no later bulletin
+# names it). The extension's own version is not read. Amazon Q keeps the server in
+# aws/toolkits/language-servers/AmazonQ under ~/Library/Caches, ~/.cache or %LOCALAPPDATA%: so says
+# its own code, Amazon-Q-Developer/amazon-q-vscode, which the 2.8.0 extension names as its source, and
+# so does that build. The aws/language-servers/<name> folder of aws-toolkit-vscode is the AWS
+# Toolkit's own; that repository has carried no Amazon Q code since January 2026.
 # id	name	os	kind	where	affected	hole	advisory
 cursor	Cursor	mac	plist	/Applications/Cursor.app/Contents/Info.plist	<3.0	a malicious agent could escape the sandbox	https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
 cursor	Cursor	mac	plist	~/Applications/Cursor.app/Contents/Info.plist	<3.0	a malicious agent could escape the sandbox	https://github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
