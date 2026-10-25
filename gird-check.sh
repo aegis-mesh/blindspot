@@ -6204,13 +6204,20 @@ _ext_found=$(ext_roots | while IFS= read -r r; do
   done | BAD_EXT_LIST=$BAD_EXT awk -F '\t' '
   BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4]; os[i] = f[5] } }
   { reg = $1; d = substr($0, length($1) + 2); gsub(/[[:cntrl:]]/, "?", d); b = d; sub(/.*\//, "", b); lb = tolower(b)
+    # Split as VS Code splits a folder name (its ExtensionKey): the id is the longest start that leaves
+    # a version of three numbers, alone or before a -, so oorzc.ssh-tools-2-0.1.0 is oorzc.ssh-tools-2.
+    fid = ""
+    for (p = length(lb); p > 1 && fid == ""; p--) {
+      if (substr(lb, p, 1) != "-" || substr(lb, 1, p - 1) !~ /^[^.]+\../) continue
+      r = substr(lb, p + 1)
+      if (!match(r, /^[0-9]+\.[0-9]+\.[0-9]+/)) continue
+      rest = substr(r, RLENGTH + 1)
+      if (rest == "" || rest ~ /^-./) { fid = substr(lb, 1, p - 1); ver = substr(r, 1, RLENGTH) }
+    }
+    if (fid == "") next
     for (i = 1; i <= n; i++) {
       if (rg[i] != "any" && rg[i] != reg) continue
-      if (substr(lb, 1, length(id[i]) + 1) != id[i] "-") continue
-      r = substr(b, length(id[i]) + 2)
-      if (!match(r, /^[0-9]+(\.[0-9]+)*/)) continue
-      ver = substr(r, 1, RLENGTH); rest = substr(r, RLENGTH + 1)
-      if (rest != "" && rest !~ /^-/) continue
+      if (fid != id[i]) continue
       if (v[i] == "*" || v[i] == ver) { print d "\t" sp[i] " " ver "\t" t[i] "\t" os[i]; break }
     } }')
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that

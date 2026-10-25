@@ -1463,6 +1463,12 @@ has    "a theme Microsoft removed from its Marketplace as malware, in VS Code's 
 has    "one it removed as impersonation, in VS Code's own folder too" '~/\.vscode/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
 has    "any oorzc.ssh-tools version in an Open VSX editor's folder, as Open VSX removed them all" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.2 oorzc\.ssh-tools 0\.5\.2 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
 hasnot "the October cluster's themes with no payload are not listed" 'theme-coca-cola-christmas|theme-charcoal-mint|theme-aurora-borealis' "$WORK/dz-ms.txt"
+# A folder is split the way the editors split it: the id is the longest start that leaves a version of
+# three numbers, so oorzc.ssh-tools-2-0.1.0 is the extension oorzc.ssh-tools-2 at 0.1.0.
+rm -rf "$WORK/dz-id"; cp -R "$WORK/clean" "$WORK/dz-id"
+mkdir -p "$WORK/dz-id/.cursor/extensions/oorzc.ssh-tools-2-0.1.0" "$WORK/dz-id/.cursor/extensions/oorzc.mind-map-1.0.61-2.0.0"
+dzrun "$WORK/dz-id" | tr -s ' \n' '  ' > "$WORK/dz-id.txt"
+hasnot "an id that runs on past a bad one, before its own version, is another extension" 'oorzc|GlassWorm' "$WORK/dz-id.txt"
 # microsoftvs.microsoftvs hid a Windows downloader (Socket): elsewhere it is a malicious extension to
 # remove, not a compromised machine. Next to an extension whose malware could run here, both are listed.
 rm -rf "$WORK/dz-os"; cp -R "$WORK/clean" "$WORK/dz-os"; mkdir -p "$WORK/dz-os/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"

@@ -5559,15 +5559,16 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
   try { $xents = @(([IO.DirectoryInfo]$xdir).GetFileSystemInfos() | Sort-Object -Property Name -CaseSensitive) } catch { $ExtUnread++; continue }
   foreach ($e in $xents) {
     if (-not (Is-DirInfo $e)) { continue }
+    # Split as VS Code splits a folder name (its ExtensionKey): the id is the longest start that leaves
+    # a version of three numbers, alone or before a -, so oorzc.ssh-tools-2-0.1.0 is oorzc.ssh-tools-2.
+    $m = [regex]::Match($e.Name, '^([^.]+\..+)-([0-9]+\.[0-9]+\.[0-9]+)(-(.+))?\z')
+    if (-not $m.Success) { continue }
     foreach ($x in $BadExtRows) {
       if ($x[3] -ne 'any' -and $x[3] -ne $reg) { continue }
-      $pre = $x[0] + '-'
-      if (-not $e.Name.StartsWith($pre, [StringComparison]::OrdinalIgnoreCase)) { continue }
-      $m = [regex]::Match($e.Name.Substring($pre.Length), '^([0-9]+(?:\.[0-9]+)*)(-.*)?$')
-      if (-not $m.Success) { continue }
-      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[1].Value) {
-        if ($x[4] -eq 'all' -or @($x[4] -split ',') -contains $IndOs) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2])) }
-        else { $ExtUpd.Add(@($e.FullName, "$($x[0]) $($m.Groups[1].Value)", $x[2], $x[4])) }
+      if (-not $m.Groups[1].Value.Equals($x[0], [StringComparison]::OrdinalIgnoreCase)) { continue }
+      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[2].Value) {
+        if ($x[4] -eq 'all' -or @($x[4] -split ',') -contains $IndOs) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[2].Value)", $x[2])) }
+        else { $ExtUpd.Add(@($e.FullName, "$($x[0]) $($m.Groups[2].Value)", $x[2], $x[4])) }
         break
       }
     }
