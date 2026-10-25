@@ -5,9 +5,11 @@
 # keys are 48 characters after sk-proj-: 20, then T3BlbkFJ (OpenAI in base64), then 20; newer ones
 # are 156 (OpenAI's community forum, GitGuardian's OpenAI detectors, gitleaks and TruffleHog).
 # A key made on a person's own keys page, not in a project, starts sk-None- and has the same two
-# shapes: OpenAI's community forum (thread 879912, July 2024) names sk-proj-, sk-None- and sk-svcacct-
+# shapes, and so does a service account's 48-character key, sk-svcacct-: OpenAI's community forum (thread 879912, July 2024) names sk-proj-, sk-None- and sk-svcacct-
 # as the prefixes of new keys, 48 characters after the prefix until August 2024 and longer since, with
 # _ and -. TruffleHog's OpenAI detector matched sk-None- keys from August 2024 to February 2026.
+# An AWS key id counts after anything but a letter or a digit, as in an s3:// address after its /:
+# glued to a word it is not a key, as with the other providers.
 # A Bedrock short-term key is bedrock-api-key- and the base64 of a signed bedrock.amazonaws.com address,
 # whose next 104 characters are the same in every key too (/?Action=CallWithBearerToken&X-Amz-Algorithm=
 # AWS4-HMAC-SHA256&X-Amz-Credential=): 144 must follow the fixed start, so the start, or a key quoted
@@ -21,13 +23,13 @@
 # id	name	starts	pattern
 anthropic	Anthropic	sk-ant-	sk-ant-[A-Za-z0-9_-]{90,}
 openrouter	OpenRouter	sk-or-v1-	sk-or-v1-[a-f0-9]{64}
-openai	OpenAI	sk-	sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
+openai	OpenAI	sk-	sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
 google	Google	AIza|AQ[.]	(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}
 groq	Groq	gsk_	gsk_[A-Za-z0-9]{52}
 xai	xAI	xai-	xai-[A-Za-z0-9]{64,}
 huggingface	Hugging Face	hf_	(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)
 perplexity	Perplexity	pplx-	pplx-[A-Za-z0-9]{40,52}
 replicate	Replicate	r8_	(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}
-aws	AWS	AKIA|ASIA|ABSK|bedrock-api-key	(^|[^A-Z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}
+aws	AWS	AKIA|ASIA|ABSK|bedrock-api-key	(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}
 github	GitHub	gh[pousr]_|github_pat_	gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
 npm	npm	npm_	npm_[A-Za-z0-9]{36}

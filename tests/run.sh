@@ -176,6 +176,21 @@ has    "and in a .env file" '~/code/u1/\.env +OpenAI$' "$SE/skn.txt"
 has    "and in its longer shape" '~/code/u2/\.env +OpenAI$' "$SE/skn.txt"
 hasnot "near misses of sk-None- are not keys" 'code/nm/' "$SE/skn.txt"
 nokeys "and no sk-None- key is printed" "$SE/skn.keys" "$SE/skn.txt"
+# A service account's key, sk-svcacct-, took the 48-character shape too (the same forum thread).
+SKS="sk""-svcacct-$(rnd 20)T3BlbkFJ$(rnd 20)"; printf '%s\n' "$SKS" > "$SE/sks.keys"
+mkdir -p "$SE/sks/code/s1" "$SE/sks/code/nm" "$SE/sks/AppData/Roaming" "$SE/sks/AppData/Local/Temp"
+printf 'OPENAI_API_KEY=%s\n' "$SKS" > "$SE/sks/code/s1/.env"; printf 'A=%s\n' "sk""-svcacct-$(lowr 20)T3BlbkFJ$(lowr 19)" > "$SE/sks/code/nm/.env"
+HOME="$SE/sks" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$SE/sks.txt" 2>&1
+has    "an OpenAI service account key in its 48-character shape is found" '~/code/s1/\.env +OpenAI$' "$SE/sks.txt"
+hasnot "and one a character short is not a key" 'code/nm/' "$SE/sks.txt"
+nokeys "and no sk-svcacct- key is printed" "$SE/sks.keys" "$SE/sks.txt"
+# An AWS key id counts after anything but a letter or a digit: after the / of an s3:// address, not
+# glued to a word.
+mkdir -p "$SE/awb/code/u" "$SE/awb/code/w" "$SE/awb/AppData/Roaming" "$SE/awb/AppData/Local/Temp"
+printf 'BACKUP_URL=s3://%s:%s@bucket\n' "AK""IA$(upper 16)" "$(rnd 40)" > "$SE/awb/code/u/.env"; printf 'NOTE=keyid%s\n' "AK""IA$(upper 16)" > "$SE/awb/code/w/.env"
+HOME="$SE/awb" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full > "$SE/awb.txt" 2>&1
+has    "an AWS key id after the / of an s3:// address is found" '~/code/u/\.env +AWS$' "$SE/awb.txt"
+hasnot "and one glued to a word is not a key" 'code/w/' "$SE/awb.txt"
 # Cline 4.x keeps API keys in plain JSON: ~/.cline/data/secrets.json and settings/providers.json, or
 # the same files under CLINE_DATA_DIR.
 hexr() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'a-f0-9' | head -c "$1"; }
