@@ -26,7 +26,8 @@
 # 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac), and setup.mjs 4066781f, its dropper,
 # in .claude and .vscode, run by a SessionStart hook and a folder-open task. Socket on lightning, that
 # wave's PyPI release: its payload plants .claude/router_runtime.js, a copy of itself, with setup.mjs
-# files beside it.
+# files beside it. It also commits .github/workflows/format-check.yml, a CI workflow, which has no line:
+# a planted file sits in .claude or .vscode, and the home scan does not look in .github/workflows.
 # SafeDep on the AntV wave: the worm commits .claude/index.js, a copy of its payload (SHA-256
 # a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c, the npm packages' index.js), and
 # setup.mjs in .claude and .vscode, run by a SessionStart hook and a folder-open task. Projects name
