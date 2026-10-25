@@ -1560,6 +1560,17 @@ dzrun "$WORK/dz-old" | tr -s ' \n' '  ' > "$WORK/dz-old.txt"
 has    "Cursor between two fixes is told the newest" '! Cursor 3\.0\.5, update to 3\.1\.2 or later An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$WORK/dz-old.txt"
 hasnot "and not the hole its version already has the fix for" 'update to 3\.1\.2 or later A malicious agent' "$WORK/dz-old.txt"
 has    "Claude Code in a sandbox escape's range: its hole, the newest fix's, and that fix" '! Claude Code 2\.1\.100, update to 2\.1\.260 or later A malicious repository could run code outside the sandbox\. github\.com/advisories/GHSA-7835-87q9-rgvv A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-old.txt"
+# Claude Desktop's version is read from Claude.app's Info.plist on macOS, as Cursor's is: a version in both
+# its advisories' ranges is told the newest fix, with each hole; the fixed version and one older than both
+# ranges are not listed.
+for V in 1.4000.0 1.15962.0 1.1.3917; do
+  rm -rf "$WORK/dz-cd$V"; cp -R "$WORK/clean" "$WORK/dz-cd$V"; mkdir -p "$WORK/dz-cd$V/Applications/Claude.app/Contents"
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n\t<key>CFBundleShortVersionString</key>\n\t<string>%s</string>\n</dict>\n</plist>\n' "$V" > "$WORK/dz-cd$V/Applications/Claude.app/Contents/Info.plist"
+  dzrun "$WORK/dz-cd$V" | tr -s ' \n' '  ' > "$WORK/dz-cd$V.txt"
+done
+has    "Claude Desktop in both its advisories' ranges: the newest fix and each hole" '! Claude Desktop 1\.4000\.0, update to 1\.15962\.0 or later A file an agent leaves in a Cowork folder could run commands on the Mac when opened\. github\.com/anthropics/claude-code/security/advisories/GHSA-v234-4jrq-mgg6 An attacker on the network could intercept its remote SSH sessions\. github\.com/anthropics/claude-code/security/advisories/GHSA-3rwf-2g6p-c2f9' "$WORK/dz-cd1.4000.0.txt"
+hasnot "Claude Desktop at that fix is not listed"     '! Claude Desktop' "$WORK/dz-cd1.15962.0.txt"
+hasnot "nor one older than both ranges"               '! Claude Desktop' "$WORK/dz-cd1.1.3917.txt"
 # The newest fix covers 2.0.68 and later: 2.1.259 has only its hole. Below 2.0.68 the highest fix of the
 # lines a version falls under is 2.1.179, which that range covers, so the row names 2.1.260 there too.
 for V in 2.1.259 2.0.67; do
