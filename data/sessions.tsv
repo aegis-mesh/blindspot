@@ -41,6 +41,8 @@ all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-state	docs
 all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/history-session-state	docs
 all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/command-history-state	docs
 all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-store.db	docs
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-store.db-wal	source code
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/command-history-state.json	source code
 all	read	Roo Code	{AS}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
 linux	read	Roo Code	{ENV:XDG_CONFIG_HOME:~/.config}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
 all	read	Roo Code	{AS}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
@@ -52,6 +54,7 @@ linux	read	Cline	{ENV:XDG_CONFIG_HOME:~/.config}/Cursor/User/globalStorage/saoud
 all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/sessions	docs
 all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/tasks	docs
 all	read	Cline	{ENV:CLINE_DIR:~/.cline}/data/sessions	source code
+all	read	Cline	{ENV:CLINE_DIR:~/.cline}/data/tasks	source code
 all	read	Cline	{ENV:CLINE_SESSION_DATA_DIR:~/.cline/data/sessions}	source code
 all	read	Continue	{ENV:CONTINUE_GLOBAL_DIR:~/.continue}/sessions	source code
 all	read	Continue	{ENV:CONTINUE_GLOBAL_DIR:~/.continue}/dev_data/0.2.0/chatInteraction.jsonl	source code
