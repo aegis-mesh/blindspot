@@ -897,8 +897,9 @@ WORM_REF_NOTE='runs a file a worm plants'
 # <<< planted
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
-AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"defaultMode\": \"bypassPermissions\"
+AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\""
@@ -1039,13 +1040,14 @@ amazonq|Amazon Q language server|win|folder|$WLAPP/aws/toolkits/language-servers
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web page could reach the editor connection|github.com/advisories/GHSA-9f65-56v6-gxw7
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.1.38|2.1.163|a malicious repository could run code outside the sandbox|github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|-|2.1.179|a plugin repository could install code that bypasses its pinned hash|github.com/advisories/GHSA-pq7j-f95f-qfcv
+claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.0.68|2.1.260|a stored API key could start sessions without the managed settings of an Enterprise or Team organization|github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
 # <<< outdated
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
 # file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
 # >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
-PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/opencode/|installed|OpenCode emailed the Console users its breach hit, and says those it did not email were not affected. If you got that email, rotate every provider key you saved in the Console. Keys kept only in the CLI never reach OpenCode.|OpenCode found: got its breach email? Rotate keys
+PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/opencode/|installed|OpenCode emailed the Console users its breach hit, and says those it did not email were not affected. It told those users to revoke and replace their keys directly with each provider. Keys kept only in the CLI never reach OpenCode.|OpenCode found: got its breach email? Rotate keys
 railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.|Railway CLI found: rotate secrets stored there
 zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.|Zeabur CLI found: rotate secrets stored there"
 # <<< platforms
@@ -1699,20 +1701,78 @@ auto_row() { # file what flattened-text
   AUTO_ROWS="$AUTO_ROWS$_rp$TAB$2$TAB$_sum${TAB}0
 "
 }
+# For aa_hit, a .json file's text (one line, spaces removed), then a line for each object that is the
+# value of a top-level key a pattern names as "key": {...: the key, a tab, and that object with every
+# value nested in it emptied ({} or []), so the rest of the pattern matches only directly inside it, as
+# Claude Code reads defaultMode only inside permissions. Strings are split on their quotes as flat
+# splits them (a key with an escaped quote in it is never one a pattern names), and the code between
+# them on each kind of bracket, one character at a time, and the object is printed as it is read:
+# linear on every awk, where building it up as one string is quadratic on macOS's awk.
+aa_keys() { # pattern|pattern...
+  AA_P=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    function out(s) { if (cur != "" && dep == 2) printf "%s", s }
+    function ob(c) { if (dep == 1 && c == "{" && (key in want)) { cur = key; printf "%s\t{", cur } else out(c); dep++ }
+    function cb(c) { dep--; out(c); if (cur != "" && dep == 1) { print "}"; cur = "" } }
+    # The code between two strings, its brackets in order: split on {, each part on }, then [ and ].
+    function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
+      na = split(s, a, "{")
+      for (i = 1; i <= na; i++) {
+        nb = split(a[i], b, "}")
+        for (j = 1; j <= nb; j++) {
+          nc = split(b[j], c, "[")
+          for (k = 1; k <= nc; k++) {
+            nd = split(c[k], d, "]")
+            for (l = 1; l <= nd; l++) { out(d[l]); if (l < nd) cb("]") }
+            if (k < nc) ob("[")
+          }
+          if (j < nb) cb("}")
+        }
+        if (i < na) ob("{")
+      }
+    }
+    BEGIN { n = split(ENVIRON["AA_P"], p, "|")
+      for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); if (match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { want[substr(p[i], 2, RLENGTH - 4)] = 1; nw++ } } }
+    { print
+      if (!nw) next
+      nq = split($0, q, "\""); st = 0; dep = 0; cur = ""; key = ""; hp = 0
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {            # code: right after a string at the top level, a : makes it the key
+          if (hp && q[i] ~ /^:/) key = pv
+          hp = 0; code(q[i])
+          if (i < nq) { out("\""); st = 1; one = 1 }
+          continue
+        }
+        out(q[i])                 # a string, up to a quote that no odd run of \ escapes
+        if (dep == 1) pv = one ? q[i] : ""
+        esc = (i < nq && trail(q[i]) % 2 == 1)
+        if (i < nq) out("\"")
+        if (esc) { one = 0; continue }
+        if (dep == 1) hp = 1
+        st = 0
+      }
+      if (cur != "") print ""
+    }'
+}
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through flat (comments are its job), and a match starts at the text, a {
-# or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts. A
-# .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
-# (so a setting inside an inline table, a profile written as one, does not count), a value in double
-# quotes also matches the same value in single quotes (a TOML literal string), and only the lines
-# before the first [table] count: a setting under [profiles.x] applies only when that profile is
-# used, and Codex 0.134.0 and later read no such table from config.toml. tr removes the spaces in
+# or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts; a
+# pattern written "key": {... matches its rest the same way, inside that top-level key's object only
+# (aa_keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
+# comment (so a setting inside an inline table, a profile written as one, does not count), a value in
+# double quotes also matches the same value in single quotes (a TOML literal string), and only the
+# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
+# is used, and Codex 0.134.0 and later read no such table from config.toml. tr removes the spaces in
 # one pass, and each pattern becomes one regex with its boundaries in it, tried once per line:
 # linear on every awk, where a gsub on the joined text, or an index() of the rest of the line at
 # every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]'; fi | AA_P=$2 awk -v toml="$_tm" '
+  if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
     # A pattern as a regex that matches only its own text: every character a regex reads is quoted.
     function lit(s,   o, c, j) {
       o = ""
@@ -1724,10 +1784,12 @@ aa_hit() { # file pattern|pattern...
     }
     BEGIN { n = split(ENVIRON["AA_P"], p, "|")
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); q = p[i]; gsub(/"/, "\047", q)
-        re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+        if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { in_[i] = 1; re[i] = "^" lit(substr(p[i], 2, RLENGTH - 4)) "\t(.*[{,])?" lit(substr(p[i], RLENGTH + 1)) "($|[,}#/])" }
+        else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
-    { for (i = 1; i <= n; i++) if (!(i in got) && $0 ~ re[i]) got[i] = 1 }
+    # A .json file: its text is the first line, the objects aa_keys printed come after it.
+    { for (i = 1; i <= n; i++) if (!(i in got) && (toml || (NR == 1) == !(i in in_)) && $0 ~ re[i]) got[i] = 1 }
     END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }'
 }
 # Keys that make Claude Code run a command: hooks and its helper commands.
@@ -1748,8 +1810,9 @@ while IFS= read -r f; do
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
   # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
-  # versions take it only from the person's own or managed settings (Claude Code's settings docs).
-  if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"'; then
+  # versions take it only from the person's own or managed settings (Claude Code's settings docs). It
+  # reads defaultMode only inside permissions (aa_hit); the grep spares the files that never name it.
+  if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && aa_hit "$f" '"permissions": {"defaultMode": "bypassPermissions"'; then
     _w="${_w:+$_w, }skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257"
   fi
   [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
@@ -1764,8 +1827,8 @@ while IFS= read -r f; do
 done <<EOF
 $TASK_FILES
 EOF
-# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" (Allow all) or
-# "autopilot" starts new Copilot chats that run every tool call without asking, and the setting
+# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" or "autopilot"
+# starts new Copilot chats that run every tool call without asking, and the setting
 # declares no scope, so VS Code takes it from a project too: a cloned repo can bring it.
 # "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
@@ -3024,17 +3087,29 @@ EOF
 # One row per tool: name<TAB>versions<TAB>fixed<TAB>holes. A tool's lines can name several advisories:
 # the row says to update to the highest fixed version among those its versions fall under, and holes
 # holds each of their holes with its advisory, as hole|advisory|hole|advisory (gen.sh refuses a | in
-# either).
-OLD_LIST=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '
+# either). When that version is in the range of another of the tool's lines, the row takes that line's
+# fix, until no line covers it: the version it names has no published fix of its own. A line's range
+# and fix are its fields counted from the end, which a | in a path cannot shift.
+OLD_LIST=$(printf '%s' "$OLD_ROWS" | OT="$OUT_TABLE" OO="$_os" awk -F "$TAB" '
   function newer(a, b,   x, y, p, q, k, i) { p = split(a, x, "."); q = split(b, y, "."); k = p > q ? p : q
     for (i = 1; i <= k; i++) if (x[i] + 0 != y[i] + 0) return ((x[i] + 0) > (y[i] + 0))
     return 0 }
-  !($1 in o) { o[$1] = ++n; r[n] = $2; v[n] = $3; fx[n] = $4; h[n] = $5 "|" $6; seen[$1 "|" $3] = 1; hs[$1 "|" $5 "|" $6] = 1; next }
+  !($1 in o) { o[$1] = ++n; id[n] = $1; r[n] = $2; v[n] = $3; fx[n] = $4; h[n] = $5 "|" $6; seen[$1 "|" $3] = 1; hs[$1 "|" $5 "|" $6] = 1; next }
   { i = o[$1]
     if (!(($1 "|" $3) in seen)) { seen[$1 "|" $3] = 1; v[i] = v[i] ", " $3 }
     if (newer($4, fx[i])) fx[i] = $4
     if (!(($1 "|" $5 "|" $6) in hs)) { hs[$1 "|" $5 "|" $6] = 1; h[i] = h[i] "|" $5 "|" $6 } }
-  END { for (i = 1; i <= n; i++) print r[i] "\t" v[i] "\t" fx[i] "\t" h[i] }')
+  END { nt = split(ENVIRON["OT"], t, "\n")
+    for (i = 1; i <= n; i++) {
+      do { ch = 0
+        for (j = 1; j <= nt; j++) {
+          m = split(t[j], c, "|")
+          if (m < 9 || c[1] != id[i] || (c[3] != "all" && c[3] != ENVIRON["OO"])) continue
+          if ((c[m - 3] == "-" || !newer(c[m - 3], fx[i])) && newer(c[m - 2], fx[i])) { fx[i] = c[m - 2]; ch = 1 }
+        }
+      } while (ch)
+      print r[i] "\t" v[i] "\t" fx[i] "\t" h[i]
+    } }')
 N_OLD=$(count_lines "$OLD_LIST")
 [ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded

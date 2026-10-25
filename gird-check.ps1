@@ -536,8 +536,9 @@ $WormRefNote = 'runs a file a worm plants'
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 $AaTable = @(
-  ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"defaultMode": "bypassPermissions"'))
+  ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"permissions": {"defaultMode": "bypassPermissions"'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access profile', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
@@ -1148,7 +1149,8 @@ $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledM
 # An empty ANTHROPIC_BASE_URL sets nothing.
 $RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
 # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
-# versions take it only from the person's own or managed settings (Claude Code's settings docs).
+# versions take it only from the person's own or managed settings (Claude Code's settings docs). It
+# reads defaultMode only inside permissions (Aa-Hit); this regex spares the files that never name it.
 $RxBypass = New-Object regex('"defaultMode"\s*:\s*"bypassPermissions"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
 # A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
@@ -1158,13 +1160,53 @@ function Flat-Text([string]$f) {
   try { $RxJsonc.Replace($t, '$1') -replace '[\r\n\t]', ' ' } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
+# The object each top-level key in $keys (written with its quotes) holds, with every value nested in
+# it emptied ({} or []), as gird-check.sh's aa_keys prints it: a pattern written "key": {... matches its
+# rest only directly inside that object, as Claude Code reads defaultMode only inside permissions. A
+# token is a string, a bracket or the text between them, so one regex pass reads the file.
+$RxJsonTok = New-Object regex('"(?:[^"\\]|\\.)*"?|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
+function Aa-Keys([string]$f, [string]$l, $keys) {
+  $objs = @{}
+  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $objs }
+  $dep = 0; $cur = $null; $key = $null; $pend = $null; $sb = $null
+  foreach ($m in $ms) {
+    $t = $m.Value; $c = [string]$t[0]
+    if ($c -eq '"') {
+      # A string at the top level is a key when a : comes right after it.
+      if ($dep -eq 1) { $pend = $t } else { $pend = $null }
+      if ($cur -and $dep -eq 2) { [void]$sb.Append($t) }
+      continue
+    }
+    if ($null -ne $pend -and $c -eq ':') { $key = $pend }
+    $pend = $null
+    if ($c -eq '{' -or $c -eq '[') {
+      if ($dep -eq 1 -and $c -eq '{' -and $keys -ccontains $key) { $cur = $key; $sb = New-Object System.Text.StringBuilder; [void]$sb.Append('{') }
+      elseif ($cur -and $dep -eq 2) { [void]$sb.Append($c) }
+      $dep++
+    } elseif ($c -eq '}' -or $c -eq ']') {
+      $dep--
+      if ($cur -and $dep -eq 2) { [void]$sb.Append($c) }
+      elseif ($cur -and $dep -eq 1) {
+        [void]$sb.Append($c)
+        if (-not $objs.ContainsKey($cur)) { $objs[$cur] = New-Object System.Collections.Generic.List[string] }
+        $objs[$cur].Add($sb.ToString()); $cur = $null
+      }
+    } elseif ($cur -and $dep -eq 2) { [void]$sb.Append($t) }
+  }
+  if ($cur) {
+    if (-not $objs.ContainsKey($cur)) { $objs[$cur] = New-Object System.Collections.Generic.List[string] }
+    $objs[$cur].Add($sb.ToString())
+  }
+  $objs
+}
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
-# a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts.
-# A .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
-# (so a setting inside an inline table, a profile written as one, does not count), a value in double
-# quotes also matches the same value in single quotes (a TOML literal string), and only the lines
-# before the first [table] count: a setting under [profiles.x] applies only when that profile is
+# a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts;
+# a pattern written "key": {... matches its rest the same way, inside that top-level key's object only
+# (Aa-Keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
+# comment (so a setting inside an inline table, a profile written as one, does not count), a value in
+# double quotes also matches the same value in single quotes (a TOML literal string), and only the
+# lines before the first [table] count: a setting under [profiles.x] applies only when that profile is
 # used, and Codex 0.134.0 and later read no such table from config.toml.
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
@@ -1172,11 +1214,19 @@ function Aa-Hit([string]$f, $pats) {
   if ($null -eq $t) { return $false }
   $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
   $got = New-Object bool[] $pp.Count
+  $par = New-Object string[] $pp.Count
+  if (-not $toml) {
+    for ($i = 0; $i -lt $pp.Count; $i++) {
+      $m = [regex]::Match($pp[$i], '^("[A-Za-z0-9_.-]+"):\{')
+      if ($m.Success) { $par[$i] = $m.Groups[1].Value; $pp[$i] = $pp[$i].Substring($m.Length) }
+    }
+  }
   $lines = @($t); if ($toml) { $lines = $t.Split("`n") }
   foreach ($line in $lines) {
     $l = $line -replace '\s', ''
     if ($toml -and $l.StartsWith('#')) { continue }
     if ($toml -and $l.StartsWith('[')) { break }
+    $objs = $null
     for ($i = 0; $i -lt $pp.Count; $i++) {
       if ($got[$i]) { continue }
       if ($toml) {
@@ -1185,13 +1235,21 @@ function Aa-Hit([string]$f, $pats) {
         }
         continue
       }
-      $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
-      while ($k -ge 0) {
-        $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
-        $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
-        $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a)))
-        if ($hit) { $got[$i] = $true; break }
-        $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
+      $texts = @($l)
+      if ($par[$i]) {
+        if ($null -eq $objs) { $objs = Aa-Keys $f $l @($par | Where-Object { $_ }) }
+        $texts = @(); if ($objs.ContainsKey($par[$i])) { $texts = @($objs[$par[$i]]) }
+      }
+      foreach ($tx in $texts) {
+        $k = $tx.IndexOf($pp[$i], [StringComparison]::Ordinal)
+        while ($k -ge 0) {
+          $b = ''; if ($k -gt 0) { $b = [string]$tx[$k - 1] }
+          $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $tx.Length) { $a = [string]$tx[$e] }
+          $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a)))
+          if ($hit) { $got[$i] = $true; break }
+          $k = $tx.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
+        }
+        if ($got[$i]) { break }
       }
     }
   }
@@ -1221,7 +1279,7 @@ foreach ($f in $AllowFiles) {
   if (Flat-Match $f $t $RxHooks) { $w.Add('run commands while the agent works') }
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
-  if (Flat-Match $f $t $RxBypass) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
+  if ((Flat-Match $f $t $RxBypass) -and (Aa-Hit $f @('"permissions": {"defaultMode": "bypassPermissions"'))) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
   if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
 }
 foreach ($f in $TaskFiles) {
@@ -1229,8 +1287,8 @@ foreach ($f in $TaskFiles) {
   $t = Flat-Text $f
   if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
 }
-# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" (Allow all) or
-# "autopilot" starts new Copilot chats that run every tool call without asking, and the setting
+# A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" or "autopilot"
+# starts new Copilot chats that run every tool call without asking, and the setting
 # declares no scope, so VS Code takes it from a project too: a cloned repo can bring it.
 # "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
@@ -2350,6 +2408,7 @@ $OutTable = @(
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '0.2.116', '1.0.24', 'a web page could reach the editor connection', 'github.com/advisories/GHSA-9f65-56v6-gxw7')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '2.1.38', '2.1.163', 'a malicious repository could run code outside the sandbox', 'github.com/advisories/GHSA-7835-87q9-rgvv')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '-', '2.1.179', 'a plugin repository could install code that bypasses its pinned hash', 'github.com/advisories/GHSA-pq7j-f95f-qfcv')
+  ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '2.0.68', '2.1.260', 'a stored API key could start sessions without the managed settings of an Enterprise or Team organization', 'github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
 )
@@ -2419,12 +2478,23 @@ foreach ($r in $OutTable) {
     # among those its versions fall under, and shows each of their holes with its advisory.
     if ($oldSeen.ContainsKey($r[0])) { $o = $oldSeen[$r[0]]; if (-not $o.Vers.Contains($v)) { $o.Vers.Add($v) } }
     else {
-      $o = @{ Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
+      $o = @{ Id = $r[0]; Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
       $o.Vers.Add($v); $oldSeen[$r[0]] = $o; $OldList.Add($o)
     }
     if ((Ver-Cmp $r[6] $o.Fixed) -gt 0) { $o.Fixed = $r[6] }
     if ($o.HoleKeys.Add("$($r[7])|$($r[8])")) { $o.Holes.Add(@($r[7], $r[8])) }
   }
+}
+# When the version a row says to update to is in the range of another of the tool's lines, the row
+# takes that line's fix, until no line covers it: the version it names has no published fix of its own.
+foreach ($o in $OldList) {
+  do {
+    $moved = $false
+    foreach ($r in $OutTable) {
+      if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs)) { continue }
+      if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6]) -lt 0) { $o.Fixed = $r[6]; $moved = $true }
+    }
+  } while ($moved)
 }
 $N_OLD = $OldList.Count
 if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldList[0].Name)" }
@@ -2577,7 +2647,7 @@ elseif ($ExtUpd.Count -gt 0) { Progress 'An editor extension to remove: its malw
 # file or a folder.
 # >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
 $Platforms = @(
-  @{ Id = 'opencode'; Name = 'OpenCode'; Cmds = @('opencode'); Dirs = @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')); Files = @(); Found = 'installed'; Advice = 'OpenCode emailed the Console users its breach hit, and says those it did not email were not affected. If you got that email, rotate every provider key you saved in the Console. Keys kept only in the CLI never reach OpenCode.'; Summary = 'OpenCode found: got its breach email? Rotate keys' },
+  @{ Id = 'opencode'; Name = 'OpenCode'; Cmds = @('opencode'); Dirs = @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')); Files = @(); Found = 'installed'; Advice = 'OpenCode emailed the Console users its breach hit, and says those it did not email were not affected. It told those users to revoke and replace their keys directly with each provider. Keys kept only in the CLI never reach OpenCode.'; Summary = 'OpenCode found: got its breach email? Rotate keys' },
   @{ Id = 'railway'; Name = 'Railway'; Cmds = @('railway'); Dirs = @(); Files = @((J $HomeDir '.railway/config.json')); Found = 'CLI found'; Advice = 'Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.'; Summary = 'Railway CLI found: rotate secrets stored there' },
   @{ Id = 'zeabur'; Name = 'Zeabur'; Cmds = @('zeabur'); Dirs = @((J $HomeDir '.config/zeabur')); Files = @(); Found = 'CLI found'; Advice = 'Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.'; Summary = 'Zeabur CLI found: rotate secrets stored there' })
 # <<< platforms

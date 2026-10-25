@@ -743,15 +743,18 @@ rm -rf "$WORK/stp/code/tool"
 psrun "$WORK/stp" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp-c.txt"
 has    "the summary row names a project file to read" 'MCP servers 0 servers, 1 project file to read' "$WORK/stp-c.txt"
 # Project settings: bypassPermissions, which Claude Code before 2.1.257 took from a project, and two
-# that are not settings: the same words inside a rule's string, and an empty ANTHROPIC_BASE_URL.
-mkdir -p "$WORK/byp/p/byp/.claude" "$WORK/byp/p/str/.claude" "$WORK/byp/p/empty/.claude" "$WORK/byp/AppData/Roaming" "$WORK/byp/AppData/Local/Temp"
+# that are not settings: the same words inside a rule's string, an empty ANTHROPIC_BASE_URL, and a
+# defaultMode outside permissions, the only place Claude Code reads it.
+mkdir -p "$WORK/byp/p/byp/.claude" "$WORK/byp/p/str/.claude" "$WORK/byp/p/empty/.claude" "$WORK/byp/p/top/.claude" "$WORK/byp/AppData/Roaming" "$WORK/byp/AppData/Local/Temp"
 printf '{\n  "permissions": {\n    "defaultMode": "bypassPermissions"\n  }\n}\n' > "$WORK/byp/p/byp/.claude/settings.json"
 printf '{"permissions":{"allow":["Bash(echo \\"defaultMode\\": \\"bypassPermissions\\")"]}}\n' > "$WORK/byp/p/str/.claude/settings.local.json"
 printf '{"env":{"ANTHROPIC_BASE_URL":""}}\n' > "$WORK/byp/p/empty/.claude/settings.json"
+printf '{"defaultMode":"bypassPermissions","permissions":{}}\n' > "$WORK/byp/p/top/.claude/settings.json"
 psrun "$WORK/byp" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/byp.txt"
 has    "a project that turns on bypassPermissions is flagged" '~/p/byp/\.claude/settings\.json Set to skip permission prompts with bypassPermissions\. Claude Code applies it from a project only before version 2\.1\.257\.' "$WORK/byp.txt"
 hasnot "the words inside a rule's string are not the setting" 'p/str/' "$WORK/byp.txt"
 hasnot "an empty ANTHROPIC_BASE_URL is not flagged" 'p/empty/' "$WORK/byp.txt"
+hasnot "a project's defaultMode outside permissions is not the setting" 'p/top/' "$WORK/byp.txt"
 # One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
 mkdir -p "$WORK/bigjs/p/.vscode" "$WORK/bigjs/AppData/Roaming" "$WORK/bigjs/AppData/Local/Temp"
 python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'
@@ -1204,7 +1207,7 @@ has    "and the fix"                                  'Turn off run-without-aski
 has    "Cursor below the fixed version" '! Cursor 2\.9\.1, update to 3\.1\.2 or later A malicious agent could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$D"
 SKIPPING=""
 has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can reach files outside it' "$D"
-has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.179 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
+has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.260 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
@@ -1321,7 +1324,17 @@ dzrun "$WORK/dz-old" | tr -s ' \n' '  ' > "$WORK/dz-old.txt"
 has    "Cursor between two fixes is told the newest" '! Cursor 3\.0\.5, update to 3\.1\.2 or later An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$WORK/dz-old.txt"
 hasnot "and not the hole its version already has the fix for" 'update to 3\.1\.2 or later A malicious agent' "$WORK/dz-old.txt"
 SKIPPING=""
-has    "Claude Code in a sandbox escape's range: its hole, the newest fix's, and that fix" '! Claude Code 2\.1\.100, update to 2\.1\.179 or later A malicious repository could run code outside the sandbox\. github\.com/advisories/GHSA-7835-87q9-rgvv A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-old.txt"
+has    "Claude Code in a sandbox escape's range: its hole, the newest fix's, and that fix" '! Claude Code 2\.1\.100, update to 2\.1\.260 or later A malicious repository could run code outside the sandbox\. github\.com/advisories/GHSA-7835-87q9-rgvv A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-old.txt"
+# The newest fix covers 2.0.68 and later: 2.1.259 has only its hole. Below 2.0.68 the highest fix of the
+# lines a version falls under is 2.1.179, which that range covers, so the row names 2.1.260 there too.
+for V in 2.1.259 2.0.67; do
+  rm -rf "$WORK/dz-cc$V"; cp -R "$WORK/clean" "$WORK/dz-cc$V"; mkdir -p "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code"
+  printf '{\n  "name": "@anthropic-ai/claude-code",\n  "version": "%s"\n}\n' "$V" > "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code/package.json"
+  dzrun "$WORK/dz-cc$V" | tr -s ' \n' '  ' > "$WORK/dz-cc$V.txt"
+done
+has    "Claude Code past 2.1.179 is told the newest fix, with its hole" '! Claude Code 2\.1\.259, update to 2\.1\.260 or later A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-cc2.1.259.txt"
+has    "below the newest fix's range the row still names it, not 2.1.179, which has a hole of its own" '! Claude Code 2\.0\.67, update to 2\.1\.260 or later A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-cc2.0.67.txt"
+hasnot "and it does not show the newest fix's hole, which that version does not have" 'A stored API key could start sessions' "$WORK/dz-cc2.0.67.txt"
 mkdir -p "$WORK/dz-os/.cursor/extensions/oorzc.mind-map-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
 has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/oorzc\.mind-map-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
@@ -1379,11 +1392,39 @@ hasnot "a setting in a /* */ block comment is not read" '! VS Code Copilot ' "$W
 has    "Codex values in single quotes, TOML's literal strings, are read" '! Codex ~/\.codex/config\.toml never asks, full access' "$WORK/dz-lim1.txt"
 has    "a literal string and a basic one in one Codex file both count" '! Codex ~/\.codex/config\.toml never asks, full access' "$WORK/dz-lim3.txt"
 hasnot "known limit: a profile made the default with profile = is not read" '! Codex ' "$WORK/dz-lim2.txt"
+# Codex's permission profiles: default_permissions = ":danger-full-access" with approval_policy = "never"
+# runs every command without asking and without a sandbox. Another profile, approvals left on, or the
+# key under a [table] is not that.
+for L in dfa dfal ws ask tbl; do rm -rf "$WORK/dz-cx-$L"; cp -R "$WORK/clean" "$WORK/dz-cx-$L"; mkdir -p "$WORK/dz-cx-$L/.codex"; done
+printf 'approval_policy = "never"\ndefault_permissions = ":danger-full-access"\n' > "$WORK/dz-cx-dfa/.codex/config.toml"
+printf "approval_policy = 'never'\ndefault_permissions = ':danger-full-access' # no sandbox\n" > "$WORK/dz-cx-dfal/.codex/config.toml"
+printf 'approval_policy = "never"\ndefault_permissions = ":workspace"\n' > "$WORK/dz-cx-ws/.codex/config.toml"
+printf 'approval_policy = "on-request"\ndefault_permissions = ":danger-full-access"\n' > "$WORK/dz-cx-ask/.codex/config.toml"
+printf 'approval_policy = "never"\n[profiles.yolo]\ndefault_permissions = ":danger-full-access"\n' > "$WORK/dz-cx-tbl/.codex/config.toml"
+for L in dfa dfal ws ask tbl; do dzrun "$WORK/dz-cx-$L" | tr -s ' \n' '  ' > "$WORK/dz-cx-$L.txt"; done
+has    "Codex's full access profile with approvals off runs without asking" '! Codex ~/\.codex/config\.toml never asks, full access profile' "$WORK/dz-cx-dfa.txt"
+has    "the full access profile in TOML's literal strings counts too" '! Codex ~/\.codex/config\.toml never asks, full access profile' "$WORK/dz-cx-dfal.txt"
+hasnot "the workspace profile is not full access" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ws.txt"
+hasnot "the full access profile with approvals on is not reported" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-ask.txt"
+hasnot "the full access profile under a [table] is not the top level" '! Codex ~/\.codex/config\.toml never asks' "$WORK/dz-cx-tbl.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 dzrun "$WORK/dz-calm" | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
 has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
-# chat.permissions.default: autoApprove ("Allow all") and autopilot run every tool call without asking.
+# Claude Code reads defaultMode only inside permissions: one at the top of the file, in an object inside
+# permissions, or under a permissions key below the top is not the setting; one after rules with
+# brackets in their strings is.
+for L in top deep env rules; do rm -rf "$WORK/dz-dm-$L"; cp -R "$WORK/dz-calm" "$WORK/dz-dm-$L"; done
+printf '{"defaultMode": "bypassPermissions", "permissions": {}}\n' > "$WORK/dz-dm-top/.claude/settings.json"
+printf '{"permissions": {"x": {"defaultMode": "bypassPermissions"}}}\n' > "$WORK/dz-dm-deep/.claude/settings.json"
+printf '{"env": {"permissions": {"defaultMode": "bypassPermissions"}}}\n' > "$WORK/dz-dm-env/.claude/settings.json"
+printf '{\n  "permissions": {\n    "allow": ["Bash(find . -exec echo {} +)", "Read(src/[a]*)"],\n    "defaultMode": "bypassPermissions"\n  }\n}\n' > "$WORK/dz-dm-rules/.claude/settings.json"
+for L in top deep env rules; do dzrun "$WORK/dz-dm-$L" | tr -s ' \n' '  ' > "$WORK/dz-dm-$L.txt"; done
+hasnot "a defaultMode at the top of the file is not Claude Code's setting" '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-top.txt"
+hasnot "nor one in an object inside permissions"  '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-deep.txt"
+hasnot "nor one under a permissions key below the top" '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-env.txt"
+has    "one after rules with brackets in their strings is" '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-dm-rules.txt"
+# chat.permissions.default: autoApprove and autopilot run every tool call without asking.
 # In the user settings the agent is set to run without asking; the default level and a commented line
 # are not reported. The setting declares no scope, so a project's copy is in force too: section 2 lists
 # it, as a setting a cloned project brings, and a project at the default level is not counted.
@@ -1541,7 +1582,8 @@ hasnot "but it is not an act-now hit"          'Act now|ACT NOW' "$WORK/pyc-full
 cp -R "$WORK/pyc" "$WORK/pyc-oc"; mkdir -p "$WORK/pyc-oc/.config/opencode"
 psrun "$WORK/pyc-oc" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyc-oc.txt"
 has    "a weak pyc and OpenCode both show in the details"  'possible leftover.*OpenCode +installed' "$WORK/pyc-oc.txt"
-has    "OpenCode's line says only the users it emailed were affected" 'OpenCode +installed OpenCode emailed the Console users its breach hit, and says those it did not email were not affected\. If you got that email, rotate every provider key you saved in the Console\. Keys kept only in the CLI never reach OpenCode\.' "$WORK/pyc-oc.txt"
+has    "OpenCode's line says only the users it emailed were affected" 'OpenCode +installed OpenCode emailed the Console users its breach hit, and says those it did not email were not affected\. It told those users to revoke and replace their keys directly with each provider\. Keys kept only in the CLI never reach OpenCode\.' "$WORK/pyc-oc.txt"
+hasnot "and gives no advice OpenCode did not give"     'rotate every provider key' "$WORK/pyc-oc.txt"
 has    "a weak pyc shows in row 05 and the fix list"       'A leftover cook\.pyc can come from the LiteLLM 1\.107\.0 malware' "$WORK/pyc-oc.txt"
 printf 'import cook\n' > "$SP/cook.pth"
 psrun "$WORK/pyc" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pth.txt"
