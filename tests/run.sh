@@ -545,6 +545,16 @@ NB=$(printf '%s\n' "$BAN" | grep -c .); NGOOD=$(printf '%s\n' "$BAN" | grep -cE 
 if [ "$NB" -ge 3 ] && [ "$NB" -eq "$NGOOD" ]; then ok "every banner shows that version and date"; else bad "every banner shows that version and date"; fi
 if [ "$(grep -m1 -E '^## [0-9]' CHANGELOG.md | awk '{print $2}' | tr -d ,)" = "$VNUM" ]; then ok "the newest CHANGELOG release is that version"; else bad "the newest CHANGELOG release is that version"; fi
 
+# The repo's own folder is listed even when the scan finds its worktree first. A find that lists in
+# reverse makes the worktree come first on any machine (macOS's find happens to list the repo first).
+mkdir -p "$WORK/revfind"
+printf '#!/bin/sh\ncase " $* " in *" -print0 "*) /usr/bin/find "$@" | sort -rz ;; *) /usr/bin/find "$@" | sort -r ;; esac\n' > "$WORK/revfind/find"; chmod +x "$WORK/revfind/find"
+rm -rf "$WORK/wtrev"; mkdir -p "$WORK/wtrev/wt/.claude/worktrees/w1/.claude"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' | tee "$WORK/wtrev/wt/.claude/settings.json" > "$WORK/wtrev/wt/.claude/worktrees/w1/.claude/settings.json"
+HOME="$WORK/wtrev" PATH="$WORK/revfind:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wtrev.txt"
+has    "the repo's folder is listed when its worktree is found first" '~/wt/\.claude/settings\.json Set to run commands while the agent works\. The same settings are in 1 more folder' "$WORK/wtrev.txt"
+hasnot "and the worktree is not"                      'worktrees/w1' "$WORK/wtrev.txt"
+
 echo "review fixes: npm, project settings and the wiper"
 RV=$WORK/rv; cp -R "$WORK/clean" "$RV"
 # Lockfiles: a pnpm override pinning away, an npm lock without URLs, a shrinkwrap, pnpm 5.

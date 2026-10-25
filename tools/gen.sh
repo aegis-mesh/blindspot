@@ -49,6 +49,7 @@ PATH_OK='function path_ok(p,   r, k, v) {
     else return 0
     return r ~ /^\/[^\/]/
   }'
+# No regex intervals ({n}) in the awk programs: older mawk (Ubuntu 22.04) does not support them.
 # Characters that would break the generated bash, awk or PowerShell are refused, and so is an
 # incident id no line of data/incidents.tsv has. A key id is lowercase letters, digits and _, and
 # names its provider once: gird.ai's counts are keyed on it. The regexes spell out counts

@@ -1110,6 +1110,7 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
   # row names the repo's own file, whichever one the scan listed first.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
   if ($AutoSeen.ContainsKey($key)) {
+    # The repo's own folder is the one listed, whichever the scan finds first.
     $row = $AutoSeen[$key]; $row.More = $row.More + 1
     if ($row.File -match '[/\\]\.claude[/\\]worktrees[/\\]' -and $f -notmatch '[/\\]\.claude[/\\]worktrees[/\\]') { $row.File = $f }
     return
