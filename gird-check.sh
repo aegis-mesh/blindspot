@@ -1887,6 +1887,8 @@ aa_hit() { # file pattern|pattern...
         else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
+    # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
+    toml && match($0, "^(\"[A-Za-z0-9_-]+\"|\047[A-Za-z0-9_-]+\047)=") { $0 = substr($0, 2, RLENGTH - 3) "=" substr($0, RLENGTH + 1) }
     # A .json file: its text is the first line, the objects aa_keys printed come after it.
     { for (i = 1; i <= n; i++) if (!(i in got) && (toml || (NR == 1) == !(i in in_)) && $0 ~ re[i]) got[i] = 1 }
     END { for (i = 1; i <= n; i++) if ((i in neg) == (i in got)) exit 1; exit 0 }'
@@ -1946,8 +1948,9 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
   fi
-  # An empty ANTHROPIC_BASE_URL sets nothing.
-  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*[^"[:space:]][^"]*"' | grep -qvE ':[[:space:]]*"[A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/[^"]*)?"$'; then
+  # An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
+  # docs call its own, is not another server.
+  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*[^"[:space:]][^"]*"' | grep -qvE ':[[:space:]]*"([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?(/[^"]*)?"$'; then
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
   # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
@@ -6182,6 +6185,8 @@ if [ -n "$_aau" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_aau" |
 AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '{ k = $1 FS $2 } !(k in o) { o[k] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[k]] = st[o[k]] ", " $3 }
   END { for (i = 1; i <= n; i++) print f[i] "\t" ag[i] "\t" st[i] }')
 N_YOLO=$(count_lines "$AA_LIST")
+# Row 01 counts agents: one can be set so in several files.
+N_YOLO_AG=$(printf '%s\n' "$AA_LIST" | cut -f2 | sort -u | grep -c .)
 [ "$N_YOLO" -gt 0 ] && progress w "Agents set to run commands without asking: $(printf '%s\n' "$AA_LIST" | head -n 1 | cut -f2)"
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
@@ -7507,7 +7512,7 @@ for _t in $NPM_TAGS; do
   _s=$(incident_summary "$_t"); if [ -n "$_s" ]; then UPD_SUM=$_s; break; fi
 done
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
-elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO set to run commands without asking"
+elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi

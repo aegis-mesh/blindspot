@@ -1201,8 +1201,9 @@ $RxCmdAlways = New-Object regex('"(apiKeyHelper|awsAuthRefresh|awsCredentialExpo
 $RxCmdHooked = New-Object regex('"(statusLine|fileSuggestion|subagentStatusLine)"\s*:', $RxOpt, $RxTimeout)
 $RxHookRun = New-Object regex('"hooks"\s*:\s*\{(\s*"([^"\\]|\\.)*"\s*:\s*\[\s*\]\s*,)*\s*"([^"\\]|\\.)*"\s*:\s*\[\s*[^\]\s]', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
-# An empty ANTHROPIC_BASE_URL sets nothing.
-$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
+# An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
+# docs call its own, is not another server.
+$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?!([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
 # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
 # versions take it only from the person's own or managed settings (Claude Code's settings docs). It
 # reads defaultMode only inside permissions (Aa-Hit); this regex spares the files that never name it.
@@ -1317,6 +1318,8 @@ function Aa-Hit([string]$f, $pats) {
   $lines = @($t); if ($toml) { $lines = $t.Split("`n") }
   foreach ($line in $lines) {
     $l = $line -replace '\s', ''
+    # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
+    if ($toml) { $l = $l -replace '^("([A-Za-z0-9_-]+)"|''([A-Za-z0-9_-]+)'')=', '$2$3=' }
     if ($toml -and $l.StartsWith('#')) { continue }
     if ($toml -and $l.StartsWith('[')) { break }
     $objs = $null
@@ -5536,6 +5539,10 @@ foreach ($r in $AaTable) {
   }
 }
 $N_YOLO = $AaList.Count
+# Row 01 counts agents: one can be set so in several files.
+$yoloAg = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($r in $AaList) { [void]$yoloAg.Add($r.Agent) }
+$N_YOLO_AG = $yoloAg.Count
 # One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
 # it with the other settings files it could not read, so the summary doesn't read clean over it.
 foreach ($f in (Unread-Files $aaTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
@@ -6417,7 +6424,7 @@ function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
 $UpdSum = ''
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
-elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO set to run commands without asking" }
+elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }
