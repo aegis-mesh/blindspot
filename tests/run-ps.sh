@@ -713,15 +713,18 @@ rm -rf "$WORK/stp/code/tool"
 psrun "$WORK/stp" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp-c.txt"
 has    "the summary row names a project file to read" 'MCP servers 0 servers, 1 project file to read' "$WORK/stp-c.txt"
 # Project settings: bypassPermissions, which Claude Code before 2.1.257 took from a project, and two
-# that are not settings: the same words inside a rule's string, and an empty ANTHROPIC_BASE_URL.
-mkdir -p "$WORK/byp/p/byp/.claude" "$WORK/byp/p/str/.claude" "$WORK/byp/p/empty/.claude" "$WORK/byp/AppData/Roaming" "$WORK/byp/AppData/Local/Temp"
+# that are not settings: the same words inside a rule's string, an empty ANTHROPIC_BASE_URL, and a
+# defaultMode outside permissions, the only place Claude Code reads it.
+mkdir -p "$WORK/byp/p/byp/.claude" "$WORK/byp/p/str/.claude" "$WORK/byp/p/empty/.claude" "$WORK/byp/p/top/.claude" "$WORK/byp/AppData/Roaming" "$WORK/byp/AppData/Local/Temp"
 printf '{\n  "permissions": {\n    "defaultMode": "bypassPermissions"\n  }\n}\n' > "$WORK/byp/p/byp/.claude/settings.json"
 printf '{"permissions":{"allow":["Bash(echo \\"defaultMode\\": \\"bypassPermissions\\")"]}}\n' > "$WORK/byp/p/str/.claude/settings.local.json"
 printf '{"env":{"ANTHROPIC_BASE_URL":""}}\n' > "$WORK/byp/p/empty/.claude/settings.json"
+printf '{"defaultMode":"bypassPermissions","permissions":{}}\n' > "$WORK/byp/p/top/.claude/settings.json"
 psrun "$WORK/byp" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/byp.txt"
 has    "a project that turns on bypassPermissions is flagged" '~/p/byp/\.claude/settings\.json Set to skip permission prompts with bypassPermissions\. Claude Code applies it from a project only before version 2\.1\.257\.' "$WORK/byp.txt"
 hasnot "the words inside a rule's string are not the setting" 'p/str/' "$WORK/byp.txt"
 hasnot "an empty ANTHROPIC_BASE_URL is not flagged" 'p/empty/' "$WORK/byp.txt"
+hasnot "a project's defaultMode outside permissions is not the setting" 'p/top/' "$WORK/byp.txt"
 # One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
 mkdir -p "$WORK/bigjs/p/.vscode" "$WORK/bigjs/AppData/Roaming" "$WORK/bigjs/AppData/Local/Temp"
 python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'
@@ -1339,6 +1342,19 @@ cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 dzrun "$WORK/dz-calm" | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
 has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
+# Claude Code reads defaultMode only inside permissions: one at the top of the file, in an object inside
+# permissions, or under a permissions key below the top is not the setting; one after rules with
+# brackets in their strings is.
+for L in top deep env rules; do rm -rf "$WORK/dz-dm-$L"; cp -R "$WORK/dz-calm" "$WORK/dz-dm-$L"; done
+printf '{"defaultMode": "bypassPermissions", "permissions": {}}\n' > "$WORK/dz-dm-top/.claude/settings.json"
+printf '{"permissions": {"x": {"defaultMode": "bypassPermissions"}}}\n' > "$WORK/dz-dm-deep/.claude/settings.json"
+printf '{"env": {"permissions": {"defaultMode": "bypassPermissions"}}}\n' > "$WORK/dz-dm-env/.claude/settings.json"
+printf '{\n  "permissions": {\n    "allow": ["Bash(find . -exec echo {} +)", "Read(src/[a]*)"],\n    "defaultMode": "bypassPermissions"\n  }\n}\n' > "$WORK/dz-dm-rules/.claude/settings.json"
+for L in top deep env rules; do dzrun "$WORK/dz-dm-$L" | tr -s ' \n' '  ' > "$WORK/dz-dm-$L.txt"; done
+hasnot "a defaultMode at the top of the file is not Claude Code's setting" '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-top.txt"
+hasnot "nor one in an object inside permissions"  '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-deep.txt"
+hasnot "nor one under a permissions key below the top" '! Claude Code ~/\.claude/settings\.json' "$WORK/dz-dm-env.txt"
+has    "one after rules with brackets in their strings is" '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-dm-rules.txt"
 # chat.permissions.default: autoApprove ("Allow all") and autopilot run every tool call without asking.
 # In the user settings the agent is set to run without asking; the default level and a commented line
 # are not reported. The setting declares no scope, so a project's copy is in force too: section 2 lists

@@ -893,7 +893,7 @@ WORM_REF_NOTE='runs a file a worm plants'
 # <<< planted
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
-AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"defaultMode\": \"bypassPermissions\"
+AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
@@ -1691,20 +1691,78 @@ auto_row() { # file what flattened-text
   AUTO_ROWS="$AUTO_ROWS$_rp$TAB$2$TAB$_sum${TAB}0
 "
 }
+# For aa_hit, a .json file's text (one line, spaces removed), then a line for each object that is the
+# value of a top-level key a pattern names as "key": {...: the key, a tab, and that object with every
+# value nested in it emptied ({} or []), so the rest of the pattern matches only directly inside it, as
+# Claude Code reads defaultMode only inside permissions. Strings are split on their quotes as flat
+# splits them (a key with an escaped quote in it is never one a pattern names), and the code between
+# them on each kind of bracket, one character at a time, and the object is printed as it is read:
+# linear on every awk, where building it up as one string is quadratic on macOS's awk.
+aa_keys() { # pattern|pattern...
+  AA_P=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    function out(s) { if (cur != "" && dep == 2) printf "%s", s }
+    function ob(c) { if (dep == 1 && c == "{" && (key in want)) { cur = key; printf "%s\t{", cur } else out(c); dep++ }
+    function cb(c) { dep--; out(c); if (cur != "" && dep == 1) { print "}"; cur = "" } }
+    # The code between two strings, its brackets in order: split on {, each part on }, then [ and ].
+    function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
+      na = split(s, a, "{")
+      for (i = 1; i <= na; i++) {
+        nb = split(a[i], b, "}")
+        for (j = 1; j <= nb; j++) {
+          nc = split(b[j], c, "[")
+          for (k = 1; k <= nc; k++) {
+            nd = split(c[k], d, "]")
+            for (l = 1; l <= nd; l++) { out(d[l]); if (l < nd) cb("]") }
+            if (k < nc) ob("[")
+          }
+          if (j < nb) cb("}")
+        }
+        if (i < na) ob("{")
+      }
+    }
+    BEGIN { n = split(ENVIRON["AA_P"], p, "|")
+      for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); if (match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { want[substr(p[i], 2, RLENGTH - 4)] = 1; nw++ } } }
+    { print
+      if (!nw) next
+      nq = split($0, q, "\""); st = 0; dep = 0; cur = ""; key = ""; hp = 0
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {            # code: right after a string at the top level, a : makes it the key
+          if (hp && q[i] ~ /^:/) key = pv
+          hp = 0; code(q[i])
+          if (i < nq) { out("\""); st = 1; one = 1 }
+          continue
+        }
+        out(q[i])                 # a string, up to a quote that no odd run of \ escapes
+        if (dep == 1) pv = one ? q[i] : ""
+        esc = (i < nq && trail(q[i]) % 2 == 1)
+        if (i < nq) out("\"")
+        if (esc) { one = 0; continue }
+        if (dep == 1) hp = 1
+        st = 0
+      }
+      if (cur != "") print ""
+    }'
+}
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through flat (comments are its job), and a match starts at the text, a {
-# or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts. A
-# .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
-# (so a setting inside an inline table, a profile written as one, does not count), a value in double
-# quotes also matches the same value in single quotes (a TOML literal string), and only the lines
-# before the first [table] count: a setting under [profiles.x] applies only when that profile is
-# used, and Codex 0.134.0 and later read no such table from config.toml. tr removes the spaces in
+# or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts; a
+# pattern written "key": {... matches its rest the same way, inside that top-level key's object only
+# (aa_keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
+# comment (so a setting inside an inline table, a profile written as one, does not count), a value in
+# double quotes also matches the same value in single quotes (a TOML literal string), and only the
+# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
+# is used, and Codex 0.134.0 and later read no such table from config.toml. tr removes the spaces in
 # one pass, and each pattern becomes one regex with its boundaries in it, tried once per line:
 # linear on every awk, where a gsub on the joined text, or an index() of the rest of the line at
 # every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]'; fi | AA_P=$2 awk -v toml="$_tm" '
+  if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
     # A pattern as a regex that matches only its own text: every character a regex reads is quoted.
     function lit(s,   o, c, j) {
       o = ""
@@ -1716,10 +1774,12 @@ aa_hit() { # file pattern|pattern...
     }
     BEGIN { n = split(ENVIRON["AA_P"], p, "|")
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); q = p[i]; gsub(/"/, "\047", q)
-        re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+        if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { in_[i] = 1; re[i] = "^" lit(substr(p[i], 2, RLENGTH - 4)) "\t(.*[{,])?" lit(substr(p[i], RLENGTH + 1)) "($|[,}#/])" }
+        else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
-    { for (i = 1; i <= n; i++) if (!(i in got) && $0 ~ re[i]) got[i] = 1 }
+    # A .json file: its text is the first line, the objects aa_keys printed come after it.
+    { for (i = 1; i <= n; i++) if (!(i in got) && (toml || (NR == 1) == !(i in in_)) && $0 ~ re[i]) got[i] = 1 }
     END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }'
 }
 # Keys that make Claude Code run a command: hooks and its helper commands.
@@ -1740,8 +1800,9 @@ while IFS= read -r f; do
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
   # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
-  # versions take it only from the person's own or managed settings (Claude Code's settings docs).
-  if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"'; then
+  # versions take it only from the person's own or managed settings (Claude Code's settings docs). It
+  # reads defaultMode only inside permissions (aa_hit); the grep spares the files that never name it.
+  if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && aa_hit "$f" '"permissions": {"defaultMode": "bypassPermissions"'; then
     _w="${_w:+$_w, }skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257"
   fi
   [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
