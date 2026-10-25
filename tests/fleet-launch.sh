@@ -14,6 +14,9 @@
 #   maxbytes   the real run with a 1 MiB file limit (an app's Info.plist stays far below it)
 #   noprot     the real run, with the protected folder it tries refusing it
 #   hardlink   a hard link to root's script copy, as any account could make in /tmp, then the real run
+#   marklink   a hard link to root's script copy under a LiteLLM marker's name in the shared temp
+#              folder, left behind for the next run, then the real run
+#   slowsess   the real run, with its session check held so it never ends on its own
 # FLL_API, when set, is handed to the account run as GIRD_CHECK_API, to show it sends nothing.
 printf '%s\n' "$*" >> "$FLL_DIR/argv.log"
 printf '%s\n' "$PATH" > "$FLL_DIR/launch-path"   # the PATH root starts sudo with
@@ -37,6 +40,8 @@ case "$mode" in
   maxbytes) extra+=(GIRD_CHECK_FLEET_MAX_BYTES=1048576) ;;
   noprot) extra+=("GIRD_CHECK_FLEET_PROTECTED=$FLL_DIR/noprot") ;;
   hardlink) for a in "$@"; do case "$a" in */gird-check.sh) /bin/ln -f "$a" "$FLL_DIR/copy-hardlink" ;; esac; done ;;
+  marklink) for a in "$@"; do case "$a" in */gird-check.sh) /bin/ln -f "$a" "$FLL_DIR/sharedtmp/.pc_once_linked" ;; esac; done ;;
+  slowsess) [ -p "$FLL_DIR/holdfifo" ] || /usr/bin/mkfifo "$FLL_DIR/holdfifo"; extra+=("GIRD_CHECK_SESSIONS_HOLD=$FLL_DIR/holdfifo") ;;
   endless) exec /usr/bin/yes agents=claude-code ;;
   hold) /usr/bin/perl -e 'use POSIX; POSIX::setsid(); sleep 60' fleet-hold-escapee &
         echo v=1; exec /bin/sleep 300 ;;

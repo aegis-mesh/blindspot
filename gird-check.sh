@@ -50,6 +50,9 @@ if [ "$EUID" -eq 0 ]; then for _v in ${!GIRD_CHECK_*}; do unset "$_v"; done; fi
 if [ "$ACCTRUN" -eq 1 ]; then
   [ "$EUID" -ne 0 ] || exit 13
   OFFLINE=1; NOGAME=1; SAVE=0; NO_COLOR=1; FULL=1; ALL=0; ALLSESS=1
+  # Root says how long the run has: the session check stops at three quarters of it, so what was
+  # found reaches root, with the sessions partly checked, instead of the run being stopped whole.
+  ACCT_END=""; case "${GIRD_CHECK_ACCOUNT_SECONDS:-}" in ''|*[!0-9]*) ;; *) ACCT_END=$((SECONDS + GIRD_CHECK_ACCOUNT_SECONDS * 3 / 4)) ;; esac
   exec 3>&1 >/dev/null 2>&1 </dev/null
   cd "${HOME:-/}" 2>/dev/null || cd / || exit 13
 fi
@@ -1411,7 +1414,7 @@ UNREAD_DIRS=""
 [ -n "$SCAN_ERR" ] && UNREAD_DIRS=$(grep -E '^find: .*: (Permission denied|Operation not permitted)$' "$SCAN_ERR" 2>/dev/null |
   sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
 N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
-HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST)) -gt 0 ] && HOME_PARTIAL=1
+HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST + SCAN_FAILED)) -gt 0 ] && HOME_PARTIAL=1
 # Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
 # files_found counts files, as it always has. A link counts only when it ends at a regular file: a
 # repo can link a settings file to /dev/zero or /dev/tty, which a reader would never get to the end of.
@@ -2159,7 +2162,7 @@ EOF
 done <<EOF
 $SITES_ALL
 EOF
-MARKS=""; _seen_t="|"
+MARKS=""; _seen_t="|"; FLEET_TMPMARK=""; FLEET_TMPWIPER=0
 # An account run looks in the account's own temp folder, the one macOS gives each account under
 # /var/folders, and in the shared /tmp only for markers that must be the account's own (owner yes):
 # the other markers there are the Mac's, checked by root.
@@ -2180,6 +2183,9 @@ for t in /tmp "${TMPDIR%/}" "$WTEMP" "$_utmp"; do
       # on Windows is the person's own folder.
       if [ "$_own" = yes ] && [ "$WIN" -eq 0 ]; then
         [ -O "$m" ] && [ ! -L "$m" ] && [ -n "$(find "$m" -prune -links 1 -print 2>/dev/null)" ] || continue
+        # In fleet mode, another account can leave a file of this account's under a marker's name in the
+        # shared /tmp (a hard link to it, once the original is renamed away): a possible sign there.
+        if [ "$ACCTRUN" -eq 1 ] && [ "$t" = /tmp ] && [ "$t" != "$_utmp" ]; then FLEET_TMPMARK="$FLEET_TMPMARK $_i"; continue; fi
       fi
       MARKS="$MARKS$_i$TAB$(rowsafe "$m")
 "
@@ -6269,7 +6275,9 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   # symbolic or hard, could put another person's file under it.
   if [ "$_iown" = yes ]; then
     [ -O "$_ip" ] || continue
-    case "$_ip" in "$H"/*) ;; *) { [ ! -L "$_ip" ] && [ -n "$(find "$_ip" -prune -links 1 -print 2>/dev/null)" ]; } || continue ;; esac
+    case "$_ip" in "$H"/*) ;; *) { [ ! -L "$_ip" ] && [ -n "$(find "$_ip" -prune -links 1 -print 2>/dev/null)" ]; } || continue
+      # As for the temp markers above: in fleet mode, a possible sign.
+      if [ "$ACCTRUN" -eq 1 ]; then if [ "$_ik" = wiper ]; then FLEET_TMPWIPER=1; else FLEET_TMPMARK="$FLEET_TMPMARK $_ii"; fi; continue; fi ;; esac
   fi
   _ext=0; case "$EXT_INCS" in *" $_ii "*) case "$NPM_INCS" in *" $_ii "*) ;; *) _ext=1 ;; esac ;; esac
   # gh-token-monitor came with more than one wave, so fleet mode gets it as wiper=1, not as an incident.
@@ -6346,7 +6354,10 @@ OC=$(plat_hit opencode); RW=$(plat_hit railway)
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless --all-sessions asked to wait.
-if [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
+if [ "$ALLSESS" -eq 1 ] && [ -n "${ACCT_END:-}" ]; then
+  while [ -n "$SESS_PID" ] && kill -0 "$SESS_PID" 2>/dev/null && [ "$SECONDS" -lt "$ACCT_END" ]; do sleep 1; done
+  if [ -n "$SESS_PID" ] && kill -0 "$SESS_PID" 2>/dev/null; then sess_stop; else sess_stop wait; fi
+elif [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
 # SESS_DONE counts the files read to the end; SESS_UNREAD the folders that could not be read (-1:
 # some, ripgrep gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
 # looked at, because there is none or the check could not start.
@@ -6626,6 +6637,14 @@ if [ "$ACCTRUN" -eq 1 ]; then
   # named like an extension incident's with no such extension (EXT_CHECK).
   _poss=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=litellm
   _poss=$(printf '%s\n' $_poss $EXT_CHECK_TAGS | fleet_ids)
+  # Root starts the run with a clean environment, so a variable a shell profile sets to move an agent's
+  # folders (CLAUDE_CONFIG_DIR and the like) is not followed: the account is partly checked then. The
+  # profiles are read, never run.
+  _moved=0
+  for _pf in "$H/.zshenv" "$H/.zprofile" "$H/.zshrc" "$H/.bash_profile" "$H/.bashrc" "$H/.profile" "$H/.config/fish/config.fish"; do
+    [ -f "$_pf" ] && fleet_ok "$_pf" || continue
+    grep -qE '^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?(CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME)([=[:space:]])' "$_pf" 2>/dev/null && _moved=1
+  done
   {
     echo "v=1"
     echo "agents=$(printf '%s' "$AGENT_IDS" | fleet_ids)"
@@ -6652,6 +6671,9 @@ if [ "$ACCTRUN" -eq 1 ]; then
     echo "lock_only=$_lock"
     echo "remove=$(printf '%s\n' $EXT_UPD_TAGS | fleet_ids)"
     echo "not_read=$_nr"
+    echo "moved=$_moved"
+    echo "tmp_marks=$(printf '%s\n' $FLEET_TMPMARK | fleet_ids)"
+    echo "tmp_wiper=$FLEET_TMPWIPER"
     echo "protected=$FLEET_PROT"
     echo "end=1"
   } >&3
@@ -6816,9 +6838,10 @@ elif [ -n "$PCT_TXT" ]; then
 else
   emit "  ${SEV}▌${RST} ${B}$(upper "$FIXN")${RST}"
 fi
+# A home scan that failed is said in the short header too, which the summary and its pages keep.
+[ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths."
 HEAD_SHORT=$CAP; CAP=""
-wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
-[ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM" 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 # Folders the home scan could not enter, so sections 2 to 5 did not read the files in them.
 dir_list() { # paths, one a line: the first three as short() shows them, then how many more
   _dl=""; _dn=0

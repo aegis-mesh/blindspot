@@ -49,7 +49,7 @@ environment:
 
 ```
 /usr/bin/sudo -n -u <account> -H /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-  HOME=<home> /bin/bash <copy> --account-run
+  HOME=<home> GIRD_CHECK_ACCOUNT_SECONDS=<its share> /bin/bash <copy> --account-run
 ```
 
 A person's files can then only show the checks what that person can already read: a link from one
@@ -99,8 +99,9 @@ it reports not checked. Leftover home folders with no account are not listed.
 
 Checked once, by root, and reported for the Mac, not for an account: the shared temp folder, startup
 items in shared folders, agents installed in shared folders (found by path, never run), and running
-processes. Any account can create files in the shared temp folder, so a malware marker there counts
-for the Mac only when root made it; one an account owns counts on that account's row. Shared install
+processes. Any account can create files in the shared temp folder, and hard-link any file it can
+reach there, so a malware marker there is only a possible sign: for the Mac when root owns it, on an
+account's row when that account owns it. Shared install
 folders an account's check reads (npm's global folders outside the home, shared Python, Cursor's
 version in `/Applications`) show on every account's row. What phase 1 checks of these is under
 "As built".
@@ -325,8 +326,13 @@ real Mac.
   as `invalid-name` (not checked), so the inventory value stays readable; in an account run a file
   the account can't read, and a folder the home scan, npm's cache, the extension folders or the
   session check can't open, count as not checked; markers that must be the person's own
-  (data/indicators.tsv) are the account's finding only, which its run looks for in `/tmp`, never the
-  Mac's unless root made them, and never through a link, symbolic or hard;
+  (data/indicators.tsv) are looked for in `/tmp` under one name, never through a link, symbolic or
+  hard, and are only possible signs there, for the account that owns them or, when root owns them,
+  for the Mac: any account can hard-link a file it can reach under a marker's name (a review found
+  that through root's own copy of gird-check.sh, which root now empties and gives away before
+  deleting it); a running LiteLLM loader counts only when root's own process holds its lock; a
+  shell profile that moves an agent's folders leaves the account partly checked; each run is told
+  its time, so its session check stops in time;
   shared temp entries are looked at as links first and never followed; a `find` or `lsof` that does
   not answer in time leaves the Mac's row not complete; agents in the account's own install folders
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A

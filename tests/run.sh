@@ -1815,6 +1815,9 @@ mkdir -p "$WORK/badfind"; printf '#!/bin/sh\necho "find: unrecognized: -maxdepth
 HOME="$WORK/dz-calm" PATH="$WORK/badfind:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-badfind.txt"
 has    "a find that rejects its options is reported, not read as a clean home folder" 'The home folder was not scanned \(find: unrecognized: -maxdepth\)' "$WORK/dz-badfind.txt"
 hasnot "a find that rejects its options is not called no findings" 'NO FINDINGS IN THIS SCAN' "$WORK/dz-badfind.txt"
+HOME="$WORK/dz-calm" PATH="$WORK/badfind:/usr/bin:/bin" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-badfind-c.txt"
+has    "and the summary says so too"                   'The home folder was not scanned \(find: unrecognized: -maxdepth\)' "$WORK/dz-badfind-c.txt"
+has    "and its rows are not green"                    'Recent leaks none found, but some folders were not read' "$WORK/dz-badfind-c.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
@@ -2342,8 +2345,8 @@ has    "fleet: system accounts are left out" '^accounts=2$' "$FL/two.flat"
 hasnot "fleet: and are not in the result" '_spotlight|daemon2' "$FL/two.flat"
 has    "fleet: each account's row holds its own findings" '^asha\.key_files=4$' "$FL/two.flat"
 if grep -q '^itadmin\.key_files=0$' "$FL/two.flat" && grep -q '^itadmin\.incidents=$' "$FL/two.flat" && grep -q '^itadmin\.ssh_keys_no_passphrase=1$' "$FL/two.flat"; then ok "fleet: and only its own"; else bad "fleet: and only its own" "$(grep '^itadmin' "$FL/two.flat" | tr '\n' ' ')"; fi
-if [ "$(grep -c . "$FL/argv.log")" -eq 2 ] && grep -qE "^/usr/bin/sudo -n -u asha -H /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=$FL/asha /bin/bash /tmp/blindspot-copy\.[A-Za-z0-9]+/gird-check\.sh --account-run\$" "$FL/argv.log" \
-   && grep -qE "^/usr/bin/sudo -n -u itadmin -H /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=$FL/itadmin /bin/bash " "$FL/argv.log"
+if [ "$(grep -c . "$FL/argv.log")" -eq 2 ] && grep -qE "^/usr/bin/sudo -n -u asha -H /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=$FL/asha GIRD_CHECK_ACCOUNT_SECONDS=[0-9]+ /bin/bash /tmp/blindspot-copy\.[A-Za-z0-9]+/gird-check\.sh --account-run\$" "$FL/argv.log" \
+   && grep -qE "^/usr/bin/sudo -n -u itadmin -H /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME=$FL/itadmin GIRD_CHECK_ACCOUNT_SECONDS=[0-9]+ /bin/bash " "$FL/argv.log"
 then ok "fleet: each account is checked through sudo -n as itself, with a clean environment"
 else bad "fleet: each account is checked through sudo -n as itself, with a clean environment" "$(cat "$FL/argv.log")"; fi
 if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$FL/two.out" 2>/dev/null; then ok "fleet: --json prints one JSON document and nothing else"; else bad "fleet: --json prints one JSON document and nothing else" "$(head -c 300 "$FL/two.out")"; fi
@@ -2363,7 +2366,10 @@ has    "fleet: the readable report lists each account" '^  asha +act now$' "$FL/
 has    "fleet: and where the result was saved" "^  Saved: $FL/state/last.json\$" "$FL/term.out"
 hasnot "fleet: no Argus note without a terminal" 'gird\.ai/argus|Argus' "$FL/term.out"
 # OpenCode's CLI files are there, which is not to say the person used the hosted Console its breach hit.
-has    "fleet: a platform found reads as its own summary" '^    !  OpenCode found: got its breach email\? Rotate keys(, once gh-token-monitor is stopped)?$' "$FL/term.out"
+has    "fleet: a platform found reads as its own summary" '^    !  OpenCode found: got its breach email\? Rotate keys(, once .*)?$' "$FL/term.out"
+# asha has SANDWORM_MODE's package and the wiper: its cleanup comes first, and the platform's rotate waits for both.
+has    "fleet: SANDWORM_MODE's cleanup comes before any rotate"  '^    x  Remove what the SANDWORM_MODE worm leaves \(git hooks, MCP servers\) before anyone rotates a key$' "$FL/term.out"
+has    "fleet: and a platform's rotate waits for it and the wiper" 'Rotate keys, once gh-token-monitor is stopped and the worm.s leftovers are removed$' "$FL/term.out"
 hasnot "fleet: never that the account uses it"         'Uses a platform' "$FL/term.out"
 has    "fleet: the JSON names the platforms found"     '^asha\.platforms_found=opencode$' "$FL/two.flat"
 if command -v script > /dev/null 2>&1; then
@@ -2538,19 +2544,38 @@ if [ "$RC" -eq 13 ] && grep -q 'run it from a file: it copies gird-check.sh from
 : > "$FL/sharedtmp/.pc_once_x"; : > "/tmp/.pc_once_blindspot-fleet-test-$$"
 fl_run machine
 rm -f "$FL/sharedtmp/.pc_once_x" "/tmp/.pc_once_blindspot-fleet-test-$$"
-has    "fleet: a malware marker in the shared temp folder is a machine finding" '^machine\.incidents=litellm$' "$FL/machine.flat"
-has    "fleet: a marker an account owns in /tmp is that account's finding" '^itadmin\.incidents=.*litellm' "$FL/machine.flat"
+# Even one root owns is only a possible sign: any account can hard-link a root-owned file there.
+has    "fleet: a marker root owns in the shared temp folder is a possible sign for the Mac" '^machine\.possible_signs=litellm$' "$FL/machine.flat"
+hasnot "fleet: not a finding of the Mac's"            '^machine\.incidents=.*litellm' "$FL/machine.flat"
+has    "fleet: a marker an account owns in /tmp is a possible sign on its row" '^itadmin\.shared_tmp_markers=litellm$' "$FL/machine.flat"
+hasnot "fleet: not a finding of that account's"       '^itadmin\.incidents=.*litellm' "$FL/machine.flat"
 # A marker with another name linked to it, or a symbolic link, could put anyone's file under the name.
 : > "$FL/plainfile"; ln "$FL/plainfile" "$FL/sharedtmp/.pc_sq_linked"; ln -s /etc/hosts "$FL/sharedtmp/.pc_e_sym"
 fl_run machlink --json
 rm -f "$FL/sharedtmp/.pc_sq_linked" "$FL/sharedtmp/.pc_e_sym" "$FL/plainfile"
 hasnot "fleet: a linked marker in the shared temp folder is not the Mac's finding" '^machine\.incidents=.*litellm' "$FL/machlink.flat"
 # The readable report under macOS's own bash, with a finding on the Mac's row: a loader holding its lock.
-printf '#!/bin/sh\necho 4242\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
+# A loader counts only when root's own process holds the lock: in a test run, a process of the tester's.
+printf '#!/bin/sh\necho $PPID\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
 GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" fl_run macterm
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
 has    "fleet: the readable report names the Mac's finding under macOS's bash" '^  This Mac +act now$' "$FL/macterm.out"
 hasnot "fleet: and prints no shell error" 'syntax error|command substitution' "$FL/macterm.err"
+# Another account's process holding the root-owned lock (launchd, PID 1, stands in) is only a possible sign.
+printf '#!/bin/sh\necho 1\n' > "$FL/other-lsof"; chmod +x "$FL/other-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
+GIRD_CHECK_FLEET_LSOF="$FL/other-lsof" fl_run otherlock --json
+rm -f "$FL/sharedtmp/remote_code_loader.lock"
+if grep -q '^machine\.possible_signs=litellm$' "$FL/otherlock.flat" && ! grep -q '^machine\.incidents=.*litellm' "$FL/otherlock.flat"; then ok "fleet: a lock another account's process holds is only a possible sign"
+else bad "fleet: a lock another account's process holds is only a possible sign" "$(grep '^machine' "$FL/otherlock.flat" | tr '\n' ' ')"; fi
+# An account links root's copy under a marker's name, to be left behind: the copy is emptied before it
+# goes, and the next run reads the link as no more than a possible sign.
+users "upd:$U:$FL/upd:/bin/zsh"; printf 'marklink\n' > "$FL/mode-upd"
+fl_run mark1 --json; rm -f "$FL/mode-upd"
+fl_run mark2 --json
+if [ -f "$FL/sharedtmp/.pc_once_linked" ] && [ ! -s "$FL/sharedtmp/.pc_once_linked" ]; then ok "fleet: a link left to root's copy is left empty"; else bad "fleet: a link left to root's copy is left empty"; fi
+if grep -q '^machine\.outcome=review$' "$FL/mark2.flat" && ! grep -q '^machine\.incidents=.*litellm' "$FL/mark2.flat"; then ok "fleet: and the next run reads it as a possible sign, never act"
+else bad "fleet: and the next run reads it as a possible sign, never act" "$(grep '^machine' "$FL/mark2.flat" | tr '\n' ' ')"; fi
+rm -f "$FL/sharedtmp/.pc_once_linked"
 # A hard link to root's script copy changes nothing in it, so it stops no account's check.
 users "upd:$U:$FL/upd:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 printf 'hardlink\n' > "$FL/mode-upd"
@@ -2613,6 +2638,10 @@ fl_run many --deadline=600
 if grep -qE ' \+more$' "$FL/many.out" 2>/dev/null || grep -qE '^inventory=.* \+more$' "$FL/many.flat"; then ok "fleet: a long inventory value ends with +more"; else bad "fleet: a long inventory value ends with +more" "$(grep '^inventory' "$FL/many.flat")"; fi
 if [ "$(sed -n 's/^inventory=//p' "$FL/many.flat" | wc -c)" -le 256 ]; then ok "fleet: and still fits"; else bad "fleet: and still fits"; fi
 has    "fleet: and keeps the accounts that need attention" '^inventory=.*person15: not_checked' "$FL/many.flat"
+# Cut short to each account's outcome, a value that then holds every account ends with no +more.
+_inv=$(sed -n 's/^inventory=//p' "$FL/inv.flat")
+if printf '%s' "$_inv" | grep -q 'asha: ' && printf '%s' "$_inv" | grep -q 'itadmin: ' && printf '%s' "$_inv" | grep -qE ' \+more$'; then bad "fleet: +more only when an account was left out" "$_inv"
+else ok "fleet: +more only when an account was left out" "${#_inv} characters"; fi
 
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
@@ -2707,6 +2736,19 @@ mkdir -p "$FL/binhome/Library/Safari" "$FL/binhome/.local/bin"; : > "$FL/binhome
 users "binhome:$U:$FL/binhome:/bin/zsh"
 fl_run binhome
 has    "fleet: an agent in the account's own ~/.local/bin is found" '^binhome\.agents=.*aider' "$FL/binhome.flat"
+# A shell profile that moves an agent's folders (CLAUDE_CONFIG_DIR) is not followed with root's clean
+# environment: the account is partly checked, never clear.
+fl_home moved; printf 'export CLAUDE_CONFIG_DIR="$HOME/.claude-work"\n' > "$FL/moved/.zshrc"
+users "moved:$U:$FL/moved:/bin/zsh"
+fl_run moved --json
+if grep -q '^moved\.agent_folders_moved=true$' "$FL/moved.flat" && grep -q '^moved\.outcome=not_checked$' "$FL/moved.flat"; then ok "fleet: a profile that moves an agent's folders leaves the account partly checked"
+else bad "fleet: a profile that moves an agent's folders leaves the account partly checked" "$(grep '^moved\.' "$FL/moved.flat" | tr '\n' ' ')"; fi
+# A session check that would never end on its own: told its time, the account run stops it and still
+# sends what it found, with the sessions partly checked, instead of being stopped whole.
+users "asha:$U:$FL/asha:/bin/zsh"; printf 'slowsess\n' > "$FL/mode-asha"
+fl_run slowsess --deadline=30 --json; rm -f "$FL/mode-asha"
+if grep -q '^asha\.outcome=act$' "$FL/slowsess.flat" && grep -q '^asha\.sessions_partly_checked=true$' "$FL/slowsess.flat" && ! grep -q '^asha\.not_checked=' "$FL/slowsess.flat"; then ok "fleet: a session check that runs long is stopped in time, and the findings still count"
+else bad "fleet: a session check that runs long is stopped in time, and the findings still count" "$(grep -E '^asha\.(outcome|sessions|not_checked|stopped)' "$FL/slowsess.flat" | tr '\n' ' ')"; fi
 # A marker that must be the person's own (gh-token-monitor's /tmp logs) is never the Mac's: any account could leave one.
 users "itadmin:$U:$FL/itadmin:/bin/zsh"
 : > "$FL/sharedtmp/gh-token-monitor.out.log"
@@ -2718,9 +2760,9 @@ if [ -e /tmp/gh-token-monitor.out.log ] || [ -L /tmp/gh-token-monitor.out.log ];
   skip "fleet: but a link there never counts" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
 else
   : > /tmp/gh-token-monitor.out.log; fl_run ownmark2; rm -f /tmp/gh-token-monitor.out.log
-  has  "fleet: and counts for the account that owns it" '^itadmin\.wiper=true$' "$FL/ownmark2.flat"
+  has  "fleet: and counts for the account that owns it" '^itadmin\.shared_tmp_wiper_logs=true$' "$FL/ownmark2.flat"
   : > "$FL/itadmin-file"; ln -s "$FL/itadmin-file" /tmp/gh-token-monitor.out.log; fl_run ownmark3; rm -f /tmp/gh-token-monitor.out.log
-  hasnot "fleet: but a link there never counts" '^itadmin\.wiper=true$' "$FL/ownmark3.flat"
+  hasnot "fleet: but a link there never counts" '^itadmin\.shared_tmp_wiper_logs=true$' "$FL/ownmark3.flat"
 fi
 # A machine check that does not answer in time leaves the Mac partly checked.
 users "clean:$U:$FL/clean:/bin/zsh"

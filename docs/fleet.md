@@ -138,6 +138,7 @@ The install step has not yet been run end to end on a real Mac.
    ```sh
    #!/bin/bash
    set -e
+   umask 077   # the new files are root's alone until their modes are set
    d="/Library/Application Support/Blindspot"
    /bin/mkdir -p "$d"
    /usr/sbin/chown root:wheel "$d"
@@ -234,7 +235,9 @@ To find the Macs to deal with first, filter the inventory field for values start
 
 Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to see which files. If the
 account's row says `gh-token-monitor` is installed, have it stopped and removed before anyone rotates
-or revokes any key below: it runs a destructive command when a stolen token stops working. Then:
+or revokes any key below: it runs a destructive command when a stolen token stops working. If the row
+says to remove what SANDWORM_MODE leaves, have that done before any key is rotated too: its pre-push
+hook sends npm tokens out on every push. Then:
 
 | Finding | What to ask them to do |
 |---|---|
@@ -253,7 +256,8 @@ or revokes any key below: it runs a destructive command when a stolen token stop
 | Files named like the ones worms plant | Have them read the files section 2 lists, and delete any they didn't put there. |
 | An SSH key without a passphrase | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets | If they used it, rotate the keys stored there. |
-| A finding under "This Mac" | Files root made in the shared temp folder, named like a malware's markers, or a running LiteLLM loader: the malware ran as root. Treat the Mac as compromised. |
+| A finding under "This Mac" | A LiteLLM loader running as root holds its lock file: the malware ran as root. Treat the Mac as compromised. |
+| A possible sign under "This Mac" or an account | Files named like a malware's markers in `/tmp`, owned by root or by that account: find out what made them. Any account can leave such a file through a hard link, so alone it is not a finding. |
 
 ## 6. Update or remove it
 
@@ -265,12 +269,15 @@ the installed script and the saved result on each Mac:
 sudo rm -rf "/Library/Application Support/Blindspot" /var/db/blindspot /var/db/blindspot.replaced-*
 ```
 
-Two things can be left behind. A saved-result folder that was not root's own with mode 0700 is moved
+A few things can be left behind. A saved-result folder that was not root's own with mode 0700 is moved
 aside to `/var/db/blindspot.replaced-<time>-<number>` and made again; the command above removes
 those too. An account's check that is stopped at its time limit can leave its own temporary files,
 named `/tmp/blindspot.` and six characters and owned by that account. Root does not know their names,
 so it does not remove them. They hold paths and counts, never a key, and can be removed once no
-Blindspot check is running.
+Blindspot check is running. If the MDM kills `gird-fleet.sh` itself, as at its own time limit, root's
+work folders are left too: `/tmp/blindspot-fleet.` and `/tmp/blindspot-copy.` and eight characters,
+root's, holding counts and a copy of `gird-check.sh`. The next run makes new ones; remove them with
+`sudo rm -rf /tmp/blindspot-fleet.* /tmp/blindspot-copy.*` once no Blindspot check is running.
 
 ## What it checks for each account
 
@@ -280,11 +287,15 @@ can hold cloud files that download when read). Each account's check runs through
 files only, and leaves out any file over 16 MB, except agent session files, which it reads in 1 MB
 pieces whatever their size. A file it can't read, and a folder the home scan, npm's cache, the
 extension folders or the session check can't open, count as not checked, never as holding nothing. With its fixed PATH, it looks for agents in the account's own install folders
-(`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. The
-gh-token-monitor logs in `/tmp`, which must be the person's own, count for the account that owns
-them, never for the Mac, and never through a link, symbolic or hard. It looks for the malware markers in the account's
-own temp folder, the one macOS gives each account under `/var/folders`, and in `/tmp` for the
-markers that must be the account's own. `sudo` writes one line to the system log for each account.
+(`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. It looks for the
+malware markers in the account's own temp folder, the one macOS gives each account under
+`/var/folders`. The markers in `/tmp` that must be the person's own, such as gh-token-monitor's logs,
+count for the account that owns them under one name, never through a link, and only as a possible
+sign: another account can hard-link one of this account's files there, once the original is renamed
+away. The clean environment drops any variable that moves an agent's folders, such as
+`CLAUDE_CONFIG_DIR`: when a shell profile sets one, the account reads partly checked. Each run is
+told its time, so its session check stops in time and what it found still counts, with the sessions
+partly checked. `sudo` writes one line to the system log for each account.
 
 Some folders outside the home are read by every account's check: npm's global folders in
 `/opt/homebrew/lib` and `/usr/local/lib`, shared Python environments, conda in `/opt`, and Cursor's
@@ -295,10 +306,12 @@ What root checks once for the Mac:
 
 Apps in `/Applications`, and agent commands in `/usr/local/bin` and `/opt/homebrew/bin`, are found
 by name and reported as the Mac's agents. In the shared temp folder, root looks by name for the
-malware markers `data/indicators.tsv` lists, never through a link of either kind: a marker that must
-be a person's own counts for the Mac only when root made it, and one an account owns counts on that
-account's row instead, found by its own check. When root made the LiteLLM loader's lock file, root
-asks `lsof` whether a process holds it open. The temp folder's names are looked for with one timed
+malware markers `data/indicators.tsv` lists, never through a link of either kind. One root owns under
+one name is a possible sign for the Mac, not a finding: any account can hard-link a root-owned file it
+can reach under a marker's name, and once root deletes the original the link is root's (root empties
+and gives away its copy of `gird-check.sh` before deleting it for that reason). One an account owns is
+on that account's row instead. When root owns the LiteLLM loader's lock file, root asks `lsof` which
+process holds it open: root's own is a finding, any other a possible sign. The temp folder's names are looked for with one timed
 `find` each, so a folder an account filled with such names cannot hold up the run. If `find` or `lsof`
 does not answer in time, the Mac reads partly checked. Those are the only running processes it looks at. It also looks by
 name for any startup file `data/indicators.tsv` lists outside a home folder; for macOS there are none

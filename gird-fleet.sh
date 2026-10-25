@@ -243,7 +243,7 @@ zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that
 # are read only when the script is not running as root.
 # ===========================================================================
 FL_STATE=/var/db/blindspot; FL_USERS=""; FL_LAUNCH=""; FL_OWNER=0; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
-FL_FIND=/usr/bin/find
+FL_FIND=/usr/bin/find; FL_PS=/bin/ps
 if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
   FL_STATE=${GIRD_CHECK_FLEET_STATE:-$FL_STATE}; FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
   FL_SHARED_TMP=${GIRD_CHECK_FLEET_SHARED_TMP:-$FL_SHARED_TMP}; FL_LSOF=${GIRD_CHECK_FLEET_LSOF:-$FL_LSOF}
@@ -253,6 +253,11 @@ FL_PATH=/usr/bin:/bin:/usr/sbin:/sbin
 FL_OUT_MAX=4096                 # bytes root reads from one account run
 FL_US=$(printf '\037'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
 fl_cleanup() {
+  # An account can hard-link the copy it ran under a marker's name in /tmp; emptied and given away first,
+  # such a link is left neither root's nor anything.
+  if [ -n "$FL_COPY" ] && [ -f "$FL_COPY" ] && [ ! -L "$FL_COPY" ]; then
+    : > "$FL_COPY" 2>/dev/null; /usr/sbin/chown -h nobody "$FL_COPY" 2>/dev/null || :   # best-effort: a test run is not root
+  fi
   [ -n "$FL_TMP" ] && /bin/rm -rf -- "$FL_TMP"
   [ -n "$FL_COPYDIR" ] && /bin/rm -rf -- "$FL_COPYDIR"
   FL_TMP=""; FL_COPYDIR=""
@@ -377,7 +382,7 @@ FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper lock_only remove not_read protected end"
+FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected end"
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -415,8 +420,8 @@ fl_parse() {
       key_providers) fl_ids_ok "$_v" "$PROVIDER_IDS" || return 1 ;;
       platforms) fl_ids_ok "$_v" "$FL_PLAT_IDS" || return 1 ;;
       incidents) fl_incidents_ok "$_v" || return 1 ;;
-      possible|updates|lock_only|remove) fl_incidents_ok "$_v" || return 1 ;;
-      sessions_partial|wiper) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
+      possible|updates|lock_only|remove|tmp_marks) fl_incidents_ok "$_v" || return 1 ;;
+      sessions_partial|wiper|moved|tmp_wiper) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
       protected) case "$_v" in ok|refused|unknown) ;; *) return 1 ;; esac ;;
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
@@ -428,6 +433,7 @@ fl_parse() {
       planted) FA_planted=$_v ;; possible) FA_possible=$_v ;; incidents) FA_incidents=$_v ;; platforms) FA_platforms=$_v ;;
       on_open) FA_on_open=$_v ;; to_read) FA_to_read=$_v ;; updates) FA_updates=$_v ;; wiper) FA_wiper=$_v ;; lock_only) FA_lock_only=$_v ;; remove) FA_remove=$_v ;;
       not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;;
+      moved) FA_moved=$_v ;; tmp_marks) FA_tmp_marks=$_v ;; tmp_wiper) FA_tmp_wiper=$_v ;;
     esac
     shift
   done < "$_f"
@@ -466,7 +472,7 @@ fl_plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s
 
 # The Mac's shared places, checked once, by root, by name only: nothing in them is read or run.
 fl_machine() {
-  FM_AGENTS=""; FM_INC=""; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + ${FM_FIND_S:-20}))
+  FM_AGENTS=""; FM_INC=""; FM_POSS=""; FM_TMPWIPER=0; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + ${FM_FIND_S:-20}))
   while IFS='|' read -r _nm _bins _paths _acts _id; do
     [ -n "$_nm" ] || continue
     _hit=0; _ifs=$IFS; IFS=';'
@@ -482,20 +488,29 @@ EOF
     case "$_ik" in
       temp)
         # Never through a link, which any account can make. A marker that must be someone's own counts
-        # for the Mac only when root made it, under its one name; one an account owns is that
-        # account's finding, which its own run looks for in /tmp. A find for each name, all of them
-        # within FM_FIND_S seconds: any account can fill the folder with such names, and they must not
-        # cost root a step each.
+        # for the Mac only when root owns it, under its one name, and even then only as a possible sign:
+        # an account can hard-link any root-owned file it can reach (the copy of gird-check.sh each run
+        # makes, an install the MDM replaces) under a marker's name, and once root deletes the original,
+        # the link is root's under one name. One an account owns is that account's to check. A find for
+        # each name, all of them within FM_FIND_S seconds: any account can fill the folder with such
+        # names, and they must not cost root a step each.
         _tl=$((_tend - SECONDS)); [ "$_tl" -ge 1 ] || { _late=1; continue; }
         set -- -name "$_ip" ! -type l
         [ "$_iown" = yes ] && set -- "$@" -user "$FL_OWNER" -links 1
         fl_timed "$_tl" "$FL_TMP/marker" -- "$FL_FIND" "$FL_SHARED_TMP/" -mindepth 1 -maxdepth 1 "$@" -print -quit || FL_TIMEOUT=1
-        [ -s "$FL_TMP/marker" ] && FM_INC="$FM_INC $_ii"
+        [ -s "$FL_TMP/marker" ] && FM_POSS="$FM_POSS $_ii"
         [ "$FL_TIMEOUT" -eq 1 ] && _late=1 ;;
       wiper|startup)
         # A marker that must be the person's own (data/indicators.tsv) is each account's own
-        # finding, checked by its account run; any account could leave one in a shared folder.
-        [ "$_iown" = yes ] && continue
+        # finding, checked by its account run; any account could leave one in a shared folder. In /tmp,
+        # one root owns under one name is a possible sign for the Mac, as above (gh-token-monitor's logs).
+        if [ "$_iown" = yes ]; then
+          case "$_ip" in /tmp/*) _ip="$FL_SHARED_TMP/${_ip#/tmp/}" ;; *) continue ;; esac
+          if [ -f "$_ip" ] && [ ! -L "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+            if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
+          fi
+          continue
+        fi
         case "$_ip" in "$H"/*|'') continue ;; /tmp/*) _ip="$FL_SHARED_TMP/${_ip#/tmp/}" ;; esac
         { [ -L "$_ip" ] || [ -e "$_ip" ]; } && FM_INC="$FM_INC $_ii" ;;
     esac
@@ -508,11 +523,18 @@ EOF
   # Only a lock file root made: one an account owns is that account's marker, found by its own run.
   if [ -f "$_lk" ] && [ ! -L "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
     fl_timed "${FM_LSOF_S:-10}" "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
-    [ -s "$FL_TMP/lsof" ] && FM_INC="$FM_INC litellm"
+    # A running loader is a sign only when root's own process holds the lock: any account can open a
+    # root-owned file it can read, and keep it open.
+    _held=""; for _p in $(/usr/bin/tr -cs '0-9' ' ' < "$FL_TMP/lsof" 2>/dev/null); do
+      [ "$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' ')" = "$FL_OWNER" ] && { _held=root; break; }
+      _held=other
+    done
+    case "$_held" in root) FM_INC="$FM_INC litellm" ;; other) FM_POSS="$FM_POSS litellm" ;; esac
     [ "$FL_TIMEOUT" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }a running LiteLLM loader could not be looked for in time"; }
   fi
   FM_AGENTS=$(printf '%s\n' $FM_AGENTS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
   FM_INC=$(printf '%s\n' $FM_INC | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
+  FM_POSS=$(printf '%s\n' $FM_POSS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
 }
 
 # The saved result: /var/db/blindspot/last.json, readable by root only. A folder that is a link,
@@ -615,7 +637,8 @@ fleet_main() {
       elif [ "$_lim" -lt 1 ]; then _r=deadline; FL_DEADLINE_HIT=1
       elif ! fl_copy_ok; then _r=copy_changed; FL_FAILED=copy
       else
-        set -- /usr/bin/sudo -n -u "$_n" -H /usr/bin/env -i "PATH=$FL_PATH" "HOME=$_h" /bin/bash "$FL_COPY" --account-run
+        # The run is told its time, so its session check stops in time and what it found still reaches root.
+        set -- /usr/bin/sudo -n -u "$_n" -H /usr/bin/env -i "PATH=$FL_PATH" "HOME=$_h" "GIRD_CHECK_ACCOUNT_SECONDS=$_lim" /bin/bash "$FL_COPY" --account-run
         [ -n "$FL_LAUNCH" ] && set -- "$FL_LAUNCH" "$@"
         fl_timed "$_lim" "$FL_TMP/out" -- "$@"
         if fl_parse "$FL_TMP/out"; then
@@ -638,6 +661,12 @@ fleet_main() {
       # gh-token-monitor runs a destructive command when the stolen token stops working, so stopping it
       # comes before any rotate or revoke the lines below call for, as in the one-person report.
       if [ "$FA_wiper" -eq 1 ]; then _act=1; _lines="$_lines$NL    x  gh-token-monitor is installed: stop and remove it before anyone revokes a GitHub token"; _inv="$_inv; wiper"; fi
+      # What an incident leaves that must go before any key is rotated (SANDWORM_MODE's git hooks and MCP
+      # servers: its pre-push hook sends npm tokens out), as the person's own report puts it first.
+      _first=""; for _x in $_ia $FA_lock_only; do case "$(incident_advice "$_x")" in First\ *) case " $_first " in *" $_x "*) ;; *) _first="$_first $_x" ;; esac ;; esac; done
+      for _x in $_first; do _lines="$_lines$NL    x  Remove what the $(incident_name "$_x") leaves (git hooks, MCP servers) before anyone rotates a key"; done
+      _wait=""; [ "$FA_wiper" -eq 1 ] && _wait="gh-token-monitor is stopped"
+      [ -n "$_first" ] && _wait="${_wait:+$_wait and }the worm's leftovers are removed"
       [ -n "$_ia" ] && _act=1
       for _x in $_ia; do _lines="$_lines$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
       [ -n "$_ia" ] && _inv="$_inv; incidents$(printf ' %s' $_ia | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
@@ -667,7 +696,7 @@ fleet_main() {
       # Found means its CLI or files are there, not that the person used the hosted service: each
       # platform's own summary says what to check, as the person's report does.
       # With gh-token-monitor there, its rotate waits for it, as every rotate in the person's report does.
-      if [ -n "$FA_platforms" ]; then _upd=1; for _x in $FA_platforms; do _lines="$_lines$NL    !  $(printf '%s\n' "$PLATFORMS" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $7; exit }')$( [ "$FA_wiper" -eq 1 ] && printf ', once gh-token-monitor is stopped')"; done; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
+      if [ -n "$FA_platforms" ]; then _upd=1; for _x in $FA_platforms; do _lines="$_lines$NL    !  $(printf '%s\n' "$PLATFORMS" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $7; exit }')$( [ -n "$_wait" ] && printf ', once %s' "$_wait")"; done; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_on_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Project settings that act when an agent or editor opens the folder: $FA_on_open"; _inv="$_inv; on-open $FA_on_open"; fi
       if [ "$FA_to_read" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Files named like the ones worms plant, to read: $FA_to_read"; _inv="$_inv; to-read $FA_to_read"; fi
       for _x in $FA_updates; do _upd=1; _lines="$_lines$NL    !  A version to update: $(incident_name "$_x")"; done
@@ -683,9 +712,15 @@ fleet_main() {
         else _lines="$_lines$NL    !  A startup file named like the one the $(incident_name "$_x") install, with none of them here"; fi
       done
       [ -n "$FA_possible" ] && _inv="$_inv; possible $(printf '%s' "$FA_possible" | /usr/bin/tr ' ' ',')"
+      # Markers of this account's in the shared /tmp: another account can leave one through a link, so a
+      # possible sign to check, not a finding.
+      if [ "$FA_tmp_wiper" -eq 1 ]; then _upd=1; _lines="$_lines$NL    !  gh-token-monitor's logs in /tmp, this account's, nothing else of it: check them before anyone revokes a GitHub token"; _inv="$_inv; tmp-wiper"; fi
+      for _x in $FA_tmp_marks; do _upd=1; _lines="$_lines$NL    !  Files named like the $(incident_name "$_x") markers in /tmp, this account's: check them, as another account can link one there"; done
+      [ -n "$FA_tmp_marks" ] && _inv="$_inv; tmp-marks $(printf '%s' "$FA_tmp_marks" | /usr/bin/tr ' ' ',')"
       _why=""
       [ "$FA_sessions_partial" -eq 1 ] && _why="${_why:+$_why, }agent sessions partly checked"
-      [ "$FA_not_read" -gt 0 ] && _why="${_why:+$_why, }$(fl_plural "$FA_not_read" "file was" "files were") not read"
+      [ "$FA_not_read" -gt 0 ] && _why="${_why:+$_why, }$(fl_plural "$FA_not_read" "file or folder was" "files or folders were") not read"
+      [ "$FA_moved" -eq 1 ] && _why="${_why:+$_why, }a shell profile moves an agent's folders, which this check does not follow"
       [ "$FA_protected" != ok ] && _why="${_why:+$_why, }folders macOS protects were not checked (Full Disk Access)"
       [ -n "$FA_stop" ] && _why="${_why:+$_why, }its check ran out of time"
       [ -n "$_why" ] && _complete=false
@@ -693,7 +728,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
@@ -707,11 +742,16 @@ fleet_main() {
     if [ "$(incident_level "$_x")" = act ]; then FM_OUT=act; _ml="$_ml$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"
     else [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; fi
   done
-  [ -n "$_ml" ] && _ml="$_ml$NL    Found as files root made in the shared temp folder, or a running LiteLLM loader: the malware ran as root."
+  [ -n "$_ml" ] && _ml="$_ml$NL    A LiteLLM loader running as root holds its lock file: the malware ran as root."
+  # Possible signs: root-owned files under a marker's name in /tmp (an account can leave one through a
+  # link) and a lock file another account's process holds.
+  for _x in $FM_POSS; do [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  Files named like the $(incident_name "$_x") markers in /tmp, root's: check what made them, as an account can link one there"; done
+  if [ "$FM_TMPWIPER" -eq 1 ]; then [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  gh-token-monitor's logs in /tmp, root's: check them before anyone revokes a GitHub token"; fi
   # A machine check that did not answer in time leaves the Mac partly checked.
   [ "$FM_COMPLETE" = true ] || { [ "$FM_OUT" = act ] || FM_OUT=not_checked; _ml="$_ml$NL    ?  Partly checked: $FM_WHY"; }
-  MACHINE="{\"complete\":$FM_COMPLETE,\"outcome\":\"$FM_OUT\",\"agents\":$(fl_json_list "$FM_AGENTS"),\"incidents\":$(fl_json_incidents "$FM_INC")}"
-  [ "$FM_OUT" != clear ] && INV="$INV | machine: $FM_OUT $(printf '%s' "$FM_INC" | /usr/bin/tr ' ' ',')"
+  MACHINE="{\"complete\":$FM_COMPLETE,\"outcome\":\"$FM_OUT\",\"agents\":$(fl_json_list "$FM_AGENTS"),\"possible_signs\":$(fl_json_list "$FM_POSS"),\"shared_tmp_wiper_logs\":$( [ "$FM_TMPWIPER" -eq 1 ] && echo true || echo false),\"incidents\":$(fl_json_incidents "$FM_INC")}"
+  _mi=$(printf '%s' "$FM_INC" | /usr/bin/tr ' ' ','); _mp=$(printf '%s' "$FM_POSS" | /usr/bin/tr ' ' ',')
+  [ "$FM_OUT" != clear ] && INV="$INV | machine: $FM_OUT${_mi:+ incidents $_mi}${_mp:+; possible $_mp}$( [ "$FM_TMPWIPER" -eq 1 ] && printf '; tmp-wiper')"
   OUTS="$OUTS$FM_OUT$NL"
   [ "$N_ACC" -eq 0 ] && OUTS="${OUTS}not_checked$NL"
   [ -n "$FL_FAILED" ] && OUTS="${OUTS}failed$NL"
@@ -727,9 +767,9 @@ fleet_main() {
     # clear ones as fit.
     _iv=$(printf '%s' "$INV" | /usr/bin/awk -v head="$_iv" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
       { n = 0; for (i = 2; i <= NF; i++) { split($i, p, " "); s[++n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5 }
-        out = head; stop = 0
-        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) { t = out " | " s[j]; if (length(t) > 243) stop = 1; else out = t }
-        print out " +more" }')
+        out = head; stop = 0; added = 0
+        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) { t = out " | " s[j]; if (length(t) > 243) stop = 1; else { out = t; added++ } }
+        print out (added < n ? " +more" : "") }')
     INVENTORY_V=$_iv
   fi
   JSON_DOC="{
