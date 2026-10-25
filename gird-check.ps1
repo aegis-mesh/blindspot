@@ -753,6 +753,8 @@ $SessTable = @(
   @('read', 'Gemini CLI', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/tmp')),
   @('read', 'Qwen Code', (J (Env-Or 'QWEN_HOME' (J $HomeDir '.qwen')) 'projects')),
   @('read', 'Qwen Code', (J (Env-Or 'QWEN_HOME' (J $HomeDir '.qwen')) 'tmp')),
+  @('read', 'Qwen Code', (J (Env-Or 'QWEN_RUNTIME_DIR' (J $HomeDir '.qwen')) 'projects')),
+  @('read', 'Qwen Code', (J (Env-Or 'QWEN_RUNTIME_DIR' (J $HomeDir '.qwen')) 'tmp')),
   @('read', 'OpenCode', (J (Env-Or 'XDG_DATA_HOME' (J $HomeDir '.local/share')) 'opencode/opencode.db')),
   @('read', 'OpenCode', (J (Env-Or 'XDG_DATA_HOME' (J $HomeDir '.local/share')) 'opencode/opencode.db-wal')),
   @('read', 'OpenCode', (J (Env-Or 'XDG_DATA_HOME' (J $HomeDir '.local/share')) 'opencode/storage')),

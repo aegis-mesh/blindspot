@@ -501,6 +501,10 @@ printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cdir/data/tasks/t1/api_conv
 printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cdir/data/sessions/s1/m.json"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/csd/s2/m.json"
 psrun "$SE/gx" CLINE_DIR="$SE/cdir" CLINE_SESSION_DATA_DIR="$SE/csd" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/cline.txt" 2>&1
 has    "Cline's sessions and tasks under CLINE_DIR and CLINE_SESSION_DATA_DIR are found" 'Cline +3 files: AWS$' "$SE/cline.txt"
+# Qwen Code keeps its sessions and temp files under QWEN_RUNTIME_DIR when that is set (Storage.getRuntimeBaseDir).
+mkdir -p "$SE/qrt/projects/p1/chats"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/qrt/projects/p1/chats/c1.jsonl"
+psrun "$SE/gx" QWEN_RUNTIME_DIR="$SE/qrt" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/qrt.txt" 2>&1
+has    "Qwen Code's sessions under QWEN_RUNTIME_DIR are found" 'Qwen Code +1 file: AWS$' "$SE/qrt.txt"
 psrun "$SE/gx" GOOSE_PATH_ROOT="$SE/groot" XDG_STATE_HOME="$SE/xs" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/groot.block"
 has    "Goose's prompts under GOOSE_PATH_ROOT are found" 'groot/state/history\.txt +[0-9]+ files?$' "$SE/groot.block"
 has    "ahead of XDG_STATE_HOME"                    'Goose +1 file: AWS$' "$SE/groot.block"

@@ -5,8 +5,8 @@
 #           else in it; or sealed for a folder whose .pb files are stored encrypted, by third-party
 #           accounts (counted and named as not checked)
 #   path    a file or a folder. ~ is the home folder, {AS} the app data folder (Application Support
-#           on a Mac, ~/.config on Linux, %APPDATA% on Windows; VS Code and other Electron apps
-#           move it to XDG_CONFIG_HOME on Linux, so their folders get a linux line with it too),
+#           on a Mac, %APPDATA% on Windows, and on Linux XDG_CONFIG_HOME when that is an absolute
+#           path, else ~/.config, where VS Code and other Electron apps keep their folders),
 #           {LOCALAPPDATA}, {XDG_DATA}
 #           (XDG_DATA_HOME or ~/.local/share), {GOOSE_DATA} and {GOOSE_STATE} (Goose's data and
 #           state folders: under GOOSE_PATH_ROOT when it is set, else the XDG folders, or
@@ -18,10 +18,8 @@ all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/projects	docs
 all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/history.jsonl	docs
 all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/paste-cache	docs
 all	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	docs
-linux	read	Claude Desktop	{ENV:XDG_CONFIG_HOME:~/.config}/Claude/local-agent-mode-sessions	docs
 win	read	Claude Desktop	{LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions	docs
 all	read	Claude Desktop	{AS}/Claude-3p/local-agent-mode-sessions	docs
-linux	read	Claude Desktop	{ENV:XDG_CONFIG_HOME:~/.config}/Claude-3p/local-agent-mode-sessions	docs
 win	read	Claude Desktop	{LOCALAPPDATA}/Claude-3p/local-agent-mode-sessions	docs
 all	read	Codex	{ENV:CODEX_HOME:~/.codex}/sessions	source code
 all	read	Codex	{ENV:CODEX_HOME:~/.codex}/archived_sessions	source code
@@ -31,9 +29,11 @@ all	read	Codex	{ENV:CODEX_HOME:~/.codex}/thread_history_1.sqlite-wal	source code
 all	read	Codex	{ENV:CODEX_SQLITE_HOME:~/.codex}/thread_history_1.sqlite	source code
 all	read	Codex	{ENV:CODEX_SQLITE_HOME:~/.codex}/thread_history_1.sqlite-wal	source code
 all	read	Gemini CLI	{ENV:GEMINI_CLI_HOME:~}/.gemini/tmp	docs
-mac	read	Gemini CLI	~/.cache/.gemini/tmp	source code
+mac	read	Gemini CLI	{ENV:GEMINI_CLI_HOME:~}/.cache/.gemini/tmp	source code
 all	read	Qwen Code	{ENV:QWEN_HOME:~/.qwen}/projects	source code
 all	read	Qwen Code	{ENV:QWEN_HOME:~/.qwen}/tmp	source code
+all	read	Qwen Code	{ENV:QWEN_RUNTIME_DIR:~/.qwen}/projects	source code
+all	read	Qwen Code	{ENV:QWEN_RUNTIME_DIR:~/.qwen}/tmp	source code
 all	read	OpenCode	{XDG_DATA}/opencode/opencode.db	docs
 all	read	OpenCode	{XDG_DATA}/opencode/opencode.db-wal	source code
 all	read	OpenCode	{XDG_DATA}/opencode/storage	source code
@@ -44,13 +44,9 @@ all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-store.db	docs
 all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-store.db-wal	source code
 all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/command-history-state.json	source code
 all	read	Roo Code	{AS}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
-linux	read	Roo Code	{ENV:XDG_CONFIG_HOME:~/.config}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
 all	read	Roo Code	{AS}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
-linux	read	Roo Code	{ENV:XDG_CONFIG_HOME:~/.config}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
 all	read	Cline	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
-linux	read	Cline	{ENV:XDG_CONFIG_HOME:~/.config}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
 all	read	Cline	{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
-linux	read	Cline	{ENV:XDG_CONFIG_HOME:~/.config}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
 all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/sessions	docs
 all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/tasks	docs
 all	read	Cline	{ENV:CLINE_DIR:~/.cline}/data/sessions	source code
@@ -73,7 +69,6 @@ all	read	Factory Droid	~/.factory/sessions	docs
 all	read	Factory Droid	~/.factory/projects	docs
 all	read	Factory Droid	~/.factory/state/history.json	source code
 all	read	Cursor	{AS}/Cursor/User/globalStorage/state.vscdb	third party
-linux	read	Cursor	{ENV:XDG_CONFIG_HOME:~/.config}/Cursor/User/globalStorage/state.vscdb	third party
 all	read	Cursor	~/.cursor/projects	docs
 all	read	Cursor	~/.cursor/chats	third party
 all	read	Windsurf	~/.windsurf/transcripts	docs

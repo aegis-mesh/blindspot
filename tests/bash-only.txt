@@ -285,3 +285,4 @@ a not-set pattern that is not a key	tools/gen.sh is one bash tool that writes th
 a line of not-set patterns only	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a Python incident's startup file outside the home folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a Python incident's startup file that must be its owner's	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+on a Mac, Gemini CLI's sandbox sessions under GEMINI_CLI_HOME are found	the line is macOS-only, for Gemini CLI's sandbox on a Mac, and gird-check.ps1 reads the Windows folders

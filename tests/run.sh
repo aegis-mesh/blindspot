@@ -14,7 +14,7 @@ trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 # The fixture homes decide every place the script looks: variables that move an agent's folders
 # elsewhere are cleared (GitHub's Ubuntu runners set XDG_CONFIG_HOME, for one).
 unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
-  QWEN_HOME COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
+  QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
 command -v python3 >/dev/null 2>&1 || { echo "tests/run.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt"
@@ -446,6 +446,17 @@ printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cdir/data/tasks/t1/api_conv
 printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/cdir/data/sessions/s1/m.json"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/csd/s2/m.json"
 HOME="$SE/gx" CLINE_DIR="$SE/cdir" CLINE_SESSION_DATA_DIR="$SE/csd" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/cline.txt" 2>&1
 has    "Cline's sessions and tasks under CLINE_DIR and CLINE_SESSION_DATA_DIR are found" 'Cline +3 files: AWS$' "$SE/cline.txt"
+# Qwen Code keeps its sessions and temp files under QWEN_RUNTIME_DIR when that is set (Storage.getRuntimeBaseDir).
+mkdir -p "$SE/qrt/projects/p1/chats"; printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/qrt/projects/p1/chats/c1.jsonl"
+HOME="$SE/gx" QWEN_RUNTIME_DIR="$SE/qrt" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/qrt.txt" 2>&1
+has    "Qwen Code's sessions under QWEN_RUNTIME_DIR are found" 'Qwen Code +1 file: AWS$' "$SE/qrt.txt"
+# In its macOS sandbox Gemini CLI keeps its sessions in .cache/.gemini under GEMINI_CLI_HOME, else the home folder
+# (Storage.getGlobalRuntimeDir); a stand-in uname says Darwin here.
+mkdir -p "$SE/macbin" "$SE/gch/.cache/.gemini/tmp/p1"
+printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Darwin; else exec /usr/bin/uname "$@"; fi\n' > "$SE/macbin/uname"; chmod +x "$SE/macbin/uname"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/gch/.cache/.gemini/tmp/p1/chat.json"
+HOME="$SE/gx" GEMINI_CLI_HOME="$SE/gch" PATH="$SE/macbin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/gch.txt" 2>&1
+has    "on a Mac, Gemini CLI's sandbox sessions under GEMINI_CLI_HOME are found" 'Gemini CLI +1 file: AWS$' "$SE/gch.txt"
 # VS Code and the other Electron apps keep their folders in XDG_CONFIG_HOME on Linux (a stand-in
 # uname says Linux here).
 mkdir -p "$SE/linbin" "$SE/xc/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/t1"

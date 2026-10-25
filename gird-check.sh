@@ -103,7 +103,7 @@ if [ "$WIN" -eq 1 ]; then
   PSRL="$WAPP/Microsoft/Windows/PowerShell/PSReadLine"
 else
   # On Linux the editors and Claude Desktop (Electron apps) keep their folders in XDG_CONFIG_HOME when
-  # it is an absolute path, as data/sessions.tsv's Linux lines already read.
+  # it is an absolute path, and data/sessions.tsv's {AS} lines read them there.
   if [ "$OS" = Darwin ]; then AS="$H/Library/Application Support"
   else case "${XDG_CONFIG_HOME:-}" in /*) AS=${XDG_CONFIG_HOME%/} ;; *) AS="$H/.config" ;; esac; fi
   APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
@@ -1126,10 +1126,8 @@ SESS_TABLE="all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/projects
 all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/history.jsonl
 all|read|Claude Code|${CLAUDE_CONFIG_DIR:-$H/.claude}/paste-cache
 all|read|Claude Desktop|$AS/Claude/local-agent-mode-sessions
-linux|read|Claude Desktop|${XDG_CONFIG_HOME:-$H/.config}/Claude/local-agent-mode-sessions
 win|read|Claude Desktop|$WLAPP/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions
 all|read|Claude Desktop|$AS/Claude-3p/local-agent-mode-sessions
-linux|read|Claude Desktop|${XDG_CONFIG_HOME:-$H/.config}/Claude-3p/local-agent-mode-sessions
 win|read|Claude Desktop|$WLAPP/Claude-3p/local-agent-mode-sessions
 all|read|Codex|${CODEX_HOME:-$H/.codex}/sessions
 all|read|Codex|${CODEX_HOME:-$H/.codex}/archived_sessions
@@ -1139,9 +1137,11 @@ all|read|Codex|${CODEX_HOME:-$H/.codex}/thread_history_1.sqlite-wal
 all|read|Codex|${CODEX_SQLITE_HOME:-$H/.codex}/thread_history_1.sqlite
 all|read|Codex|${CODEX_SQLITE_HOME:-$H/.codex}/thread_history_1.sqlite-wal
 all|read|Gemini CLI|${GEMINI_CLI_HOME:-$H}/.gemini/tmp
-mac|read|Gemini CLI|$H/.cache/.gemini/tmp
+mac|read|Gemini CLI|${GEMINI_CLI_HOME:-$H}/.cache/.gemini/tmp
 all|read|Qwen Code|${QWEN_HOME:-$H/.qwen}/projects
 all|read|Qwen Code|${QWEN_HOME:-$H/.qwen}/tmp
+all|read|Qwen Code|${QWEN_RUNTIME_DIR:-$H/.qwen}/projects
+all|read|Qwen Code|${QWEN_RUNTIME_DIR:-$H/.qwen}/tmp
 all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/opencode.db
 all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/opencode.db-wal
 all|read|OpenCode|${XDG_DATA_HOME:-$H/.local/share}/opencode/storage
@@ -1152,13 +1152,9 @@ all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-store.db
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/session-store.db-wal
 all|read|GitHub Copilot CLI|${COPILOT_HOME:-$H/.copilot}/command-history-state.json
 all|read|Roo Code|$AS/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
-linux|read|Roo Code|${XDG_CONFIG_HOME:-$H/.config}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 all|read|Roo Code|$AS/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks
-linux|read|Roo Code|${XDG_CONFIG_HOME:-$H/.config}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks
 all|read|Cline|$AS/Code/User/globalStorage/saoudrizwan.claude-dev/tasks
-linux|read|Cline|${XDG_CONFIG_HOME:-$H/.config}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks
 all|read|Cline|$AS/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks
-linux|read|Cline|${XDG_CONFIG_HOME:-$H/.config}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks
 all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/sessions
 all|read|Cline|${CLINE_DATA_DIR:-$H/.cline/data}/tasks
 all|read|Cline|${CLINE_DIR:-$H/.cline}/data/sessions
@@ -1181,7 +1177,6 @@ all|read|Factory Droid|$H/.factory/sessions
 all|read|Factory Droid|$H/.factory/projects
 all|read|Factory Droid|$H/.factory/state/history.json
 all|read|Cursor|$AS/Cursor/User/globalStorage/state.vscdb
-linux|read|Cursor|${XDG_CONFIG_HOME:-$H/.config}/Cursor/User/globalStorage/state.vscdb
 all|read|Cursor|$H/.cursor/projects
 all|read|Cursor|$H/.cursor/chats
 all|read|Windsurf|$H/.windsurf/transcripts
