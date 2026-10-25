@@ -183,3 +183,13 @@ fleet: without gird-check.sh next to it, it stops and says why	gird-check.ps1 ha
 both scripts carry the same version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
 every banner shows that version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
 the newest CHANGELOG release is that version	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+fleet: an account name it can't read is shown as invalid-name, and the inventory still reads	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a file or folder the account can't read is not checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an agent in the account's own ~/.local/bin is found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker that must be its owner's never counts for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and counts for the account that owns it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a machine check that runs out of time leaves the Mac not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --inventory says failed when a later run did not finish by its deadline	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the last result while that run still has time	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --stale-days is at most 30	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a folder whose ACL lets anyone write is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

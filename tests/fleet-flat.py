@@ -1,4 +1,4 @@
-"""Prints a fleet result (gird-check.sh --all-users) one value per line, for tests/run.sh to match:
+"""Prints a fleet result (gird-fleet.sh --all-users) one value per line, for tests/run.sh to match:
 key=value for the top level, accounts=N, <account>.<field>=value and machine.<field>=value. Lists
 are space-separated; incidents are their ids."""
 import json

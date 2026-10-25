@@ -107,11 +107,13 @@ fi
 # An account run reads only regular files up to FLEET_MAX bytes: a fifo, socket, device or bigger
 # file is not read and is counted, one line each in FLEET_NR, as not checked. Apps in /Applications
 # and the shared temp folder are the Mac's, checked once by root, never as an account's.
-FLEET_NR=""; FLEET_MAX=16777216; FLEET_PROT=ok
+FLEET_NR=""; FLEET_FE=/dev/null; FLEET_MAX=16777216; FLEET_PROT=ok
 if [ "$ACCTRUN" -eq 1 ]; then
   APP_CLAUDE=""; APP_CURSOR=""; APP_WINDSURF=""; APP_ANTIGRAVITY=""
   case "${GIRD_CHECK_FLEET_MAX_BYTES:-}" in ''|*[!0-9]*) ;; *) FLEET_MAX=$GIRD_CHECK_FLEET_MAX_BYTES ;; esac
   FLEET_NR=$(/usr/bin/mktemp /tmp/blindspot.XXXXXX) || exit 13
+  # Folders the home scan could not read: each error find reports counts as not checked.
+  FLEET_FE=$(/usr/bin/mktemp /tmp/blindspot.XXXXXX) || exit 13
   # Full Disk Access: a folder macOS protects is tried first. Refused means the protected folders
   # are not checked for this account, never that they are clear. With none of them there, there is
   # nothing protected to miss.
@@ -126,7 +128,8 @@ if [ "$ACCTRUN" -eq 1 ]; then
 fi
 fleet_ok() { # file: 0 when it may be read; outside an account run, always
   [ "$ACCTRUN" -eq 1 ] || return 0
-  if [ -f "$1" ]; then
+  # A file this account can't read counts as not checked, never as holding nothing.
+  if [ -f "$1" ] && [ -r "$1" ]; then
     _fs=$(/usr/bin/stat -L -f %z -- "$1" 2>/dev/null)
     case "$_fs" in ''|*[!0-9]*) ;; *) [ "$_fs" -le "$FLEET_MAX" ] && return 0 ;; esac
   elif [ ! -e "$1" ]; then return 1; fi
@@ -670,6 +673,7 @@ cleanup() {
   [ -n "$SESS_FILE" ] && rm -f "$SESS_FILE"
   [ -n "$SESS_FIFO" ] && rm -f "$SESS_FIFO"
   [ -n "$FLEET_NR" ] && rm -f "$FLEET_NR"
+  [ "$FLEET_FE" != /dev/null ] && rm -f "$FLEET_FE"
   printf '%s' "$SHOW"
 }
 trap cleanup EXIT
@@ -917,7 +921,7 @@ EOF
        -o -name .aider.chat.history.md "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        "${_pf[@]}" \) -print \) -o \
-    \( -type l -lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} + \) 2>/dev/null
+    \( -type l -lname '*.ssh/authorized_keys' -exec printf 'L %s\n' {} + \) 2>>"$FLEET_FE"
 }
 
 # Findings for the game or the spinner to show while the scan runs: a mark (x a
@@ -1235,6 +1239,16 @@ while IFS='|' read -r name bins paths acts aid; do
   [ -n "$name" ] || continue
   inst=0; old_ifs=$IFS; IFS=';'
   for b in $bins; do [ -n "$b" ] && command -v "$b" >/dev/null 2>&1 && inst=1; done
+  # An account run has a fixed PATH, so it looks in the account's own install folders by path.
+  if [ "$ACCTRUN" -eq 1 ]; then
+    for b in $bins; do
+      [ -n "$b" ] || continue
+      for _bd in "$H/.local/bin" "$H/bin" "$H/.npm-global/bin" "$H/.volta/bin" "$H/.bun/bin" "$H/.deno/bin" \
+                 "$H/Library/pnpm" "$H/.local/share/pnpm" "$H/.asdf/shims" "$H/.local/share/mise/shims" "$H"/.nvm/versions/node/*/bin; do
+        [ -e "$_bd/$b" ] && inst=1
+      done
+    done
+  fi
   for p in $paths; do [ -n "$p" ] && [ -e "$p" ] && inst=1; done
   IFS=$old_ifs
   [ "$inst" -eq 1 ] || continue
@@ -2092,7 +2106,8 @@ WIPER=""; PERSIST=""; IND_HITS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
-  if [ "$ACCTRUN" -eq 1 ]; then case "$_ip" in "$H"/*) ;; *) continue ;; esac; fi   # shared places are root's
+  # Shared places are root's, except a marker that must be this person's own (checked just below).
+  if [ "$ACCTRUN" -eq 1 ]; then case "$_ip" in "$H"/*) ;; *) [ "$_iown" = yes ] || continue ;; esac; fi
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
   if [ "$_iown" = yes ] && [ ! -O "$_ip" ]; then continue; fi
   IND_HITS="$IND_HITS $_ii"
@@ -2307,7 +2322,8 @@ fleet_agent_id() { # an agent's name in data/auto-approve.tsv: its id in AGENTS,
 if [ "$ACCTRUN" -eq 1 ]; then
   _yolo=$(printf '%s\n' "$AA_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
   _inc=$(printf '%s\n' $NPM_TAGS $EXT_TAGS $PY_HITS $IND_HITS | fleet_ids)
-  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD))
+  _fe=$(grep -c . "$FLEET_FE" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
+  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + _fe))
   _planted=$(( $(count_lines "$WORM_FILES") + $(count_lines "$WORM_REFS") ))
   _poss=0; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=1
   {

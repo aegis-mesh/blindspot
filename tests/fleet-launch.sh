@@ -1,6 +1,6 @@
 #!/bin/bash
 # Stands in for sudo in tests/run.sh's fleet tests, which never run as root: it records the command
-# gird-check.sh --all-users would run, then runs what follows sudo's -H as the person running the
+# gird-fleet.sh --all-users would run, then runs what follows sudo's -H as the person running the
 # tests. $FLL_DIR/mode-<account> picks how that account's run behaves:
 #   (none)     the real account run
 #   fail       sudo refused: no output, exit 1

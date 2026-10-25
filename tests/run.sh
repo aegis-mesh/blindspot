@@ -978,7 +978,7 @@ FL=$WORK/fleet; mkdir -p "$FL"
 FSKIP=""; [ "$(uname -s)" = Darwin ] || FSKIP="fleet mode is built for macOS only so far: its root side reads dscl and BSD stat"
 U=$(id -u); FLL=$PWD/tests/fleet-launch.sh; FLEETSH=$PWD/gird-fleet.sh
 fl_home() { mkdir -p "$FL/$1/Library/Safari"; }
-for h in asha itadmin clean upd linker odd shared; do fl_home "$h"; done
+for h in asha itadmin clean upd linker odd shared keeper; do fl_home "$h"; done
 bash tests/make-fixture.sh "$FL/asha" "$FL/keys-asha.txt" > /dev/null; mkdir -p "$FL/asha/Library/Safari"
 # itadmin: one SSH key with no passphrase and nothing else; upd: the same, so it has something to review only.
 for h in itadmin upd; do
@@ -986,9 +986,9 @@ for h in itadmin upd; do
 done
 # A key in a file the linking account can't read, and links to it, to a system file and through a linked folder.
 KEYX="AK""IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)"; printf '%s\n' "$KEYX" >> "$FL/keys-asha.txt"
-mkdir -p "$FL/itadmin/private"; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FL/itadmin/private/zshrc"; chmod 000 "$FL/itadmin/private"
-ln -s "$FL/itadmin/private/zshrc" "$FL/linker/.zshrc"; ln -s /etc/master.passwd "$FL/linker/.bash_profile"
-ln -s "$FL/itadmin/private" "$FL/linker/.config"
+mkdir -p "$FL/keeper/private"; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FL/keeper/private/zshrc"; chmod 000 "$FL/keeper/private"
+ln -s "$FL/keeper/private/zshrc" "$FL/linker/.zshrc"; ln -s /etc/master.passwd "$FL/linker/.bash_profile"
+ln -s "$FL/keeper/private" "$FL/linker/.config"
 # odd: a fifo in place of a history file, a link to a device, and a file over the size limit.
 mkfifo "$FL/odd/.zsh_history"; ln -s /dev/zero "$FL/odd/.bash_history"
 python3 -c "import sys; open(sys.argv[1], 'w').write('export OPENAI_API_KEY=x\n' + '#' * 5000 + '\n')" "$FL/odd/.zshrc"
@@ -1267,7 +1267,67 @@ if [ "$RC" -eq 2 ]; then ok "fleet: --json without --all-users is refused"; else
 SKIPPING=""
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_OS=Linux bash "$FLEETSH" --all-users > "$FL/linux.out" 2> "$FL/linux.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FL/linux.out" ] && grep -q 'macOS only so far; Linux comes next' "$FL/linux.err"; then ok "fleet: on Linux --all-users exits 13 with a message"; else bad "fleet: on Linux --all-users exits 13 with a message" "exit $RC"; fi
-chmod 755 "$FL/itadmin/private" "$FL/noprot" 2>/dev/null
+chmod 755 "$FL/keeper/private" "$FL/noprot" 2>/dev/null
+# From an IT team's review: what an account can do to a result, and what an account run can miss.
+SKIPPING=$FSKIP
+{
+users "bad name:$U:$FL/clean:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+fl_run badname
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/badname-inv.out" 2>&1
+if grep -q '^invalid-name\.not_checked=name$' "$FL/badname.flat" && grep -qE '^v1 [a-z_]+ .*\| invalid-name: not_checked name' "$FL/badname-inv.out"; then ok "fleet: an account name it can't read is shown as invalid-name, and the inventory still reads"; else bad "fleet: an account name it can't read is shown as invalid-name, and the inventory still reads" "$(cat "$FL/badname-inv.out")"; fi
+mkdir -p "$FL/unread/Library/Safari" "$FL/unread/code/locked"; printf 'export OPENAI_API_KEY=x\n' > "$FL/unread/.zshrc"; chmod 000 "$FL/unread/.zshrc" "$FL/unread/code/locked"
+users "unread:$U:$FL/unread:/bin/zsh"
+fl_run unread
+chmod 755 "$FL/unread/code/locked"; chmod 644 "$FL/unread/.zshrc"
+if grep -qE '^unread\.files_not_checked=([2-9]|[1-9][0-9]+)$' "$FL/unread.flat" && grep -q '^unread\.outcome=not_checked$' "$FL/unread.flat"; then ok "fleet: a file or folder the account can't read is not checked, never clear"; else bad "fleet: a file or folder the account can't read is not checked, never clear" "$(grep '^unread' "$FL/unread.flat" | tr '\n' ' ')"; fi
+mkdir -p "$FL/binhome/Library/Safari" "$FL/binhome/.local/bin"; : > "$FL/binhome/.local/bin/aider"; chmod 755 "$FL/binhome/.local/bin/aider"
+users "binhome:$U:$FL/binhome:/bin/zsh"
+fl_run binhome
+has    "fleet: an agent in the account's own ~/.local/bin is found" '^binhome\.agents=.*aider' "$FL/binhome.flat"
+# A marker that must be the person's own (gh-token-monitor's /tmp logs) is never the Mac's: any account could leave one.
+users "itadmin:$U:$FL/itadmin:/bin/zsh"
+: > "$FL/sharedtmp/gh-token-monitor.out.log"
+fl_run ownmark
+rm -f "$FL/sharedtmp/gh-token-monitor.out.log"
+hasnot "fleet: a marker that must be its owner's never counts for the Mac" '^machine\.incidents=.*tanstack' "$FL/ownmark.flat"
+if [ -e /tmp/gh-token-monitor.out.log ] || [ -L /tmp/gh-token-monitor.out.log ]; then
+  skip "fleet: and counts for the account that owns it" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
+else
+  : > /tmp/gh-token-monitor.out.log; fl_run ownmark2; rm -f /tmp/gh-token-monitor.out.log
+  has  "fleet: and counts for the account that owns it" '^itadmin\.incidents=.*tanstack' "$FL/ownmark2.flat"
+fi
+# A machine check that does not answer in time leaves the Mac partly checked.
+users "clean:$U:$FL/clean:/bin/zsh"
+: > "$FL/sharedtmp/remote_code_loader.lock"; printf '#!/bin/sh\nexec /bin/sleep 60\n' > "$FL/slow-lsof"; chmod +x "$FL/slow-lsof"
+GIRD_CHECK_FLEET_LSOF="$FL/slow-lsof" fl_run slowlsof
+rm -f "$FL/sharedtmp/remote_code_loader.lock"
+if grep -q '^machine\.complete=false$' "$FL/slowlsof.flat" && ! grep -q '^outcome=clear$' "$FL/slowlsof.flat"; then ok "fleet: a machine check that runs out of time leaves the Mac not checked"; else bad "fleet: a machine check that runs out of time leaves the Mac not checked" "$(grep -E '^(machine|outcome)' "$FL/slowlsof.flat" | tr '\n' ' ')"; fi
+# A run the MDM stopped part-way is not hidden behind the last finished result.
+fl_run attempt1
+python3 - "$FL/state" <<'PY2'
+import re, sys, time
+d = sys.argv[1]; now = int(time.time())
+s = open(d + '/last.json').read(); open(d + '/last.json', 'w').write(re.sub(r'"checked_epoch": \d+', '"checked_epoch": %d' % (now - 100), s))
+open(d + '/attempt', 'w').write('%d 10\n' % (now - 50))
+PY2
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/attempt-old.out" 2>&1
+has    "fleet: --inventory says failed when a later run did not finish by its deadline" '^failed: the run started 20[0-9-]{8}T[0-9:]{5}Z did not finish$' "$FL/attempt-old.out"
+python3 -c "import sys, time; open(sys.argv[1], 'w').write('%d 3000\n' % (int(time.time()) - 5))" "$FL/state/attempt"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/attempt-run.out" 2>&1
+has    "fleet: and the last result while that run still has time" '^v1 ' "$FL/attempt-run.out"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --stale-days=31 > /dev/null 2>&1; RC=$?
+if [ "$RC" -eq 2 ]; then ok "fleet: --stale-days is at most 30"; else bad "fleet: --stale-days is at most 30" "exit $RC"; fi
+# An ACL that lets anyone write counts as writable by someone else.
+mkdir -p "$FL/acl"; cp "$SCRIPT" "$FLEETSH" "$FL/acl/"
+if chmod +a "everyone allow add_file,delete_child" "$FL/acl" 2>/dev/null; then
+  : > "$FL/argv.log"
+  GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+    FLL_DIR="$FL" bash "$FL/acl/gird-fleet.sh" --all-users < /dev/null > /dev/null 2> "$FL/acl.err"; RC=$?
+  chmod -N "$FL/acl"
+  if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'writable by no one else' "$FL/acl.err"; then ok "fleet: a folder whose ACL lets anyone write is refused"; else bad "fleet: a folder whose ACL lets anyone write is refused" "exit $RC"; fi
+else skip "fleet: a folder whose ACL lets anyone write is refused" "chmod +a is not available here"; fi
+}
+SKIPPING=""
 # gird-check.sh, the script each person runs, carries no root work.
 if grep -v '^[[:space:]]*#' "$SCRIPT" | grep -qE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)'; then bad "gird-check.sh runs no sudo or dscl" "$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -nE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)' | head -n 3)"; else ok "gird-check.sh runs no sudo or dscl"; fi
 bash "$SCRIPT" --all-users > "$FL/cs-all.out" 2> "$FL/cs-all.err"; RC=$?
