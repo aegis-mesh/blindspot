@@ -896,7 +896,13 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
   if (Flat-Match $f $t $RxWormRun) { $WormRefs.Add($f) }
   # A repo's worktrees carry the same settings: one row, with how many more folders have it.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
-  if ($AutoSeen.ContainsKey($key)) { $AutoSeen[$key].More = $AutoSeen[$key].More + 1; return }
+  if ($AutoSeen.ContainsKey($key)) {
+    # The repo's own folder is the one listed, whichever the scan finds first.
+    $old = $AutoSeen[$key]; $old.More = $old.More + 1
+    $wt = '[/\\]\.claude[/\\]worktrees[/\\]'
+    if ($old.File -match $wt -and $f -notmatch $wt) { $old.File = $f }
+    return
+  }
   $row = @{ File = $f; What = $what; More = 0 }
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }

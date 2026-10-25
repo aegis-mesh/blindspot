@@ -1266,7 +1266,8 @@ auto_row() { # file what flattened-text
 "
   # Worktrees and copies carry the same settings: one row, with how many more folders have it.
   _sum="$(printf '%s' "$3" | cksum | cut -d' ' -f1):$(printf '%s' "$1" | sed -E 's#/\.claude/worktrees/[^/]+/#/#')"
-  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | awk -F "$TAB" -v OFS="$TAB" -v s="$_sum" '$3 == s { $4++ } { print }')
+  # The repo's own folder is the one listed, whichever the scan finds first.
+  case "$AUTO_SEEN" in *"|$_sum|"*) AUTO_ROWS="$(printf '%s' "$AUTO_ROWS" | AUTO_F=$1 awk -F "$TAB" -v OFS="$TAB" -v s="$_sum" '$3 == s { $4++; if ($1 ~ /\/\.claude\/worktrees\// && ENVIRON["AUTO_F"] !~ /\/\.claude\/worktrees\//) $1 = ENVIRON["AUTO_F"] } { print }')
 "; return ;; esac
   AUTO_SEEN="$AUTO_SEEN$_sum|"
   N_AUTO=$((N_AUTO + 1))
