@@ -71,6 +71,10 @@
 #     and those govern. All but yarsg's: its advisory, GHSA-xw78-h8vv-phcj, also spans a 1000.0.0 that
 #     npm's registry dates 2019-04-04, so it is listed at the 18.0.0 and 18.0.1 of 17 February 2026
 #     (Socket's list names 18.0.1).
+#   GlassWorm's invisible-code wave, March 2026 (glasswormuni): the two npm packages Aikido's post on it
+#     names, at the versions GitHub's malware advisories name: @aifabrix/miso-client 4.7.2
+#     (GHSA-5w47-93jc-5w3g) and @iflow-mcp/watercrawl-watercrawl-mcp 1.3.0 to 1.3.4 (GHSA-rg84-r52h-2rgw).
+#     No other malware entry names that wave. Its VS Code extension is in data/bad-extensions.tsv.
 # npm's registry dates every listed version of the AntV, Red Hat and Mini Shai-Hulud waves to its wave's
 # days (19 May, 1 June, and 29 and 30 April 2026), except @cap-js/openapi 1.4.1 (above). A version it
 # dates before a wave is not listed and has a skip line below.
@@ -3653,3 +3657,9 @@ yarsg	18.0.1	sandworm
 ethres	*	sandsleep
 uudi	*	sandsleep
 @injectivelabs/sdk-ts	1.20.21	injective
+@aifabrix/miso-client	4.7.2	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.0	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.1	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.2	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.3	glasswormuni
+@iflow-mcp/watercrawl-watercrawl-mcp	1.3.4	glasswormuni

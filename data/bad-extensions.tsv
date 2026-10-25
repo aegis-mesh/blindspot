@@ -14,7 +14,7 @@
 #             where its malware could not run, the report shows it as a malicious extension to remove,
 #             not a compromised machine (as data/bad-pypi.tsv's os does)
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
-# GlassWorm, from Socket's posts and one of Aikido's, each its own incident. A version where the post gives one, every
+# GlassWorm, from Socket's posts and two of Aikido's, each its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
 # update themselves, so a version from before an extension was turned counts too. Left out: what a post
 # calls a sleeper (not malicious yet), the 17 extensions turned on 29 April, whose payload Open VSX
@@ -55,6 +55,18 @@
 #     machine with either as compromised, and gives no version: every version.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
 #     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe).
+#   Aikido, March 2026 (glasswormuni, its post of 13 March on GlassWorm's invisible-code wave):
+#     quartz.quartz-markdown-editor 0.3.0, a VS Code extension the post names, which Microsoft's list removes
+#     (11 March 2026, as untrustworthy): any. Its loader is JavaScript: all. The two npm packages of that
+#     post are in data/bad-npm.tsv.
+# GlassWASM, June 2026 (glasswasm): the two Open VSX extensions of Socket's post, which it ties to GlassWorm,
+#   exargd.vsblack 0.0.1 and noellee-doc.flint-debug 0.1.1. They clone Marketplace extensions under the same
+#   ids and versions, and Socket says those Marketplace builds are clean: openvsx. Their loader picks a
+#   download command for each OS: all.
+# The 18 March post's payload, autoimport-smart-tool-2.5.8.vsix, a clone of the Auto Import extension that
+#   its droppers install from GitHub into every editor, has no line: the post names the file, not the id
+#   its folder takes, and the release that held it is gone. The droppers are listed, and so is
+#   floktokbok.autoimport, the dropper Aikido's April post names, at every version.
 # Nx Console 18.95.0, May 2026 (nxconsole): the compromised extension Wiz's post on the AntV wave names.
 #   Nx's own advisory, GHSA-c9j4-9m59-847w, says that build was on the VS Code Marketplace for 18
 #   minutes and on Open VSX for 36 (any), and gives its signs on macOS, Linux and Windows (all). The
@@ -166,4 +178,7 @@ specstudio.code-wakatime-activity-tracker	*	glasswormzig	openvsx	mac,win
 floktokbok.autoimport	*	glasswormzig	any	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win
 cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any	all
+quartz.quartz-markdown-editor	0.3.0	glasswormuni	any	all
+exargd.vsblack	0.0.1	glasswasm	openvsx	all
+noellee-doc.flint-debug	0.1.1	glasswasm	openvsx	all
 nrwl.angular-console	18.95.0	nxconsole	any	all

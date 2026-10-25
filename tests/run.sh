@@ -1050,7 +1050,7 @@ has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.
 # The AntV wave reached a second account (Wiz's list of the wave, GitHub's malware advisories of 19 May):
 # its packages are the wave's at the versions named, and a version beside one is not.
 rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/x"
-printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/openclaw-cn": {\n      "version": "0.3.0"\n    },\n    "node_modules/@starmind/collector-cli": {\n      "version": "0.3.10"\n    },\n    "node_modules/x/node_modules/openclaw-cn": {\n      "version": "0.3.1"\n    },\n    "node_modules/@antv/li-sam-assets": {\n      "version": "0.2.4"\n    },\n    "node_modules/x/node_modules/@antv/li-sam-assets": {\n      "version": "0.1.4"\n    },\n    "node_modules/yarsg": {\n      "version": "18.0.1"\n    },\n    "node_modules/x/node_modules/yarsg": {\n      "version": "1000.0.0"\n    }\n  }\n}\n' > "$WORK/npw/code/x/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/openclaw-cn": {\n      "version": "0.3.0"\n    },\n    "node_modules/@starmind/collector-cli": {\n      "version": "0.3.10"\n    },\n    "node_modules/x/node_modules/openclaw-cn": {\n      "version": "0.3.1"\n    },\n    "node_modules/@antv/li-sam-assets": {\n      "version": "0.2.4"\n    },\n    "node_modules/x/node_modules/@antv/li-sam-assets": {\n      "version": "0.1.4"\n    },\n    "node_modules/yarsg": {\n      "version": "18.0.1"\n    },\n    "node_modules/x/node_modules/yarsg": {\n      "version": "1000.0.0"\n    },\n    "node_modules/@iflow-mcp/watercrawl-watercrawl-mcp": {\n      "version": "1.3.2"\n    },\n    "node_modules/@aifabrix/miso-client": {\n      "version": "4.7.1"\n    }\n  }\n}\n' > "$WORK/npw/code/x/package-lock.json"
 HOME="$WORK/npw" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npw.txt"
 has    "a package of the AntV wave's second account is found" 'openclaw-cn 0\.3\.0 \(AntV account takeover, May 2026\)' "$WORK/npw.txt"
 has    "and another package of that account"          '@starmind/collector-cli 0\.3\.10 \(AntV account takeover, May 2026\)' "$WORK/npw.txt"
@@ -1061,6 +1061,9 @@ has    "a version of the AntV wave is found beside an older one" '@antv/li-sam-a
 hasnot "a 2023 version only one advisory names is not flagged" 'li-sam-assets 0\.1\.4' "$WORK/npw.txt"
 has    "a SANDWORM_MODE version of yarsg is found"     'yarsg 18\.0\.1 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npw.txt"
 hasnot "a 2019 version of yarsg is not flagged"        'yarsg 1000\.0\.0' "$WORK/npw.txt"
+# The npm packages of GlassWorm's invisible-code wave, at the versions GitHub's malware advisories name.
+has    "an npm package of GlassWorm's invisible-code wave is found" '@iflow-mcp/watercrawl-watercrawl-mcp 1\.3\.2 \(GlassWorm invisible code, March 2026\)' "$WORK/npw.txt"
+hasnot "a version of the other one no advisory names is not flagged" 'miso-client 4\.7\.1' "$WORK/npw.txt"
 # SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
 # to remove them comes ahead of every fix that says to rotate, an incident's own advice to rotate too.
 rm -rf "$WORK/sw"; mkdir -p "$WORK/sw/code/s/node_modules/suport-color" "$WORK/sw/code/s/node_modules/@keyv/redis" "$WORK/sw/AppData/Roaming" "$WORK/sw/AppData/Local/Temp"
@@ -1613,6 +1616,19 @@ has    "in VS Code's own folder"                      '~/\.vscode/extensions/nrw
 has    "and in an Open VSX editor's folder"           '~/\.cursor/extensions/nrwl\.angular-console-18\.95\.0-darwin-arm64 nrwl\.angular-console 18\.95\.0 \(Nx Console 18\.95\.0, May 2026\), installed' "$WORK/dz-nx.txt"
 has    "with Nx's sourced line"                       'Nx Console 18\.95\.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory\. github\.com' "$WORK/dz-nx.txt"
 hasnot "its fixed version is not flagged"             'angular-console-18\.100\.0' "$WORK/dz-nx.txt"
+# GlassWorm's invisible-code wave (Aikido, March 2026): its Marketplace extension at the version the post names.
+# GlassWASM (Socket, June 2026): Open VSX clones under the ids and versions of clean Marketplace extensions, so
+# malware in an Open VSX editor's folder and not in VS Code's own.
+rm -rf "$WORK/dz-gw2"; cp -R "$WORK/clean" "$WORK/dz-gw2"
+mkdir -p "$WORK/dz-gw2/.vscode/extensions/quartz.quartz-markdown-editor-0.3.0" "$WORK/dz-gw2/.cursor/extensions/quartz.quartz-markdown-editor-0.2.9" \
+  "$WORK/dz-gw2/.cursor/extensions/exargd.vsblack-0.0.1" "$WORK/dz-gw2/.vscode/extensions/noellee-doc.flint-debug-0.1.1"
+dzrun "$WORK/dz-gw2" | tr -s ' \n' '  ' > "$WORK/dz-gw2.txt"
+has    "the extension of GlassWorm's invisible-code wave is malware" '~/\.vscode/extensions/quartz\.quartz-markdown-editor-0\.3\.0 quartz\.quartz-markdown-editor 0\.3\.0 \(GlassWorm invisible code, March 2026\), installed' "$WORK/dz-gw2.txt"
+has    "with Aikido's sourced line"                   'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs\. aikido\.dev' "$WORK/dz-gw2.txt"
+hasnot "a version of it the post does not name is not flagged" 'quartz-markdown-editor-0\.2\.9' "$WORK/dz-gw2.txt"
+has    "a GlassWASM clone in an Open VSX editor's folder is malware" '~/\.cursor/extensions/exargd\.vsblack-0\.0\.1 exargd\.vsblack 0\.0\.1 \(GlassWASM extensions, June 2026\), installed' "$WORK/dz-gw2.txt"
+has    "with Socket's sourced line"                   'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage\. socket\.dev' "$WORK/dz-gw2.txt"
+hasnot "the clean Marketplace original in VS Code's own folder is not flagged" 'noellee-doc' "$WORK/dz-gw2.txt"
 # Antigravity installs from Open VSX: Antigravity IDE keeps its extensions in ~/.antigravity-ide, the
 # Antigravity before it in ~/.antigravity. A GlassWorm extension that names Antigravity, in each.
 rm -rf "$WORK/dz-ag"; cp -R "$WORK/clean" "$WORK/dz-ag"
