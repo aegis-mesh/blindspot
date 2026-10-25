@@ -167,6 +167,7 @@ for E in net rg; do
   tr -s ' \n' '  ' < "$SE/$E.block" > "$SE/$E.flat"   # the notes wrap
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.block"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.block"
+  has    "$E: a session in another place is listed under that place" '^ +~/\.codex/sessions +1 file$' "$SE/$E.block"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.block"
   hasnot "$E: a made-up key is not counted"        'Claude Code .*(Anthropic|AWS|GitHub)' "$SE/$E.block"
   hasnot "$E: a key of counting digits is made up" 'Claude Code .*Groq' "$SE/$E.block"
@@ -184,6 +185,40 @@ bash tests/make-fixture.sh "$SE/bh" "$SE/bk" >/dev/null
 # part-way and list nothing, which is the script working as designed but not a comparison.
 HOME="$SE/bh" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/bash.block"
 if diff -q "$SE/bash.block" "$SE/net.block" >/dev/null; then ok "the same session block as gird-check.sh"; else bad "the same session block as gird-check.sh"; diff "$SE/bash.block" "$SE/net.block" | head -n 6; fi
+# Session files are listed by place, one row each with how many of its files had keys. A place is
+# the session folder an agent keeps, or the file when the location is one file.
+HFK="hf""_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu"
+sessfix() { # home folder:count...: that many session files with a key in each folder under home
+  _d=$1; shift
+  mkdir -p "$_d/AppData/Roaming" "$_d/AppData/Local/Temp"
+  for _s in "$@"; do
+    _p=${_s%:*}; _c=${_s##*:}; mkdir -p "$_d/$_p"
+    for _i in $(seq 1 "$_c"); do printf '{"t":"%s end"}\n' "$HFK" > "$_d/$_p/agent-$_i.jsonl"; done
+  done
+}
+LONGP=$(printf 'long-folder-name-%.0s' 1 2 3 4 5 6)tail-marker-end
+sessfix "$SE/g1" .claude/projects/proj-one/s1/subagents:4
+sessfix "$SE/g2" .claude/projects/p/s1:2 .codex/sessions/2026/10:5
+sessfix "$SE/g3" "$LONGP/projects/p:12"
+sessfix "$SE/g4"
+for _n in $(seq -w 1 23); do mkdir -p "$SE/g4/code/p$_n"; printf '> %s\n' "$HFK" > "$SE/g4/code/p$_n/.aider.chat.history.md"; done
+for _g in g1 g2 g3 g4; do
+  _ev=(); [ "$_g" = g3 ] && _ev=(CLAUDE_CONFIG_DIR="$SE/g3/$LONGP")
+  psrun "$SE/$_g" ${_ev[@]+"${_ev[@]}"} GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/$_g.txt" 2>&1
+  sed -n '/Keys in agent sessions/,/^$/p' "$SE/$_g.txt" > "$SE/$_g.block"
+done
+has    "several files in one place collapse into one row with their count" '^ +~/\.claude/projects +4 files$' "$SE/g1.block"
+hasnot "and are not listed one by one, nor their project folders" 'agent-[0-9]+\.jsonl|subagents|proj-one' "$SE/g1.block"
+_lc=$(grep -an '~/\.codex/sessions ' "$SE/g2.block" | cut -d: -f1); _lp=$(grep -an '~/\.claude/projects ' "$SE/g2.block" | cut -d: -f1)
+if [ -n "$_lc" ] && [ -n "$_lp" ] && [ "$_lc" -lt "$_lp" ]; then ok "two places are ordered by count"; else bad "two places are ordered by count"; fi
+has    "a long place is shortened in the middle and keeps its end" '^ +~/long-.*\.\.\..*tail-marker-end/projects +12 files$' "$SE/g3.block"
+has    "more than 20 places end with how many more" '^ +and 3 more$' "$SE/g4.block"
+if [ "$(grep -acE '^ +~/code/p[0-9]+/\.aider\.chat\.history\.md +1 file$' "$SE/g4.block")" -eq 20 ]; then ok "and show 20 of them"; else bad "and show 20 of them"; fi
+if cat "$SE"/g?.block | grep -av '✗' | LC_ALL=C awk 'length($0) > 80 { bad = 1 } END { exit bad }'; then ok "no session row is wider than 80 columns"; else bad "no session row is wider than 80 columns"; fi
+for _g in g1 g2 g3 g4; do
+  HOME="$SE/$_g" PATH=/usr/bin:/bin bash "$BASH_SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/$_g.bash"
+done
+if cat "$SE"/g?.bash | diff -q - <(cat "$SE"/g?.block) >/dev/null; then ok "the same folder rows as gird-check.sh"; else bad "the same folder rows as gird-check.sh"; fi
 psrun "$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_STOP_AFTER=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
 has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
 psrun "$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > "$SE/clean.txt" 2>&1
@@ -205,8 +240,8 @@ SKIPPING=""
 # A long token that crosses a 1 MB piece is not mistaken for a key.
 for D in piece esc esc2; do mkdir -p "$SE/$D/.claude/projects/p" "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
-python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 2) + '\\\\n' + 'hf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc/.claude/projects/p/a.jsonl"
-python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 1) + '\\\\' + 'nhf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc2/.claude/projects/p/a.jsonl"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 2) + '\\\\n' + 'h' + 'f_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc/.claude/projects/p/a.jsonl"
+python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 1) + '\\\\' + 'nh' + 'f_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end' + '\n')" "$SE/esc2/.claude/projects/p/a.jsonl"
 psrun "$SE/esc2" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions > "$SE/esc2.txt" 2>&1
 has    "net: a key after a backslash that ends a read is found" 'Claude Code +1 file: Hugging Face' "$SE/esc2.txt"
 for E in net rg; do

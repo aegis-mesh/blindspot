@@ -1,5 +1,5 @@
 <#
-Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.1.0 (23 October 2026)
+Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.2.0 (25 October 2026)
 https://gird.ai/blindspot
 
 Shows the AI coding agents and MCP servers on this computer, AI and cloud keys
@@ -645,7 +645,7 @@ function Show-Banner {
     if ($i -eq 3) { $mark = (& $u ' \u2819\u281b\u283b\u2801 ') + $cGold + (& $u '\u2830\u2806') + $cTeal + (& $u ' \u2880\u28e6\u28e4\u28c4\u2840') } else { $mark = & $u $mk[$i] }
     Emit ("  $cTeal$mark$cRst   $cBold$row$cRst")
   }
-  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.1.0 $gMid 23 Oct 2026 $gMid gird.ai/blindspot$cRst")
+  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
 }
 
 # ===========================================================================
@@ -654,7 +654,7 @@ $Early = $false
 try {
 Blank
 if ($Fancy) { Show-Banner } else {
-Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.1.0 $gMid 23 Oct 2026 $gMid gird.ai/blindspot$cRst")
+Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
 }
 Blank
 Emit "  ${cDim}Read-only. Prints paths and counts, never a key.$cRst"
@@ -2058,17 +2058,19 @@ function Sess-Where([string]$f) {
   foreach ($src in $SessSources) { if ($f.Equals($src[1], $PathCmp) -or $f.StartsWith($src[1] + [IO.Path]::DirectorySeparatorChar, $PathCmp) -or $f.StartsWith($src[1] + '/', $PathCmp)) { return @($src[0], $src[1]) } }
   @('Other', [IO.Path]::GetDirectoryName($f))
 }
-$SessFiles = New-Object System.Collections.Generic.List[string]; $SessPlaces = New-Object System.Collections.Generic.List[string]; $sessAg = [ordered]@{}
+$SessFiles = New-Object System.Collections.Generic.List[string]; $SessPlaces = New-Object System.Collections.Generic.List[string]; $sessPlaceN = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal); $sessAg = [ordered]@{}
 foreach ($h in $sessHits) {
   # The provider comes last and holds no tab, so a tab in a file name can't shift the split.
   $at = $h.LastIndexOf("`t"); $f = $h.Substring(0, $at); $p = $h.Substring($at + 1); $a, $where = Sess-Where $f
   if (-not $SessFiles.Contains($f)) {
-    $SessFiles.Add($f); if (-not $SessPlaces.Contains($where)) { $SessPlaces.Add($where) }
+    $SessFiles.Add($f); if ($sessPlaceN.ContainsKey($where)) { $sessPlaceN[$where]++ } else { $SessPlaces.Add($where); $sessPlaceN[$where] = 1 }
     if (-not $sessAg.Contains($a)) { $sessAg[$a] = @{ N = 0; P = (New-Object System.Collections.Generic.List[string]) } }; $sessAg[$a].N++
   }
   if (-not $sessAg[$a].P.Contains($p)) { $sessAg[$a].P.Add($p) }
 }
-$SessFiles.Sort([StringComparer]::Ordinal); $SessPlaces.Sort([StringComparer]::Ordinal)
+$SessFiles.Sort([StringComparer]::Ordinal)
+# Most files first, then by name.
+$SessPlaces.Sort([Comparison[string]]{ param($x, $y) if ($sessPlaceN[$x] -ne $sessPlaceN[$y]) { return $sessPlaceN[$y] - $sessPlaceN[$x] }; return [string]::CompareOrdinal($x, $y) })
 $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
@@ -2362,7 +2364,14 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
   Emit "     ${cBold}Keys in agent sessions$cRst"
   foreach ($r in $SessRows) { Pair "$cRed$gX$cRst" $r[0] 20 "$(Plural $r[1] 'file' 'files'): $($r[2])" }
   if ($N_SESS -gt 0) {
-    foreach ($f in ($SessPlaces | Select-Object -First 20)) { Emit "        $cDim$(Short $f)$cRst" }
+    $placeShow = @($SessPlaces | Select-Object -First 20)
+    $cw = 0; foreach ($g in $placeShow) { $cw = [Math]::Max($cw, (Plural $sessPlaceN[$g] 'file' 'files').Length) }
+    $fw = 80 - 8 - 2 - $cw
+    foreach ($g in $placeShow) {
+      $d = Short $g
+      if ($d.Length -gt $fw) { $hd = [int][Math]::Floor(($fw - 3) / 2); $d = $d.Substring(0, $hd) + '...' + $d.Substring($d.Length - ($fw - 3 - $hd)) }
+      Emit ("        $cDim" + $d.PadRight($fw) + '  ' + (Plural $sessPlaceN[$g] 'file' 'files').PadLeft($cw) + $cRst)
+    }
     if ($N_PLACES -gt 20) { Emit "        ${cDim}and $($N_PLACES - 20) more$cRst" }
     Wrap (Wiper-Wait 'Treat these keys as exposed and rotate them.') 8 '        ' '        '
   }

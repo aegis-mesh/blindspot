@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Blindspot, the GIRD AI key check, version 1.1.0 (22 October 2026)
+# Blindspot, the GIRD AI key check, version 1.2.0 (25 October 2026)
 # https://gird.ai/blindspot
 #
 # Shows the AI coding agents and MCP servers on this machine, AI and cloud keys
@@ -239,7 +239,7 @@ banner() {
   done <<EOF
 $_wm
 EOF
-  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.1.0 · 22 Oct 2026 · gird.ai/blindspot${RST}"
+  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.2.0 · 25 Oct 2026 · gird.ai/blindspot${RST}"
   blank
   emit "  ${DIM}Read-only. Prints paths and counts, never a key.${RST}"
   if [ "$OFFLINE" -eq 0 ]; then
@@ -2586,7 +2586,8 @@ if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
   done)
   SESS_FILES=$(printf '%s\n' "$SESS_TAGGED" | cut -f2 | sort -u)
   N_SESS=$(count_lines "$SESS_FILES")
-  SESS_PLACES=$(printf '%s\n' "$SESS_TAGGED" | cut -f4 | sort -u)
+  # Each place with how many of its files had keys, most first, then by name. A file has one place.
+  SESS_PLACES=$(printf '%s\n' "$SESS_TAGGED" | awk -F '\t' '$2 != "" && !($2 in s) { s[$2] = 1; c[$4]++ } END { for (p in c) printf "%d\t%s\n", c[p], p }' | sort -t "$TAB" -k1,1nr -k2,2)
   N_PLACES=$(count_lines "$SESS_PLACES")
   SESS_ROWS=$(printf '%s\n' "$SESS_TAGGED" | awk -F '\t' '
     !(($1 "|" $2) in f) { f[$1 "|" $2] = 1; n[$1]++; if (!($1 in o)) { o[$1] = ++k; name[k] = $1 } }
@@ -2977,10 +2978,29 @@ if [ "$SESS_TOTAL" -gt 0 ] || [ "$SESS_UNREAD" -ne 0 ] || [ -n "$SESS_SEALED_FOU
 $SESS_ROWS
 EOF
   if [ "$N_SESS" -gt 0 ]; then
-    _shown=0
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      _shown=$((_shown + 1)); [ "$_shown" -le 20 ] && emit "        ${DIM}$(short "$f")${RST}"
+    _cw=0; _shown=0; _nd=0
+    while IFS="$(printf '\t')" read -r _n _g; do
+      [ -n "$_g" ] || continue
+      _nd=$((_nd + 1)); [ "$_nd" -le 20 ] || continue
+      _t=$(plural "$_n" file files); [ "${#_t}" -gt "$_cw" ] && _cw=${#_t}
+    done <<EOF
+$SESS_PLACES
+EOF
+    _fw=$((80 - 8 - 2 - _cw))
+    while IFS="$(printf '\t')" read -r _n _g; do
+      [ -n "$_g" ] || continue
+      _shown=$((_shown + 1)); [ "$_shown" -le 20 ] || continue
+      _g=$(short "$_g")
+      if [ "${#_g}" -gt "$_fw" ]; then
+        # Shortened in the middle, and never inside a character of more than one byte.
+        _hd=$(((_fw - 3) / 2)); _h=${_g:0:_hd}; _e=${_g: -$((_fw - 3 - _hd))}
+        while case "$_h" in *[$'\x80'-$'\xbf']) true ;; *) false ;; esac; do _h=${_h%?}; done
+        case "$_h" in *[$'\xc0'-$'\xff']) _h=${_h%?} ;; esac
+        while case "$_e" in [$'\x80'-$'\xbf']*) true ;; *) false ;; esac; do _e=${_e#?}; done
+        _g="$_h...$_e"
+      fi
+      printf -v _x '%-*s  %*s' "$_fw" "$_g" "$_cw" "$(plural "$_n" file files)"
+      emit "        ${DIM}$_x${RST}"
     done <<EOF
 $SESS_PLACES
 EOF

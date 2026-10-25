@@ -153,9 +153,11 @@ Section 3, "Keys in plain text", gains a block like "Login files":
 - The score and the report payload do not change. A score that depended on how much was checked
   in time would differ between two runs on the same machine, and the payload needs a Worker and D1
   change first. Both are separate decisions.
-- `--full` and a saved report list up to 20 places (the session folder, or the file when the
+- `--full` and a saved report list the places with keys (the session folder, or the file when the
   location is one file), not session files: a Claude Code session's path spells out the project
-  folder, username included, and reports get pasted into issues. Paths stay on the machine.
+  folder, username included, and reports get pasted into issues. Each row shows the place (a long
+  one shortened in the middle with "...", so the row fits 80 columns) and how many of its files had
+  keys, most first, then by name, up to 20 rows and then "and N more". Paths stay on the machine.
 - A session that is also a file Blindspot reads elsewhere (none today) is listed once, here.
 - The summary row for section 3 counts session files when there are no plain-text key files.
 
