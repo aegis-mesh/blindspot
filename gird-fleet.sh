@@ -201,6 +201,8 @@ mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|the Mastra malware 
 antv|all|startup|no|$H/.config/systemd/user/kitty-monitor.service|starts the AntV wave's kitty-monitor backdoor at login
 antv|all|startup|no|$H/Library/LaunchAgents/com.user.kitty-monitor.plist|starts the AntV wave's kitty-monitor backdoor at login
 antv|all|startup|no|$H/.local/share/kitty/cat.py|the AntV wave's kitty-monitor backdoor, which its service starts at login
+nxconsole|all|startup|no|$H/Library/LaunchAgents/com.user.kitty-monitor.plist|starts the kitty-monitor backdoor Nx Console 18.95.0 installed, at login
+nxconsole|all|startup|no|$H/.local/share/kitty/cat.py|the kitty-monitor backdoor Nx Console 18.95.0 installed
 antv|all|startup|no|$H/.claude/package/index.js|a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 antv|all|startup|no|$H/.codex/package/index.js|a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 litellm|all|site|no|cook.pth|-

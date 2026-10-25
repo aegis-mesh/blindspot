@@ -1587,6 +1587,8 @@ $IndTable = @(
   ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.config/systemd/user/kitty-monitor.service'), 'starts the AntV wave''s kitty-monitor backdoor at login')
   ,@('antv', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.kitty-monitor.plist'), 'starts the AntV wave''s kitty-monitor backdoor at login')
   ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.local/share/kitty/cat.py'), 'the AntV wave''s kitty-monitor backdoor, which its service starts at login')
+  ,@('nxconsole', 'all', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.user.kitty-monitor.plist'), 'starts the kitty-monitor backdoor Nx Console 18.95.0 installed, at login')
+  ,@('nxconsole', 'all', 'startup', 'no', (J $HomeDir '.local/share/kitty/cat.py'), 'the kitty-monitor backdoor Nx Console 18.95.0 installed')
   ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.claude/package/index.js'), 'a copy of the AntV wave''s payload, run by the hooks it adds to agent settings')
   ,@('antv', 'all', 'startup', 'no', (J $HomeDir '.codex/package/index.js'), 'a copy of the AntV wave''s payload, run by the hooks it adds to agent settings')
   ,@('litellm', 'all', 'site', 'no', 'cook.pth', '-')
@@ -5910,6 +5912,26 @@ $Persist = New-Object System.Collections.Generic.List[object]
 $ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
 $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
+# A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
+# packages and Nx Console 18.95.0 leave the same kitty-monitor files) is listed once, by the incident
+# $IndOwner names: the extension's when it was found and none of the npm incident's packages were.
+$ExtFound = @($ExtRows | ForEach-Object { $_[2] })
+$IndOwner = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
+$ownXa = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ownXf = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
+$ownM = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ownNf = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
+foreach ($r in $IndOn) {
+  if ($r[2] -ne 'startup' -or -not $r[4]) { continue }
+  if ($ExtIncs -ccontains $r[0] -and -not ($NpmIncs -ccontains $r[0])) {
+    if (-not $ownXa.ContainsKey($r[4])) { $ownXa[$r[4]] = $r[0] }
+    if ($ExtFound -ccontains $r[0] -and -not $ownXf.ContainsKey($r[4])) { $ownXf[$r[4]] = $r[0] }
+  } else {
+    if (-not $ownM.ContainsKey($r[4])) { $ownM[$r[4]] = $r[0] }
+    if ($NpmTags -ccontains $r[0]) { $ownNf[$r[4]] = $true }
+  }
+}
+foreach ($p in @($ownM.Keys)) {
+  if ($ownXa.ContainsKey($p)) { if ($ownXf.ContainsKey($p) -and -not $ownNf.ContainsKey($p)) { $IndOwner[$p] = $ownXf[$p] } else { $IndOwner[$p] = $ownM[$p] } }
+}
 foreach ($r in $IndOn) {
   if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
   # A Python incident's startup file is shown in its row ($PyStart).
@@ -5921,6 +5943,7 @@ foreach ($r in $IndOn) {
     # person's file under it.
     if (-not (Owns-File $m) -or (-not $m.StartsWith("$HomeDir/") -and (Multi-Name $m))) { continue }
   }
+  if ($r[2] -eq 'startup' -and $IndOwner.ContainsKey($m) -and $IndOwner[$m] -cne $r[0]) { continue }
   if ($r[2] -eq 'wiper') { $Wiper.Add($m) }
   elseif ($ExtIncs -contains $r[0] -and -not ($NpmIncs -contains $r[0])) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
   else { $Persist.Add(@($m, $r[5])) }
@@ -6124,7 +6147,8 @@ Add-Advice 'first'
 if ($MAL_HIT -eq 1 -and $MAL_LOCKONLY -eq 0) { Add-Todo 5 'Treat this machine as compromised. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm''s cache with npm cache clean --force.' }
 if ($EXT_HIT -eq 1) {
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
-  if ($ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
+  if ($ExtPersist.Count -gt 1) { $edo = 'Uninstall the extensions listed in section 5, delete the startup files listed there, and' }
+  elseif ($ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
   else { $edo = 'Uninstall the extensions listed in section 5 and' }
   Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
 }

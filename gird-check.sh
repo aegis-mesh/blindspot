@@ -1054,6 +1054,8 @@ mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|the Mastra malware 
 antv|all|startup|no|$H/.config/systemd/user/kitty-monitor.service|starts the AntV wave's kitty-monitor backdoor at login
 antv|all|startup|no|$H/Library/LaunchAgents/com.user.kitty-monitor.plist|starts the AntV wave's kitty-monitor backdoor at login
 antv|all|startup|no|$H/.local/share/kitty/cat.py|the AntV wave's kitty-monitor backdoor, which its service starts at login
+nxconsole|all|startup|no|$H/Library/LaunchAgents/com.user.kitty-monitor.plist|starts the kitty-monitor backdoor Nx Console 18.95.0 installed, at login
+nxconsole|all|startup|no|$H/.local/share/kitty/cat.py|the kitty-monitor backdoor Nx Console 18.95.0 installed
 antv|all|startup|no|$H/.claude/package/index.js|a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 antv|all|startup|no|$H/.codex/package/index.js|a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 litellm|all|site|no|cook.pth|-
@@ -6532,6 +6534,16 @@ N_LOCKPROJ=$(printf '%s' "$NPM_LOCKPROJ" | sort -u | grep -c .)
 # file to check (EXT_CHECK), not a compromised machine.
 EXT_INCS=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
+# A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
+# packages and Nx Console 18.95.0 leave the same kitty-monitor files) is listed once, by the incident
+# IND_OWNER names: the extension's when it was found and none of the npm incident's packages were.
+EXT_FOUND=" $(printf '%s\n' "$EXT_ROWS" | cut -f3 | sort -u | tr '\n' ' ')"
+IND_OWNER=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v e="$EXT_INCS" -v n="$NPM_INCS" -v f="$EXT_FOUND" -v t=" $(printf '%s ' $NPM_TAGS)" -v o="$_os" '
+  $3 == "startup" && ($2 == "all" || $2 == o) && $5 != "" {
+    if (index(e, " " $1 " ") && !index(n, " " $1 " ")) { if (!($5 in xa)) xa[$5] = $1; if (index(f, " " $1 " ") && !($5 in xf)) xf[$5] = $1 }
+    else { if (!($5 in m)) m[$5] = $1; if (index(t, " " $1 " ")) nf[$5] = 1 }
+  }
+  END { for (p in m) if (p in xa) print p "|" ((p in xf) && !(p in nf) ? xf[p] : m[p]) }')
 WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; IND_HITS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
@@ -6549,6 +6561,10 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
     case "$_ip" in "$H"/*) ;; *) { [ ! -L "$_ip" ] && [ -n "$(find "$_ip" -prune -links 1 -print 2>/dev/null)" ]; } || continue
       # As for the temp markers above: in fleet mode, a possible sign.
       if [ "$ACCTRUN" -eq 1 ]; then if [ "$_ik" = wiper ]; then FLEET_TMPWIPER=1; else FLEET_TMPMARK="$FLEET_TMPMARK $_ii"; fi; continue; fi ;; esac
+  fi
+  if [ "$_ik" = startup ] && [ -n "$IND_OWNER" ]; then
+    _ow=$(printf '%s\n' "$IND_OWNER" | awk -F '|' -v p="$_ip" '$1 == p { print $2; exit }')
+    [ -z "$_ow" ] || [ "$_ow" = "$_ii" ] || continue
   fi
   _ext=0; case "$EXT_INCS" in *" $_ii "*) case "$NPM_INCS" in *" $_ii "*) ;; *) _ext=1 ;; esac ;; esac
   # gh-token-monitor came with more than one wave, so fleet mode gets it as wiper=1, not as an incident.
@@ -6839,7 +6855,8 @@ if [ "$MAL_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
   # Only what section 5 lists: the extensions, the incident's startup file, or both.
-  if [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
+  if [ "$(printf '%s' "$EXT_PERSIST" | grep -c .)" -gt 1 ]; then _edo="Uninstall the extensions listed in section 5, delete the startup files listed there, and"
+  elif [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
   else _edo="Uninstall the extensions listed in section 5 and"; fi
   todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
 fi

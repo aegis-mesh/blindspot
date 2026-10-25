@@ -43,6 +43,12 @@
 # SessionStart hooks it adds to Claude Code and Codex settings run. Its /var/tmp/.gh_update_state, the
 # backdoor's state file, has no line: a temp line is a Python incident's hit in /tmp, TMPDIR or %TEMP%,
 # and a wiper path must name gh-token-monitor. Its ~/.local/bin/gh-token-monitor.sh is a wiper line.
+# Nx Console 18.95.0, the AntV wave's extension: Nx's own advisory (GHSA-c9j4-9m59-847w) and postmortem
+# name the same cat.py and LaunchAgent. A file an npm incident's line and an editor extension
+# incident's line both name is listed once: with the extension when that extension was found and none
+# of the npm incident's packages were, else as npm malware. Its /var/tmp/.gh_update_state, /tmp/kitty-*
+# and their %TEMP% copies have no line, as for the AntV wave, nor %USERPROFILE%\.bun\bin\bun.exe, where
+# Bun's own installer puts Bun.
 # GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
 # extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware,
 # and only when an extension that shipped malware is found: alone, it is a file to check.
@@ -63,6 +69,8 @@ mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	the Mastra malware
 antv	all	startup	no	~/.config/systemd/user/kitty-monitor.service	starts the AntV wave's kitty-monitor backdoor at login
 antv	all	startup	no	~/Library/LaunchAgents/com.user.kitty-monitor.plist	starts the AntV wave's kitty-monitor backdoor at login
 antv	all	startup	no	~/.local/share/kitty/cat.py	the AntV wave's kitty-monitor backdoor, which its service starts at login
+nxconsole	all	startup	no	~/Library/LaunchAgents/com.user.kitty-monitor.plist	starts the kitty-monitor backdoor Nx Console 18.95.0 installed, at login
+nxconsole	all	startup	no	~/.local/share/kitty/cat.py	the kitty-monitor backdoor Nx Console 18.95.0 installed
 antv	all	startup	no	~/.claude/package/index.js	a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 antv	all	startup	no	~/.codex/package/index.js	a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 litellm	all	site	no	cook.pth	-
