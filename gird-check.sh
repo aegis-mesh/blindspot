@@ -6656,9 +6656,9 @@ N_LOCKPROJ=$(printf '%s' "$NPM_LOCKPROJ" | sort -u | grep -c .)
 # before any token is revoked. A file in the shared /tmp counts only if this person owns it.
 # A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
 # is that incident's sign, shown with the extensions (EXT_PERSIST), never called npm malware, and only
-# next to an extension that shipped malware: GlassWorm's is named com.user.nodestart.plist, the kind
-# of name people give their own LaunchAgents, and Socket gives the name as an example. Alone, it is a
-# file to check (EXT_CHECK), not a compromised machine.
+# next to an extension of that incident: GlassWorm's is named com.user.nodestart.plist, the kind of
+# name people give their own LaunchAgents, and Socket gives the name as an example. Alone, or next to
+# another incident's extension, it is a file to check (EXT_CHECK), not that incident's sign.
 EXT_INCS=" $(printf '%s\n' "$BAD_EXT" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' ' ')"
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
@@ -6672,7 +6672,7 @@ IND_OWNER=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v e="$EXT_INCS" -v n="$NPM_
     else { if (!($5 in m)) m[$5] = $1; if (index(t, " " $1 " ")) nf[$5] = 1 }
   }
   END { for (p in m) if (p in xa) print p "|" ((p in xf) && !(p in nf) ? xf[p] : m[p]) }')
-WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; IND_HITS=""
+WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; EXT_CHECK=""; EXT_CHECK_TAGS=""; IND_HITS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   # A Python incident's startup file is shown in its row (PY_START).
@@ -6699,9 +6699,15 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   [ "$_ext" -eq 1 ] || [ "$_ik" = wiper ] || IND_HITS="$IND_HITS $_ii"
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
 "
-  elif [ "$_ext" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
+  elif [ "$_ext" -eq 1 ]; then
+    case "$EXT_FOUND" in
+      *" $_ii "*) EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
 "; EXT_PERSIST_TAGS="$EXT_PERSIST_TAGS$_ii
-"
+" ;;
+      *) EXT_CHECK="$EXT_CHECK$(rowsafe "$_ip")$TAB$_in
+"; EXT_CHECK_TAGS="$EXT_CHECK_TAGS$_ii
+" ;;
+    esac
   else PERSIST="$PERSIST$(rowsafe "$_ip")$TAB$_in
 "; fi
 done <<EOF
@@ -6716,10 +6722,7 @@ fi
 "
 [ -n "$WORM_REFS" ] && PERSIST="$PERSIST$(printf '%s\n' "$WORM_REFS" | while IFS= read -r _f; do [ -n "$_f" ] && printf '%s\t%s\n' "$(rowsafe "$_f")" "$WORM_REF_NOTE"; done)
 "
-EXT_CHECK=""; EXT_CHECK_TAGS=""
-if [ -z "$EXT_ROWS" ] && [ -n "$EXT_PERSIST" ]; then
-  EXT_CHECK=$EXT_PERSIST; EXT_CHECK_TAGS=$EXT_PERSIST_TAGS; EXT_PERSIST=""; EXT_PERSIST_TAGS=""
-fi
+EXT_CHECK_TAGS=$(printf '%s\n' $EXT_CHECK_TAGS | sort -u)
 WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
 MAL_LOCKONLY=0; if [ "$MAL_HIT" -eq 1 ] && [ "$NPM_INST" -eq 0 ] && [ -z "$PERSIST" ] && [ "$WIPER_HIT" -eq 0 ]; then MAL_LOCKONLY=1; fi
@@ -7736,7 +7739,17 @@ EOF
 $EXT_PERSIST
 EOF
   [ -n "$EXT_UPD" ] && ext_upd_rows
-  for _t in $EXT_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
+  if [ -n "$EXT_CHECK" ]; then
+    while IFS="$TAB" read -r f p; do
+      [ -n "$f" ] || continue
+      emit "        $(short "$f")"
+      emit "          has the name of a file that $p"
+    done <<EOF
+$EXT_CHECK
+EOF
+    wrap "No extension of the incident that names this file was found. Open the file and check what it starts at login." 8 "        " "        "
+  fi
+  for _t in $(printf '%s\n' $EXT_TAGS $EXT_CHECK_TAGS | sort -u); do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ -n "$EXT_UPD" ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}a malicious extension to remove${RST}"
   ext_upd_rows

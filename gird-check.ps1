@@ -6037,6 +6037,7 @@ $Persist = New-Object System.Collections.Generic.List[object]
 # of name people give their own LaunchAgents, and Socket gives the name as an example. Alone, it is a
 # file to check ($ExtCheck), not a compromised machine.
 $ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
+$ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
 $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
@@ -6073,7 +6074,10 @@ foreach ($r in $IndOn) {
   }
   if ($r[2] -eq 'startup' -and $IndOwner.ContainsKey($m) -and $IndOwner[$m] -cne $r[0]) { continue }
   if ($r[2] -eq 'wiper') { $Wiper.Add($m) }
-  elseif ($ExtIncs -contains $r[0] -and -not ($NpmIncs -contains $r[0])) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
+  elseif ($ExtIncs -contains $r[0] -and -not ($NpmIncs -contains $r[0])) {
+    if ($ExtFound -ccontains $r[0]) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
+    else { $ExtCheck.Add(@($m, $r[5])); if (-not $ExtCheckTags.Contains($r[0])) { $ExtCheckTags.Add($r[0]) } }
+  }
   else { $Persist.Add(@($m, $r[5])) }
 }
 # A registry value is not a file, so the Mastra malware's Run key stays code.
@@ -6085,10 +6089,6 @@ if ($OnWindows) {
 }
 foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }
 foreach ($f in $WormRefs) { $Persist.Add(@($f, $WormRefNote)) }
-$ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
-if ($ExtRows.Count -eq 0 -and $ExtPersist.Count -gt 0) {
-  $ExtCheck.AddRange($ExtPersist); $ExtCheckTags.AddRange($ExtPersistTags); $ExtPersist.Clear(); $ExtPersistTags.Clear()
-}
 $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
 $MAL_LOCKONLY = 0; if ($MAL_HIT -eq 1 -and $NpmInst -eq 0 -and $Persist.Count -eq 0 -and $WIPER_HIT -eq 0) { $MAL_LOCKONLY = 1 }
@@ -6747,7 +6747,11 @@ if ($EXT_HIT -eq 1) {
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
   foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   if ($ExtUpd.Count -gt 0) { Ext-Upd-Rows }
-  foreach ($t in @(@($ExtTags) + @($ExtUpdTags) | Sort-Object -Unique -CaseSensitive)) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
+  if ($ExtCheck.Count -gt 0) {
+    foreach ($r in $ExtCheck) { Emit "        $(Short $r[0])"; Emit "          has the name of a file that $($r[1])" }
+    Wrap 'No extension of the incident that names this file was found. Open the file and check what it starts at login.' 8 '        ' '        '
+  }
+  foreach ($t in @(@($ExtTags) + @($ExtUpdTags) + @($ExtCheckTags) | Sort-Object -Unique -CaseSensitive)) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 } elseif ($ExtUpd.Count -gt 0) {
   Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}a malicious extension to remove$cRst"
   Ext-Upd-Rows

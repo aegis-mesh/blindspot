@@ -1885,6 +1885,13 @@ has    "beside an AntV version only in a lockfile, they stay with the extension"
 has    "and the headline names only the extension's malware" 'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-nxkl.txt"
 has    "alone, the backdoor is the AntV wave's npm malware" 'npm malware signs of the malware found ~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor' "$WORK/dz-nxk0.txt"
 hasnot "and not a file to check as well"                'a startup file to check|Nx Console 18\.95\.0 installed' "$WORK/dz-nxk0.txt"
+# GlassWorm's LaunchAgent next to another incident's extension (Nx Console) is a file to check, not
+# GlassWorm's sign: people name their own LaunchAgents that way.
+rm -rf "$WORK/dz-nxgw"; cp -R "$WORK/dz-nx" "$WORK/dz-nxgw"; mkdir -p "$WORK/dz-nxgw/Library/LaunchAgents"; : > "$WORK/dz-nxgw/Library/LaunchAgents/com.user.nodestart.plist"
+dzrun "$WORK/dz-nxgw" | tr -s ' \n' '  ' > "$WORK/dz-nxgw.txt"
+has    "GlassWorm's LaunchAgent beside another incident's extension is a file to check" '~/Library/LaunchAgents/com\.user\.nodestart\.plist has the name of a file that starts the GlassWorm malware at login' "$WORK/dz-nxgw.txt"
+hasnot "and not GlassWorm's sign"                       'com\.user\.nodestart\.plist starts the GlassWorm malware' "$WORK/dz-nxgw.txt"
+has    "and its fix says to check what it starts"       'Open the startup file listed in section 5 and check what it starts at login' "$WORK/dz-nxgw.txt"
 # GlassWorm's invisible-code wave (Aikido, March 2026): its Marketplace extension at the version the post names.
 # GlassWASM (Socket, June 2026): Open VSX clones under the ids and versions of clean Marketplace extensions, so
 # malware in an Open VSX editor's folder and not in VS Code's own.
