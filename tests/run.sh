@@ -1149,7 +1149,12 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1
 printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/g2mix/code/a/node_modules/axios/package.json"
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$WORK/g2mix/code/k/package-lock.json"
 for g2 in g2py g2sw g2mix; do HOME="$WORK/$g2" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$g2.txt"; done
+HOME="$WORK/g2py" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/g2py-sum.txt"
 has    "a lockfile-only hit beside malware found for sure: the confirmed fix comes first" ' 1\. Treat this machine as compromised\. Don.t run Python in the affected environments\. .* 2\. If you ran an install in the project section 5 lists' "$WORK/g2py.txt"
+has    "beside it, the headline and row 05 name the LiteLLM malware alone" 'ACT NOW: SIGNS OF THE LITELLM 1\.107\.0 MALWARE' "$WORK/g2py.txt"
+has    "row 05 names the LiteLLM malware alone"         'Recent leaks +signs of the LiteLLM malware\. Act now' "$WORK/g2py-sum.txt"
+hasnot "and row 05 does not call the npm malware found" 'npm and LiteLLM malware found' "$WORK/g2py-sum.txt"
+has    "and the npm row says a lockfile lists it, not found" 'npm malware in a lockfile: act if installed ~/code/a/package-lock\.json' "$WORK/g2py.txt"
 [ "$(uname -s)" = Darwin ] || SKIPPING="the snapshot note with the Argus offer is printed on a Mac only"
 has    "and on a Mac the closing note names both" 'It found signs of the LiteLLM malware, and npm malware listed' "$WORK/g2py.txt"
 SKIPPING=""
@@ -1651,6 +1656,16 @@ has    "npm and extensions: both rows, each with its own findings" 'npm malware 
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
 has    "npm and extensions: both fixes"               'then delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
 has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
+# npm malware found only in a lockfile beside an extension's: only the extension's is a sign on this
+# machine, so the headline and row 05 name it alone, and the npm row says a lockfile lists it.
+cp -R "$WORK/dz-ext" "$WORK/dz-lock"; mkdir -p "$WORK/dz-lock/code/ax"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/dz-lock/code/ax/package-lock.json"
+dzrun "$WORK/dz-lock" | tr -s ' \n' '  ' > "$WORK/dz-lock.txt"
+dzrun "$WORK/dz-lock" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-lock-sum.txt"
+has    "npm only in a lockfile beside extensions: the headline names the extension's malware" 'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-lock.txt"
+has    "and the npm row says a lockfile lists it"     'npm malware in a lockfile: act if installed ~/code/ax/package-lock\.json axios 1\.14\.1' "$WORK/dz-lock.txt"
+hasnot "and the report never calls it found"          'SIGNS OF NPM|signs of npm|npm malware signs of the malware found|npm and editor extension' "$WORK/dz-lock.txt"
+has    "and row 05 names the extension's"             'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-lock-sum.txt"
 # GlassWorm's later waves, one extension of each in another editor's folder: Socket's 13 March list
 # (every version), a version the 18 March post shows delivering malware, one of the six the April post
 # confirms, and a malicious Marketplace theme of October in VS Code's own folder. Near misses: a version

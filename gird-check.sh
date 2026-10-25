@@ -6506,11 +6506,15 @@ EXT_ACT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST
 EXT_UPD_TAGS=$(printf '%s\n' "$EXT_UPD" | cut -f3 | grep -v '^$' | sort -u)
 EXT_TAGS=$(printf '%s\n' $EXT_ACT_TAGS $EXT_UPD_TAGS | grep -v '^$' | sort -u)
 ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
-if [ "$MAL_HIT" -eq 1 ] && [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="npm and editor extension malware"; MAL_SHORT="npm and editor extension"
+# MAL_SIGN: npm or extension malware found on this machine. npm malware found only in a lockfile is not
+# one, so the lines that say what was found (MAL_WHAT) leave it to the npm row and the fixes.
+MAL_SIGN=0; if [ "$ANY_MAL" -eq 1 ] && { [ "$MAL_LOCKONLY" -eq 0 ] || [ "$EXT_HIT" -eq 1 ]; }; then MAL_SIGN=1; fi
+if [ "$MAL_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ] && [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="npm and editor extension malware"; MAL_SHORT="npm and editor extension"
 elif [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="malware in an editor extension"; MAL_SHORT="editor extension"
 else MAL_WHAT="npm malware"; MAL_SHORT="npm"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "A wiper waits for a GitHub token to be revoked: gh-token-monitor"
-elif [ "$ANY_MAL" -eq 1 ]; then progress x "Signs of $MAL_WHAT found"
+elif [ "$MAL_SIGN" -eq 1 ]; then progress x "Signs of $MAL_WHAT found"
+elif [ "$MAL_LOCKONLY" -eq 1 ]; then progress x "npm malware listed in a lockfile"
 elif [ -n "$EXT_CHECK" ]; then progress w "A startup file to check: $(short "$(printf '%s\n' "$EXT_CHECK" | head -n 1 | cut -f1)")"
 elif [ -n "$EXT_UPD" ]; then progress w "An editor extension to remove: its malware could not run on this system"
 elif [ "$NPM_UPD" -eq 1 ]; then progress w "An npm package to update"
@@ -6815,7 +6819,7 @@ elif [ "$SCORE" -ge 64 ]; then GRADE=C; elif [ "$SCORE" -ge 50 ]; then GRADE=D; 
 # GRADE only goes in the research counts. People see how they compare instead.
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "Scan done. Don't revoke GitHub tokens yet: act now"
 elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then progress x "Scan done. npm malware in a lockfile: act if you installed it"
-elif [ "$ANY_MAL" -eq 1 ]; then progress x "Scan done. Signs of $MAL_WHAT: act now"
+elif [ "$MAL_SIGN" -eq 1 ]; then progress x "Scan done. Signs of $MAL_WHAT: act now"
 elif [ "$PY_HIT" -eq 1 ]; then progress x "Scan done. Signs of the $PY_SHORT malware: act now"
 elif [ "$ISSUES" -gt 0 ]; then progress w "Scan done: $(plural "$ISSUES" "thing" "things") to fix"
 elif [ "$PARTIAL" -eq 1 ]; then progress w "Scan done: no findings in the paths checked"
@@ -7033,7 +7037,7 @@ if { [ -n "$RANK" ] && [ "$RANK" -le 1000 ]; } || { [ -z "$RANK" ] && [ "$EARLY"
 fi
 _act=""
 if [ "$WIPER_HIT" -eq 1 ]; then _act="ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN"
-elif [ "$ANY_MAL" -eq 1 ] && { [ "$MAL_LOCKONLY" -eq 0 ] || [ "$EXT_HIT" -eq 1 ]; }; then _act="ACT NOW: SIGNS OF $(upper "$MAL_WHAT")"
+elif [ "$MAL_SIGN" -eq 1 ]; then _act="ACT NOW: SIGNS OF $(upper "$MAL_WHAT")"
 elif [ "$PY_HIT" -eq 1 ]; then
   _act=""; for _pi in $PY_HITS; do _act="${_act:+$_act AND }$(incident_name "$_pi")"; done
   _act="ACT NOW: SIGNS OF THE $(upper "$_act") MALWARE"
@@ -7398,7 +7402,11 @@ EOF
 fi
 if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
   if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ]; then
-    [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm malware" 16 "${RED}signs of the malware found${RST}"
+    # Found only in a lockfile, nothing installed where it puts it: not a sign on this machine.
+    if [ "$MAL_LOCKONLY" -eq 1 ]; then
+      _lockwhere="in a lockfile"; [ "$N_LOCKPROJ" -gt 1 ] && _lockwhere="in lockfiles"
+      pair "${RED}✗${RST}" "npm malware" 16 "${RED}${_lockwhere}: act if installed${RST}"
+    else [ "$WIPER_HIT" -eq 1 ] || pair "${RED}✗${RST}" "npm malware" 16 "${RED}signs of the malware found${RST}"; fi
   else
     pair "${YEL}!${RST}" "npm malware" 16 "${YEL}a bad version to update${RST}"
   fi
@@ -7565,8 +7573,7 @@ if [ "$OS" = Darwin ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     # Each kind of malware it found, and npm malware found only in a lockfile named as that, last.
     _sig=""
-    if [ "$EXT_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 1 ]; then _sig="malware in an editor extension"
-    elif [ "$ANY_MAL" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then _sig=$MAL_WHAT; fi
+    [ "$MAL_SIGN" -eq 1 ] && _sig=$MAL_WHAT
     [ "$PY_HIT" -eq 1 ] && _sig="${_sig:+$_sig and of }the $PY_SHORT malware"
     if [ -z "$_sig" ]; then _sig="npm malware"
     elif [ "$MAL_LOCKONLY" -eq 1 ]; then _sig="$_sig, and npm malware listed in a lockfile"; fi
@@ -7666,9 +7673,9 @@ elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved key
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
 else G4="${RED}✗${RST}"; D4="saved keys in $N_ALLOW files"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop it before revoking tokens"
-elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
-elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ]; then G5="${RED}✗${RST}"; D5="npm malware in a lockfile: act if installed"
-elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
+elif [ "$MAL_SIGN" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
+elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then G5="${RED}✗${RST}"; D5="npm malware in a lockfile: act if installed"
+elif [ "$MAL_SIGN" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
 elif [ -n "$UPD_SUM" ]; then G5="${YEL}!${RST}"; D5=$UPD_SUM
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"

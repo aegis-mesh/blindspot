@@ -5841,11 +5841,15 @@ $EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT =
 $ExtTags = @((@(foreach ($r in $ExtRows) { $r[2] }) + @($ExtPersistTags)) | Sort-Object -Unique -CaseSensitive)
 $ExtUpdTags = @(@(foreach ($r in $ExtUpd) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
 $ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
-if ($MAL_HIT -eq 1 -and $EXT_HIT -eq 1) { $MalWhat = 'npm and editor extension malware'; $MalShort = 'npm and editor extension' }
+# MAL_SIGN: npm or extension malware found on this machine. npm malware found only in a lockfile is not
+# one, so the lines that say what was found ($MalWhat) leave it to the npm row and the fixes.
+$MAL_SIGN = 0; if ($ANY_MAL -eq 1 -and ($MAL_LOCKONLY -eq 0 -or $EXT_HIT -eq 1)) { $MAL_SIGN = 1 }
+if ($MAL_HIT -eq 1 -and $MAL_LOCKONLY -eq 0 -and $EXT_HIT -eq 1) { $MalWhat = 'npm and editor extension malware'; $MalShort = 'npm and editor extension' }
 elseif ($EXT_HIT -eq 1) { $MalWhat = 'malware in an editor extension'; $MalShort = 'editor extension' }
 else { $MalWhat = 'npm malware'; $MalShort = 'npm' }
 if ($WIPER_HIT -eq 1) { Progress 'A wiper waits for a GitHub token to be revoked: gh-token-monitor' }
-elseif ($ANY_MAL -eq 1) { Progress "Signs of $MalWhat found" }
+elseif ($MAL_SIGN -eq 1) { Progress "Signs of $MalWhat found" }
+elseif ($MAL_LOCKONLY -eq 1) { Progress 'npm malware listed in a lockfile' }
 elseif ($ExtCheck.Count -gt 0) { Progress "A startup file to check: $(Short $ExtCheck[0][0])" }
 elseif ($ExtUpd.Count -gt 0) { Progress 'An editor extension to remove: its malware could not run on this system' }
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH, a
@@ -6180,7 +6184,7 @@ if (($RANK -and [long]$RANK -le 1000) -or (-not $RANK -and $Early)) {
 }
 $Act = ''
 if ($WIPER_HIT -eq 1) { $Act = 'ACT NOW: REMOVE GH-TOKEN-MONITOR BEFORE YOU REVOKE ANY TOKEN' }
-elseif ($ANY_MAL -eq 1 -and ($MAL_LOCKONLY -eq 0 -or $EXT_HIT -eq 1)) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
+elseif ($MAL_SIGN -eq 1) { $Act = "ACT NOW: SIGNS OF $($MalWhat.ToUpperInvariant())" }
 elseif ($PY_HIT -eq 1) { $Act = "ACT NOW: SIGNS OF THE $((@($PyHits | ForEach-Object { Incident-Name $_ }) -join ' AND ').ToUpperInvariant()) MALWARE" }
 elseif ($MAL_LOCKONLY -eq 1) {
   if ($N_LOCKPROJ -eq 1) { $Act = 'ACT NOW IF YOU INSTALLED IT: A LOCKFILE LISTS NPM MALWARE' } else { $Act = 'ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE' }
@@ -6405,7 +6409,11 @@ if ($WIPER_HIT -eq 1) {
 }
 if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0) {
-    if ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}signs of the malware found$cRst" }
+    # Found only in a lockfile, nothing installed where it puts it: not a sign on this machine.
+    if ($MAL_LOCKONLY -eq 1) {
+      $LockWhere = 'in a lockfile'; if ($N_LOCKPROJ -gt 1) { $LockWhere = 'in lockfiles' }
+      Pair "$cRed$gX$cRst" 'npm malware' 16 "$cRed${LockWhere}: act if installed$cRst"
+    } elseif ($WIPER_HIT -eq 0) { Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}signs of the malware found$cRst" }
   } else { Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}a bad version to update$cRst" }
   foreach ($r in $NpmRows) {
     if ($r[0].EndsWith($NpmCacheTag)) { $w = "downloaded into npm's cache" }
@@ -6563,9 +6571,9 @@ elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $
 else { $G4 = "$cRed$gX$cRst"; $D4 = "saved keys in $N_ALLOW files" }
 $leaks = @($Platforms | Where-Object { $PlatFound -contains $_.Id })
 if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it before revoking tokens' }
-elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
-elseif ($MAL_LOCKONLY -eq 1 -and $EXT_HIT -eq 0) { $G5 = "$cRed$gX$cRst"; $D5 = 'npm malware in a lockfile: act if installed' }
-elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
+elseif ($MAL_SIGN -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
+elseif ($MAL_LOCKONLY -eq 1 -and $EXT_HIT -eq 0 -and $PY_HIT -eq 0) { $G5 = "$cRed$gX$cRst"; $D5 = 'npm malware in a lockfile: act if installed' }
+elseif ($MAL_SIGN -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
 elseif ($UpdSum) { $G5 = "$cYel!$cRst"; $D5 = $UpdSum }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
