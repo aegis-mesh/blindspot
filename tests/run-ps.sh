@@ -862,7 +862,7 @@ hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WO
 for np in npd npa npk; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x" "$WORK/$np/AppData/Roaming" "$WORK/$np/AppData/Local/Temp"; done
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$WORK/npk/code/x/package-lock.json"
-printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    },\n    "node_modules/intercom-client": {\n      "version": "7.0.4"\n    },\n    "node_modules/@cap-js/openapi": {\n      "version": "1.4.1"\n    },\n    "node_modules/mastraqqq": {\n      "version": "1.13.1"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
 for np in npd npa npk; do psrun "$WORK/$np" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
 has    "a @keyv 6.0.0 build is npm malware, as GitHub's advisory says" '@keyv/redis 6\.0\.0 \(keyv account takeover, August 2026\).*keyv account takeover, August 2026: published from the compromised keyv account, and the GitHub advisory says to treat a machine that installed one as compromised\.' "$WORK/npk.txt"
 has    "with its advice to rotate from another computer" 'Rotate the secrets this machine held from another computer, as the GitHub advisory says, then pin each @keyv package listed in section 5 to its version before 6\.0\.0\.' "$WORK/npk.txt"
@@ -878,6 +878,10 @@ has    "and is a version to update"                   'npm malware a bad version
 has    "with UiPath's own fix"                        'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional: updating them is all they need\.' "$WORK/npu.txt"
 has    "and row 05 gives UiPath's summary"            'Recent leaks +UiPath builds: update them, UiPath says no risk' "$WORK/npu-sum.txt"
 has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
+has    "a version of April's Mini Shai-Hulud wave is found" 'intercom-client 7\.0\.4 \(Mini Shai-Hulud worm, April 2026\)' "$WORK/npa.txt"
+has    "with that wave's sourced line"                'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens\. wiz\.io' "$WORK/npa.txt"
+has    "a package the TanStack worm reached after Wiz's list is found" '@cap-js/openapi 1\.4\.1 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
+has    "a Mastra typosquat Socket lists is found at any version" 'mastraqqq 1\.13\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
 has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
 # SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
 # to remove them comes ahead of every fix that says to rotate, an incident's own advice to rotate too.
@@ -934,6 +938,13 @@ SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which 
 has    "on a Mac, guardrails-ai 0.10.1 is a version to update" 'guardrails-ai 0\.10\.1 +a bad version to update ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1 Its malware runs on Linux only, so it did not run here\. Update to a version without it\. Advisory: www\.wiz\.io/blog/' "$WORK/gpy.txt"
 hasnot "and is not 'compromised' there"               'ACT NOW|Treat this machine as compromised' "$WORK/gpy.txt"
 SKIPPING=""
+# lightning 2.6.2 and 2.6.3, the PyPI release of April's Mini Shai-Hulud wave, start a stealer when
+# imported, on any OS; 2.6.1, the version Lightning AI says to pin, is not one of them.
+cp -R "$WORK/clean" "$WORK/lpy"; mkdir -p "$WORK/lpy/code/venv/lib/site-packages/lightning-2.6.3.dist-info" "$WORK/lpy/code/old/lib/site-packages/lightning-2.6.1.dist-info"
+psrun "$WORK/lpy" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lpy.txt"
+has    "lightning 2.6.3 from PyPI is its own act-now row" 'lightning 2\.6\.2 and 2\.6\.3 +signs of the malware found ~/code/venv/lib/site-packages: lightning 2\.6\.3' "$WORK/lpy.txt"
+has    "with its fix, naming lightning"               "Treat this machine as compromised\. Don't run Python in the affected environments, follow lightning's advisory" "$WORK/lpy.txt"
+hasnot "the version Lightning AI says to pin is not flagged" 'lightning 2\.6\.1' "$WORK/lpy.txt"
 # transformers.pyz in the temp folder is a Linux-only sign of mistralai 2.4.6.
 cp -R "$WORK/clean" "$WORK/mpyt"; : > "$WORK/mpyt/AppData/Local/Temp/transformers.pyz"
 psrun "$WORK/mpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt.txt"
@@ -1061,7 +1072,7 @@ hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftove
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro and Antigravity' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +8 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +9 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -1405,7 +1416,7 @@ mups() { # home out [compact]
 mups "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +10 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +11 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"

@@ -17,12 +17,20 @@
 #     non-functional and the packages pose no risk (uipath), and OpenSearch
 #     (GHSA-298w-vvm4-ww55). And wot-api 0.8.5, which Wiz's list leaves out: OpenSSF's MAL-2026-3591
 #     adds it to GitHub's 0.8.1 to 0.8.4, and npm's registry shows it published an hour after 0.8.4.
-#     Not the five versions Wiz's list also names from April's SAP and Intercom compromise, which
-#     this list does not cover: @cap-js/db-service 2.10.1, @cap-js/postgres 2.2.2, @cap-js/sqlite
-#     2.2.2, mbt 1.2.48 and intercom-client 7.0.4 (malware advisories of 29 and 30 April 2026, and the
-#     advisories of cap-js/cds-dbs and intercom/intercom-node).
+#     And @cap-js/openapi 1.4.1, published on 19 May after Wiz's last update: GitHub's malware advisory
+#     GHSA-qj5h-p6mj-66pf names it, and OpenSSF's MAL-2026-4161 puts it in the same worm ("Mini
+#     Shai-Hulud is back", StepSecurity's name for this wave). The five versions Wiz's list also names
+#     from April's SAP and Intercom compromise are the next campaign's.
+#   Mini Shai-Hulud, April 2026 (minishai), from Wiz's post on it: @cap-js/db-service 2.10.1,
+#     @cap-js/postgres 2.2.2 and @cap-js/sqlite 2.2.2 (malware advisories of 29 and 30 April 2026, and
+#     cap-js/cds-dbs's GHSA-pvw4-cvr4-97p8), mbt 1.2.48 (OpenSSF's MAL-2026-3179), and intercom-client
+#     7.0.4 (Intercom's GHSA-54pg-9963-v8vg and GitHub's GHSA-4594-wxqv-j3pm; Wiz's update says 7.0.5,
+#     which no advisory names). Its PyPI release, lightning 2.6.2 and 2.6.3, is in data/bad-pypi.tsv.
 #   Mastra, June 2026: the 89 @mastra packages, mastra and create-mastra that GitHub lists, and
 #     easy-day-js 1.11.22, which Socket says each of the 141 compromised @mastra packages pulled in.
+#     And mastraqqq at every version (GHSA-7vj9-63m9-3x7f), a typosquat of mastra that Socket's page on
+#     the campaign lists, with caspian-day-js 1.11.23 (OpenSSF's MAL-2026-5892), the dropper its
+#     caspian-day-js ^1.11.22 dependency resolves to.
 #   keyv, August 2026: keyv 6.0.0, the nine cacheable versions and ecto 5.0.1, which carried the
 #     payload (keyv), and the 19 @keyv 6.0.0 builds (keyvscope): Socket says they were published without
 #     the install hook, but GitHub's malware advisories say a machine that installed one is compromised,
@@ -32,7 +40,7 @@
 #     the same day name every version of each (GHSA-9w7p-hqx2-pjjx, GHSA-m47j-9qfx-6jh4,
 #     GHSA-56j5-62q9-cj2c, GHSA-w9hv-7gxr-9f8f) and say a machine that installed one is compromised,
 #     and those govern.
-# Not listed: the AntV and Red Hat waves, and April's SAP and Intercom wave. tensorlake's advisory also
+# Not listed: the AntV and Red Hat waves. tensorlake's advisory also
 # lists every version, but names only 0.5.144 as malicious. GitHub's advisory for @tallyui/components
 # spans every version, but OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3.
 #! skip tensorlake * the advisory also lists every version, but names only 0.5.144 as malicious
@@ -367,6 +375,7 @@ wot-api	0.8.2	tanstack
 wot-api	0.8.3	tanstack
 wot-api	0.8.4	tanstack
 wot-api	0.8.5	tanstack
+@cap-js/openapi	1.4.1	tanstack
 @mistralai/mistralai	2.2.2	mistral
 @mistralai/mistralai	2.2.3	mistral
 @mistralai/mistralai	2.2.4	mistral
@@ -443,6 +452,11 @@ wot-api	0.8.5	tanstack
 @uipath/vss	0.1.6	uipath
 @uipath/widget.sdk	1.2.3	uipath
 @bitwarden/cli	2026.4.0	bitwarden
+@cap-js/db-service	2.10.1	minishai
+@cap-js/postgres	2.2.2	minishai
+@cap-js/sqlite	2.2.2	minishai
+mbt	1.2.48	minishai
+intercom-client	7.0.4	minishai
 @mastra/core	1.42.1	mastra
 mastra	1.13.1	mastra
 create-mastra	1.13.1	mastra
@@ -535,6 +549,8 @@ easy-day-js	1.11.22	mastra
 @mastra/voice-openai	0.12.3	mastra
 @mastra/voice-openai-realtime	0.12.6	mastra
 @mastra/voice-playai	0.12.2	mastra
+mastraqqq	*	mastra
+caspian-day-js	1.11.23	mastra
 keyv	6.0.0	keyv
 cacheable	2.5.1	keyv
 cache-manager	7.2.10	keyv

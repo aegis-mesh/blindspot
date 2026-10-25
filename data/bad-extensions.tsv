@@ -34,6 +34,10 @@
 #     October 2026), and the dopbop-studio, kwitch-studio and potstok ones as impersonation (3 March
 #     2026). Whether those Marketplace builds carried the loader is not known: they are any.
 #   18 March 2026: the versions the post shows delivering malware, themselves or through an extension pack.
+#     Not the rest of its weekend wave of 14 and 15 March: the post lists 17 impersonation extensions
+#     without showing those versions deliver malware, and Socket's campaign page lists them among its
+#     affected artifacts with no word on which are malware and which sleepers. Three of them, later made
+#     into extension packs that delivered it, are listed at those versions.
 #   25 April 2026: the six it confirms as malicious; its 67 sleepers are left out. The post shows
 #     boulderzitunnel.vscode-buddies loading its native installer only on win32 and darwin, so its
 #     os is mac,win.
