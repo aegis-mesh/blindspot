@@ -14,11 +14,16 @@
 #             where its malware could not run, the report shows it as a malicious extension to remove,
 #             not a compromised machine (as data/bad-pypi.tsv's os does)
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
-# GlassWorm, from Socket's posts, each wave its own incident. A version where the post gives one, every
+# GlassWorm, from Socket's posts and one of Aikido's, each its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
 # update themselves, so a version from before an extension was turned counts too. Left out: what a post
-# calls a sleeper (not malicious yet), and the 17 extensions turned on 29 April, whose payload Open VSX
-# had already removed (the April post's update).
+# calls a sleeper (not malicious yet), the 17 extensions turned on 29 April, whose payload Open VSX
+# had already removed (the April post's update), and three themes of the October cluster that
+# Microsoft's list removes as malware (1 and 2 October 2026): charcoal-mint-studio.theme-charcoal-mint,
+# lohsebhipolg2s.theme-aurora-borealis and holiday-themes.theme-coca-cola-christmas. Socket found no
+# payload in the versions it read and calls Coca-Cola Christmas malware for its cluster, not a payload;
+# a removal from the Marketplace does not say what ran on a machine, nor anything of the Open VSX
+# builds; and Charcoal Mint's three builds on Open VSX hold colors and, in 1.0.2, a welcome page.
 #   January 2026: the four oorzc extensions, Open VSX only: Socket's findings concern the Open VSX
 #     builds, and it does not suggest the publisher's Marketplace listings were compromised. The
 #     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026, after that post:
@@ -37,16 +42,19 @@
 #     Not the rest of its weekend wave of 14 and 15 March: the post lists 17 impersonation extensions
 #     without showing those versions deliver malware, and Socket's campaign page lists them among its
 #     affected artifacts with no word on which are malware and which sleepers. Three of them, later made
-#     into extension packs that delivered it, are listed at those versions.
+#     into extension packs that delivered it, are listed at those versions, and one more from Aikido's
+#     post, which shows it delivering malware (below).
 #   25 April 2026: the six it confirms as malicious; its 67 sleepers are left out. The post shows
 #     boulderzitunnel.vscode-buddies loading its native installer only on win32 and darwin, so its
 #     os is mac,win.
+#   Aikido, April 2026 (glasswormzig, its post of 8 April, updated 21 April):
+#     specstudio.code-wakatime-activity-tracker, an Open VSX extension of that weekend wave, loads a native
+#     binary that installs floktokbok.autoimport, a GlassWorm dropper, from GitHub into every editor it
+#     finds, VS Code included, so that one is any. The tracker loads win.node on Windows and mac.node
+#     anywhere else, so its malware runs on Windows and macOS only: mac,win. Aikido says to treat a
+#     machine with either as compromised, and gives no version: every version.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
-#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe), and three
-#     of the cluster's themes on both registries that Microsoft's list removes as malware (1 and 2
-#     October 2026): Charcoal Mint, Aurora Borealis and Coca-Cola Christmas. Socket found no payload in
-#     the versions of those three it read; Microsoft's classification governs, as GitHub's malware
-#     advisories do for npm.
+#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe).
 # id	version	incident	registry	os
 oorzc.ssh-tools	*	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
@@ -150,8 +158,7 @@ krundoven.ironplc-fast-hub	*	glasswormapr	openvsx	all
 boulderzitunnel.vscode-buddies	*	glasswormapr	openvsx	mac,win
 cubedivervolt.html-code-validate	*	glasswormapr	openvsx	all
 winnerdomain17.version-lens-tool	*	glasswormapr	openvsx	all
+specstudio.code-wakatime-activity-tracker	*	glasswormzig	openvsx	mac,win
+floktokbok.autoimport	*	glasswormzig	any	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win
 cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any	all
-charcoal-mint-studio.theme-charcoal-mint	*	glasswormoct	any	all
-lohsebhipolg2s.theme-aurora-borealis	*	glasswormoct	any	all
-holiday-themes.theme-coca-cola-christmas	*	glasswormoct	any	all

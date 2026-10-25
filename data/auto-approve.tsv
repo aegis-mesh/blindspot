@@ -13,12 +13,16 @@
 #             inside an inline table does not count, a value in double quotes also matches the same
 #             value in single quotes (a TOML literal string), and only the lines before the first
 #             [table] count (a setting under [profiles.x] applies only when that profile is used, and
-#             Codex 0.134.0 and later read no such table from config.toml)
+#             Codex 0.134.0 and later read no such table from config.toml). A pattern !key, in a .toml
+#             file only and beside another pattern, matches when none of those lines sets that key
 # Claude Code: code.claude.com/docs/en/permission-modes, and its settings reference, where defaultMode
 # is a key of permissions and of nothing else. Codex: its configuration reference, and its
 # advanced configuration page for profiles (0.134.0). Its permissions page (beta): the built-in
 # profile :danger-full-access, chosen with default_permissions, removes the sandbox, and replaces the
-# older sandbox_mode; in Codex's code (0.164.0) a config file that sets default_permissions uses it.
+# older sandbox_mode. For a file that sets both, Codex's docs and code disagree: the permissions page
+# says sandbox_mode then wins and not to set both, while the code (0.164.0, resolve_permission_config_syntax)
+# uses the profile when one file sets both. The lines follow the code: the sandbox_mode line counts only
+# in a file that sets no default_permissions.
 # TOML's literal strings: toml.io. VS Code:
 # the Copilot settings reference and the 1.104 release notes. VS Code 1.104 renamed chat.tools.autoApprove
 # to chat.tools.global.autoApprove without migrating it, so the old name is ignored, and it reads the
@@ -26,17 +30,27 @@
 # project's .vscode/settings.json. A project's chat.tools.autoApprove is the setting CVE-2025-53773
 # wrote; section 2 of the scripts lists it as a sign of that attack, not as a setting in force.
 # VS Code added chat.permissions.default, the permission level new chats start with: autoApprove
-# (Bypass Approvals in its picker, VS Code 1.143) and autopilot run every tool call without asking
-# (VS Code's AI settings reference and approvals page; the values and labels from
-# chat.shared.contribution.ts). It declares no scope, and VS Code reads its merged value, so a
+# ("Allow all" in the chat's permission picker and "Bypass Approvals" in the Settings editor, at VS Code
+# 1.143.1) and autopilot run every tool call without asking (VS Code's AI settings reference and
+# approvals page; the values and labels from chat.shared.contribution.ts and
+# permissionPickerActionItem.ts). It declares no scope, and VS Code reads its merged value, so a
 # project's .vscode/settings.json sets it too: section 2 of the scripts lists such a project's copy,
 # as a setting a cloned project brings, not as a line here.
 # chat.defaultConfiguration, an object whose approvals and mode would have to be read inside it, is
 # not read.
+# Claude Code's VS Code extension: its docs (the VS Code and permission-modes pages) say that
+# claudeCode.initialPermissionMode set to bypassPermissions in the user settings starts new conversations
+# in bypass mode only with claudeCode.allowDangerouslySkipPermissions on (without it they start in
+# Manual), and that it reads the first from the user settings only, so both must match there. The
+# extension installs in Cursor too, where the docs give it an install link; Cursor keeps its user
+# settings in Cursor/User as VS Code does in Code/User. A settings file that holds two agents' settings
+# makes a row for each.
 # agent	os	path	setting	pattern...
 Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"permissions": {"defaultMode": "bypassPermissions"
-Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"	!default_permissions
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access profile	approval_policy = "never"	default_permissions = ":danger-full-access"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+Claude Code	all	{AS}/Code/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+Claude Code	all	{AS}/Cursor/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true

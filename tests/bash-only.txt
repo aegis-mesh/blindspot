@@ -279,3 +279,7 @@ a list of bad npm versions longer than awk gets	tools/gen.sh is one bash tool th
 on Linux, VS Code's settings in XDG_CONFIG_HOME are read	gird-check.ps1 takes the editors' folders from APPDATA, as on Windows, on every system
 no ++ or -- on an awk field, which BusyBox refuses	gird-check.ps1 has no awk
 fleet: with the wiper there, a platform's rotate waits for it too	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+and its PowerShell does not end itself	only gird-check.sh's Git Bash stop starts a PowerShell whose own command line names gh-token-monitor; gird-check.ps1's is typed into the person's own session
+a not-set pattern in a .json file	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a not-set pattern that is not a key	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a line of not-set patterns only	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

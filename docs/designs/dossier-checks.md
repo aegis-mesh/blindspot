@@ -14,7 +14,7 @@ dropped.
 | check | decision | why |
 |---|---|---|
 | Agents set to approve everything | build, for three agents | verified setting names for Claude Code, Codex and VS Code Copilot |
-| Agent versions with a published fix | build, four tools | each has a GitHub or vendor advisory with a fixed version |
+| Agent versions with a published fix | build, five tools | each has a GitHub or vendor advisory with a fixed version |
 | Project files that link to `~/.ssh/authorized_keys` | build | Wiz GhostApproval: an agent edits a repo file that is a link, and writes the attacker's key into `authorized_keys` |
 | GlassWorm extensions, Injective SDK | build, as data lines | Socket's GlassWorm posts, GHSA-5fc4-fm2x-6f4r |
 | `.env` files a repo does not ignore | dropped | the dossier does not cite it; reproducing git's ignore rules from files is unreliable, and asking git runs a repo's `core.fsmonitor` program (measured with `git check-ignore` on git 2.50.1) |
@@ -28,13 +28,16 @@ the text, a `{` or a `,` and ends at the text's end, a `,` `}` `#` or `/`. A `.t
 line by line: a `#` line is skipped, a match is a whole line up to a `#` comment (so a setting
 inside an inline table, a profile written as one, does not count), a value in double quotes also
 matches the same value in single quotes (a TOML literal string, `approval_policy = 'never'`), and
-only the lines before the first `[table]` count.
+only the lines before the first `[table]` count. A `.toml` line can also carry `!key`, a key none of
+those lines may set.
 
 | agent | file | patterns | source |
 |---|---|---|---|
-| Claude Code | `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json` | `"defaultMode": "bypassPermissions"` | code.claude.com/docs/en/permission-modes |
-| Codex | `{ENV:CODEX_HOME:~/.codex}/config.toml` | `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` | Codex config reference |
+| Claude Code | `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json` | `"permissions": {"defaultMode": "bypassPermissions"`, directly inside `permissions` | code.claude.com/docs/en/permission-modes and its settings reference |
+| Codex | `{ENV:CODEX_HOME:~/.codex}/config.toml` | `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`, in a file that sets no `default_permissions` (`!default_permissions`) | Codex config reference; its 0.164.0 code uses the profile when one file sets both, though its permissions page says `sandbox_mode` wins |
+| Codex | `{ENV:CODEX_HOME:~/.codex}/config.toml` | `approval_policy = "never"` and `default_permissions = ":danger-full-access"` | Codex's permissions page (beta) and its 0.164.0 source |
 | VS Code (Copilot) | user `settings.json` per OS | `"chat.tools.global.autoApprove": true` | VS Code Copilot settings reference and the 1.104 release notes |
+| Claude Code (its VS Code extension) | VS Code's and Cursor's user `settings.json` | `"claudeCode.initialPermissionMode": "bypassPermissions"` and `"claudeCode.allowDangerouslySkipPermissions": true` | code.claude.com/docs/en/vs-code and permission-modes (without the second it starts in Manual) |
 | VS Code (Copilot) | user `settings.json` per OS | `"chat.permissions.default": "autoApprove"` or `"autopilot"` | VS Code's AI settings reference and approvals page, `chat.shared.contribution.ts` |
 
 VS Code 1.104 renamed `chat.tools.autoApprove` to `chat.tools.global.autoApprove` without
@@ -47,7 +50,7 @@ sign of that attack (or of an old VS Code) that VS Code 1.104 and later ignore; 
 the score.
 
 VS Code added `chat.permissions.default`, the permission level new chats start with. Its values
-`autoApprove` (Bypass Approvals in the picker, VS Code 1.143) and `autopilot` run every tool call without asking, so in the user
+`autoApprove` ("Allow all" in the chat's permission picker, "Bypass Approvals" in the Settings editor, VS Code 1.143.1) and `autopilot` run every tool call without asking, so in the user
 settings they are an agent set to run without asking, like the global setting. The setting declares no
 scope, and VS Code reads its merged value (`chatInputPart.ts`), so a project's `.vscode/settings.json`
 sets it too: section 2 lists such a project's copy under "Project settings that act as soon as the
@@ -80,8 +83,9 @@ range, what the hole allows (a few words, from the advisory) and the advisory.
 |---|---|---|---|
 | Cursor | `Cursor.app/Contents/Info.plist` `CFBundleShortVersionString`, in `/Applications` and `~/Applications` (macOS only: the other platforms' version files were not verified) | `< 3.0`; `< 3.1.2` | GHSA-3p48-7v9f-v5cw, GHSA-3v8f-48vw-3mjx (sandbox escape); GHSA-p9g2-cr55-cw9c (sandbox escape through a virtual environment's Python, Cursor for macOS, its newest fix) |
 | Amazon Q language server | the highest version folder under `aws/toolkits/language-servers/AmazonQ/` in `~/Library/Caches`, `~/.cache` or `%LOCALAPPDATA%` | `< 1.69.0` | AWS-2026-047 (a link in a workspace reaches files outside it; before 1.65.0 a trusted workspace runs its commands) |
-| Claude Code | `@anthropic-ai/claude-code/package.json` in global npm installs | `>= 0.2.116 < 1.0.24`; `>= 2.1.38 < 2.1.163`; `< 2.1.179`; `>= 2.0.68 < 2.1.260` | GHSA-9f65-56v6-gxw7 (a web page can talk to the IDE connection); GHSA-7835-87q9-rgvv (sandbox escape); GHSA-pq7j-f95f-qfcv (a plugin's pinned hash is bypassed; its fix, 2.1.179, is the newest of the 29 advisories OSV lists); GHSA-gfvf-j8jh-jxxw (a stored API key skips an organization's managed settings; published only in anthropics/claude-code, its fix, 2.1.260, is the newest of the 31 there) |
-| mcp-remote | `mcp-remote/package.json` in global installs and npx's cache, and `mcp-remote@<version>` in MCP config args | `>= 0.0.5 < 0.1.16` | GHSA-6xpm-ggf7-wc3p (a hostile MCP server runs commands) |
+| Claude Code | `@anthropic-ai/claude-code/package.json` in global npm installs | `>= 0.2.116 < 1.0.24`; `>= 2.1.38 < 2.1.163`; `< 2.1.179`; `>= 2.0.68 < 2.1.260` | GHSA-9f65-56v6-gxw7 (a web page can talk to the IDE connection); GHSA-7835-87q9-rgvv (sandbox escape); GHSA-pq7j-f95f-qfcv (a plugin's pinned hash is bypassed; its fix, 2.1.179, is the newest of the 29 advisories OSV lists); GHSA-gfvf-j8jh-jxxw (a stored API key skips an organization's managed settings; not in GitHub's global database, and in OSV only as CVE-2026-103012, outside its npm records; its fix, 2.1.260, is the newest of the 31 in anthropics/claude-code) |
+| Claude Desktop | `Claude.app/Contents/Info.plist` `CFBundleShortVersionString`, in `/Applications` and `~/Applications` (macOS only: no kind reads its Windows version, so its two Windows advisories have no line) | `>= 1.1.3918 < 1.15962.0`; `>= 1.2581.0 < 1.4304.0` | GHSA-v234-4jrq-mgg6 (a file an agent leaves in a Cowork folder runs commands when opened, macOS; its newest fix); GHSA-3rwf-2g6p-c2f9 (remote SSH sessions accept any host key) |
+| mcp-remote | `mcp-remote/package.json` in global installs and npx's cache, and `mcp-remote@<version>` in MCP config args | `>= 0.0.5 < 0.1.16` | GHSA-6xpm-ggf7-wc3p (a hostile MCP server runs commands). Six unreviewed advisories name later holes but no fix, so they have no line |
 
 Versions are compared numerically, part by part. A version that does not parse is not reported, and
 neither is one of fewer than three parts in an MCP config (`mcp-remote@0.1`): that is a range npx
@@ -156,17 +160,23 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   - 25 April 2026: the six the post confirms as malicious, every version, `openvsx`. Its 67 sleepers
     are left out, and so are the 17 extensions of its 29 April update, whose pack pointed to an
     extension Open VSX had removed two days before.
+  - Aikido's post on GlassWorm's native dropper (8 April 2026, updated 21 April), its own incident:
+    `specstudio.code-wakatime-activity-tracker`, an Open VSX extension of the 18 March post's weekend
+    wave, every version, `openvsx`, `os` `mac,win` (it loads win.node on Windows and mac.node anywhere
+    else), and `floktokbok.autoimport`, the dropper its native code installs from GitHub into every
+    editor, every version, `any`.
   - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
     `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too; the
     first hid a Windows downloader, so its `os` is `win`: on a Mac or Linux it is a yellow "malicious
-    extension to remove", with its own fix and row 05, and leaves the headline, score and link alone),
-    and
-    three more of the cluster's themes, on both registries, that Microsoft's list removes as malware:
-    Charcoal Mint, Aurora Borealis and Coca-Cola Christmas. Socket found no payload in the versions
-    of those three it read; Microsoft's classification governs.
+    extension to remove", with its own fix and row 05, and leaves the headline, score and link alone).
+    Three more of the cluster's themes, on both registries, that Microsoft's list removes as malware
+    (Charcoal Mint, Aurora Borealis and Coca-Cola Christmas) are left out: Socket found no payload in
+    the versions it read, a removal from the Marketplace does not say what ran on a machine, and
+    Charcoal Mint's three Open VSX builds hold colors and, in 1.0.2, a welcome page.
   The March and April loaders install a further extension from GitHub into every editor they find,
   VS Code included; no post gives its id, so those incidents' fix says to check every editor for
-  extensions the person did not install, said once when both are found.
+  extensions the person did not install, said once when both are found. Aikido's names the one its
+  dropper installs, which is listed, and its incident carries the same fix.
 - The January post's startup file, `~/Library/LaunchAgents/com.user.nodestart.plist`, is a `startup`
   indicator. Socket gives the name as an example ("e.g."), and `com.user.` is how people name their
   own LaunchAgents, so it counts only next to an extension that shipped malware: then it is listed with

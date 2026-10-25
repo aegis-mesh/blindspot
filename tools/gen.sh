@@ -82,12 +82,13 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
         function shas_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ","); for (i = 1; i <= n; i++) if (a[i] !~ /^[0-9a-f]+$/ || length(a[i]) != 64) return 0; return 1 }
         NF != 6 || $1 !~ /^\.(claude|vscode)$/ || $2 !~ /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/ || index(ids, " " $3 " ") == 0 || $4 == "" || $4 ~ /[\047"`$|\\]/ ||
         $5 !~ /^(yes|no)$/ || !shas_ok($6) || ($5 == "yes" && $6 != "-") || seen[$1 "/" $2]++ { print "data/planted.tsv: " $0 }'
+      # A pattern !key (a key no line of the file may set) is a .toml file's only, and a line needs one other.
       rows data/auto-approve.tsv | awk -F '\t' "$PATH_OK"'
-        function pat_ok(s) { return s ~ /[^[:space:]]/ && s !~ /[\047`$|\\]/ }
+        function pat_ok(s) { return s ~ /[^[:space:]]/ && s !~ /[\047`$|\\]/ && (s !~ /^!/ || (s ~ /^![A-Za-z0-9_.-]+$/ && $3 ~ /\.toml$/)) }
         { ok = NF >= 5 && $1 != "" && $1 !~ /[\047"`$|\\]/ && $2 ~ /^(all|mac|linux|win)$/ && $4 != "" && $4 !~ /[\047"`$|\\]/
           if ($3 ~ /^\{PROJECT\}/) ok = ok && $3 ~ /^\{PROJECT\}(\/[A-Za-z0-9_.-]+)(\/[A-Za-z0-9_.-]+)+$/ && $3 !~ /\/\.\.?(\/|$)/
           else ok = ok && path_ok($3)
-          for (i = 5; i <= NF; i++) if (!pat_ok($i)) ok = 0
+          pos = 0; for (i = 5; i <= NF; i++) { if (!pat_ok($i)) ok = 0; if ($i !~ /^!/) pos++ }; if (pos == 0) ok = 0
           if (!ok) print "data/auto-approve.tsv: " $0 }'
       # Lines of one tool must agree on its name, and lines of one advisory of a tool on its range and hole.
       rows data/outdated.tsv | awk -F '\t' "$PATH_OK"'

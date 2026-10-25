@@ -14,9 +14,15 @@
 # lightning 2.6.2 and 2.6.3, the PyPI release of April's Mini Shai-Hulud wave (Wiz), start a credential
 # stealer when imported, on any OS (GitHub's malware advisory GHSA-g4wr-mm54-799x); Lightning AI's own
 # advisory (GHSA-w37p-236h-pfx3) says to assume the environment is compromised and to pin 2.6.1. No
-# source names a file they leave.
+# source names a file they leave on the machine; the files their payload commits to a repository are in
+# data/planted.tsv.
+# litellm 1.82.7 and 1.82.8, March 2026: OpenSSF's MAL-2026-2144 (the entry that also names 1.107.0) and
+# GitHub's GHSA-5mg7-485q-xm76, on any OS; LiteLLM's own post says they stole credentials and that
+# 1.82.8 also carried litellm_init.pth, its file in data/indicators.tsv.
 # name	version	incident	os
 litellm	1.107.0	litellm	all
+litellm	1.82.7	litellmmar	all
+litellm	1.82.8	litellmmar	all
 mistralai	2.4.6	mistralpy	linux
 guardrails_ai	0.10.1	guardrails	linux
 lightning	2.6.2	lightning	all
