@@ -516,6 +516,16 @@ SKIPPING=""
 has    "a lockfile hit says it is listed there"      'axios 1\.14\.1 \(Axios takeover, March 2026\), listed in this lockfile' "$WORK/out-flat.txt"
 has    "an install hit says it is installed"         'claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed' "$WORK/out-flat.txt"
 has    "a cache hit says it was downloaded"          "@bitwarden/cli 2026\.4\.0 \(Bitwarden CLI, April 2026\), downloaded into npm's cache" "$WORK/out-flat.txt"
+# A lockfile the scan found but can't read leaves npm not fully checked, as an unreadable cache does.
+rm -rf "$WORK/lkr"; cp -R "$WORK/clean" "$WORK/lkr"; mkdir -p "$WORK/lkr/code/cloned"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/lkr/code/cloned/package-lock.json"
+chmod 000 "$WORK/lkr/code/cloned/package-lock.json"
+psrun "$WORK/lkr" -- -Offline > "$WORK/lkr.txt" 2>&1
+psrun "$WORK/lkr" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lkr-c.txt"
+chmod 644 "$WORK/lkr/code/cloned/package-lock.json"
+tr -s ' \n' '  ' < "$WORK/lkr.txt" > "$WORK/lkr-flat.txt"
+has    "an unreadable lockfile is not called clean"  'npm malware not fully checked: 1 lockfile could not be read ~/code/cloned/package-lock\.json' "$WORK/lkr-flat.txt"
+has    "and the summary row names unreadable files"  'Recent leaks npm packages not fully checked: files unreadable' "$WORK/lkr-c.txt"
 cp -R "$WORK/clean" "$WORK/ph2"; mkdir -p "$WORK/ph2/code/ph"
 printf '{"lockfileVersion":3,"packages":{"node_modules/plain-crypto-js":{"version":"0.0.1-security","resolved":"https://registry.npmjs.org/plain-crypto-js/-/plain-crypto-js-0.0.1-security.tgz"}}}\n' > "$WORK/ph2/code/ph/package-lock.json"
 psrun "$WORK/ph2" -- -Offline > "$WORK/ph2.txt" 2>&1
@@ -672,6 +682,28 @@ has    "a | in a folder name: a key file keeps its provider"         "code/key\|
 has    "a | in a folder name: an allow list keeps its finding"       "code/allow\|\?\[2Jpipe$X/\.claude/settings\.local\.json A saved command contains a key" "$WORK/hostile-flat.txt"
 nokeys "hostile folder names: no planted key is printed" "$WORK/keys-hostile.txt" "$WORK/hostile.txt"
 hasnot "hostile folder names: no shell error" 'Exception|ParserError|At line:|is not recognized' "$WORK/hostile.txt"
+
+echo "folders the home scan can't read"
+# A folder that can't be read, holding a bad lockfile: it is named as not checked, and the rows the
+# home scan feeds are not green.
+rm -rf "$WORK/ud"; mkdir -p "$WORK/ud/code/locked/app" "$WORK/ud/AppData/Roaming" "$WORK/ud/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/ud/code/locked/app/package-lock.json"
+chmod 000 "$WORK/ud/code/locked"
+psrun "$WORK/ud" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud.txt"
+psrun "$WORK/ud" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-c.txt"
+chmod 755 "$WORK/ud/code/locked"
+has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
+has    "and the npm row is not green"                 'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud.txt"
+has    "and the keys row is not green"                'Keys in plain text none found, but some folders were not read' "$WORK/ud-c.txt"
+has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
+has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
+hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
+# A folder whose name holds a line break: gird-check.ps1 lists folders through .NET, so it reads the
+# files in it (gird-check.sh, which reads find's output a line at a time, names it as not checked).
+rm -rf "$WORK/nl"; mkdir -p "$WORK/nl/code/proj${_nl}x" "$WORK/nl/AppData/Roaming" "$WORK/nl/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/nl/code/proj${_nl}x/package-lock.json"
+psrun "$WORK/nl" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/nl.txt"
+has    "the files in a folder with a line break in its name are read" '~/code/proj\?x/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$WORK/nl.txt"
 
 echo "placeholders and the LiteLLM leftovers"
 mkdir -p "$WORK/ph/code/ph" "$WORK/ph/AppData/Local/Temp"

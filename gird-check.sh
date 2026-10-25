@@ -870,7 +870,12 @@ EOF
       -o -path "$H/Videos" -o -path "$H/Saved Games" -o -path "$H/3D Objects" -o -path "$H/scoop"
   fi
   if [ "$ALL" -eq 0 ]; then set -- "$@" -o -path "$H/Desktop" -o -path "$H/Documents" -o -path "$H/Downloads"; fi
-  find "$H" -maxdepth 6 \( -type d \( "$@" \) -prune \) -o \
+  # A folder whose name holds a line break would split every path under it in two, so the scan
+  # does not enter it. It is printed as "N path", the line break shown as ?, and named as not checked.
+  _nl=$'\n'
+  # shellcheck disable=SC2016  # $1 is the folder, for the sh that find starts
+  find "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
+    \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
@@ -891,7 +896,7 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
   while IFS= read -r _l; do
     printf '%s\n' "$_l"
     _n=$((_n + 1)); [ $((_n % 4)) -eq 1 ] || continue
-    _s=${_l#[LS] }; _s=${_s//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
+    _s=${_l#[LSN] }; _s=${_s//$'\xc2'[$'\x80'-$'\x9f']/?}; _s=${_s//[[:cntrl:]]/?}
     # shellcheck disable=SC2088  # a literal ~ for home paths, as short() prints
     case "$_s" in "$H"/*) _s="~/${_s#"$H"/}" ;; esac
     progress i "Checking $_s"
@@ -1157,6 +1162,15 @@ SCAN_FAILED=0; SCAN_WHY=""
 if [ -z "$FOUND" ] && [ -n "$SCAN_ERR" ] && grep -qiE '^find: .*(unrecognized|unknown|invalid|illegal|not a valid|bad option|usage)' "$SCAN_ERR" 2>/dev/null; then
   SCAN_FAILED=1; SCAN_WHY=$(grep -m 1 '^find: ' "$SCAN_ERR" | tr -d '\r' | cut -c 1-120)
 fi
+# Folders the scan could not enter, and so did not check: the ones find could not read (its errors,
+# the path quoted or not), and the ones whose name holds a line break ("N path"). Rows the home scan
+# feeds never read clean while there are any (HOME_PARTIAL).
+NL_DIRS=$(printf '%s\n' "$FOUND" | sed -n 's/^N //p')
+UNREAD_DIRS=""
+[ -n "$SCAN_ERR" ] && UNREAD_DIRS=$(grep -E '^find: .*: (Permission denied|Operation not permitted)$' "$SCAN_ERR" 2>/dev/null |
+  sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
+N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
+HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS)) -gt 0 ] && HOME_PARTIAL=1
 # Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
 # files_found counts files, as it always has. A link counts only when it ends at a regular file: a
 # repo can link a settings file to /dev/zero or /dev/tty, which a reader would never get to the end of.
@@ -1174,7 +1188,7 @@ ak_link() { # link
   [ "$_d" = "$(cd "$H/.ssh" 2>/dev/null && pwd -P)" ]
 }
 AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^L //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) ak_link "$_f" && printf '%s\n' "$_f" ;; esac; done)
-FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LS] ')
+FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LSN] ')
 LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
 TASK_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
@@ -2515,10 +2529,16 @@ npm_hits() {
       }
     }' "$@" 2>/dev/null
 }
-NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0; NPM_UNREAD=0
-while IFS= read -r f; do [ -n "$f" ] && [ -r "$f" ] && N_LOCK=$((N_LOCK + 1)); done <<EOF
+NPM_ROWS=""; NPM_HIT=0; NPM_UPD=0; N_LOCK=0; NPM_UNREAD=0; LOCK_UNREAD=""
+# A lockfile the scan found but can't read leaves npm not fully checked, as the cache does.
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  if [ -r "$f" ]; then N_LOCK=$((N_LOCK + 1)); else LOCK_UNREAD="$LOCK_UNREAD$f
+"; fi
+done <<EOF
 $LOCKFILES
 EOF
+N_LOCK_UNREAD=$(count_lines "$LOCK_UNREAD")
 if [ "$N_LOCK" -gt 0 ]; then
   NPM_ROWS=$(printf '%s\n' "$LOCKFILES" | while IFS= read -r f; do [ -r "$f" ] && npm_hits "$f"; done)
 fi
@@ -2768,6 +2788,8 @@ elif [ "$EXT_HIT" -eq 1 ]; then MAL_WHAT="malware in an editor extension"; MAL_S
 else MAL_WHAT="npm malware"; MAL_SHORT="npm"; fi
 if [ "$WIPER_HIT" -eq 1 ]; then progress x "A wiper waits for a GitHub token to be revoked: gh-token-monitor"
 elif [ "$ANY_MAL" -eq 1 ]; then progress x "Signs of $MAL_WHAT found"
+elif [ "$NPM_UPD" -eq 1 ]; then progress w "An npm package to update"
+elif [ $((NPM_UNREAD + N_LOCK_UNREAD)) -gt 0 ] || [ "$HOME_PARTIAL" -eq 1 ]; then progress w "npm packages not fully checked"
 else progress o "No npm malware in $(plural "$N_LOCK" lockfile lockfiles), global installs or npm's cache"; fi
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
 # file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
@@ -3100,10 +3122,10 @@ fi
 # ===========================================================================
 if [ "$PY_HIT" -eq 1 ] || [ "$ANY_MAL" -eq 1 ]; then SEV=$RED
 elif [ "$KEY_FILES" -gt 0 ] || [ "$N_ALLOW" -gt 0 ] || [ "$N_MCP_TOKEN" -gt 0 ] || [ "$N_AK" -gt 0 ]; then SEV=$RED
-elif [ "$ISSUES" -gt 0 ] || [ "$SCAN_FAILED" -eq 1 ]; then SEV=$YEL
+elif [ "$ISSUES" -gt 0 ] || [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ]; then SEV=$YEL
 else SEV=$GRN; fi
 if [ "$ISSUES" -gt 0 ]; then FIXN="$(plural "$ISSUES" "thing" "things") to fix"
-elif [ "$SCAN_FAILED" -eq 1 ]; then FIXN="No findings in the paths checked"
+elif [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ]; then FIXN="No findings in the paths checked"
 else FIXN="No findings in this scan"; fi
 PCT_TXT=""; [ -n "$PCT" ] && PCT_TXT="Better than $PCT% of AI builders who ran Blindspot"
 STATS="$(plural "$N_AG" "coding agent" "coding agents"), $N_IDLE not used in 30 days, $(plural "$N_MCP" "MCP server" "MCP servers"), $(plural "$KEY_FILES" "file" "files") with keys in plain text, $(plural "$N_ALLOW" "key" "keys") in allow lists"
@@ -3132,6 +3154,28 @@ fi
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM"
 [ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+# Folders the home scan could not enter, so sections 2 to 5 did not read the files in them.
+dir_list() { # paths, one a line: the first three as short() shows them, then how many more
+  _dl=""; _dn=0
+  while IFS= read -r _d; do
+    [ -n "$_d" ] || continue
+    _dn=$((_dn + 1)); [ "$_dn" -le 3 ] && _dl="${_dl:+$_dl, }$(short "$_d")"
+  done <<EOF
+$1
+EOF
+  [ "$_dn" -gt 3 ] && _dl="$_dl and $((_dn - 3)) more"
+  printf '%s' "$_dl"
+}
+if [ "$N_UNREAD_DIRS" -gt 0 ]; then
+  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 2 to 5 did not check the files in it"
+  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 2 to 5 did not check the files in them"; fi
+  wrap "$_it: $(dir_list "$UNREAD_DIRS")." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+fi
+if [ "$N_NL_DIRS" -gt 0 ]; then
+  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 2 to 5 did not check the files in it"
+  else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
+  wrap "$_it: $(dir_list "$NL_DIRS"), the line break shown as ?." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+fi
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
@@ -3222,7 +3266,8 @@ fi
 SEC2=$CAP; CAP=""
 section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
 if [ "$KEY_FILES" -eq 0 ]; then
-  wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "
+  if [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
+  else wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files." 8 "     ${GRN}✓${RST}  " "        "; fi
 fi
 _shown=0
 while IFS='|' read -r p f; do
@@ -3280,7 +3325,8 @@ fi
 
 SEC3=$CAP; CAP=""
 section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
-if [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
+if [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No saved commands with keys, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
+elif [ "$N_ALLOW" -eq 0 ]; then emit "     ${GRN}✓${RST}  No saved commands with keys."; fi
 while IFS='|' read -r npm f; do
   [ -n "$f" ] || continue
   emit "     ${RED}✗${RST}  $(short "$f")"
@@ -3388,15 +3434,29 @@ EOF
 $PERSIST
 EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
-elif [ "$WIPER_HIT" -eq 0 ] && [ "$NPM_UNREAD" -gt 0 ]; then
-  pair "${YEL}!${RST}" "npm malware" 16 "${YEL}not fully checked: part of npm's cache could not be read${RST}"
+fi
+# What of npm's places could not be read: part of its cache, lockfiles, folders the scan could not
+# enter. The row is never green over them, and findings above them are not the full list.
+_np=""; _nn=0
+[ "$NPM_UNREAD" -gt 0 ] && { _np="part of npm's cache"; _nn=1; }
+[ "$N_LOCK_UNREAD" -gt 0 ] && { _np="${_np:+$_np|}$(plural "$N_LOCK_UNREAD" lockfile lockfiles)"; _nn=$((_nn + 1)); }
+[ "$HOME_PARTIAL" -eq 1 ] && { _np="${_np:+$_np|}some folders in your home"; _nn=$((_nn + 1)); }
+case "$_nn" in 2) _np=${_np/|/ and } ;; 3) _np=${_np/|/, }; _np=${_np/|/ and } ;; esac
+lock_unread() { while IFS= read -r _f; do [ -n "$_f" ] && emit "        $(short "$_f")"; done <<EOF
+$LOCK_UNREAD
+EOF
+}
+if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then :
+elif [ "$WIPER_HIT" -eq 0 ] && [ -n "$_np" ]; then
+  pair "${YEL}!${RST}" "npm malware" 16 "${YEL}not fully checked: $_np could not be read${RST}"
+  lock_unread
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm malware" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
   emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
 fi
-# With findings above, a part of the cache that could not be read still has to be said.
-if [ "$NPM_UNREAD" -gt 0 ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
-  wrap "Part of npm's cache could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+if [ -n "$_np" ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
+  wrap "$(printf '%s' "${_np:0:1}" | tr 'a-z' 'A-Z')${_np:1} could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+  lock_unread
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
   pair "${RED}✗${RST}" "Editor extensions" 16 "${RED}signs of the malware found${RST}"
@@ -3524,6 +3584,7 @@ elif [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens i
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
 elif [ "$N_LOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_LOOK" "project file" "project files") to read"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, but some folders were not read"
 elif [ -n "$MCP_ROWS" ]; then G2="${GRN}✓${RST}"; D2="$MCP_SUM, no tokens in their configs"
 else G2="${GRN}✓${RST}"; D2="none configured"; fi
 if [ "$KEY_FILES" -gt 1 ]; then G3="${RED}✗${RST}"; D3="$KEY_FILES files, like $(short "${KEY_FIRST#*|}") (${KEY_FIRST%%|*})"
@@ -3531,8 +3592,10 @@ elif [ "$KEY_FILES" -eq 1 ]; then G3="${RED}✗${RST}"; D3="$(short "${KEY_FIRST
 elif [ "$N_SESS" -gt 0 ]; then G3="${RED}✗${RST}"; D3="keys in $(plural "$N_SESS" "agent session file" "agent session files"): $(printf '%s' "$SESS_ROWS" | head -n 1 | cut -d'|' -f1)"
 elif [ "$SESS_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none in files; agent sessions partly checked"
 elif [ "$N_SSH_OPEN" -gt 0 ]; then G3="${YEL}○${RST}"; D3="none in plain text, but $(plural "$N_SSH_OPEN" "SSH key has" "SSH keys have") no passphrase"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then G3="${YEL}!${RST}"; D3="none found, but some folders were not read"
 else G3="${GRN}✓${RST}"; D3="no AI or cloud keys in plain text"; fi
-if [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"
+if [ "$N_ALLOW" -eq 0 ] && [ "$HOME_PARTIAL" -eq 1 ]; then G4="${YEL}!${RST}"; D4="none found, but some folders were not read"
+elif [ "$N_ALLOW" -eq 0 ]; then G4="${GRN}✓${RST}"; D4="no saved commands with keys"
 elif [ "$N_ALLOW_NPM" -gt 0 ] && [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="1 saved key, and an npm publish would ship it"
 elif [ "$N_ALLOW_NPM" -gt 0 ]; then G4="${RED}✗${RST}"; D4="$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship"
 elif [ "$N_ALLOW" -eq 1 ]; then G4="${RED}✗${RST}"; D4="a saved key in $(short "$ALLOW_FIRST")"
@@ -3560,7 +3623,9 @@ elif [ "$N_PLAT_FOUND" -eq 1 ]; then
 $PLATFORMS
 EOF
 # A partial check comes after every finding someone has to act on, and before the green line.
+elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: files unreadable"
 elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
 blank
 cline 01 "$G1" "Coding agents" "$D1"

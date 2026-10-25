@@ -497,6 +497,8 @@ $AaFiles = New-Object System.Collections.Generic.List[string]
 $VscSettings = New-Object System.Collections.Generic.List[string]
 $AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
+# Folders the scan could not read: the files in them were not checked (sections 2 to 5 say so).
+$UnreadDirs = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
   foreach ($n in $PruneNames) { if ($name -ceq $n) { return $true } }
@@ -563,7 +565,8 @@ function Is-AkLink([string]$dir, [string]$target) {
   } catch { return $false }
 }
 function Scan-Home([string]$dir, [int]$depth) {
-  foreach ($e in (Entries $dir)) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
     $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
     if (Is-DirInfo $e) {
       if ($link -or (Is-Pruned $path $name $d)) { continue }
@@ -842,6 +845,7 @@ function Sess-Stop([bool]$wait) {
 }
 
 Scan-Home $HomeDir 0
+$HOME_PARTIAL = 0; if ($UnreadDirs.Count -gt 0) { $HOME_PARTIAL = 1 }
 # Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
 # name projects use too (setup.mjs) counts in a project that also holds one of those, or when the file
 # is the very one the sources publish the SHA-256 of; anywhere else section 2 lists it as a file to
@@ -2037,8 +2041,9 @@ function Npm-Scan([string]$where, [string]$text, [string]$kind) {
   } catch { if (-not $SlowFiles.Contains($where)) { $script:NpmSlow++ }; Mark-Slow $where }
 }
 # Read directly rather than through Read-Text, so big lockfiles are not kept in memory.
-$N_LOCK = 0; $NpmSlow = 0; $NpmUnread = 0
-foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { continue }; $N_LOCK++; Npm-Scan $f $t ([IO.Path]::GetFileName($f)) }
+# A lockfile the scan found but can't read leaves npm not fully checked, as the cache does.
+$N_LOCK = 0; $NpmSlow = 0; $NpmUnread = 0; $LockUnread = New-Object System.Collections.Generic.List[string]
+foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { $LockUnread.Add($f); continue }; $N_LOCK++; Npm-Scan $f $t ([IO.Path]::GetFileName($f)) }
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv,
 # nvm-windows), pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
 $NpmRoots = New-Object System.Collections.Generic.List[string]
@@ -2501,8 +2506,8 @@ if (-not $OptOffline) {
 # ===========================================================================
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
-elseif ($ISSUES -gt 0) { $Sev = $cYel } else { $Sev = $cGrn }
-if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } else { $FixN = 'No findings in this scan' }
+elseif ($ISSUES -gt 0 -or $HOME_PARTIAL -eq 1) { $Sev = $cYel } else { $Sev = $cGrn }
+if ($ISSUES -gt 0) { $FixN = "$(Plural $ISSUES 'thing' 'things') to fix" } elseif ($HOME_PARTIAL -eq 1) { $FixN = 'No findings in the paths checked' } else { $FixN = 'No findings in this scan' }
 $PctTxt = ''; if ($PCT) { $PctTxt = "Better than $PCT% of AI builders who ran Blindspot" }
 $SlowText = "$(Plural $SlowFiles.Count 'file' 'files') skipped: took too long to check"
 $Stats = "$(Plural $N_AG 'coding agent' 'coding agents'), $N_IDLE not used in 30 days, $(Plural $N_MCP 'MCP server' 'MCP servers'), $(Plural $KEY_FILES 'file' 'files') with keys in plain text, $(Plural $N_ALLOW 'key' 'keys') in allow lists"
@@ -2526,6 +2531,13 @@ if ($Act) {
 }
 $HeadShort = Take-Cap
 Wrap $Stats 4 "  $Sev$gBar$cRst " "  $Sev$gBar$cRst " $cDim
+# Folders the home scan could not read, so sections 2 to 5 did not read the files in them.
+function Dir-List($dirs) { $da = @($dirs); $dl = (@($da | Select-Object -First 3 | ForEach-Object { Short $_ })) -join ', '; if ($da.Count -gt 3) { $dl += " and $($da.Count - 3) more" }; $dl }
+if ($UnreadDirs.Count -gt 0) {
+  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 2 to 5 did not check the files in it' }
+  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 2 to 5 did not check the files in them" }
+  Wrap "$($udText): $(Dir-List $UnreadDirs)." 4 "  $cYel$gBar$cRst " "  $cYel$gBar$cRst " $cYel
+}
 $HeadFull = $HeadShort + (Take-Cap)
 
 Section '01' 'CODING AGENTS' "$N_AG found, $N_IDLE idle"
@@ -2589,7 +2601,8 @@ if ($N_AK -gt 0) {
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
-if ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
+if ($KEY_FILES -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
+elseif ($KEY_FILES -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
 $shown = 0
 foreach ($r in $KeyRows) { $shown++; if ($shown -le 20) { Pair "$cRed$gX$cRst" (Short $r[0]) 44 $r[1] } }
 if ($KEY_FILES -gt 20) { Emit "        ${cDim}and $($KEY_FILES - 20) more$cRst" }
@@ -2627,7 +2640,8 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedFound.Count -gt 0) {
 }
 $Sec3 = Take-Cap
 Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
-if ($N_ALLOW -eq 0) { Emit "     $cGrn$gOk$cRst  No saved commands with keys." }
+if ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No saved commands with keys, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
+elseif ($N_ALLOW -eq 0) { Emit "     $cGrn$gOk$cRst  No saved commands with keys." }
 foreach ($r in $AllowRows) {
   Emit "     $cRed$gX$cRst  $(Short $r[0])"
   Emit '        A saved command contains a key.'
@@ -2691,19 +2705,33 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   }
   foreach ($r in $Persist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   foreach ($t in $NpmTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
-} elseif ($WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $NpmUnread -gt 0)) {
+}
+# What of npm's places could not be read: part of its cache, lockfiles, folders the scan could not
+# enter. The row is never green over them, and findings above them are not the full list.
+$npParts = New-Object System.Collections.Generic.List[string]
+if ($NpmUnread -gt 0) { $npParts.Add("part of npm's cache") }
+if ($LockUnread.Count -gt 0) { $npParts.Add((Plural $LockUnread.Count 'lockfile' 'lockfiles')) }
+if ($HOME_PARTIAL -eq 1) { $npParts.Add('some folders in your home') }
+$npText = ''
+if ($npParts.Count -eq 1) { $npText = $npParts[0] } elseif ($npParts.Count -eq 2) { $npText = $npParts[0] + ' and ' + $npParts[1] } elseif ($npParts.Count -eq 3) { $npText = $npParts[0] + ', ' + $npParts[1] + ' and ' + $npParts[2] }
+$npFound = ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1)
+if (-not $npFound -and $WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $npText)) {
   $why = New-Object System.Collections.Generic.List[string]
   if ($NpmSlow -gt 0) { $why.Add("$(Plural $NpmSlow 'file' 'files') took too long") }
-  if ($NpmUnread -gt 0) { $why.Add("part of npm's cache could not be read") }
+  if ($npText) { $why.Add("$npText could not be read") }
   Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}not fully checked: $($why -join ', ')$cRst"
-} elseif ($WIPER_HIT -eq 0) {
+  foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
+} elseif (-not $npFound -and $WIPER_HIT -eq 0) {
   Pair "$cGrn$gOk$cRst" 'npm malware' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
   Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
 }
 # With findings above, a part of the check that did not finish still has to be said.
-if (($NpmSlow -gt 0 -or $NpmUnread -gt 0) -and ($WIPER_HIT -eq 1 -or $NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1)) {
+if (($NpmSlow -gt 0 -or $npText) -and ($WIPER_HIT -eq 1 -or $npFound)) {
   if ($NpmSlow -gt 0) { Wrap "$(Plural $NpmSlow 'file' 'files') took too long to check, so this is not the full list." 8 '        ' '        ' $cYel }
-  if ($NpmUnread -gt 0) { Wrap "Part of npm's cache could not be read, so this is not the full list." 8 '        ' '        ' $cYel }
+  if ($npText) {
+    Wrap "$($npText.Substring(0, 1).ToUpperInvariant())$($npText.Substring(1)) could not be read, so this is not the full list." 8 '        ' '        ' $cYel
+    foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
+  }
 }
 if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
@@ -2765,6 +2793,7 @@ elseif ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
 elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
 elseif ($N_LOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_LOOK 'project file' 'project files') to read" }
+elseif ($HOME_PARTIAL -eq 1) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, but some folders were not read" }
 elseif ($McpRows.Count -gt 0) { $G2 = "$cGrn$gOk$cRst"; $D2 = "$McpSum, no tokens in their configs" }
 else { $G2 = "$cGrn$gOk$cRst"; $D2 = 'none configured' }
 if ($KEY_FILES -gt 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$KEY_FILES files, like $(Short $KeyFirst[0]) ($($KeyFirst[1]))" }
@@ -2772,8 +2801,10 @@ elseif ($KEY_FILES -eq 1) { $G3 = "$cRed$gX$cRst"; $D3 = "$(Short $KeyFirst[0]) 
 elseif ($N_SESS -gt 0) { $G3 = "$cRed$gX$cRst"; $D3 = "keys in $(Plural $N_SESS 'agent session file' 'agent session files'): $($SessRows[0][0])" }
 elseif ($SESS_PARTIAL) { $G3 = "$cYel!$cRst"; $D3 = 'none in files; agent sessions partly checked' }
 elseif ($N_SSH_OPEN -gt 0) { $G3 = "$cYel$gRing$cRst"; $D3 = "none in plain text, but $(Plural $N_SSH_OPEN 'SSH key has' 'SSH keys have') no passphrase" }
+elseif ($HOME_PARTIAL -eq 1) { $G3 = "$cYel!$cRst"; $D3 = 'none found, but some folders were not read' }
 else { $G3 = "$cGrn$gOk$cRst"; $D3 = 'no AI or cloud keys in plain text' }
-if ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
+if ($N_ALLOW -eq 0 -and $HOME_PARTIAL -eq 1) { $G4 = "$cYel!$cRst"; $D4 = 'none found, but some folders were not read' }
+elseif ($N_ALLOW -eq 0) { $G4 = "$cGrn$gOk$cRst"; $D4 = 'no saved commands with keys' }
 elseif ($N_ALLOW_NPM -gt 0 -and $N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = '1 saved key, and an npm publish would ship it' }
 elseif ($N_ALLOW_NPM -gt 0) { $G4 = "$cRed$gX$cRst"; $D4 = "$N_ALLOW saved keys, $N_ALLOW_NPM that an npm publish would ship" }
 elseif ($N_ALLOW -eq 1) { $G4 = "$cRed$gX$cRst"; $D4 = "a saved key in $(Short $AllowFirst)" }
@@ -2796,7 +2827,9 @@ elseif ($leaks.Count -ge 2) {
 elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
 # A partial check comes after every finding someone has to act on, and before the green line.
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
+elseif ($LockUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: files unreadable' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
+elseif ($HOME_PARTIAL -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'none found, but some folders were not read' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank
 CLine '01' $G1 'Coding agents' $D1
