@@ -79,9 +79,10 @@
 # days (19 May, 1 June, and 29 and 30 April 2026), except @cap-js/openapi 1.4.1 (above). A version it
 # dates before a wave is not listed and has a skip line below.
 # Not listed: every version of four names. tensorlake's advisory also lists every version, but names
-# only 0.5.144 as malicious. GitHub's advisory for @tallyui/components spans every version, but
-# OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3. GitHub's advisory for @antv/a8 spans every
-# version, but OpenSSF's entry names only 0.1.1 and 0.2.1, and npm's registry keeps only 0.0.1, from
+# only 0.5.144 as malicious. GitHub's advisory for @tallyui/components spans every version, and
+# OpenSSF's entry carries that range too, but the versions it lists, like Wiz's list, are only 1.0.1
+# to 1.0.3. GitHub's advisory for @antv/a8 spans every version, and OpenSSF's entry carries that range
+# too, but the versions it lists are only 0.1.1 and 0.2.1, and npm's registry keeps only 0.0.1, from
 # December 2023. GitHub's advisory and OpenSSF's entry for yarsg span every version, but npm's registry
 # dates its 1000.0.0 to 2019-04-04, before the worm.
 #! skip tensorlake * the advisory also lists every version, but names only 0.5.144 as malicious
@@ -91,8 +92,8 @@
 #! skip tensorlake-native-linux-x64-gnu 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
 #! skip tensorlake-native-linux-x64-musl 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
 #! skip tensorlake-native-win32-x64 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
-#! skip @tallyui/components * GitHub's advisory spans every version, but OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3, published on the day of the wave; 2.0.0 and later came months after
-#! skip @antv/a8 * GitHub's advisory spans every version, but OpenSSF's entry names only 0.1.1 and 0.2.1, published in the wave; npm's registry keeps only 0.0.1, from December 2023
+#! skip @tallyui/components * GitHub's advisory spans every version, and OpenSSF's entry carries that range, but the versions OpenSSF's entry lists and Wiz's list names are only 1.0.1 to 1.0.3, published on the day of the wave; 2.0.0 and later came months after
+#! skip @antv/a8 * GitHub's advisory spans every version, and OpenSSF's entry carries that range, but the versions it lists are only 0.1.1 and 0.2.1, published in the wave; npm's registry keeps only 0.0.1, from December 2023
 #! skip @antv/li-sam-assets 0.1.4 npm's registry dates it 2023-07-10, before the wave; of the sources only GitHub's advisory names it, and its package.json has no install hook
 #! skip yarsg * GitHub's advisory and OpenSSF's entry span every version, but npm's registry dates 1000.0.0 to 2019-04-04, before the worm; 18.0.0 and 18.0.1 came out on 17 February 2026
 #! skip @servicetitan/suppress-warnings * GitHub's advisory and OpenSSF's entry also list versions npm's registry dates before the worm (OpenSSF's 25, from 3 February to 29 July 2026); only 38.1.1 to 38.1.7 came out on 4 August

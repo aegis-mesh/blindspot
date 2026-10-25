@@ -23,7 +23,10 @@
 # lohsebhipolg2s.theme-aurora-borealis and holiday-themes.theme-coca-cola-christmas. Socket found no
 # payload in the versions it read and calls Coca-Cola Christmas malware for its cluster, not a payload;
 # a removal from the Marketplace does not say what ran on a machine, nor anything of the Open VSX
-# builds; and Charcoal Mint's three builds on Open VSX hold colors and, in 1.0.2, a welcome page.
+# builds; and Charcoal Mint's three builds on Open VSX hold colors and, in 1.0.2, a welcome page. Nor
+# the cluster's two other Open VSX extensions, aurora-them-creator.theme-aurora-nocturne (which Microsoft's
+# list removes as impersonation, 30 January 2026) and solidity-syntax.deep-focus: Socket shows no payload
+# in either.
 #   January 2026: the four oorzc extensions, Open VSX only: Socket's findings concern the Open VSX
 #     builds, and it does not suggest the publisher's Marketplace listings were compromised. The
 #     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026, after that post:
