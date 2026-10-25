@@ -5912,13 +5912,26 @@ npm_hits() {
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; fn = FILENAME; gsub(/[[:cntrl:]]/, "?", fn); print fn "\t" nm " " v "\t" t }
     }
-    FNR == 1 { over = 0; depth = 0; pend = "" }
+    FNR == 1 { over = 0; depth = 0; pend = ""; yn = "" }
     FILENAME ~ /pnpm-lock\.yaml$/ && /^[^ #]/ { over = ($0 ~ /^overrides:/) }
     FILENAME ~ /bun\.lock$/ {
       if (over) { o = $0; depth += gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
       if ($0 ~ /"overrides"[[:space:]]*:[[:space:]]*\{/) { over = 1; o = $0; depth = gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
     }
     over { next }
+    # A yarn.lock entry starts with what asked for it (axios@1.14.1, axios@1.14.2:), not what was
+    # installed: a resolutions pin can move it to another version. That line only names the entry; its
+    # version comes from its resolved URL or version line (yarn 1), or its resolution line (yarn 2 on).
+    FILENAME ~ /yarn\.lock$/ && /^[^ \t\r#]/ {
+      k = $0; sub(/[ \t\r]*$/, "", k); sub(/:$/, "", k); sub(/,.*$/, "", k); gsub(/"/, "", k)
+      if (index(k, "@npm:")) k = substr(k, index(k, "@npm:") + 5)
+      yn = ""; if (match(k, /^@?[^@]+/)) yn = substr(k, 1, RLENGTH)
+      if (yn !~ /^(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+$/) yn = ""
+      next
+    }
+    FILENAME ~ /yarn\.lock$/ && yn != "" && match($0, /^[ \t]+version "[^"]+"/) {
+      v = substr($0, RSTART, RLENGTH); sub(/^[ \t]+version "/, "", v); sub(/"$/, "", v); hit(yn, v); yn = ""
+    }
     FILENAME ~ /(package-lock|npm-shrinkwrap)\.json$/ {
       if (match($0, /"(node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
         pend = substr($0, RSTART + 1); sub(/"[[:space:]]*:.*/, "", pend); sub(/^.*node_modules\//, "", pend)

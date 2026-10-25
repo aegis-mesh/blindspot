@@ -5327,9 +5327,31 @@ function Strip-Overrides([string]$kind, [string]$text) {
   }
   $sb.ToString()
 }
+# A yarn.lock entry starts with what asked for it (axios@1.14.1, axios@1.14.2:), not what was
+# installed: a resolutions pin can move it to another version. That line only names the entry; its
+# version comes from its resolved URL or version line (yarn 1), or its resolution line (yarn 2 on).
+$RxYarnKey = New-Object regex('^[^\s#][^\n]*', $RxOpt, $RxTimeout)
+$RxYarnEntry = New-Object regex('^([^\s#][^\n]*)|^[^\S\n]+version "([^"\n]+)"', $RxOpt, $RxTimeout)
+function Yarn-KeyName([string]$k) {
+  $k = $k.TrimEnd(); if ($k.EndsWith(':')) { $k = $k.Substring(0, $k.Length - 1) }
+  $c = $k.IndexOf(','); if ($c -ge 0) { $k = $k.Substring(0, $c) }
+  $k = $k.Replace('"', '')
+  $a = $k.IndexOf('@npm:', [StringComparison]::Ordinal); if ($a -ge 0) { $k = $k.Substring($a + 5) }
+  $m = [regex]::Match($k, '^@?[^@]+')
+  if ($m.Success -and $m.Value -cmatch '^(@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+\z') { return $m.Value }
+  ''
+}
 function Npm-Scan([string]$where, [string]$text, [string]$kind) {
   try {
     if ($kind -ceq 'pnpm-lock.yaml' -or $kind -ceq 'bun.lock') { $text = Strip-Overrides $kind $text }
+    if ($kind -ceq 'yarn.lock') {
+      $yn = ''
+      foreach ($m in $RxYarnEntry.Matches($text)) {
+        if ($m.Groups[1].Success) { $yn = Yarn-KeyName $m.Groups[1].Value }
+        elseif ($yn) { Npm-Hit $where $yn $m.Groups[2].Value; $yn = '' }
+      }
+      $text = $RxYarnKey.Replace($text, '')
+    }
     if ($kind -ceq 'package-lock.json' -or $kind -ceq 'npm-shrinkwrap.json') {
       $pend = ''
       foreach ($m in $RxLockEntry.Matches($text)) {

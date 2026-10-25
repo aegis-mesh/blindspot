@@ -641,6 +641,12 @@ printf '{"permissions":{"allow":["Bash(ls /tmp/*)"]},"hooks":{"Stop":[{"hooks":[
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$RV/code/x|y/package-lock.json"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make fmt"}]}]}}\n' | tee "$RV/p/r1/.claude/settings.json" > "$RV/p/r2/.claude/settings.json"
 printf '{\n  "overrides": {\n    "axios@1.14.1": "1.14.2"\n  },\n  "packages": {\n    "axios": ["axios@1.14.2", ""]\n  }\n}\n' > "$RV/code/bunpin/bun.lock"
+# A yarn.lock entry's first line says what asked for it, which a resolutions pin can move to another
+# version: the version is the one its resolved URL, version line (yarn 1) or resolution line names.
+mkdir -p "$RV/code/yres" "$RV/code/yberryres" "$RV/code/yurl"
+printf '# yarn lockfile v1\n\n\naxios@1.14.1, axios@1.14.2:\n  version "1.14.2"\n  resolved "https://registry.yarnpkg.com/axios/-/axios-1.14.2.tgz#0123"\n\nlegacy-client@2.0.0:\n  version "2.0.0"\n  resolved "https://registry.yarnpkg.com/legacy-client/-/legacy-client-2.0.0.tgz#4567"\n  dependencies:\n    axios "1.14.1"\n' > "$RV/code/yres/yarn.lock"
+printf '__metadata:\n  version: 8\n\n"axios@npm:1.14.1":\n  version: 1.14.2\n  resolution: "axios@npm:1.14.2"\n' > "$RV/code/yberryres/yarn.lock"
+printf '# yarn lockfile v1\n\n\n"@keyv/redis@^6.0.0":\n  version "6.0.0"\n  resolved "https://npm.example.com/download/@keyv/redis/6.0.0"\n' > "$RV/code/yurl/yarn.lock"
 # Comments: a // inside a string (a label, a URL) is text; only a comment outside strings is dropped, in every settings file.
 mkdir -p "$RV/p/hide/.vscode" "$RV/p/url/.vscode" "$RV/p/unhide/.vscode" "$RV/p/chook/.claude"
 printf '{"tasks":[{"label":"x //","runOptions":{"runOn":"folderOpen"},"command":"make"}]}\n' > "$RV/p/hide/.vscode/tasks.json"
@@ -680,6 +686,9 @@ has    "and its package"                               'axios 1\.14\.1 \(Axios t
 has    "two unrelated repos with the same settings are both listed (1)" 'p/r1/\.claude/settings\.json' "$WORK/rv.txt"
 has    "two unrelated repos with the same settings are both listed (2)" 'p/r2/\.claude/settings\.json' "$WORK/rv.txt"
 hasnot "a bun override pinning away is not a hit"      'code/bunpin/' "$WORK/rv.txt"
+hasnot "a yarn 1 resolutions pin that moves a version away is not a hit" 'code/yres/' "$WORK/rv.txt"
+hasnot "and neither is one in a yarn 2 lockfile"       'code/yberryres/' "$WORK/rv.txt"
+has    "a yarn 1 entry without a registry URL is read from its version line" '~/code/yurl/yarn\.lock @keyv/redis 6\.0\.0 \(keyv account takeover' "$WORK/rv-flat.txt"
 # A worktree's copy listed before the repo's own file still leaves the row named for the repo's file.
 # find's order depends on the file system, so a stand-in lists the home scan in reverse name order.
 mkdir -p "$WORK/wto/r/.claude/worktrees/w1/.claude" "$WORK/wto/r/.claude/worktrees/w1/.vscode" "$WORK/wto/r/.vscode" "$WORK/wto/findbin"
