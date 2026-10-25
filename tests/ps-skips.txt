@@ -45,3 +45,6 @@ rg: a session folder that cannot be read is named	needs ripgrep on PATH: these t
 rg: and the sessions are not called clean	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 when the check cannot start the sessions are named as not checked	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed
 and are not called clean	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed
+rg: the check line counts only the files read, not compressed ones	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and a compressed session makes the summary row partly checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a home with only compressed sessions is never told no keys	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed

@@ -791,10 +791,17 @@ $SessWorker = {
       }
       if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
       if ($whole) { $st.Done++ }
-    } catch { } finally { if ($sr) { $sr.Dispose() } }
+    } catch {
+      # A pattern that ran out of time leaves the file not checked, as a stop does. Anything else
+      # (no permission, a range another program has locked, a file that is gone) is a file that
+      # could not be read, counted apart so the report says so.
+      $timedOut = $false; $xe = $_.Exception
+      while ($xe) { if ($xe -is [Text.RegularExpressions.RegexMatchTimeoutException]) { $timedOut = $true }; $xe = $xe.InnerException }
+      if (-not $timedOut) { $st.Unread++ }
+    } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = @{} })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -1812,9 +1819,10 @@ $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
 Sess-Stop $OptAllSess
-# SESS_UNREAD counts the folders that could not be read (-1: some, rg.exe gives no count);
-# SESS_NOTRUN the files no engine looked at, because there is none or the check could not start.
-$SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst; $SESS_UNREAD = [int]$SessSt.Skipped; $SESS_NOTRUN = 0
+# SESS_DONE counts the files read to the end; SESS_UNREAD the folders that could not be read (-1:
+# some, rg.exe gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
+# looked at, because there is none or the check could not start.
+$SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst; $SESS_UNREAD = [int]$SessSt.Skipped; $SESS_UNREAD_FILES = [int]$SessSt.Unread; $SESS_NOTRUN = 0
 if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
   $cnt = @{ Skipped = 0; Stop = $false }
   $sessAll = Sess-List $SessRoots $cnt
@@ -1832,8 +1840,9 @@ foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # Aider keeps its history in each project, found by the home scan, and is checked here.
 $rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
 foreach ($f in $AiderFiles) {
-  $t = Read-Text $f; if ($null -eq $t) { continue }
-  $SESS_TOTAL++; if ($SESS_DONE -ge 0) { $SESS_DONE++ }
+  $SESS_TOTAL++
+  $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }
+  if ($SESS_DONE -ge 0) { $SESS_DONE++ }
   $seenA = @{}
   try { foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } } } catch { Mark-Slow $f }
 }
@@ -1860,7 +1869,9 @@ foreach ($h in $sessHits) {
 $SessFiles.Sort([StringComparer]::Ordinal); $SessPlaces.Sort([StringComparer]::Ordinal)
 $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
-$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt 0 -or $SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST)))
+# Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
+# check was stopped), or a folder that could not be read.
+$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
 $SessSealedFound = @($SessSealed | Where-Object { Is-Dir $_[1] } | ForEach-Object { $_[0] } | Select-Object -Unique)
 if ($N_SESS -gt 0) { Progress "Keys in $(Plural $N_SESS 'agent session file' 'agent session files')" }
 
@@ -2140,11 +2151,17 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedFound.Count -gt 0) {
     Wrap "$(Plural $SESS_NOTRUN 'agent session file was' 'agent session files were') not checked$why" 8 "     $cYel!$cRst  " '        '
   }
   elseif ($SESS_DONE -lt 0) { Wrap 'Agent sessions were partly checked. Add -AllSessions to check all of them.' 8 "     $cYel!$cRst  " '        ' }
-  elseif ($SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
-  elseif ($N_SESS -eq 0 -and $SESS_TOTAL -gt 0 -and $SESS_UNREAD -eq 0) { Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_TOTAL) 'agent session file' 'agent session files')." }
-  if ($SESS_UNREAD -gt 0) { Wrap "Agent sessions were partly checked: $(Plural $SESS_UNREAD 'folder' 'folders') could not be read." 8 "     $cYel!$cRst  " '        ' }
+  elseif (($SESS_DONE + $SESS_UNREAD_FILES) -lt ($SESS_TOTAL - $SESS_ZST)) { Wrap "Checked the newest $(Commas $SESS_DONE) of $(Commas $SESS_TOTAL) agent session files. $allTxt" 8 "     $cYel!$cRst  " '        ' }
+  elseif ($N_SESS -eq 0 -and $SESS_DONE -gt 0 -and $SESS_UNREAD -eq 0 -and $SESS_UNREAD_FILES -eq 0) {
+    # The files read, not the compressed ones, which are named below.
+    Emit "     $cGrn$gOk$cRst  No keys in $(Plural (Commas $SESS_DONE) 'agent session file' 'agent session files')."
+  }
+  $urParts = @()
+  if ($SESS_UNREAD -gt 0) { $urParts += (Plural $SESS_UNREAD 'folder' 'folders') }
+  if ($SESS_UNREAD_FILES -gt 0) { $urParts += (Plural $SESS_UNREAD_FILES 'file' 'files') }
+  if ($urParts.Count -gt 0) { Wrap "Agent sessions were partly checked: $($urParts -join ' and ') could not be read." 8 "     $cYel!$cRst  " '        ' }
   elseif ($SESS_UNREAD -lt 0) { Wrap 'Agent sessions were partly checked: some files or folders could not be read.' 8 "     $cYel!$cRst  " '        ' }
-  if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 '        ' '        ' $cDim }
+  if ($SESS_ZST -gt 0) { Wrap "$(Plural $SESS_ZST 'compressed session file was' 'compressed session files were') not checked." 8 "     $cYel!$cRst  " '        ' }
   if ($SessSealedFound.Count -gt 0) { Wrap "$($SessSealedFound -join ' and ') conversation files are encrypted, so they were not checked." 8 '        ' '        ' $cDim }
 }
 $Sec3 = Take-Cap

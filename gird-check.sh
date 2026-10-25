@@ -985,17 +985,17 @@ SESS_ROOTS=$(printf '%s\n' "$SESS_SOURCES" | while IFS='|' read -r _a _p; do { [
 # Lines without a key's start are skipped cheaply.
 SESS_PRE=$KEY_STARTS
 # One perl parent lists the files newest first and forks workers, each with its own pipe back to
-# the parent, which is the only writer to its output, so lines never interleave. A worker prints
-# K (a match) and then D (done) for a file, or Z for a compressed one; the parent prints T (the
-# total) first, and S (the folders it could not open, whose files are not in the total) when
-# there are any. Before printing, control characters become ? in a file name and a space in a
-# match, so neither a hostile folder name nor a newline or tab that happens to be the boundary
-# byte of a match can split a line or shift its fields. Files are read 1 MB at a time and cut
-# just after the last character that can't be in a key or start an escape such as \n (a backslash
-# never ends a piece), so a huge database file never loads at once and a piece never ends inside
-# a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers; a
-# worker exits when its parent or the script that started everything is gone, so a kill -9 of
-# the script stops them at the next piece.
+# the parent, which is the only writer to its output, so lines never interleave. A worker prints K
+# (a match) and then D (done) for a file, Z for a compressed one or U for one it can't open; the
+# parent prints T (the total) first, and S (the folders it could not open, whose files are not in
+# the total) when there are any. Before printing, control characters become ? in a file name and a
+# space in a match, so neither a hostile folder name nor a newline or tab that happens to be the
+# boundary byte of a match can split a line or shift its fields. Files are read 1 MB at a time and
+# cut just after the last character that can't be in a key or start an escape such as \n (a
+# backslash never ends a piece), so a huge database file never loads at once and a piece never ends
+# inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers;
+# a worker exits when its parent or the script that started everything is gone, so a kill -9 of the
+# script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
 my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
@@ -1023,7 +1023,8 @@ for my $w (0 .. $n - 1) {
       exit 0 unless $alive->();
       my $file = $f[$i]; (my $fn = $file) =~ tr/\x00-\x1f\x7f/?/;
       if ($file =~ /\.zst$/) { print "Z\t$fn\n"; next }
-      open(my $h, "<", $file) or next; binmode $h; local $/ = \1048576; my $buf = "";
+      my $h; unless (open($h, "<", $file)) { print "U\t$fn\n"; next }
+      binmode $h; local $/ = \1048576; my $buf = "";
       my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { (my $k = $&) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n" } } };
       while (defined(my $c = <$h>)) {
         exit 0 unless $alive->();
@@ -1050,7 +1051,7 @@ while ($sel->count) {
 }
 1 while wait() != -1;'
 # Turns matches into "H<tab>file<tab>provider", once per file and provider, and drops keys that
-# look made up. T, D, Z and S lines pass through. Keys reach it through a pipe and stop here.
+# look made up. T, D, Z, U and S lines pass through. Keys reach it through a pipe and stop here.
 # With rg, the input is ripgrep's own: the file, the NUL that --null puts after it (the one byte
 # a path can't hold) turned into a tab by tr, which turns every real tab into ?, then the match.
 # So a line without a tab is a piece of a file name that holds a newline, and the match may hold
@@ -1070,7 +1071,7 @@ sess_filter() { # [rg]
       }
       return n < (len < 30 ? 8 : 12)
     }
-    rg == "" && ($1 == "T" || $1 == "D" || $1 == "Z" || $1 == "S") { print; fflush(); next }
+    rg == "" && ($1 == "T" || $1 == "D" || $1 == "Z" || $1 == "U" || $1 == "S") { print; fflush(); next }
     {
       if (rg != "") {
         i = index($0, "\t")
@@ -2324,9 +2325,10 @@ OC=$(plat_hit opencode); RW=$(plat_hit railway)
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless --all-sessions asked to wait.
 if [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
-# SESS_UNREAD counts the folders that could not be read (-1: some, ripgrep gives no count);
-# SESS_NOTRUN the files no engine looked at, because there is none or the check could not start.
-SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""; SESS_UNREAD=0; SESS_NOTRUN=0
+# SESS_DONE counts the files read to the end; SESS_UNREAD the folders that could not be read (-1:
+# some, ripgrep gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
+# looked at, because there is none or the check could not start.
+SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""; SESS_UNREAD=0; SESS_UNREAD_FILES=0; SESS_NOTRUN=0
 if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
   SESS_HITS=$(awk -F '\t' '$1 == "H" { print $2 "\t" $3 }' "$SESS_FILE")
   if [ "$SESS_ENGINE" = perl ]; then
@@ -2337,6 +2339,7 @@ if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
       SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find "$_r" -type f -print0 2>/dev/null; done | tr -cd '\000' | wc -c | tr -d ' ')
     fi
     SESS_ZST=$(grep -c '^Z' "$SESS_FILE")
+    SESS_UNREAD_FILES=$(grep -c '^U' "$SESS_FILE")
     SESS_UNREAD=$(awk -F '\t' '$1 == "S" { print $2; exit }' "$SESS_FILE")
   else
     _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
@@ -2357,12 +2360,15 @@ elif [ -n "$SESS_ROOTS" ] && { [ "$SESS_ENGINE" = none ] || [ "$SESS_FAIL" -eq 1
 fi
 case "$SESS_TOTAL" in ''|*[!0-9]*) SESS_TOTAL=0 ;; esac
 case "$SESS_UNREAD" in ''|*[!0-9-]*) SESS_UNREAD=0 ;; esac
+case "$SESS_UNREAD_FILES" in ''|*[!0-9]*) SESS_UNREAD_FILES=0 ;; esac
 # Aider keeps its history in each project, found by the home scan, and is checked here. The file
 # name and the match are cleaned of control characters as the perl engine cleans its own, so a
 # tab in a cloned repo's folder name can't shift the fields.
 while IFS= read -r f; do
-  [ -n "$f" ] && [ -r "$f" ] || continue
-  SESS_TOTAL=$((SESS_TOTAL + 1)); [ "$SESS_DONE" -ge 0 ] && SESS_DONE=$((SESS_DONE + 1))
+  [ -n "$f" ] || continue
+  SESS_TOTAL=$((SESS_TOTAL + 1))
+  if [ ! -r "$f" ]; then SESS_UNREAD_FILES=$((SESS_UNREAD_FILES + 1)); continue; fi
+  [ "$SESS_DONE" -ge 0 ] && SESS_DONE=$((SESS_DONE + 1))
   _h=$(grep -aoE "$TR_KEYS" "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
   [ -n "$_h" ] && SESS_HITS="$SESS_HITS
 $_h"
@@ -2398,8 +2404,10 @@ if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
     !(($1 "|" $3) in pv) { pv[$1 "|" $3] = 1; ps[$1] = ps[$1] (ps[$1] == "" ? "" : ", ") $3 }
     END { for (i = 1; i <= k; i++) print name[i] "|" n[name[i]] "|" ps[name[i]] }' | sort -t '|' -k2,2nr -k1,1)
 fi
+# Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
+# check was stopped), or a folder that could not be read.
 SESS_PARTIAL=0
-if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt 0 ] || [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; }; }; then SESS_PARTIAL=1; fi
+if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do [ -d "$_p" ] && printf '%s\n' "$_a"; done | awk '!seen[$0]++')
 if [ "$N_SESS" -gt 0 ]; then progress x "Keys in $(plural "$N_SESS" "agent session file" "agent session files")"; fi
 
@@ -2774,17 +2782,21 @@ EOF
     wrap "$(plural "$SESS_NOTRUN" "agent session file was" "agent session files were") not checked: $_why." 8 "     ${YEL}!${RST}  " "        "
   elif [ "$SESS_DONE" -lt 0 ]; then
     wrap "Agent sessions were partly checked. Add --all-sessions to check all of them." 8 "     ${YEL}!${RST}  " "        "
-  elif [ "$SESS_DONE" -lt $((SESS_TOTAL - SESS_ZST)) ]; then
+  elif [ $((SESS_DONE + SESS_UNREAD_FILES)) -lt $((SESS_TOTAL - SESS_ZST)) ]; then
     wrap "Checked the newest $(commas "$SESS_DONE") of $(commas "$SESS_TOTAL") agent session files. $_all" 8 "     ${YEL}!${RST}  " "        "
-  elif [ "$N_SESS" -eq 0 ] && [ "$SESS_TOTAL" -gt 0 ] && [ "$SESS_UNREAD" -eq 0 ]; then
-    emit "     ${GRN}✓${RST}  No keys in $(plural "$(commas "$SESS_TOTAL")" "agent session file" "agent session files")."
+  elif [ "$N_SESS" -eq 0 ] && [ "$SESS_DONE" -gt 0 ] && [ "$SESS_UNREAD" -eq 0 ] && [ "$SESS_UNREAD_FILES" -eq 0 ]; then
+    # The files read, not the compressed ones, which are named below.
+    emit "     ${GRN}✓${RST}  No keys in $(plural "$(commas "$SESS_DONE")" "agent session file" "agent session files")."
   fi
-  if [ "$SESS_UNREAD" -gt 0 ]; then
-    wrap "Agent sessions were partly checked: $(plural "$SESS_UNREAD" "folder" "folders") could not be read." 8 "     ${YEL}!${RST}  " "        "
+  _ur=""
+  [ "$SESS_UNREAD" -gt 0 ] && _ur=$(plural "$SESS_UNREAD" "folder" "folders")
+  [ "$SESS_UNREAD_FILES" -gt 0 ] && _ur="${_ur:+$_ur and }$(plural "$SESS_UNREAD_FILES" "file" "files")"
+  if [ -n "$_ur" ]; then
+    wrap "Agent sessions were partly checked: $_ur could not be read." 8 "     ${YEL}!${RST}  " "        "
   elif [ "$SESS_UNREAD" -lt 0 ]; then
     wrap "Agent sessions were partly checked: some files or folders could not be read." 8 "     ${YEL}!${RST}  " "        "
   fi
-  [ "$SESS_ZST" -gt 0 ] && wrap "$(plural "$SESS_ZST" "compressed session file was" "compressed session files were") not checked." 8 "        " "        " "$DIM"
+  [ "$SESS_ZST" -gt 0 ] && wrap "$(plural "$SESS_ZST" "compressed session file was" "compressed session files were") not checked." 8 "     ${YEL}!${RST}  " "        "
   [ -n "$SESS_SEALED_FOUND" ] && wrap "$(printf '%s' "$SESS_SEALED_FOUND" | tr '\n' ',' | sed -e 's/,$//' -e 's/,/ and /g') conversation files are encrypted, so they were not checked." 8 "        " "        " "$DIM"
 fi
 

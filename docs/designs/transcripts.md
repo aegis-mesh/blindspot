@@ -87,10 +87,14 @@ machines will differ:
 - The check starts in the background when the home scan starts, and is stopped when the rest of
   the check is done. That is the signal; there is no timer.
 - `--all-sessions` waits for it to finish instead. (`--full` already means "every detail".)
-- Coverage counts only files with a done line. A file in flight when stopped, unreadable, or
-  compressed (`.zst`) counts as not checked, and compressed files are named. A folder that can't be
-  opened is counted too (perl reports how many, ripgrep only that there were some) and makes the
-  check "partly checked", never "no keys".
+- Coverage counts only files read to the end. A file in flight when stopped, unreadable, or
+  compressed (`.zst`) counts as not checked, and any of them makes the check "partly checked" in
+  the summary row. "No keys in N agent session files" counts only the files read, and is printed
+  when nothing was stopped or unreadable; compressed files are then named on their own line. A file
+  that can't be opened is named as one that could not be read (perl and .NET count them), never as
+  a time cut that ripgrep or `--all-sessions` would fix. A folder that can't be opened is counted
+  too (perl reports how many, ripgrep only that there were some) and makes the check "partly
+  checked", never "no keys".
 - ripgrep reports no per-file progress, so a stopped ripgrep run reads "partly checked", with no
   number.
 - Stopping: the perl parent traps TERM, HUP and INT, kills its workers and exits. Each worker
@@ -161,7 +165,7 @@ needs the Worker and the D1 schema to accept them: a separate decision.
 ## Not covered
 
 - Codex may compress sessions older than 7 days into `.jsonl.zst`. The feature is off by
-  default; such files are counted and named as not checked.
+  default; such files are counted and named as not checked, and make the check partial.
 - The encrypted `.pb` conversation stores of Windsurf and Antigravity (the plaintext transcript
   copies Antigravity keeps under `brain/` are read). Antigravity's newer `.db` conversations sit in
   the same folder as the `.pb` files and are not read yet.

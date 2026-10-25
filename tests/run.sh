@@ -117,7 +117,7 @@ has    "with no engine the sessions are named as not checked" 'agent session fil
 # A file that can't be read is not counted as checked.
 mkdir -p "$SE/unread/.claude/projects/p"; printf '{}\n' > "$SE/unread/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/unread/.claude/projects/p/b.jsonl"; chmod 000 "$SE/unread/.claude/projects/p/b.jsonl"
 HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-perl.txt"
-has    "perl: an unreadable session is not counted as checked" 'Checked the newest 1 of 2 agent session files' "$SE/unread-perl.txt"
+has    "perl: an unreadable session is not counted as checked" 'Agent sessions were partly checked: 1 file could not be read' "$SE/unread-perl.txt"
 HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-sum.txt"
 has    "the summary row is not a check mark after a partial check" 'Keys in plain text none in files; agent sessions partly checked' "$SE/unread-sum.txt"
 # A pipe nobody writes to: the perl workers open it and wait, and with the ripgrep engine the
@@ -211,6 +211,33 @@ for E in perl rg; do
 done
 SKIPPING=""
 chmod 755 "$SE/urdir/.claude/projects/locked"
+# A compressed session is not read: the check line counts only the files read, the summary row
+# says partly checked, and a home whose only session is compressed is never told no keys.
+mkdir -p "$SE/zst/.codex/sessions/2026/10" "$SE/zst1/.codex/sessions/2026/10"
+printf '{}\n' > "$SE/zst/.codex/sessions/2026/10/rollout-a.jsonl"; printf 'x' > "$SE/zst/.codex/sessions/2026/10/rollout-b.jsonl.zst"
+printf 'x' > "$SE/zst1/.codex/sessions/2026/10/rollout-b.jsonl.zst"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$SE/zst" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst-$E.txt"
+  has    "$E: the check line counts only the files read, not compressed ones" 'No keys in 1 agent session file\. ! 1 compressed session file was not checked' "$SE/zst-$E.txt"
+  HOME="$SE/zst" GIRD_CHECK_SESSIONS_ENGINE=$E GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst-sum-$E.txt"
+  has    "$E: and a compressed session makes the summary row partly checked" 'Keys in plain text none in files; agent sessions partly checked' "$SE/zst-sum-$E.txt"
+  HOME="$SE/zst1" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst1-$E.txt"
+  hasnot "$E: a home with only compressed sessions is never told no keys" 'No keys in' "$SE/zst1-$E.txt"
+done
+SKIPPING=""
+# An unreadable session file is named as one, never as a time cut that ripgrep or --all-sessions
+# would fix, and an unreadable Aider history is counted too instead of being skipped.
+mkdir -p "$SE/unr3/.claude/projects/p" "$SE/aidur/code/aid"
+for _f in a b c; do printf '{}\n' > "$SE/unr3/.claude/projects/p/$_f.jsonl"; done; chmod 000 "$SE/unr3/.claude/projects/p/b.jsonl"
+printf '#### hello\n' > "$SE/aidur/code/aid/.aider.chat.history.md"; chmod 000 "$SE/aidur/code/aid/.aider.chat.history.md"
+HOME="$SE/unr3" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/unr3.txt"
+has    "perl: an unreadable session file is named as one" 'Agent sessions were partly checked: 1 file could not be read\.' "$SE/unr3.txt"
+hasnot "perl: not as a time cut"                  'Checked the newest|Install ripgrep' "$SE/unr3.txt"
+hasnot "perl: and the sessions read are not called clean" 'No keys in' "$SE/unr3.txt"
+HOME="$SE/aidur" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/aidur.txt"
+has    "an unreadable Aider history is named as not read" 'Agent sessions were partly checked: 1 file could not be read\.' "$SE/aidur.txt"
+chmod 644 "$SE/unr3/.claude/projects/p/b.jsonl" "$SE/aidur/code/aid/.aider.chat.history.md"
 # A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
 mkdir -p "$SE/aidtab/code/a${_tab}b"
 printf '> export GROQ_API_KEY=%s\n' "gs""k_$(rnd 52)" > "$SE/aidtab/code/a${_tab}b/.aider.chat.history.md"
