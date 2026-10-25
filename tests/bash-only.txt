@@ -15,6 +15,10 @@ a planted file in another folder	tools/gen.sh is one bash tool that writes the d
 a planted file listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a platform advice with a $	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a platform path that is only the home	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform whose incident is not a leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a leak that no platform names	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an npm package of a platform leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a startup file of a platform leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a platform with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a platform with another found word	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a site file with a slash	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

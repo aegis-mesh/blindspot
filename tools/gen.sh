@@ -18,6 +18,10 @@ WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 rows() { grep -v '^#' "$1" | grep -v '^[[:space:]]*$'; }
 IDS=" $(rows data/incidents.tsv | cut -f1 | tr '\n' ' ')"
 ACT_IDS=" $(rows data/incidents.tsv | awk -F '\t' '$6 == "act" { printf "%s ", $1 }')"
+# A leak is a hosted platform's (data/platforms.tsv): it never means a compromised machine, so a platform
+# names only a leak, a leak is a platform's, and no package, extension or file of a leak is looked for.
+LEAK_IDS=" $(rows data/incidents.tsv | awk -F '\t' '$6 == "leak" { printf "%s ", $1 }')"
+PLAT_IDS=" $(rows data/platforms.tsv | cut -f1 | tr '\n' ' ')"
 # What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
@@ -48,9 +52,9 @@ PATH_OK='function path_ok(p,   r, k, v) {
 # names its provider once: gird.ai's counts are keyed on it. The regexes spell out counts
 # ([0-9][0-9][0-9][0-9], not [0-9]{4}): Debian 12's mawk has no {n} intervals and would refuse every line.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[$1]++ || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
-      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" '(NF != 6 && NF != 7) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
+      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF != 6 && NF != 7) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       # npm's placeholder for a removed package (0.0.1-security, or 0.0.1-security.0 for a few names) is never malware, and the scripts skip it.
-      rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" 'NF != 3 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /^0\.0\.1-security(\.[0-9]+)?$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
+      rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" -v leaks="$LEAK_IDS" 'NF != 3 || index(leaks, " " $3 " ") > 0 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /^0\.0\.1-security(\.[0-9]+)?$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' "$PATH_OK"'
         NF != 5 || $1 !~ /^(all|mac|linux|win)$/ || $2 !~ /^(read|sealed)$/ || $3 ~ /[\047"`$|\\]/ || !path_ok($4) { print "data/sessions.tsv: " $0 }'
       # A Python incident means a compromised machine: one whose level is update is refused. The os
@@ -58,8 +62,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       rows data/bad-pypi.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9_.]*$/ || $2 !~ /^[0-9][0-9A-Za-z.+!]*$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(all|mac|linux|win)$/ { print "data/bad-pypi.tsv: " $0 }'
       # A startup line carries a note, a temp line the advice of its incident (the same on each of its
       # temp lines); wiper and site lines carry -. PowerShell gets the note quoted, so it may hold a quote.
-      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" "$PATH_OK"'
-        { ok = NF == 6 && index(ids, " " $1 " ") > 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
+      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" -v leaks="$LEAK_IDS" "$PATH_OK"'
+        { ok = NF == 6 && index(ids, " " $1 " ") > 0 && index(leaks, " " $1 " ") == 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
           if ($3 ~ /^(wiper|startup)$/) ok = ok && path_ok($5)
           if ($3 == "wiper") ok = ok && $5 ~ /gh-token-monitor/
           if ($3 == "site") ok = ok && $5 ~ /^[A-Za-z0-9._-]+$/
@@ -89,7 +93,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if (!ok) print "data/outdated.tsv: " $0 }'
       # An extension that shipped malware means a compromised machine: an update-level incident is refused.
       rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" 'NF != 4 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
-      rows data/platforms.tsv | awk -F '\t' -v ids="$IDS" "$PATH_OK"'
+      rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
         !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')

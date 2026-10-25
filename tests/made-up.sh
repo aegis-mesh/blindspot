@@ -12,7 +12,7 @@ R=$1; C=$2; F=$3
 mkdir -p "$R"; cp -R gird-check.sh gird-check.ps1 tools data "$R/"
 T=$(printf '\t')
 cat >> "$R/data/incidents.tsv" <<EOF
-madeplat${T}Made Platform${T}October 2026${T}a made-up platform leak for the tests${T}https://example.com/madeplat${T}act
+madeplat${T}Made Platform${T}October 2026${T}a made-up platform leak for the tests${T}https://example.com/madeplat${T}leak
 madeworm${T}Made worm${T}October 2026${T}a made-up worm for the tests${T}https://example.com/madeworm${T}act
 madepy${T}Madepkg 9.9.9${T}October 2026${T}a made-up Python package for the tests${T}https://example.com/madepy/advisory${T}act
 madenpm${T}Made npm worm${T}October 2026${T}a made-up npm worm for the tests${T}https://example.com/madenpm${T}act
