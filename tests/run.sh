@@ -1635,6 +1635,7 @@ has    "Windows: keys in the shell's own home too"      'msyshome/\.bash_history
 has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
 has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
 has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/AppData/Local/Programs/Python/Python312/Lib/site-packages: mistralai 2\.4\.6' "$WORK/win1.txt"
+has    "Windows: next to a Python hit, a version to update keeps its fix" 'Update the Python packages listed in section 5 to a version without the malware' "$WORK/win1.txt"
 # An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
 mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"

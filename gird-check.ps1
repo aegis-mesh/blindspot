@@ -6317,7 +6317,9 @@ if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like fi
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
 $UpdFix = @(foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'update' -and (Incident-Advice $t) -cnotmatch '[Uu]pdate') { $t } }).Count -gt 0
 if (($MAL_HIT -eq 0 -or $MAL_LOCKONLY -eq 1) -and $UpdFix) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
-if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
+# A Python hit's fix follows its advisory for its own packages and deletes nothing else, so a version to
+# update keeps its fix beside one.
+if ($PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 if ($EXT_HIT -eq 0 -and $ExtUpd.Count -gt 0) { Add-Todo 5 'Uninstall the editor extensions listed in section 5. Their malware could not run on this system.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
 $ISSUES = $Todo.Count

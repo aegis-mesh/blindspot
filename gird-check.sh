@@ -7029,7 +7029,9 @@ N_AK=$(count_lines "$AK_LINKS")
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
 _upd_fix=0; for _t in $NPM_TAGS; do [ "$(incident_level "$_t")" = update ] || continue; case "$(incident_advice "$_t")" in *[Uu]pdate*) ;; *) _upd_fix=1 ;; esac; done
 { [ "$MAL_HIT" -eq 0 ] || [ "$MAL_LOCKONLY" -eq 1 ]; } && [ "$_upd_fix" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
-[ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
+# A Python hit's fix follows its advisory for its own packages and deletes nothing else, so a version to
+# update keeps its fix beside one.
+[ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 [ "$EXT_HIT" -eq 0 ] && [ -n "$EXT_UPD" ] && todo 5 "Uninstall the editor extensions listed in section 5. Their malware could not run on this system."
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
 
