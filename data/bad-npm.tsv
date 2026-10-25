@@ -10,13 +10,14 @@
 #   Axios, Bitwarden, OpenSearch, tensorlake and Injective: the versions their advisories name.
 #   TanStack wave, May 2026: every npm version in the affected-packages list of Wiz's post on it,
 #     each also named by a GitHub or OpenSSF malware advisory: the 42 @tanstack packages
-#     (GHSA-g7cv-rxg3-hmpx) and the packages the worm spread to (tanstack), the @mistralai builds
-#     (GHSA-3q49-cfcf-g5fm, GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc) and the @uipath builds (malware
-#     advisories such as GHSA-cx9h-9vrc-7393), versions to update because their maintainers say the
-#     malware could not run: Mistral (mistral), and UiPath, whose trust center says a bug left it
-#     non-functional and the packages pose no risk (uipath), and OpenSearch
-#     (GHSA-298w-vvm4-ww55). And wot-api 0.8.5, which Wiz's list leaves out: OpenSSF's MAL-2026-3591
-#     adds it to GitHub's 0.8.1 to 0.8.4, and npm's registry shows it published an hour after 0.8.4.
+#     (GHSA-g7cv-rxg3-hmpx) and the packages the worm spread to (tanstack), the OpenSearch client
+#     (GHSA-298w-vvm4-ww55, opensearch), and the @mistralai builds (GHSA-3q49-cfcf-g5fm,
+#     GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc) and the @uipath builds (malware advisories such as
+#     GHSA-cx9h-9vrc-7393), versions to update because their maintainers say the malware could not
+#     run: Mistral (mistral), and UiPath, whose trust center says a bug left it non-functional and the
+#     packages pose no risk (uipath). And wot-api 0.8.5, which Wiz's list leaves out: OpenSSF's
+#     MAL-2026-3591 adds it to GitHub's 0.8.1 to 0.8.4, and npm's registry shows it published an hour
+#     after 0.8.4.
 #     The five versions Wiz's list also names from April's SAP and Intercom compromise are the next
 #     campaign's.
 #   Mini Shai-Hulud, April 2026 (minishai), from Wiz's post on it: @cap-js/db-service 2.10.1,
@@ -48,8 +49,10 @@
 #     govern; and the packages the worm spread to (keyvspread), from @thiennq/docs-viewer at 09:38 on 4
 #     August, which Socket names, on: every version of every OpenSSF malware entry, not withdrawn, that
 #     names the "self-propagating npm supply-chain worm of 2026-08-04" (OSV's npm export of 25 October
-#     2026), 2224 versions of 432 packages. GitHub's malware advisories name the same versions for 370 of
-#     them and have none for 5; for 56, OpenSSF's entry adds one to five versions GitHub's leaves out.
+#     2026): 2249 versions of 432 packages, less the 25 of @servicetitan/suppress-warnings skipped below,
+#     so 2224. GitHub's malware advisories name the same versions for 370 of them and have none for 5;
+#     for 56, OpenSSF's entry adds one to five versions GitHub's leaves out; and for the 432nd,
+#     @servicetitan/suppress-warnings, GitHub's advisory names all 342 of its versions (skipped below).
 #   SANDWORM_MODE, February 2026: the 19 malicious packages of Socket's list (sandworm) and the
 #     four it lists as sleeper packages, not malicious yet (sandsleep): GitHub's malware advisories of
 #     the same day name every version of each (GHSA-9w7p-hqx2-pjjx, GHSA-m47j-9qfx-6jh4,
