@@ -1,7 +1,7 @@
 # Key types Blindspot looks for. One line each, tab separated, most specific first: the first
 # line whose start matches names the provider. After editing, run: bash tools/gen.sh
-# A new id must also be added to PROVIDERS in gird-website worker/check-stats.js, or gird.ai
-# drops it from the counts. Patterns are POSIX extended regexes that .NET reads the same way.
+# A new id must also be added to PROVIDERS in gird.ai's Worker, or gird.ai drops it from the
+# counts. Patterns are POSIX extended regexes that .NET reads the same way.
 # id	name	starts	pattern
 anthropic	Anthropic	sk-ant-	sk-ant-[A-Za-z0-9_-]{90,}
 openrouter	OpenRouter	sk-or-v1-	sk-or-v1-[a-f0-9]{64}
