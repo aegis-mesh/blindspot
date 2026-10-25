@@ -83,6 +83,7 @@ for E in perl rg; do
   sed -n '/Keys in agent sessions/,/^$/p' "$SE/$E.txt" > "$SE/$E.block"
   has    "$E: a key after an escaped newline in a Claude Code session" 'Claude Code +1 file: Hugging Face' "$SE/$E.txt"
   has    "$E: a key in a Codex session"            'Codex +1 file: OpenAI' "$SE/$E.txt"
+  has    "$E: a session in another root is listed under its own folder" '^ +~/\.codex/sessions/2026 +1 file$' "$SE/$E.block"
   has    "$E: a key in an Aider history"           'Aider +1 file: Groq' "$SE/$E.txt"
   hasnot "$E: a made-up key is not counted"        'Claude Code .*(Anthropic|AWS|GitHub)' "$SE/$E.block"
   has    "$E: a real key with few different characters counts" 'Codex +1 file: OpenAI, AWS' "$SE/$E.block"
@@ -94,6 +95,34 @@ done
 if [ -s "$SE/rg.block" ]; then
   if diff -q "$SE/perl.block" "$SE/rg.block" >/dev/null; then ok "perl and ripgrep report the same"; else bad "perl and ripgrep report the same"; diff "$SE/perl.block" "$SE/rg.block" | head -n 6; fi
 fi
+# Session files are listed by folder, one row each with its count.
+sessfix() {
+  _d=$1; shift
+  mkdir -p "$_d/.claude/projects" "$_d/AppData/Roaming" "$_d/AppData/Local/Temp"
+  for _s in "$@"; do
+    _p=${_s%:*}; _c=${_s##*:}
+    mkdir -p "$_d/.claude/projects/$_p/s1/subagents"
+    for _i in $(seq 1 "$_c"); do printf '{"t":"hf_Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAu end"}\n' > "$_d/.claude/projects/$_p/s1/subagents/agent-$_i.jsonl"; done
+  done
+}
+LONGP=$(printf 'long-folder-name-%.0s' 1 2 3 4 5 6)tail-marker-end
+sessfix "$SE/g1" proj-one:4
+sessfix "$SE/g2" proj-few:2 proj-many:5
+sessfix "$SE/g3" "$LONGP:12"
+G4=(); for _n in $(seq -w 1 23); do G4+=("p$_n:1"); done
+sessfix "$SE/g4" "${G4[@]}"
+for _g in g1 g2 g3 g4; do
+  HOME="$SE/$_g" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/$_g.txt" 2>&1
+  sed -n '/Keys in agent sessions/,/^$/p' "$SE/$_g.txt" > "$SE/$_g.block"
+done
+has    "several files in one folder collapse into one row with their count" '^ +~/\.claude/projects/proj-one +4 files$' "$SE/g1.block"
+hasnot "and are not listed one by one" 'agent-[0-9]+\.jsonl|subagents' "$SE/g1.block"
+many=$(grep -an 'proj-many' "$SE/g2.block" | cut -d: -f1); few=$(grep -an 'proj-few' "$SE/g2.block" | cut -d: -f1)
+if [ -n "$many" ] && [ -n "$few" ] && [ "$many" -lt "$few" ]; then ok "two folders are ordered by count"; else bad "two folders are ordered by count"; fi
+has    "a long folder is shortened in the middle and keeps its end" '^ +~/\.claude/projects/long-.*\.\.\..*tail-marker-end +12 files$' "$SE/g3.block"
+has    "more than 20 folders end with how many more" '^ +and 3 more folders$' "$SE/g4.block"
+if [ "$(grep -acE '^ +~/\.claude/projects/p[0-9]+ +1 file$' "$SE/g4.block")" -eq 20 ]; then ok "and show 20 of them"; else bad "and show 20 of them"; fi
+if cat "$SE"/g?.block | grep -av '✗' | LC_ALL=C awk 'length($0) > 80 { bad = 1 } END { exit bad }'; then ok "no session row is wider than 80 columns"; else bad "no session row is wider than 80 columns"; fi
 HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_SESSIONS_STOP_AFTER=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/part.txt"
 has    "a partial check says how much it covered" 'Checked the newest 2 of 6 agent session files' "$SE/part.txt"
 HOME="$WORK/clean" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$SE/clean.txt" 2>&1
