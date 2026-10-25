@@ -1036,11 +1036,17 @@ has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.
 # The AntV wave reached a second account (Wiz's list of the wave, GitHub's malware advisories of 19 May):
 # its packages are the wave's at the versions named, and a version beside one is not.
 rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/x"
-printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/openclaw-cn": {\n      "version": "0.3.0"\n    },\n    "node_modules/@starmind/collector-cli": {\n      "version": "0.3.10"\n    },\n    "node_modules/x/node_modules/openclaw-cn": {\n      "version": "0.3.1"\n    }\n  }\n}\n' > "$WORK/npw/code/x/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/openclaw-cn": {\n      "version": "0.3.0"\n    },\n    "node_modules/@starmind/collector-cli": {\n      "version": "0.3.10"\n    },\n    "node_modules/x/node_modules/openclaw-cn": {\n      "version": "0.3.1"\n    },\n    "node_modules/@antv/li-sam-assets": {\n      "version": "0.2.4"\n    },\n    "node_modules/x/node_modules/@antv/li-sam-assets": {\n      "version": "0.1.4"\n    },\n    "node_modules/yarsg": {\n      "version": "18.0.1"\n    },\n    "node_modules/x/node_modules/yarsg": {\n      "version": "1000.0.0"\n    }\n  }\n}\n' > "$WORK/npw/code/x/package-lock.json"
 HOME="$WORK/npw" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npw.txt"
 has    "a package of the AntV wave's second account is found" 'openclaw-cn 0\.3\.0 \(AntV account takeover, May 2026\)' "$WORK/npw.txt"
 has    "and another package of that account"          '@starmind/collector-cli 0\.3\.10 \(AntV account takeover, May 2026\)' "$WORK/npw.txt"
 hasnot "a version of openclaw-cn no advisory names is not flagged" 'openclaw-cn 0\.3\.1' "$WORK/npw.txt"
+# npm's registry dates @antv/li-sam-assets 0.1.4 to 2023 and yarsg 1000.0.0 to 2019, before their waves,
+# though an advisory names them: not flagged, while the wave's versions are.
+has    "a version of the AntV wave is found beside an older one" '@antv/li-sam-assets 0\.2\.4 \(AntV account takeover, May 2026\)' "$WORK/npw.txt"
+hasnot "a 2023 version only one advisory names is not flagged" 'li-sam-assets 0\.1\.4' "$WORK/npw.txt"
+has    "a SANDWORM_MODE version of yarsg is found"     'yarsg 18\.0\.1 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npw.txt"
+hasnot "a 2019 version of yarsg is not flagged"        'yarsg 1000\.0\.0' "$WORK/npw.txt"
 # SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
 # to remove them comes ahead of every fix that says to rotate, an incident's own advice to rotate too.
 rm -rf "$WORK/sw"; mkdir -p "$WORK/sw/code/s/node_modules/suport-color" "$WORK/sw/code/s/node_modules/@keyv/redis" "$WORK/sw/AppData/Roaming" "$WORK/sw/AppData/Local/Temp"

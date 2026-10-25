@@ -3183,7 +3183,6 @@ caspian-day-js 1.11.23 mastra
 @antv/li-editor 1.8.1 antv
 @antv/li-p2 1.9.2 antv
 @antv/li-p2 1.10.2 antv
-@antv/li-sam-assets 0.1.4 antv
 @antv/li-sam-assets 0.2.4 antv
 @antv/li-sam-assets 0.3.4 antv
 @antv/li-sdk 1.6.1 antv
@@ -5774,7 +5773,8 @@ locale-loader-pro * sandworm
 parse-compat * sandworm
 scan-store * sandworm
 veim * sandworm
-yarsg * sandworm
+yarsg 18.0.0 sandworm
+yarsg 18.0.1 sandworm
 ethres * sandsleep
 uudi * sandsleep
 @injectivelabs/sdk-ts 1.20.21 injective"
