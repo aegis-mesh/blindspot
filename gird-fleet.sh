@@ -353,7 +353,7 @@ FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper not_read protected end"
+FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper lock_only not_read protected end"
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -391,7 +391,7 @@ fl_parse() {
       key_providers) fl_ids_ok "$_v" "$PROVIDER_IDS" || return 1 ;;
       platforms) fl_ids_ok "$_v" "$FL_PLAT_IDS" || return 1 ;;
       incidents) fl_incidents_ok "$_v" || return 1 ;;
-      possible|updates) fl_incidents_ok "$_v" || return 1 ;;
+      possible|updates|lock_only) fl_incidents_ok "$_v" || return 1 ;;
       sessions_partial|wiper) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
       protected) case "$_v" in ok|refused|unknown) ;; *) return 1 ;; esac ;;
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
@@ -402,7 +402,7 @@ fl_parse() {
       history_keys) FA_history_keys=$_v ;; session_files) FA_session_files=$_v ;; sessions_partial) FA_sessions_partial=$_v ;;
       allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;;
       planted) FA_planted=$_v ;; possible) FA_possible=$_v ;; incidents) FA_incidents=$_v ;; platforms) FA_platforms=$_v ;;
-      on_open) FA_on_open=$_v ;; to_read) FA_to_read=$_v ;; updates) FA_updates=$_v ;; wiper) FA_wiper=$_v ;;
+      on_open) FA_on_open=$_v ;; to_read) FA_to_read=$_v ;; updates) FA_updates=$_v ;; wiper) FA_wiper=$_v ;; lock_only) FA_lock_only=$_v ;;
       not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;;
     esac
     shift
@@ -412,7 +412,9 @@ fl_parse() {
 fl_copy_ok() { # the copy each account runs: owned by root, nobody else can change it
   [ -d "$FL_COPYDIR" ] && [ ! -L "$FL_COPYDIR" ] && [ -f "$FL_COPY" ] && [ ! -L "$FL_COPY" ] || return 1
   [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPYDIR" 2>/dev/null)" = "$FL_OWNER 755" ] || return 1
-  [ "$(/usr/bin/stat -f '%u %Lp %l' "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644 1" ]
+  # Not its link count: any account can hard-link a file in /tmp, and a link can't change a file
+  # root owns at 0644, so counting links would let one account stop every later account's check.
+  [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644" ]
 }
 fl_json_list() { _o=""; for _x in $1; do _o="${_o:+$_o,}\"$_x\""; done; printf '[%s]' "$_o"; }
 fl_json_incidents() { _o=""; for _x in $1; do _o="${_o:+$_o,}{\"id\":\"$_x\",\"level\":\"$(incident_level "$_x")\"}"; done; printf '[%s]' "$_o"; }
@@ -455,7 +457,14 @@ EOF
     case "$_io" in all|mac) ;; *) continue ;; esac
     case "$_ik" in
       temp) # shellcheck disable=SC2086  # the name may end in a glob
-        for _m in "$FL_SHARED_TMP"/$_ip; do { [ -L "$_m" ] || [ -e "$_m" ]; } && { FM_INC="$FM_INC $_ii"; break; }; done ;;
+        # Never through a link, which any account can make. A marker that must be someone's own counts
+        # for the Mac only when root made it, under its one name; one an account owns is that
+        # account's finding, which its own run looks for in /tmp.
+        for _m in "$FL_SHARED_TMP"/$_ip; do
+          [ -e "$_m" ] && [ ! -L "$_m" ] || continue
+          if [ "$_iown" = yes ] && [ "$(/usr/bin/stat -f '%u %l' "$_m" 2>/dev/null)" != "$FL_OWNER 1" ]; then continue; fi
+          FM_INC="$FM_INC $_ii"; break
+        done ;;
       wiper|startup)
         # A marker that must be the person's own (data/indicators.tsv) is each account's own
         # finding, checked by its account run; any account could leave one in a shared folder.
@@ -468,7 +477,8 @@ $IND_TABLE
 EOF
   # The LiteLLM loader holds its lock file open while it runs.
   _lk="$FL_SHARED_TMP/remote_code_loader.lock"
-  if [ -f "$_lk" ] && [ ! -L "$_lk" ]; then
+  # Only a lock file root made: one an account owns is that account's marker, found by its own run.
+  if [ -f "$_lk" ] && [ ! -L "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
     fl_timed 10 "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk"
     [ -s "$FL_TMP/lsof" ] && FM_INC="$FM_INC litellm"
     [ "$FL_TIMEOUT" -eq 1 ] && FM_COMPLETE=false
@@ -598,9 +608,16 @@ fleet_main() {
       if [ "$FA_wiper" -eq 1 ]; then _act=1; _lines="$_lines$NL    x  gh-token-monitor is installed: stop and remove it before anyone revokes a GitHub token"; _inv="$_inv; wiper"; fi
       [ -n "$_ia" ] && _act=1
       for _x in $_ia; do _lines="$_lines$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
-      [ -n "$_ia" ] && _inv="$_inv; act$(printf ' %s' $_ia | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
-      for _x in $_iu; do _upd=1; _lines="$_lines$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
-      [ -n "$_iu" ] && _inv="$_inv; review$(printf ' %s' $_iu | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
+      [ -n "$_ia" ] && _inv="$_inv; incidents$(printf ' %s' $_ia | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
+      # A bad npm version only in a lockfile, nothing installed: act if that project was installed.
+      if [ -n "$FA_lock_only" ]; then
+        _act=1; for _x in $FA_lock_only; do _lines="$_lines$NL    x  A lockfile lists $(incident_name "$_x") versions, nothing installed: act now if that project was installed"; done
+        _inv="$_inv; lockfile $(printf '%s' "$FA_lock_only" | /usr/bin/tr ' ' ',')"
+      fi
+      for _x in $_iu; do
+        _upd=1; _s=$(incident_summary "$_x")
+        if [ -n "$_s" ]; then _lines="$_lines$NL    !  $_s"; else _lines="$_lines$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; fi
+      done
       if [ "$FA_planted" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Files a worm plants in a project, or settings that run one: $FA_planted"; _inv="$_inv; planted $FA_planted"; fi
       if [ -n "$FA_yolo" ]; then _upd=1; for _x in $FA_yolo; do _lines="$_lines$NL    !  $(fl_agent_name "$_x") set to run commands without asking"; done; _inv="$_inv; run-without-asking $(printf '%s' "$FA_yolo" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_key_files" -gt 0 ]; then
@@ -619,7 +636,9 @@ fleet_main() {
       if [ "$FA_on_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Project settings that act when an agent or editor opens the folder: $FA_on_open"; _inv="$_inv; on-open $FA_on_open"; fi
       if [ "$FA_to_read" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Files named like the ones worms plant, to read: $FA_to_read"; _inv="$_inv; to-read $FA_to_read"; fi
       for _x in $FA_updates; do _upd=1; _lines="$_lines$NL    !  A version to update: $(incident_name "$_x")"; done
-      [ -n "$FA_updates" ] && _inv="$_inv; update $(printf '%s' "$FA_updates" | /usr/bin/tr ' ' ',')"
+      # Incidents and package versions at the update level, one item in the inventory value.
+      _ul=$(printf '%s\n' $_iu $FA_updates | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ',' -)
+      [ -n "$_ul" ] && _inv="$_inv; update $_ul"
       for _x in $FA_possible; do
         _upd=1
         if [ "$_x" = litellm ]; then _lines="$_lines$NL    !  A leftover file that can come from the LiteLLM malware"
@@ -636,7 +655,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
@@ -701,7 +720,9 @@ fleet_main() {
     if [ "$_nck" -eq "$N_ACC" ]; then printf '\n  This Mac: %s checked\n' "$(fl_plural "$N_ACC" "account" "accounts")"
     else printf '\n  This Mac: %s of %s checked\n' "$_nck" "$(fl_plural "$N_ACC" "account" "accounts")"; fi
     printf '%s\n' "$TERM_VIEW"
-    if [ -n "$_ml" ]; then printf '\n  %-44s%s%s\n' "This Mac" "$(case "$FM_OUT" in act) echo "act now" ;; not_checked) echo "partly checked" ;; *) echo "review" ;; esac)" "$_ml"; fi
+    # The word is set first: bash 3.2, macOS's own, ends a $( ) at a case pattern's ")".
+    case "$FM_OUT" in act) _mw="act now" ;; not_checked) _mw="partly checked" ;; *) _mw=review ;; esac
+    if [ -n "$_ml" ]; then printf '\n  %-44s%s%s\n' "This Mac" "$_mw" "$_ml"; fi
     [ -n "$FL_FAILED" ] && printf '\n  The run stopped: the script copy each account runs was changed.\n'
     if [ "$FL_SAVED" -eq 1 ]; then printf '\n  Saved: %s/last.json\n' "$FL_STATE"; else printf '\n  Not saved: %s could not be written safely.\n' "$FL_STATE"; fi
     if [ "$TTY" -eq 1 ]; then

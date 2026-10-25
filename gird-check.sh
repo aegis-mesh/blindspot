@@ -2004,16 +2004,18 @@ done <<EOF
 $SITES_ALL
 EOF
 MARKS=""; _seen_t="|"
-# An account run looks only in the account's own temp folder, the one macOS gives each account under
-# /var/folders: the shared one is the Mac's, checked by root.
+# An account run looks in the account's own temp folder, the one macOS gives each account under
+# /var/folders, and in the shared /tmp only for markers that must be the account's own (owner yes):
+# the other markers there are the Mac's, checked by root.
 _utmp=""
 if [ "$ACCTRUN" -eq 1 ]; then _utmp=${GIRD_CHECK_FLEET_USER_TMP:-$(/usr/bin/getconf DARWIN_USER_TEMP_DIR 2>/dev/null)}; _utmp=${_utmp%/}; fi
 for t in /tmp "${TMPDIR%/}" "$WTEMP" "$_utmp"; do
   [ -n "$t" ] && [ -d "$t" ] || continue
-  [ "$ACCTRUN" -eq 1 ] && [ "$t" != "$_utmp" ] && continue
+  if [ "$ACCTRUN" -eq 1 ]; then case "$t" in /tmp|"$_utmp") ;; *) continue ;; esac; fi
   case "$_seen_t" in *"|$t|"*) continue ;; esac; _seen_t="$_seen_t$t|"
   while read -r _i _own _g; do
     [ -n "$_g" ] || continue
+    [ "$ACCTRUN" -eq 1 ] && [ "$t" = /tmp ] && [ "$t" != "$_utmp" ] && [ "$_own" != yes ] && continue
     # shellcheck disable=SC2086  # the name may end in a glob
     for m in "$t"/$_g; do
       [ -e "$m" ] || continue
@@ -3385,7 +3387,14 @@ fleet_agent_id() { # an agent's name in data/auto-approve.tsv: its id in AGENTS,
 }
 if [ "$ACCTRUN" -eq 1 ]; then
   _yolo=$(printf '%s\n' "$AA_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
-  _inc=$(printf '%s\n' $NPM_TAGS $EXT_TAGS $PY_HITS $IND_HITS | fleet_ids)
+  # A bad npm version found only in a lockfile, nothing installed (MAL_LOCKONLY), is act-if-installed:
+  # its act-level incidents go in lock_only, worded as the person's report words them.
+  _npm_inc=$NPM_TAGS; _lock=""
+  if [ "$MAL_LOCKONLY" -eq 1 ]; then
+    _lock=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] && printf '%s\n' "$_t"; done | fleet_ids)
+    _npm_inc=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" != act ] && printf '%s\n' "$_t"; done)
+  fi
+  _inc=$(printf '%s\n' $_npm_inc $EXT_TAGS $PY_HITS $IND_HITS | fleet_ids)
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
   _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + N_NL_DIRS + _fe))
@@ -3418,6 +3427,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
     echo "to_read=$N_LOOK"
     echo "updates=$(printf '%s\n' "$PY_UPD" | cut -f1 | fleet_ids)"
     echo "wiper=$WIPER_HIT"
+    echo "lock_only=$_lock"
     echo "not_read=$_nr"
     echo "protected=$FLEET_PROT"
     echo "end=1"

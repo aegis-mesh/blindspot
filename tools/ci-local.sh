@@ -20,8 +20,8 @@ job() { # name command...
 skip() { printf '  %-34s skipped: %s\n' "$1" "$2"; SKIPPED=1; }
 
 shellcheck_run() {
-  if command -v shellcheck >/dev/null 2>&1; then shellcheck -s bash -S warning gird-check.sh tests/*.sh
-  else pipx run --spec shellcheck-py==0.10.0.1 shellcheck -s bash -S warning gird-check.sh tests/*.sh; fi
+  if command -v shellcheck >/dev/null 2>&1; then shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh
+  else pipx run --spec shellcheck-py==0.10.0.1 shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh; fi
 }
 # The Ubuntu jobs: the repo mounted read-only, the tools the CI image has, run as a user, not root.
 in_linux() { # image command [extra docker args]

@@ -1816,6 +1816,7 @@ echo "fleet mode (--all-users)"
 FL=$WORK/fleet; mkdir -p "$FL"
 FSKIP=""; [ "$(uname -s)" = Darwin ] || FSKIP="fleet mode is built for macOS only so far: its root side reads dscl and BSD stat"
 U=$(id -u); FLL=$PWD/tests/fleet-launch.sh; FLEETSH=$PWD/gird-fleet.sh
+FLBASH=/bin/bash   # what an MDM runs it with: macOS's own bash, 3.2
 fl_home() { mkdir -p "$FL/$1/Library/Safari"; }
 for h in asha itadmin clean upd linker odd shared keeper; do fl_home "$h"; done
 bash tests/make-fixture.sh "$FL/asha" "$FL/keys-asha.txt" > /dev/null; mkdir -p "$FL/asha/Library/Safari"
@@ -1840,7 +1841,7 @@ fl_run() { # out-prefix args...: a simulated root run; stdout, stderr, exit code
   _p=$1; shift; : > "$FL/argv.log"
   GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
     GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" \
-    bash "$FLEETSH" --all-users "$@" > "$FL/$_p.out" 2> "$FL/$_p.err" < /dev/null
+    "$FLBASH" "$FLEETSH" --all-users "$@" > "$FL/$_p.out" 2> "$FL/$_p.err" < /dev/null
   echo "$?" > "$FL/$_p.rc"
   python3 tests/fleet-flat.py "$FL/state/last.json" > "$FL/$_p.flat" 2>/dev/null || : > "$FL/$_p.flat"
 }
@@ -1875,7 +1876,7 @@ has    "fleet: and where the result was saved" "^  Saved: $FL/state/last.json\$"
 hasnot "fleet: no Argus note without a terminal" 'gird\.ai/argus|Argus' "$FL/term.out"
 if command -v script > /dev/null 2>&1; then
   GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-    GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" script -q /dev/null bash "$FLEETSH" --all-users < /dev/null > "$FL/tty.out" 2>&1
+    GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" script -q /dev/null "$FLBASH" "$FLEETSH" --all-users < /dev/null > "$FL/tty.out" 2>&1
   has  "fleet: the Argus note once, with a terminal" 'Roll it out through the MDM you' "$FL/tty.out"
   if LC_ALL=C grep -aq "$(printf '\033')" "$FL/tty.out"; then bad "fleet: no colours, even on a terminal"; else ok "fleet: no colours, even on a terminal"; fi
 else skip "fleet: the Argus note once, with a terminal" "needs script(1) for a terminal"; skip "fleet: no colours, even on a terminal" "needs script(1) for a terminal"; fi
@@ -1927,7 +1928,7 @@ rm -f "$FL/mode-asha"
 printf 'hold\n' > "$FL/mode-asha"
 T0=$SECONDS
 ( GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-    GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$FLEETSH" --all-users --deadline=40 --summary-to-stdout < /dev/null 2>&1; echo "rc=$?" ) | cat > "$FL/hold.out"
+    GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "$FLBASH" "$FLEETSH" --all-users --deadline=40 --summary-to-stdout < /dev/null 2>&1; echo "rc=$?" ) | cat > "$FL/hold.out"
 T1=$((SECONDS - T0))
 python3 tests/fleet-flat.py "$FL/state/last.json" > "$FL/hold.flat" 2>/dev/null
 if [ "$T1" -lt 40 ] && grep -q '^rc=12$' "$FL/hold.out"; then ok "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s"; else bad "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s, $(cat "$FL/hold.out")"; fi
@@ -1992,30 +1993,30 @@ has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspo
 mkdir -p "$FL/inst"; cp "$SCRIPT" "$FL/inst/gird-check.sh"
 python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\ncase \"\${1:-}\" in --inventory) ;; *) set -- --all-users --summary-to-stdout --deadline=600 ;; esac\n' + l[1])" "$FLEETSH" "$FL/inst/mdm-item.sh"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$FL/inst/mdm-item.sh" / "$(hostname)" root < /dev/null > "$FL/mdm-item.out" 2>&1
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "$FLBASH" "$FL/inst/mdm-item.sh" / "$(hostname)" root < /dev/null > "$FL/mdm-item.out" 2>&1
 FLVER=$(sed -n '2s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p' "$SCRIPT")
 has    "fleet: an MDM item's options line works whatever arguments the MDM adds" "^blindspot act accounts=2 act=1 review=1 not_checked=0 v=${FLVER:-no-version} at=" "$FL/mdm-item.out"
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FL/inst/mdm-item.sh" --inventory < /dev/null > "$FL/mdm-inv.out" 2>&1
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FL/inst/mdm-item.sh" --inventory < /dev/null > "$FL/mdm-inv.out" 2>&1
 has    "fleet: with the options line in the file, --inventory still only reads the result" '^v1 act ' "$FL/mdm-inv.out"
 python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\ncase \"\${1:-}\" in --inventory) ;; *) set -- --all-users --summary-to-stdout --hash-accounts=fleet-test-secret-42 ;; esac\n' + l[1])" "$FLEETSH" "$FL/inst/mdm-secret.sh"
 rm -f "$FL/copycheck"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" FLL_COPYCHECK=fleet-test-secret-42 bash "$FL/inst/mdm-secret.sh" < /dev/null > "$FL/mdm-secret.out" 2>&1
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" FLL_COPYCHECK=fleet-test-secret-42 "$FLBASH" "$FL/inst/mdm-secret.sh" < /dev/null > "$FL/mdm-secret.out" 2>&1
 if [ "$(tr -d '\n' < "$FL/copycheck" 2>/dev/null)" = 00 ] && grep -q '^blindspot act ' "$FL/mdm-secret.out"; then ok "fleet: the copy each account runs leaves out the options line and its secret"; else bad "fleet: the copy each account runs leaves out the options line and its secret" "$(cat "$FL/copycheck" 2>/dev/null)"; fi
 if cmp -s "$FL/copy-seen.sh" "$SCRIPT"; then ok "fleet: and removes nothing else"; else bad "fleet: and removes nothing else" "$(diff "$SCRIPT" "$FL/copy-seen.sh" 2>&1 | head -n 4)"; fi
 # Root runs for every account only what root alone can change.
 mkdir -p "$FL/gw"; cp "$SCRIPT" "$FLEETSH" "$FL/gw/"; chmod 775 "$FL/gw"; : > "$FL/argv.log"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  FLL_DIR="$FL" bash "$FL/gw/gird-fleet.sh" --all-users < /dev/null > "$FL/gw.out" 2> "$FL/gw.err"; RC=$?
+  FLL_DIR="$FL" "$FLBASH" "$FL/gw/gird-fleet.sh" --all-users < /dev/null > "$FL/gw.out" 2> "$FL/gw.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above them must be owned by root and writable by no one else' "$FL/gw.err"; then ok "fleet: a script in a folder others can write to is refused"; else bad "fleet: a script in a folder others can write to is refused" "exit $RC $(cat "$FL/gw.err")"; fi
 chmod 755 "$FL/gw"
 mkdir -p "$FL/gw2"; cp "$SCRIPT" "$FLEETSH" "$FL/gw2/"; chmod 664 "$FL/gw2/gird-check.sh"; : > "$FL/argv.log"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  FLL_DIR="$FL" bash "$FL/gw2/gird-fleet.sh" --all-users < /dev/null > "$FL/gw2.out" 2> "$FL/gw2.err"; RC=$?
+  FLL_DIR="$FL" "$FLBASH" "$FL/gw2/gird-fleet.sh" --all-users < /dev/null > "$FL/gw2.out" 2> "$FL/gw2.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above them must be owned by root and writable by no one else' "$FL/gw2.err"; then ok "fleet: a gird-check.sh others can write to is refused"; else bad "fleet: a gird-check.sh others can write to is refused" "exit $RC $(cat "$FL/gw2.err")"; fi
 mkdir -p "$FL/alone"; cp "$FLEETSH" "$FL/alone/"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  FLL_DIR="$FL" bash "$FL/alone/gird-fleet.sh" --all-users < /dev/null > /dev/null 2> "$FL/alone.err"; RC=$?
+  FLL_DIR="$FL" "$FLBASH" "$FL/alone/gird-fleet.sh" --all-users < /dev/null > /dev/null 2> "$FL/alone.err"; RC=$?
 if [ "$RC" -eq 13 ] && grep -q 'gird-check.sh must sit next to gird-fleet.sh' "$FL/alone.err"; then ok "fleet: without gird-check.sh next to it, it stops and says why"; else bad "fleet: without gird-check.sh next to it, it stops and says why" "exit $RC $(cat "$FL/alone.err")"; fi
 # Modes with no owner bits, read with three digits: 002 and 020 are writable by others, not "2" and "20".
 # Nobody but root can run a script that sits in or below such a mode, so a test run adds one such path
@@ -2023,23 +2024,55 @@ if [ "$RC" -eq 13 ] && grep -q 'gird-check.sh must sit next to gird-fleet.sh' "$
 for M in 002 020; do
   : > "$FL/mode$M"; chmod "$M" "$FL/mode$M"
   GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-    GIRD_CHECK_FLEET_CHECK_ALSO="$FL/mode$M" FLL_DIR="$FL" bash "$FLEETSH" --all-users < /dev/null > "$FL/m$M.out" 2> "$FL/m$M.err"
+    GIRD_CHECK_FLEET_CHECK_ALSO="$FL/mode$M" FLL_DIR="$FL" "$FLBASH" "$FLEETSH" --all-users < /dev/null > "$FL/m$M.out" 2> "$FL/m$M.err"
   has "fleet: a path with mode $M is refused as writable by others" 'every folder above them must be owned by root and writable by no one else' "$FL/m$M.err"
 done
 # Run by a relative path from the script's folder, as the guide shows; from standard input it can't copy itself.
 ( cd "$(dirname "$FLEETSH")" && GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash gird-fleet.sh --all-users --summary-to-stdout < /dev/null > "$FL/rel.out" 2>&1 )
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "$FLBASH" gird-fleet.sh --all-users --summary-to-stdout < /dev/null > "$FL/rel.out" 2>&1 )
 has    "fleet: runs by a relative path from the script's folder" '^blindspot act accounts=2 act=1 review=1 not_checked=0 ' "$FL/rel.out"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  FLL_DIR="$FL" bash -s -- --all-users < "$FLEETSH" > "$FL/stdin.out" 2> "$FL/stdin.err"; RC=$?
+  FLL_DIR="$FL" "$FLBASH" -s -- --all-users < "$FLEETSH" > "$FL/stdin.out" 2> "$FL/stdin.err"; RC=$?
 if [ "$RC" -eq 13 ] && grep -q 'run it from a file: it copies gird-check.sh from its own folder' "$FL/stdin.err"; then ok "fleet: from standard input it fails, and says why"; else bad "fleet: from standard input it fails, and says why" "exit $RC $(cat "$FL/stdin.err")"; fi
 
-# The Mac's shared places.
+# The Mac's shared places. In a test run root's stand-in owns the stand-in shared temp folder's files,
+# so a marker there is one root made; one in the real /tmp is the account's own.
 : > "$FL/sharedtmp/.pc_once_x"; : > "/tmp/.pc_once_blindspot-fleet-test-$$"
 fl_run machine
 rm -f "$FL/sharedtmp/.pc_once_x" "/tmp/.pc_once_blindspot-fleet-test-$$"
 has    "fleet: a malware marker in the shared temp folder is a machine finding" '^machine\.incidents=litellm$' "$FL/machine.flat"
-hasnot "fleet: and never an account's" '^itadmin\.incidents=.*litellm' "$FL/machine.flat"
+has    "fleet: a marker an account owns in /tmp is that account's finding" '^itadmin\.incidents=.*litellm' "$FL/machine.flat"
+# A marker with another name linked to it, or a symbolic link, could put anyone's file under the name.
+: > "$FL/plainfile"; ln "$FL/plainfile" "$FL/sharedtmp/.pc_sq_linked"; ln -s /etc/hosts "$FL/sharedtmp/.pc_e_sym"
+fl_run machlink --json
+rm -f "$FL/sharedtmp/.pc_sq_linked" "$FL/sharedtmp/.pc_e_sym" "$FL/plainfile"
+hasnot "fleet: a linked marker in the shared temp folder is not the Mac's finding" '^machine\.incidents=.*litellm' "$FL/machlink.flat"
+# The readable report under macOS's own bash, with a finding on the Mac's row: a loader holding its lock.
+printf '#!/bin/sh\necho 4242\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" fl_run macterm
+rm -f "$FL/sharedtmp/remote_code_loader.lock"
+has    "fleet: the readable report names the Mac's finding under macOS's bash" '^  This Mac +act now$' "$FL/macterm.out"
+hasnot "fleet: and prints no shell error" 'syntax error|command substitution' "$FL/macterm.err"
+# A hard link to root's script copy changes nothing in it, so it stops no account's check.
+users "upd:$U:$FL/upd:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+printf 'hardlink\n' > "$FL/mode-upd"
+fl_run hlink --json
+rm -f "$FL/mode-upd" "$FL/copy-hardlink"
+if ! grep -q '^outcome=failed$' "$FL/hlink.flat" && grep -q '^itadmin\.complete=true$' "$FL/hlink.flat"; then ok "fleet: a hard link to the script copy stops no account's check"; else bad "fleet: a hard link to the script copy stops no account's check" "$(grep -E '^(outcome|itadmin\.(complete|not_checked))=' "$FL/hlink.flat" | tr '\n' ' ')"; fi
+# A bad npm version only in a lockfile, nothing installed: act if that project was installed, as the
+# person's report says; and an update-level incident's own fix (Injective's).
+for h in lk inj; do fl_home "$h"; done
+mkdir -p "$FL/lk/code/app" "$FL/inj/code/w/node_modules/@injectivelabs/sdk-ts"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$FL/lk/code/app/package-lock.json"
+printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21"}}}\n' > "$FL/inj/code/w/package-lock.json"
+printf '{"name":"@injectivelabs/sdk-ts","version":"1.20.21"}\n' > "$FL/inj/code/w/node_modules/@injectivelabs/sdk-ts/package.json"
+users "lk:$U:$FL/lk:/bin/zsh" "inj:$U:$FL/inj:/bin/zsh"
+fl_run lkinj --json
+has    "fleet: a bad npm version only in a lockfile is its own field" '^lk\.lockfile_only_incidents=axios$' "$FL/lkinj.flat"
+has    "fleet: not one of the incidents" '^lk\.incidents=$' "$FL/lkinj.flat"
+fl_run lkinjterm
+has    "fleet: and its line says to act if that project was installed" 'A lockfile lists Axios takeover versions, nothing installed: act now if that project was installed' "$FL/lkinjterm.out"
+has    "fleet: an update-level incident with a fix of its own shows that fix" 'Injective SDK: move the funds out of its wallets' "$FL/lkinjterm.out"
 
 # The saved result's folder.
 users "itadmin:$U:$FL/itadmin:/bin/zsh"
@@ -2054,18 +2087,18 @@ fl_run smode
 if [ "$(stat -f %Lp "$FL/state")" = 700 ] && [ -f "$FL/state/last.json" ]; then ok "fleet: a saved-result folder anyone can read is made again"; else bad "fleet: a saved-result folder anyone can read is made again"; fi
 : > "$FL/argv.log"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE=/var/empty \
-  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" bash "$FLEETSH" --all-users --summary-to-stdout < /dev/null > "$FL/sother.out" 2>&1; RC=$?
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "$FLBASH" "$FLEETSH" --all-users --summary-to-stdout < /dev/null > "$FL/sother.out" 2>&1; RC=$?
 if [ "$RC" -eq 13 ] && grep -q '^blindspot failed ' "$FL/sother.out" && [ ! -e /var/empty/last.json ]; then ok "fleet: a saved-result folder owned by someone else is never written to"; else bad "fleet: a saved-result folder owned by someone else is never written to" "exit $RC $(cat "$FL/sother.out")"; fi
 
 # The inventory value and the reader an MDM runs at check-in.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 rm -rf "$FL/state"
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/inv0.out" 2>&1
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FLEETSH" --inventory > "$FL/inv0.out" 2>&1
 has    "fleet: --inventory says none before the first run" '^none$' "$FL/inv0.out"
 fl_run inv
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/inv1.out" 2>&1
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FLEETSH" --inventory > "$FL/inv1.out" 2>&1
 if [ "$(cat "$FL/inv1.out")" = "$(sed -n 's/^inventory=//p' "$FL/inv.flat")" ] && grep -qE '^v1 act 20[0-9-]{8}T[0-9]{2}:[0-9]{2}Z \| asha: act ' "$FL/inv1.out"; then ok "fleet: --inventory prints the saved inventory value"; else bad "fleet: --inventory prints the saved inventory value" "$(cat "$FL/inv1.out")"; fi
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --result-tags > "$FL/inv-tags.out" 2>&1
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FLEETSH" --inventory --result-tags > "$FL/inv-tags.out" 2>&1
 has    "fleet: --result-tags puts the value between Jamf's result tags" '^<result>v1 act .*</result>$' "$FL/inv-tags.out"
 if [ "$(wc -c < "$FL/inv1.out")" -le 256 ] && ! grep -qE '/|\.zshrc|\.env' "$FL/inv1.out"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
 python3 - "$FL/state/last.json" <<'PY'
@@ -2073,7 +2106,7 @@ import re, sys
 p = sys.argv[1]; s = open(p).read()
 open(p, 'w').write(re.sub(r'"checked_epoch": \d+', '"checked_epoch": 1000000000', s))
 PY
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --stale-days=3 > "$FL/inv2.out" 2>&1
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FLEETSH" --inventory --stale-days=3 > "$FL/inv2.out" 2>&1
 has    "fleet: --inventory says stale when the last run is too old" '^stale: last run 2001-09-09T' "$FL/inv2.out"
 FLU=(); for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14; do FLU+=("person$i:$U:$FL/many$i:/bin/zsh"); fl_home "many$i"; done
 FLU+=("person15:$U:$FL/gone15:/bin/zsh")   # its home is missing: not_checked, listed last
@@ -2129,17 +2162,17 @@ _unguarded=$(awk '/^[[:space:]]*#/ { next } /GIRD_CHECK_FLEET_/ { if (/GIRD_CHEC
 if [ -z "$_unguarded" ]; then ok "fleet: every test setting is read only behind the not-root guard"; else bad "fleet: every test setting is read only behind the not-root guard" "$_unguarded"; fi
 
 # Refusals.
-bash "$FLEETSH" --all-users > "$FL/noroot.out" 2> "$FL/noroot.err"; RC=$?
+"$FLBASH" "$FLEETSH" --all-users > "$FL/noroot.out" 2> "$FL/noroot.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FL/noroot.out" ] && grep -q 'needs root' "$FL/noroot.err"; then ok "fleet: not root exits 13"; else bad "fleet: not root exits 13" "exit $RC"; fi
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" FLL_DIR="$FL" \
-  bash "$FLEETSH" --all-users --all > /dev/null 2> "$FL/all.err"; RC=$?
+  "$FLBASH" "$FLEETSH" --all-users --all > /dev/null 2> "$FL/all.err"; RC=$?
 if [ "$RC" -eq 13 ] && grep -q -- '--all is refused' "$FL/all.err"; then ok "fleet: --all with --all-users is refused"; else bad "fleet: --all with --all-users is refused" "exit $RC"; fi
 # As root, every test setting is ignored: GIRD_CHECK_FLEET_REAL_ROOT takes the path a real root run takes.
 : > "$FL/argv.log"; rm -rf "$FL/state-root"
 GIRD_CHECK_FLEET_REAL_ROOT=1 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
-  GIRD_CHECK_FLEET_STATE="$FL/state-root" FLL_DIR="$FL" bash "$FLEETSH" --all-users > /dev/null 2> "$FL/realroot.err"; RC=$?
+  GIRD_CHECK_FLEET_STATE="$FL/state-root" FLL_DIR="$FL" "$FLBASH" "$FLEETSH" --all-users > /dev/null 2> "$FL/realroot.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && [ ! -e "$FL/state-root" ] && grep -q 'needs root' "$FL/realroot.err"; then ok "fleet: run as root, the test settings are ignored"; else bad "fleet: run as root, the test settings are ignored" "exit $RC"; fi
-bash "$FLEETSH" --json > /dev/null 2>&1; RC=$?
+"$FLBASH" "$FLEETSH" --json > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "fleet: --json without --all-users is refused"; else bad "fleet: --json without --all-users is refused" "exit $RC"; fi
 }
 SKIPPING=""

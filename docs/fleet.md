@@ -215,7 +215,7 @@ The inventory value is one line with each account's outcome and what was found, 
 name or key:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
 ```
 
 If it would be too long, it keeps the accounts that need attention first (`act`, then `not_checked`,
@@ -231,7 +231,9 @@ To find the Macs to deal with first, filter the inventory field for values start
 
 ## 5. Act on a finding
 
-Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to see which files. Then:
+Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to see which files. If the
+account's row says `gh-token-monitor` is installed, have it stopped and removed before anyone rotates
+or revokes any key below: it runs a destructive command when a stolen token stops working. Then:
 
 | Finding | What to ask them to do |
 |---|---|
@@ -241,6 +243,7 @@ Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to s
 | Tokens in MCP configs | Replace them with environment variable references, then rotate them. |
 | Keys in Claude Code allow lists | Delete those saved commands and rotate the keys. |
 | Files a worm plants in a project | Treat the Mac as compromised, as for malware. |
+| npm malware only in a lockfile | Ask whether they installed that project. If they did, treat the Mac as compromised; if not, update the lockfile to a version without it. |
 | An agent set to run without asking | Turn it off, unless the agent runs in a sandbox. |
 | A tool with a security fix, or a package version to update | Update it. |
 | Project settings that act when a folder opens | Have them read those settings in each project section 2 of their report lists. |
@@ -277,14 +280,17 @@ extension folders or the session check can't open, count as not checked, never a
 (`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. The
 gh-token-monitor logs in `/tmp`, which must be the person's own, count for the account that owns
 them, never for the Mac, and never through a link, symbolic or hard. It looks for the malware markers in the account's
-own temp folder, the one macOS gives each account under `/var/folders`. `sudo` writes one line to the system log for each account.
+own temp folder, the one macOS gives each account under `/var/folders`, and in `/tmp` for the
+markers that must be the account's own. `sudo` writes one line to the system log for each account.
 
 What root checks once for the Mac:
 
 Apps in `/Applications`, and agent commands in `/usr/local/bin` and `/opt/homebrew/bin`, are found
-by name and reported as the Mac's agents. In the shared temp folder, root looks by name, without
-following links, for the malware markers `data/indicators.tsv` lists there that need not be any one
-person's, and asks `lsof` whether a process holds the LiteLLM loader's lock file open. If `lsof`
+by name and reported as the Mac's agents. In the shared temp folder, root looks by name for the
+malware markers `data/indicators.tsv` lists, never through a link of either kind: a marker that must
+be a person's own counts for the Mac only when root made it, and one an account owns counts on that
+account's row instead, found by its own check. When root made the LiteLLM loader's lock file, root
+asks `lsof` whether a process holds it open. If `lsof`
 does not answer in time, the Mac reads partly checked. Those are the only running processes it looks at. It also looks by
 name for any startup file `data/indicators.tsv` lists outside a home folder; for macOS there are none
 today. Nothing in these places is read or run.

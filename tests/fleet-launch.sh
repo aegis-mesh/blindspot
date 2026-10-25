@@ -13,6 +13,7 @@
 #   hold       holds its output open past any limit, with a process that leaves its group
 #   maxbytes   the real run with a 1 MiB file limit (an app's Info.plist stays far below it)
 #   noprot     the real run, with the protected folder it tries refusing it
+#   hardlink   a hard link to root's script copy, as any account could make in /tmp, then the real run
 # FLL_API, when set, is handed to the account run as GIRD_CHECK_API, to show it sends nothing.
 printf '%s\n' "$*" >> "$FLL_DIR/argv.log"
 printf '%s\n' "$PATH" > "$FLL_DIR/launch-path"   # the PATH root starts sudo with
@@ -35,6 +36,7 @@ case "$mode" in
   chmod) for a in "$@"; do case "$a" in */gird-check.sh) /bin/chmod 666 "$a" ;; esac; done ;;
   maxbytes) extra+=(GIRD_CHECK_FLEET_MAX_BYTES=1048576) ;;
   noprot) extra+=("GIRD_CHECK_FLEET_PROTECTED=$FLL_DIR/noprot") ;;
+  hardlink) for a in "$@"; do case "$a" in */gird-check.sh) /bin/ln -f "$a" "$FLL_DIR/copy-hardlink" ;; esac; done ;;
   endless) exec /usr/bin/yes agents=claude-code ;;
   hold) /usr/bin/perl -e 'use POSIX; POSIX::setsid(); sleep 60' fleet-hold-escapee &
         echo v=1; exec /bin/sleep 300 ;;

@@ -143,7 +143,7 @@ today, and no file paths, file names or key values:
   v=<script version> at=<UTC time>`.
 - The inventory value is a compact form of the whole result, one line, short enough for an MDM's
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
-  `v1 act 2026-10-25T09:12Z | asha: act tanstack; run-without-asking claude-code; keys 2
+  `v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; run-without-asking claude-code; keys 2
   anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. If it would not fit, it keeps the
   outcome, then the accounts that need attention first (act, not_checked, review), then as many
   clear ones as fit, and ends with `+more`; the full result is in the saved file.
@@ -320,12 +320,13 @@ real Mac.
   as `invalid-name` (not checked), so the inventory value stays readable; in an account run a file
   the account can't read, and a folder the home scan, npm's cache, the extension folders or the
   session check can't open, count as not checked; markers that must be the person's own
-  (data/indicators.tsv) are the account's finding only, never the Mac's, and never through a link, symbolic or hard;
+  (data/indicators.tsv) are the account's finding only, which its run looks for in `/tmp`, never the
+  Mac's unless root made them, and never through a link, symbolic or hard;
   shared temp entries are looked at as links first and never followed; an `lsof` that does not
   answer in time leaves the Mac's row not complete; agents in the account's own install folders
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A
-  normal run of `gird-check.sh` still counts a profile it can't read as no keys; that is a separate
-  issue, not changed here.
+  normal run of `gird-check.sh` now names a key file it can't read and doesn't call the keys check
+  clean over it.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
 - Two files. `gird-fleet.sh` holds all the root work: the fixed PATH, the ownership checks, the

@@ -76,7 +76,7 @@ After a Mac has run the policy and then submitted inventory, the `Blindspot` ext
 shows one line, such as:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws | itadmin: clear
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear
 ```
 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see

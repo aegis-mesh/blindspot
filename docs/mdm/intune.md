@@ -76,7 +76,7 @@ In **Custom attributes** > `Blindspot` > **Device status**, the **Result** colum
 Mac, such as:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws | itadmin: clear
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear
 ```
 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
@@ -91,7 +91,7 @@ In **Scripts** > `Blindspot check` > **Device status**, **Success** means the ch
 
 Checked 2026-10-24:
 
-- A shell script file must be less than 1 MB. The install script, with both files in it, is about 220 KB.
+- A shell script file must be less than 1 MB. The install script, with both files in it, is about 300 KB.
 - A shell script that runs longer than 60 minutes is stopped and reported as failed.
   `--deadline=3000` aims to finish the check within 50 minutes.
 - A shell script runs as root unless **Run script as signed-in user** is **Yes**.
