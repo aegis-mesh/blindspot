@@ -14,6 +14,7 @@ axios	Axios takeover	March 2026	downloaded payloads, including a remote access t
 tanstack	TanStack worm	May 2026	stole cloud, GitHub, npm and SSH credentials on install, then republished itself	https://github.com/advisories/GHSA-g7cv-rxg3-hmpx	act
 mistral	Mistral AI npm packages	May 2026	published with malware Mistral says could not run, as its setup script names a missing file	https://docs.mistral.ai/resources/security-advisories/MAI-2026-002	update
 mistralpy	mistralai 2.4.6	May 2026	started a credential stealer in the background when imported on Linux	https://docs.mistral.ai/resources/security-advisories/MAI-2026-002	act
+guardrails	guardrails-ai 0.10.1	May 2026	downloaded and ran a credential stealer, on Linux only	https://www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised	act
 opensearch	OpenSearch client	May 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-298w-vvm4-ww55	act
 bitwarden	Bitwarden CLI	April 2026	stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs	https://www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools	act
 mastra	Mastra worm	June 2026	started itself at login and sent browser history to the attackers	https://socket.dev/blog/mastra-npm-packages-compromised	act

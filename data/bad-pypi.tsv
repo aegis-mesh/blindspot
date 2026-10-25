@@ -8,6 +8,10 @@
 #             shows it as a version to update, not a compromised machine
 # Each line is looked for as a .dist-info folder in every Python environment found and as a
 # name-version entry in uv's cache. Section 5 shows one row per incident, named as incidents.tsv names it.
+# mistralai 2.4.6 is Linux-only by Mistral's advisory. guardrails-ai 0.10.1, published in the same wave
+# (Wiz; GitHub advisory GHSA-xmpw-2vmm-p4p6), is Linux-only by Wiz's post and by Socket's report in the
+# project's issue 1473; no source names a file it leaves, so it has no line in data/indicators.tsv.
 # name	version	incident	os
 litellm	1.107.0	litellm	all
 mistralai	2.4.6	mistralpy	linux
+guardrails_ai	0.10.1	guardrails	linux

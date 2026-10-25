@@ -529,6 +529,14 @@ hasnot "a Mac with it is not 'compromised'"           'ACT NOW|Treat this machin
 has    "with a fix to update it"                      'Update the Python packages listed in section 5 to a version without the malware' "$WORK/mpy-mac.txt"
 has    "the link does not flag a Python incident"     '&ll=0&.*&py=0&' "$WORK/mpy-mac.txt"
 has    "row 05 says a Python package to update"       'Recent leaks a Python package to update, see section 5' "$WORK/mpy-mac-c.txt"
+# guardrails-ai 0.10.1, published in the same wave, runs its stealer on Linux only too (Wiz).
+cp -R "$WORK/clean" "$WORK/gpy"; mkdir -p "$WORK/gpy/code/venv/lib/site-packages/guardrails_ai-0.10.1.dist-info"
+HOME="$WORK/gpy" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy.txt"
+HOME="$WORK/gpy" PATH="$WORK/macbin2:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy-mac.txt"
+has    "guardrails-ai 0.10.1 is its own act-now row on Linux" 'guardrails-ai 0\.10\.1 +signs of the malware found ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1' "$WORK/gpy.txt"
+has    "with its fix, naming it"                      "Don't run Python in the affected environments, follow guardrails-ai's advisory" "$WORK/gpy.txt"
+has    "on a Mac, guardrails-ai 0.10.1 is a version to update" 'guardrails-ai 0\.10\.1 +a bad version to update ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1 Its malware runs on Linux only, so it did not run here\. Update to a version without it\. Advisory: www\.wiz\.io/blog/' "$WORK/gpy-mac.txt"
+hasnot "and is not 'compromised' there"               'ACT NOW|Treat this machine as compromised' "$WORK/gpy-mac.txt"
 # /tmp/transformers.pyz is a Linux-only sign, with mistralai's own advice from data/indicators.tsv.
 cp -R "$WORK/clean" "$WORK/mpyt"; mkdir -p "$WORK/mpyt/tmp"; : > "$WORK/mpyt/tmp/transformers.pyz"
 HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt-linux.txt"
@@ -696,7 +704,7 @@ lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offlin
 lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 6 recent leaks or malware it checks' "$WORK/zb-none.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 7 recent leaks or malware it checks' "$WORK/zb-none.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-one"; mkdir -p "$WORK/zb-one/.config/zeabur"
 lp "$WORK/zb-one" > "$WORK/zb-one.txt"
 lpf "$WORK/zb-one" > "$WORK/zb-one-full.txt"
@@ -866,7 +874,7 @@ mu() { env HOME="$1" TMPDIR="$1/tmp" PATH=/usr/bin:/bin ${3:+GIRD_CHECK_COMPACT=
 mu "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +8 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +9 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"

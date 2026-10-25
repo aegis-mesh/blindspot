@@ -45,3 +45,7 @@ rg: a session folder that cannot be read is named	needs ripgrep on PATH: these t
 rg: and the sessions are not called clean	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 when the check cannot start the sessions are named as not checked	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed
 and are not called clean	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed
+guardrails-ai 0.10.1 is its own act-now row on Linux	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+with its fix, naming it	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on a Mac, guardrails-ai 0.10.1 is a version to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+and is not 'compromised' there	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
