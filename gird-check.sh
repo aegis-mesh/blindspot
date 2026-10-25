@@ -59,6 +59,9 @@ API=${GIRD_CHECK_API:-$WEB/api/check}
 
 H=${HOME:-}
 if [ -z "$H" ] || [ ! -d "$H" ]; then echo "HOME is not set."; exit 1; fi
+# A trailing / would put // in every path, and the checks that tell your own files from a project's
+# compare against "$H/": it comes off. A HOME that is a link is followed by the home scan (find -H).
+while [ "${#H}" -gt 1 ] && [ "${H%/}" != "$H" ]; do H=${H%/}; done
 OS=$(uname -s); ARCH=$(uname -m)
 # Apple Silicon even when Terminal runs under Rosetta
 if [ "$OS" = Darwin ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then ARCH=arm64; fi
@@ -969,7 +972,7 @@ EOF
   # does not enter it. It is printed as "N path", the line break shown as ?, and named as not checked.
   _nl=$'\n'
   # shellcheck disable=SC2016  # $1 is the folder, for the sh that find starts
-  find "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
+  find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
     \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
@@ -6566,7 +6569,10 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
-[ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
+# A version to update needs its own fix unless the compromised-machine fix already deletes it (a
+# lockfile-only hit's fix does not), or its incident's own fix already says to update it.
+_upd_fix=0; for _t in $NPM_TAGS; do [ "$(incident_level "$_t")" = update ] || continue; case "$(incident_advice "$_t")" in *[Uu]pdate*) ;; *) _upd_fix=1 ;; esac; done
+{ [ "$MAL_HIT" -eq 0 ] || [ "$MAL_LOCKONLY" -eq 1 ]; } && [ "$_upd_fix" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
 [ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 [ "$EXT_HIT" -eq 0 ] && [ -n "$EXT_UPD" ] && todo 5 "Uninstall the editor extensions listed in section 5. Their malware could not run on this system."
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
@@ -7315,7 +7321,7 @@ if [ "$OS" = Darwin ]; then
   if [ "$KEY_FILES" -gt 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found $(plural "$KEY_FILES" "file" "files") with keys that any agent you run can read. It can't tell you whether one already did, or what your agents do after you close this window."
-  elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then
+  elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."
   elif [ "$ANY_MAL" -eq 1 ]; then

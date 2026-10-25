@@ -5821,7 +5821,10 @@ if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
-if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
+# A version to update needs its own fix unless the compromised-machine fix already deletes it (a
+# lockfile-only hit's fix does not), or its incident's own fix already says to update it.
+$UpdFix = @(foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'update' -and (Incident-Advice $t) -cnotmatch '[Uu]pdate') { $t } }).Count -gt 0
+if (($MAL_HIT -eq 0 -or $MAL_LOCKONLY -eq 1) -and $UpdFix) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
 if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 if ($EXT_HIT -eq 0 -and $ExtUpd.Count -gt 0) { Add-Todo 5 'Uninstall the editor extensions listed in section 5. Their malware could not run on this system.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }

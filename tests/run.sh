@@ -918,6 +918,16 @@ for _n in $(seq 1 150); do mkdir -p "$WORK/manylock/code/m$_n"; printf '{\n  "lo
 HOME="$WORK/manylock" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$WORK/manylock.txt"
 _c=$(grep -o 'axios 1\.14\.1 (Axios takeover' "$WORK/manylock.txt" | grep -c .)
 if [ "$_c" -eq 150 ]; then ok "a bad version in each of 150 lockfiles is found in all of them"; else bad "a bad version in each of 150 lockfiles is found in all of them" "found $_c"; fi
+# A HOME that is a link is scanned through it, and a HOME ending in / is the same home: your own
+# settings are never a project's.
+cp -R "$WORK/clean" "$WORK/hshape"; mkdir -p "$WORK/hshape/code/axp" "$WORK/hshape/.claude"; ln -s "$WORK/hshape" "$WORK/hshape-link"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$WORK/hshape/code/axp/package-lock.json"
+printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/hshape/.claude/settings.json"
+HOME="$WORK/hshape-link" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$WORK/hshape-link.txt"
+HOME="$WORK/hshape/" PATH=/usr/bin:/bin bash "$SCRIPT" --offline --full 2>&1 | tr -s ' \n' '  ' > "$WORK/hshape-slash.txt"
+has    "a HOME that is a link is scanned through it" 'axios 1\.14\.1 \(Axios takeover' "$WORK/hshape-link.txt"
+has    "a HOME ending in / finds your own settings as yours" '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/hshape-slash.txt"
+hasnot "and never as a project's"                      'applies it from a project' "$WORK/hshape-slash.txt"
 # LiteLLM alone still leads the summary.
 cp -R "$WORK/clean" "$WORK/lite"; mkdir -p "$WORK/lite/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"; printf 'home = /usr\n' > "$WORK/lite/code/py/.venv/pyvenv.cfg"
 HOME="$WORK/lite" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lite.txt"
