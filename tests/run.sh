@@ -1180,7 +1180,8 @@ lp "$WORK/zb-pyc-strong" > "$WORK/zb-pyc-strong.txt"
 cp -R "$WORK/zb-pyc" "$WORK/zb-pyc-oc"; mkdir -p "$WORK/zb-pyc-oc/.config/opencode"
 lpf "$WORK/zb-pyc-oc" > "$WORK/zb-pyc-oc.txt"
 has    "a weak pyc and OpenCode both show in the details"  'possible leftover.*OpenCode +installed' "$WORK/zb-pyc-oc.txt"
-has    "OpenCode's line says only the users it emailed were affected" 'OpenCode +installed OpenCode emailed the Console users its breach hit, and says those it did not email were not affected\. If you got that email, rotate every provider key you saved in the Console\. Keys kept only in the CLI never reach OpenCode\.' "$WORK/zb-pyc-oc.txt"
+has    "OpenCode's line says only the users it emailed were affected" 'OpenCode +installed OpenCode emailed the Console users its breach hit, and says those it did not email were not affected\. It told those users to revoke and replace their keys directly with each provider\. Keys kept only in the CLI never reach OpenCode\.' "$WORK/zb-pyc-oc.txt"
+hasnot "and gives no advice OpenCode did not give"     'rotate every provider key' "$WORK/zb-pyc-oc.txt"
 has    "a weak pyc shows in row 05 and the fix list"       'A leftover cook\.pyc can come from the LiteLLM 1\.107\.0 malware' "$WORK/zb-pyc-oc.txt"
 # Idle agents are found on any Mac (Claude Desktop is in /Applications), so a copy of the
 # script that ignores them stands in for a machine with no idle agent.
