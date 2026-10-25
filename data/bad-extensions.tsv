@@ -20,9 +20,11 @@
 # calls a sleeper (not malicious yet), and the 17 extensions turned on 29 April, whose payload Open VSX
 # had already removed (the April post's update).
 #   January 2026: the four oorzc extensions, Open VSX only: Socket's findings concern the Open VSX
-#     builds, and it does not suggest the publisher's Marketplace listings were compromised (the
-#     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026). Three at their
-#     malicious versions, and oorzc.ssh-tools at every version: Open VSX removed them all and added it
+#     builds, and it does not suggest the publisher's Marketplace listings were compromised. The
+#     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026, after that post:
+#     Microsoft's list of removed extensions does not name it (24 October 2026), and its package
+#     holds none of the loader IOCs Socket publishes (the AES key and IVs, the Solana address, the
+#     IP). Three at their malicious versions, and oorzc.ssh-tools at every version: Open VSX removed them all and added it
 #     to its malware list, Socket says. Their os is mac: Socket shows their loader going on only when
 #     os.platform() is darwin, to a second stage that is a macOS implant. And the thirteen earlier
 #     extensions it lists, which the Marketplace does not offer and Microsoft's list does not name

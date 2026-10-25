@@ -40,7 +40,9 @@ if [ "$MODE" = miss ]; then
   # A repo's own .ssh/authorized_keys fixture and a link to it: not this user's file.
   mkdir -p "$F/code/repo/fixtures/.ssh"; : > "$F/code/repo/fixtures/.ssh/authorized_keys"
   ln -s fixtures/.ssh/authorized_keys "$F/code/repo/sample"
-  # VS Code's own folder holds the Marketplace's oorzc.ssh-tools 0.5.1; the near-miss versions and name
+  # VS Code's own folder holds the Marketplace's oorzc.ssh-tools 0.5.1, which Microsoft's removed list
+  # does not name and whose package holds none of the IOCs Socket publishes for the January loader
+  # (data/bad-extensions.tsv); the near-miss versions and name
   # sit in an Open VSX editor's folder, where the bad builds are looked for: an earlier and a longer
   # version of oorzc.mind-map, and a longer name than oorzc.ssh-tools, of which every version counts.
   mkdir -p "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1" "$F/.cursor/extensions/oorzc.mind-map-1.0.6" "$F/.cursor/extensions/oorzc.mind-map-1.0.610" "$F/.cursor/extensions/oorzc.ssh-tools-pro-0.5.1"
