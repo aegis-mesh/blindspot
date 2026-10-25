@@ -16,7 +16,7 @@ dropped.
 | Agents set to approve everything | build, for three agents | verified setting names for Claude Code, Codex and VS Code Copilot |
 | Agent versions with a published fix | build, four tools | each has a GitHub or vendor advisory with a fixed version |
 | Project files that link to `~/.ssh/authorized_keys` | build | Wiz GhostApproval: an agent edits a repo file that is a link, and writes the attacker's key into `authorized_keys` |
-| GlassWorm extensions, Injective SDK | build, as data lines | Socket's GlassWorm post, GHSA-5fc4-fm2x-6f4r |
+| GlassWorm extensions, Injective SDK | build, as data lines | Socket's GlassWorm posts, GHSA-5fc4-fm2x-6f4r |
 | `.env` files a repo does not ignore | dropped | the dossier does not cite it; reproducing git's ignore rules from files is unreliable, and asking git runs a repo's `core.fsmonitor` program (measured with `git check-ignore` on git 2.50.1) |
 
 ## 1. Agents set to approve everything
@@ -111,12 +111,29 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   own folder, where the same version is the Marketplace's clean build. A hit is its own section 5
   row, "Editor extensions", with the incident line, level `act`, its own headline and fix, never
   called npm malware.
-- GlassWorm (Socket, January 2026): the four `oorzc` extensions at their malicious versions, and
-  the thirteen earlier extensions Socket names, at every version, all `openvsx`: Socket says the
-  malicious versions were published to Open VSX and that the publisher's Marketplace listings were
-  not compromised, the Marketplace has a clean `oorzc.ssh-tools` 0.5.1 of March 2026, and the
-  thirteen were never on the Marketplace. Its startup file,
-  `~/Library/LaunchAgents/com.user.nodestart.plist`, is a `startup` indicator (Socket names it, like
+- GlassWorm, from Socket's posts, one incident per post: a version where the post gives one, and
+  every version where it names an extension without one (these are the attacker's own extensions,
+  which update themselves, so a version from before an extension was turned counts too).
+  - January 2026: the four `oorzc` extensions at their malicious versions, and the thirteen earlier
+    extensions Socket names, at every version, all `openvsx`: Socket says the malicious versions
+    were published to Open VSX and that the publisher's Marketplace listings were not compromised,
+    the Marketplace has a clean `oorzc.ssh-tools` 0.5.1 of March 2026, and the thirteen were never
+    on the Marketplace.
+  - 13 March 2026: the 72 extensions listed since that report (59 besides those thirteen), every
+    version, `openvsx`.
+  - 18 March 2026: the versions the post shows delivering malware, themselves or through an
+    extension pack (20 versions of 15 extensions), `openvsx`. The first versions of its sleepers,
+    which carried nothing yet, are left out.
+  - 25 April 2026: the six the post confirms as malicious, every version, `openvsx`. Its 67 sleepers
+    are left out, and so are the 17 extensions of its 29 April update, whose pack pointed to an
+    extension Open VSX had removed two days before.
+  - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
+    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too).
+  The March and April loaders install a further extension from GitHub into every editor they find,
+  VS Code included; no post gives its id, so those incidents' fix says to check every editor for
+  extensions the person did not install, said once when both are found.
+- The January post's startup file, `~/Library/LaunchAgents/com.user.nodestart.plist`, is a `startup`
+  indicator (Socket names it, like
   gh-token-monitor's `com.user.gh-token-monitor.plist`); as the sign of an incident whose packages are
   extensions only, it is listed with the extensions, counts as the extension finding, and the fix
   names what section 5 lists: the extensions, the startup file, or both. The incident's advice names
@@ -130,7 +147,10 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
 ## Not covered
 
 - Settings saved in SQLite or a format that needs a parser (above).
-- GlassWorm's later waves without a primary list of extension ids.
+- GlassWorm's sleepers (named by Socket's posts as not malicious yet), and the extension the March and
+  April loaders install from GitHub, whose id no post gives. Socket's GlassWorm campaign page lists
+  more versions than its posts (372 by October 2026), sleepers among them, without saying which ran
+  malware, so it is not used as a list.
 - An Open VSX build installed into VS Code by hand (a VSIX) sits in VS Code's folder, where an
   `openvsx` line is not looked for.
 - Comments in a JSONC settings file are `flat`'s to remove; a setting the comment removal leaves in

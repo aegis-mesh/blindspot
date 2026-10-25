@@ -4,12 +4,21 @@
 #   incident  an id from data/incidents.tsv, whose level must be act
 #   registry  openvsx: the bad build was only ever published to Open VSX, so it is looked for in the
 #             extension folders of the editors that install from there (Cursor, Windsurf, VSCodium
-#             and Kiro) and not in VS Code's own, whose Marketplace build of the same version is clean.
-#             any: looked for in every folder
+#             and Kiro) and not in VS Code's own, where the same id is the Marketplace's extension:
+#             a clean build, or another publisher's. any: looked for in every folder
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
-# GlassWorm: Socket, January 2026. The oorzc versions went to Open VSX only: Socket says the
-# publisher's VS Code Marketplace listings were not compromised, and the Marketplace has a clean
-# oorzc.ssh-tools 0.5.1 of March 2026. The other thirteen were never on the Marketplace.
+# GlassWorm, from Socket's posts, each wave its own incident. A version where the post gives one, every
+# version (*) where it names the extension without one: these are the attacker's own extensions, which
+# update themselves, so a version from before an extension was turned counts too. Left out: what a post
+# calls a sleeper (not malicious yet), and the 17 extensions turned on 29 April, whose payload Open VSX
+# had already removed (the April post's update).
+#   January 2026: the four oorzc versions, Open VSX only (Socket says the publisher's Marketplace listings
+#     were not compromised, and the Marketplace has a clean oorzc.ssh-tools 0.5.1 of March 2026), and
+#     the thirteen earlier extensions it lists, which were never on the Marketplace.
+#   13 March 2026: the 72 extensions listed since that report, less those thirteen.
+#   18 March 2026: the versions the post shows delivering malware, themselves or through an extension pack.
+#   25 April 2026: the six it confirms as malicious; its 67 sleepers are left out.
+#   2 October 2026: the two malicious Marketplace themes; Cosmic Nebula is on Open VSX too.
 # id	version	incident	registry
 oorzc.ssh-tools	0.5.1	glassworm	openvsx
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx
@@ -28,3 +37,90 @@ studio-velte-distributor.pro-svelte-extension	*	glassworm	openvsx
 sun-shine-studio.shiny-extension-for-vscode	*	glassworm	openvsx
 tucyzirille-studio.angular-pro-tools-extension	*	glassworm	openvsx
 vce-brendan-studio-eich.js-debuger-vscode	*	glassworm	openvsx
+aadarkcode.one-dark-material	*	glasswormmar	openvsx
+aligntool.extension-align-professional-tool	*	glasswormmar	openvsx
+awesomeco.wonder-for-vscode-icons	*	glasswormmar	openvsx
+bhbpbarn.vsce-python-indent-extension	*	glasswormmar	openvsx
+blockstoks.easily-gitignore-manage	*	glasswormmar	openvsx
+brategmaqendaalar-studio.pro-prettyxml-formatter	*	glasswormmar	openvsx
+codbroks.compile-runnner-extension	*	glasswormmar	openvsx
+codevunmis.csv-sql-tsv-rainbow	*	glasswormmar	openvsx
+codwayexten.code-way-extension	*	glasswormmar	openvsx
+cosmic-themes.sql-formatter	*	glasswormmar	openvsx
+craz2team.vscode-todo-extension	*	glasswormmar	openvsx
+crotoapp.vscode-xml-extension	*	glasswormmar	openvsx
+daeumer-web.es-linter-for-vs-code	*	glasswormmar	openvsx
+dark-code-studio.flutter-extension	*	glasswormmar	openvsx
+densy-little-studio.wonder-for-vscode-icons	*	glasswormmar	openvsx
+dep-labs-studio.dep-proffesinal-extension	*	glasswormmar	openvsx
+devmidu-studio.svg-better-extension	*	glasswormmar	openvsx
+dopbop-studio.vscode-tailwindcss-extension-toolkit	*	glasswormmar	openvsx
+errlenscre.error-lens-finder-ex	*	glasswormmar	openvsx
+exss-studio.yaml-professional-extension	*	glasswormmar	openvsx
+federicanc.dotenv-syntax-highlighting	*	glasswormmar	openvsx
+flutxvs.vscode-kuberntes-extension	*	glasswormmar	openvsx
+gvotcha.claude-code-extension	*	glasswormmar	openvsx
+gvotcha.claude-code-extensions	*	glasswormmar	openvsx
+intellipro.extension-json-intelligence	*	glasswormmar	openvsx
+kharizma.vscode-extension-wakatime	*	glasswormmar	openvsx
+kwitch-studio.auto-run-command-extension	*	glasswormmar	openvsx
+lavender-studio.theme-lavender-dreams	*	glasswormmar	openvsx
+lyu-wen-studio-web-han.better-formatter-vscode	*	glasswormmar	openvsx
+markvalid.vscode-mdvalidator-extension	*	glasswormmar	openvsx
+mecreation-studio.pyrefly-pro-extension	*	glasswormmar	openvsx
+mswincx.antigravity-cockpit	*	glasswormmar	openvsx
+mswincx.antigravity-cockpit-extension	*	glasswormmar	openvsx
+namopins.prettier-pro-vscode-extension	*	glasswormmar	openvsx
+oigotm.my-command-palette-extension	*	glasswormmar	openvsx
+otoboss.autoimport-extension	*	glasswormmar	openvsx
+ovixcode.vscode-better-comments	*	glasswormmar	openvsx
+pessa07tm.my-js-ts-auto-commands	*	glasswormmar	openvsx
+potstok.dotnet-runtime-extension	*	glasswormmar	openvsx
+prismapp.prisma-vs-code-extension	*	glasswormmar	openvsx
+projmanager.your-project-manager-extension	*	glasswormmar	openvsx
+pubruncode.ccoderunner	*	glasswormmar	openvsx
+pyflowpyr.py-flowpyright-extension	*	glasswormmar	openvsx
+pyscopexte.pyscope-extension	*	glasswormmar	openvsx
+redcapcollective.vscode-quarkus-elite-suite	*	glasswormmar	openvsx
+rubyideext.ruby-ide-extension	*	glasswormmar	openvsx
+runnerpost.runner-your-code	*	glasswormmar	openvsx
+shinypy.shiny-extension-for-vscode	*	glasswormmar	openvsx
+ssgwysc.volar-vscode	*	glasswormmar	openvsx
+sxatvo.jinja-extension	*	glasswormmar	openvsx
+tamokill12.foundry-pdf-extension	*	glasswormmar	openvsx
+thing-mn.your-flow-extension-for-icons	*	glasswormmar	openvsx
+tima-web-wang.shell-check-utils	*	glasswormmar	openvsx
+tokcodes.import-cost-extension	*	glasswormmar	openvsx
+toowespace.worksets-extension	*	glasswormmar	openvsx
+treedotree.tree-do-todoextension	*	glasswormmar	openvsx
+turbobase.sql-turbo-tool	*	glasswormmar	openvsx
+twilkbilk.color-highlight-css	*	glasswormmar	openvsx
+yamaprolas.revature-labs-extension	*	glasswormmar	openvsx
+lauracode.wrap-selected-code	0.0.2	glasswormvsix	openvsx
+96-studio.json-formatter	0.0.2	glasswormvsix	openvsx
+96-studio.json-formatter	0.0.4	glasswormvsix	openvsx
+spacetoow.vsc-python-indent	1.21.1	glasswormvsix	openvsx
+spacetoow.vsc-python-indent	1.21.3	glasswormvsix	openvsx
+spacetoow.vsc-python-indent	1.21.4	glasswormvsix	openvsx
+spacetoow.vsc-python-indent	1.21.5	glasswormvsix	openvsx
+spacetoow.vsc-python-indent	1.21.6	glasswormvsix	openvsx
+spacetoow.vsc-python-indent	1.21.7	glasswormvsix	openvsx
+namop-dex.claude-code-assistant	2.1.47	glasswormvsix	openvsx
+msw-tm.component-vetur-toolkit	0.37.4	glasswormvsix	openvsx
+cod-vok.arko-dev-devsecops	1.0.4	glasswormvsix	openvsx
+oxigener-tmp.sql-turbo-manager	0.28.10	glasswormvsix	openvsx
+otobo-vs.csv-query-tsv-rainbow	3.3.4	glasswormvsix	openvsx
+awesome-codespace.jinja-language-support	0.3.2	glasswormvsix	openvsx
+yamal-dext.wonder-workspace-icons	0.10.4	glasswormvsix	openvsx
+daeumer-web.align-format-tool	1.4.6	glasswormvsix	openvsx
+baksmink.vscode-quokka-extension	1.0.756	glasswormvsix	openvsx
+bansheejust22.retro-vhs-theme	1.0.1	glasswormvsix	openvsx
+quickrunn.auto-run-command-quick	1.6.2	glasswormvsix	openvsx
+outsidestormcommand.monochromator-theme	*	glasswormapr	openvsx
+keyacrosslaud.auto-loop-for-antigravity	*	glasswormapr	openvsx
+krundoven.ironplc-fast-hub	*	glasswormapr	openvsx
+boulderzitunnel.vscode-buddies	*	glasswormapr	openvsx
+cubedivervolt.html-code-validate	*	glasswormapr	openvsx
+winnerdomain17.version-lens-tool	*	glasswormapr	openvsx
+microsoftvs.microsoftvs	*	glasswormoct	any
+cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any

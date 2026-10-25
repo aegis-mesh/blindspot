@@ -1194,12 +1194,12 @@ if ($env:ProgramData) { $PyRoots += @((J $env:ProgramData 'miniconda3'), (J $env
 foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
-function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'mastra' { 'Mastra worm, June 2026: started itself at login and sent browser history to the attackers. socket.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' } 'injective' { 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' } default { $t } } }
+function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'mastra' { 'Mastra worm, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
+function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'mastra' { 'Mastra worm, June 2026: started itself at login and sent browser history to the attackers. socket.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: exposed AI provider keys saved in Console workspaces; users reported charges on them. techcrunch.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: stole SSH keys, cloud and npm credentials, keychains and crypto wallets from Macs. socket.dev' } 'glasswormmar' { 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm. socket.dev' } 'injective' { 'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it. github.com' } default { $t } } }
 function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'opencode' { 'leak' } 'railway' { 'leak' } 'zeabur' { 'leak' } 'injective' { 'update' } default { 'act' } } }
-function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'injective' { 'Injective SDK' } default { $t } } }
-function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
-function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
+function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'injective' { 'Injective SDK' } default { $t } } }
+function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
+function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'glasswormvsix' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormapr' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 $BadPypi = @'
@@ -1505,6 +1505,93 @@ studio-velte-distributor.pro-svelte-extension * glassworm openvsx
 sun-shine-studio.shiny-extension-for-vscode * glassworm openvsx
 tucyzirille-studio.angular-pro-tools-extension * glassworm openvsx
 vce-brendan-studio-eich.js-debuger-vscode * glassworm openvsx
+aadarkcode.one-dark-material * glasswormmar openvsx
+aligntool.extension-align-professional-tool * glasswormmar openvsx
+awesomeco.wonder-for-vscode-icons * glasswormmar openvsx
+bhbpbarn.vsce-python-indent-extension * glasswormmar openvsx
+blockstoks.easily-gitignore-manage * glasswormmar openvsx
+brategmaqendaalar-studio.pro-prettyxml-formatter * glasswormmar openvsx
+codbroks.compile-runnner-extension * glasswormmar openvsx
+codevunmis.csv-sql-tsv-rainbow * glasswormmar openvsx
+codwayexten.code-way-extension * glasswormmar openvsx
+cosmic-themes.sql-formatter * glasswormmar openvsx
+craz2team.vscode-todo-extension * glasswormmar openvsx
+crotoapp.vscode-xml-extension * glasswormmar openvsx
+daeumer-web.es-linter-for-vs-code * glasswormmar openvsx
+dark-code-studio.flutter-extension * glasswormmar openvsx
+densy-little-studio.wonder-for-vscode-icons * glasswormmar openvsx
+dep-labs-studio.dep-proffesinal-extension * glasswormmar openvsx
+devmidu-studio.svg-better-extension * glasswormmar openvsx
+dopbop-studio.vscode-tailwindcss-extension-toolkit * glasswormmar openvsx
+errlenscre.error-lens-finder-ex * glasswormmar openvsx
+exss-studio.yaml-professional-extension * glasswormmar openvsx
+federicanc.dotenv-syntax-highlighting * glasswormmar openvsx
+flutxvs.vscode-kuberntes-extension * glasswormmar openvsx
+gvotcha.claude-code-extension * glasswormmar openvsx
+gvotcha.claude-code-extensions * glasswormmar openvsx
+intellipro.extension-json-intelligence * glasswormmar openvsx
+kharizma.vscode-extension-wakatime * glasswormmar openvsx
+kwitch-studio.auto-run-command-extension * glasswormmar openvsx
+lavender-studio.theme-lavender-dreams * glasswormmar openvsx
+lyu-wen-studio-web-han.better-formatter-vscode * glasswormmar openvsx
+markvalid.vscode-mdvalidator-extension * glasswormmar openvsx
+mecreation-studio.pyrefly-pro-extension * glasswormmar openvsx
+mswincx.antigravity-cockpit * glasswormmar openvsx
+mswincx.antigravity-cockpit-extension * glasswormmar openvsx
+namopins.prettier-pro-vscode-extension * glasswormmar openvsx
+oigotm.my-command-palette-extension * glasswormmar openvsx
+otoboss.autoimport-extension * glasswormmar openvsx
+ovixcode.vscode-better-comments * glasswormmar openvsx
+pessa07tm.my-js-ts-auto-commands * glasswormmar openvsx
+potstok.dotnet-runtime-extension * glasswormmar openvsx
+prismapp.prisma-vs-code-extension * glasswormmar openvsx
+projmanager.your-project-manager-extension * glasswormmar openvsx
+pubruncode.ccoderunner * glasswormmar openvsx
+pyflowpyr.py-flowpyright-extension * glasswormmar openvsx
+pyscopexte.pyscope-extension * glasswormmar openvsx
+redcapcollective.vscode-quarkus-elite-suite * glasswormmar openvsx
+rubyideext.ruby-ide-extension * glasswormmar openvsx
+runnerpost.runner-your-code * glasswormmar openvsx
+shinypy.shiny-extension-for-vscode * glasswormmar openvsx
+ssgwysc.volar-vscode * glasswormmar openvsx
+sxatvo.jinja-extension * glasswormmar openvsx
+tamokill12.foundry-pdf-extension * glasswormmar openvsx
+thing-mn.your-flow-extension-for-icons * glasswormmar openvsx
+tima-web-wang.shell-check-utils * glasswormmar openvsx
+tokcodes.import-cost-extension * glasswormmar openvsx
+toowespace.worksets-extension * glasswormmar openvsx
+treedotree.tree-do-todoextension * glasswormmar openvsx
+turbobase.sql-turbo-tool * glasswormmar openvsx
+twilkbilk.color-highlight-css * glasswormmar openvsx
+yamaprolas.revature-labs-extension * glasswormmar openvsx
+lauracode.wrap-selected-code 0.0.2 glasswormvsix openvsx
+96-studio.json-formatter 0.0.2 glasswormvsix openvsx
+96-studio.json-formatter 0.0.4 glasswormvsix openvsx
+spacetoow.vsc-python-indent 1.21.1 glasswormvsix openvsx
+spacetoow.vsc-python-indent 1.21.3 glasswormvsix openvsx
+spacetoow.vsc-python-indent 1.21.4 glasswormvsix openvsx
+spacetoow.vsc-python-indent 1.21.5 glasswormvsix openvsx
+spacetoow.vsc-python-indent 1.21.6 glasswormvsix openvsx
+spacetoow.vsc-python-indent 1.21.7 glasswormvsix openvsx
+namop-dex.claude-code-assistant 2.1.47 glasswormvsix openvsx
+msw-tm.component-vetur-toolkit 0.37.4 glasswormvsix openvsx
+cod-vok.arko-dev-devsecops 1.0.4 glasswormvsix openvsx
+oxigener-tmp.sql-turbo-manager 0.28.10 glasswormvsix openvsx
+otobo-vs.csv-query-tsv-rainbow 3.3.4 glasswormvsix openvsx
+awesome-codespace.jinja-language-support 0.3.2 glasswormvsix openvsx
+yamal-dext.wonder-workspace-icons 0.10.4 glasswormvsix openvsx
+daeumer-web.align-format-tool 1.4.6 glasswormvsix openvsx
+baksmink.vscode-quokka-extension 1.0.756 glasswormvsix openvsx
+bansheejust22.retro-vhs-theme 1.0.1 glasswormvsix openvsx
+quickrunn.auto-run-command-quick 1.6.2 glasswormvsix openvsx
+outsidestormcommand.monochromator-theme * glasswormapr openvsx
+keyacrosslaud.auto-loop-for-antigravity * glasswormapr openvsx
+krundoven.ironplc-fast-hub * glasswormapr openvsx
+boulderzitunnel.vscode-buddies * glasswormapr openvsx
+cubedivervolt.html-code-validate * glasswormapr openvsx
+winnerdomain17.version-lens-tool * glasswormapr openvsx
+microsoftvs.microsoftvs * glasswormoct any
+cosmic-themes.theme-cosmic-nebula * glasswormoct any
 '@
 # <<< bad-extensions
 $NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
@@ -1889,13 +1976,15 @@ if ($EXT_HIT -eq 1) {
   Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
 }
 # An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
-# the act-now fixes, an update-level one before the update it has to come before.
+# the act-now fixes, an update-level one before the update it has to come before. Two incidents can
+# share a fix (two waves of one malware): it is said once.
 function Add-Advice([string]$level) {
-  $seen = @{}
+  $seen = @{}; $said = @{}
   foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) {
     if ($seen.ContainsKey($t)) { continue }; $seen[$t] = 1
     if ((Incident-Level $t) -ne $level) { continue }
-    $a = Incident-Advice $t; if ($a) { Add-Todo 5 $a }
+    $a = Incident-Advice $t; if (-not $a -or $said.ContainsKey($a)) { continue }; $said[$a] = 1
+    Add-Todo 5 $a
   }
 }
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }

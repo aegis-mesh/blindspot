@@ -825,6 +825,23 @@ has    "npm and extensions: both rows, each with its own findings" 'npm malware 
 has    "npm and extensions: one headline names both"  'ACT NOW: SIGNS OF NPM AND EDITOR EXTENSION MALWARE' "$WORK/dz-both.txt"
 has    "npm and extensions: both fixes"               'Delete the packages and files listed in section 5.*Uninstall the extensions listed in section 5' "$WORK/dz-both.txt"
 has    "npm and extensions: the link says both"       '&nm=1&py=0&ex=1&wp=0' "$WORK/dz-both.txt"
+# GlassWorm's later waves, one extension of each in another editor's folder: Socket's 13 March list
+# (every version), a version the 18 March post shows delivering malware, one of the six the April post
+# confirms, and a malicious Marketplace theme of October in VS Code's own folder. Near misses: a version
+# the 18 March post does not name, and an Open VSX extension's id in VS Code's own folder.
+rm -rf "$WORK/dz-waves"; cp -R "$WORK/clean" "$WORK/dz-waves"
+mkdir -p "$WORK/dz-waves/.cursor/extensions/aadarkcode.one-dark-material-3.20.1" "$WORK/dz-waves/.windsurf/extensions/spacetoow.vsc-python-indent-1.21.4" \
+  "$WORK/dz-waves/.kiro/extensions/boulderzitunnel.vscode-buddies-1.35.3" "$WORK/dz-waves/.vscode/extensions/cosmic-themes.theme-cosmic-nebula-1.0.0" \
+  "$WORK/dz-waves/.vscode-oss/extensions/spacetoow.vsc-python-indent-1.21.0" "$WORK/dz-waves/.vscode/extensions/aadarkcode.one-dark-material-3.20.1"
+dzrun "$WORK/dz-waves" | tr -s ' \n' '  ' > "$WORK/dz-waves.txt"
+has    "a GlassWorm extension of Socket's 13 March list, at any version" '~/\.cursor/extensions/aadarkcode\.one-dark-material-3\.20\.1 aadarkcode\.one-dark-material 3\.20\.1 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-waves.txt"
+has    "a version the 18 March post shows delivering malware" '~/\.windsurf/extensions/spacetoow\.vsc-python-indent-1\.21\.4 spacetoow\.vsc-python-indent 1\.21\.4 \(GlassWorm sleeper extensions, March 2026\), installed' "$WORK/dz-waves.txt"
+has    "one of the six the April post confirms"      '~/\.kiro/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-waves.txt"
+has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-waves.txt"
+has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: VS Code themes that ran hidden loaders, one of them tied to GlassWorm\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
+if [ "$(grep -o 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-waves.txt" | grep -c .)" -eq 1 ]; then ok "the fix two waves share is said once"; else bad "the fix two waves share is said once"; fi
+hasnot "a version the 18 March post does not name is not flagged" 'spacetoow\.vsc-python-indent 1\.21\.0' "$WORK/dz-waves.txt"
+hasnot "an Open VSX extension's id in VS Code's own folder is not flagged" '~/\.vscode/extensions/aadarkcode' "$WORK/dz-waves.txt"
 has    "summary row 01 names the fixes to install"    '01 . Coding agents +[0-9]+ found, 4 security fixes to install' "$WORK/dz-hit-sum.txt"
 has    "summary row 02 names the link"                '02 . MCP servers .* 1 file links to your SSH' "$WORK/dz-hit-sum.txt"
 D=$WORK/dz-miss-flat.txt
