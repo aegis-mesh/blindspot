@@ -918,7 +918,9 @@ Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
-VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\""
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT=''
 # <<< auto-approve
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
@@ -6038,8 +6040,8 @@ EOF
 done <<EOF
 $AA_TABLE
 EOF
-# One row per file: file<TAB>agent<TAB>settings.
-AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '!($1 in o) { o[$1] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[$1]] = st[o[$1]] ", " $3 }
+# One row per file and agent: file<TAB>agent<TAB>settings. VS Code's settings file can hold two agents'.
+AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '{ k = $1 FS $2 } !(k in o) { o[k] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[k]] = st[o[k]] ", " $3 }
   END { for (i = 1; i <= n; i++) print f[i] "\t" ag[i] "\t" st[i] }')
 N_YOLO=$(count_lines "$AA_LIST")
 [ "$N_YOLO" -gt 0 ] && progress w "Agents set to run commands without asking: $(printf '%s\n' "$AA_LIST" | head -n 1 | cut -f2)"

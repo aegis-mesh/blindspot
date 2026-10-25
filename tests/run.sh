@@ -1718,6 +1718,23 @@ has    "a project's chat.permissions.default: autoApprove is listed in section 2
 has    "and a project's autopilot"                    '! ~/p/x/\.vscode/settings\.json Set to run every Copilot tool call without asking in new chats, with chat\.permissions\.default: autopilot\.' "$WORK/dz-perm-proj.txt"
 has    "a project at the default level is not counted: row 02 counts the other 2" '02 . MCP servers .*, 2 projects act on opening' "$WORK/dz-perm-proj-c.txt"
 has    "and the fix says to read those settings before an editor opens the folder" 'Read the settings marked in section 2 before an agent or editor opens those folders' "$WORK/dz-perm-proj.txt"
+# Claude Code's VS Code extension starts new conversations in bypass mode with claudeCode.initialPermissionMode
+# set to bypassPermissions in the user settings, and only with claudeCode.allowDangerouslySkipPermissions on (its
+# docs): both make a row, in VS Code's and in Cursor's user settings; one alone does not, and a project's copy,
+# which the extension ignores, is not one. A settings file with a Copilot setting too gets a row for each agent.
+for L in on half both; do rm -rf "$WORK/dz-ccx-$L"; cp -R "$WORK/clean" "$WORK/dz-ccx-$L"; mkdir -p "$WORK/dz-ccx-$L/$DAS/Code/User"; done
+mkdir -p "$WORK/dz-ccx-on/$DAS/Cursor/User" "$WORK/dz-ccx-on/p/v/.vscode"
+printf '{\n  "claudeCode.initialPermissionMode": "bypassPermissions",\n  "claudeCode.allowDangerouslySkipPermissions": true\n}\n' | \
+  tee "$WORK/dz-ccx-on/$DAS/Cursor/User/settings.json" "$WORK/dz-ccx-on/p/v/.vscode/settings.json" > "$WORK/dz-ccx-on/$DAS/Code/User/settings.json"
+printf '{"claudeCode.initialPermissionMode": "bypassPermissions"}\n' > "$WORK/dz-ccx-half/$DAS/Code/User/settings.json"
+printf '{"chat.tools.global.autoApprove": true, "claudeCode.initialPermissionMode": "bypassPermissions", "claudeCode.allowDangerouslySkipPermissions": true}\n' > "$WORK/dz-ccx-both/$DAS/Code/User/settings.json"
+for L in on half both; do dzrun "$WORK/dz-ccx-$L" | tr -s ' \n' '  ' > "$WORK/dz-ccx-$L.txt"; done
+has    "Claude Code's VS Code extension set to start in bypass mode" '! Claude Code ~/Library/Application Support/Code/User/settings\.json claudeCode\.initialPermissionMode: bypassPermissions' "$WORK/dz-ccx-on.txt"
+has    "and the same in Cursor's user settings"      '! Claude Code ~/Library/Application Support/Cursor/User/settings\.json claudeCode\.initialPermissionMode: bypassPermissions' "$WORK/dz-ccx-on.txt"
+hasnot "a project's copy, which the extension ignores, is not one" 'Claude Code ~/p/v' "$WORK/dz-ccx-on.txt"
+hasnot "without the toggle that allows bypass mode it is not reported" 'claudeCode\.initialPermissionMode' "$WORK/dz-ccx-half.txt"
+has    "a settings file with a Copilot setting too: Copilot's row" '! VS Code Copilot ~/Library/Application Support/Code/User/settings\.json chat\.tools\.global\.autoApprove ' "$WORK/dz-ccx-both.txt"
+has    "and Claude Code's row of its own"            '! Claude Code ~/Library/Application Support/Code/User/settings\.json claudeCode\.initialPermissionMode: bypassPermissions' "$WORK/dz-ccx-both.txt"
 # A find that rejects the expression (an old or BusyBox find) prints nothing: the report must say the
 # home folder was not scanned, never read it as clean.
 mkdir -p "$WORK/badfind"; printf '#!/bin/sh\necho "find: unrecognized: -maxdepth" >&2\nexit 1\n' > "$WORK/badfind/find"; chmod +x "$WORK/badfind/find"

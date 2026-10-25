@@ -33,6 +33,13 @@
 # as a setting a cloned project brings, not as a line here.
 # chat.defaultConfiguration, an object whose approvals and mode would have to be read inside it, is
 # not read.
+# Claude Code's VS Code extension: its docs (the VS Code and permission-modes pages) say that
+# claudeCode.initialPermissionMode set to bypassPermissions in the user settings starts new conversations
+# in bypass mode only with claudeCode.allowDangerouslySkipPermissions on (without it they start in
+# Manual), and that it reads the first from the user settings only, so both must match there. The
+# extension installs in Cursor too, where the docs give it an install link; Cursor keeps its user
+# settings in Cursor/User as VS Code does in Code/User. A settings file that holds two agents' settings
+# makes a row for each.
 # agent	os	path	setting	pattern...
 Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"permissions": {"defaultMode": "bypassPermissions"
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"
@@ -40,3 +47,5 @@ Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access profile	
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+Claude Code	all	{AS}/Code/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+Claude Code	all	{AS}/Cursor/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true

@@ -547,6 +547,8 @@ $AaTable = @(
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('Claude Code', 'all', (J $AppData 'Code/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('Claude Code', 'all', (J $AppData 'Cursor/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
 )
 $AaProject = @()
 # <<< auto-approve
@@ -5406,8 +5408,10 @@ foreach ($r in $AaTable) {
   if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) }) } else { $files = @($r[2]) }
   foreach ($f in $files) {
     if (-not (Is-File $f) -or -not (Aa-Hit $f $r[4])) { continue }
-    if ($aaSeen.ContainsKey($f)) { $aaSeen[$f].Setting += ", $($r[3])" }
-    else { $row = @{ File = $f; Agent = $r[0]; Setting = $r[3] }; $aaSeen[$f] = $row; $AaList.Add($row) }
+    # One row per file and agent: VS Code's settings file can hold two agents'.
+    $k = $f + [char]9 + $r[0]
+    if ($aaSeen.ContainsKey($k)) { $aaSeen[$k].Setting += ", $($r[3])" }
+    else { $row = @{ File = $f; Agent = $r[0]; Setting = $r[3] }; $aaSeen[$k] = $row; $AaList.Add($row) }
   }
 }
 $N_YOLO = $AaList.Count
