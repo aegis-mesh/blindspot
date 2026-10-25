@@ -4,7 +4,7 @@
 # way the CI runner does; without docker they are listed as skipped, and the run does not count as a
 # full CI run. Logs are kept in a temp folder, named at the end.
 #
-#   PWSH=/path/to/pwsh bash tools/ci-local.sh
+#   bash tools/ci-local.sh
 set -u
 cd "$(dirname "$0")/.."
 LOGS=$(mktemp -d "${TMPDIR:-/tmp}/blindspot-ci.XXXXXX")
@@ -24,11 +24,32 @@ shellcheck_run() {
   else pipx run --spec shellcheck-py==0.10.0.1 shellcheck -s bash -S warning gird-check.sh tests/*.sh; fi
 }
 # The Ubuntu jobs: the repo mounted read-only, the tools the CI image has, run as a user, not root.
-in_linux() { # image command
-  docker run --rm -v "$PWD:/src:ro" "$1" bash -c "
+in_linux() { # image command [extra docker args]
+  _img=$1; _cmd=$2; shift 2
+  docker run --rm -v "$PWD:/src:ro" "$@" "$_img" bash -c "
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq >/dev/null && apt-get install -y -qq python3 perl jq procps curl git expect file xxd ca-certificates >/dev/null &&
-    useradd -m ci && su ci -c 'cd /src && $2'"
+    apt-get update -qq >/dev/null && apt-get install -y -qq python3 perl jq procps curl git expect file xxd ca-certificates libicu74 >/dev/null &&
+    { [ ! -f /pwsh.tar.gz ] || { mkdir -p /opt/pwsh && tar -xzf /pwsh.tar.gz -C /opt/pwsh && chmod +x /opt/pwsh/pwsh && ln -s /opt/pwsh/pwsh /usr/local/bin/pwsh; }; } &&
+    useradd -m -s /bin/bash ci && su -s /bin/bash ci -c 'cd /src && $_cmd'"
+}
+
+# PowerShell for the Linux container: a pinned release for this machine's chip, downloaded here (not in
+# the container, which may not trust this machine's TLS setup), checked against its published SHA-256.
+PWSH_VER=7.4.6
+pwsh_linux() {
+  case "$(docker info --format '{{.Architecture}}' 2>/dev/null)" in
+    aarch64|arm64) _a=arm64; _h=c0159b03e85f44ae1e7697818a011558da6c813d0aae848bf5ac13bf435d8624 ;;
+    x86_64|amd64) _a=x64; _h=6f6015203c47806c5cc444c19d8ed019695e610fbd948154264bf9ca8e157561 ;;
+    *) return 1 ;;
+  esac
+  PWSH_TGZ="$HOME/.cache/blindspot-ci/powershell-$PWSH_VER-linux-$_a.tar.gz"
+  if [ ! -f "$PWSH_TGZ" ]; then
+    mkdir -p "${PWSH_TGZ%/*}"
+    curl -fsSL -o "$PWSH_TGZ.part" "https://github.com/PowerShell/PowerShell/releases/download/v$PWSH_VER/powershell-$PWSH_VER-linux-$_a.tar.gz" || return 1
+    mv "$PWSH_TGZ.part" "$PWSH_TGZ"
+  fi
+  _got=$( (shasum -a 256 "$PWSH_TGZ" 2>/dev/null || sha256sum "$PWSH_TGZ") | cut -d' ' -f1)
+  [ "$_got" = "$_h" ] || { rm -f "$PWSH_TGZ"; return 1; }
 }
 
 echo "Local CI ($(git rev-parse --short HEAD 2>/dev/null))"
@@ -43,7 +64,8 @@ else
 fi
 if docker info >/dev/null 2>&1; then
   job "tests (ubuntu)" in_linux ubuntu:24.04 "bash tests/run.sh"
-  job "tests (pwsh, ubuntu)" in_linux mcr.microsoft.com/powershell:7.4-ubuntu-22.04 "PWSH=pwsh bash tests/parity-run.sh"
+  if pwsh_linux; then job "tests (pwsh, ubuntu)" in_linux ubuntu:24.04 "bash tests/parity-run.sh" -v "$PWSH_TGZ:/pwsh.tar.gz:ro"
+  else skip "tests (pwsh, ubuntu)" "could not get PowerShell $PWSH_VER for this machine's chip, checked by SHA-256"; fi
 else
   skip "tests (ubuntu)" "needs docker (for example: brew install colima docker && colima start)"
   skip "tests (pwsh, ubuntu)" "needs docker"
