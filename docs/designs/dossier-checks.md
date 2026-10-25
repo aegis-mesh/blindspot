@@ -159,11 +159,11 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
     `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too; the
     first hid a Windows downloader, so its `os` is `win`: on a Mac or Linux it is a yellow "malicious
-    extension to remove", with its own fix and row 05, and leaves the headline, score and link alone),
-    and
-    three more of the cluster's themes, on both registries, that Microsoft's list removes as malware:
-    Charcoal Mint, Aurora Borealis and Coca-Cola Christmas. Socket found no payload in the versions
-    of those three it read; Microsoft's classification governs.
+    extension to remove", with its own fix and row 05, and leaves the headline, score and link alone).
+    Three more of the cluster's themes, on both registries, that Microsoft's list removes as malware
+    (Charcoal Mint, Aurora Borealis and Coca-Cola Christmas) are left out: Socket found no payload in
+    the versions it read, a removal from the Marketplace does not say what ran on a machine, and
+    Charcoal Mint's three Open VSX builds hold colors and, in 1.0.2, a welcome page.
   The March and April loaders install a further extension from GitHub into every editor they find,
   VS Code included; no post gives its id, so those incidents' fix says to check every editor for
   extensions the person did not install, said once when both are found.

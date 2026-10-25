@@ -5109,10 +5109,7 @@ boulderzitunnel.vscode-buddies * glasswormapr openvsx mac,win
 cubedivervolt.html-code-validate * glasswormapr openvsx all
 winnerdomain17.version-lens-tool * glasswormapr openvsx all
 microsoftvs.microsoftvs * glasswormoct any win
-cosmic-themes.theme-cosmic-nebula * glasswormoct any all
-charcoal-mint-studio.theme-charcoal-mint * glasswormoct any all
-lohsebhipolg2s.theme-aurora-borealis * glasswormoct any all
-holiday-themes.theme-coca-cola-christmas * glasswormoct any all"
+cosmic-themes.theme-cosmic-nebula * glasswormoct any all"
 # <<< bad-extensions
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,

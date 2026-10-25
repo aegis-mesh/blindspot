@@ -17,8 +17,13 @@
 # GlassWorm, from Socket's posts, each wave its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
 # update themselves, so a version from before an extension was turned counts too. Left out: what a post
-# calls a sleeper (not malicious yet), and the 17 extensions turned on 29 April, whose payload Open VSX
-# had already removed (the April post's update).
+# calls a sleeper (not malicious yet), the 17 extensions turned on 29 April, whose payload Open VSX
+# had already removed (the April post's update), and three themes of the October cluster that
+# Microsoft's list removes as malware (1 and 2 October 2026): charcoal-mint-studio.theme-charcoal-mint,
+# lohsebhipolg2s.theme-aurora-borealis and holiday-themes.theme-coca-cola-christmas. Socket found no
+# payload in the versions it read and calls Coca-Cola Christmas malware for its cluster, not a payload;
+# a removal from the Marketplace does not say what ran on a machine, nor anything of the Open VSX
+# builds; and Charcoal Mint's three builds on Open VSX hold colors and, in 1.0.2, a welcome page.
 #   January 2026: the four oorzc extensions, Open VSX only: Socket's findings concern the Open VSX
 #     builds, and it does not suggest the publisher's Marketplace listings were compromised. The
 #     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026, after that post:
@@ -42,11 +47,7 @@
 #     boulderzitunnel.vscode-buddies loading its native installer only on win32 and darwin, so its
 #     os is mac,win.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
-#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe), and three
-#     of the cluster's themes on both registries that Microsoft's list removes as malware (1 and 2
-#     October 2026): Charcoal Mint, Aurora Borealis and Coca-Cola Christmas. Socket found no payload in
-#     the versions of those three it read; Microsoft's classification governs, as GitHub's malware
-#     advisories do for npm.
+#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe).
 # id	version	incident	registry	os
 oorzc.ssh-tools	*	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
@@ -152,6 +153,3 @@ cubedivervolt.html-code-validate	*	glasswormapr	openvsx	all
 winnerdomain17.version-lens-tool	*	glasswormapr	openvsx	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win
 cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any	all
-charcoal-mint-studio.theme-charcoal-mint	*	glasswormoct	any	all
-lohsebhipolg2s.theme-aurora-borealis	*	glasswormoct	any	all
-holiday-themes.theme-coca-cola-christmas	*	glasswormoct	any	all

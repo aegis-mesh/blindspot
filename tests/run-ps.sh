@@ -1351,26 +1351,27 @@ has    "and the earlier Antigravity's folder too"     '~/\.antigravity/extension
 # from the Marketplace (an Open VSX build's id there is the Marketplace's own), the others from Open VSX.
 rm -rf "$WORK/dz-rem"; cp -R "$WORK/clean" "$WORK/dz-rem"
 mkdir -p "$WORK/dz-rem/.vscode-insiders/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-rem/.vscode-server/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
-  "$WORK/dz-rem/.vscode-server-insiders/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" "$WORK/dz-rem/.vscode-server/extensions/aadarkcode.one-dark-material-3.20.1" \
+  "$WORK/dz-rem/.vscode-server-insiders/extensions/cosmic-themes.theme-cosmic-nebula-1.0.0" "$WORK/dz-rem/.vscode-server/extensions/aadarkcode.one-dark-material-3.20.1" \
   "$WORK/dz-rem/.cursor-server/extensions/aadarkcode.one-dark-material-3.20.1" "$WORK/dz-rem/.windsurf-server/extensions/spacetoow.vsc-python-indent-1.21.4" \
   "$WORK/dz-rem/.devin-server/extensions/littensy-studio.magical-icons-1.0.61"
 dzrun "$WORK/dz-rem" | tr -s ' \n' '  ' > "$WORK/dz-rem.txt"
 has    "VS Code Insiders' extension folder is read, as VS Code's" '~/\.vscode-insiders/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-rem.txt"
-has    "the VS Code Server folders are read, as VS Code's" '~/\.vscode-server/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed ~/\.vscode-server-insiders/extensions/holiday-themes\.theme-coca-cola-christmas-1\.0\.2 holiday-themes' "$WORK/dz-rem.txt"
+has    "the VS Code Server folders are read, as VS Code's" '~/\.vscode-server/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed ~/\.vscode-server-insiders/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes' "$WORK/dz-rem.txt"
 hasnot "an Open VSX build's id in a VS Code Server folder is not flagged" '~/\.vscode-server/extensions/aadarkcode' "$WORK/dz-rem.txt"
 has    "the Cursor, Windsurf and Devin Desktop server folders are read, as Open VSX editors'" '~/\.cursor-server/extensions/aadarkcode\.one-dark-material-3\.20\.1 aadarkcode\.one-dark-material 3\.20\.1 \(GlassWorm extensions, March 2026\), installed ~/\.windsurf-server/extensions/spacetoow\.vsc-python-indent-1\.21\.4 .*~/\.devin-server/extensions/littensy-studio\.magical-icons-1\.0\.61 littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-rem.txt"
 # Microsoft's list of extensions removed from the Marketplace: a GlassWorm theme it removed as malware and
 # an extension it removed as impersonation are looked for in VS Code's own folder too. Open VSX removed
-# every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. And a theme of the
-# October cluster that Microsoft removed as malware.
+# every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. The three themes of
+# the October cluster that Microsoft removed as malware, and no source shows a payload in, are not listed.
 rm -rf "$WORK/dz-ms"; cp -R "$WORK/clean" "$WORK/dz-ms"
 mkdir -p "$WORK/dz-ms/.vscode/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-ms/.vscode/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
-  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2"
+  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" \
+  "$WORK/dz-ms/.cursor/extensions/charcoal-mint-studio.theme-charcoal-mint-1.0.2" "$WORK/dz-ms/.vscode/extensions/lohsebhipolg2s.theme-aurora-borealis-1.0.1"
 dzrun "$WORK/dz-ms" | tr -s ' \n' '  ' > "$WORK/dz-ms.txt"
 has    "a theme Microsoft removed from its Marketplace as malware, in VS Code's own folder" '~/\.vscode/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
 has    "one it removed as impersonation, in VS Code's own folder too" '~/\.vscode/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
 has    "any oorzc.ssh-tools version in an Open VSX editor's folder, as Open VSX removed them all" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.2 oorzc\.ssh-tools 0\.5\.2 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
-has    "a theme of the October cluster that Microsoft removed as malware" '~/\.cursor/extensions/holiday-themes\.theme-coca-cola-christmas-1\.0\.2 holiday-themes\.theme-coca-cola-christmas 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-ms.txt"
+hasnot "the October cluster's themes with no payload are not listed" 'theme-coca-cola-christmas|theme-charcoal-mint|theme-aurora-borealis' "$WORK/dz-ms.txt"
 # microsoftvs.microsoftvs hid a Windows downloader (Socket): elsewhere it is a malicious extension to
 # remove, not a compromised machine. Next to an extension whose malware could run here, both are listed.
 rm -rf "$WORK/dz-os"; cp -R "$WORK/clean" "$WORK/dz-os"; mkdir -p "$WORK/dz-os/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"

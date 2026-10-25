@@ -4520,9 +4520,6 @@ cubedivervolt.html-code-validate * glasswormapr openvsx all
 winnerdomain17.version-lens-tool * glasswormapr openvsx all
 microsoftvs.microsoftvs * glasswormoct any win
 cosmic-themes.theme-cosmic-nebula * glasswormoct any all
-charcoal-mint-studio.theme-charcoal-mint * glasswormoct any all
-lohsebhipolg2s.theme-aurora-borealis * glasswormoct any all
-holiday-themes.theme-coca-cola-christmas * glasswormoct any all
 '@
 # <<< bad-extensions
 $NpmBad = @{}; $NpmAny = @{}; $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
