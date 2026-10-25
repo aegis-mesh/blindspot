@@ -2122,6 +2122,27 @@ has    "and the allow lists row is not green"         'Allow lists none found, b
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
+# Poetry's, pipenv's and Hatch's own folders of environments, which the home scan does not enter, are
+# read: each holds a bad version here. A site-packages folder that can't be read is not counted as an
+# environment checked: the Python rows, the headline and row 05 say so.
+if [ "$(uname -s)" = Darwin ]; then _po="Library/Caches/pypoetry/virtualenvs"; _ha="Library/Application Support/hatch/env/virtual"
+else _po=".cache/pypoetry/virtualenvs"; _ha=".local/share/hatch/env/virtual"; fi
+rm -rf "$WORK/pyt" "$WORK/pyu"; mkdir -p "$WORK/pyt/$_po/app-Xy3kQ9-py3.12/lib/python3.12/site-packages/litellm-1.107.0.dist-info" \
+  "$WORK/pyt/.local/share/virtualenvs/app-Xy3kQ9/lib/python3.12/site-packages/litellm-1.82.7.dist-info" \
+  "$WORK/pyt/$_ha/app/Xy3kQ9/default/lib/python3.12/site-packages/lightning-2.6.2.dist-info" \
+  "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"
+printf 'home = /usr\n' > "$WORK/pyu/code/py/.venv/pyvenv.cfg"
+HOME="$WORK/pyt" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyt.txt"
+has    "a Python environment in Poetry's folder is checked" 'pypoetry/[^ ]*site-packages: litellm 1\.107\.0' "$WORK/pyt.txt"
+has    "and in pipenv's"                              'share/virtualenvs/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyt.txt"
+has    "and in Hatch's"                               'hatch/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyt.txt"
+chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
+HOME="$WORK/pyu" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu.txt"
+HOME="$WORK/pyu" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"   # no idle agents, whose fix would take the headline
+chmod 755 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
+has    "a site-packages folder that cannot be read is not counted as checked" '! LiteLLM 1\.107\.0 (no signs in [0-9]+ Python environments?, but 1 more|1 Python environment) could not be read' "$WORK/pyu.txt"
+has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
+has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
 # The scan keeps find's errors in a temp file: in /tmp when TMPDIR can't be written to, and with no temp
 # folder at all, it can't tell which folders it read, and says so.
 mkdir -p "$WORK/nomk"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomk/mktemp"; chmod +x "$WORK/nomk/mktemp"

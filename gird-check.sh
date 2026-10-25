@@ -2072,6 +2072,10 @@ $H/.local/share/uv
 /opt/homebrew/anaconda3
 /opt/anaconda3
 /opt/miniconda3"
+# Poetry's, pipenv's and Hatch's own folders of environments, as each documents them: Poetry's cache
+# folder's virtualenvs, pipenv's XDG_DATA_HOME/virtualenvs (~/.virtualenvs on Windows, above) and
+# Hatch's data folder's env/virtual, under LOCALAPPDATA on Windows, ~/Library on a Mac and the XDG
+# folders on Linux.
 if [ "$WIN" -eq 1 ]; then
   PY_ROOTS="$PY_ROOTS
 $H/pipx
@@ -2080,10 +2084,21 @@ $WAPP/uv
 $WLAPP/Programs/Python
 $WAPP/Python
 $WLAPP/miniconda3
-$WLAPP/anaconda3"
+$WLAPP/anaconda3
+$WLAPP/pypoetry/Cache/virtualenvs
+$WLAPP/hatch/env/virtual"
   [ -n "$_pd" ] && PY_ROOTS="$PY_ROOTS
 $_pd/miniconda3
 $_pd/anaconda3"
+else
+  _xd=${XDG_DATA_HOME:-}; case "$_xd" in /*) ;; *) _xd="$H/.local/share" ;; esac
+  _xc=${XDG_CACHE_HOME:-}; case "$_xc" in /*) ;; *) _xc="$H/.cache" ;; esac
+  PY_ROOTS="$PY_ROOTS
+$H/Library/Caches/pypoetry/virtualenvs
+$H/Library/Application Support/hatch/env/virtual
+$_xc/pypoetry/virtualenvs
+$_xd/virtualenvs
+$_xd/hatch/env/virtual"
 fi
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
@@ -2135,9 +2150,14 @@ SITE_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "site" && 
 TEMP_IND=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v o="$_os" '$3 == "temp" && ($2 == "all" || $2 == o) { print $1 " " $4 " " $5 }')
 # The advice shown under an incident's row when its temp files are found: the note of its temp lines.
 temp_advice() { printf '%s\n' "$IND_TABLE" | awk -F '|' -v i="$1" '$1 == i && $3 == "temp" { print $6; exit }'; }
-N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""; PY_UPD=""
+N_PY=0; N_LITE=0; LITE_VERS=""; LITE_BAD=""; LITE_PYC=""; PY_UPD=""; PY_UNREAD=0
 while IFS= read -r sp; do
   [ -n "$sp" ] && [ -d "$sp" ] || continue
+  # One that can't be opened was not checked: it is counted apart (an account run counts it as not
+  # checked), never as an environment with no signs.
+  if [ ! -r "$sp" ] || [ ! -x "$sp" ]; then
+    PY_UNREAD=$((PY_UNREAD + 1)); [ -n "$FLEET_NR" ] && printf '%s\n' "$sp" >> "$FLEET_NR"; continue
+  fi
   N_PY=$((N_PY + 1))
   # The installed LiteLLM versions, shown on a clean row and counted in litellm_installed.
   for d in "$sp"/litellm-*.dist-info; do
@@ -6456,7 +6476,7 @@ if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -
 # scanned, the sessions were partly checked, or a key file, part of npm's cache or an extension
 # folder could not be read. The headline then says what it can: no findings in the paths checked.
 PARTIAL=0
-if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -7122,7 +7142,9 @@ $LITE_PYC
 EOF
         wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(incident_source "$_pi")" 8 "        " "        "
       else
-        if [ "$HOME_PARTIAL" -eq 1 ]; then pair "${YEL}!${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments"), but some folders in your home were not read"
+        if [ "$PY_UNREAD" -gt 0 ] && [ "$N_PY" -gt 0 ]; then pair "${YEL}!${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments"), but $PY_UNREAD more could not be read"
+        elif [ "$PY_UNREAD" -gt 0 ]; then pair "${YEL}!${RST}" "$_pl" 16 "$(plural "$PY_UNREAD" "Python environment" "Python environments") could not be read"
+        elif [ "$HOME_PARTIAL" -eq 1 ]; then pair "${YEL}!${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments"), but some folders in your home were not read"
         else pair "${GRN}✓${RST}" "$_pl" 16 "no signs in $(plural "$N_PY" "Python environment" "Python environments")"; fi
         [ "$_pi" = litellm ] && [ "$N_LITE" -gt 0 ] && emit "                          ${DIM}installed: $(short "$LITE_VERS")${RST}"
       fi
@@ -7465,6 +7487,7 @@ EOF
 elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: files unreadable"
 elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
+elif [ "$PY_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="Python not fully checked: folder unreadable"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
 blank

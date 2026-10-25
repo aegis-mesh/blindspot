@@ -1300,6 +1300,25 @@ has    "and the keys row is not green"                'Keys in plain text none f
 has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
+# Poetry's and Hatch's own folders of environments under LOCALAPPDATA, and pipenv's off Windows, which
+# the home scan does not enter, are read: each holds a bad version here. A site-packages folder that
+# can't be read is not counted as an environment checked: the Python rows, the headline and row 05 say so.
+rm -rf "$WORK/pyt" "$WORK/pyu"; mkdir -p "$WORK/pyt/AppData/Local/pypoetry/Cache/virtualenvs/app-Xy3kQ9-py3.12/Lib/site-packages/litellm-1.107.0.dist-info" \
+  "$WORK/pyt/.local/share/virtualenvs/app-Xy3kQ9/lib/python3.12/site-packages/litellm-1.82.7.dist-info" \
+  "$WORK/pyt/AppData/Local/hatch/env/virtual/app/Xy3kQ9/default/Lib/site-packages/lightning-2.6.2.dist-info" \
+  "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info" "$WORK/pyt/AppData/Roaming" "$WORK/pyt/AppData/Local/Temp" "$WORK/pyu/AppData/Roaming" "$WORK/pyu/AppData/Local/Temp"
+printf 'home = /usr\n' > "$WORK/pyu/code/py/.venv/pyvenv.cfg"
+psrun "$WORK/pyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyt.txt"
+has    "a Python environment in Poetry's folder is checked" 'pypoetry/[^ ]*site-packages: litellm 1\.107\.0' "$WORK/pyt.txt"
+has    "and in pipenv's"                              'share/virtualenvs/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyt.txt"
+has    "and in Hatch's"                               'hatch/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyt.txt"
+chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
+psrun "$WORK/pyu" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu.txt"
+psrun "$WORK/pyu" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"
+chmod 755 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
+has    "a site-packages folder that cannot be read is not counted as checked" '! LiteLLM 1\.107\.0 (no signs in [0-9]+ Python environments?, but 1 more|1 Python environment) could not be read' "$WORK/pyu.txt"
+has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
+has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
 # A folder whose name holds a line break: gird-check.ps1 lists folders through .NET, so it reads the
 # files in it (gird-check.sh, which reads find's output a line at a time, names it as not checked).

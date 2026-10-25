@@ -1522,6 +1522,16 @@ foreach ($d in (Glob-Dirs (J $LocalAppData 'Packages') 'PythonSoftwareFoundation
 $PyRoots = @('.pyenv/pyenv-win/versions', 'miniconda3', 'miniforge3', 'anaconda3', '.conda', '.virtualenvs', 'Envs', '.local/pipx', 'pipx' | ForEach-Object { J $HomeDir $_ }) +
   @((J $LocalAppData 'pipx'), (J $AppData 'uv'), (J $LocalAppData 'miniconda3'), (J $LocalAppData 'anaconda3'))
 if ($env:ProgramData) { $PyRoots += @((J $env:ProgramData 'miniconda3'), (J $env:ProgramData 'anaconda3')) }
+# Poetry's, pipenv's and Hatch's own folders of environments, as each documents them: Poetry's cache
+# folder's virtualenvs, pipenv's XDG_DATA_HOME/virtualenvs (~/.virtualenvs on Windows, above) and
+# Hatch's data folder's env/virtual, under LOCALAPPDATA on Windows, ~/Library on a Mac and the XDG
+# folders on Linux.
+$PyRoots += @((J $LocalAppData 'pypoetry/Cache/virtualenvs'), (J $LocalAppData 'hatch/env/virtual'))
+if (-not $OnWindows) {
+  $xd = [Environment]::GetEnvironmentVariable('XDG_DATA_HOME'); if (-not ($xd -and $xd.StartsWith('/'))) { $xd = J $HomeDir '.local/share' }
+  $xc = [Environment]::GetEnvironmentVariable('XDG_CACHE_HOME'); if (-not ($xc -and $xc.StartsWith('/'))) { $xc = J $HomeDir '.cache' }
+  $PyRoots += @((J $HomeDir 'Library/Caches/pypoetry/virtualenvs'), (J $HomeDir 'Library/Application Support/hatch/env/virtual'), (J $xc 'pypoetry/virtualenvs'), (J $xd 'virtualenvs'), (J $xd 'hatch/env/virtual'))
+}
 foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1593,8 +1603,11 @@ Progress "Checking $(Plural $SitesAll.Count 'Python environment' 'Python environ
 $N_PY = 0; $N_LITE = 0; $LiteVers = New-Object System.Collections.Generic.List[string]
 $LiteBad = New-Object System.Collections.Generic.List[object]; $LitePyc = New-Object System.Collections.Generic.List[string]
 $PyUpd = New-Object System.Collections.Generic.List[object]
+$PyUnread = 0
 foreach ($sp in $SitesAll) {
   if (-not (Is-Dir $sp)) { continue }
+  # One that can't be listed was not checked: it is counted apart, never as an environment with no signs.
+  try { [void][IO.Directory]::EnumerateFileSystemEntries($sp).GetEnumerator().MoveNext() } catch { $PyUnread++; continue }
   $N_PY++
   # The installed LiteLLM versions, shown on a clean row and counted in litellm_installed.
   foreach ($d in (Glob-Dirs $sp 'litellm-*.dist-info')) {
@@ -5985,7 +5998,7 @@ if (-not $OptOffline) {
 # A check that was not done in full never leaves the headline green: the sessions were partly
 # checked, a key file, part of npm's cache or an extension folder could not be read, or a file took
 # too long. The headline then says what it can: no findings in the paths checked.
-$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0)
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0 -or $PyUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -6198,7 +6211,9 @@ foreach ($pi in $PyIncidents) {
     foreach ($l in $LitePyc) { Emit "        $l" }
     Wrap "A compiled cook file stays behind when cook.py is deleted, which is what the 1.107.0 malware ships. If litellm 1.107.0 was ever installed here, treat this as a hit. Advisory: $(Incident-Source $pi)" 8 '        ' '        '
   } else {
-    if ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments'), but some folders in your home were not read" }
+    if ($PyUnread -gt 0 -and $N_PY -gt 0) { Pair "$cYel!$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments'), but $PyUnread more could not be read" }
+    elseif ($PyUnread -gt 0) { Pair "$cYel!$cRst" $pl 16 "$(Plural $PyUnread 'Python environment' 'Python environments') could not be read" }
+    elseif ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments'), but some folders in your home were not read" }
     else { Pair "$cGrn$gOk$cRst" $pl 16 "no signs in $(Plural $N_PY 'Python environment' 'Python environments')" }
     if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $(Short ($LiteVers -join ' '))$cRst" }
   }
@@ -6406,6 +6421,7 @@ elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully che
 elseif ($LockUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: files unreadable' }
 elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($ExtUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'extensions not fully checked: folder unreadable' }
+elseif ($PyUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'Python not fully checked: folder unreadable' }
 elseif ($HOME_PARTIAL -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'none found, but some folders were not read' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
 Blank
