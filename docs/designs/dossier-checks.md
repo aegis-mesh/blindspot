@@ -118,12 +118,13 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   only ever published to Open VSX, `any` otherwise. Looked for as `<id>-<version>` folders in
   `~/.vscode/extensions` (VS Code, which installs from the Marketplace) and in `~/.cursor/extensions`,
   `~/.windsurf/extensions`, `~/.devin/extensions`, `~/.vscode-oss/extensions` and `~/.kiro/extensions`
-  (Cursor, Windsurf, VSCodium and Kiro, which install from Open VSX; Windsurf became Devin Desktop on 2
-  June 2026, which keeps extensions in `~/.devin/extensions` and only reads the old folder); an `openvsx` line is not looked for in VS Code's
-  own folder, where the same version is the Marketplace's clean build. A hit is its own section 5
-  row, "Editor extensions", with the incident line, level `act`, its own headline and fix, never
-  called npm malware. With nothing found the row is green, and it is one of the checks section 5
-  counts; a folder that can't be read makes it yellow, not fully checked.
+  (Cursor, Windsurf, VSCodium and Kiro, which install from Open VSX; Windsurf became Devin Desktop
+  on 2 June 2026, which keeps extensions in `~/.devin/extensions` and only reads the old folder); an
+  `openvsx` line is not looked for in VS Code's own folder, where the same version is the
+  Marketplace's clean build. A hit is its own section 5 row, "Editor extensions", with the incident
+  line, level `act`, its own headline and fix, never called npm malware. With nothing found the row
+  is green, and it is one of the checks section 5 counts; a folder that can't be read makes it
+  yellow, not fully checked.
 - GlassWorm, from Socket's posts, one incident per post: a version where the post gives one, and
   every version where it names an extension without one (these are the attacker's own extensions,
   which update themselves, so a version from before an extension was turned counts too).
@@ -158,8 +159,8 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   Level `update`: the machine is not compromised, but a wallet used with it is, and the incident
   line says so. Its fix, moving the funds to a new wallet, comes right after the act-now fixes,
   ahead of every other one, and row 05 names it (the incident's summary column); the result link
-  carries nothing for it. The `update` level's description changes from "nothing ran" to "the machine itself
-  is not compromised".
+  carries nothing for it. The `update` level's description changes from "nothing ran" to "the
+  machine itself is not compromised".
 
 ## Not covered
 
