@@ -927,7 +927,18 @@ VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
 Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
-Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
+Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+Claude Code|all|$AS/Code/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+Claude Code|all|$AS/Code - Insiders/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT=''
 # <<< auto-approve
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
@@ -6140,16 +6151,22 @@ _g=$(
 $_g"
 # --- 1. Coding agents: settings and versions -------------------------------------
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by aa_hit (section 2).
-AA_ROWS=""
+AA_ROWS=""; AA_TRIED=""
+# A path with one * folder: that file in every folder there, as VS Code keeps a settings file for each
+# profile in User/profiles/<id>/.
+aa_glob() { for _g in "${1%%/\**}"/*/"${1#*/\*/}"; do [ -e "$_g" ] && printf '%s\n' "$_g"; done; }
 while IFS='|' read -r _aa _ao _ap _as _apat; do
   [ -n "$_aa" ] || continue
   case "$_ao" in all|"$_os") ;; *) continue ;; esac
   case "$_ap" in
     "{PROJECT}/"*) _rel=${_ap#"{PROJECT}/"}; _al=$(printf '%s\n' "$AA_FILES" | while IFS= read -r _f; do case "$_f" in (*/"$_rel") printf '%s\n' "$_f" ;; esac; done) ;;
+    */\*/*) _al=$(aa_glob "$_ap") ;;
     *) _al=$_ap ;;
   esac
+  AA_TRIED="$AA_TRIED$_al
+"
   while IFS= read -r _f; do
-    [ -n "$_f" ] && fleet_ok "$_f" && [ -f "$_f" ] && aa_hit "$_f" "$_apat" && AA_ROWS="$AA_ROWS$(rowsafe "$_f")$TAB$_aa$TAB$_as
+    [ -n "$_f" ] && fleet_ok "$_f" && [ -f "$_f" ] && ! too_big "$_f" && aa_hit "$_f" "$_apat" && AA_ROWS="$AA_ROWS$(rowsafe "$_f")$TAB$_aa$TAB$_as
 "
   done <<EOF
 $_al
@@ -6157,6 +6174,10 @@ EOF
 done <<EOF
 $AA_TABLE
 EOF
+# One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
+# it with the other settings files it could not read, so the summary doesn't read clean over it.
+_aau=$(printf '%s\n' "$AA_TRIED" | unread_files big)
+if [ -n "$_aau" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_aau" | awk 'length && !s[$0]++'); N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD"); fi
 # One row per file and agent: file<TAB>agent<TAB>settings. VS Code's settings file can hold two agents'.
 AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '{ k = $1 FS $2 } !(k in o) { o[k] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[k]] = st[o[k]] ", " $3 }
   END { for (i = 1; i <= n; i++) print f[i] "\t" ag[i] "\t" st[i] }')

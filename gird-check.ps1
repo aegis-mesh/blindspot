@@ -556,6 +556,17 @@ $AaTable = @(
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
   ,@('Claude Code', 'all', (J $AppData 'Code/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('Claude Code', 'all', (J $AppData 'Cursor/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('Claude Code', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('Claude Code', 'all', (J $AppData 'Cursor/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
 )
 $AaProject = @()
 # <<< auto-approve
@@ -5502,12 +5513,22 @@ $OutTable = @(
 # , } # or /. Lines starting with // or # are skipped; in a .toml file only the lines before the
 # first [table] count.
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by Aa-Hit (section 2).
-$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}
+# A path with one * folder: that file in every folder there, as VS Code keeps a settings file for each
+# profile in User/profiles/<id>/. The same as gird-check.sh's aa_glob.
+function Aa-Glob([string]$p) {
+  $pp = $p -replace '\\', '/'; $k = $pp.IndexOf('/*/')
+  if ($k -lt 0) { return $p }
+  $rest = $pp.Substring($k + 3)
+  try { foreach ($d in @(([IO.DirectoryInfo]$pp.Substring(0, $k)).GetDirectories() | Sort-Object -Property Name -CaseSensitive)) { $f = J $d.FullName $rest; if (Exists $f) { $f } } } catch { }
+}
+$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}; $aaTried = New-Object System.Collections.Generic.List[string]
 foreach ($r in $AaTable) {
   if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
-  if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) }) } else { $files = @($r[2]) }
+  if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) }) } else { $files = @(Aa-Glob $r[2]) }
   foreach ($f in $files) {
-    if (-not (Is-File $f) -or -not (Aa-Hit $f $r[4])) { continue }
+    if (-not (Is-File $f) -or -not (Is-RegularFile $f)) { continue }
+    if (-not $aaTried.Contains($f)) { $aaTried.Add($f) }
+    if ((Too-Big $f) -or -not (Aa-Hit $f $r[4])) { continue }
     # One row per file and agent: VS Code's settings file can hold two agents'.
     $k = $f + [char]9 + $r[0]
     if ($aaSeen.ContainsKey($k)) { $aaSeen[$k].Setting += ", $($r[3])" }
@@ -5515,6 +5536,9 @@ foreach ($r in $AaTable) {
   }
 }
 $N_YOLO = $AaList.Count
+# One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
+# it with the other settings files it could not read, so the summary doesn't read clean over it.
+foreach ($f in (Unread-Files $aaTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 if ($N_YOLO -gt 0) { Progress "Agents set to run commands without asking: $($AaList[0].Agent)" }
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.

@@ -2,7 +2,8 @@
 #   agent     as the report shows it
 #   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
 #   path      the settings file, with the path tokens data/sessions.tsv uses, or {PROJECT}/folder/file
-#             for that file in every project folder the home scan finds
+#             for that file in every project folder the home scan finds. One folder may be *, for that
+#             file in every folder there (VS Code keeps a settings file for each profile)
 #   setting   as the report shows it
 #   pattern   one or more, each in its own field, and every one must match. Spaces are ignored. A
 #             .json file is read as one line (the scripts' flat): a match starts at the text, a { or
@@ -45,6 +46,15 @@
 # extension installs in Cursor too, where the docs give it an install link; Cursor keeps its user
 # settings in Cursor/User as VS Code does in Code/User. A settings file that holds two agents' settings
 # makes a row for each.
+# VS Code profiles: VS Code's settings docs put a profile's user settings in
+# Code/User/profiles/<profile ID>/settings.json, in force while that profile is active. VS Code's source
+# (PROFILE_SCOPES in workbench/services/configuration) reads machine, window and resource settings from
+# a profile's file, never application ones. chat.permissions.default declares no scope (window), and
+# the Claude Code extension declares both its settings machine (its package.json, 2.1.310): each has a
+# profile line. chat.tools.global.autoApprove is APPLICATION_MACHINE, read from the default profile only,
+# so it has none. VS Code Insiders keeps its user data in a folder named after its product's nameShort
+# (src/mainImpl.ts), Code - Insiders in the Insiders build's product.json, with the same settings.
+# Cursor has VS Code's profiles (its docs on importing a VS Code profile), kept the same way.
 # agent	os	path	setting	pattern...
 Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"permissions": {"defaultMode": "bypassPermissions"
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"	!default_permissions
@@ -54,3 +64,14 @@ VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoA
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
 Claude Code	all	{AS}/Code/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
 Claude Code	all	{AS}/Cursor/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+VS Code Copilot	all	{AS}/Code/User/profiles/*/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code/User/profiles/*/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+Claude Code	all	{AS}/Code/User/profiles/*/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+Claude Code	all	{AS}/Code - Insiders/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+VS Code Copilot	all	{AS}/Code - Insiders/User/profiles/*/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code - Insiders/User/profiles/*/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+Claude Code	all	{AS}/Code - Insiders/User/profiles/*/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+Claude Code	all	{AS}/Cursor/User/profiles/*/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true

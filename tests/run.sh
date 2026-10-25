@@ -1882,6 +1882,30 @@ has    "a project's chat.permissions.default: autoApprove is listed in section 2
 has    "and a project's autopilot"                    '! ~/p/x/\.vscode/settings\.json Set to run every Copilot tool call without asking in new chats, with chat\.permissions\.default: autopilot\.' "$WORK/dz-perm-proj.txt"
 has    "a project at the default level is not counted: row 02 counts the other 2" '02 . MCP servers .*, 2 projects act on opening' "$WORK/dz-perm-proj-c.txt"
 has    "and the fix says to read those settings before an editor opens the folder" 'Read the settings marked in section 2 before an agent or editor opens those folders' "$WORK/dz-perm-proj.txt"
+# VS Code reads chat.permissions.default and the Claude Code extension's settings from a profile's own
+# settings file too (User/profiles/<id>/settings.json), never chat.tools.global.autoApprove, which only
+# the default profile sets. VS Code Insiders keeps its user settings in Code - Insiders, and Cursor has
+# profiles too. A user settings file that can't be read is named as not read.
+rm -rf "$WORK/dz-prof"; cp -R "$WORK/clean" "$WORK/dz-prof"
+mkdir -p "$WORK/dz-prof/$DAS/Code/User/profiles/-5a1f2e3d" "$WORK/dz-prof/$DAS/Code - Insiders/User" "$WORK/dz-prof/$DAS/Cursor/User/profiles/6b2c"
+printf '{"chat.permissions.default": "autopilot", "chat.tools.global.autoApprove": true}\n' > "$WORK/dz-prof/$DAS/Code/User/profiles/-5a1f2e3d/settings.json"
+printf '{"chat.tools.global.autoApprove": true}\n' > "$WORK/dz-prof/$DAS/Code - Insiders/User/settings.json"
+printf '{"claudeCode.initialPermissionMode": "bypassPermissions", "claudeCode.allowDangerouslySkipPermissions": true}\n' > "$WORK/dz-prof/$DAS/Cursor/User/profiles/6b2c/settings.json"
+dzrun "$WORK/dz-prof" | tr -s ' \n' '  ' > "$WORK/dz-prof.txt"
+has    "a VS Code profile set to start chats in Autopilot" '! VS Code Copilot ~/Library/Application Support/Code/User/profiles/-5a1f2e3d/settings\.json chat\.permissions\.default: autopilot' "$WORK/dz-prof.txt"
+hasnot "a profile's chat.tools.global.autoApprove is not in force" 'profiles/-5a1f2e3d/settings\.json [^!]*global' "$WORK/dz-prof.txt"
+has    "VS Code Insiders' user settings are read" '! VS Code Copilot ~/Library/Application Support/Code - Insiders/User/settings\.json chat\.tools\.global\.autoApprove' "$WORK/dz-prof.txt"
+has    "a Cursor profile with Claude Code set to bypass permissions" '! Claude Code ~/Library/Application Support/Cursor/User/profiles/6b2c/settings\.json claudeCode\.initialPermissionMode: bypassPermissions' "$WORK/dz-prof.txt"
+rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/$DAS/Code/User" "$WORK/dz-unr/$DAS/Cursor/User"
+printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/$DAS/Code/User/settings.json" > "$WORK/dz-unr/$DAS/Cursor/User/settings.json"
+# No MCP token, so row 02 shows the files not read.
+chmod 000 "$WORK/dz-unr/$DAS/Code/User/settings.json" "$WORK/dz-unr/$DAS/Cursor/User/settings.json"
+dzrun "$WORK/dz-unr" | tr -s ' \n' '  ' > "$WORK/dz-unr.txt"
+dzrun "$WORK/dz-unr" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-unr-c.txt"
+chmod 644 "$WORK/dz-unr/$DAS/Code/User/settings.json" "$WORK/dz-unr/$DAS/Cursor/User/settings.json"
+has    "VS Code's user settings that can't be read are named as not read" 'could not be read, so the servers, tokens and settings in them were not checked: .*Code/User/settings\.json' "$WORK/dz-unr.txt"
+has    "and so are Cursor's" 'could not be read, so the servers, tokens and settings in them were not checked: .*Cursor/User/settings\.json' "$WORK/dz-unr.txt"
+has    "and row 02 says they could not be read" 'MCP servers .*but [0-9]+ files? could not be read' "$WORK/dz-unr-c.txt"
 # Claude Code's VS Code extension starts new conversations in bypass mode with claudeCode.initialPermissionMode
 # set to bypassPermissions in the user settings, and only with claudeCode.allowDangerouslySkipPermissions on (its
 # docs): both make a row, in VS Code's and in Cursor's user settings; one alone does not, and a project's copy,
@@ -1954,6 +1978,7 @@ mu "$WORK/mu-act" "$WORK/mu-act.txt"
 has    "a made-up act-level npm hit alone: compromised" 'Treat this machine as compromised\. Delete the packages and files listed in section 5' "$WORK/mu-act.txt"
 has    "and the link says npm malware"                '&nm=1&py=0&ex=0&wp=0' "$WORK/mu-act.txt"
 has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagent/config\.json madeMode' "$WORK/mu.txt"
+has    "made-up agent setting in a folder for each profile" '! Made Agent ~/\.madeagent/profiles/p1/config\.json madeMode profile' "$WORK/mu.txt"
 has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 3\.0\.0 or later A made-up hole for the tests\. example\.com/madetool A second made-up hole\. example\.com/madetool2' "$WORK/mu.txt"
 has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
 has    "a made-up extension whose malware runs on Windows only is one to remove here" '~/\.cursor/extensions/made\.winext-2\.0\.0 made\.winext 2\.0\.0 \(Made extension, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/mu.txt"

@@ -87,7 +87,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
         function pat_ok(s) { return s ~ /[^[:space:]]/ && s !~ /[\047`$|\\]/ && (s !~ /^!/ || (s ~ /^![A-Za-z0-9_.-]+$/ && $3 ~ /\.toml$/)) }
         { ok = NF >= 5 && $1 != "" && $1 !~ /[\047"`$|\\]/ && $2 ~ /^(all|mac|linux|win)$/ && $4 != "" && $4 !~ /[\047"`$|\\]/
           if ($3 ~ /^\{PROJECT\}/) ok = ok && $3 ~ /^\{PROJECT\}(\/[A-Za-z0-9_.-]+)(\/[A-Za-z0-9_.-]+)+$/ && $3 !~ /\/\.\.?(\/|$)/
-          else ok = ok && path_ok($3)
+          # One folder may be *, for every folder there; the scripts expand it, and a * anywhere else is refused.
+          else { p = $3; ok = ok && gsub(/\/\*\//, "/x/", p) <= 1 && path_ok(p) }
           pos = 0; for (i = 5; i <= NF; i++) { if (!pat_ok($i)) ok = 0; if ($i !~ /^!/) pos++ }; if (pos == 0) ok = 0
           if (!ok) print "data/auto-approve.tsv: " $0 }'
       # Lines of one tool must agree on its name, and lines of one advisory of a tool on its range and hole.
