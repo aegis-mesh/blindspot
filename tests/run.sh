@@ -877,6 +877,17 @@ cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
 HOME="$WORK/dz-calm" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-calm.txt"
 has    "a one-line settings file is read too"         '! Claude Code ~/\.claude/settings\.json bypassPermissions' "$WORK/dz-calm.txt"
+# VS Code 1.124's chat.permissions.default: autoApprove ("Allow all") and autopilot run every tool call
+# without asking. The default level, a commented line and a project's copy (not read yet) are not reported.
+for L in pilot allow none; do rm -rf "$WORK/dz-perm-$L"; cp -R "$WORK/clean" "$WORK/dz-perm-$L"; mkdir -p "$WORK/dz-perm-$L/$DAS/Code/User"; done
+printf '{\n  // "chat.permissions.default": "autoApprove",\n  "chat.permissions.default": "autopilot"\n}\n' > "$WORK/dz-perm-pilot/$DAS/Code/User/settings.json"
+printf '{"chat.permissions.default": "autoApprove"}\n' > "$WORK/dz-perm-allow/$DAS/Code/User/settings.json"
+printf '{\n  // "chat.permissions.default": "autoApprove",\n  "chat.permissions.default": "default"\n}\n' > "$WORK/dz-perm-none/$DAS/Code/User/settings.json"
+mkdir -p "$WORK/dz-perm-none/p/w/.vscode"; printf '{"chat.permissions.default": "autoApprove"}\n' > "$WORK/dz-perm-none/p/w/.vscode/settings.json"
+for L in pilot allow none; do dzrun "$WORK/dz-perm-$L" | tr -s ' \n' '  ' > "$WORK/dz-perm-$L.txt"; done
+has    "VS Code set to start chats in Autopilot"      '! VS Code Copilot ~/Library/Application Support/Code/User/settings\.json chat\.permissions\.default: autopilot' "$WORK/dz-perm-pilot.txt"
+has    "VS Code set to start chats allowing all"      '! VS Code Copilot ~/Library/Application Support/Code/User/settings\.json chat\.permissions\.default: autoApprove' "$WORK/dz-perm-allow.txt"
+hasnot "the default level, a commented one or a project's copy is not reported" 'chat\.permissions\.default' "$WORK/dz-perm-none.txt"
 # A find that rejects the expression (an old or BusyBox find) prints nothing: the report must say the
 # home folder was not scanned, never read it as clean.
 mkdir -p "$WORK/badfind"; printf '#!/bin/sh\necho "find: unrecognized: -maxdepth" >&2\nexit 1\n' > "$WORK/badfind/find"; chmod +x "$WORK/badfind/find"

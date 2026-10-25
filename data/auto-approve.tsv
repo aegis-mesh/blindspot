@@ -17,7 +17,14 @@
 # new one from the user settings only (scope APPLICATION_MACHINE in its source), never from a
 # project's .vscode/settings.json. A project's chat.tools.autoApprove is the setting CVE-2025-53773
 # wrote; section 2 of the scripts lists it as a sign of that attack, not as a setting in force.
+# VS Code 1.124 added chat.permissions.default, the permission level new chats start with: autoApprove
+# ("Allow all") and autopilot run every tool call without asking (VS Code's AI settings reference and
+# approvals page; the values from chat.shared.contribution.ts). It declares no scope, so a project's
+# .vscode/settings.json may set it as well; that copy is not read yet. chat.defaultConfiguration, an
+# object whose approvals and mode would have to be read inside it, is not read.
 # agent	os	path	setting	pattern...
 Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"defaultMode": "bypassPermissions"
 Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"
 VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"

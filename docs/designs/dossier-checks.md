@@ -34,6 +34,7 @@ first `[table]` count.
 | Claude Code | `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json` | `"defaultMode": "bypassPermissions"` | code.claude.com/docs/en/permission-modes |
 | Codex | `{ENV:CODEX_HOME:~/.codex}/config.toml` | `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` | Codex config reference |
 | VS Code (Copilot) | user `settings.json` per OS | `"chat.tools.global.autoApprove": true` | VS Code Copilot settings reference and the 1.104 release notes |
+| VS Code (Copilot) | user `settings.json` per OS | `"chat.permissions.default": "autoApprove"` or `"autopilot"` | VS Code's AI settings reference and approvals page, `chat.shared.contribution.ts` |
 
 VS Code 1.104 renamed `chat.tools.autoApprove` to `chat.tools.global.autoApprove` without
 migration, so current VS Code ignores the old name, and the setting is registered with the scope
@@ -43,6 +44,13 @@ is ignored too. Neither is a setting in force, so neither is a line here. A proj
 section 2 lists it under "Project settings that act as soon as the folder is opened", worded as a
 sign of that attack (or of an old VS Code) that VS Code 1.104 and later ignore; it does not lower
 the score.
+
+VS Code 1.124 added `chat.permissions.default`, the permission level new chats start with. Its values
+`autoApprove` ("Allow all") and `autopilot` run every tool call without asking, so in the user
+settings they are an agent set to run without asking, like the global setting. The setting declares no
+scope, so a project's `.vscode/settings.json` may set it as well; that copy is not read yet.
+`chat.defaultConfiguration`, an object whose `approvals` and `mode` would have to be read inside it,
+is not read either.
 
 Not built: Gemini CLI (its YOLO mode cannot be saved in settings), the Cursor editor (stored in
 SQLite), Cursor CLI (the docs do not say what `unrestricted` does), Kiro (YAML rules need a parser),
