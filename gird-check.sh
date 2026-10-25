@@ -6157,7 +6157,7 @@ $_g"
 AA_ROWS=""; AA_TRIED=""
 # A path with one * folder: that file in every folder there, as VS Code keeps a settings file for each
 # profile in User/profiles/<id>/.
-aa_glob() { for _g in "${1%%/\**}"/*/"${1#*/\*/}"; do [ -e "$_g" ] && printf '%s\n' "$_g"; done; }
+aa_glob() { for _ag in "${1%%/\**}"/*/"${1#*/\*/}"; do [ -e "$_ag" ] && printf '%s\n' "$_ag"; done; }
 while IFS='|' read -r _aa _ao _ap _as _apat; do
   [ -n "$_aa" ] || continue
   case "$_ao" in all|"$_os") ;; *) continue ;; esac
