@@ -178,3 +178,5 @@ fleet: a path with mode 020 is refused as writable by others	gird-check.ps1 has 
 fleet: with the options line in the file, --inventory still only reads the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 gird-check.sh runs no sudo or dscl	gird-fleet.sh, the root side of fleet mode, is bash only; gird-check.ps1 has no fleet mode to keep apart
 gird-check.sh --all-users points to gird-fleet.sh	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a gird-check.sh others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: without gird-check.sh next to it, it stops and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

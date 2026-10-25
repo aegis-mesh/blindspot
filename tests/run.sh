@@ -1129,6 +1129,14 @@ GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_
   FLL_DIR="$FL" bash "$FL/gw/gird-fleet.sh" --all-users < /dev/null > "$FL/gw.out" 2> "$FL/gw.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above them must be owned by root and writable by no one else' "$FL/gw.err"; then ok "fleet: a script in a folder others can write to is refused"; else bad "fleet: a script in a folder others can write to is refused" "exit $RC $(cat "$FL/gw.err")"; fi
 chmod 755 "$FL/gw"
+mkdir -p "$FL/gw2"; cp "$SCRIPT" "$FLEETSH" "$FL/gw2/"; chmod 664 "$FL/gw2/gird-check.sh"; : > "$FL/argv.log"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  FLL_DIR="$FL" bash "$FL/gw2/gird-fleet.sh" --all-users < /dev/null > "$FL/gw2.out" 2> "$FL/gw2.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above them must be owned by root and writable by no one else' "$FL/gw2.err"; then ok "fleet: a gird-check.sh others can write to is refused"; else bad "fleet: a gird-check.sh others can write to is refused" "exit $RC $(cat "$FL/gw2.err")"; fi
+mkdir -p "$FL/alone"; cp "$FLEETSH" "$FL/alone/"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  FLL_DIR="$FL" bash "$FL/alone/gird-fleet.sh" --all-users < /dev/null > /dev/null 2> "$FL/alone.err"; RC=$?
+if [ "$RC" -eq 13 ] && grep -q 'gird-check.sh must sit next to gird-fleet.sh' "$FL/alone.err"; then ok "fleet: without gird-check.sh next to it, it stops and says why"; else bad "fleet: without gird-check.sh next to it, it stops and says why" "exit $RC $(cat "$FL/alone.err")"; fi
 # Modes with no owner bits, read with three digits: 002 and 020 are writable by others, not "2" and "20".
 # Nobody but root can run a script that sits in or below such a mode, so a test run adds one such path
 # to the paths root checks (GIRD_CHECK_FLEET_CHECK_ALSO, read only when not root).
