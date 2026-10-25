@@ -87,3 +87,5 @@ a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh 
 both scripts carry the same version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
 every banner shows that version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
 the newest CHANGELOG release is that version	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+the repo's folder is listed when its worktree is found first	forces find's order with a stand-in find; gird-check.ps1 lists files through .NET, whose order a test can't set
+and the worktree is not	forces find's order with a stand-in find; gird-check.ps1 lists files through .NET, whose order a test can't set
