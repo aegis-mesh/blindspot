@@ -1647,6 +1647,18 @@ hasnot "a version of it the post does not name is not flagged" 'quartz-markdown-
 has    "a GlassWASM clone in an Open VSX editor's folder is malware" '~/\.cursor/extensions/exargd\.vsblack-0\.0\.1 exargd\.vsblack 0\.0\.1 \(GlassWASM extensions, June 2026\), installed' "$WORK/dz-gw2.txt"
 has    "with Socket's sourced line"                   'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage\. socket\.dev' "$WORK/dz-gw2.txt"
 hasnot "the clean Marketplace original in VS Code's own folder is not flagged" 'noellee-doc' "$WORK/dz-gw2.txt"
+# Codex reads a trusted project's .codex/config.toml above the user's file, and a project may set its approvals
+# and sandbox (its docs and config loader): the same settings count there. ~/.codex/config.toml is the person's own.
+rm -rf "$WORK/cxp"; mkdir -p "$WORK/cxp/.codex" "$WORK/cxp/code/p/.codex" "$WORK/cxp/code/q/.codex" "$WORK/cxp/code/r/.codex"
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n' | tee "$WORK/cxp/.codex/config.toml" > "$WORK/cxp/code/p/.codex/config.toml"
+printf 'approval_policy = "never"\ndefault_permissions = ":danger-full-access"\n' > "$WORK/cxp/code/r/.codex/config.toml"
+printf 'approval_policy = "never"\nsandbox_mode = "workspace-write"\n' > "$WORK/cxp/code/q/.codex/config.toml"
+HOME="$WORK/cxp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/cxp.txt"
+has    "a project's .codex/config.toml that never asks, with full access, is listed" '! Codex ~/code/p/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxp.txt"
+has    "and one that picks the full-access profile"    '! Codex ~/code/r/\.codex/config\.toml never asks, full access profile, when the project is trusted' "$WORK/cxp.txt"
+hasnot "a project that keeps the sandbox is not listed" 'code/q/' "$WORK/cxp.txt"
+has    "the person's own config is listed as theirs"   '! Codex ~/\.codex/config\.toml never asks, full access( !| A prompt)' "$WORK/cxp.txt"
+hasnot "and not as a project's too"                   '~/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxp.txt"
 # Antigravity installs from Open VSX: Antigravity IDE keeps its extensions in ~/.antigravity-ide, the
 # Antigravity before it in ~/.antigravity. A GlassWorm extension that names Antigravity, in each.
 rm -rf "$WORK/dz-ag"; cp -R "$WORK/clean" "$WORK/dz-ag"

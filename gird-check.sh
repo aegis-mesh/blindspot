@@ -919,12 +919,14 @@ WORM_REF_NOTE='runs a file a worm plants'
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|never asks, full access, when the project is trusted|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|never asks, full access profile, when the project is trusted|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
 Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
-AA_PROJECT=''
+AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
 # dependency caches, build output, model and VM images, cloud sync folders.
@@ -6076,7 +6078,8 @@ while IFS='|' read -r _aa _ao _ap _as _apat; do
   [ -n "$_aa" ] || continue
   case "$_ao" in all|"$_os") ;; *) continue ;; esac
   case "$_ap" in
-    "{PROJECT}/"*) _rel=${_ap#"{PROJECT}/"}; _al=$(printf '%s\n' "$AA_FILES" | while IFS= read -r _f; do case "$_f" in (*/"$_rel") printf '%s\n' "$_f" ;; esac; done) ;;
+    # The home folder is not a project: its own file there is the user's, such as ~/.codex/config.toml.
+    "{PROJECT}/"*) _rel=${_ap#"{PROJECT}/"}; _al=$(printf '%s\n' "$AA_FILES" | while IFS= read -r _f; do case "$_f" in ("$H/$_rel") ;; (*/"$_rel") printf '%s\n' "$_f" ;; esac; done) ;;
     *) _al=$_ap ;;
   esac
   while IFS= read -r _f; do

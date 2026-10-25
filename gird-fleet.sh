@@ -151,12 +151,14 @@ prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf o
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|never asks, full access, when the project is trusted|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|never asks, full access profile, when the project is trusted|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
 Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
-AA_PROJECT=''
+AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
 # >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code

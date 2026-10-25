@@ -544,13 +544,15 @@ $AaTable = @(
   ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"permissions": {"defaultMode": "bypassPermissions"'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access profile', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'never asks, full access, when the project is trusted', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'never asks, full access profile, when the project is trusted', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
   ,@('Claude Code', 'all', (J $AppData 'Code/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('Claude Code', 'all', (J $AppData 'Cursor/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
 )
-$AaProject = @()
+$AaProject = @('.codex/config.toml')
 # <<< auto-approve
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
 # Whether a link ends at a regular file. Off Windows a repo can link a settings file to /dev/zero or
@@ -5447,7 +5449,8 @@ $OutTable = @(
 $AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = @{}
 foreach ($r in $AaTable) {
   if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
-  if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) }) } else { $files = @($r[2]) }
+  # The home folder is not a project: its own file there is the user's, such as ~/.codex/config.toml.
+  if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $own = (J $HomeDir $r[2].Substring(10)) -replace '\\', '/'; $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) -and ($_ -replace '\\', '/') -ne $own }) } else { $files = @($r[2]) }
   foreach ($f in $files) {
     if (-not (Is-File $f) -or -not (Aa-Hit $f $r[4])) { continue }
     # One row per file and agent: VS Code's settings file can hold two agents'.
