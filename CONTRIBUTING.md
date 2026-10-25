@@ -28,7 +28,7 @@ Every change has to keep these true. Reviews check them first.
 
 - **Read-only.** It never writes, moves or deletes a file, except the report someone asks it to save.
 - **Never prints a key.** Match keys inside `grep` or `awk` pipes. Never put a key value in a variable or the output.
-- **Runs nothing it finds.** No Python, no agents, no MCP servers, no git inside other people's repos, no sudo.
+- **Runs nothing it finds.** No Python, no agents, no MCP servers, no git inside other people's repos, no sudo. The root side of fleet mode lives in `gird-fleet.sh` alone (`docs/designs/fleet-mode.md`).
 - **No new dependencies.** Only tools that ship with macOS and common Linux distributions. It must run on bash 3.2, the version macOS ships.
 - **Windows too.** `gird-check.ps1` keeps the same rules and must run on Windows PowerShell 5.1, which ships with Windows, and on PowerShell 7.
 - **Shares nothing new by accident.** Anything added to the shared counts must be a number or come from a fixed list, and must be listed in [TELEMETRY.md](TELEMETRY.md).
@@ -84,7 +84,7 @@ A reviewer starts from the person who acts on the report, not from the diff:
 ```sh
 bash tests/run.sh            # builds a fake home folder and checks what the script finds and never prints
 bash tests/interactive.sh    # macOS: drives the game and the menu with expect
-shellcheck -s bash -S warning gird-check.sh tests/*.sh
+shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh
 PWSH=/path/to/pwsh bash tests/run-ps.sh   # the same checks for gird-check.ps1, under PowerShell 7
 PWSH=/path/to/pwsh bash tests/parity-run.sh   # both suites, then checks every bash test has a twin
 ```
