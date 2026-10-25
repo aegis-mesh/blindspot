@@ -180,3 +180,6 @@ gird-check.sh runs no sudo or dscl	gird-fleet.sh, the root side of fleet mode, i
 gird-check.sh --all-users points to gird-fleet.sh	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a gird-check.sh others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: without gird-check.sh next to it, it stops and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+both scripts carry the same version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+every banner shows that version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+the newest CHANGELOG release is that version	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
