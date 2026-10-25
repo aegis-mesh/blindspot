@@ -9,7 +9,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 R=$1; C=$2; F=$3
-mkdir -p "$R"; cp -R gird-check.sh gird-check.ps1 tools data "$R/"
+mkdir -p "$R"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$R/"
 T=$(printf '\t')
 cat >> "$R/data/incidents.tsv" <<EOF
 madeplat${T}Made Platform${T}October 2026${T}a made-up platform leak for the tests${T}https://example.com/madeplat${T}act

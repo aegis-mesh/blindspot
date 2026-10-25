@@ -170,9 +170,11 @@ fleet: the copy each account runs leaves out the options line and its secret	gir
 fleet: runs by a relative path from the script's folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: from standard input it fails, and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: with no protected folder in the home, there is nothing protected to miss	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
---help shows the whole header, --all-users included	gird-check.ps1 has no fleet mode, so its help has no --all-users line to check
+--help shows the whole header, gird-fleet.sh included	gird-check.ps1 has no fleet mode, so its help has no --all-users line to check
 fleet: and removes nothing else	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a script in a folder others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a path with mode 002 is refused as writable by others	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a path with mode 020 is refused as writable by others	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: with the options line in the file, --inventory still only reads the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+gird-check.sh runs no sudo or dscl	gird-fleet.sh, the root side of fleet mode, is bash only; gird-check.ps1 has no fleet mode to keep apart
+gird-check.sh --all-users points to gird-fleet.sh	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

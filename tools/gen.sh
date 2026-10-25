@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Writes the data files into gird-check.sh and gird-check.ps1, between each block's "# >>> <name>"
+# Writes the data files into gird-check.sh and gird-check.ps1 (and the tables root reads into
+# gird-fleet.sh, with gird-check.sh's agents table), between each block's "# >>> <name>"
 # and "# <<< <name>" markers: key types (data/keys.tsv), agent session locations
 # (data/sessions.tsv), bad npm packages (data/bad-npm.tsv), incidents (data/incidents.tsv), bad
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
@@ -327,10 +328,18 @@ splice() { # file block-name generated-file
     !skip { print }
     END { if (!found) { print "no \"# >>> " name "\" marker" > "/dev/stderr"; exit 3 } }' "$1"
 }
+# --- the agents table, for gird-fleet.sh -----------------------------------------
+# Its home is gird-check.sh, where the checks read it; root in gird-fleet.sh reads the same copy.
+awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< agents$/ { exit }' gird-check.sh > "$WORK/agents.sh"
+grep -q '^# <<< agents$' "$WORK/agents.sh" || { echo "gird-check.sh has no agents block"; exit 1; }
+
 RC=0
-for f in gird-check.sh gird-check.ps1; do
+for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
+  if [ "$f" = gird-fleet.sh ]; then blocks="keys auto-approve agents incidents indicators outdated platforms"
+  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
-  for blk in keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms; do
+  for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }
   done
   if [ "$CHECK" -eq 1 ]; then

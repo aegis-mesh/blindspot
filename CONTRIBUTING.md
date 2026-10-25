@@ -84,7 +84,7 @@ A reviewer starts from the person who acts on the report, not from the diff:
 ```sh
 bash tests/run.sh            # builds a fake home folder and checks what the script finds and never prints
 bash tests/interactive.sh    # macOS: drives the game and the menu with expect
-shellcheck -s bash -S warning gird-check.sh tests/*.sh
+shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh
 PWSH=/path/to/pwsh bash tests/run-ps.sh   # the same checks for gird-check.ps1, under PowerShell 7
 PWSH=/path/to/pwsh bash tests/parity-run.sh   # both suites, then checks every bash test has a twin
 ```
