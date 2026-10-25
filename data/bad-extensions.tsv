@@ -8,7 +8,8 @@
 #             Marketplace's extension, or another publisher's. any: looked for in every folder. An id
 #             that Microsoft's list of extensions removed from the Marketplace names
 #             (github.com/microsoft/vsmarketplace, RemovedPackages.md) was on the Marketplace too, so it
-#             is any. Of the openvsx ids, the Marketplace offers only the oorzc extensions (October 2026).
+#             is any. Of the openvsx ids, the Marketplace offers the oorzc extensions and the clean
+#             originals of the GlassWASM pair (October 2026).
 #   os        all, mac, linux or win, or two of them separated by a comma (mac,win): where the
 #             extension's malware could run, as its source says. It is looked for on every OS; on one
 #             where its malware could not run, the report shows it as a malicious extension to remove,
