@@ -984,6 +984,9 @@ SESS_SEALED=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all"
 SESS_ROOTS=$(printf '%s\n' "$SESS_SOURCES" | while IFS='|' read -r _a _p; do { [ -f "$_p" ] || [ -d "$_p" ]; } && printf '%s\n' "$_p"; done)
 # Lines without a key's start are skipped cheaply.
 SESS_PRE=$KEY_STARTS
+# A location given as a file is read as it is, following a link as ripgrep follows one, but only to
+# a regular file: -f is false for a pipe or a device, whose read would block or never end. Links
+# found inside a folder are not followed, as ripgrep does not follow them.
 # One perl parent lists the files newest first and forks workers, each with its own pipe back to
 # the parent, which is the only writer to its output, so lines never interleave. A worker prints K
 # (a match) and then D (done) for a file, Z for a compressed one or U for one it can't open; the
@@ -1000,11 +1003,11 @@ SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
 my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
 $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
-my @f; my $unread = 0;
+my @f = grep { !-d $_ && -f $_ } @ARGV; my $unread = 0;
 {
   local $SIG{__WARN__} = sub { $unread++ if $_[0] =~ /^Can.t opendir/ };
-  find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } },
-    map { -d $_ ? "$_/" : $_ } grep { -e } @ARGV);
+  my @d = map { "$_/" } grep { -d $_ } @ARGV;
+  find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } }, @d) if @d;
 }
 my %m; $m{$_} = (stat $_)[9] || 0 for @f;
 @f = sort { $m{$b} <=> $m{$a} or $a cmp $b } @f;
@@ -2345,7 +2348,7 @@ if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
     SESS_DONE=$(grep -c '^D' "$SESS_FILE")
     # Stopped while still listing the files: count them here, none were checked.
     if [ -z "$SESS_TOTAL" ]; then
-      SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find "$_r" -type f -print0 2>/dev/null; done | tr -cd '\000' | wc -c | tr -d ' ')
+      SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find -H "$_r" -type f -print0 2>/dev/null; done | tr -cd '\000' | wc -c | tr -d ' ')
     fi
     SESS_ZST=$(grep -c '^Z' "$SESS_FILE")
     SESS_UNREAD_FILES=$(grep -c '^U' "$SESS_FILE")
@@ -2355,15 +2358,16 @@ if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
 $SESS_ROOTS
 EOF
     _rs=(); for _r in "${_roots[@]}"; do if [ -d "$_r" ]; then _rs+=("$_r/"); else _rs+=("$_r"); fi; done
-    # Counted by the NUL after each name, so a newline in a file name counts once.
-    SESS_TOTAL=$(find "${_rs[@]}" -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
-    SESS_ZST=$(find "${_rs[@]}" -type f -name '*.zst' -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+    # Counted by the NUL after each name, so a newline in a file name counts once. -H follows a
+    # location that is a link, as ripgrep does, and no link found inside a folder.
+    SESS_TOTAL=$(find -H "${_rs[@]}" -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+    SESS_ZST=$(find -H "${_rs[@]}" -type f -name '*.zst' -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
     # ripgrep reports no progress per file: it finished (0 or 1), finished but could not read
     # some file or folder (2), or was stopped before the end.
     case "$SESS_RC" in 0|1) SESS_DONE=$((SESS_TOTAL - SESS_ZST)) ;; 2) SESS_DONE=$((SESS_TOTAL - SESS_ZST)); SESS_UNREAD=-1 ;; *) SESS_DONE=-1 ;; esac
   fi
 elif [ -n "$SESS_ROOTS" ] && { [ "$SESS_ENGINE" = none ] || [ "$SESS_FAIL" -eq 1 ]; }; then
-  SESS_NOTRUN=$(printf '%s\n' "$SESS_ROOTS" | tr '\n' '\0' | xargs -0 -I{} find {} -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+  SESS_NOTRUN=$(printf '%s\n' "$SESS_ROOTS" | tr '\n' '\0' | xargs -0 -I{} find -H {} -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
   case "$SESS_NOTRUN" in ''|*[!0-9]*) SESS_NOTRUN=0 ;; esac
   SESS_TOTAL=$SESS_NOTRUN
 fi

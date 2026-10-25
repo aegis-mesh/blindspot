@@ -289,6 +289,32 @@ hasnot "net: and the sessions read are not called clean" 'No keys in' "$SE/unr3.
 psrun "$SE/aidur" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/aidur.txt"
 has    "an unreadable Aider history is named as not read" 'Agent sessions were partly checked: 1 file could not be read\.' "$SE/aidur.txt"
 chmod 644 "$SE/unr3/.claude/projects/p/b.jsonl" "$SE/aidur/code/aid/.aider.chat.history.md"
+# A session location that is a link to a file is read and counted, as ripgrep reads it. A link to
+# a pipe or a device, or a pipe in a session folder, is never read: the check still ends, with
+# -AllSessions too, and counts the one regular file. Each run gets 60 s and is killed and failed after.
+for D in lnk lnkc lnkp; do mkdir -p "$SE/$D/.claude/projects/p" "$SE/$D/.codex" "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done; mkdir -p "$SE/lnkel"
+printf '{}\n' | tee "$SE/lnk/.claude/projects/p/s.jsonl" "$SE/lnkc/.claude/projects/p/s.jsonl" "$SE/lnkp/.claude/projects/p/s.jsonl" "$SE/lnkel/clean.jsonl" > /dev/null
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/lnkel/key.jsonl"
+ln -s "$SE/lnkel/key.jsonl" "$SE/lnk/.codex/history.jsonl"; ln -s "$SE/lnkel/clean.jsonl" "$SE/lnkc/.codex/history.jsonl"
+mkfifo "$SE/lnkel/pipe" "$SE/lnkp/.claude/projects/p/f.jsonl"; ln -s "$SE/lnkel/pipe" "$SE/lnkp/.codex/history.jsonl"; ln -s /dev/null "$SE/lnkp/.claude/history.jsonl"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  if [ -z "$SKIPPING" ]; then
+    psrun "$SE/lnk" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/lnk-$E.txt" 2>&1
+    psrun "$SE/lnkc" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/lnkc-$E.txt" 2>&1
+    psrun "$SE/lnkp" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/lnkp-$E.txt" 2>&1 &
+    BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+    if kill -0 "$BP" 2>/dev/null; then
+      pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$SE/lnkp-$E.txt"
+      pkill -f "with-filename.*$SE/lnkp/" 2>/dev/null
+    fi
+    wait "$BP" 2>/dev/null
+  fi
+  has    "$E: a session location that is a link to a file is read" 'Codex +1 file: AWS' "$SE/lnk-$E.txt"
+  has    "$E: and counted as read"                  'No keys in 2 agent session files\.' "$SE/lnkc-$E.txt"
+  has    "$E: a link to a pipe or a device, or a pipe in a session folder, is not read" 'No keys in 1 agent session file\.' "$SE/lnkp-$E.txt"
+done
+SKIPPING=""
 # A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
 mkdir -p "$SE/aidtab/code/a${_tab}b" "$SE/aidtab/AppData/Roaming" "$SE/aidtab/AppData/Local/Temp"
 printf '> export GROQ_API_KEY=%s\n' "gs""k_$(rnd 52)" > "$SE/aidtab/code/a${_tab}b/.aider.chat.history.md"
@@ -336,9 +362,19 @@ if [ "$RC" -eq 0 ]; then ok "a held engine does not hold up the check"; else bad
 has    "and the report says the sessions were not all checked" 'Checked the newest 0 of 2' "$SE/held.txt"
 SKIPPING=$NORG
 {
-  # A session ripgrep never finishes (a pipe nobody writes to) is stopped when the rest is done.
-  mkdir -p "$SE/stuck/.codex" "$SE/stuck/AppData/Roaming" "$SE/stuck/AppData/Local/Temp"; mkfifo "$SE/stuck/.codex/history.jsonl"
-  psrun "$SE/stuck" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline > "$SE/stuck.txt" 2>&1; RC=$?
+  # A pipe where a session file should be is not given to ripgrep, which would wait on it forever:
+  # with -AllSessions the check would never end, so it gets 60 s and is killed and failed after.
+  mkdir -p "$SE/fifo/.codex" "$SE/fifo/.claude/projects/p" "$SE/fifo/AppData/Roaming" "$SE/fifo/AppData/Local/Temp"
+  mkfifo "$SE/fifo/.codex/history.jsonl"; printf '{}\n' > "$SE/fifo/.claude/projects/p/a.jsonl"
+  psrun "$SE/fifo" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions > "$SE/fifo.txt" 2>&1 &
+  BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; pkill -f "with-filename.*$SE/fifo/" 2>/dev/null; bad "rg: a pipe where a session file should be is skipped" "the check did not finish in 60 s"
+  else has "rg: a pipe where a session file should be is skipped" 'No keys in 1 agent session file' "$SE/fifo.txt"; fi
+  wait "$BP" 2>/dev/null
+  # A session ripgrep never finishes is stopped when the rest is done. A pipe nobody writes to,
+  # given to rg.exe as one more root (GIRD_CHECK_SESSIONS_HOLD, tests only), keeps it reading.
+  mkdir -p "$SE/stuck/.codex" "$SE/stuck/AppData/Roaming" "$SE/stuck/AppData/Local/Temp"; printf '{}\n' > "$SE/stuck/.codex/history.jsonl"; mkfifo "$SE/stuck/pipe"
+  psrun "$SE/stuck" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_SESSIONS_HOLD="$SE/stuck/pipe" -- -Offline > "$SE/stuck.txt" 2>&1; RC=$?
   if [ "$RC" -eq 0 ]; then ok "rg: a stuck ripgrep does not hold up the check"; else bad "rg: a stuck ripgrep does not hold up the check" "exit $RC"; fi
   if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then bad "rg: no ripgrep process is left running"; pkill -f "with-filename.*$SE/stuck/"; else ok "rg: no ripgrep process is left running"; fi
   # Closing the terminal sends HUP to the process group, ripgrep included. Many folders keep the
@@ -352,7 +388,7 @@ for d in range(300):
   # Its own session, so the HUP goes to its group and not this script's.
   "$(command -v python3)" -c 'import os, sys; os.setsid(); os.execv(sys.argv[1], sys.argv[1:])' /usr/bin/env -i PATH="$WORK/bin:$SE/rgbin" \
     HOME="$WORK/pshome" USERPROFILE="$SE/stuck" APPDATA="$SE/stuck/AppData/Roaming" LOCALAPPDATA="$SE/stuck/AppData/Local" \
-    TEMP="$SE/stuck/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=rg "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline > /dev/null 2>&1 &
+    TEMP="$SE/stuck/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_SESSIONS_HOLD="$SE/stuck/pipe" "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline > /dev/null 2>&1 &
   BP=$!
   for _i in $(seq 1 100); do [ -n "$SKIPPING" ] && break; pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1 && break; sleep 0.1; done   # safety ceiling while it starts
   if pgrep -f "with-filename.*$SE/stuck/" >/dev/null 2>&1; then RGUP=1; else RGUP=0; fi

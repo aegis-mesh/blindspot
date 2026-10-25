@@ -100,6 +100,11 @@ machines will differ:
   a time cut that ripgrep or `--all-sessions` would fix. A folder that can't be opened is counted
   too (perl reports how many, ripgrep only that there were some) and makes the check "partly
   checked", never "no keys".
+- Links: a location from the list that is a link is followed, as ripgrep follows a path it is
+  given, but only to a regular file; links found inside a folder are not followed, as ripgrep does
+  not follow them. A pipe, a socket or a device is never read: its read would wait for a writer or
+  never end. (`gird-check.ps1` reads which a file is from PowerShell 7.2's `UnixMode` off Windows,
+  never opens an empty file, and still reads a link to a file inside a folder.)
 - ripgrep reports no per-file progress, so a stopped ripgrep run reads "partly checked", with no
   number.
 - Stopping: the perl parent traps TERM, HUP and INT, kills its workers and exits. Each worker

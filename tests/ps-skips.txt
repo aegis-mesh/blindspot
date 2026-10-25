@@ -15,6 +15,7 @@ rg: never prints a key	needs ripgrep on PATH: these tests drive gird-check.ps1's
 rg: an unreadable session means partly checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: a token across a piece boundary is not a key	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: a key after an escaped newline at a piece boundary is found	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a pipe where a session file should be is skipped	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: a stuck ripgrep does not hold up the check	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: no ripgrep process is left running	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: HUP leaves no ripgrep process	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
@@ -51,3 +52,6 @@ rg: a home with only compressed sessions is never told no keys	needs ripgrep on 
 rg: Amazon Q's own telemetry key in its database is not counted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: nor Kiro CLI's	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
 rg: a long-term AWS key or another provider's in that database still counts	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session location that is a link to a file is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and counted as read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a link to a pipe or a device, or a pipe in a session folder, is not read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed

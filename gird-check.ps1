@@ -706,13 +706,25 @@ $SessTable = @(
 # <<< sessions
 $SessSources = @($SessTable | Where-Object { $_[0] -eq 'read' } | ForEach-Object { , @($_[1], $_[2]) })
 $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Object { , @($_[1], $_[2]) })
-$SessRoots = @($SessSources | ForEach-Object { $_[1] } | Where-Object { Exists $_ } | Select-Object -Unique)
 # Lists the files under the session roots one folder at a time, so a folder that can't be read is
 # counted in $st.Skipped and the rest are still listed (EnumerateFiles over all folders at once
 # stops at the first one it can't open, and drops the rest of that root). Folders that are links
-# are not followed, as ripgrep and gird-check.sh's perl do not. Text, so the background session
-# check can load it too; it returns the list as one object.
+# are not followed, as ripgrep and gird-check.sh's perl do not. A pipe, a socket or a device is
+# never listed: opening a pipe waits for a writer, and a device may never end. Text, so the
+# background session check can load it too; it returns the list as one object.
 $SessListFn = @'
+# A regular file, following a link: what bash's [ -f ] and perl's -f say. PowerShell 7.2 and up
+# say which a file is off Windows (the first letter of UnixMode, from Get-Item); Windows keeps no
+# pipes or devices among files, and an older PowerShell is taken at its word.
+function Is-PlainFile([string]$p) {
+  if ($env:OS -eq 'Windows_NT') { return $true }
+  try {
+    $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
+    if ($t) { if (-not $t.Exists) { return $false }; $p = $t.FullName }
+    $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode
+    return (-not $m) -or $m.StartsWith('-')
+  } catch { return $true }
+}
 function Sess-List($roots, $st) {
   $files = New-Object System.Collections.Generic.List[object]
   $dirs = New-Object System.Collections.Generic.Stack[object]
@@ -725,7 +737,12 @@ function Sess-List($roots, $st) {
     if ($st.Stop) { break }
     $d = $dirs.Pop()
     try {
-      foreach ($f in $d.EnumerateFiles()) { $files.Add($f) }
+      foreach ($f in $d.EnumerateFiles()) {
+        # Only an entry that may not be a regular file is asked about: a link, or an empty one, as
+        # pipes, sockets and devices are.
+        if ((($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $f.Length -eq 0) -and -not (Is-PlainFile $f.FullName)) { continue }
+        $files.Add($f)
+      }
       foreach ($sd in $d.EnumerateDirectories()) { if (($sd.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $dirs.Push($sd) } }
     } catch { $st.Skipped++ }
   }
@@ -733,6 +750,9 @@ function Sess-List($roots, $st) {
 }
 '@
 . ([scriptblock]::Create($SessListFn))
+# A location given as a file is read as it is, following a link as ripgrep follows one, but only to
+# a regular file.
+$SessRoots = @($SessSources | ForEach-Object { $_[1] } | Where-Object { (Is-Dir $_) -or ((Is-File $_) -and (Is-PlainFile $_)) } | Select-Object -Unique)
 # Runs in its own runspace: lists the files newest first and checks them until told to stop, or
 # lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
 $SessWorker = {
@@ -745,14 +765,17 @@ $SessWorker = {
   $hit = { param($f, $k)
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
-  if ($hold) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }  # tests only
+  # Tests only: the .NET engine waits while the file named exists; rg.exe gets it as one more root,
+  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held.
+  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
     try {
       $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
-      $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($roots | ForEach-Object { & $q $_ }) -join ' ')
+      $rgRoots = @($roots); if ($hold) { $rgRoots += $hold }
+      $psi.Arguments = '-a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
       # --null ends the file name with a NUL, the one character a path can't hold. A line without
@@ -778,6 +801,9 @@ $SessWorker = {
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
     if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
+    # An empty file holds nothing and is not opened, so a pipe an older PowerShell could not tell
+    # from a file never holds the check up. Never a link: Windows gives a link's own size, 0.
+    if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { $st.Done++; continue }
     # Read 1 MB at a time and cut just after the last character that can't be in a key or start an
     # escape such as \n (a backslash never ends a piece), so a huge database file never loads at
     # once, a piece never ends inside a token unless one runs past 8 MB, and a stop is seen within

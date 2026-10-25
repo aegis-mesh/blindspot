@@ -95,7 +95,6 @@ parity.sh passes a PowerShell skip that ps-skips.txt explains	tests tests/parity
 parity.sh fails on a stale ps-skips line	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 parity.sh passes a test both suites skipped	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
 a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
-rg: a pipe where a session file should be is skipped	a pipe in the file system where a session file should be: gird-check.ps1 runs on Windows, which has none, and its Linux-only test run keeps one as the way to hold ripgrep
 and so is the folder it is in	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
 a key id that is not lowercase	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a key id listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

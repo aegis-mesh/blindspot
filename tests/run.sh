@@ -263,6 +263,29 @@ hasnot "perl: and the sessions read are not called clean" 'No keys in' "$SE/unr3
 HOME="$SE/aidur" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/aidur.txt"
 has    "an unreadable Aider history is named as not read" 'Agent sessions were partly checked: 1 file could not be read\.' "$SE/aidur.txt"
 chmod 644 "$SE/unr3/.claude/projects/p/b.jsonl" "$SE/aidur/code/aid/.aider.chat.history.md"
+# A session location that is a link to a file is read and counted, as ripgrep reads it. A link to
+# a pipe or a device, or a pipe in a session folder, is never read: the check still ends, with
+# --all-sessions too, and counts the one regular file. Each run gets 60 s and is killed and failed after.
+mkdir -p "$SE/lnk/.claude/projects/p" "$SE/lnk/.codex" "$SE/lnkc/.claude/projects/p" "$SE/lnkc/.codex" "$SE/lnkp/.claude/projects/p" "$SE/lnkp/.codex" "$SE/lnkel"
+printf '{}\n' | tee "$SE/lnk/.claude/projects/p/s.jsonl" "$SE/lnkc/.claude/projects/p/s.jsonl" "$SE/lnkp/.claude/projects/p/s.jsonl" "$SE/lnkel/clean.jsonl" > /dev/null
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/lnkel/key.jsonl"
+ln -s "$SE/lnkel/key.jsonl" "$SE/lnk/.codex/history.jsonl"; ln -s "$SE/lnkel/clean.jsonl" "$SE/lnkc/.codex/history.jsonl"
+mkfifo "$SE/lnkel/pipe" "$SE/lnkp/.claude/projects/p/f.jsonl"; ln -s "$SE/lnkel/pipe" "$SE/lnkp/.codex/history.jsonl"; ln -s /dev/null "$SE/lnkp/.claude/history.jsonl"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  if [ -z "$SKIPPING" ]; then
+    HOME="$SE/lnk" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/lnk-$E.txt" 2>&1
+    HOME="$SE/lnkc" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/lnkc-$E.txt" 2>&1
+    HOME="$SE/lnkp" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/lnkp-$E.txt" 2>&1 &
+    BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+    if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$SE/lnkp-$E.txt"; fi
+    wait "$BP" 2>/dev/null
+  fi
+  has    "$E: a session location that is a link to a file is read" 'Codex +1 file: AWS' "$SE/lnk-$E.txt"
+  has    "$E: and counted as read"                  'No keys in 2 agent session files\.' "$SE/lnkc-$E.txt"
+  has    "$E: a link to a pipe or a device, or a pipe in a session folder, is not read" 'No keys in 1 agent session file\.' "$SE/lnkp-$E.txt"
+done
+SKIPPING=""
 # A tab in a cloned repo's folder name, where an Aider history sits, does not lose the key or its agent.
 mkdir -p "$SE/aidtab/code/a${_tab}b"
 printf '> export GROQ_API_KEY=%s\n' "gs""k_$(rnd 52)" > "$SE/aidtab/code/a${_tab}b/.aider.chat.history.md"
