@@ -26,8 +26,9 @@ A new data file, `data/auto-approve.tsv`: agent, os, path (the path tokens of
 file is read as one line through the scripts' `flat` (comments are its job), and a match starts at
 the text, a `{` or a `,` and ends at the text's end, a `,` `}` `#` or `/`. A `.toml` file is read
 line by line: a `#` line is skipped, a match is a whole line up to a `#` comment (so a setting
-inside an inline table, a profile written as one, does not count), and only the lines before the
-first `[table]` count.
+inside an inline table, a profile written as one, does not count), a value in double quotes also
+matches the same value in single quotes (a TOML literal string, `approval_policy = 'never'`), and
+only the lines before the first `[table]` count.
 
 | agent | file | patterns | source |
 |---|---|---|---|
@@ -173,8 +174,8 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
   `openvsx` line is not looked for.
 - Comments in a JSONC settings file are `flat`'s to remove; a setting the comment removal leaves in
   place is read if it sits at a boundary (`/*, "key": true */`).
-- Codex values written in single quotes, and a `[profiles.x]` table made the default by
-  `profile = "x"`, are not read.
+- A `[profiles.x]` table made the default by `profile = "x"` is not read. Codex 0.134.0 and later
+  support neither: a profile is its own file, `~/.codex/<name>.config.toml`, used with `--profile`.
 - A link to a link whose own text does not end in `authorized_keys` (`keys -> notes.txt`, where
   `notes.txt -> ../.ssh/authorized_keys`): `notes.txt` is listed, `keys` is not. On Windows,
   PowerShell does not resolve a linked folder on the way. Before `authorized_keys` exists, a link that

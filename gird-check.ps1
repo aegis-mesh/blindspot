@@ -1150,9 +1150,10 @@ function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) 
 # file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
 # a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts.
 # A .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
-# (so a setting inside an inline table, a profile written as one, does not count), and only the
-# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
-# is used.
+# (so a setting inside an inline table, a profile written as one, does not count), a value in double
+# quotes also matches the same value in single quotes (a TOML literal string), and only the lines
+# before the first [table] count: a setting under [profiles.x] applies only when that profile is
+# used, and Codex 0.134.0 and later read no such table from config.toml.
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
   if ($toml) { $t = Read-Text $f } else { $t = Flat-Text $f }
@@ -1166,12 +1167,17 @@ function Aa-Hit([string]$f, $pats) {
     if ($toml -and $l.StartsWith('[')) { break }
     for ($i = 0; $i -lt $pp.Count; $i++) {
       if ($got[$i]) { continue }
+      if ($toml) {
+        foreach ($q in @($pp[$i], $pp[$i].Replace('"', "'"))) {
+          if ($l.StartsWith($q, [StringComparison]::Ordinal) -and ($l.Length -eq $q.Length -or [string]$l[$q.Length] -eq '#')) { $got[$i] = $true }
+        }
+        continue
+      }
       $k = $l.IndexOf($pp[$i], [StringComparison]::Ordinal)
       while ($k -ge 0) {
         $b = ''; if ($k -gt 0) { $b = [string]$l[$k - 1] }
         $e = $k + $pp[$i].Length; $a = ''; if ($e -lt $l.Length) { $a = [string]$l[$e] }
-        if ($toml) { $hit = ($b -eq '' -and ($a -eq '' -or $a -eq '#')) }
-        else { $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a))) }
+        $hit = (($b -eq '' -or $b -eq '{' -or $b -eq ',') -and ($a -eq '' -or ',}#/'.Contains($a)))
         if ($hit) { $got[$i] = $true; break }
         $k = $l.IndexOf($pp[$i], $k + 1, [StringComparison]::Ordinal)
       }

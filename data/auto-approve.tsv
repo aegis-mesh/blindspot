@@ -9,9 +9,12 @@
 #             a , and ends at the text's end, a , } # or /, so a longer key or another value never
 #             counts. A .toml file is read line by line: a line starting with # is skipped, a match
 #             is a whole line (up to a # comment), so a setting inside an inline table does not count,
-#             and only the lines before the first [table] count (a setting under [profiles.x] applies
-#             only when that profile is used)
-# Claude Code: code.claude.com/docs/en/permission-modes. Codex: its configuration reference. VS Code:
+#             a value in double quotes also matches the same value in single quotes (a TOML literal
+#             string), and only the lines before the first [table] count (a setting under
+#             [profiles.x] applies only when that profile is used, and Codex 0.134.0 and later read
+#             no such table from config.toml)
+# Claude Code: code.claude.com/docs/en/permission-modes. Codex: its configuration reference, and its
+# advanced configuration page for profiles (0.134.0). TOML's literal strings: toml.io. VS Code:
 # the Copilot settings reference and the 1.104 release notes. VS Code 1.104 renamed chat.tools.autoApprove
 # to chat.tools.global.autoApprove without migrating it, so the old name is ignored, and it reads the
 # new one from the user settings only (scope APPLICATION_MACHINE in its source), never from a

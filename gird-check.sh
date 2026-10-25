@@ -1688,11 +1688,13 @@ auto_row() { # file what flattened-text
 # file is read as one line through flat (comments are its job), and a match starts at the text, a {
 # or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts. A
 # .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
-# (so a setting inside an inline table, a profile written as one, does not count), and only the
-# lines before the first [table] count: a setting under [profiles.x] applies only when that profile
-# is used. tr removes the spaces in one pass, and each pattern becomes one regex with its boundaries
-# in it, tried once per line: linear on every awk, where a gsub on the joined text, or an index() of
-# the rest of the line at every near miss, is quadratic on macOS's awk for a large file.
+# (so a setting inside an inline table, a profile written as one, does not count), a value in double
+# quotes also matches the same value in single quotes (a TOML literal string), and only the lines
+# before the first [table] count: a setting under [profiles.x] applies only when that profile is
+# used, and Codex 0.134.0 and later read no such table from config.toml. tr removes the spaces in
+# one pass, and each pattern becomes one regex with its boundaries in it, tried once per line:
+# linear on every awk, where a gsub on the joined text, or an index() of the rest of the line at
+# every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
   if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]'; fi | AA_P=$2 awk -v toml="$_tm" '
@@ -1706,7 +1708,8 @@ aa_hit() { # file pattern|pattern...
       return o
     }
     BEGIN { n = split(ENVIRON["AA_P"], p, "|")
-      for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); re[i] = toml ? "^" lit(p[i]) "(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+      for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); q = p[i]; gsub(/"/, "\047", q)
+        re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
     { for (i = 1; i <= n; i++) if (!(i in got) && $0 ~ re[i]) got[i] = 1 }

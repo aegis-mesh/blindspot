@@ -1338,15 +1338,18 @@ if [ -e "$WORK/ak/.SSH/AUTHORIZED_KEYS" ]; then has "a link in another case coun
 else skip "a link in another case counts where the volume ignores case" "this volume tells case apart, so the link does not reach the file"; fi
 hasnot "a link to another file named like it does not count" 'code/e/other\.txt' "$WORK/ak.txt"
 # A settings file is read as one line (flat), so a setting inside a /* */ block comment is not at a
-# boundary and is not read. Known limits (docs/designs/dossier-checks.md, Not covered): Codex values
-# in single quotes, and a profile made the default with profile = "x", are not read.
-for L in 1 2; do rm -rf "$WORK/dz-lim$L"; cp -R "$WORK/clean" "$WORK/dz-lim$L"; mkdir -p "$WORK/dz-lim$L/$DAS/Code/User" "$WORK/dz-lim$L/.codex"; done
+# boundary and is not read. Codex values in single quotes, TOML's literal strings, count as the same
+# values in double quotes, alone or next to them. Known limit (docs/designs/dossier-checks.md, Not
+# covered): a profile made the default with profile = "x", before Codex 0.134.0, is not read.
+for L in 1 2 3; do rm -rf "$WORK/dz-lim$L"; cp -R "$WORK/clean" "$WORK/dz-lim$L"; mkdir -p "$WORK/dz-lim$L/$DAS/Code/User" "$WORK/dz-lim$L/.codex"; done
 printf '{\n  /*\n  "chat.tools.global.autoApprove": true\n  */\n}\n' > "$WORK/dz-lim1/$DAS/Code/User/settings.json"
 printf "approval_policy = 'never'\nsandbox_mode = 'danger-full-access'\n" > "$WORK/dz-lim1/.codex/config.toml"
 printf 'profile = "yolo"\n[profiles.yolo]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$WORK/dz-lim2/.codex/config.toml"
-dzrun "$WORK/dz-lim1" | tr -s ' \n' '  ' > "$WORK/dz-lim1.txt"; dzrun "$WORK/dz-lim2" | tr -s ' \n' '  ' > "$WORK/dz-lim2.txt"
+printf "approval_policy = 'never' # no prompts\nsandbox_mode = \"danger-full-access\"\n" > "$WORK/dz-lim3/.codex/config.toml"
+for L in 1 2 3; do dzrun "$WORK/dz-lim$L" | tr -s ' \n' '  ' > "$WORK/dz-lim$L.txt"; done
 hasnot "a setting in a /* */ block comment is not read" '! VS Code Copilot ' "$WORK/dz-lim1.txt"
-hasnot "known limit: Codex values in single quotes are not read" '! Codex ' "$WORK/dz-lim1.txt"
+has    "Codex values in single quotes, TOML's literal strings, are read" '! Codex ~/\.codex/config\.toml never asks, full access' "$WORK/dz-lim1.txt"
+has    "a literal string and a basic one in one Codex file both count" '! Codex ~/\.codex/config\.toml never asks, full access' "$WORK/dz-lim3.txt"
 hasnot "known limit: a profile made the default with profile = is not read" '! Codex ' "$WORK/dz-lim2.txt"
 cp -R "$WORK/dz-miss" "$WORK/dz-calm"; rm -rf "$WORK/dz-calm/code/mr"
 printf '{"permissions":{"defaultMode":"bypassPermissions"}}\n' > "$WORK/dz-calm/.claude/settings.json"
