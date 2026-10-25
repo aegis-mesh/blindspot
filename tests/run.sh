@@ -861,9 +861,9 @@ has    "the summary row says so in yellow"           'Recent leaks an npm packag
 hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WORK/mis.txt"
-# Versions the sources say carried no working malware are versions to update, each with its own
-# line: the @keyv 6.0.0 builds published without the install hook, SANDWORM_MODE's sleeper packages
-# and the UiPath builds whose payload had a bug. Packages the TanStack worm spread to, GitHub's second
+# The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
+# malware, as GitHub's malware advisories say; the UiPath builds whose payload had a bug are versions to
+# update. Packages the TanStack worm spread to, GitHub's second
 # SANDWORM_MODE batch and the Mastra packages besides @mastra/core are found, Mastra named as Socket does.
 for np in npd npa; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x"; done
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    },\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
@@ -871,10 +871,14 @@ printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/m
 for np in npd npa; do HOME="$WORK/$np" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
 has    "a @keyv 6.0.0 build is npm malware, as GitHub's advisory says" '@keyv/redis 6\.0\.0 \(keyv account takeover, August 2026\).*keyv account takeover, August 2026: published from the compromised keyv account, and the GitHub advisory says to treat a machine that installed one as compromised\.' "$WORK/npd.txt"
 has    "with its advice to rotate from another computer" 'Rotate the secrets this machine held from another computer, as the GitHub advisory says, then pin each @keyv package listed in section 5 to its version before 6\.0\.0\.' "$WORK/npd.txt"
-has    "a SANDWORM_MODE sleeper package is a version to update" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: published by the SANDWORM_MODE attackers with no malware in them yet, Socket says\.' "$WORK/npd.txt"
-has    "with a fix to uninstall it"                   'Uninstall the SANDWORM_MODE sleeper packages listed in section 5: the attackers published every version of them\.' "$WORK/npd.txt"
+has    "a SANDWORM_MODE sleeper package is malware, as GitHub's advisories say" 'iru-caches 1\.0\.0 \(SANDWORM_MODE sleeper packages, February 2026\).*SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised\.' "$WORK/npd.txt"
+hasnot "and no fix says its attackers published every version" 'the attackers published every version' "$WORK/npd.txt"
 has    "a UiPath build whose payload could not run is a version to update" '@uipath/robot 1\.3\.4 \(UiPath npm packages, May 2026\).*UiPath npm packages, May 2026: published with malware that a bug in its payload kept from working, Wiz says\.' "$WORK/npd.txt"
-hasnot "none of them is a compromised machine"        'ACT NOW|Treat this machine as compromised' "$WORK/npd.txt"
+rm -rf "$WORK/npu"; mkdir -p "$WORK/npu/code/x" "$WORK/npu/AppData/Roaming" "$WORK/npu/AppData/Local/Temp"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npu/code/x/package-lock.json"
+HOME="$WORK/npu" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npu.txt"
+hasnot "a UiPath build alone is not a compromised machine" 'ACT NOW|Treat this machine as compromised' "$WORK/npu.txt"
+has    "and is a version to update"                   'npm malware a bad version to update' "$WORK/npu.txt"
 has    "a package the TanStack worm spread to is found" '@squawk/mcp 0\.9\.3 \(TanStack worm, May 2026\)' "$WORK/npa.txt"
 has    "a SANDWORM_MODE package of GitHub's second batch is found" 'veim 2\.46\.2 \(SANDWORM_MODE worm, February 2026\)' "$WORK/npa.txt"
 # SANDWORM_MODE leaves git hooks behind (its pre-push hook sends npm tokens out) and MCP servers: its fix
@@ -933,14 +937,14 @@ HOME="$WORK/mpyt" TMPDIR="$WORK/mpyt/tmp" PATH="$WORK/macbin2:$PATH" bash "$SCRI
 has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/tmp/transformers\.pyz' "$WORK/mpyt-linux.txt"
 has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt-linux.txt"
 has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no signs' "$WORK/mpyt-mac.txt"
-has    "a temp file alone: stop and delete, in section 5" 'Kill any python process started from transformers\.pyz, then delete the file\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
+has    "a temp file alone: the incident's own advice, in section 5" 'Mistral lists this file, and a process started through python /tmp/transformers\.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity\. Advisory: docs\.mistral\.ai' "$WORK/mpyt-linux.txt"
 has    "and in the fix"                               'Stop any process started from the files listed in section 5, delete them, follow mistralai.s advisory' "$WORK/mpyt-linux.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mpyt-linux.txt"
 # A LiteLLM marker alone: the row carries LiteLLM's own advice (data/indicators.tsv), not the environment one.
 cp -R "$WORK/clean" "$WORK/lmark"; mkdir -p "$WORK/lmark/tmp"; : > "$WORK/lmark/tmp/.pc_once_1"
 HOME="$WORK/lmark" TMPDIR="$WORK/lmark/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmark.txt"
 has    "finds a malware marker in TEMP"               'LiteLLM 1\.107\.0 +signs of the malware found ~/tmp/\.pc_once_1' "$WORK/lmark.txt"
-has    "with LiteLLM's own advice"                    'These files mean the malware ran and sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
+has    "with LiteLLM's own advice"                    'These files mean the malware ran here, and a \.pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
 hasnot "a marker alone names no environment to stop"  "Don't run Python or pip in these environments" "$WORK/lmark.txt"
 # Another user's file in the shared temp folder is not this person's sign: a link to a root-owned file stands in for one.
 cp -R "$WORK/clean" "$WORK/lmo"; mkdir -p "$WORK/lmo/tmp"; ln -s /etc/passwd "$WORK/lmo/tmp/.pc_once_1"

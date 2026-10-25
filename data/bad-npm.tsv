@@ -20,7 +20,10 @@
 #     the install hook, but GitHub's malware advisories say a machine that installed one is compromised,
 #     and those govern. Not the packages the worm spread to after that.
 #   SANDWORM_MODE, February 2026: the 19 malicious packages of Socket's list (sandworm) and the
-#     four it calls sleeper packages, not malicious yet (sandsleep: versions to update).
+#     four it lists as sleeper packages, not malicious yet (sandsleep): GitHub's malware advisories of
+#     the same day name every version of each (GHSA-9w7p-hqx2-pjjx, GHSA-m47j-9qfx-6jh4,
+#     GHSA-56j5-62q9-cj2c, GHSA-w9hv-7gxr-9f8f) and say a machine that installed one is compromised,
+#     and those govern.
 # Not listed: the AntV and Red Hat waves. tensorlake's advisory also lists every version, but
 # names only 0.5.144 as malicious.
 #! skip tensorlake * the advisory also lists every version, but names only 0.5.144 as malicious
