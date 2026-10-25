@@ -5997,32 +5997,95 @@ fi
 # pnpm's and bun's global folders, and npx's cache. One pass: the package.json of every package
 # under each root (the package itself, or a dependency of a globally installed tool) is listed by
 # its folder, and one awk reads the ones whose folder names a bad package.
-NPM_ROOTS=$(
-  for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
-           "$H"/.nvm/versions/node/*/lib/node_modules "$H"/.volta/tools/image/node/*/lib/node_modules \
-           "$H"/.volta/tools/image/packages/*/lib/node_modules "$H"/.local/share/fnm/node-versions/*/installation/lib/node_modules \
-           "$H"/Library/Application\ Support/fnm/node-versions/*/installation/lib/node_modules \
-           "$H"/.asdf/installs/nodejs/*/lib/node_modules "$H"/.local/share/mise/installs/node/*/lib/node_modules \
-           "$H"/.nodenv/versions/*/lib/node_modules "$H"/Library/pnpm/global/*/node_modules \
-           "$H"/.local/share/pnpm/global/*/node_modules "$H/.bun/install/global/node_modules" "$H"/.npm/_npx/*/node_modules; do
-    [ -d "$r" ] && printf '%s\n' "$r"
+# A root that is not a folder can still be there, behind a folder on its way that can't be read or
+# entered: that folder is printed as "?<TAB>folder" and counts as not read (NPM_GUNREAD).
+npm_blocked() { # path: prints the nearest folder on its way that exists, when that can't be read
+  _bd=$1
+  while :; do
+    case "$_bd" in */*) _bd=${_bd%/*} ;; *) return 1 ;; esac
+    [ -n "$_bd" ] || return 1
+    if [ -d "$_bd" ]; then { [ -r "$_bd" ] && [ -x "$_bd" ]; } && return 1; printf '?\t%s\n' "$_bd"; return 0; fi
   done
+}
+npm_root() { if [ -d "$1" ]; then printf '%s\n' "$1"; else npm_blocked "$1"; fi; }
+npm_roots_in() { # folder holding one folder per version or package, where node_modules sits in each
+  if [ ! -d "$1" ]; then npm_blocked "$1/x"; return; fi
+  if [ ! -r "$1" ] || [ ! -x "$1" ]; then printf '?\t%s\n' "$1"; return; fi
+  for _rv in "$1"/*/; do if [ -d "$_rv" ]; then npm_root "${_rv%/}/$2"; fi; done
+}
+_npm_roots=$(
+  for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
+           "$H/.bun/install/global/node_modules"; do
+    npm_root "$r"
+  done
+  npm_roots_in "$H/.nvm/versions/node" lib/node_modules; npm_roots_in "$H/.volta/tools/image/node" lib/node_modules
+  npm_roots_in "$H/.volta/tools/image/packages" lib/node_modules; npm_roots_in "$H/.local/share/fnm/node-versions" installation/lib/node_modules
+  npm_roots_in "$H/Library/Application Support/fnm/node-versions" installation/lib/node_modules
+  npm_roots_in "$H/.asdf/installs/nodejs" lib/node_modules; npm_roots_in "$H/.local/share/mise/installs/node" lib/node_modules
+  npm_roots_in "$H/.nodenv/versions" lib/node_modules; npm_roots_in "$H/Library/pnpm/global" node_modules
+  npm_roots_in "$H/.local/share/pnpm/global" node_modules; npm_roots_in "$H/.npm/_npx" node_modules
   if [ "$WIN" -eq 1 ]; then
     # The Windows places gird-check.ps1 reads: npm's own folder, nvm-windows (NVM_HOME), fnm (FNM_DIR), Volta, mise, pnpm and npx's cache.
     _nvm=$(winpath "${NVM_HOME:-}"); _nvm=${_nvm%/}; [ -n "$_nvm" ] || _nvm="$WAPP/nvm"
     _fnm=$(winpath "${FNM_DIR:-}"); _fnm=${_fnm%/}; [ -n "$_fnm" ] || _fnm="$WAPP/fnm"
-    for r in "$WAPP/npm/node_modules" "$_nvm"/*/node_modules "$_fnm"/node-versions/*/installation/node_modules \
-             "$WLAPP"/Volta/tools/image/node/*/node_modules "$WLAPP"/Volta/tools/image/packages/*/node_modules \
-             "$WLAPP"/Volta/tools/image/packages/*/lib/node_modules "$WLAPP"/mise/installs/node/*/node_modules \
-             "$WLAPP"/pnpm/global/*/node_modules "$WLAPP"/npm-cache/_npx/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done
+    npm_root "$WAPP/npm/node_modules"; npm_roots_in "$_nvm" node_modules; npm_roots_in "$_fnm/node-versions" installation/node_modules
+    npm_roots_in "$WLAPP/Volta/tools/image/node" node_modules; npm_roots_in "$WLAPP/Volta/tools/image/packages" node_modules
+    npm_roots_in "$WLAPP/Volta/tools/image/packages" lib/node_modules; npm_roots_in "$WLAPP/mise/installs/node" node_modules
+    npm_roots_in "$WLAPP/pnpm/global" node_modules; npm_roots_in "$WLAPP/npm-cache/_npx" node_modules
   fi
   # pnpm's own folder, where its setup points PNPM_HOME.
   _ph=$(winpath "${PNPM_HOME:-}"); _ph=${_ph%/}
-  if [ -n "$_ph" ]; then for r in "$_ph"/global/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done; fi
+  if [ -n "$_ph" ]; then npm_roots_in "$_ph/global" node_modules; fi
 )
-npm_global_named() { # package.json paths on stdin; the ones whose folder names a package on the list
+NPM_ROOTS=$(printf '%s\n' "$_npm_roots" | grep -v "^?$TAB" | grep -v '^$')
+# Each root is read as a node_modules folder: the package.json of every package in it, and of every
+# dependency in the node_modules folders nested in theirs, 16 levels deep, so a tool's dependency's own
+# dependency is read too. A store in a dot folder beside them (pnpm's .pnpm/<id>/node_modules, where a
+# pnpm global folder keeps every package) is read as well, its real folders only: the links in a store,
+# and at the root beside it, lead to those. A linked package is otherwise read but not entered, except
+# at a root without a store (npm link). Each folder that can't be read or entered, deeper than 16
+# levels, or a bad package's package.json that can't be read, is printed as "?<TAB>path".
+npm_global_pkg() { # package folder, kind of the folder it is in: R root, P root with a store, S store, N nested
+  if [ -L "$1" ]; then case "$2" in P|S) return ;; esac; fi
+  if [ -d "$1" ] && [ ! -x "$1" ]; then printf '?\t%s\n' "$1"; return; fi
+  # A regular file; in an account run anything there, so fleet_filter can count what it won't read.
+  if [ -f "$1/package.json" ] || { [ "$ACCTRUN" -eq 1 ] && { [ -e "$1/package.json" ] || [ -L "$1/package.json" ]; }; }; then printf '%s\n' "$1/package.json"; fi
+  if { [ ! -L "$1" ] || [ "$2" = R ]; } && [ -d "$1/node_modules" ] && [ ! -L "$1/node_modules" ]; then _gnq+=("$1/node_modules"); _gnm+=(N); fi
+}
+npm_global_walk() {
+  printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    _gq=(); _gm=()
+    for _s in "$r"/.[!.]*; do
+      [ -d "$_s" ] && [ ! -L "$_s" ] && [ "${_s##*/}" != .bin ] || continue
+      if [ ! -r "$_s" ] || [ ! -x "$_s" ]; then printf '?\t%s\n' "$_s"; continue; fi
+      for _sn in "$_s"/*/node_modules; do if [ -d "$_sn" ] && [ ! -L "$_sn" ]; then _gq+=("$_sn"); _gm+=(S); fi; done
+    done
+    if [ "${#_gq[@]}" -gt 0 ]; then _gq=("$r" "${_gq[@]}"); _gm=(P "${_gm[@]}"); else _gq=("$r"); _gm=(R); fi
+    _gl=0
+    while [ "${#_gq[@]}" -gt 0 ]; do
+      _gnq=(); _gnm=(); _gi=0
+      while [ "$_gi" -lt "${#_gq[@]}" ]; do
+        _m=${_gq[$_gi]}; _md=${_gm[$_gi]}; _gi=$((_gi + 1))
+        if [ "$_gl" -ge 16 ] || [ ! -r "$_m" ] || [ ! -x "$_m" ]; then printf '?\t%s\n' "$_m"; continue; fi
+        for _e in "$_m"/*; do
+          case "${_e##*/}" in
+            @*) [ -d "$_e" ] || continue
+                if [ -L "$_e" ]; then case "$_md" in P|S) continue ;; esac; fi
+                if [ ! -r "$_e" ] || [ ! -x "$_e" ]; then printf '?\t%s\n' "$_e"; continue; fi
+                for _e2 in "$_e"/*; do if [ -e "$_e2" ] || [ -L "$_e2" ]; then npm_global_pkg "$_e2" "$_md"; fi; done ;;
+            *) if [ -e "$_e" ] || [ -L "$_e" ]; then npm_global_pkg "$_e" "$_md"; fi ;;
+          esac
+        done
+      done
+      _gq=(${_gnq[@]+"${_gnq[@]}"}); _gm=(${_gnm[@]+"${_gnm[@]}"}); _gl=$((_gl + 1))
+    done
+  done
+}
+npm_global_named() { # package.json paths on stdin; the ones whose folder names a package on the list, and the "?" lines
   npm_awk '
     BEGIN { for (pc = 1; pc <= 4; pc++) { n = split(ENVIRON["BAD_NPM_P" pc], L, "\n"); for (i = 1; i <= n; i++) if (split(L[i], f, " ") >= 3) names[f[1]] = 1 } }
+    /^\?\t/ { print; next }
     { d = $0; sub(/\/package\.json$/, "", d); k = split(d, c, "/"); nm = c[k]; if (k > 1 && c[k - 1] ~ /^@/) nm = c[k - 1] "/" nm
       if (nm in names) print }'
 }
@@ -6049,18 +6112,17 @@ npm_global_hits() { # package.json paths on stdin; prints folder|name version|ta
       if (t != "") { gsub(/[[:cntrl:]]/, "?", d); print d "\t" nm " " v "\t" t }
     }' 2>/dev/null
 }
-_g=$(
-  printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
-    [ -n "$r" ] || continue
-    for f in "$r"/*/package.json "$r"/@*/*/package.json "$r"/*/node_modules/*/package.json "$r"/*/node_modules/@*/*/package.json \
-             "$r"/@*/*/node_modules/*/package.json "$r"/@*/*/node_modules/@*/*/package.json; do
-      # A regular file; in an account run anything there, so fleet_filter can count what it won't read.
-      if [ -f "$f" ] || { [ "$ACCTRUN" -eq 1 ] && { [ -e "$f" ] || [ -L "$f" ]; }; }; then printf '%s\n' "$f"; fi
-    done
-  done | npm_global_named | fleet_filter | npm_global_hits
-)
+_gw=$(npm_global_walk | npm_global_named)
+_g=$(printf '%s\n' "$_gw" | grep -v "^?$TAB" | grep -v '^$' | fleet_filter | npm_global_hits)
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"
+# What of the global installs could not be read: each folder (or bad package's package.json) once. It
+# counts in NPM_UNREAD, which npm's cache adds to below, so the check is never called clean over it.
+NPM_GUNREAD=$( { printf '%s\n' "$_npm_roots" "$_gw" | grep "^?$TAB"
+  # An account run leaves an unreadable file to fleet_filter, which counts it already.
+  [ "$ACCTRUN" -eq 1 ] || printf '%s\n' "$_gw" | grep -v "^?$TAB" | while IFS= read -r _f; do [ -n "$_f" ] && [ -e "$_f" ] && [ ! -r "$_f" ] && printf '?\t%s\n' "$_f"; done
+  } | sort -u | grep -c .)
+NPM_UNREAD=$((NPM_UNREAD + NPM_GUNREAD))
 # --- 1. Coding agents: settings and versions -------------------------------------
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by aa_hit (section 2).
 AA_ROWS=""
@@ -7313,13 +7375,15 @@ $PERSIST
 EOF
   for _t in $NPM_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 fi
-# What of npm's places could not be read: part of its cache, lockfiles, folders the scan could not
-# enter. The row is never green over them, and findings above them are not the full list.
+# What of npm's places could not be read: part of its cache or of the global installs, lockfiles,
+# folders the scan could not enter. The row is never green over them, and findings above them are not
+# the full list.
 _np=""; _nn=0
-[ "$NPM_UNREAD" -gt 0 ] && { _np="part of npm's cache"; _nn=1; }
+[ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ] && { _np="part of npm's cache"; _nn=1; }
+[ "$NPM_GUNREAD" -gt 0 ] && { _np="${_np:+$_np|}part of the global installs"; _nn=$((_nn + 1)); }
 [ "$N_LOCK_UNREAD" -gt 0 ] && { _np="${_np:+$_np|}$(plural "$N_LOCK_UNREAD" lockfile lockfiles)"; _nn=$((_nn + 1)); }
 [ "$HOME_PARTIAL" -eq 1 ] && { _np="${_np:+$_np|}some folders in your home"; _nn=$((_nn + 1)); }
-case "$_nn" in 2) _np=${_np/|/ and } ;; 3) _np=${_np/|/, }; _np=${_np/|/ and } ;; esac
+case "$_nn" in 2) _np=${_np/|/ and } ;; 3) _np=${_np/|/, }; _np=${_np/|/ and } ;; 4) _np=${_np/|/, }; _np=${_np/|/, }; _np=${_np/|/ and } ;; esac
 lock_unread() { while IFS= read -r _f; do [ -n "$_f" ] && emit "        $(short "$_f")"; done <<EOF
 $LOCK_UNREAD
 EOF
@@ -7577,7 +7641,8 @@ $PLATFORMS
 EOF
 # A partial check comes after every finding someone has to act on, and before the green line.
 elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: files unreadable"
-elif [ "$NPM_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
+elif [ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
+elif [ "$NPM_GUNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: folder unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi

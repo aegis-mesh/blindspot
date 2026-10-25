@@ -5374,7 +5374,22 @@ foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { $Lo
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv,
 # nvm-windows), pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
 $NpmRoots = New-Object System.Collections.Generic.List[string]
-function Add-NpmRoot([string]$r) { if ($r -and (Is-Dir $r) -and -not $NpmRoots.Contains($r)) { $NpmRoots.Add($r) } }
+# A root that is not a folder can still be there, behind a folder on its way that can't be read or
+# entered: that folder counts as not read ($NpmGUnread), as does every folder the walk below can't read.
+$NpmGUnread = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+function Npm-Blocked([string]$p) { # the nearest folder on its way that exists, when that can't be read; '' otherwise
+  $d = $p
+  while ($true) {
+    try { $d = [IO.Path]::GetDirectoryName($d) } catch { return '' }
+    if (-not $d) { return '' }
+    if (Is-Dir $d) { try { [void][IO.Directory]::GetFileSystemEntries($d); return '' } catch { return $d } }
+  }
+}
+function Add-NpmRoot([string]$r) {
+  if (-not $r) { return }
+  if (Is-Dir $r) { if (-not $NpmRoots.Contains($r)) { $NpmRoots.Add($r) } }
+  else { $b = Npm-Blocked $r; if ($b) { [void]$NpmGUnread.Add($b) } }
+}
 foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'),
     '/opt/homebrew/lib/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules')) { Add-NpmRoot $r }
 # Folders holding one folder per version or package, and where node_modules sits in each.
@@ -5390,30 +5405,78 @@ foreach ($g in @(@($nvmWin, 'node_modules'), @((J $fnmWin 'node-versions'), 'ins
     @((J $LocalAppData 'Volta/tools/image/packages'), 'lib/node_modules'), @((J $LocalAppData 'mise/installs/node'), 'node_modules'),
     @((J $LocalAppData 'pnpm/global'), 'node_modules'), @((J $LocalAppData 'npm-cache/_npx'), 'node_modules'))) { $NpmGlobs.Add($g) }
 if ($env:PNPM_HOME) { $NpmGlobs.Add(@((J $env:PNPM_HOME 'global'), 'node_modules')) }
-foreach ($g in $NpmGlobs) { foreach ($d in (Glob-Dirs $g[0] '*')) { Add-NpmRoot (J $d $g[1]) } }
-# One pass over each root: a folder named for a bad package (node_modules/<name> or
-# node_modules/@<scope>/<name>) has its package.json read, as the package itself or as a dependency
-# of a globally installed tool. Nothing is looked up per bad name.
-function Npm-Package([string]$d, [string]$nm, [bool]$deep) {
-  if ($NpmNames.Contains($nm)) {
-    $pj = J $d 'package.json'
-    if (Is-File $pj) {
-      $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"')
-      $v = ''; if ($m.Success) { $v = $m.Groups[1].Value }
-      Npm-Hit $d $nm $v
+foreach ($g in $NpmGlobs) {
+  if (Is-Dir $g[0]) {
+    try { $gk = @([IO.Directory]::GetDirectories($g[0]) | Sort-Object) } catch { [void]$NpmGUnread.Add($g[0]); continue }
+    foreach ($d in $gk) { Add-NpmRoot (J $d $g[1]) }
+  } else { $b = Npm-Blocked $g[0]; if ($b) { [void]$NpmGUnread.Add($b) } }
+}
+# Each root is read as a node_modules folder: the package.json of every package in it, and of every
+# dependency in the node_modules folders nested in theirs, 16 levels deep, so a tool's dependency's own
+# dependency is read too. A store in a dot folder beside them (pnpm's .pnpm/<id>/node_modules, where a
+# pnpm global folder keeps every package) is read as well, its real folders only: the links in a store,
+# and at the root beside it, lead to those. A linked package is otherwise read but not entered, except
+# at a root without a store (npm link). Each folder that can't be read or entered, deeper than 16
+# levels, or a bad package's package.json that can't be read, counts as not read. A package.json is
+# read only for a folder named for a bad package (node_modules/<name> or node_modules/@<scope>/<name>).
+function Npm-Entries([string]$d) { try { , @(([IO.DirectoryInfo]$d).GetFileSystemInfos()) } catch { $null } }
+function Path-IsLink([string]$p) { try { ([IO.File]::GetAttributes($p) -band [IO.FileAttributes]::ReparsePoint) -ne 0 } catch { $false } }
+function Npm-GPkg($e, [string]$nm, [string]$md, $nq) { # a package's entry, its name, the kind of folder it is in (R root, P root with a store, S store, N nested)
+  $lnk = Is-Link $e; $p = $e.FullName
+  if ($lnk -and ($md -ceq 'P' -or $md -ceq 'S')) { return }
+  if ($lnk) { if (-not (Is-Dir $p)) { return } } elseif (-not (Is-DirInfo $e)) { return }
+  $pj = J $p 'package.json'; $pn = J $p 'node_modules'
+  $hasNm = Is-Dir $pn
+  if (-not $hasNm -and -not (Is-File $pj)) {
+    # No package.json and no node_modules to see: a folder that can't be entered, or not a package.
+    try { $pl = [IO.Directory]::GetFileSystemEntries($p, 'package.json') } catch { [void]$NpmGUnread.Add($p); return }
+    if ($pl.Count -gt 0) { [void]$NpmGUnread.Add($p) }
+    return
+  }
+  if ($NpmNames.Contains($nm) -and (Is-File $pj)) {
+    $t = Read-Text $pj; if ($null -eq $t) { [void]$NpmGUnread.Add($pj) }
+    $m = [regex]::Match([string]$t, '"version"\s*:\s*"([^"]+)"')
+    $v = ''; if ($m.Success) { $v = $m.Groups[1].Value }
+    Npm-Hit $p $nm $v
+  }
+  if ((-not $lnk -or $md -ceq 'R') -and $hasNm -and -not (Path-IsLink $pn)) { $nq.Add(@($pn, 'N')) }
+}
+function Npm-Walk([string]$r) {
+  $q = New-Object System.Collections.Generic.List[object]
+  $es = Npm-Entries $r
+  if ($null -ne $es) {
+    foreach ($s in $es) {
+      if (-not $s.Name.StartsWith('.') -or $s.Name -ceq '.bin' -or (Is-Link $s) -or -not (Is-DirInfo $s)) { continue }
+      $ss = Npm-Entries $s.FullName; if ($null -eq $ss) { [void]$NpmGUnread.Add($s.FullName); continue }
+      foreach ($x in ($ss | Sort-Object -Property Name -CaseSensitive)) {
+        if ($x.Name.StartsWith('.')) { continue }
+        $xn = J $x.FullName 'node_modules'; if ((Is-Dir $xn) -and -not (Path-IsLink $xn)) { $q.Add(@($xn, 'S')) }
+      }
     }
   }
-  if ($deep) { $nm2 = J $d 'node_modules'; if (Is-Dir $nm2) { Npm-Modules $nm2 $false } }
-}
-function Npm-Modules([string]$md, [bool]$deep) {
-  foreach ($d in (Glob-Dirs $md '*')) {
-    $dn = [IO.Path]::GetFileName($d); if ($dn.StartsWith('.')) { continue }
-    if ($dn.StartsWith('@')) {
-      foreach ($d2 in (Glob-Dirs $d '*')) { $n2 = [IO.Path]::GetFileName($d2); if (-not $n2.StartsWith('.')) { Npm-Package $d2 "$dn/$n2" $deep } }
-    } else { Npm-Package $d $dn $deep }
+  if ($q.Count -gt 0) { $q.Insert(0, @($r, 'P')) } else { $q.Add(@($r, 'R')) }
+  $lv = 0
+  while ($q.Count -gt 0) {
+    $nq = New-Object System.Collections.Generic.List[object]
+    foreach ($item in $q) {
+      $m = $item[0]; $md = $item[1]
+      if ($lv -ge 16) { [void]$NpmGUnread.Add($m); continue }
+      $es = Npm-Entries $m; if ($null -eq $es) { [void]$NpmGUnread.Add($m); continue }
+      foreach ($e in $es) {
+        if ($e.Name.StartsWith('.')) { continue }
+        if ($e.Name.StartsWith('@')) {
+          $sl = Is-Link $e
+          if ($sl) { if ($md -ceq 'P' -or $md -ceq 'S' -or -not (Is-Dir $e.FullName)) { continue } } elseif (-not (Is-DirInfo $e)) { continue }
+          $es2 = Npm-Entries $e.FullName; if ($null -eq $es2) { [void]$NpmGUnread.Add($e.FullName); continue }
+          foreach ($e2 in $es2) { if (-not $e2.Name.StartsWith('.')) { Npm-GPkg $e2 "$($e.Name)/$($e2.Name)" $md $nq } }
+        } else { Npm-GPkg $e $e.Name $md $nq }
+      }
+    }
+    $q = $nq; $lv++
   }
 }
-foreach ($r in $NpmRoots) { Npm-Modules $r $true }
+foreach ($r in $NpmRoots) { Npm-Walk $r }
+$NpmUnread += $NpmGUnread.Count
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 $OutTable = @(
   ,@('cursor', 'Cursor', 'mac', 'plist', '/Applications/Cursor.app/Contents/Info.plist', '-', '3.0', 'a malicious agent could escape the sandbox', 'github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw')
@@ -6330,11 +6393,12 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
 # What of npm's places could not be read: part of its cache, lockfiles, folders the scan could not
 # enter. The row is never green over them, and findings above them are not the full list.
 $npParts = New-Object System.Collections.Generic.List[string]
-if ($NpmUnread -gt 0) { $npParts.Add("part of npm's cache") }
+if ($NpmUnread - $NpmGUnread.Count -gt 0) { $npParts.Add("part of npm's cache") }
+if ($NpmGUnread.Count -gt 0) { $npParts.Add('part of the global installs') }
 if ($LockUnread.Count -gt 0) { $npParts.Add((Plural $LockUnread.Count 'lockfile' 'lockfiles')) }
 if ($HOME_PARTIAL -eq 1) { $npParts.Add('some folders in your home') }
 $npText = ''
-if ($npParts.Count -eq 1) { $npText = $npParts[0] } elseif ($npParts.Count -eq 2) { $npText = $npParts[0] + ' and ' + $npParts[1] } elseif ($npParts.Count -eq 3) { $npText = $npParts[0] + ', ' + $npParts[1] + ' and ' + $npParts[2] }
+if ($npParts.Count -eq 1) { $npText = $npParts[0] } elseif ($npParts.Count -ge 2) { $npText = ($npParts.GetRange(0, $npParts.Count - 1) -join ', ') + ' and ' + $npParts[$npParts.Count - 1] }
 $npFound = ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1)
 if (-not $npFound -and $WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $npText)) {
   $why = New-Object System.Collections.Generic.List[string]
@@ -6494,7 +6558,8 @@ elseif ($leaks.Count -eq 1) { $G5 = "$cYel!$cRst"; $D5 = $leaks[0].Summary }
 # A partial check comes after every finding someone has to act on, and before the green line.
 elseif ($NpmSlow -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: took too long' }
 elseif ($LockUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: files unreadable' }
-elseif ($NpmUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
+elseif ($NpmUnread - $NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
+elseif ($NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: folder unreadable' }
 elseif ($ExtUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'extensions not fully checked: folder unreadable' }
 elseif ($HOME_PARTIAL -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'none found, but some folders were not read' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }

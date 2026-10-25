@@ -995,6 +995,40 @@ has    "a yarn 2 entry's zip in the project's cache is an install" 'ACT NOW: SIG
 has    "so is its zip in the shared cache yarn 4 uses" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/gc.txt"
 has    "a yarn 1 entry's tarball in the offline mirror its .yarnrc names is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/mir.txt"
 has    "another version in each of those places is not an install" 'ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE' "$LI/miss.txt"
+# Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
+# folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
+# version deep down is not a hit.
+GI=$WORK/gi; rm -rf "$GI"; mkdir -p "$GI/AppData/Roaming" "$GI/AppData/Local/Temp"
+gi_pkg() { mkdir -p "$1"; printf '{"name":"%s","version":"%s"}\n' "$2" "$3" > "$1/package.json"; }
+_gn="$GI/.nvm/versions/node/v22.11.0/lib/node_modules/acme-cli"
+gi_pkg "$_gn" acme-cli 2.0.0; gi_pkg "$_gn/node_modules/old-http" old-http 1.0.0; gi_pkg "$_gn/node_modules/old-http/node_modules/axios" axios 0.30.4
+gi_pkg "$_gn/node_modules/old-http/node_modules/new-http/node_modules/axios" axios 1.7.0
+gi_pkg "$GI/.npm/_npx/77aa/node_modules/mcp-tool/node_modules/old-http/node_modules/@keyv/redis" @keyv/redis 6.0.0
+_gp="$GI/Library/pnpm/global/5/node_modules"
+gi_pkg "$_gp/.pnpm/acme-cli@2.0.0/node_modules/acme-cli" acme-cli 2.0.0; gi_pkg "$_gp/.pnpm/claud-code@1.0.3/node_modules/claud-code" claud-code 1.0.3
+gi_pkg "$_gp/.pnpm/axios@1.14.1/node_modules/axios" axios 1.14.1
+ln -s .pnpm/acme-cli@2.0.0/node_modules/acme-cli "$_gp/acme-cli"; ln -s .pnpm/claud-code@1.0.3/node_modules/claud-code "$_gp/claud-code"
+ln -s ../../axios@1.14.1/node_modules/axios "$_gp/.pnpm/acme-cli@2.0.0/node_modules/axios"
+HOME="$GI" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gi.txt"
+has    "a global tool's dependency's own dependency is read" '~/\.nvm/versions/node/v22\.11\.0/lib/node_modules/acme-cli/node_modules/old-http/node_modules/axios axios 0\.30\.4 \(Axios takeover' "$WORK/gi.txt"
+has    "and one nested in npx's folder" '~/\.npm/_npx/77aa/node_modules/mcp-tool/node_modules/old-http/node_modules/@keyv/redis @keyv/redis 6\.0\.0 \(keyv account takeover' "$WORK/gi.txt"
+has    "pnpm's global store is read" '~/Library/pnpm/global/5/node_modules/\.pnpm/axios@1\.14\.1/node_modules/axios axios 1\.14\.1 \(Axios takeover' "$WORK/gi.txt"
+_c=$(grep -o 'claud-code 1\.0\.3 (SANDWORM' "$WORK/gi.txt" | grep -c .)
+if [ "$_c" -eq 1 ]; then ok "a pnpm global tool is listed once, not again through its link"; else bad "a pnpm global tool is listed once, not again through its link" "listed $_c times"; fi
+hasnot "a safe version deep in a global tool is not a hit" 'axios 1\.7\.0' "$WORK/gi.txt"
+# A global tool's folder or an npx folder that can't be read is not called clean: the npm row and row
+# 05 say part of the global installs could not be read.
+for gu in gu1 gu2; do rm -rf "${WORK:?}/$gu"; mkdir -p "$WORK/$gu/AppData/Roaming" "$WORK/$gu/AppData/Local/Temp"; done
+gi_pkg "$WORK/gu1/.nvm/versions/node/v22.11.0/lib/node_modules/acme-cli/node_modules/axios" axios 1.14.1
+gi_pkg "$WORK/gu2/.npm/_npx/9f1e/node_modules/plain-crypto-js" plain-crypto-js 4.2.1
+chmod 000 "$WORK/gu1/.nvm/versions/node/v22.11.0/lib/node_modules/acme-cli" "$WORK/gu2/.npm/_npx/9f1e"
+for gu in gu1 gu2; do HOME="$WORK/$gu" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$gu.txt"; HOME="$WORK/$gu" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$gu-c.txt"; done
+chmod 755 "$WORK/gu1/.nvm/versions/node/v22.11.0/lib/node_modules/acme-cli" "$WORK/gu2/.npm/_npx/9f1e"
+has    "a global tool's folder that can't be read is not called clean" 'npm malware not fully checked: part of the global installs could not be read' "$WORK/gu1.txt"
+has    "and the summary row says a folder could not be read" 'Recent leaks npm packages not fully checked: folder unreadable' "$WORK/gu1-c.txt"
+has    "an npx folder that can't be read is not called clean either" 'npm malware not fully checked: part of the global installs could not be read' "$WORK/gu2.txt"
+cat "$WORK/gu1.txt" "$WORK/gu2.txt" > "$WORK/gu.txt"
+hasnot "and neither reads as no findings" 'NO FINDINGS IN THIS SCAN|No findings in this scan' "$WORK/gu.txt"
 # With no key file, the snapshot note under the Argus offer speaks of the lockfile, on a Mac.
 rm -rf "$WORK/lke"; mkdir -p "$WORK/lke/code/cloned"; cp "$WORK/lko/code/cloned/package-lock.json" "$WORK/lke/code/cloned/"
 HOME="$WORK/lke" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lke.txt"
