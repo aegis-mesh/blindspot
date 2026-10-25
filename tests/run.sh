@@ -323,6 +323,22 @@ has    "a Bedrock API key is found"                   'Gemini CLI +1 file: AWS' 
 has    "a GitHub app token in the new format is found" 'Continue +1 file: GitHub' "$SE/fmt.txt"
 has    "and all four in a project .env file"          '~/code/new/\.env +AWS, GitHub, OpenAI' "$SE/fmt.txt"
 if grep -aqF -f "$SE/fmt-keys.txt" "$SE/fmt.txt"; then bad "and none of them is printed"; else ok "and none of them is printed"; fi
+# OpenAI project keys from before their length grew: sk-proj-, 20 letters and digits, T3BlbkFJ
+# (OpenAI in base64), 20 more; and today's 156 characters. Near misses, not keys: the old length
+# without the marker, and one character short of it. Built from pieces.
+mkdir -p "$SE/oai/.claude/projects/p" "$SE/oai/.codex/sessions/x" "$SE/oai/code/old" "$SE/oai/code/near"
+_m="T3Blb""kFJ"; _p48="sk""-proj-$(rnd 20)$_m$(rnd 20)"; _p156="sk""-proj-$(rnd 74)$_m$(rnd 74)"
+printf '{"a":"x %s y"}\n' "$_p48" > "$SE/oai/.claude/projects/p/a.jsonl"
+printf '{"a":"x %s y"}\n' "$_p156" > "$SE/oai/.codex/sessions/x/r.jsonl"
+printf 'OPENAI_API_KEY=%s\n' "$_p48" > "$SE/oai/code/old/.env"
+printf 'OPENAI_API_KEY=%s\nOPENAI_KEY_2=%s\n' "sk""-proj-$(rnd 48)" "sk""-proj-$(rnd 19)$_m$(rnd 20)" > "$SE/oai/code/near/.env"
+printf '%s\n' "$_p48" "$_p156" > "$SE/oai-keys.txt"
+HOME="$SE/oai" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions > "$SE/oai.txt" 2>&1
+has    "an OpenAI project key of 48 characters is found" 'Claude Code +1 file: OpenAI' "$SE/oai.txt"
+has    "and one of 156"                                'Codex +1 file: OpenAI' "$SE/oai.txt"
+has    "and the short one in a project .env file"       '~/code/old/\.env +OpenAI' "$SE/oai.txt"
+hasnot "the old length without the marker, or one short of it, is not a key" 'code/near' "$SE/oai.txt"
+if grep -aqF -f "$SE/oai-keys.txt" "$SE/oai.txt"; then bad "and no OpenAI key is printed"; else ok "and no OpenAI key is printed"; fi
 # A kill -9 of the script stops the perl workers within one piece of a file. What a kill -9
 # leaves behind, as documented, lands in this test's own TMPDIR.
 mkdir -p "$SE/k9/.claude/projects/p" "$SE/tmp9"
