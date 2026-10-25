@@ -52,7 +52,7 @@ PATH_OK='function path_ok(p,   r, k, v) {
 # names its provider once: gird.ai's counts are keyed on it. The regexes spell out counts
 # ([0-9][0-9][0-9][0-9], not [0-9]{4}): Debian 12's mawk has no {n} intervals and would refuse every line.
 bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[$1]++ || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
-      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF != 6 && NF != 7) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF == 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
+      rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF < 6 || NF > 8) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF >= 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0)) || (NF == 8 && ($6 != "update" || $8 == "" || $8 ~ /[\047"`$|\\]/ || length($8) > 49)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       # npm's placeholder for a removed package (0.0.1-security, or 0.0.1-security.0 for a few names) is never malware, and the scripts skip it.
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" -v leaks="$LEAK_IDS" 'NF != 3 || index(leaks, " " $3 " ") > 0 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /^0\.0\.1-security(\.[0-9]+)?$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
       rows data/sessions.tsv | awk -F '\t' "$PATH_OK"'
@@ -192,11 +192,11 @@ rows data/sessions.tsv | awk -F '\t' "$PATH_PS"'
 # --- incidents ---------------------------------------------------------------
 # npm_label gives "name, month year"; incident_line adds what it did and the source's site;
 # incident_level says whether a hit means a compromised machine (act) or a version to update;
-# incident_name is the name alone, incident_source the source without https:// and incident_advice
-# the incident's own fix, if it has one.
+# incident_name is the name alone, incident_source the source without https://, incident_advice
+# the incident's own fix, if it has one, and incident_summary its row 05, if it has one.
 rows data/incidents.tsv | awk -F '\t' '
   function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
-  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; adv[NR] = $7; n = NR }
+  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; adv[NR] = $7; sm[NR] = $8; n = NR }
   END {
     print "# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it."
     printf "npm_label() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], lab[i]; print " esac; }"
@@ -205,11 +205,12 @@ rows data/incidents.tsv | awk -F '\t' '
     printf "incident_name() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], nm[i]; print " esac; }"
     printf "incident_source() { case \"$1\" in"; for (i = 1; i <= n; i++) printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], src[i]; print " esac; }"
     printf "incident_advice() { case \"$1\" in"; for (i = 1; i <= n; i++) if (adv[i] != "") printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], adv[i]; print " esac; }"
+    printf "incident_summary() { case \"$1\" in"; for (i = 1; i <= n; i++) if (sm[i] != "") printf " %s) printf \047%%s\047 \047%s\047 ;;", id[i], sm[i]; print " esac; }"
     print "# <<< incidents"
   }' > "$WORK/incidents.sh"
 rows data/incidents.tsv | awk -F '\t' '
   function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
-  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; adv[NR] = $7; n = NR }
+  { id[NR] = $1; nm[NR] = $2; lab[NR] = $2 ", " $3; line[NR] = $2 ", " $3 ": " $4 ". " host($5); src[NR] = substr($5, 9); lv[NR] = $6; adv[NR] = $7; sm[NR] = $8; n = NR }
   END {
     print "# >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it."
     printf "function Npm-Label([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], lab[i]; print " default { $t } } }"
@@ -218,6 +219,7 @@ rows data/incidents.tsv | awk -F '\t' '
     printf "function Incident-Name([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], nm[i]; print " default { $t } } }"
     printf "function Incident-Source([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", id[i], src[i]; print " default { $t } } }"
     printf "function Incident-Advice([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) if (adv[i] != "") printf " \047%s\047 { \047%s\047 }", id[i], adv[i]; print " default { \047\047 } } }"
+    printf "function Incident-Summary([string]$t) { switch ($t) {"; for (i = 1; i <= n; i++) if (sm[i] != "") printf " \047%s\047 { \047%s\047 }", id[i], sm[i]; print " default { \047\047 } } }"
     print "# <<< incidents"
   }' > "$WORK/incidents.ps1"
 

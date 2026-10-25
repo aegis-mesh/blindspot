@@ -19,6 +19,8 @@ a platform whose incident is not a leak	tools/gen.sh is one bash tool that write
 a leak that no platform names	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an npm package of a platform leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a startup file of a platform leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a row 05 summary on an act-level incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a row 05 summary longer than row 05 holds	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a platform with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a platform with another found word	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a site file with a slash	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

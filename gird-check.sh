@@ -1645,6 +1645,7 @@ incident_level() { case "$1" in mistral) printf update ;; opencode) printf leak 
 incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; mastra) printf '%s' 'Mastra worm' ;; keyv) printf '%s' 'keyv worm' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
 incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; opencode) printf '%s' 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
 incident_advice() { case "$1" in glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; injective) printf '%s' 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+incident_summary() { case "$1" in injective) printf '%s' 'Injective SDK: move the funds out of its wallets' ;; esac; }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
@@ -2558,9 +2559,10 @@ if [ "$EXT_HIT" -eq 1 ]; then
   else _edo="Uninstall the extensions listed in section 5 and"; fi
   todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
 fi
-# An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
-# the act-now fixes, an update-level one before the update it has to come before. Two incidents can
-# share a fix (two waves of one malware): it is said once.
+# An incident's own fix (data/incidents.tsv), once for each incident found, right after the act-now
+# fixes: an act-level one, then an update-level one, ahead of every other fix (the Injective SDK's:
+# move the funds out of a wallet whose seed phrase may have been sent out). Two incidents can share a
+# fix (two waves of one malware): it is said once.
 advice_todos() { # level
   _seen=" "; _said="$TAB"
   for _t in $NPM_TAGS $EXT_TAGS $PY_HITS; do
@@ -2579,6 +2581,7 @@ PY_ENV=0; for _pi in $PY_HITS; do printf '%s' "$LITE_BAD" | grep -q "^$_pi$TAB" 
 if [ "$PY_HIT" -eq 1 ] && [ "$PY_ENV" -eq 1 ]; then todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $_adv, and rotate every key the machine could reach."
 elif [ "$PY_HIT" -eq 1 ]; then todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $_adv, and rotate every key the machine could reach."; fi
 advice_todos act
+advice_todos update
 case "$OS" in
   Darwin) _store="the macOS Keychain or a secrets manager" ;;
   Linux)  if [ "$WSL" -eq 1 ]; then _store="a secrets manager" # WSL usually has no desktop keyring
@@ -2598,7 +2601,6 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
-advice_todos update
 [ "$MAL_HIT" -eq 0 ] && [ "$NPM_UPD" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
 [ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
@@ -3177,6 +3179,12 @@ cline() { # number mark label detail
   _cd=$4; [ "${#_cd}" -gt "$_room" ] && _cd="${_cd:0:$((_room - 3))}..."
   emit "   ${TEAL}${B}$1${RST}  $2  ${B}${_cb}${RST}${_cd}"
 }
+# An update-level incident with a fix of its own has a summary for row 05 (data/incidents.tsv).
+UPD_SUM=""
+for _t in $NPM_TAGS; do
+  [ "$(incident_level "$_t")" = update ] || continue
+  _s=$(incident_summary "$_t"); if [ -n "$_s" ]; then UPD_SUM=$_s; break; fi
+done
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO set to run commands without asking"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
@@ -3203,6 +3211,7 @@ if [ "$WIPER_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="gh-token-monitor: stop
 elif [ "$ANY_MAL" -eq 1 ] && [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="$MAL_SHORT and $PY_SHORT malware found. Act now"
 elif [ "$ANY_MAL" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of $MAL_WHAT. Act now"
 elif [ "$PY_HIT" -eq 1 ]; then G5="${RED}✗${RST}"; D5="signs of the $PY_SHORT malware. Act now"
+elif [ -n "$UPD_SUM" ]; then G5="${YEL}!${RST}"; D5=$UPD_SUM
 elif [ -n "$LITE_PYC" ]; then G5="${YEL}!${RST}"; D5="possible LiteLLM leftover: check cook.pyc"
 elif [ -n "$EXT_CHECK" ]; then G5="${YEL}!${RST}"; D5="a startup file to check, see section 5"
 elif [ "$NPM_UPD" -eq 1 ] && [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="npm and Python packages to update, see section 5"

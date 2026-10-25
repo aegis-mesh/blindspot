@@ -153,7 +153,9 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
 - Injective: `@injectivelabs/sdk-ts 1.20.21` in `data/bad-npm.tsv`. Only that package carries the
   code (the advisory); the others at 1.20.21 depend on it, so a lockfile with them lists it too.
   Level `update`: the machine is not compromised, but a wallet used with it is, and the incident
-  line says so. The `update` level's description changes from "nothing ran" to "the machine itself
+  line says so. Its fix, moving the funds to a new wallet, comes right after the act-now fixes,
+  ahead of every other one, and row 05 names it (the incident's summary column); the result link
+  carries nothing for it. The `update` level's description changes from "nothing ran" to "the machine itself
   is not compromised".
 
 ## Not covered

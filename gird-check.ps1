@@ -1202,6 +1202,7 @@ function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'open
 function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'mastra' { 'Mastra worm' } 'keyv' { 'keyv worm' } 'sandworm' { 'SANDWORM_MODE worm' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'injective' { 'Injective SDK' } default { $t } } }
 function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'opencode' { 'techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
 function Incident-Advice([string]$t) { switch ($t) { 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'glasswormvsix' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormapr' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'injective' { 'Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
+function Incident-Summary([string]$t) { switch ($t) { 'injective' { 'Injective SDK: move the funds out of its wallets' } default { '' } } }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 $BadPypi = @'
@@ -1995,9 +1996,10 @@ if ($EXT_HIT -eq 1) {
   else { $edo = 'Uninstall the extensions listed in section 5 and' }
   Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
 }
-# An incident's own fix (data/incidents.tsv), once for each incident found: an act-level one next to
-# the act-now fixes, an update-level one before the update it has to come before. Two incidents can
-# share a fix (two waves of one malware): it is said once.
+# An incident's own fix (data/incidents.tsv), once for each incident found, right after the act-now
+# fixes: an act-level one, then an update-level one, ahead of every other fix (the Injective SDK's:
+# move the funds out of a wallet whose seed phrase may have been sent out). Two incidents can share a
+# fix (two waves of one malware): it is said once.
 function Add-Advice([string]$level) {
   $seen = @{}; $said = @{}
   foreach ($t in (@($NpmTags) + @($ExtTags) + @($PyHits))) {
@@ -2015,6 +2017,7 @@ $PyEnv = @($LiteBad | Where-Object { $PyHits -contains $_[0] }).Count -gt 0
 if ($PY_HIT -eq 1 -and $PyEnv) { Add-Todo 5 "Treat this machine as compromised. Don't run Python in the affected environments, follow $adv, and rotate every key the machine could reach." }
 elseif ($PY_HIT -eq 1) { Add-Todo 5 "Treat this machine as compromised. Stop any process started from the files listed in section 5, delete them, follow $adv, and rotate every key the machine could reach." }
 Add-Advice 'act'
+Add-Advice 'update'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
@@ -2028,7 +2031,6 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
-Add-Advice 'update'
 if ($MAL_HIT -eq 0 -and $NPM_UPD -eq 1) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
 if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
@@ -2411,6 +2413,9 @@ function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
   if ($detail.Length -gt $room) { $detail = $detail.Substring(0, $room - 3) + '...' }
   Emit "   $cTeal$cBold$num$cRst  $mark  $cBold$($label.PadRight(20))$cRst$detail"
 }
+# An update-level incident with a fix of its own has a summary for row 05 (data/incidents.tsv).
+$UpdSum = ''
+foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO set to run commands without asking" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
@@ -2438,6 +2443,7 @@ if ($WIPER_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = 'gh-token-monitor: stop it 
 elseif ($ANY_MAL -eq 1 -and $PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "$MalShort and $PyShort malware found. Act now" }
 elseif ($ANY_MAL -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of $MalWhat. Act now" }
 elseif ($PY_HIT -eq 1) { $G5 = "$cRed$gX$cRst"; $D5 = "signs of the $PyShort malware. Act now" }
+elseif ($UpdSum) { $G5 = "$cYel!$cRst"; $D5 = $UpdSum }
 elseif ($LitePyc.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'possible LiteLLM leftover: check cook.pyc' }
 elseif ($ExtCheck.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'a startup file to check, see section 5' }
 elseif ($NPM_UPD -eq 1 -and $PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'npm and Python packages to update, see section 5' }

@@ -762,6 +762,14 @@ has    "the Injective fix: move the funds out of its wallets" 'Move the funds ou
 has    "the Injective fix comes before the update it has to come before" 'into a new wallet\. .*Update the npm packages listed in section 5' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
 has    "with its sourced line"                        'Injective SDK, July 2026: sent the seed phrase or private key of any wallet an app created or imported with it\. github\.com' "$D"
+# Injective alone: moving the funds outranks every fix that is not act-now, and row 05 names the wallets.
+rm -rf "$WORK/dz-inj"; cp -R "$WORK/clean" "$WORK/dz-inj"; mkdir -p "$WORK/dz-inj/code/inj"
+printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$WORK/dz-inj/code/inj/package-lock.json"
+psrun "$WORK/dz-inj" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj.txt"
+psrun "$WORK/dz-inj" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj-sum.txt"
+has    "Injective's wallet fix comes first, ahead of moving keys out of plain text" ' 1\. Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21, into a new wallet\. 2\. Move keys out of shell profiles' "$WORK/dz-inj.txt"
+has    "and it is the summary's first fix"             'First fix: Move the funds out of any wallet created or imported with Injective SDK 1\.20\.21' "$WORK/dz-inj-sum.txt"
+has    "row 05 names the wallets"                      'Recent leaks +Injective SDK: move the funds out of its wallets' "$WORK/dz-inj-sum.txt"
 dzrun() { _h=$1; shift; psrun "$_h" "$@" -- -Offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
 # Editor extensions: a row, headline and fix of their own, never called npm malware. The LaunchAgent

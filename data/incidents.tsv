@@ -8,8 +8,11 @@
 #           leak: a hosted platform leaked what people stored on it (data/platforms.tsv names the incident, and
 #           only a platform's incident is a leak): rotate what was stored there; never a compromised machine
 #   advice  optional: one more fix, shown in What to do when a package or extension of the incident
-#           is found (bad-npm, bad-pypi, bad-extensions; gen.sh refuses it on any other incident)
-# id	name	when	impact	source	level	advice
+#           is found (bad-npm, bad-pypi, bad-extensions; gen.sh refuses it on any other incident). An
+#           update-level incident's advice comes right after the act-now fixes
+#   summary optional, only for an update-level incident with advice: summary row 05 when the incident
+#           is the most urgent thing section 5 found, at most 49 characters (row 05's room at 80 columns)
+# id	name	when	impact	source	level	advice	summary
 axios	Axios takeover	March 2026	downloaded payloads, including a remote access trojan, onto machines that installed it	https://www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager	act
 tanstack	TanStack worm	May 2026	stole cloud, GitHub, npm and SSH credentials on install, then republished itself	https://github.com/advisories/GHSA-g7cv-rxg3-hmpx	act
 mistral	Mistral AI npm packages	May 2026	published with malware Mistral says could not run, as its setup script names a missing file	https://docs.mistral.ai/resources/security-advisories/MAI-2026-002	update
@@ -30,4 +33,4 @@ glasswormmar	GlassWorm extensions	March 2026	ran attacker code in memory that co
 glasswormvsix	GlassWorm sleeper extensions	March 2026	installed a malicious extension from GitHub into every editor it found	https://socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx	act	Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.
 glasswormapr	GlassWorm sleeper extensions	April 2026	updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf	https://socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm	act	Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.
 glasswormoct	GlassWorm-linked themes	October 2026	VS Code themes that ran hidden loaders, one of them tied to GlassWorm	https://socket.dev/blog/glassworm-vscode-themes	act
-injective	Injective SDK	July 2026	sent the seed phrase or private key of any wallet an app created or imported with it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update	Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.
+injective	Injective SDK	July 2026	sent the seed phrase or private key of any wallet an app created or imported with it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update	Move the funds out of any wallet created or imported with Injective SDK 1.20.21, into a new wallet.	Injective SDK: move the funds out of its wallets
