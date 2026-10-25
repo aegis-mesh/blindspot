@@ -1412,24 +1412,26 @@ auto_row() { # file what flattened-text
 # .toml file is read line by line: a # line is skipped, a match is a whole line up to a # comment
 # (so a setting inside an inline table, a profile written as one, does not count), and only the
 # lines before the first [table] count: a setting under [profiles.x] applies only when that profile
-# is used.
+# is used. tr removes the spaces in one pass, and each pattern becomes one regex with its boundaries
+# in it, tried once per line: linear on every awk, where a gsub on the joined text, or an index() of
+# the rest of the line at every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  if [ "$_tm" -eq 1 ]; then cat "$1" 2>/dev/null; else flat "$1"; fi | AA_P=$2 awk -v toml="$_tm" '
-    BEGIN { n = split(ENVIRON["AA_P"], p, "|"); for (i = 1; i <= n; i++) gsub(/[[:space:]]/, "", p[i]) }
-    { l = $0; gsub(/[[:space:]]/, "", l) }
-    toml && l ~ /^#/ { next }
-    toml && l ~ /^\[/ { exit }
-    { for (i = 1; i <= n; i++) {
-        if (i in got) continue
-        off = 0
-        while ((k = index(substr(l, off + 1), p[i])) > 0) {
-          k += off; b = k > 1 ? substr(l, k - 1, 1) : ""; a = substr(l, k + length(p[i]), 1)
-          if (toml) hit = (b == "" && (a == "" || a == "#"))
-          else hit = ((b == "" || b == "{" || b == ",") && (a == "" || a == "," || a == "}" || a == "#" || a == "/"))
-          if (hit) { got[i] = 1; break }
-          off = k
-        } } }
+  if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]'; fi | AA_P=$2 awk -v toml="$_tm" '
+    # A pattern as a regex that matches only its own text: every character a regex reads is quoted.
+    function lit(s,   o, c, j) {
+      o = ""
+      for (j = 1; j <= length(s); j++) {
+        c = substr(s, j, 1)
+        if (c == "^") o = o "\\^"; else if (c == "]") o = o "[]]"; else if (index(".[()*+?{}/", c)) o = o "[" c "]"; else o = o c
+      }
+      return o
+    }
+    BEGIN { n = split(ENVIRON["AA_P"], p, "|")
+      for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); re[i] = toml ? "^" lit(p[i]) "(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+    toml && /^#/ { next }
+    toml && /^\[/ { exit }
+    { for (i = 1; i <= n; i++) if (!(i in got) && $0 ~ re[i]) got[i] = 1 }
     END { for (i = 1; i <= n; i++) if (!(i in got)) exit 1; exit 0 }'
 }
 # Keys that make Claude Code run a command: hooks and its helper commands.
