@@ -221,7 +221,9 @@ v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; s
 ```
 
 If it would be too long, it keeps the accounts that need attention first (`act`, then `not_checked`,
-then `review`), then as many clear ones as fit, and ends with `+more`. The full result is
+then `review`), then as many clear ones as fit, and cuts details before accounts: an account whose
+details don't fit keeps its outcome, and an `act` one its `wiper` and `incidents` too. It ends with
+`+more` whenever anything was cut. The full result is
 in `/var/db/blindspot/last.json`. The inventory field shows `stale: last run <time>` when the last run
 is older than `--stale-days`, `failed: the run started <time> did not finish` when a later run
 stopped part-way (your MDM's time limit, a restart), `none` before the first run, and `unreadable`
@@ -256,7 +258,7 @@ hook sends npm tokens out on every push. Then:
 | Files named like the ones worms plant | Have them read the files section 2 lists, and delete any they didn't put there. |
 | An SSH key without a passphrase | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets | If they used it, rotate the keys stored there. |
-| A finding under "This Mac" | A LiteLLM loader running as root holds its lock file: the malware ran as root. Treat the Mac as compromised. |
+| A finding under "This Mac" | A file malware leaves outside every home folder, or a LiteLLM loader that root's own process runs (the row then says the malware ran as root). Treat the Mac as compromised. |
 | A possible sign under "This Mac" or an account | Files named like a malware's markers in `/tmp`, owned by root or by that account: find out what made them. Any account can leave such a file through a hard link, so alone it is not a finding. |
 
 ## 6. Update or remove it

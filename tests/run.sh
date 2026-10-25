@@ -3131,6 +3131,25 @@ hasnot "fleet: not a finding of that account's"       '^itadmin\.incidents=.*lit
 fl_run machlink --json
 rm -f "$FL/sharedtmp/.pc_sq_linked" "$FL/sharedtmp/.pc_e_sym" "$FL/plainfile"
 hasnot "fleet: a linked marker in the shared temp folder is not the Mac's finding" '^machine\.incidents=.*litellm' "$FL/machlink.flat"
+# A startup line in /tmp, which any account can write to, counts only as one root owns under one name,
+# and then only as a possible sign; only a loader lock root's own process holds says the malware ran as
+# root. No data line puts a startup file in /tmp today, so a copy whose table has one stands in.
+mkdir -p "$FL/tl"; cp "$FLEETSH" gird-check.sh "$FL/tl/"
+awk '{ print } /^IND_TABLE="/ && !d { print "mastra|all|startup|no|/tmp/blindspot-made-loader.js|starts the Mastra malware at login"; d = 1 }' "$FLEETSH" > "$FL/tl/gird-fleet.sh"
+chmod 755 "$FL/tl"; chmod 644 "$FL/tl/gird-fleet.sh" "$FL/tl/gird-check.sh"
+fl_tl() { # out-prefix: a simulated root run of the copy
+  GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
+    GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" \
+    "$FLBASH" "$FL/tl/gird-fleet.sh" --all-users > "$FL/$1.out" 2> "$FL/$1.err" < /dev/null
+  python3 tests/fleet-flat.py "$FL/state/last.json" > "$FL/$1.flat" 2>/dev/null || : > "$FL/$1.flat"
+}
+: > "$FL/sharedtmp/blindspot-made-loader.js"; fl_tl tlown
+rm -f "$FL/sharedtmp/blindspot-made-loader.js"; ln -s /etc/hosts "$FL/sharedtmp/blindspot-made-loader.js"; fl_tl tllink
+rm -f "$FL/sharedtmp/blindspot-made-loader.js"
+has    "fleet: a startup file root owns in /tmp is only a possible sign for the Mac" '^machine\.possible_signs=.*mastra' "$FL/tlown.flat"
+hasnot "fleet: and not the Mac's finding"            '^machine\.incidents=.*mastra' "$FL/tlown.flat"
+hasnot "fleet: and no row says the malware ran as root" 'the malware ran as root' "$FL/tlown.out"
+hasnot "fleet: a link at that name in /tmp is nothing" '^machine\.(incidents|possible_signs)=.*mastra' "$FL/tllink.flat"
 # The readable report under macOS's own bash, with a finding on the Mac's row: a loader holding its lock.
 # A loader counts only when root's own process holds the lock: in a test run, a process of the tester's.
 printf '#!/bin/sh\necho $PPID\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
@@ -3215,10 +3234,11 @@ fl_run many --deadline=600
 if grep -qE ' \+more$' "$FL/many.out" 2>/dev/null || grep -qE '^inventory=.* \+more$' "$FL/many.flat"; then ok "fleet: a long inventory value ends with +more"; else bad "fleet: a long inventory value ends with +more" "$(grep '^inventory' "$FL/many.flat")"; fi
 if [ "$(sed -n 's/^inventory=//p' "$FL/many.flat" | wc -c)" -le 256 ]; then ok "fleet: and still fits"; else bad "fleet: and still fits"; fi
 has    "fleet: and keeps the accounts that need attention" '^inventory=.*person15: not_checked' "$FL/many.flat"
-# Cut short to each account's outcome, a value that then holds every account ends with no +more.
+# Cut short, details go before accounts: an act account keeps gh-token-monitor and its incidents, and
+# a value with anything cut ends with +more.
 _inv=$(sed -n 's/^inventory=//p' "$FL/inv.flat")
-if printf '%s' "$_inv" | grep -q 'asha: ' && printf '%s' "$_inv" | grep -q 'itadmin: ' && printf '%s' "$_inv" | grep -qE ' \+more$'; then bad "fleet: +more only when an account was left out" "$_inv"
-else ok "fleet: +more only when an account was left out" "${#_inv} characters"; fi
+if [ "${#_inv}" -le 250 ] && printf '%s' "$_inv" | grep -qE 'asha: act wiper; incidents [a-z0-9,-]+( |;)' && printf '%s' "$_inv" | grep -q 'itadmin: '; then ok "fleet: a value cut short keeps an act account's wiper and incidents, and every account"; else bad "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "$_inv"; fi
+if printf '%s' "$_inv" | grep -qE ' \+more$'; then ok "fleet: and ends with +more, since details were cut"; else bad "fleet: and ends with +more, since details were cut" "$_inv"; fi
 
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"

@@ -488,7 +488,7 @@ fl_plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s
 
 # The Mac's shared places, checked once, by root, by name only: nothing in them is read or run.
 fl_machine() {
-  FM_AGENTS=""; FM_INC=""; FM_POSS=""; FM_TMPWIPER=0; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + ${FM_FIND_S:-20}))
+  FM_AGENTS=""; FM_INC=""; FM_POSS=""; FM_TMPWIPER=0; FM_ROOTLOADER=0; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + ${FM_FIND_S:-20}))
   while IFS='|' read -r _nm _bins _paths _acts _id; do
     [ -n "$_nm" ] || continue
     _hit=0; _ifs=$IFS; IFS=';'
@@ -527,7 +527,16 @@ EOF
           fi
           continue
         fi
-        case "$_ip" in "$H"/*|'') continue ;; /tmp/*) _ip="$FL_SHARED_TMP/${_ip#/tmp/}" ;; esac
+        case "$_ip" in "$H"/*|'') continue ;; esac
+        # In /tmp any account can leave a file under any name: only one root owns, under one name and
+        # not a link, and then only as a possible sign, as the markers above.
+        case "$_ip" in /tmp/*)
+          _ip="$FL_SHARED_TMP/${_ip#/tmp/}"
+          if [ -f "$_ip" ] && [ ! -L "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+            if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
+          fi
+          continue ;;
+        esac
         { [ -L "$_ip" ] || [ -e "$_ip" ]; } && FM_INC="$FM_INC $_ii" ;;
     esac
   done <<EOF
@@ -545,7 +554,7 @@ EOF
       [ "$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' ')" = "$FL_OWNER" ] && { _held=root; break; }
       _held=other
     done
-    case "$_held" in root) FM_INC="$FM_INC litellm" ;; other) FM_POSS="$FM_POSS litellm" ;; esac
+    case "$_held" in root) FM_INC="$FM_INC litellm"; FM_ROOTLOADER=1 ;; other) FM_POSS="$FM_POSS litellm" ;; esac
     [ "$FL_TIMEOUT" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }a running LiteLLM loader could not be looked for in time"; }
   fi
   FM_AGENTS=$(printf '%s\n' $FM_AGENTS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
@@ -758,7 +767,8 @@ fleet_main() {
     if [ "$(incident_level "$_x")" = act ]; then FM_OUT=act; _ml="$_ml$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"
     else [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; fi
   done
-  [ -n "$_ml" ] && _ml="$_ml$NL    A LiteLLM loader running as root holds its lock file: the malware ran as root."
+  # Only for the lock root's own process holds: no other finding says what ran as root.
+  [ "$FM_ROOTLOADER" -eq 1 ] && _ml="$_ml$NL    A LiteLLM loader running as root holds its lock file: the malware ran as root."
   # Possible signs: root-owned files under a marker's name in /tmp (an account can leave one through a
   # link) and a lock file another account's process holds.
   for _x in $FM_POSS; do [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  Files named like the $(incident_name "$_x") markers in /tmp, root's: check what made them, as an account can link one there"; done
@@ -775,17 +785,32 @@ fleet_main() {
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
   SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
   # The inventory value: one line for an MDM's inventory field, no path, file name or key. Too
-  # long, it keeps the accounts that need attention first and ends with +more; the saved file has the rest.
+  # long, it keeps the accounts that need attention first, cuts details before accounts (an act account
+  # keeps gh-token-monitor and its incidents), and ends with +more when anything was cut; the saved
+  # file has the rest.
   INVENTORY_V="v1 $OUTCOME $_short$INV"; [ "$N_ACC" -eq 0 ] && INVENTORY_V="$INVENTORY_V | no accounts"
   if [ "${#INVENTORY_V}" -gt 250 ]; then
     _iv="v1 $OUTCOME $_short"
     # The accounts that need attention come first, act, then not_checked, then review, then as many
-    # clear ones as fit.
+    # clear ones as fit. An account whose details don't fit keeps its outcome, and an act account its
+    # wiper and incidents too.
     _iv=$(printf '%s' "$INV" | /usr/bin/awk -v head="$_iv" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
-      { n = 0; for (i = 2; i <= NF; i++) { split($i, p, " "); s[++n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5 }
-        out = head; stop = 0; added = 0
-        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) { t = out " | " s[j]; if (length(t) > 243) stop = 1; else { out = t; added++ } }
-        print out (added < n ? " +more" : "") }')
+      { n = 0
+        for (i = 2; i <= NF; i++) {
+          split($i, p, " "); n++; full[n] = $i; base[n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5
+          key[n] = base[n]
+          if (p[2] == "act") { m = split(substr($i, length(base[n]) + 2), d, "; ")
+            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key[n] = key[n] (key[n] == base[n] ? " " : "; ") d[x] }
+        }
+        out = head; cut = 0; stop = 0
+        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) {
+          if (length(out " | " full[j]) <= 243) { out = out " | " full[j]; continue }
+          cut = 1
+          if (key[j] != base[j] && length(out " | " key[j]) <= 243) out = out " | " key[j]
+          else if (length(out " | " base[j]) <= 243) out = out " | " base[j]
+          else stop = 1
+        }
+        print out (cut ? " +more" : "") }')
     INVENTORY_V=$_iv
   fi
   JSON_DOC="{
