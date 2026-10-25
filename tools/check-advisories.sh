@@ -49,7 +49,7 @@ cut -f1 "$WORK/ours.tsv" | sort -u | while IFS= read -r name; do
   while IFS= read -r v; do
     if [ "$v" = '*' ]; then [ "$all" -eq 1 ] || { echo "NO SOURCE  $name (every version)"; echo 1 > "$WORK/rc"; }
     elif grep -qxF "$v" "$WORK/withdrawn.txt" && ! grep -qxF "$v" "$WORK/theirs.txt"; then echo "WITHDRAWN  $name $v"; echo 1 > "$WORK/rc"
-    elif ! grep -qxF "$v" "$WORK/theirs.txt" && [ "$all" -eq 0 ]; then echo "NO SOURCE  $name $v"; echo 1 > "$WORK/rc"; fi
+    elif ! grep -qxF "$v" "$WORK/theirs.txt" && [ "$all" -eq 0 ] && ! grep -qxF "$name $v" "$WORK/skip.txt"; then echo "NO SOURCE  $name $v"; echo 1 > "$WORK/rc"; fi
   done < "$WORK/mine.txt"
   grep -qxF '*' "$WORK/mine.txt" && continue
   if [ "$all" -eq 1 ] && ! grep -qxF "$name *" "$WORK/skip.txt"; then echo "MISSING    $name (every version)"; echo 1 > "$WORK/rc"; fi

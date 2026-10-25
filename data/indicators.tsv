@@ -3,7 +3,8 @@
 #   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
 #   kind      wiper    a file of gh-token-monitor (its path must name it), the wiper that runs a destructive command when a
 #                      stolen GitHub token is revoked. Section 5 tells people to stop it first.
-#             startup  a file that starts malware at login; the note is shown under it
+#             startup  a file that starts malware at login, or a copy of malware that hooks it adds to an
+#                      agent run at each session; the note is shown under it
 #             site     a file in any Python environment's site-packages: a Python incident's hit
 #             temp     an entry in /tmp, TMPDIR or %TEMP%: a Python incident's hit. May end in *
 #   owner     yes: counts only if this person owns it (for files in the shared /tmp; %TEMP% on Windows is the
@@ -29,6 +30,11 @@
 # LiteLLM 1.82.7 and 1.82.8: LiteLLM's March post, which says to look for litellm_init.pth in
 # site-packages and remove it (1.82.8). Wiz says the payload kept the persistence of the attack it
 # continued, without naming files for LiteLLM, so no other file has a line.
+# AntV wave: SafeDep, which names the kitty-monitor backdoor's systemd unit and LaunchAgent, the cat.py
+# they start at login, and the payload copies in ~/.claude/package and ~/.codex/package that the
+# SessionStart hooks it adds to Claude Code and Codex settings run. Its /var/tmp/.gh_update_state, the
+# backdoor's state file, has no line: a temp line is a Python incident's hit in /tmp, TMPDIR or %TEMP%,
+# and a wiper path must name gh-token-monitor. Its ~/.local/bin/gh-token-monitor.sh is a wiper line.
 # GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
 # extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware,
 # and only when an extension that shipped malware is found: alone, it is a file to check.
@@ -46,6 +52,11 @@ mastra	all	startup	no	~/Library/NodePackages/protocal.cjs	starts the Mastra malw
 mastra	all	startup	no	~/.config/systemd/user/nvmconf.service	starts the Mastra malware at login
 mastra	all	startup	no	~/.config/systemd/nvmconf/protocal.cjs	starts the Mastra malware at login
 mastra	win	startup	no	{PROGRAMDATA}/NodePackages/protocal.cjs	starts the Mastra malware at login
+antv	all	startup	no	~/.config/systemd/user/kitty-monitor.service	starts the AntV wave's kitty-monitor backdoor at login
+antv	all	startup	no	~/Library/LaunchAgents/com.user.kitty-monitor.plist	starts the AntV wave's kitty-monitor backdoor at login
+antv	all	startup	no	~/.local/share/kitty/cat.py	the AntV wave's kitty-monitor backdoor, which its service starts at login
+antv	all	startup	no	~/.claude/package/index.js	a copy of the AntV wave's payload, run by the hooks it adds to agent settings
+antv	all	startup	no	~/.codex/package/index.js	a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 litellm	all	site	no	cook.pth	-
 litellm	all	site	no	cook.py	-
 litellmmar	all	site	no	litellm_init.pth	-

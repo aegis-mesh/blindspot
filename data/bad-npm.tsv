@@ -7,7 +7,10 @@
 # What each campaign's lines cover:
 # The level: a GitHub or OpenSSF malware advisory decides it, unless the package's own maintainer says
 # its malware could not run. A third party's reading (Socket's, Wiz's) is noted, not followed.
-#   Axios, Bitwarden, OpenSearch, tensorlake and Injective: the versions their advisories name.
+#   Axios, Bitwarden, OpenSearch, tensorlake and Injective: the versions their advisories name. And
+#     tensorlake's six native packages (tensorlake-native-*) at 0.5.144: Tensorlake's own GitHub advisory,
+#     GHSA-8g63-53c9-65j2, names them as compromised with tensorlake 0.5.144. No malware entry names them,
+#     so each has a skip line below for tools/check-advisories.sh.
 #   TanStack wave, May 2026: every npm version in the affected-packages list of Wiz's post on it,
 #     each also named by a GitHub or OpenSSF malware advisory: the 42 @tanstack packages
 #     (GHSA-g7cv-rxg3-hmpx) and the packages the worm spread to (tanstack), the OpenSearch client
@@ -64,6 +67,12 @@
 # version, but OpenSSF's entry names only 0.1.1 and 0.2.1, and npm's registry keeps only 0.0.1, from
 # December 2023.
 #! skip tensorlake * the advisory also lists every version, but names only 0.5.144 as malicious
+#! skip tensorlake-native-darwin-arm64 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
+#! skip tensorlake-native-linux-arm64-gnu 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
+#! skip tensorlake-native-linux-arm64-musl 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
+#! skip tensorlake-native-linux-x64-gnu 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
+#! skip tensorlake-native-linux-x64-musl 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
+#! skip tensorlake-native-win32-x64 0.5.144 Tensorlake's own advisory, GHSA-8g63-53c9-65j2, names it as compromised; no malware entry does
 #! skip @tallyui/components * GitHub's advisory spans every version, but OpenSSF's entry and Wiz's list name only 1.0.1 to 1.0.3, published on the day of the wave; 2.0.0 and later came months after
 #! skip @antv/a8 * GitHub's advisory spans every version, but OpenSSF's entry names only 0.1.1 and 0.2.1, published in the wave; npm's registry keeps only 0.0.1, from December 2023
 #! skip @servicetitan/suppress-warnings * GitHub's advisory and OpenSSF's entry also list versions npm's registry dates before the worm (OpenSSF's 25, from 3 February to 29 July 2026); only 38.1.1 to 38.1.7 came out on 4 August
@@ -3597,6 +3606,12 @@ workbench-browser-server	0.0.2	keyvspread
 @opensearch-project/opensearch	3.7.0	opensearch
 @opensearch-project/opensearch	3.8.0	opensearch
 tensorlake	0.5.144	tensorlake
+tensorlake-native-darwin-arm64	0.5.144	tensorlake
+tensorlake-native-linux-arm64-gnu	0.5.144	tensorlake
+tensorlake-native-linux-arm64-musl	0.5.144	tensorlake
+tensorlake-native-linux-x64-gnu	0.5.144	tensorlake
+tensorlake-native-linux-x64-musl	0.5.144	tensorlake
+tensorlake-native-win32-x64	0.5.144	tensorlake
 cloude	*	sandworm
 opencraw	*	sandworm
 crypto-reader-info	*	sandworm

@@ -26,7 +26,14 @@
 # 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac), and setup.mjs 4066781f, its dropper,
 # in .claude and .vscode, run by a SessionStart hook and a folder-open task. Socket on lightning, that
 # wave's PyPI release: its payload plants .claude/router_runtime.js, a copy of itself, with setup.mjs
-# files beside it.
+# files beside it. It also commits .github/workflows/format-check.yml, a CI workflow, which has no line:
+# a planted file sits in .claude or .vscode, and the home scan does not look in .github/workflows.
+# SafeDep on the AntV wave: the worm commits .claude/index.js, a copy of its payload (SHA-256
+# a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c, the npm packages' index.js), and
+# setup.mjs in .claude and .vscode, run by a SessionStart hook and a folder-open task. Projects name
+# files index.js too, so it counts only by that SHA-256 or beside a worm's own file. Its
+# .github/workflows/codeql.yml, a CI workflow that dumps the repository's secrets, has no line: a
+# planted file sits in .claude or .vscode, and the home scan does not look in .github/workflows.
 # folder	file	incident	note	alone	sha256
 .claude	router_runtime.js	tanstack	a file the TanStack and Mini Shai-Hulud worms plant	yes	-
 .vscode	router_runtime.js	tanstack	a file the TanStack worm plants	yes	-
@@ -34,3 +41,4 @@
 .claude	math_init.js	keyv	a file the keyv worm plants	yes	-
 .vscode	setup.mjs	keyv	a file the TanStack, keyv and Mini Shai-Hulud worms plant	no	fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb,54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668,2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df,4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34
 .claude	execution.js	minishai	a file the Mini Shai-Hulud worm plants	yes	-
+.claude	index.js	antv	a file the AntV wave plants	no	a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c

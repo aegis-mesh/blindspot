@@ -751,6 +751,22 @@ has    "and so does its SessionStart hook"           '~/code/r/\.claude/settings
 has    "and its folder-open task"                    '~/code/r/\.vscode/tasks\.json runs a file a worm plants' "$WORK/msh.txt"
 hasnot "none of them is a file to read"              'Named like a file' "$WORK/msh.txt"
 hasnot "execution.js in another folder is not the worm's" 'code/other' "$WORK/msh.txt"
+# The AntV wave (SafeDep): the kitty-monitor backdoor's systemd unit and LaunchAgent, the cat.py they start, and
+# the payload copies that the hooks it adds to Claude Code and Codex settings run are signs of its malware. It also
+# commits .claude/index.js, a name projects use too: alone, and not the published payload, it is a file to read;
+# the name in another folder is not listed.
+mkdir -p "$WORK/akm/.config/systemd/user" "$WORK/akm/Library/LaunchAgents" "$WORK/akm/.local/share/kitty" "$WORK/akm/.codex/package" \
+  "$WORK/akm/code/i/.claude" "$WORK/akm/code/j/.claude/hooks"
+: > "$WORK/akm/.config/systemd/user/kitty-monitor.service"; : > "$WORK/akm/Library/LaunchAgents/com.user.kitty-monitor.plist"
+: > "$WORK/akm/.local/share/kitty/cat.py"; : > "$WORK/akm/.codex/package/index.js"
+printf 'x\n' > "$WORK/akm/code/i/.claude/index.js"; printf 'y\n' > "$WORK/akm/code/j/.claude/hooks/index.js"
+psrun "$WORK/akm" -- -Offline -Full 2>&1 | tr -s ' \n' '  ' > "$WORK/akm.txt"
+has    "the AntV wave's kitty-monitor service is a sign of its malware" '~/\.config/systemd/user/kitty-monitor\.service starts the AntV wave.s kitty-monitor backdoor at login' "$WORK/akm.txt"
+has    "and its LaunchAgent"                           '~/Library/LaunchAgents/com\.user\.kitty-monitor\.plist starts the AntV wave.s kitty-monitor backdoor at login' "$WORK/akm.txt"
+has    "and the backdoor they start"                   '~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor, which its service starts at login' "$WORK/akm.txt"
+has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
+has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
+hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
 # A command counts only when it runs the file: a guard in node -e code, a script given the file to
 # block, and a task whose first argument is another script are not malware; a task that runs node
 # on the file is.
@@ -945,7 +961,7 @@ hasnot "a Mistral hit does not get Injective's wallet fix" 'Move the funds' "$WO
 for np in npd npa npk; do rm -rf "${WORK:?}/$np"; mkdir -p "$WORK/$np/code/x" "$WORK/$np/AppData/Roaming" "$WORK/$np/AppData/Local/Temp"; done
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/iru-caches": {\n      "version": "1.0.0"\n    },\n    "node_modules/@uipath/robot": {\n      "version": "1.3.4"\n    }\n  }\n}\n' > "$WORK/npd/code/x/package-lock.json"
 printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/redis": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$WORK/npk/code/x/package-lock.json"
-printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    },\n    "node_modules/intercom-client": {\n      "version": "7.0.4"\n    },\n    "node_modules/@cap-js/openapi": {\n      "version": "1.4.1"\n    },\n    "node_modules/mastraqqq": {\n      "version": "1.13.1"\n    },\n    "node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.2"\n    },\n    "node_modules/tool/node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.5"\n    },\n    "node_modules/hamus.js": {\n      "version": "0.4.1"\n    },\n    "node_modules/echarts-for-react": {\n      "version": "3.1.7"\n    },\n    "node_modules/chart/node_modules/echarts-for-react": {\n      "version": "3.1.6"\n    },\n    "node_modules/chart/node_modules/@antv/a8": {\n      "version": "0.0.1"\n    },\n    "node_modules/@redhat-cloud-services/chrome": {\n      "version": "2.3.4"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@squawk/mcp": {\n      "version": "0.9.3"\n    },\n    "node_modules/veim": {\n      "version": "2.46.2"\n    },\n    "node_modules/@mastra/mcp": {\n      "version": "1.10.1"\n    },\n    "node_modules/intercom-client": {\n      "version": "7.0.4"\n    },\n    "node_modules/@cap-js/openapi": {\n      "version": "1.4.1"\n    },\n    "node_modules/mastraqqq": {\n      "version": "1.13.1"\n    },\n    "node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.2"\n    },\n    "node_modules/tool/node_modules/@thiennq/docs-viewer": {\n      "version": "1.6.5"\n    },\n    "node_modules/hamus.js": {\n      "version": "0.4.1"\n    },\n    "node_modules/echarts-for-react": {\n      "version": "3.1.7"\n    },\n    "node_modules/chart/node_modules/echarts-for-react": {\n      "version": "3.1.6"\n    },\n    "node_modules/chart/node_modules/@antv/a8": {\n      "version": "0.0.1"\n    },\n    "node_modules/@redhat-cloud-services/chrome": {\n      "version": "2.3.4"\n    },\n    "node_modules/tensorlake-native-linux-x64-gnu": {\n      "version": "0.5.144"\n    },\n    "node_modules/tensorlake-native-darwin-arm64": {\n      "version": "0.5.143"\n    }\n  }\n}\n' > "$WORK/npa/code/x/package-lock.json"
 for np in npd npa npk; do psrun "$WORK/$np" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$np.txt"; done
 has    "a @keyv 6.0.0 build is npm malware, as GitHub's advisory says" '@keyv/redis 6\.0\.0 \(keyv account takeover, August 2026\).*keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised\.' "$WORK/npk.txt"
 has    "with its advice to rotate from another computer" 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says\.' "$WORK/npk.txt"
@@ -970,6 +986,8 @@ has    "with the AntV wave's sourced line"           'AntV account takeover, May
 has    "a package of June's Red Hat Cloud Services wave is found" '@redhat-cloud-services/chrome 2\.3\.4 \(Red Hat Cloud Services packages, June 2026\)' "$WORK/npa.txt"
 has    "with the Red Hat wave's sourced line"        'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials\. github\.com' "$WORK/npa.txt"
 hasnot "versions of those packages the entries do not name are not flagged" 'echarts-for-react 3\.1\.6|@antv/a8 0\.0\.1' "$WORK/npa.txt"
+has    "a native package of tensorlake 0.5.144 is found, as Tensorlake's advisory names it" 'tensorlake-native-linux-x64-gnu 0\.5\.144 \(tensorlake package, October 2026\)' "$WORK/npa.txt"
+hasnot "and a native build before it is not"          'tensorlake-native-darwin-arm64' "$WORK/npa.txt"
 has    "a Mastra typosquat Socket lists is found at any version" 'mastraqqq 1\.13\.1 \(Mastra npm packages, June 2026\)' "$WORK/npa.txt"
 has    "a package the keyv worm spread to is found"   '@thiennq/docs-viewer 1\.6\.2 \(keyv worm spread, August 2026\)' "$WORK/npa.txt"
 has    "with the spread's sourced line"               'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials\. osv\.dev' "$WORK/npa.txt"

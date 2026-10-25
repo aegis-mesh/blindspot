@@ -902,16 +902,17 @@ PLANTED='.claude/router_runtime.js
 .claude/setup.mjs
 .claude/math_init.js
 .vscode/setup.mjs
-.claude/execution.js'
-PLANTED_ERE='\.claude/router_runtime\.js|\.vscode/router_runtime\.js|\.claude/setup\.mjs|\.claude/math_init\.js|\.vscode/setup\.mjs|\.claude/execution\.js'
+.claude/execution.js
+.claude/index.js'
+PLANTED_ERE='\.claude/router_runtime\.js|\.vscode/router_runtime\.js|\.claude/setup\.mjs|\.claude/math_init\.js|\.vscode/setup\.mjs|\.claude/execution\.js|\.claude/index\.js'
 PLANTED_ALONE='.claude/router_runtime.js
 .vscode/router_runtime.js
 .claude/math_init.js
 .claude/execution.js'
 WORM_RUN_ALONE='\.(claude|vscode)[/\\]+(router_runtime\.js|math_init\.js|execution\.js)'
-WORM_RUN_WEAK='\.(claude|vscode)[/\\]+(setup\.mjs)'
-planted_note() { case "$1" in */.claude/router_runtime.js) printf '%s' 'a file the TanStack and Mini Shai-Hulud worms plant' ;; */.vscode/router_runtime.js) printf '%s' 'a file the TanStack worm plants' ;; */.claude/setup.mjs) printf '%s' 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' ;; */.claude/math_init.js) printf '%s' 'a file the keyv worm plants' ;; */.vscode/setup.mjs) printf '%s' 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' ;; */.claude/execution.js) printf '%s' 'a file the Mini Shai-Hulud worm plants' ;; esac; }
-planted_sha() { case "$1" in */.claude/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' ;; */.vscode/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' ;; esac; }
+WORM_RUN_WEAK='\.(claude|vscode)[/\\]+(setup\.mjs|index\.js)'
+planted_note() { case "$1" in */.claude/router_runtime.js) printf '%s' 'a file the TanStack and Mini Shai-Hulud worms plant' ;; */.vscode/router_runtime.js) printf '%s' 'a file the TanStack worm plants' ;; */.claude/setup.mjs) printf '%s' 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' ;; */.claude/math_init.js) printf '%s' 'a file the keyv worm plants' ;; */.vscode/setup.mjs) printf '%s' 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' ;; */.claude/execution.js) printf '%s' 'a file the Mini Shai-Hulud worm plants' ;; */.claude/index.js) printf '%s' 'a file the AntV wave plants' ;; esac; }
+planted_sha() { case "$1" in */.claude/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' ;; */.vscode/setup.mjs) printf '%s' 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' ;; */.claude/index.js) printf '%s' 'a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c' ;; esac; }
 WORM_REF_NOTE='runs a file a worm plants'
 # <<< planted
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
@@ -1043,6 +1044,11 @@ mastra|all|startup|no|$H/Library/NodePackages/protocal.cjs|starts the Mastra mal
 mastra|all|startup|no|$H/.config/systemd/user/nvmconf.service|starts the Mastra malware at login
 mastra|all|startup|no|$H/.config/systemd/nvmconf/protocal.cjs|starts the Mastra malware at login
 mastra|win|startup|no|${_pd:+$_pd/NodePackages/protocal.cjs}|starts the Mastra malware at login
+antv|all|startup|no|$H/.config/systemd/user/kitty-monitor.service|starts the AntV wave's kitty-monitor backdoor at login
+antv|all|startup|no|$H/Library/LaunchAgents/com.user.kitty-monitor.plist|starts the AntV wave's kitty-monitor backdoor at login
+antv|all|startup|no|$H/.local/share/kitty/cat.py|the AntV wave's kitty-monitor backdoor, which its service starts at login
+antv|all|startup|no|$H/.claude/package/index.js|a copy of the AntV wave's payload, run by the hooks it adds to agent settings
+antv|all|startup|no|$H/.codex/package/index.js|a copy of the AntV wave's payload, run by the hooks it adds to agent settings
 litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
 litellmmar|all|site|no|litellm_init.pth|-
@@ -5741,6 +5747,12 @@ workbench-browser-server 0.0.2 keyvspread
 @opensearch-project/opensearch 3.7.0 opensearch
 @opensearch-project/opensearch 3.8.0 opensearch
 tensorlake 0.5.144 tensorlake
+tensorlake-native-darwin-arm64 0.5.144 tensorlake
+tensorlake-native-linux-arm64-gnu 0.5.144 tensorlake
+tensorlake-native-linux-arm64-musl 0.5.144 tensorlake
+tensorlake-native-linux-x64-gnu 0.5.144 tensorlake
+tensorlake-native-linux-x64-musl 0.5.144 tensorlake
+tensorlake-native-win32-x64 0.5.144 tensorlake
 cloude * sandworm
 opencraw * sandworm
 crypto-reader-info * sandworm
