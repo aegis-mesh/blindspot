@@ -1156,8 +1156,12 @@ function Worm-Cmd([string]$name) {
 }
 $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
-# reference lists each as running your own command, set from any settings file.
-$RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper|fileSuggestion|subagentStatusLine)"\s*:', $RxOpt, $RxTimeout)
+# reference lists each as running your own command, set from any settings file. disableAllHooks set to
+# true turns off hooks, the status line, the file suggestion command and the subagent status line, but
+# not the credential helpers ($RxCmdAlways). A hook event with an empty list runs nothing either.
+$RxCmdAlways = New-Object regex('"(apiKeyHelper|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper)"\s*:', $RxOpt, $RxTimeout)
+$RxCmdHooked = New-Object regex('"(statusLine|fileSuggestion|subagentStatusLine)"\s*:', $RxOpt, $RxTimeout)
+$RxHookRun = New-Object regex('"hooks"\s*:\s*\{(\s*"([^"\\]|\\.)*"\s*:\s*\[\s*\]\s*,)*\s*"([^"\\]|\\.)*"\s*:\s*\[\s*[^\]\s]', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
 # An empty ANTHROPIC_BASE_URL sets nothing.
 $RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
@@ -1211,6 +1215,24 @@ function Aa-Keys([string]$f, [string]$l, $keys) {
     $objs[$cur].Add($sb.ToString())
   }
   $objs
+}
+# The value of a top-level key of a .json file's flattened text: 'true', 'false', or ''. Tokens are read
+# as Aa-Keys reads them, so the same key inside another setting's object is not it. The last one wins,
+# as in JSON.parse. The same as gird-check.sh's json_top.
+function Json-Top([string]$f, [string]$t, [string]$key) {
+  $l = $t -replace '\s', ''
+  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  $dep = 0; $pend = $null; $v = ''
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') { if ($dep -eq 1) { $pend = $x } else { $pend = $null }; continue }
+    if ($dep -eq 1 -and $null -ne $pend -and $pend -ceq ('"' + $key + '"')) {
+      $mm = [regex]::Match($x, '^:(true|false)([,}]|$)'); if ($mm.Success) { $v = $mm.Groups[1].Value }
+    }
+    $pend = $null
+    if ($c -eq '{' -or $c -eq '[') { $dep++ } elseif ($c -eq '}' -or $c -eq ']') { $dep-- }
+  }
+  $v
 }
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
@@ -1277,6 +1299,8 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
   # A worm file counts only when a command runs it (Worm-Cmd), and a file projects use too only in a
   # project that counts ($WormProj).
   if (($RxWormAlone -and (Flat-Match $f $t $RxWormAlone)) -or ($RxWormWeak -and $WormProj.Contains((Worm-Project $f)) -and (Flat-Match $f $t $RxWormWeak))) { $WormRefs.Add($f) }
+  # With nothing to list (hooks turned off), only a hook that runs a worm file counts: the worm wrote it.
+  if (-not $what) { return }
   # A repo's worktrees carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
@@ -1294,11 +1318,19 @@ foreach ($f in $AllowFiles) {
   if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f)) { continue }
   $t = Flat-Text $f; if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
-  if (Flat-Match $f $t $RxHooks) { $w.Add('run commands while the agent works') }
+  # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
+  # (Managed settings can set it too; they are not read here.)
+  $dah = ''; $dir = [IO.Path]::GetDirectoryName($f)
+  foreach ($s in @((J $dir 'settings.local.json'), (J $dir 'settings.json'))) {
+    if ($s -eq $f) { $st = $t } elseif ((Is-File $s) -and (Is-RegularFile $s)) { $st = Flat-Text $s } else { continue }
+    if ($null -eq $st) { continue }
+    $v = Json-Top $s $st 'disableAllHooks'; if ($v) { $dah = $v; break }
+  }
+  if ((Flat-Match $f $t $RxCmdAlways) -or ($dah -ne 'true' -and ((Flat-Match $f $t $RxHookRun) -or (Flat-Match $f $t $RxCmdHooked)))) { $w.Add('run commands while the agent works') }
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
   if ((Flat-Match $f $t $RxBypass) -and (Aa-Hit $f @('"permissions": {"defaultMode": "bypassPermissions"'))) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
-  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
+  Auto-Row $f ($w -join ', ') $t
 }
 foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/') { continue }

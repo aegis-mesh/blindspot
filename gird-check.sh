@@ -1734,6 +1734,8 @@ auto_row() { # file what flattened-text
     WORM_REFS="$WORM_REFS$1
 "
   fi
+  # With nothing to list (hooks turned off), only a hook that runs a worm file counts: the worm wrote it.
+  [ -n "$2" ] || return 0
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   # The path goes into TAB-separated rows and the list of settings seen, so it is made row-safe first.
@@ -1841,15 +1843,56 @@ aa_hit() { # file pattern|pattern...
     { for (i = 1; i <= n; i++) if (!(i in got) && (toml || (NR == 1) == !(i in in_)) && $0 ~ re[i]) got[i] = 1 }
     END { for (i = 1; i <= n; i++) if ((i in neg) == (i in got)) exit 1; exit 0 }'
 }
+# The value of a top-level key of a .json file, from its text as one line with the spaces removed:
+# true, false, or nothing. Strings and brackets are read as aa_keys reads them, so the same key inside
+# another setting's object is not it. The last one wins, as in JSON.parse.
+json_top() { # key
+  K=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; hp = 0; pv = ""; one = 1; v = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {            # code: right after a key at the top level, its value
+          if (hp && dep == 1 && pv == ENVIRON["K"] && match(q[i], /^:(true|false)([,}]|$)/)) v = (substr(q[i], 2, 1) == "t") ? "true" : "false"
+          hp = 0
+          dep += split(q[i], a, "{") + split(q[i], b, "[") - split(q[i], c, "}") - split(q[i], d, "]")
+          if (i < nq) { st = 1; one = 1 }
+          continue
+        }
+        if (dep == 1) pv = one ? q[i] : ""
+        if (i < nq && trail(q[i]) % 2 == 1) { one = 0; continue }
+        if (dep == 1) hp = 1
+        st = 0
+      }
+      print v; exit
+    }'
+}
 # Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
-# reference lists each as running your own command, set from any settings file.
-CMD_KEYS='apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper|fileSuggestion|subagentStatusLine'
+# reference lists each as running your own command, set from any settings file. disableAllHooks set to
+# true turns off hooks, the status line, the file suggestion command and the subagent status line, but
+# not the credential helpers (CMD_ALWAYS). A hook event with an empty list runs nothing either.
+CMD_ALWAYS='apiKeyHelper|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
+CMD_KEYS="$CMD_ALWAYS|statusLine|fileSuggestion|subagentStatusLine"
+HOOK_RUN='"hooks"[[:space:]]*:[[:space:]]*\{([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*\][[:space:]]*,)*[[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]'
 while IFS= read -r f; do
   case "$f" in */.claude/settings.json|*/.claude/settings.local.json) ;; *) continue ;; esac
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
   [ -f "$f" ] || continue
   _t=$(flat "$f"); _w=""
-  if printf '%s' "$_t" | grep -qE "\"hooks\"[[:space:]]*:[[:space:]]*\{[[:space:]]*\"|\"($CMD_KEYS)\"[[:space:]]*:"; then
+  # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
+  # (Managed settings can set it too; they are not read here.)
+  _dah=""
+  for _s in "${f%/*}/settings.local.json" "${f%/*}/settings.json"; do
+    if [ "$_s" = "$f" ]; then _v=$(printf '%s' "$_t" | tr -d '[:space:]' | json_top disableAllHooks)
+    elif [ -f "$_s" ] && [ -r "$_s" ]; then _v=$(flat "$_s" | tr -d '[:space:]' | json_top disableAllHooks)
+    else continue; fi
+    [ -n "$_v" ] && { _dah=$_v; break; }
+  done
+  if [ "$_dah" = true ]; then _rx="\"($CMD_ALWAYS)\"[[:space:]]*:"; else _rx="$HOOK_RUN|\"($CMD_KEYS)\"[[:space:]]*:"; fi
+  if printf '%s' "$_t" | grep -qE "$_rx"; then
     _w="run commands while the agent works"
   fi
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
@@ -1865,7 +1908,7 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && aa_hit "$f" '"permissions": {"defaultMode": "bypassPermissions"'; then
     _w="${_w:+$_w, }skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257"
   fi
-  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
+  auto_row "$f" "$_w" "$_t"
 done <<EOF
 $ALLOW_FILES
 EOF

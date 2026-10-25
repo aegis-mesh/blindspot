@@ -827,6 +827,30 @@ has    "a project that turns on bypassPermissions is flagged" '~/p/byp/\.claude/
 hasnot "the words inside a rule's string are not the setting" 'p/str/' "$WORK/byp.txt"
 hasnot "an empty ANTHROPIC_BASE_URL is not flagged" 'p/empty/' "$WORK/byp.txt"
 hasnot "a project's defaultMode outside permissions is not the setting" 'p/top/' "$WORK/byp.txt"
+# Hooks that run nothing are not commands: an event with an empty list, and hooks in a file whose
+# disableAllHooks is true, unless the project's settings.local.json, which comes first, sets it back to
+# false. It turns off the status line too, not the credential helpers, and counts only at the top of the
+# file (Claude Code's settings reference). A hook there that runs a worm file still counts.
+for L in empty second off offst offkey nest local offworm; do mkdir -p "$WORK/hko/p/$L/.claude"; done
+printf '{"hooks":{"Stop":[]}}\n' > "$WORK/hko/p/empty/.claude/settings.json"
+printf '{"hooks":{"Stop":[],"PreToolUse":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' > "$WORK/hko/p/second/.claude/settings.json"
+printf '{"disableAllHooks":true,"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' | tee "$WORK/hko/p/off/.claude/settings.json" > "$WORK/hko/p/local/.claude/settings.json"
+printf '{"disableAllHooks":false}\n' > "$WORK/hko/p/local/.claude/settings.local.json"
+printf '{"disableAllHooks":true,"statusLine":{"type":"command","command":"make status"}}\n' > "$WORK/hko/p/offst/.claude/settings.json"
+printf '{"disableAllHooks":true,"apiKeyHelper":"make key"}\n' > "$WORK/hko/p/offkey/.claude/settings.json"
+printf '{"env":{"disableAllHooks":true},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make lint"}]}]}}\n' > "$WORK/hko/p/nest/.claude/settings.json"
+printf '{"disableAllHooks":true,"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/router_runtime.js"}]}]}}\n' > "$WORK/hko/p/offworm/.claude/settings.json"
+mkdir -p "$WORK/hko/AppData/Roaming" "$WORK/hko/AppData/Local/Temp"
+psrun "$WORK/hko" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hko.txt"
+hasnot "a hook event with an empty list runs nothing"  'p/empty/' "$WORK/hko.txt"
+has    "an empty event beside one with a hook still runs it" '~/p/second/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hko.txt"
+hasnot "hooks in a file whose disableAllHooks is true run nothing" 'p/off/' "$WORK/hko.txt"
+hasnot "nor does its status line"                      'p/offst/' "$WORK/hko.txt"
+has    "but its credential helper still runs"          '~/p/offkey/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hko.txt"
+has    "a disableAllHooks inside another setting is not the setting" '~/p/nest/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hko.txt"
+has    "a settings.local.json that sets it back to false turns the hooks on" '~/p/local/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hko.txt"
+has    "a hook that runs a worm file counts with hooks turned off" '~/p/offworm/\.claude/settings\.json runs a file a worm plants' "$WORK/hko.txt"
+hasnot "and that file is not listed as acting on opening" '~/p/offworm/\.claude/settings\.json Set to' "$WORK/hko.txt"
 # One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
 mkdir -p "$WORK/bigjs/p/.vscode" "$WORK/bigjs/AppData/Roaming" "$WORK/bigjs/AppData/Local/Temp"
 python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'
