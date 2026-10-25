@@ -931,7 +931,18 @@ VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
 Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
-Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
+Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+Claude Code|all|$AS/Code/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+Claude Code|all|$AS/Code - Insiders/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
+Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
@@ -951,9 +962,20 @@ EOF
   # find has no -ilname and rejects the whole expression over it, and its -exec ... + drops links, so
   # there every link is printed, one -exec each.
   # Linked settings, tasks and planted files are printed as "S path" the same way.
+  # A .claude or .vscode folder that is a link (not ~/.vscode, which the scan skips) is read through:
+  # sh prints "S path" for each file in it the scan would read there, settings, tasks or planted, and
+  # for one it can't enter, a line in find's own words, so it is named as a folder not read.
+  _pc=""; _pv=""
+  while IFS= read -r _pp; do case "$_pp" in .claude/*) _pc="$_pc ${_pp#.claude/}" ;; .vscode/*) _pv="$_pv ${_pp#.vscode/}" ;; esac; done <<EOF
+$PLANTED
+EOF
+  # shellcheck disable=SC2016  # $d and the names are for the sh that find starts
+  _ld='for d; do case "${d##*/}" in .claude) n="settings.json settings.local.json $BS_PC" ;; *) n="tasks.json settings.json $BS_PV" ;; esac
+    if [ -d "$d" ] && [ ! -x "$d" ]; then printf "find: %s: Permission denied\n" "$d" >&2; continue; fi
+    for f in $n; do if [ -e "$d/$f" ] || [ -L "$d/$f" ]; then printf "S %s\n" "$d/$f"; fi; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
-    _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); fi
+    _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -976,7 +998,7 @@ EOF
   # does not enter it. It is printed as "N path", the line break shown as ?, and named as not checked.
   _nl=$'\n'
   # shellcheck disable=SC2016  # $1 is the folder, for the sh that find starts
-  find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
+  BS_PC=$_pc BS_PV=$_pv find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
     \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
@@ -985,7 +1007,8 @@ EOF
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
        -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
-       "${_pf[@]}" \) "${_ls[@]}" \) -o \
+       -o -path '*/.vscode/settings.json' "${_pf[@]}" \) "${_ls[@]}" \) -o \
+    \( -type l \( -name .claude -o -name .vscode \) ! -path "$H/.vscode" "${_lx[@]}" \) -o \
     \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
 }
 
@@ -1418,10 +1441,17 @@ UNREAD_DIRS=""
   sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
 N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
 HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST + SCAN_FAILED)) -gt 0 ] && HOME_PARTIAL=1
-# Linked settings, tasks and planted files come marked "S path" and are checked like the files, but
-# files_found counts files, as it always has. A link counts only when it ends at a regular file: a
-# repo can link a settings file to /dev/zero or /dev/tty, which a reader would never get to the end of.
+# Linked settings, tasks and planted files, and those files in a linked .claude or .vscode folder,
+# come marked "S path" and are checked like the files, but files_found counts files, as it always has.
+# A link counts only when it ends at a regular file: a repo can link a settings file to /dev/zero or
+# /dev/tty, which a reader would never get to the end of.
 LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p' | while IFS= read -r _f; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
+# A settings, tasks or planted file bigger than READ_MAX, the bound an account run keeps for every file,
+# is not read: a project can link one to a large system file, which would hold the scan for minutes
+# (about a second a megabyte on macOS's awk). A settings or tasks file is then named as not read; a
+# planted file is not hashed, so one that projects name too stays a file to read.
+READ_MAX=$FLEET_MAX
+too_big() { _tb=$({ wc -c < "$1"; } 2>/dev/null); _tb=${_tb//[!0-9]/}; [ -n "$_tb" ] && [ "$_tb" -gt "$READ_MAX" ]; }
 # Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
 # outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
 # .ssh/authorized_keys fixture does not count. Before the file exists, a link that resolves to its
@@ -1474,8 +1504,8 @@ while IFS= read -r _f; do
   while IFS= read -r _a; do [ -n "$_a" ] && [ -e "$_pp/$_a" ] && _ok=1; done <<EOF
 $PLANTED_ALONE
 EOF
-  if [ "$_ok" -eq 0 ] && [ -f "$_f" ]; then
-    _sh=$(sha_hex < "$_f" 2>/dev/null)
+  if [ "$_ok" -eq 0 ] && [ -f "$_f" ] && ! too_big "$_f"; then
+    _sh=$({ sha_hex < "$_f"; } 2>/dev/null)
     case " $(planted_sha "$_f") " in *" $_sh "*) [ -n "$_sh" ] && _ok=1 ;; esac
   fi
   [ "$_ok" -eq 1 ] && WORM_PROJ="$WORM_PROJ$_pp
@@ -1499,7 +1529,7 @@ if [ -n "$AA_PROJECT" ]; then
   AA_ERE=$(printf '%s\n' "$AA_PROJECT" | sed 's/[.]/\\./g' | paste -sd '|' -)
   AA_FILES=$(printf '%s\n' "$FOUND" | grep -E "/($AA_ERE)\$")
 fi
-VSC_SETTINGS=$(printf '%s\n' "$FOUND" | grep -E '/\.vscode/settings\.json$')
+VSC_SETTINGS=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/settings\.json$')
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
@@ -1661,13 +1691,18 @@ AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
 # and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
 # option word starting with e or p ends the match); when the file is the command itself; or when a
 # task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
-# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
-# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
+# or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
+# echo that names the file. A rule or a guard that only names the file, or passes it to another
+# script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
+# ./, and must end there.
 worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these files
   _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
   _wo='(--|--[A-DF-OQ-Za-df-oq-z0-9][^[:space:]"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)[[:space:]]+'
-  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(([^"\\]|\\.)*(;|&&?|\|\|?)[[:space:]]*)?'
+  # One piece of a command before a separator: a character outside quotes, a JSON escape other than
+  # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
+  _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp"'(node|bun|deno|tsx)(\.exe)?"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
@@ -1679,13 +1714,19 @@ TAB=$(printf '\t')
 # One line of text, with comments removed first: // to the end of the line and /* */, outside
 # strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
 # JSONC parser reads it). tasks.json and VS Code's settings.json are JSONC, and a commented-out
-# setting in any other file is not active either. Each line is split on its quotes, and each piece
+# setting in any other file is not active either. A CR is a line break too, and a \ escapes only one:
+# after \ and CRLF the LF still ends the string. Inside strings, \uXXXX for a printable character
+# other than " and \, and \/, are written as that character, as JSON reads them: "\u0068ooks" is
+# "hooks", and a setting can't hide behind its escapes. Each line is split on its quotes, and each piece
 # outside a string on its slashes, both with a one-character separator, and every chunk is looked at
 # a bounded number of times, so the time grows with the size of the file: a loop over single
 # characters (substr measures the whole string on macOS's awk), a regex split or gsub with many
 # matches, or a match that can restart inside a long run would be quadratic on a long minified line.
+# A file that can't be opened reads as nothing, and silently: bash reports a failed < itself, with the
+# raw path, before a 2>/dev/null after it takes effect, so the redirect sits inside the braces. The
+# same goes for every read of a scanned path below.
 flat() {
-  tr '\r\t' '\n ' < "$1" 2>/dev/null | awk '
+  { tr '\r\t' '\n ' < "$1"; } 2>/dev/null | awk '
     # How many backslashes s ends with. A match anchored at the last other character starts once per
     # run of backslashes, where /\\+$/ restarts at every backslash of a long run.
     function trail(s) {
@@ -1708,11 +1749,26 @@ flat() {
       }
       return 0
     }
-    BEGIN { st = 0 }   # 0 code, 1 string, 2 block comment
+    # A piece of a string, its escapes written as JSON reads them (above). Split on \, so each chunk is
+    # looked at once: an empty chunk is an escaped \ (kept as \\), or the lone \ that ends the piece.
+    function str(s,   nb, b, j, h) {
+      if (index(s, "\\") == 0) { printf "%s", s; return }
+      nb = split(s, b, "\\"); printf "%s", b[1]
+      for (j = 2; j <= nb; j++) {
+        if (b[j] == "") { if (j == nb) { printf "\\"; break }; printf "\\\\%s", b[j + 1]; j++; continue }
+        h = tolower(substr(b[j], 2, 4))
+        if (substr(b[j], 1, 1) == "u" && (h in U)) printf "%s%s", U[h], substr(b[j], 6)
+        else if (substr(b[j], 1, 1) == "/") printf "%s", b[j]
+        else printf "\\%s", b[j]
+      }
+    }
+    BEGIN { st = 0   # 0 code, 1 string, 2 block comment
+            for (c = 32; c < 127; c++) if (c != 34 && c != 92) U[sprintf("%04x", c)] = sprintf("%c", c) }
     { nq = split($0, q, "\"")
+      if (nq == 0 && st == 1) st = 0   # an empty line in a string: its line break was not escaped
       for (i = 1; i <= nq; i++) {
         if (st == 1) {            # in a string: kept as it is; an odd run of \ escapes the quote or the line break
-          printf "%s", q[i]; esc = (trail(q[i]) % 2 == 1)
+          str(q[i]); esc = (trail(q[i]) % 2 == 1)
           if (i < nq) printf "\""
           if (!esc) st = 0
           continue
@@ -1732,6 +1788,8 @@ auto_row() { # file what flattened-text
     WORM_REFS="$WORM_REFS$1
 "
   fi
+  # With nothing to list (hooks turned off), only a hook that runs a worm file counts: the worm wrote it.
+  [ -n "$2" ] || return 0
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   # The path goes into TAB-separated rows and the list of settings seen, so it is made row-safe first.
@@ -1817,7 +1875,7 @@ aa_keys() { # pattern|pattern...
 # every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1" 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
+  if [ "$_tm" -eq 1 ]; then { tr -d ' \t\r\f\v' < "$1"; } 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
     # A pattern as a regex that matches only its own text: every character a regex reads is quoted.
     function lit(s,   o, c, j) {
       o = ""
@@ -1835,25 +1893,70 @@ aa_hit() { # file pattern|pattern...
         else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
+    # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
+    toml && match($0, "^(\"[A-Za-z0-9_-]+\"|\047[A-Za-z0-9_-]+\047)=") { $0 = substr($0, 2, RLENGTH - 3) "=" substr($0, RLENGTH + 1) }
     # A .json file: its text is the first line, the objects aa_keys printed come after it.
     { for (i = 1; i <= n; i++) if (!(i in got) && (toml || (NR == 1) == !(i in in_)) && $0 ~ re[i]) got[i] = 1 }
     END { for (i = 1; i <= n; i++) if ((i in neg) == (i in got)) exit 1; exit 0 }'
 }
-# Keys that make Claude Code run a command: hooks and its helper commands.
-CMD_KEYS='apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
+# The value of a top-level key of a .json file, from its text as one line with the spaces removed:
+# true, false, or nothing. Strings and brackets are read as aa_keys reads them, so the same key inside
+# another setting's object is not it. The last one wins, as in JSON.parse.
+json_top() { # key
+  K=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; hp = 0; pv = ""; one = 1; v = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {            # code: right after a key at the top level, its value
+          if (hp && dep == 1 && pv == ENVIRON["K"] && match(q[i], /^:(true|false)([,}]|$)/)) v = (substr(q[i], 2, 1) == "t") ? "true" : "false"
+          hp = 0
+          dep += split(q[i], a, "{") + split(q[i], b, "[") - split(q[i], c, "}") - split(q[i], d, "]")
+          if (i < nq) { st = 1; one = 1 }
+          continue
+        }
+        if (dep == 1) pv = one ? q[i] : ""
+        if (i < nq && trail(q[i]) % 2 == 1) { one = 0; continue }
+        if (dep == 1) hp = 1
+        st = 0
+      }
+      print v; exit
+    }'
+}
+# Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
+# reference lists each as running your own command, set from any settings file. disableAllHooks set to
+# true turns off hooks, the status line, the file suggestion command and the subagent status line, but
+# not the credential helpers (CMD_ALWAYS). A hook event with an empty list runs nothing either.
+CMD_ALWAYS='apiKeyHelper|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
+CMD_KEYS="$CMD_ALWAYS|statusLine|fileSuggestion|subagentStatusLine"
+HOOK_RUN='"hooks"[[:space:]]*:[[:space:]]*\{([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*\][[:space:]]*,)*[[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]'
 while IFS= read -r f; do
   case "$f" in */.claude/settings.json|*/.claude/settings.local.json) ;; *) continue ;; esac
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
-  [ -f "$f" ] || continue
+  [ -f "$f" ] && ! too_big "$f" || continue
   _t=$(flat "$f"); _w=""
-  if printf '%s' "$_t" | grep -qE "\"hooks\"[[:space:]]*:[[:space:]]*\{[[:space:]]*\"|\"($CMD_KEYS)\"[[:space:]]*:"; then
+  # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
+  # (Managed settings can set it too; they are not read here.)
+  _dah=""
+  for _s in "${f%/*}/settings.local.json" "${f%/*}/settings.json"; do
+    if [ "$_s" = "$f" ]; then _v=$(printf '%s' "$_t" | tr -d '[:space:]' | json_top disableAllHooks)
+    elif [ -f "$_s" ] && [ -r "$_s" ] && ! too_big "$_s"; then _v=$(flat "$_s" | tr -d '[:space:]' | json_top disableAllHooks)
+    else continue; fi
+    [ -n "$_v" ] && { _dah=$_v; break; }
+  done
+  if [ "$_dah" = true ]; then _rx="\"($CMD_ALWAYS)\"[[:space:]]*:"; else _rx="$HOOK_RUN|\"($CMD_KEYS)\"[[:space:]]*:"; fi
+  if printf '%s' "$_t" | grep -qE "$_rx"; then
     _w="run commands while the agent works"
   fi
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
   fi
-  # An empty ANTHROPIC_BASE_URL sets nothing.
-  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*[^"[:space:]][^"]*"' | grep -qvE ':[[:space:]]*"[A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?(/[^"]*)?"$'; then
+  # An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
+  # docs call its own, is not another server.
+  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*[^"[:space:]][^"]*"' | grep -qvE ':[[:space:]]*"([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?(/[^"]*)?"$'; then
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
   # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
@@ -1862,12 +1965,12 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && aa_hit "$f" '"permissions": {"defaultMode": "bypassPermissions"'; then
     _w="${_w:+$_w, }skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257"
   fi
-  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
+  auto_row "$f" "$_w" "$_t"
 done <<EOF
 $ALLOW_FILES
 EOF
 while IFS= read -r f; do
-  [ -n "$f" ] && [ -f "$f" ] || continue
+  [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
   _t=$(flat "$f")
   printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' && auto_row "$f" "run a task when the folder opens in VS Code or Cursor" "$_t"
@@ -1881,11 +1984,11 @@ EOF
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
 # Both are things to look at in a project, not an agent set to run without asking. A file that names
-# neither setting (most do not) is skipped before it is flattened: flat only takes comments out, so a
-# setting's name stays as written.
+# neither setting (most do not) is skipped before it is flattened: flat only takes comments out and
+# writes escapes as their characters, so a setting's name stays as written unless it has an escape.
 while IFS= read -r f; do
-  [ -n "$f" ] && [ -f "$f" ] || continue
-  tr -d '[:space:]' < "$f" 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)' || continue
+  [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
+  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)|\\u|\\/' || continue
   _w=""
   if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
   elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
@@ -2038,16 +2141,17 @@ N_LOGIN=0; for _x in $LOGIN_IDS; do N_LOGIN=$((N_LOGIN + 1)); done
 
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
 ALLOW_ROWS=""; N_ALLOW=0; N_ALLOW_NPM=0; ALLOW_FIRST=""
-unread_files() { # files on stdin that are there but can't be read, each once
-  while IFS= read -r _uf; do [ -n "$_uf" ] && [ -f "$_uf" ] && [ ! -r "$_uf" ] && printf '%s\n' "$_uf"; done | awk '!s[$0]++'
+unread_files() { # files on stdin that are there but can't be read, each once; with "big", or too big to read
+  while IFS= read -r _uf; do [ -n "$_uf" ] && [ -f "$_uf" ] && { [ ! -r "$_uf" ] || { [ -n "${1:-}" ] && too_big "$_uf"; }; } && printf '%s\n' "$_uf"; done | awk '!s[$0]++'
 }
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
-SEC2_UNREAD=$(printf '%s\n%s\n%s\n%s\n' "$MCP_LIST" "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" | unread_files)
+SEC2_UNREAD=$({ printf '%s\n' "$MCP_LIST" | unread_files; printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" | unread_files big; } | awk '!s[$0]++')
 N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
-ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files)
+ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
-ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter | files_matching "$TR_KEYS|$P_ASSIGN")
+ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
+  while IFS= read -r _f; do too_big "$_f" || printf '%s\n' "$_f"; done | files_matching "$TR_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
@@ -6203,17 +6307,23 @@ NPM_GUNREAD=$( { printf '%s\n' "$_npm_roots" "$_gw" | grep "^?$TAB"
 NPM_UNREAD=$((NPM_UNREAD + NPM_GUNREAD))
 # --- 1. Coding agents: settings and versions -------------------------------------
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by aa_hit (section 2).
-AA_ROWS=""
+AA_ROWS=""; AA_TRIED=""
+# A path with one * folder: that file in every folder there, as VS Code keeps a settings file for each
+# profile in User/profiles/<id>/.
+aa_glob() { for _ag in "${1%%/\**}"/*/"${1#*/\*/}"; do [ -e "$_ag" ] && printf '%s\n' "$_ag"; done; }
 while IFS='|' read -r _aa _ao _ap _as _apat; do
   [ -n "$_aa" ] || continue
   case "$_ao" in all|"$_os") ;; *) continue ;; esac
   case "$_ap" in
     # The home folder is not a project: its own file there is the user's, such as ~/.codex/config.toml.
     "{PROJECT}/"*) _rel=${_ap#"{PROJECT}/"}; _al=$(printf '%s\n' "$AA_FILES" | while IFS= read -r _f; do case "$_f" in ("$H/$_rel") ;; (*/"$_rel") printf '%s\n' "$_f" ;; esac; done) ;;
+    */\*/*) _al=$(aa_glob "$_ap") ;;
     *) _al=$_ap ;;
   esac
+  AA_TRIED="$AA_TRIED$_al
+"
   while IFS= read -r _f; do
-    [ -n "$_f" ] && fleet_ok "$_f" && [ -f "$_f" ] && aa_hit "$_f" "$_apat" && AA_ROWS="$AA_ROWS$(rowsafe "$_f")$TAB$_aa$TAB$_as
+    [ -n "$_f" ] && fleet_ok "$_f" && [ -f "$_f" ] && ! too_big "$_f" && aa_hit "$_f" "$_apat" && AA_ROWS="$AA_ROWS$(rowsafe "$_f")$TAB$_aa$TAB$_as
 "
   done <<EOF
 $_al
@@ -6221,10 +6331,16 @@ EOF
 done <<EOF
 $AA_TABLE
 EOF
+# One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
+# it with the other settings files it could not read, so the summary doesn't read clean over it.
+_aau=$(printf '%s\n' "$AA_TRIED" | unread_files big)
+if [ -n "$_aau" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_aau" | awk 'length && !s[$0]++'); N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD"); fi
 # One row per file and agent: file<TAB>agent<TAB>settings. VS Code's settings file can hold two agents'.
 AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '{ k = $1 FS $2 } !(k in o) { o[k] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[k]] = st[o[k]] ", " $3 }
   END { for (i = 1; i <= n; i++) print f[i] "\t" ag[i] "\t" st[i] }')
 N_YOLO=$(count_lines "$AA_LIST")
+# Row 01 counts agents: one can be set so in several files.
+N_YOLO_AG=$(printf '%s\n' "$AA_LIST" | cut -f2 | sort -u | grep -c .)
 [ "$N_YOLO" -gt 0 ] && progress w "Agents set to run commands without asking: $(printf '%s\n' "$AA_LIST" | head -n 1 | cut -f2)"
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
@@ -6248,7 +6364,7 @@ while IFS='|' read -r _oid _onm _oos _okind _ow _olo _ohi _ohole _osrc; do
   [ -n "$_oid" ] || continue
   case "$_oos" in all|"$_os") ;; *) continue ;; esac
   case "$_okind" in
-    plist) _vs=""; fleet_ok "$_ow" && [ -f "$_ow" ] && _vs=$(tr '\n\r\t' '   ' < "$_ow" 2>/dev/null | sed -n 's#.*<key>CFBundleShortVersionString</key> *<string>\([^<]*\)</string>.*#\1#p') ;;
+    plist) _vs=""; fleet_ok "$_ow" && [ -f "$_ow" ] && _vs=$({ tr '\n\r\t' '   ' < "$_ow"; } 2>/dev/null | sed -n 's#.*<key>CFBundleShortVersionString</key> *<string>\([^<]*\)</string>.*#\1#p') ;;
     folder) _vs=""
       for _d in "$_ow"/*/; do
         _d=${_d%/}; _d=${_d##*/}; ver_ok "$_d" || continue
@@ -7759,7 +7875,7 @@ for _t in $NPM_TAGS; do
   _s=$(incident_summary "$_t"); if [ -n "$_s" ]; then UPD_SUM=$_s; break; fi
 done
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
-elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO set to run commands without asking"
+elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi

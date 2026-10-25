@@ -35,3 +35,10 @@ printf '> run with OPENAI_API_KEY=%s\n' "$(key "sk-""proj-$(rnd 130)")" > "$H/co
 # A link to this user's authorized_keys.
 mkdir -p "$H/.ssh" "$H/code/link$INJ"; : > "$H/.ssh/authorized_keys"
 ln -s ../../.ssh/authorized_keys "$H/code/link$INJ/notes.txt"
+# Files the scan reads but can't open: a project's settings file that links to one, and a VS Code
+# settings file, a tasks file and a planted setup.mjs, each mode 000. Each is named as not read, and
+# nothing about them reaches stderr, where a failed read once printed the raw path.
+mkdir -p "$H/sealed" "$H/code/unread$INJ/.claude" "$H/code/unread$INJ/.vscode"
+printf '{}\n' > "$H/sealed/settings.json"; ln -s ../../../sealed/settings.json "$H/code/unread$INJ/.claude/settings.json"
+for f in settings.json tasks.json setup.mjs; do printf '{}\n' > "$H/code/unread$INJ/.vscode/$f"; done
+chmod 000 "$H/sealed/settings.json" "$H/code/unread$INJ/.vscode/settings.json" "$H/code/unread$INJ/.vscode/tasks.json" "$H/code/unread$INJ/.vscode/setup.mjs"

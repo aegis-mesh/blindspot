@@ -299,6 +299,13 @@ function Read-Text([string]$f) {
   $TextCache[$f] = $t
   $t
 }
+# A settings, tasks or planted file bigger than this, the bound gird-check.sh keeps, is not read: a
+# project can link one to a large system file, which would hold the scan. A settings or tasks file is
+# then named as not read; a planted file is not hashed, so one that projects name too stays a file to read.
+$ReadMax = 16777216
+function Too-Big([string]$f) {
+  try { $fs = [IO.File]::Open($f, 'Open', 'Read', 'ReadWrite'); try { $fs.Length -gt $ReadMax } finally { $fs.Dispose() } } catch { $false }
+}
 function Has-Match([string]$f, [regex]$rx) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
@@ -553,6 +560,17 @@ $AaTable = @(
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
   ,@('Claude Code', 'all', (J $AppData 'Code/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('Claude Code', 'all', (J $AppData 'Cursor/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('Claude Code', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
+  ,@('Claude Code', 'all', (J $AppData 'Cursor/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
 )
 $AaProject = @('.codex/config.toml')
 # <<< auto-approve
@@ -626,23 +644,43 @@ function Add-Plain($list, $e) {
   }
   $list.Add($e.FullName)
 }
+# A .claude or .vscode folder that is a link (not ~/.vscode, which the scan skips) is read through: the
+# files the scan reads there, settings, tasks or planted, each when it ends at a regular file, as a
+# linked settings file is. One that can't be listed is named as a folder not read.
+function Scan-LinkedDir([string]$dir, [string]$name) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
+    $n = $e.Name; $p = J $dir $n
+    if ($name -ceq '.claude' -and ($n -ceq 'settings.json' -or $n -ceq 'settings.local.json')) { $l = $LinkSettings }
+    elseif ($name -ceq '.vscode' -and $n -ceq 'tasks.json') { $l = $TaskFiles }
+    elseif ($name -ceq '.vscode' -and $n -ceq 'settings.json') { $l = $VscSettings }
+    elseif (Is-WormFile $name $n) { $l = $WormFiles }
+    else { continue }
+    if (Is-RegularFile $p) { $l.Add($p) }
+  }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
     $name = $e.Name; $path = $e.FullName; $d = $depth + 1; $link = Is-Link $e
     if (Is-DirInfo $e) {
-      if ($link -or (Is-Pruned $path $name $d)) { continue }
+      if ($link) {
+        if ($name -ceq '.claude' -or ($name -ceq '.vscode' -and -not $path.Equals((J $HomeDir '.vscode'), $PathCmp))) { Scan-LinkedDir $path $name }
+        continue
+      }
+      if (Is-Pruned $path $name $d) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
       if ($d -lt 6) { Scan-Home $path $d }
       continue
     }
     $parent = [IO.Path]::GetFileName($dir)
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
-    # A linked settings, tasks or worm file is followed when it ends at a regular file; any other
-    # link is not.
+    # A linked settings (.claude's or .vscode's), tasks or worm file is followed when it ends at a
+    # regular file; any other link is not.
     if ($link) {
       if ($isSettings) { if (Is-RegularFile $path) { $LinkSettings.Add($path) } }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { if (Is-RegularFile $path) { $TaskFiles.Add($path) } }
+      elseif ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { if (Is-RegularFile $path) { $VscSettings.Add($path) } }
       elseif (Is-WormFile $parent $name) { if (Is-RegularFile $path) { $WormFiles.Add($path) } }
       if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
@@ -1027,7 +1065,7 @@ foreach ($f in $WormFiles) {
   if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains($wpr)) { continue }
   $wok = $false
   foreach ($wal in $PlantedAlone) { if (Exists (J $wpr $wal)) { $wok = $true; break } }
-  if (-not $wok) { $wsh = File-Sha256 $f; if ($wsh -and (@((Planted-Sha (Planted-Rel $f)) -split ' ') -ccontains $wsh)) { $wok = $true } }
+  if (-not $wok -and -not (Too-Big $f)) { $wsh = File-Sha256 $f; if ($wsh -and (@((Planted-Sha (Planted-Rel $f)) -split ' ') -ccontains $wsh)) { $wok = $true } }
   if ($wok) { [void]$WormProj.Add($wpr) }
 }
 $WormHit = New-Object System.Collections.Generic.List[string]; $WormLook = New-Object System.Collections.Generic.List[string]
@@ -1173,36 +1211,63 @@ $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([
 # and their options, or after bun run or deno run, never the code of -e, -p, --eval or --print (an
 # option word starting with e or p ends the match); when the file is the command itself; or when a
 # task's command is the interpreter and its first argument the file. Each may come after ;, &, &&, |
-# or ||. A rule or a guard that only names the file, or passes it to another script, does not count.
-# The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or ./, and must end there.
-# The same expression as gird-check.sh's worm_cmd.
+# or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
+# echo that names the file. A rule or a guard that only names the file, or passes it to another
+# script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
+# ./, and must end there. The same expression as gird-check.sh's worm_cmd.
 function Worm-Cmd([string]$name) {
   if (-not $name) { return $null }
   $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $name + '(\\"|["''\s;&|)])'
   $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
   $co = '(--|--[A-DF-OQ-Za-df-oq-z0-9][^\s"\\]*|-[A-DF-OQ-Za-df-oq-z0-9]+)\s+'
-  $cs = '"command"\s*:\s*"\s*(([^"\\]|\\.)*(;|&&?|\|\|?)\s*)?'
+  # One piece of a command before a separator: a character outside quotes, a JSON escape other than
+  # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
+  $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
   $ci = '"command"\s*:\s*"' + $cp + '(node|bun|deno|tsx)(\.exe)?"'
   $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $name + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
   New-Object regex(($cs + $cp + '((node|tsx)(\.exe)?\s+(' + $co + ')*|(bun|deno)(\.exe)?\s+(' + $co + ')*(run\s+(' + $co + ')*)?)' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
 }
 $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
-# Keys that make Claude Code run a command: hooks and its helper commands.
-$RxHooks = New-Object regex('"hooks"\s*:\s*\{\s*"|"(apiKeyHelper|statusLine|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper)"\s*:', $RxOpt, $RxTimeout)
+# Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
+# reference lists each as running your own command, set from any settings file. disableAllHooks set to
+# true turns off hooks, the status line, the file suggestion command and the subagent status line, but
+# not the credential helpers ($RxCmdAlways). A hook event with an empty list runs nothing either.
+$RxCmdAlways = New-Object regex('"(apiKeyHelper|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper)"\s*:', $RxOpt, $RxTimeout)
+$RxCmdHooked = New-Object regex('"(statusLine|fileSuggestion|subagentStatusLine)"\s*:', $RxOpt, $RxTimeout)
+$RxHookRun = New-Object regex('"hooks"\s*:\s*\{(\s*"([^"\\]|\\.)*"\s*:\s*\[\s*\]\s*,)*\s*"([^"\\]|\\.)*"\s*:\s*\[\s*[^\]\s]', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
-# An empty ANTHROPIC_BASE_URL sets nothing.
-$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?![A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
+# An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
+# docs call its own, is not another server.
+$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?!([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
 # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
 # versions take it only from the person's own or managed settings (Claude Code's settings docs). It
 # reads defaultMode only inside permissions (Aa-Hit); this regex spares the files that never name it.
 $RxBypass = New-Object regex('"defaultMode"\s*:\s*"bypassPermissions"', $RxOpt, $RxTimeout)
 $RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
 # A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
+# A \ escapes one character, so after \ and CRLF the LF still ends the string, as in VS Code.
 $RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
+# Inside strings, \uXXXX for a printable character other than " and \, and \/, are written as that
+# character, as JSON reads them: "\u0068ooks" is "hooks", and a setting can't hide behind its escapes.
+# Each \\ is taken whole, so escapes pair up as in JSON. Only a file with such an escape takes this path.
+$RxJsonEsc = New-Object regex('\\(\\|/|u([0-9A-Fa-f]{4}))', $RxOpt, $RxTimeout)
+$JsonEsc = [Text.RegularExpressions.MatchEvaluator] {
+  param($m)
+  if ($m.Groups[1].Value -ceq '/') { return '/' }
+  if (-not $m.Groups[2].Success) { return $m.Value }
+  $c = [Convert]::ToInt32($m.Groups[2].Value, 16)
+  if ($c -ge 32 -and $c -lt 127 -and $c -ne 34 -and $c -ne 92) { return [string][char]$c }
+  $m.Value
+}
+$JsoncEsc = [Text.RegularExpressions.MatchEvaluator] { param($m) if ($m.Groups[1].Success) { $RxJsonEsc.Replace($m.Groups[1].Value, $JsonEsc) } else { '' } }
 function Flat-Text([string]$f) {
   $t = Read-Text $f; if ($null -eq $t) { return $null }
-  try { $RxJsonc.Replace($t, '$1') -replace '[\r\n\t]', ' ' } catch { Mark-Slow $f; $null }
+  try {
+    if ($t.Contains('\u') -or $t.Contains('\/')) { $o = $RxJsonc.Replace($t, $JsoncEsc) } else { $o = $RxJsonc.Replace($t, '$1') }
+    $o -replace '[\r\n\t]', ' '
+  } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 # The object each top-level key in $keys (written with its quotes) holds, with every value nested in
@@ -1244,6 +1309,24 @@ function Aa-Keys([string]$f, [string]$l, $keys) {
   }
   $objs
 }
+# The value of a top-level key of a .json file's flattened text: 'true', 'false', or ''. Tokens are read
+# as Aa-Keys reads them, so the same key inside another setting's object is not it. The last one wins,
+# as in JSON.parse. The same as gird-check.sh's json_top.
+function Json-Top([string]$f, [string]$t, [string]$key) {
+  $l = $t -replace '\s', ''
+  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  $dep = 0; $pend = $null; $v = ''
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') { if ($dep -eq 1) { $pend = $x } else { $pend = $null }; continue }
+    if ($dep -eq 1 -and $null -ne $pend -and $pend -ceq ('"' + $key + '"')) {
+      $mm = [regex]::Match($x, '^:(true|false)([,}]|$)'); if ($mm.Success) { $v = $mm.Groups[1].Value }
+    }
+    $pend = $null
+    if ($c -eq '{' -or $c -eq '[') { $dep++ } elseif ($c -eq '}' -or $c -eq ']') { $dep-- }
+  }
+  $v
+}
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
 # a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts;
@@ -1272,6 +1355,8 @@ function Aa-Hit([string]$f, $pats) {
   $lines = @($t); if ($toml) { $lines = $t.Split("`n") }
   foreach ($line in $lines) {
     $l = $line -replace '\s', ''
+    # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
+    if ($toml) { $l = $l -replace '^("([A-Za-z0-9_-]+)"|''([A-Za-z0-9_-]+)'')=', '$2$3=' }
     if ($toml -and $l.StartsWith('#')) { continue }
     if ($toml -and $l.StartsWith('[')) { break }
     $objs = $null
@@ -1309,6 +1394,8 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
   # A worm file counts only when a command runs it (Worm-Cmd), and a file projects use too only in a
   # project that counts ($WormProj).
   if (($RxWormAlone -and (Flat-Match $f $t $RxWormAlone)) -or ($RxWormWeak -and $WormProj.Contains((Worm-Project $f)) -and (Flat-Match $f $t $RxWormWeak))) { $WormRefs.Add($f) }
+  # With nothing to list (hooks turned off), only a hook that runs a worm file counts: the worm wrote it.
+  if (-not $what) { return }
   # A repo's worktrees carry the same settings: one row, with how many more folders have it. The
   # row names the repo's own file, whichever one the scan listed first.
   $key = $t + [char]0 + ($f -replace '[/\\]\.claude[/\\]worktrees[/\\][^/\\]+[/\\]', '/')
@@ -1323,17 +1410,25 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
 }
 $homeClaude = J $HomeDir '.claude'
 foreach ($f in $AllowFiles) {
-  if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f)) { continue }
+  if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f) -or (Too-Big $f)) { continue }
   $t = Flat-Text $f; if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
-  if (Flat-Match $f $t $RxHooks) { $w.Add('run commands while the agent works') }
+  # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
+  # (Managed settings can set it too; they are not read here.)
+  $dah = ''; $dir = [IO.Path]::GetDirectoryName($f)
+  foreach ($s in @((J $dir 'settings.local.json'), (J $dir 'settings.json'))) {
+    if ($s -eq $f) { $st = $t } elseif ((Is-File $s) -and (Is-RegularFile $s) -and -not (Too-Big $s)) { $st = Flat-Text $s } else { continue }
+    if ($null -eq $st) { continue }
+    $v = Json-Top $s $st 'disableAllHooks'; if ($v) { $dah = $v; break }
+  }
+  if ((Flat-Match $f $t $RxCmdAlways) -or ($dah -ne 'true' -and ((Flat-Match $f $t $RxHookRun) -or (Flat-Match $f $t $RxCmdHooked)))) { $w.Add('run commands while the agent works') }
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
   if ((Flat-Match $f $t $RxBypass) -and (Aa-Hit $f @('"permissions": {"defaultMode": "bypassPermissions"'))) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
-  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
+  Auto-Row $f ($w -join ', ') $t
 }
 foreach ($f in $TaskFiles) {
-  if (($f -replace '\\', '/') -match '/\.claude/plugins/') { continue }
+  if (($f -replace '\\', '/') -match '/\.claude/plugins/' -or (Too-Big $f)) { continue }
   $t = Flat-Text $f
   if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
 }
@@ -1345,7 +1440,7 @@ foreach ($f in $TaskFiles) {
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
 # Both are things to look at in a project, not an agent set to run without asking.
 foreach ($f in $VscSettings) {
-  if (-not (Is-File $f)) { continue }
+  if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   $w = New-Object System.Collections.Generic.List[string]
   if (Aa-Hit $f @('"chat.permissions.default": "autopilot"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot') }
   elseif (Aa-Hit $f @('"chat.permissions.default": "autoApprove"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove') }
@@ -1489,17 +1584,19 @@ if ($LoginsText) { Progress "Login files any agent you run can read: $LoginsText
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
-function Unread-Files($files) {
+# With $big, a file too big to read counts too, checked before any read.
+function Unread-Files($files, [bool]$big = $false) {
   $out = New-Object System.Collections.Generic.List[string]
-  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $out.Add($f) } }
+  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (Is-File $f) -and (($big -and (Too-Big $f)) -or $null -eq (Read-Text $f)) -and (Is-RegularFile $f)) { $out.Add($f) } }
   ,$out
 }
-$Sec2Unread = Unread-Files (@($McpList) + @($AllowFiles) + @($TaskFiles) + @($VscSettings))
+$Sec2Unread = Unread-Files @($McpList)
+foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
 $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
-$AllowUnread = Unread-Files $allowAll
+$AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
-  if (-not (Is-File $f)) { continue }
+  if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   if (-not (Has-RealMatch $f $RxCommand)) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
@@ -5602,13 +5699,23 @@ $OutTable = @(
 # , } # or /. Lines starting with // or # are skipped; in a .toml file only the lines before the
 # first [table] count.
 # Agents set to run commands without asking (data/auto-approve.tsv), matched by Aa-Hit (section 2).
-$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
+# A path with one * folder: that file in every folder there, as VS Code keeps a settings file for each
+# profile in User/profiles/<id>/. The same as gird-check.sh's aa_glob.
+function Aa-Glob([string]$p) {
+  $pp = $p -replace '\\', '/'; $k = $pp.IndexOf('/*/')
+  if ($k -lt 0) { return $p }
+  $rest = $pp.Substring($k + 3)
+  try { foreach ($d in @(([IO.DirectoryInfo]$pp.Substring(0, $k)).GetDirectories() | Sort-Object -Property Name -CaseSensitive)) { $f = J $d.FullName $rest; if (Exists $f) { $f } } } catch { }
+}
+$AaList = New-Object System.Collections.Generic.List[object]; $aaSeen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)); $aaTried = New-Object System.Collections.Generic.List[string]
 foreach ($r in $AaTable) {
   if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
   # The home folder is not a project: its own file there is the user's, such as ~/.codex/config.toml.
-  if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $own = (J $HomeDir $r[2].Substring(10)) -replace '\\', '/'; $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) -and ($_ -replace '\\', '/') -ne $own }) } else { $files = @($r[2]) }
+  if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $own = (J $HomeDir $r[2].Substring(10)) -replace '\\', '/'; $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) -and ($_ -replace '\\', '/') -ne $own }) } else { $files = @(Aa-Glob $r[2]) }
   foreach ($f in $files) {
-    if (-not (Is-File $f) -or -not (Aa-Hit $f $r[4])) { continue }
+    if (-not (Is-File $f) -or -not (Is-RegularFile $f)) { continue }
+    if (-not $aaTried.Contains($f)) { $aaTried.Add($f) }
+    if ((Too-Big $f) -or -not (Aa-Hit $f $r[4])) { continue }
     # One row per file and agent: VS Code's settings file can hold two agents'.
     $k = $f + [char]9 + $r[0]
     if ($aaSeen.ContainsKey($k)) { $aaSeen[$k].Setting += ", $($r[3])" }
@@ -5616,6 +5723,13 @@ foreach ($r in $AaTable) {
   }
 }
 $N_YOLO = $AaList.Count
+# Row 01 counts agents: one can be set so in several files.
+$yoloAg = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($r in $AaList) { [void]$yoloAg.Add($r.Agent) }
+$N_YOLO_AG = $yoloAg.Count
+# One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
+# it with the other settings files it could not read, so the summary doesn't read clean over it.
+foreach ($f in (Unread-Files $aaTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 if ($N_YOLO -gt 0) { Progress "Agents set to run commands without asking: $($AaList[0].Agent)" }
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
@@ -6690,7 +6804,7 @@ function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
 $UpdSum = ''
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
-elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO set to run commands without asking" }
+elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }
