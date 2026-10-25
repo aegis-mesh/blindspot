@@ -3389,7 +3389,8 @@ if [ "$ACCTRUN" -eq 1 ]; then
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
   _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + N_NL_DIRS + _fe))
-  _planted=$(( $(count_lines "$WORM_FILES") + $(count_lines "$WORM_REFS") ))
+  # Planted files that count (WORM_HIT), as the report lists them; one named like them alone is to read.
+  _planted=$(( $(count_lines "$WORM_HIT") + $(count_lines "$WORM_REFS") ))
   # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
   # named like an extension incident's with no such extension (EXT_CHECK).
   _poss=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=litellm
