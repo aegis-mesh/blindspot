@@ -11,7 +11,7 @@
 #   endless    output that never stops
 #   malformed  the real output with one value that is not a number
 #   hold       holds its output open past any limit, with a process that leaves its group
-#   maxbytes   the real run with a 1000-byte file limit
+#   maxbytes   the real run with a 1 MiB file limit (an app's Info.plist stays far below it)
 #   noprot     the real run, with the protected folder it tries refusing it
 # FLL_API, when set, is handed to the account run as GIRD_CHECK_API, to show it sends nothing.
 printf '%s\n' "$*" >> "$FLL_DIR/argv.log"
@@ -33,7 +33,7 @@ extra=("GIRD_CHECK_FLEET_USER_TMP=$FLL_DIR/usertmp-$acct")
 case "$mode" in
   fail) echo "sudo: a password is required" >&2; exit 1 ;;
   chmod) for a in "$@"; do case "$a" in */gird-check.sh) /bin/chmod 666 "$a" ;; esac; done ;;
-  maxbytes) extra+=(GIRD_CHECK_FLEET_MAX_BYTES=1000) ;;
+  maxbytes) extra+=(GIRD_CHECK_FLEET_MAX_BYTES=1048576) ;;
   noprot) extra+=("GIRD_CHECK_FLEET_PROTECTED=$FLL_DIR/noprot") ;;
   endless) exec /usr/bin/yes agents=claude-code ;;
   hold) /usr/bin/perl -e 'use POSIX; POSIX::setsid(); sleep 60' fleet-hold-escapee &

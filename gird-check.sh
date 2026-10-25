@@ -2326,6 +2326,12 @@ NPM_ROOTS=$(
   _ph=$(winpath "${PNPM_HOME:-}"); _ph=${_ph%/}
   if [ -n "$_ph" ]; then for r in "$_ph"/global/*/node_modules; do [ -d "$r" ] && printf '%s\n' "$r"; done; fi
 )
+npm_global_named() { # package.json paths on stdin; the ones whose folder names a package on the list
+  BAD_NPM_LIST=$BAD_NPM awk '
+    BEGIN { n = split(ENVIRON["BAD_NPM_LIST"], L, "\n"); for (i = 1; i <= n; i++) if (split(L[i], f, " ") >= 3) names[f[1]] = 1 }
+    { d = $0; sub(/\/package\.json$/, "", d); k = split(d, c, "/"); nm = c[k]; if (k > 1 && c[k - 1] ~ /^@/) nm = c[k - 1] "/" nm
+      if (nm in names) print }'
+}
 npm_global_hits() { # package.json paths on stdin; prints folder|name version|tag for each bad package
   BAD_NPM_LIST=$BAD_NPM awk '
     BEGIN {
@@ -2354,9 +2360,10 @@ _g=$(
     [ -n "$r" ] || continue
     for f in "$r"/*/package.json "$r"/@*/*/package.json "$r"/*/node_modules/*/package.json "$r"/*/node_modules/@*/*/package.json \
              "$r"/@*/*/node_modules/*/package.json "$r"/@*/*/node_modules/@*/*/package.json; do
-      [ -f "$f" ] && fleet_ok "$f" && printf '%s\n' "$f"
+      # A regular file; in an account run anything there, so fleet_filter can count what it won't read.
+      if [ -f "$f" ] || { [ "$ACCTRUN" -eq 1 ] && { [ -e "$f" ] || [ -L "$f" ]; }; }; then printf '%s\n' "$f"; fi
     done
-  done | npm_global_hits
+  done | npm_global_named | fleet_filter | npm_global_hits
 )
 [ -n "$_g" ] && NPM_ROWS="$NPM_ROWS
 $_g"

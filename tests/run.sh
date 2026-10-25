@@ -1665,7 +1665,7 @@ ln -s "$FL/keeper/private/zshrc" "$FL/linker/.zshrc"; ln -s /etc/master.passwd "
 ln -s "$FL/keeper/private" "$FL/linker/.config"
 # odd: a fifo in place of a history file, a link to a device, and a file over the size limit.
 mkfifo "$FL/odd/.zsh_history"; ln -s /dev/zero "$FL/odd/.bash_history"
-python3 -c "import sys; open(sys.argv[1], 'w').write('export OPENAI_API_KEY=x\n' + '#' * 5000 + '\n')" "$FL/odd/.zshrc"
+python3 -c "import sys; open(sys.argv[1], 'w').write('export OPENAI_API_KEY=x\n' + '#' * 1100000 + '\n')" "$FL/odd/.zshrc"
 ln -s "$FL/clean" "$FL/homelink"; mkdir -p "$FL/notmine"
 mkdir -p "$FL/noprot"; chmod 000 "$FL/noprot"; mkdir -p "$FL/prot"
 users() { # name:home:uid:shell ... -> the users file
