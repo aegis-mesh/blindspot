@@ -1817,7 +1817,7 @@ has    "a find that rejects its options is reported, not read as a clean home fo
 hasnot "a find that rejects its options is not called no findings" 'NO FINDINGS IN THIS SCAN' "$WORK/dz-badfind.txt"
 HOME="$WORK/dz-calm" PATH="$WORK/badfind:/usr/bin:/bin" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-badfind-c.txt"
 has    "and the summary says so too"                   'The home folder was not scanned \(find: unrecognized: -maxdepth\)' "$WORK/dz-badfind-c.txt"
-has    "and its rows are not green"                    'Recent leaks none found, but some folders were not read' "$WORK/dz-badfind-c.txt"
+has    "and its rows are not green"                    'Allow lists none found, but some folders were not read' "$WORK/dz-badfind-c.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
