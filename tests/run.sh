@@ -1320,6 +1320,14 @@ GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inv
 has    "fleet: and the last result while that run still has time" '^v1 ' "$FL/attempt-run.out"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --stale-days=31 > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "fleet: --stale-days is at most 30"; else bad "fleet: --stale-days is at most 30" "exit $RC"; fi
+# Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+mkdir -p "$FL/inst700"; cp "$SCRIPT" "$FLEETSH" "$FL/inst700/"; chmod 755 "$FL/inst700/gird-check.sh"; chmod 700 "$FL/inst700/gird-fleet.sh"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" /usr/bin/env -i PATH=/usr/bin:/bin GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" \
+  GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" \
+  /bin/bash "$FL/inst700/gird-fleet.sh" --all-users --summary-to-stdout < /dev/null > "$FL/inst700.out" 2>&1; RC=$?
+if [ "$RC" -eq 10 ] && grep -q '^blindspot act accounts=2 ' "$FL/inst700.out"; then ok "fleet: installed as the guide says, run with env -i, it runs"; else bad "fleet: installed as the guide says, run with env -i, it runs" "exit $RC $(cat "$FL/inst700.out")"; fi
 # An ACL that lets anyone write counts as writable by someone else.
 mkdir -p "$FL/acl"; cp "$SCRIPT" "$FLEETSH" "$FL/acl/"
 if chmod +a "everyone allow add_file,delete_child" "$FL/acl" 2>/dev/null; then

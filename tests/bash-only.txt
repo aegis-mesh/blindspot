@@ -194,3 +194,4 @@ fleet: and the last result while that run still has time	gird-check.ps1 has no f
 fleet: --stale-days is at most 30	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a folder whose ACL lets anyone write is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: but a link there never counts	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: installed as the guide says, run with env -i, it runs	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
