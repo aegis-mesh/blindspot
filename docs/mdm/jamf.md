@@ -47,7 +47,7 @@ the result either way: each account's `protected_folders` is `checked` once acce
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
+   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
    ```
 
 2. Make a second policy the same way, with the execution frequency **Once every day**, the
@@ -65,7 +65,7 @@ the result either way: each account's `protected_folders` is `checked` once acce
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3 --result-tags
+   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3 --result-tags
    ```
 
 6. Click **Save**.
@@ -81,8 +81,8 @@ v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws | itadmin: c
 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
-`none` means the check has not run yet, and `unreadable` means the saved result could not be
-trusted. Treat each of those, and an empty value, as not checked. The extension attribute can be used
+`none` means the check has not run yet, `failed` means the last run stopped part-way, and
+`unreadable` means the saved result could not be trusted. Treat each of those, and an empty value, as not checked. The extension attribute can be used
 as smart group criteria, for example values that start with `v1 act`.
 
 ## Jamf's limits

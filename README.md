@@ -93,7 +93,7 @@ At the end you get a short summary: how you compare with the other AI builders w
 - Print a key. It names the provider, never the value.
 - Use sudo or ask for your password.
 - Start an agent, an MCP server or Python. To read agent sessions it runs ripgrep if you have it, otherwise perl, and stops them when it finishes.
-- Leave a file behind, unless you ask it to save the report. While it runs it keeps three small temp files, for the progress line, the public totals, and which session files had keys from which provider (never a key), and deletes them when it exits.
+- Leave a file behind, unless you ask it to save the report. (One exception: run by `gird-fleet.sh` as an account's check and stopped at its time limit, it can leave its temp files, `/tmp/blindspot.` and six characters, owned by that account; [docs/fleet.md](docs/fleet.md#6-update-or-remove-it) says how to remove them.) While it runs it keeps three small temp files, for the progress line, the public totals, and which session files had keys from which provider (never a key), and deletes them when it exits.
 - Send a path, a key, a username, a hostname or your raw hardware ID.
 
 ## What it shares
@@ -128,7 +128,7 @@ powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 
 ## For IT teams
 
-`gird-fleet.sh`, a separate script that runs as root from your MDM, checks every account on a Mac with `gird-check.sh`, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. All the root work is in `gird-fleet.sh`; `gird-check.sh` holds none. Root runs both only from a folder root alone can change, such as `/Library/Application Support/Blindspot`. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
+`gird-fleet.sh`, a separate script that runs as root from your MDM, checks every account on a Mac with `gird-check.sh`, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. All the root work is in `gird-fleet.sh`; `gird-check.sh` holds none. Root runs `gird-fleet.sh`, and copies `gird-check.sh` for each account, only from a folder root alone can change, such as `/Library/Application Support/Blindspot`. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
 
 ## Limits
 

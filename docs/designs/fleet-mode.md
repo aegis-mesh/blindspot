@@ -243,7 +243,7 @@ real Mac.
   command in a group or session of its own, out of reach of root's kill of the process group). A run
   that leaves the group is caught only when it still holds root's pipe open, which root then reports
   as a process left running; one that let go of the pipe is not seen.
-- A run as `bash /dev/fd/0 < gird-check.sh` reads its own source from a path that is not the file;
+- A run as `bash /dev/fd/0 < gird-fleet.sh` reads its own source from a path that is not the file;
   it is not refused by name, and is left to the "run it from a file" and ownership checks.
 - Collecting results from many machines in one place. The result is for the MDM's own inventory.
 - Containers, servers and CI runners.
@@ -284,14 +284,20 @@ real Mac.
   outside the shares (the home folder checks, the machine check, saving), which can still overrun it
   slightly.
 - The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
-  value, `stale: last run <time>` past `--stale-days` (3 by default), `none` before the first run
-  and `unreadable` when the saved file is not root's own 0600 file in a 0700 folder.
+  value, `stale: last run <time>` past `--stale-days` (3 by default, at most 30), `none` before the
+  first run, `unreadable` when the saved file is not root's own 0600 file in a 0700 folder, and
+  `failed: the run started <time> did not finish` when a later run's start, saved as
+  `/var/db/blindspot/attempt` with its deadline, is past that deadline with no newer result.
   `--result-tags` wraps it for Jamf Pro.
 - Deployment: the MDM installs both files once in `/Library/Application Support/Blindspot`
-  (folder and files `root:wheel` 0755), with the options in one line that starts the second line of
+  (folder `root:wheel` 0755, `gird-check.sh` 0755, `gird-fleet.sh` 0700 so any `--hash-accounts`
+  secret in it is root's only), with the options in one line that starts the second line of
   `gird-fleet.sh`, `case "${1:-}" in --inventory) ;; *) set -- <options> ;; esac`, so an
-  `--inventory` call keeps its own. The MDM's daily item and its inventory field only `exec`
-  `gird-fleet.sh`, with no options or secret on their own line. The install step is untested on a
+  `--inventory` call keeps its own. The MDM's daily item and its inventory field only run
+  `exec /usr/bin/env -i /bin/bash .../gird-fleet.sh`, with no options or secret on their own line,
+  so no `BASH_ENV` or `ENV` from the MDM's environment runs before the script can clear it. The
+  secret is never on a command line: the options line sets it inside the script, and the hash is
+  computed with the secret in perl's environment, which only root can read. The install step is untested on a
   real Mac.
 - `review` means something to change or confirm, not urgent. It covers a tool with a security fix and an incident at the update level, and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
@@ -309,6 +315,15 @@ real Mac.
   open (`lsof`), the only running process it looks at; and any startup file `data/indicators.tsv`
   lists outside a home folder, of which macOS has none today. Startup items in shared folders and
   other running processes are not checked yet.
+- From an IT team's review of both files: an account name the account check does not read shows
+  as `invalid-name` (not checked), so the inventory value stays readable; in an account run a file
+  or folder the account can't read counts as not checked; markers that must be the person's own
+  (data/indicators.tsv) are the account's finding only, never the Mac's, and never through a link;
+  shared temp entries are looked at as links first and never followed; an `lsof` that does not
+  answer in time leaves the Mac's row not complete; agents in the account's own install folders
+  are found by path; and the ownership check refuses an ACL entry that lets anyone write. A
+  normal run of `gird-check.sh` still counts a profile it can't read as no keys; that is a separate
+  issue, not changed here.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
 - Two files. `gird-fleet.sh` holds all the root work: the fixed PATH, the ownership checks, the

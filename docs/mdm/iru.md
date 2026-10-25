@@ -44,7 +44,7 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
+   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
    ```
 
 4. Select **Save**.

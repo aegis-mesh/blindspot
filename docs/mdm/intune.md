@@ -44,7 +44,7 @@ Check the result: each account's `protected_folders` is `checked` once access wo
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
+   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
    ```
 
 2. Add a second script the same way, named `Blindspot check`, uploading `blindspot-check.sh`.
@@ -59,7 +59,7 @@ Check the result: each account's `protected_folders` is `checked` once access wo
 
    ```sh
    #!/bin/bash
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
+   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
    ```
 
 2. Select **Devices** > **By platform** > **macOS** > **Organize devices** >
@@ -81,8 +81,8 @@ v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws | itadmin: c
 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
-`none` means the check has not run yet, and `unreadable` means the saved result could not be
-trusted. Treat each of those, and an empty result, as not checked.
+`none` means the check has not run yet, `failed` means the last run stopped part-way, and
+`unreadable` means the saved result could not be trusted. Treat each of those, and an empty result, as not checked.
 
 In **Scripts** > `Blindspot check` > **Device status**, **Success** means the check finished.
 **Failed** means it could not run safely (`failed`), or Intune stopped it.

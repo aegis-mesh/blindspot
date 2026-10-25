@@ -46,7 +46,9 @@ Answer each question with line numbers:
    Could any of them hold a path, a file name or a key?
 7. What happens on a timeout, a home that does not answer, or a folder macOS
    refuses. Can any of these read as "clear"?
-8. Anything hidden or hard to read: encoded blobs, downloaded code, dense
+8. Can anything an account does make the result read clear when it is not, or
+   act when it is not?
+9. Anything hidden or hard to read: encoded blobs, downloaded code, dense
    one-liners.
 
 docs/fleet.md claims it runs as root only from a root-owned folder, sends
@@ -69,7 +71,8 @@ Root runs only files that root alone can change, so put both where only root can
 
 ```sh
 sudo /usr/bin/install -d -o root -g wheel -m 0755 "/Library/Application Support/Blindspot"
-sudo /usr/bin/install -o root -g wheel -m 0755 gird-check.sh gird-fleet.sh "/Library/Application Support/Blindspot/"
+sudo /usr/bin/install -o root -g wheel -m 0755 gird-check.sh "/Library/Application Support/Blindspot/"
+sudo /usr/bin/install -o root -g wheel -m 0700 gird-fleet.sh "/Library/Application Support/Blindspot/"
 ```
 
 See who it would check, without checking anything:
@@ -110,7 +113,8 @@ The page for your MDM says where its agent is.
 ## 3. Add it to your MDM
 
 Root runs only files that root alone can change: `gird-fleet.sh`, `gird-check.sh` next to it and
-every folder above them owned by root and writable by no one else, or the check stops (exit 13)
+every folder above them owned by root and writable by no one else, by mode or by ACL, or the check
+stops (exit 13)
 before it starts any account's check. So the MDM installs both files once, in
 `/Library/Application Support/Blindspot`, and its other items only run `gird-fleet.sh` from there.
 The install step has not yet been run end to end on a real Mac.
@@ -123,8 +127,9 @@ The install step has not yet been run end to end on a real Mac.
    case "${1:-}" in --inventory) ;; *) set -- --all-users --exit-zero --summary-to-stdout --deadline=3000 ;; esac
    ```
 
-   Put `--hash-accounts=<secret>` here if you use it, never in an MDM's arguments. Nothing in
-   `gird-fleet.sh` is copied for the accounts, so the secret stays readable by root only.
+   Put `--hash-accounts=<secret>` here if you use it, never in an MDM's arguments. `gird-fleet.sh`
+   is installed readable by root only (0700) and is never copied for the accounts, so the secret
+   stays root's. `gird-check.sh`, which each account's copy is made from, holds no secret (0755).
 
 2. **Install them once.** Paste each file between its marker lines in this install script, and
    have your MDM run it once, as root:
@@ -142,24 +147,25 @@ The install step has not yet been run end to end on a real Mac.
    /bin/cat > "$d/gird-fleet.sh.new" <<'BLINDSPOT_FLEET'
    (paste gird-fleet.sh, with its options line, here)
    BLINDSPOT_FLEET
-   for f in gird-check.sh gird-fleet.sh; do
-     /usr/sbin/chown root:wheel "$d/$f.new"
-     /bin/chmod 0755 "$d/$f.new"
-     /bin/mv -f "$d/$f.new" "$d/$f"
-   done
+   /usr/sbin/chown root:wheel "$d/gird-check.sh.new" "$d/gird-fleet.sh.new"
+   /bin/chmod 0755 "$d/gird-check.sh.new"
+   /bin/chmod 0700 "$d/gird-fleet.sh.new"
+   /bin/mv -f "$d/gird-check.sh.new" "$d/gird-check.sh"
+   /bin/mv -f "$d/gird-fleet.sh.new" "$d/gird-fleet.sh"
    ```
 
-3. **The check**, run daily. The MDM's script is only this line:
+3. **The check**, run daily. The MDM's script is only this line. `env -i` starts bash with no
+   environment, so nothing the MDM's environment names (such as `BASH_ENV`) runs first:
 
    ```sh
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
+   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
    ```
 
 4. **The inventory field**, run whenever the Mac reports in. It only reads the saved result and
    never checks anything:
 
    ```sh
-   exec /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
+   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
    ```
 
 Set `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the
@@ -179,7 +185,7 @@ each account.
 | `--deadline=<seconds>` | The run aims to finish before this. 3000 if not given. |
 | `--hash-accounts=<secret>` | Shows each account as a keyed hash of its name. Keep the secret to match them later. Put it only in the options line in `gird-fleet.sh`, never in an MDM's arguments: an argument shows in the process list, to every account, while the run lasts. |
 | `--inventory` | Prints the saved inventory value. Needs root. |
-| `--stale-days=<days>` | With `--inventory`: older than this reads `stale`. 3 if not given. |
+| `--stale-days=<days>` | With `--inventory`: older than this reads `stale`. 3 if not given, at most 30. |
 | `--result-tags` | With `--inventory`: wraps the value in `<result></result>`, for Jamf Pro. |
 
 ## 4. Read the results
@@ -214,11 +220,13 @@ v1 act 2026-10-25T09:12Z | asha: act tanstack; keys 2 anthropic,aws; sessions 3;
 
 If it would be too long, it keeps each account's outcome and ends with `+more`. The full result is
 in `/var/db/blindspot/last.json`. The inventory field shows `stale: last run <time>` when the last run
-is older than `--stale-days`, `none` before the first run, and `unreadable` when the saved file is
-not root's own. Treat each of those, and any outcome your MDM does not show, as not checked.
+is older than `--stale-days`, `failed: the run started <time> did not finish` when a later run
+stopped part-way (your MDM's time limit, a restart), `none` before the first run, and `unreadable`
+when the saved file is not root's own. Treat each of those, and any outcome your MDM does not show,
+as not checked. An account whose name Blindspot does not read shows as `invalid-name`, not checked.
 
 To find the Macs to deal with first, filter the inventory field for values starting `v1 act`, then
-`v1 not_checked` and `stale`.
+`v1 not_checked`, `failed` and `stale`.
 
 ## 5. Act on a finding
 
@@ -261,14 +269,19 @@ The same places as a normal run of `gird-check.sh`, without Desktop, Documents a
 can hold cloud files that download when read). Each account's check runs through
 `sudo -n -u <account>` with a clean environment and only that account's rights. It reads regular
 files only, and leaves out any file over 16 MB, except agent session files, which it reads in 1 MB
-pieces whatever their size. `sudo` writes one line to the system log for each account.
+pieces whatever their size. A file or folder the account can't read counts as not checked, never as
+holding nothing. With its fixed PATH, it looks for agents in the account's own install folders
+(`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. The
+gh-token-monitor logs in `/tmp`, which must be the person's own, count for the account that owns
+them, never for the Mac, and never through a link. `sudo` writes one line to the system log for each account.
 
 What root checks once for the Mac:
 
 Apps in `/Applications`, and agent commands in `/usr/local/bin` and `/opt/homebrew/bin`, are found
-by name and reported as the Mac's agents. In the shared temp folder, root looks by name for the
-malware markers `data/indicators.tsv` lists there, and asks `lsof` whether a process holds the
-LiteLLM loader's lock file open. Those are the only running processes it looks at. It also looks by
+by name and reported as the Mac's agents. In the shared temp folder, root looks by name, without
+following links, for the malware markers `data/indicators.tsv` lists there that need not be any one
+person's, and asks `lsof` whether a process holds the LiteLLM loader's lock file open. If `lsof`
+does not answer in time, the Mac reads partly checked. Those are the only running processes it looks at. It also looks by
 name for any startup file `data/indicators.tsv` lists outside a home folder; for macOS there are none
 today. Nothing in these places is read or run.
 
