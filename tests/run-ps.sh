@@ -884,6 +884,23 @@ has    "and a worm file in it is found" '~/p/cdir/\.claude/router_runtime\.js a 
 has    "a .vscode folder that is a link is read through" '~/p/vdir/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
 has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
 hasnot "a .claude link to nothing reads as nothing" 'p/gone/' "$WORK/hid.txt"
+# A settings, tasks or planted file bigger than 16 MB, here a link to a large file, is not read: it would
+# hold the scan for minutes. The settings and tasks files are named as not read, never read clean, and
+# what the large file holds at its end is not reported.
+mkdir -p "$WORK/huge/p/a/.claude" "$WORK/huge/p/a/.vscode" "$WORK/huge-target"
+head -c 17000000 /dev/zero | tr '\0' ' ' > "$WORK/huge-target/big.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make"}]}]},"tasks":[{"label":"s","command":"make","runOptions":{"runOn":"folderOpen"}}]}\n' >> "$WORK/huge-target/big.json"
+ln -s "$WORK/huge-target/big.json" "$WORK/huge/p/a/.claude/settings.json"; ln -s "$WORK/huge-target/big.json" "$WORK/huge/p/a/.vscode/tasks.json"
+ln -s "$WORK/huge-target/big.json" "$WORK/huge/p/a/.vscode/settings.json"; ln -s "$WORK/huge-target/big.json" "$WORK/huge/p/a/.vscode/setup.mjs"
+mkdir -p "$WORK/huge/AppData/Roaming" "$WORK/huge/AppData/Local/Temp"
+T0=$(date +%s); psrun "$WORK/huge" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/huge.txt"; T=$(( $(date +%s) - T0 ))
+has    "a settings file over 16 MB is named as not read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/p/a/\.claude/settings\.json' "$WORK/huge.txt"
+has    "and so is a tasks file over 16 MB" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/p/a/\.vscode/tasks\.json' "$WORK/huge.txt"
+has    "and a VS Code settings file over 16 MB" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/p/a/\.vscode/settings\.json' "$WORK/huge.txt"
+hasnot "what a file over 16 MB holds is not reported" '~/p/a/\.(claude|vscode)/(settings|tasks)\.json Set to' "$WORK/huge.txt"
+has    "a planted file over 16 MB is a file to read" '~/p/a/\.vscode/setup\.mjs Named like a file' "$WORK/huge.txt"
+if [ "$T" -le 60 ]; then ok "and the scan does not read them" "${T}s"; else bad "and the scan does not read them" "took ${T}s"; fi
+rm -rf "$WORK/huge-target"
 # One huge minified line, a // inside every label, the folderOpen task last: read whole, in linear time.
 mkdir -p "$WORK/bigjs/p/.vscode" "$WORK/bigjs/AppData/Roaming" "$WORK/bigjs/AppData/Local/Temp"
 python3 - "$WORK/bigjs/p/.vscode/tasks.json" <<'PY3'

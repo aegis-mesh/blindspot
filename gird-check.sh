@@ -1429,6 +1429,12 @@ HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST)) -gt 0 ] && HOME_PAR
 # A link counts only when it ends at a regular file: a repo can link a settings file to /dev/zero or
 # /dev/tty, which a reader would never get to the end of.
 LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p' | while IFS= read -r _f; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
+# A settings, tasks or planted file bigger than READ_MAX, the bound an account run keeps for every file,
+# is not read: a project can link one to a large system file, which would hold the scan for minutes
+# (about a second a megabyte on macOS's awk). A settings or tasks file is then named as not read; a
+# planted file is not hashed, so one that projects name too stays a file to read.
+READ_MAX=$FLEET_MAX
+too_big() { _tb=$({ wc -c < "$1"; } 2>/dev/null); _tb=${_tb//[!0-9]/}; [ -n "$_tb" ] && [ "$_tb" -gt "$READ_MAX" ]; }
 # Links to this user's own ~/.ssh/authorized_keys (the scan prints link candidates as "L path"),
 # outside ~/.ssh itself. -ef compares the files themselves, so a link into a repo's own
 # .ssh/authorized_keys fixture does not count. Before the file exists, a link that resolves to its
@@ -1481,7 +1487,7 @@ while IFS= read -r _f; do
   while IFS= read -r _a; do [ -n "$_a" ] && [ -e "$_pp/$_a" ] && _ok=1; done <<EOF
 $PLANTED_ALONE
 EOF
-  if [ "$_ok" -eq 0 ] && [ -f "$_f" ]; then
+  if [ "$_ok" -eq 0 ] && [ -f "$_f" ] && ! too_big "$_f"; then
     _sh=$({ sha_hex < "$_f"; } 2>/dev/null)
     case " $(planted_sha "$_f") " in *" $_sh "*) [ -n "$_sh" ] && _ok=1 ;; esac
   fi
@@ -1911,14 +1917,14 @@ HOOK_RUN='"hooks"[[:space:]]*:[[:space:]]*\{([[:space:]]*"([^"\\]|\\.)*"[[:space
 while IFS= read -r f; do
   case "$f" in */.claude/settings.json|*/.claude/settings.local.json) ;; *) continue ;; esac
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
-  [ -f "$f" ] || continue
+  [ -f "$f" ] && ! too_big "$f" || continue
   _t=$(flat "$f"); _w=""
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
   # (Managed settings can set it too; they are not read here.)
   _dah=""
   for _s in "${f%/*}/settings.local.json" "${f%/*}/settings.json"; do
     if [ "$_s" = "$f" ]; then _v=$(printf '%s' "$_t" | tr -d '[:space:]' | json_top disableAllHooks)
-    elif [ -f "$_s" ] && [ -r "$_s" ]; then _v=$(flat "$_s" | tr -d '[:space:]' | json_top disableAllHooks)
+    elif [ -f "$_s" ] && [ -r "$_s" ] && ! too_big "$_s"; then _v=$(flat "$_s" | tr -d '[:space:]' | json_top disableAllHooks)
     else continue; fi
     [ -n "$_v" ] && { _dah=$_v; break; }
   done
@@ -1944,7 +1950,7 @@ done <<EOF
 $ALLOW_FILES
 EOF
 while IFS= read -r f; do
-  [ -n "$f" ] && [ -f "$f" ] || continue
+  [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
   _t=$(flat "$f")
   printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' && auto_row "$f" "run a task when the folder opens in VS Code or Cursor" "$_t"
@@ -1961,7 +1967,7 @@ EOF
 # neither setting (most do not) is skipped before it is flattened: flat only takes comments out and
 # writes escapes as their characters, so a setting's name stays as written unless it has an escape.
 while IFS= read -r f; do
-  [ -n "$f" ] && [ -f "$f" ] || continue
+  [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)|\\u|\\/' || continue
   _w=""
   if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
@@ -2106,16 +2112,17 @@ N_LOGIN=0; for _x in $LOGIN_IDS; do N_LOGIN=$((N_LOGIN + 1)); done
 
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
 ALLOW_ROWS=""; N_ALLOW=0; N_ALLOW_NPM=0; ALLOW_FIRST=""
-unread_files() { # files on stdin that are there but can't be read, each once
-  while IFS= read -r _uf; do [ -n "$_uf" ] && [ -f "$_uf" ] && [ ! -r "$_uf" ] && printf '%s\n' "$_uf"; done | awk '!s[$0]++'
+unread_files() { # files on stdin that are there but can't be read, each once; with "big", or too big to read
+  while IFS= read -r _uf; do [ -n "$_uf" ] && [ -f "$_uf" ] && { [ ! -r "$_uf" ] || { [ -n "${1:-}" ] && too_big "$_uf"; }; } && printf '%s\n' "$_uf"; done | awk '!s[$0]++'
 }
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
-SEC2_UNREAD=$(printf '%s\n%s\n%s\n%s\n' "$MCP_LIST" "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" | unread_files)
+SEC2_UNREAD=$({ printf '%s\n' "$MCP_LIST" | unread_files; printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" | unread_files big; } | awk '!s[$0]++')
 N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
-ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files)
+ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
-ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter | files_matching "$TR_KEYS|$P_ASSIGN")
+ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
+  while IFS= read -r _f; do too_big "$_f" || printf '%s\n' "$_f"; done | files_matching "$TR_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue

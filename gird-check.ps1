@@ -297,6 +297,13 @@ function Read-Text([string]$f) {
   $TextCache[$f] = $t
   $t
 }
+# A settings, tasks or planted file bigger than this, the bound gird-check.sh keeps, is not read: a
+# project can link one to a large system file, which would hold the scan. A settings or tasks file is
+# then named as not read; a planted file is not hashed, so one that projects name too stays a file to read.
+$ReadMax = 16777216
+function Too-Big([string]$f) {
+  try { $fs = [IO.File]::Open($f, 'Open', 'Read', 'ReadWrite'); try { $fs.Length -gt $ReadMax } finally { $fs.Dispose() } } catch { $false }
+}
 function Has-Match([string]$f, [regex]$rx) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
@@ -1010,7 +1017,7 @@ foreach ($f in $WormFiles) {
   if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains($wpr)) { continue }
   $wok = $false
   foreach ($wal in $PlantedAlone) { if (Exists (J $wpr $wal)) { $wok = $true; break } }
-  if (-not $wok) { $wsh = File-Sha256 $f; if ($wsh -and (@((Planted-Sha (Planted-Rel $f)) -split ' ') -ccontains $wsh)) { $wok = $true } }
+  if (-not $wok -and -not (Too-Big $f)) { $wsh = File-Sha256 $f; if ($wsh -and (@((Planted-Sha (Planted-Rel $f)) -split ' ') -ccontains $wsh)) { $wok = $true } }
   if ($wok) { [void]$WormProj.Add($wpr) }
 }
 $WormHit = New-Object System.Collections.Generic.List[string]; $WormLook = New-Object System.Collections.Generic.List[string]
@@ -1352,14 +1359,14 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
 }
 $homeClaude = J $HomeDir '.claude'
 foreach ($f in $AllowFiles) {
-  if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f)) { continue }
+  if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f) -or (Too-Big $f)) { continue }
   $t = Flat-Text $f; if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
   # (Managed settings can set it too; they are not read here.)
   $dah = ''; $dir = [IO.Path]::GetDirectoryName($f)
   foreach ($s in @((J $dir 'settings.local.json'), (J $dir 'settings.json'))) {
-    if ($s -eq $f) { $st = $t } elseif ((Is-File $s) -and (Is-RegularFile $s)) { $st = Flat-Text $s } else { continue }
+    if ($s -eq $f) { $st = $t } elseif ((Is-File $s) -and (Is-RegularFile $s) -and -not (Too-Big $s)) { $st = Flat-Text $s } else { continue }
     if ($null -eq $st) { continue }
     $v = Json-Top $s $st 'disableAllHooks'; if ($v) { $dah = $v; break }
   }
@@ -1370,7 +1377,7 @@ foreach ($f in $AllowFiles) {
   Auto-Row $f ($w -join ', ') $t
 }
 foreach ($f in $TaskFiles) {
-  if (($f -replace '\\', '/') -match '/\.claude/plugins/') { continue }
+  if (($f -replace '\\', '/') -match '/\.claude/plugins/' -or (Too-Big $f)) { continue }
   $t = Flat-Text $f
   if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
 }
@@ -1382,7 +1389,7 @@ foreach ($f in $TaskFiles) {
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
 # Both are things to look at in a project, not an agent set to run without asking.
 foreach ($f in $VscSettings) {
-  if (-not (Is-File $f)) { continue }
+  if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   $w = New-Object System.Collections.Generic.List[string]
   if (Aa-Hit $f @('"chat.permissions.default": "autopilot"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot') }
   elseif (Aa-Hit $f @('"chat.permissions.default": "autoApprove"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove') }
@@ -1517,17 +1524,19 @@ if ($LoginsText) { Progress "Login files any agent you run can read: $LoginsText
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
-function Unread-Files($files) {
+# With $big, a file too big to read counts too, checked before any read.
+function Unread-Files($files, [bool]$big = $false) {
   $out = New-Object System.Collections.Generic.List[string]
-  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $out.Add($f) } }
+  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (Is-File $f) -and (($big -and (Too-Big $f)) -or $null -eq (Read-Text $f)) -and (Is-RegularFile $f)) { $out.Add($f) } }
   ,$out
 }
-$Sec2Unread = Unread-Files (@($McpList) + @($AllowFiles) + @($TaskFiles) + @($VscSettings))
+$Sec2Unread = Unread-Files @($McpList)
+foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
 $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
-$AllowUnread = Unread-Files $allowAll
+$AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
-  if (-not (Is-File $f)) { continue }
+  if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   if (-not (Has-RealMatch $f $RxCommand)) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
