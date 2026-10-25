@@ -6014,8 +6014,9 @@ if (-not $OptOffline) {
 # has every detail.
 # ===========================================================================
 # A check that was not done in full never leaves the headline green: the sessions were partly
-# checked, a key file, part of npm's cache or an extension folder could not be read, or a file took
-# too long. The headline then says what it can: no findings in the paths checked.
+# checked, a key file, part of npm's cache, a Python environment or an extension folder could not
+# be read, or a file took too long. The headline then says what it can: no findings in the paths
+# checked.
 $Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0 -or $PyUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }

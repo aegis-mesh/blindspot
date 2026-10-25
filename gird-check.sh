@@ -6488,8 +6488,9 @@ fi
 SESS_PARTIAL=0
 if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
 # A check that was not done in full never leaves the headline green: the home folder was not
-# scanned, the sessions were partly checked, or a key file, part of npm's cache or an extension
-# folder could not be read. The headline then says what it can: no findings in the paths checked.
+# scanned, the sessions were partly checked, or a key file, part of npm's cache, a Python environment
+# or an extension folder could not be read. The headline then says what it can: no findings in the
+# paths checked.
 PARTIAL=0
 if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
