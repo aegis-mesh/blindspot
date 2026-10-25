@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Blindspot, the GIRD AI key check, version 1.1.0 (22 October 2026)
+# Blindspot, the GIRD AI key check, version 1.2.0 (25 October 2026)
 # https://gird.ai/blindspot
 #
 # Shows the AI coding agents and MCP servers on this machine, AI and cloud keys
@@ -225,7 +225,7 @@ banner() {
   done <<EOF
 $_wm
 EOF
-  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.1.0 · 22 Oct 2026 · gird.ai/blindspot${RST}"
+  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.2.0 · 25 Oct 2026 · gird.ai/blindspot${RST}"
   blank
   emit "  ${DIM}Read-only. Prints paths and counts, never a key.${RST}"
   if [ "$OFFLINE" -eq 0 ]; then
@@ -2129,13 +2129,23 @@ $SESS_SOURCES
 EOF
   printf 'Other'
 }
-SESS_ROWS=""; SESS_FILES=""; N_SESS=0
+SESS_ROWS=""; SESS_FILES=""; SESS_DIRS=""; N_SESS=0
 if [ -n "$(printf '%s' "$SESS_HITS" | tr -d '[:space:]')" ]; then
   SESS_TAGGED=$(printf '%s\n' "$SESS_HITS" | while IFS="$(printf '\t')" read -r f p; do
     [ -n "$f" ] && printf '%s\t%s\t%s\n' "$(sess_agent "$f")" "$f" "$p"
   done)
   SESS_FILES=$(printf '%s\n' "$SESS_TAGGED" | cut -f2 | sort -u)
   N_SESS=$(count_lines "$SESS_FILES")
+  SESS_DIRS=$(printf '%s\n' "$SESS_FILES" | SESS_ROOTS="$SESS_ROOTS" awk '
+    BEGIN { n = split(ENVIRON["SESS_ROOTS"], r, "\n"); for (i = 1; i <= n; i++) sub("/+$", "", r[i]) }
+    $0 != "" {
+      best = ""
+      for (i = 1; i <= n; i++) if (r[i] != "" && substr($0, 1, length(r[i]) + 1) == r[i] "/" && length(r[i]) > length(best)) best = r[i]
+      g = $0
+      if (best != "") { rel = substr($0, length(best) + 2); j = index(rel, "/"); if (j > 0) g = best "/" substr(rel, 1, j - 1) }
+      c[g]++
+    }
+    END { for (g in c) printf "%d\t%s\n", c[g], g }' | LC_ALL=C sort -t "$(printf '\t')" -k1,1nr -k2,2)
   SESS_ROWS=$(printf '%s\n' "$SESS_TAGGED" | awk -F '\t' '
     !(($1 "|" $2) in f) { f[$1 "|" $2] = 1; n[$1]++; if (!($1 in o)) { o[$1] = ++k; name[k] = $1 } }
     !(($1 "|" $3) in pv) { pv[$1 "|" $3] = 1; ps[$1] = ps[$1] (ps[$1] == "" ? "" : ", ") $3 }
@@ -2481,14 +2491,26 @@ if [ "$SESS_TOTAL" -gt 0 ] || [ -n "$SESS_SEALED_FOUND" ]; then
 $SESS_ROWS
 EOF
   if [ "$N_SESS" -gt 0 ]; then
-    _shown=0
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      _shown=$((_shown + 1)); [ "$_shown" -le 20 ] && emit "        ${DIM}$(short "$f")${RST}"
+    _cw=0; _shown=0; _nd=0
+    while IFS="$(printf '\t')" read -r _n _g; do
+      [ -n "$_g" ] || continue
+      _nd=$((_nd + 1)); [ "$_nd" -le 20 ] || continue
+      _t=$(plural "$_n" file files); [ "${#_t}" -gt "$_cw" ] && _cw=${#_t}
     done <<EOF
-$SESS_FILES
+$SESS_DIRS
 EOF
-    [ "$N_SESS" -gt 20 ] && emit "        ${DIM}and $((N_SESS - 20)) more${RST}"
+    _fw=$((80 - 8 - 2 - _cw))
+    while IFS="$(printf '\t')" read -r _n _g; do
+      [ -n "$_g" ] || continue
+      _shown=$((_shown + 1)); [ "$_shown" -le 20 ] || continue
+      _g=$(short "$_g")
+      if [ "${#_g}" -gt "$_fw" ]; then _hd=$(((_fw - 3) / 2)); _g="${_g:0:_hd}...${_g: -$((_fw - 3 - _hd))}"; fi
+      printf -v _x '%-*s  %*s' "$_fw" "$_g" "$_cw" "$(plural "$_n" file files)"
+      emit "        ${DIM}$_x${RST}"
+    done <<EOF
+$SESS_DIRS
+EOF
+    [ "$_nd" -gt 20 ] && emit "        ${DIM}and $(plural $((_nd - 20)) "more folder" "more folders")${RST}"
     wrap "Treat these keys as exposed and rotate them." 8 "        " "        "
   fi
   _all="Install ripgrep, or add --all-sessions, to check all of them."

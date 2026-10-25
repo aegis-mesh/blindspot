@@ -1,5 +1,5 @@
 <#
-Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.1.0 (23 October 2026)
+Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.2.0 (25 October 2026)
 https://gird.ai/blindspot
 
 Shows the AI coding agents and MCP servers on this computer, AI and cloud keys
@@ -580,7 +580,7 @@ function Show-Banner {
     if ($i -eq 3) { $mark = (& $u ' \u2819\u281b\u283b\u2801 ') + $cGold + (& $u '\u2830\u2806') + $cTeal + (& $u ' \u2880\u28e6\u28e4\u28c4\u2840') } else { $mark = & $u $mk[$i] }
     Emit ("  $cTeal$mark$cRst   $cBold$row$cRst")
   }
-  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.1.0 $gMid 23 Oct 2026 $gMid gird.ai/blindspot$cRst")
+  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
 }
 
 # ===========================================================================
@@ -589,7 +589,7 @@ $Early = $false
 try {
 Blank
 if ($Fancy) { Show-Banner } else {
-Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.1.0 $gMid 23 Oct 2026 $gMid gird.ai/blindspot$cRst")
+Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
 }
 Blank
 Emit "  ${cDim}Read-only. Prints paths and counts, never a key.$cRst"
@@ -1686,6 +1686,18 @@ foreach ($h in $sessHits) {
 }
 $SessFiles.Sort([StringComparer]::Ordinal)
 $N_SESS = $SessFiles.Count
+$sessRootList = @($SessRoots | ForEach-Object { ([string]$_).TrimEnd('/', [IO.Path]::DirectorySeparatorChar) })
+$sessDirN = @{}
+foreach ($f in $SessFiles) {
+  $best = ''
+  foreach ($r in $sessRootList) { if ($r -and $f.Length -gt $r.Length -and ($f[$r.Length] -eq '/' -or $f[$r.Length] -eq [IO.Path]::DirectorySeparatorChar) -and $f.StartsWith($r, $PathCmp) -and $r.Length -gt $best.Length) { $best = $r } }
+  $g = $f
+  if ($best) { $rel = $f.Substring($best.Length + 1); $j = $rel.IndexOfAny([char[]]@('/', [IO.Path]::DirectorySeparatorChar)); if ($j -gt 0) { $g = $f.Substring(0, $best.Length + 1 + $j) } }
+  if ($sessDirN.ContainsKey($g)) { $sessDirN[$g]++ } else { $sessDirN[$g] = 1 }
+}
+$SessDirs = New-Object System.Collections.Generic.List[string]
+foreach ($k in $sessDirN.Keys) { $SessDirs.Add($k) }
+$SessDirs.Sort([Comparison[string]]{ param($x, $y) if ($sessDirN[$x] -ne $sessDirN[$y]) { return $sessDirN[$y] - $sessDirN[$x] }; return [string]::CompareOrdinal($x, $y) })
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
 $SESS_PARTIAL = $SESS_TOTAL -gt 0 -and ($SessEngine -eq 'none' -or $SESS_DONE -lt 0 -or $SESS_DONE -lt ($SESS_TOTAL - $SESS_ZST))
 $SessSealedFound = @($SessSealed | Where-Object { Is-Dir $_[1] } | ForEach-Object { $_[0] })
@@ -1939,8 +1951,15 @@ if ($SESS_TOTAL -gt 0 -or $SessSealedFound.Count -gt 0) {
   Emit "     ${cBold}Keys in agent sessions$cRst"
   foreach ($r in $SessRows) { Pair "$cRed$gX$cRst" $r[0] 20 "$(Plural $r[1] 'file' 'files'): $($r[2])" }
   if ($N_SESS -gt 0) {
-    foreach ($f in ($SessFiles | Select-Object -First 20)) { Emit "        $cDim$(Short $f)$cRst" }
-    if ($N_SESS -gt 20) { Emit "        ${cDim}and $($N_SESS - 20) more$cRst" }
+    $dirShow = @($SessDirs | Select-Object -First 20)
+    $cw = 0; foreach ($g in $dirShow) { $cw = [Math]::Max($cw, (Plural $sessDirN[$g] 'file' 'files').Length) }
+    $fw = 80 - 8 - 2 - $cw
+    foreach ($g in $dirShow) {
+      $d = Short $g
+      if ($d.Length -gt $fw) { $hd = [int][Math]::Floor(($fw - 3) / 2); $d = $d.Substring(0, $hd) + '...' + $d.Substring($d.Length - ($fw - 3 - $hd)) }
+      Emit ("        $cDim" + $d.PadRight($fw) + '  ' + (Plural $sessDirN[$g] 'file' 'files').PadLeft($cw) + $cRst)
+    }
+    if ($SessDirs.Count -gt 20) { Emit "        ${cDim}and $(Plural ($SessDirs.Count - 20) 'more folder' 'more folders')$cRst" }
     Wrap 'Treat these keys as exposed and rotate them.' 8 '        ' '        '
   }
   $allTxt = 'Install ripgrep, or add -AllSessions, to check all of them.'
