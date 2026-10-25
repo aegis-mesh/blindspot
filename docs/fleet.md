@@ -121,10 +121,11 @@ The install step has not yet been run end to end on a real Mac.
 
 1. Take `gird-check.sh` and `gird-fleet.sh` from a tagged release whose SHA-256 you checked (the
    release notes give them). Add exactly this line under the first line of `gird-fleet.sh`,
-   starting the line. It sets the options for the daily check and leaves `--inventory` alone:
+   starting the line. It sets the options for the daily check, and leaves `--inventory`, `--list` and
+   `--help` alone:
 
    ```sh
-   case "${1:-}" in --inventory) ;; *) set -- --all-users --exit-zero --summary-to-stdout --deadline=3000 ;; esac
+   case " $* " in *" --inventory "*|*" --list "*|*" --help "*|*" -h "*) ;; *) set -- --all-users --exit-zero --summary-to-stdout --deadline=3000 ;; esac
    ```
 
    Put `--hash-accounts=<secret>` here if you use it, never in an MDM's arguments. `gird-fleet.sh`

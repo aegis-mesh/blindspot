@@ -253,3 +253,4 @@ fleet: a bad npm version only in a lockfile is its own field	gird-check.ps1 has 
 fleet: not one of the incidents	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and its line says to act if that project was installed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: an update-level incident with a fix of its own shows that fix	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and --list only lists	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

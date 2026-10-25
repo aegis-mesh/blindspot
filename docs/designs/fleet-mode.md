@@ -293,7 +293,7 @@ real Mac.
 - Deployment: the MDM installs both files once in `/Library/Application Support/Blindspot`
   (folder `root:wheel` 0755, `gird-check.sh` 0755, `gird-fleet.sh` 0700 so any `--hash-accounts`
   secret in it is root's only), with the options in one line that starts the second line of
-  `gird-fleet.sh`, `case "${1:-}" in --inventory) ;; *) set -- <options> ;; esac`, so an
+  `gird-fleet.sh`, `case " $* " in *" --inventory "*|*" --list "*|*" --help "*|*" -h "*) ;; *) set -- <options> ;; esac`, so an
   `--inventory` call keeps its own. The MDM's daily item and its inventory field only run
   `exec /usr/bin/env -i /bin/bash .../gird-fleet.sh`, with no options or secret on their own line,
   so no `BASH_ENV` or `ENV` from the MDM's environment runs before the script can clear it. The
