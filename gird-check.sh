@@ -6206,7 +6206,7 @@ npm_hits() {
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; fn = FILENAME; gsub(/[[:cntrl:]]/, "?", fn); print fn "\t" nm " " v "\t" t }
     }
-    FNR == 1 { over = 0; depth = 0; pend = ""; yn = "" }
+    FNR == 1 { over = 0; depth = 0; pend = ""; pnm = 0; yn = "" }
     FILENAME ~ /pnpm-lock\.yaml$/ && /^[^ #]/ { over = ($0 ~ /^overrides:/) }
     FILENAME ~ /bun\.lock$/ {
       if (over) { o = $0; depth += gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
@@ -6226,11 +6226,28 @@ npm_hits() {
     FILENAME ~ /yarn\.lock$/ && yn != "" && match($0, /^[ \t]+version "[^"]+"/) {
       v = substr($0, RSTART, RLENGTH); sub(/^[ \t]+version "/, "", v); sub(/"$/, "", v); hit(yn, v); yn = ""
     }
+    # Every "key": { on a line is read, in order, so a lockfile npm writes on one line (with
+    # format-package-lock=false) reads as a pretty-printed one does: the piece before each { can hold
+    # the version of the entry opened before it, then ends with the key of the next. A key is where
+    # the entry installs (node_modules/a/node_modules/b, or packages/w/node_modules/b in a workspace),
+    # or a name (lockfile 1); any other key (the project itself, a workspace) opens no package. An
+    # entry under node_modules with a "name" is installed under another name (an npm alias): npm
+    # writes the real name there, ahead of the version (arborist, shrinkwrap.js), and it is the package.
     FILENAME ~ /(package-lock|npm-shrinkwrap)\.json$/ {
-      if (match($0, /"(node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
-        pend = substr($0, RSTART + 1); sub(/"[[:space:]]*:.*/, "", pend); sub(/^.*node_modules\//, "", pend)
-      } else if (pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
-        v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); hit(pend, v); pend = ""
+      nb = split($0, B, "[{]")
+      for (b = 1; b <= nb; b++) {
+        q = B[b]
+        if (pend != "") {
+          np = 0; vp = 0
+          if (pnm && match(q, /"name"[[:space:]]*:[[:space:]]*"[^"]+"/)) { np = RSTART; x = substr(q, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x) }
+          if (match(q, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) { vp = RSTART; v = substr(q, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v) }
+          if (np && (!vp || np < vp) && x ~ /^(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+$/) pend = x
+          if (vp) { hit(pend, v); pend = "" }
+        }
+        if (b < nb && match(q, /"[^"]*"[[:space:]]*:[[:space:]]*$/)) {
+          k = substr(q, RSTART + 1); sub(/"[[:space:]]*:[[:space:]]*$/, "", k); pend = ""; pnm = 0
+          if (k ~ /^(([^"]*\/)?node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+$/) { pnm = (k ~ /(^|\/)node_modules\//); pend = k; sub(/^.*node_modules\//, "", pend) }
+        }
       }
     }
     FILENAME ~ /pnpm-lock\.yaml$/ && match($0, /^[[:space:]]+\/(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+\/[0-9][^:(_\/]*/) {
@@ -6646,19 +6663,25 @@ lock_paths() { # lockfile name version
       for (i = 1; i <= n; i++) { s = c[i]; if (s ~ /^@/ && i < n) { i++; s = s "/" c[i] }; p = p (p == "" ? "" : "/") "node_modules/" s }
       print p; next
     }
-    match($0, /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/) {
-      k = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*"/, "", k); sub(/".*$/, "", k)
-      pend = ""; ok = 0
-      if (k ~ /(^|\/)node_modules\//) { pend = k; nm = k; sub(/^.*node_modules\//, "", nm); ok = (nm == N) }
-      next
-    }
-    pend != "" && match($0, /"name"[[:space:]]*:[[:space:]]*"[^"]*"/) {
-      x = substr($0, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x); if (x == N) ok = 1
-    }
-    pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]*"/) {
-      x = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x)
-      if (ok && x == V) print pend
-      pend = ""
+    # An npm lockfile: every "key": { on a line, as npm_hits reads them, one line or pretty-printed. The
+    # "name" of an entry (an alias) is the package at that path.
+    {
+      nb = split($0, B, "[{]")
+      for (b = 1; b <= nb; b++) {
+        q = B[b]
+        if (pend != "") {
+          np = 0; vp = 0
+          if (match(q, /"name"[[:space:]]*:[[:space:]]*"[^"]*"/)) { np = RSTART; xn = substr(q, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", xn); sub(/"$/, "", xn) }
+          if (match(q, /"version"[[:space:]]*:[[:space:]]*"[^"]*"/)) { vp = RSTART; xv = substr(q, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", xv); sub(/"$/, "", xv) }
+          if (np && (!vp || np < vp)) ok = (xn == N)
+          if (vp) { if (ok && xv == V) print pend; pend = "" }
+        }
+        if (b < nb && match(q, /"[^"]*"[[:space:]]*:[[:space:]]*$/)) {
+          k = substr(q, RSTART + 1); sub(/"[[:space:]]*:[[:space:]]*$/, "", k)
+          pend = ""; ok = 0
+          if (k ~ /(^|\/)node_modules\//) { pend = k; nm = k; sub(/^.*node_modules\//, "", nm); ok = (nm == N) }
+        }
+      }
     }' "$1" 2>/dev/null
 }
 # node_modules folders nested in a project's, 16 levels deep: npm, yarn 1, yarn's node-modules linker,

@@ -1229,6 +1229,36 @@ has    "a yarn 2 entry's zip in the project's cache is an install" 'ACT NOW: SIG
 has    "so is its zip in the shared cache yarn 4 uses" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/gc.txt"
 has    "a yarn 1 entry's tarball in the offline mirror its .yarnrc names is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/mir.txt"
 has    "another version in each of those places is not an install" 'ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE' "$LI/miss.txt"
+# A lockfile npm writes on one line (format-package-lock=false), with no URLs (omit-lockfile-registry-
+# resolved=true), reads as a pretty-printed one does: its entries, a bundled one and one in a workspace's
+# node_modules (neither has a URL, in either format), and where each installs.
+OL=$WORK/ol; rm -rf "$OL"
+for d in ol olw ala alb; do mkdir -p "$OL/$d/AppData/Roaming" "$OL/$d/AppData/Local/Temp"; done
+mkdir -p "$OL/ol/code/oneline" "$OL/ol/code/bundled" "$OL/ol/code/mono" "$OL/olw/code/mono/packages/web/node_modules/axios"
+printf '{"name":"oneline","lockfileVersion":3,"requires":true,"packages":{"":{"name":"oneline","dependencies":{"axios":"^1.14.0"}},"node_modules/left-pad":{"version":"1.3.0","integrity":"sha512-y"},"node_modules/axios":{"version":"1.14.1","integrity":"sha512-x"}}}' > "$OL/ol/code/oneline/package-lock.json"
+printf '{"name":"bundled","lockfileVersion":3,"requires":true,"packages":{"":{"name":"bundled"},"node_modules/some-tool":{"version":"2.0.0","resolved":"https://registry.npmjs.org/some-tool/-/some-tool-2.0.0.tgz","bundleDependencies":["@keyv/redis"]},"node_modules/some-tool/node_modules/@keyv/redis":{"version":"6.0.0","inBundle":true}}}' > "$OL/ol/code/bundled/package-lock.json"
+for d in ol olw; do printf '{"name":"mono","lockfileVersion":3,"packages":{"":{"name":"mono","workspaces":["packages/web"]},"node_modules/web":{"resolved":"packages/web","link":true},"packages/web":{"name":"web","version":"1.0.0"},"packages/web/node_modules/axios":{"version":"0.30.4"}}}' > "$OL/$d/code/mono/package-lock.json"; done
+printf '{"name":"axios","version":"0.30.4"}\n' > "$OL/olw/code/mono/packages/web/node_modules/axios/package.json"
+# A checkout of a package's own monorepo at a bad version's number: the workspace is the project's own source,
+# linked into node_modules with no version of its own.
+mkdir -p "$OL/ol/code/tsmono"; printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "": {"name": "router", "workspaces": ["packages/router-core"]},\n    "node_modules/@tanstack/router-core": {\n      "resolved": "packages/router-core",\n      "link": true\n    },\n    "packages/router-core": {\n      "name": "@tanstack/router-core",\n      "version": "1.169.5"\n    }\n  }\n}\n' > "$OL/ol/code/tsmono/package-lock.json"
+# npm writes an alias's real name in its entry's "name" (arborist's shrinkwrap.js): a fork installed as axios is
+# not axios, in either format; axios installed under another name is axios, installed where that name puts it.
+mkdir -p "$OL/ala/code/fork/node_modules/axios" "$OL/ala/code/fork1/node_modules/axios" "$OL/alb/code/http/node_modules/my-http"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "": {"dependencies": {"axios": "npm:@acme/axios-fork@1.14.1"}},\n    "node_modules/axios": {\n      "name": "@acme/axios-fork",\n      "version": "1.14.1",\n      "resolved": "https://registry.npmjs.org/@acme/axios-fork/-/axios-fork-1.14.1.tgz"\n    }\n  }\n}\n' > "$OL/ala/code/fork/package-lock.json"
+printf '{"lockfileVersion":3,"packages":{"":{"dependencies":{"axios":"npm:@acme/axios-fork@1.14.1"}},"node_modules/axios":{"name":"@acme/axios-fork","version":"1.14.1"}}}' > "$OL/ala/code/fork1/package-lock.json"
+for d in fork fork1; do printf '{"name":"@acme/axios-fork","version":"1.14.1"}\n' > "$OL/ala/code/$d/node_modules/axios/package.json"; done
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/my-http": {\n      "name": "axios",\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$OL/alb/code/http/package-lock.json"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$OL/alb/code/http/node_modules/my-http/package.json"
+for d in ol olw ala alb; do HOME="$OL/$d" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$OL/$d.txt"; done
+has    "a one-line npm lockfile without URLs is read" '~/code/oneline/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$OL/ol.txt"
+has    "and a bundled entry in one, which has no URL" '~/code/bundled/package-lock\.json @keyv/redis 6\.0\.0 \(keyv account takeover' "$OL/ol.txt"
+has    "and an entry in a workspace's node_modules, which has none either" '~/code/mono/package-lock\.json axios 0\.30\.4 \(Axios takeover' "$OL/ol.txt"
+hasnot "a workspace's own version is not taken for the entry before it" '@tanstack/router-core 1\.169\.5' "$OL/ol.txt"
+has    "a one-line lockfile's entry installed where it names is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$OL/olw.txt"
+hasnot "an npm alias of a fork is not flagged as the package it replaces" 'axios 1\.14\.1|NPM MALWARE' "$OL/ala.txt"
+has    "an alias of a bad version is flagged by its own name" '~/code/http/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$OL/alb.txt"
+has    "and is an install where the alias puts it" 'ACT NOW: SIGNS OF NPM MALWARE' "$OL/alb.txt"
 # Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
 # folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
 # version deep down is not a hit.

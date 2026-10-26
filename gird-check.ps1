@@ -5572,7 +5572,14 @@ function Npm-Hit([string]$where, [string]$nm, [string]$v) {
 # overrides are skipped.
 $RxTgz = New-Object regex('/((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))/-/([A-Za-z0-9._~-]+)\.tgz', $RxOpt, $RxTimeout)
 $RxTok = New-Object regex('(?<![A-Za-z0-9._~@-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
-$RxLockEntry = New-Object regex('^[^\n]*?"((?:node_modules/(?:[A-Za-z0-9._~@-]+/)*)?(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)"[^\S\n]*:[^\S\n]*\{|^[^\n]*?"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
+# An npm lockfile's entries: every "key": {, "name" and "version" in order, so a lockfile npm writes on one
+# line (with format-package-lock=false) reads as a pretty-printed one does. A key is where the entry installs
+# (node_modules/a/node_modules/b, or packages/w/node_modules/b in a workspace), or a name (lockfile 1); any
+# other key (the project itself, a workspace) opens no package. An entry under node_modules with a "name" is
+# installed under another name (an npm alias): npm writes the real name there, ahead of the version
+# (arborist, shrinkwrap.js), and it is the package.
+$RxLockEntry = New-Object regex('"([^"\n]*)"[^\S\n]*:[^\S\n]*\{|"name"[^\S\n]*:[^\S\n]*"([^"\n]+)"|"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
+$RxLockKey = '^((?:[^"]*/)?node_modules/(?:[A-Za-z0-9._~@-]+/)*)?(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+\z'
 $RxPnpmKey = New-Object regex('^[^\S\n]+/((?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)/([0-9][^:(_/\n]*)', $RxOpt, $RxTimeout)
 $RxPnpmOver = New-Object regex('^overrides:', $RxOpt, $RxTimeout)
 $RxBunOver = New-Object regex('"overrides"[^\S\n]*:[^\S\n]*\{', $RxOpt, $RxTimeout)
@@ -5619,10 +5626,14 @@ function Npm-Scan([string]$where, [string]$text, [string]$kind) {
       $text = $RxYarnKey.Replace($text, '')
     }
     if ($kind -ceq 'package-lock.json' -or $kind -ceq 'npm-shrinkwrap.json') {
-      $pend = ''
+      $pend = ''; $pnm = $false
       foreach ($m in $RxLockEntry.Matches($text)) {
-        if ($m.Groups[1].Success) { $pend = $m.Groups[1].Value -replace '^.*node_modules/', '' }
-        elseif ($pend) { Npm-Hit $where $pend $m.Groups[2].Value; $pend = '' }
+        if ($m.Groups[1].Success) {
+          $k = $m.Groups[1].Value; $pend = ''; $pnm = $false
+          if ($k -cmatch $RxLockKey) { $pnm = $k -cmatch '(^|/)node_modules/'; $pend = $k -creplace '^.*node_modules/', '' }
+        } elseif ($m.Groups[2].Success) {
+          if ($pend -and $pnm -and $m.Groups[2].Value -cmatch '^(@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+\z') { $pend = $m.Groups[2].Value }
+        } elseif ($pend) { Npm-Hit $where $pend $m.Groups[3].Value; $pend = '' }
       }
     }
     if ($kind -ceq 'pnpm-lock.yaml') { foreach ($m in $RxPnpmKey.Matches($text)) { Npm-Hit $where $m.Groups[1].Value $m.Groups[2].Value } }
@@ -5970,32 +5981,30 @@ function Pkg-At([string]$d, [string]$v) {
 # or bun's names for an entry: node_modules/a/node_modules/b, or a workspace's packages/w/node_modules/b.
 # bun's key is that path without the node_modules (a/b), and its value starts with the name@version.
 $RxBunKey = New-Object regex('^\s*"([^"]+)"\s*:\s*\[\s*"([^"]*)"')
-$RxLockOpen = New-Object regex('^\s*"([^"]*)"\s*:\s*\{')
-$RxLockName = New-Object regex('"name"\s*:\s*"([^"]*)"')
-$RxLockVer = New-Object regex('"version"\s*:\s*"([^"]*)"')
+# An npm lockfile: every "key": {, "name" and "version" in order, as Npm-Scan reads them, one line or
+# pretty-printed. The "name" of an entry (an alias) is the package at that path.
+$RxLockTok = New-Object regex('"([^"\n]*)"[^\S\n]*:[^\S\n]*\{|"name"[^\S\n]*:[^\S\n]*"([^"\n]*)"|"version"[^\S\n]*:[^\S\n]*"([^"\n]*)"')
 function Lock-Paths([string]$f, [string]$n, [string]$v) {
   try { $t = [IO.File]::ReadAllText($f) } catch { return }
-  $bun = $f.EndsWith('bun.lock', [StringComparison]::Ordinal); $pend = ''; $ok = $false
-  foreach ($l in $t.Split("`n")) {
-    if ($bun) {
+  if ($f.EndsWith('bun.lock', [StringComparison]::Ordinal)) {
+    foreach ($l in $t.Split("`n")) {
       $m = $RxBunKey.Match($l)
       if ($m.Success -and $m.Groups[2].Value -ceq "$n@$v") {
         $seg = $m.Groups[1].Value.Split('/'); $p = New-Object System.Collections.Generic.List[string]
         for ($i = 0; $i -lt $seg.Count; $i++) { $s = $seg[$i]; if ($s.StartsWith('@') -and $i + 1 -lt $seg.Count) { $i++; $s = "$s/$($seg[$i])" }; $p.Add("node_modules/$s") }
         $p -join '/'
       }
-      continue
     }
-    $m = $RxLockOpen.Match($l)
-    if ($m.Success) {
+    return
+  }
+  $pend = ''; $ok = $false
+  foreach ($m in $RxLockTok.Matches($t)) {
+    if ($m.Groups[1].Success) {
       $k = $m.Groups[1].Value; $pend = ''; $ok = $false
       if ($k -cmatch '(^|/)node_modules/') { $pend = $k; $ok = (($k -creplace '^.*node_modules/', '') -ceq $n) }
-      continue
-    }
-    if (-not $pend) { continue }
-    $m = $RxLockName.Match($l); if ($m.Success -and $m.Groups[1].Value -ceq $n) { $ok = $true }
-    $m = $RxLockVer.Match($l)
-    if ($m.Success) { if ($ok -and $m.Groups[1].Value -ceq $v) { $pend }; $pend = '' }
+    } elseif (-not $pend) { continue }
+    elseif ($m.Groups[2].Success) { $ok = ($m.Groups[2].Value -ceq $n) }
+    else { if ($ok -and $m.Groups[3].Value -ceq $v) { $pend }; $pend = '' }
   }
 }
 # node_modules folders nested in a project's, 16 levels deep: npm, yarn 1, yarn's node-modules linker,
