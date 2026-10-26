@@ -104,7 +104,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if ($4 ~ /^(plist|folder)$/) ok = ok && path_ok($5); else ok = ok && $5 ~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/
           if ($4 == "plist") ok = ok && $5 ~ /\/Info\.plist$/
           n = split($6, r, " ")
-          ok = ok && ((n == 1 && r[1] ~ /^</ && ver(substr(r[1], 2))) || (n == 2 && r[1] ~ /^>=/ && ver(substr(r[1], 3)) && r[2] ~ /^</ && ver(substr(r[2], 2))))
+          # >=first <=last: an advisory that names first to last and that no version fixes.
+          ok = ok && ((n == 1 && r[1] ~ /^</ && ver(substr(r[1], 2))) || (n == 2 && r[1] ~ /^>=/ && ver(substr(r[1], 3)) && ((r[2] ~ /^<[0-9]/ && ver(substr(r[2], 2))) || (r[2] ~ /^<=/ && ver(substr(r[2], 3))))))
           ok = ok && $7 != "" && $7 !~ /[\047"`$|\\]/ && $8 ~ /^https:\/\/[^ \047"`$|\\]+$/
           if (($1 in same) && same[$1] != $2) ok = 0; same[$1] = $2
           a = $1 "\t" $8; k = $6 "\t" $7; if ((a in adv) && adv[a] != k) ok = 0; adv[a] = k
@@ -369,18 +370,18 @@ rows data/auto-approve.tsv | awk -F '\t' "$PATH_PS"'
   END { print ")"; print "$AaProject = @(" po ")"; print "# <<< auto-approve" }' > "$WORK/auto-approve.ps1"
 
 # --- agent versions with a published fix -----------------------------------------
-# Rows are id|name|os|kind|where|first|fixed|hole|advisory, first - when the range has none and the
-# advisory without https://.
+# Rows are id|name|os|kind|where|first|fixed|hole|advisory, first - when the range has none, fixed !last
+# for an advisory that no version fixes (>=first <=last), and the advisory without https://.
 rows data/outdated.tsv | awk -F '\t' "$PATH_SH"'
   BEGIN { print "# >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it."
           printf "OUT_TABLE=\"" }
-  { n = split($6, r, " "); lo = n == 2 ? substr(r[1], 3) : "-"; hi = substr(r[n], 2)
+  { n = split($6, r, " "); lo = n == 2 ? substr(r[1], 3) : "-"; hi = r[n] ~ /^<=/ ? "!" substr(r[n], 3) : substr(r[n], 2)
     printf "%s%s|%s|%s|%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, ($4 ~ /^(plist|folder)$/ ? sh($5) : $5), lo, hi, $7, substr($8, 9) }
   END { print "\""; print "# <<< outdated" }' > "$WORK/outdated.sh"
 rows data/outdated.tsv | awk -F '\t' "$PATH_PS"'
   BEGIN { print "# >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it."
           print "$OutTable = @(" }
-  { n = split($6, r, " "); lo = n == 2 ? substr(r[1], 3) : "-"; hi = substr(r[n], 2)
+  { n = split($6, r, " "); lo = n == 2 ? substr(r[1], 3) : "-"; hi = r[n] ~ /^<=/ ? "!" substr(r[n], 3) : substr(r[n], 2)
     printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, %s, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", $1, $2, $3, $4, ($4 ~ /^(plist|folder)$/ ? ps($5) : "\047" $5 "\047"), lo, hi, $7, substr($8, 9) }
   END { print ")"; print "# <<< outdated" }' > "$WORK/outdated.ps1"
 

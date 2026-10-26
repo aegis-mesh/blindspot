@@ -1905,6 +1905,7 @@ has    "Cursor below the fixed version"               '! Cursor 2\.9\.1, update 
 has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can reach files outside it' "$D"
 has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.260 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
+has    "and that no version fixes a later advisory that covers 0.1.16" 'update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p No version fixes this yet: a hostile server could open an internal address in your browser\. github\.com/advisories/GHSA-v65w-6crh-cp3h' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
 has    "with the fix to delete the link"              'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
@@ -2180,6 +2181,16 @@ hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc'
 hasnot "the Marketplace build of oorzc.ssh-tools 0.5.1 in VS Code's own folder is not the bad build" 'oorzc\.ssh-tools 0\.5\.1' "$D"
 hasnot "Codex: a profile written as an inline table is not the top level" '! Codex ' "$D"
 hasnot "mcp-remote@0.1 in an MCP config is a range, not a version" 'mcp-remote 0\.1,|mcp-remote 0\.1 ' "$D"
+# A version only an advisory with no fix covers (mcp-remote 0.1.16 to 0.1.38, GHSA-v65w-6crh-cp3h) has no
+# row: there is no fix to install. mcp-remote named only in a plugin catalog's config is not a server this
+# person set up: section 2 counts it apart, and the version check reads the configs section 2 counts.
+rm -rf "$WORK/mrx"; mkdir -p "$WORK/mrx/.npm-global/lib/node_modules/mcp-remote" "$WORK/mrx/.codex/.tmp/plugins/catalog/someplugin" "$WORK/mrx/AppData/Roaming" "$WORK/mrx/AppData/Local/Temp"
+printf '{"name":"mcp-remote","version":"0.1.20"}\n' > "$WORK/mrx/.npm-global/lib/node_modules/mcp-remote/package.json"
+printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.10","https://example.com/sse"]}}}\n' > "$WORK/mrx/.codex/.tmp/plugins/catalog/someplugin/.mcp.json"
+env HOME="$WORK/mrx" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mrx.txt"
+hasnot "mcp-remote 0.1.20, which only an advisory with no fix covers, has no row" 'mcp-remote 0\.1\.20' "$WORK/mrx.txt"
+has    "an MCP config in a plugin catalog is not a configured server" 'No MCP servers configured\.' "$WORK/mrx.txt"
+hasnot "and mcp-remote named there is not a tool to update" 'mcp-remote 0\.1\.10|Tools with a security fix' "$WORK/mrx.txt"
 hasnot "the old chat.tools.autoApprove in user settings is not reported: VS Code 1.104 and later ignore it" 'Code/User/settings\.json' "$D"
 hasnot "a project's chat.tools.global.autoApprove is not reported: VS Code reads it from user settings only" 'p/global/' "$D"
 # A link to an authorized_keys that does not exist yet still counts: an agent writing through it

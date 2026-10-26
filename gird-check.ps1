@@ -5752,6 +5752,8 @@ $OutTable = @(
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '2.0.68', '2.1.260', 'a stored API key could start sessions without the managed settings of an Enterprise or Team organization', 'github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
 )
 # <<< outdated
 # --- 1. Coding agents: settings and versions -------------------------------------
@@ -5818,6 +5820,9 @@ function Pkg-Args([string]$nm, [string]$t) {
 $OldList = New-Object System.Collections.Generic.List[object]; $oldSeen = @{}
 foreach ($r in $OutTable) {
   if ($r[2] -ne 'all' -and $r[2] -ne $IndOs) { continue }
+  # A line whose advisory no version fixes (its fixed field !last) makes no row of its own: there is
+  # nothing to install. A row whose fix it covers says so (below).
+  if ($r[6].StartsWith('!')) { continue }
   $vs = @()
   switch ($r[3]) {
     'plist' { $t = Read-Text $r[4]; if ($null -ne $t) { $m = [regex]::Match($t, '<key>CFBundleShortVersionString</key>\s*<string>([^<]*)</string>'); if ($m.Success) { $vs = @($m.Groups[1].Value) } } }
@@ -5827,7 +5832,8 @@ foreach ($r in $OutTable) {
       if ($best) { $vs = @($best) }
     }
     'npm' { $vs = @(foreach ($nr in $NpmRoots) { $pj = J (J $nr $r[4]) 'package.json'; if (Is-File $pj) { $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"'); if ($m.Success) { $m.Groups[1].Value } } }) }
-    'mcparg' { $vs = @(foreach ($f in $McpList) { if (Is-File $f) { Pkg-Args $r[4] (Read-Text $f) } }) }
+    # The MCP configs section 2 counts: not those in plugin catalogs and caches, copies of other people's.
+    'mcparg' { $vs = @(foreach ($f in $McpList) { if ((Is-File $f) -and -not (Is-PluginPath $f)) { Pkg-Args $r[4] (Read-Text $f) } }) }
   }
   foreach ($v in $vs) {
     if (-not (Ver-Ok $v)) { continue }
@@ -5839,7 +5845,7 @@ foreach ($r in $OutTable) {
     # among those its versions fall under, and shows each of their holes with its advisory.
     if ($oldSeen.ContainsKey($r[0])) { $o = $oldSeen[$r[0]]; if (-not $o.Vers.Contains($v)) { $o.Vers.Add($v) } }
     else {
-      $o = @{ Id = $r[0]; Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
+      $o = @{ Id = $r[0]; Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)); Unfixed = (New-Object System.Collections.Generic.List[object]) }
       $o.Vers.Add($v); $oldSeen[$r[0]] = $o; $OldList.Add($o)
     }
     if ((Ver-Cmp $r[6] $o.Fixed) -gt 0) { $o.Fixed = $r[6] }
@@ -5848,14 +5854,20 @@ foreach ($r in $OutTable) {
 }
 # When the version a row says to update to is in the range of another of the tool's lines, the row
 # takes that line's fix, until no line covers it: the version it names has no published fix of its own.
+# When a line whose advisory no version fixes covers it, the row shows that line's hole as not fixed yet.
 foreach ($o in $OldList) {
   do {
     $moved = $false
     foreach ($r in $OutTable) {
-      if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs)) { continue }
+      if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs) -or $r[6].StartsWith('!')) { continue }
       if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6]) -lt 0) { $o.Fixed = $r[6]; $moved = $true }
     }
   } while ($moved)
+  $ufSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($r in $OutTable) {
+    if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs) -or -not $r[6].StartsWith('!')) { continue }
+    if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6].Substring(1)) -le 0 -and $ufSeen.Add("$($r[7])|$($r[8])")) { $o.Unfixed.Add(@($r[7], $r[8])) }
+  }
 }
 $N_OLD = $OldList.Count
 if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldList[0].Name)" }
@@ -6546,6 +6558,8 @@ if ($N_OLD -gt 0) {
   foreach ($r in $OldList) {
     Pair "$cYel!$cRst" $r.Name 20 "$($r.Vers -join ', '), update to $($r.Fixed) or later"
     foreach ($h in $r.Holes) { Wrap "$($h[0].Substring(0, 1).ToUpperInvariant())$($h[0].Substring(1)). $($h[1])" 8 '        ' '        ' $cDim }
+    # A later advisory that covers the version named, and that no version fixes.
+    foreach ($h in $r.Unfixed) { Wrap "No version fixes this yet: $($h[0]). $($h[1])" 8 '        ' '        ' $cDim }
   }
 }
 $Sec1 = Take-Cap

@@ -1116,7 +1116,9 @@ claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.1.38|2.1.163|a malici
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|-|2.1.179|a plugin repository could install code that bypasses its pinned hash|github.com/advisories/GHSA-pq7j-f95f-qfcv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.0.68|2.1.260|a stored API key could start sessions without the managed settings of an Enterprise or Team organization|github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
-mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p"
+mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
+mcpremote|mcp-remote|all|npm|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h
+mcpremote|mcp-remote|all|mcparg|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h"
 # <<< outdated
 # Hosted platforms that leaked stored secrets (data/platforms.tsv): found by a command on PATH or a
 # file or folder (a folder ends in /). PLAT_FOUND lists the ids found, PLAT_LIST every name.
@@ -6434,6 +6436,9 @@ OLD_ROWS=""
 while IFS='|' read -r _oid _onm _oos _okind _ow _olo _ohi _ohole _osrc; do
   [ -n "$_oid" ] || continue
   case "$_oos" in all|"$_os") ;; *) continue ;; esac
+  # A line whose advisory no version fixes (its fixed field !last) makes no row of its own: there is
+  # nothing to install. A row whose fix it covers says so (OLD_LIST).
+  case "$_ohi" in '!'*) continue ;; esac
   case "$_okind" in
     plist) _vs=""; fleet_ok "$_ow" && [ -f "$_ow" ] && _vs=$({ tr '\n\r\t' '   ' < "$_ow"; } 2>/dev/null | sed -n 's#.*<key>CFBundleShortVersionString</key> *<string>\([^<]*\)</string>.*#\1#p') ;;
     folder) _vs=""
@@ -6444,7 +6449,8 @@ while IFS='|' read -r _oid _onm _oos _okind _ow _olo _ohi _ohole _osrc; do
     npm) _vs=$(printf '%s\n' "$NPM_ROOTS" | while IFS= read -r r; do
         [ -n "$r" ] && [ -f "$r/$_ow/package.json" ] && grep -oE '"version"[[:space:]]*:[[:space:]]*"[^"]+"' "$r/$_ow/package.json" 2>/dev/null | head -n 1 | sed -E 's/.*"([^"]+)"$/\1/'
       done) ;;
-    mcparg) _vs=$(printf '%s\n' "$MCP_LIST" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && pkg_args "$_ow" "$f"; done) ;;
+    # The MCP configs section 2 counts: not those in plugin catalogs and caches, copies of other people's.
+    mcparg) _vs=$(printf '%s\n' "$MCP_LIST" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && ! is_plugin_path "$f" && pkg_args "$_ow" "$f"; done) ;;
     *) _vs="" ;;
   esac
   while IFS= read -r _v; do
@@ -6461,12 +6467,14 @@ EOF
 done <<EOF
 $OUT_TABLE
 EOF
-# One row per tool: name<TAB>versions<TAB>fixed<TAB>holes. A tool's lines can name several advisories:
-# the row says to update to the highest fixed version among those its versions fall under, and holes
-# holds each of their holes with its advisory, as hole|advisory|hole|advisory (gen.sh refuses a | in
-# either). When that version is in the range of another of the tool's lines, the row takes that line's
-# fix, until no line covers it: the version it names has no published fix of its own. A line's range
-# and fix are its fields counted from the end, which a | in a path cannot shift.
+# One row per tool: name<TAB>versions<TAB>fixed<TAB>holes<TAB>unfixed. A tool's lines can name several
+# advisories: the row says to update to the highest fixed version among those its versions fall under,
+# and holes holds each of their holes with its advisory, as hole|advisory|hole|advisory (gen.sh refuses a
+# | in either). When that version is in the range of another of the tool's lines, the row takes that
+# line's fix, until no line covers it: the version it names has no published fix of its own. When a line
+# whose advisory no version fixes covers it, unfixed holds that line's hole|advisory, which the row shows
+# as not fixed yet. A line's range and fix are its fields counted from the end, which a | in a path
+# cannot shift.
 OLD_LIST=$(printf '%s' "$OLD_ROWS" | OT="$OUT_TABLE" OO="$_os" awk -F "$TAB" '
   function newer(a, b,   x, y, p, q, k, i) { p = split(a, x, "."); q = split(b, y, "."); k = p > q ? p : q
     for (i = 1; i <= k; i++) if (x[i] + 0 != y[i] + 0) return ((x[i] + 0) > (y[i] + 0))
@@ -6481,11 +6489,17 @@ OLD_LIST=$(printf '%s' "$OLD_ROWS" | OT="$OUT_TABLE" OO="$_os" awk -F "$TAB" '
       do { ch = 0
         for (j = 1; j <= nt; j++) {
           m = split(t[j], c, "|")
-          if (m < 9 || c[1] != id[i] || (c[3] != "all" && c[3] != ENVIRON["OO"])) continue
+          if (m < 9 || c[1] != id[i] || (c[3] != "all" && c[3] != ENVIRON["OO"]) || c[m - 2] ~ /^!/) continue
           if ((c[m - 3] == "-" || !newer(c[m - 3], fx[i])) && newer(c[m - 2], fx[i])) { fx[i] = c[m - 2]; ch = 1 }
         }
       } while (ch)
-      print r[i] "\t" v[i] "\t" fx[i] "\t" h[i]
+      nf = ""; split("", nfs)
+      for (j = 1; j <= nt; j++) {
+        m = split(t[j], c, "|")
+        if (m < 9 || c[1] != id[i] || (c[3] != "all" && c[3] != ENVIRON["OO"]) || c[m - 2] !~ /^!/) continue
+        if ((c[m - 3] == "-" || !newer(c[m - 3], fx[i])) && !newer(fx[i], substr(c[m - 2], 2)) && !((c[m - 1] "|" c[m]) in nfs)) { nfs[c[m - 1] "|" c[m]] = 1; nf = nf (nf == "" ? "" : "|") c[m - 1] "|" c[m] }
+      }
+      print r[i] "\t" v[i] "\t" fx[i] "\t" h[i] "\t" nf
     } }')
 N_OLD=$(count_lines "$OLD_LIST")
 [ "$N_OLD" -gt 0 ] && progress w "A tool with a security fix to install: $(printf '%s\n' "$OLD_LIST" | head -n 1 | cut -f1)"
@@ -7402,13 +7416,19 @@ fi
 if [ "$N_OLD" -gt 0 ]; then
   blank
   emit "     ${B}Tools with a security fix to install${RST}"
-  while IFS="$TAB" read -r nm vs fx holes; do
+  while IFS="$TAB" read -r nm vs fx holes unfixed; do
     [ -n "$nm" ] || continue
     pair "${YEL}!${RST}" "$nm" 20 "$vs, update to $fx or later"
     while [ -n "$holes" ]; do
       hole=${holes%%|*}; holes=${holes#*|}; src=${holes%%|*}
       case "$holes" in *"|"*) holes=${holes#*|} ;; *) holes="" ;; esac
       wrap "$(printf '%s' "${hole:0:1}" | tr 'a-z' 'A-Z')${hole:1}. $src" 8 "        " "        " "$DIM"
+    done
+    # A later advisory that covers the version named, and that no version fixes.
+    while [ -n "$unfixed" ]; do
+      hole=${unfixed%%|*}; unfixed=${unfixed#*|}; src=${unfixed%%|*}
+      case "$unfixed" in *"|"*) unfixed=${unfixed#*|} ;; *) unfixed="" ;; esac
+      wrap "No version fixes this yet: $hole. $src" 8 "        " "        " "$DIM"
     done
   done <<EOF
 $OLD_LIST
