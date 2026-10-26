@@ -2557,6 +2557,17 @@ hasnot "near miss: full access under a profiles table is not listed" 'code/h/' "
 hasnot "near miss: the workspace-write sandbox alone is not listed" 'code/k/' "$WORK/cxa.txt"
 has    "a [ line inside a multi-line TOML string does not hide the settings after it" '! Codex ~/code/i/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxa.txt"
 hasnot "and settings written inside a multi-line string are not read as settings" 'code/j/' "$WORK/cxa.txt"
+# A project's .codex/config.toml of one 512 KB line, with a quote every two characters and three in
+# a row at its end, then the settings: read whole, in linear time (it took two minutes on macOS's awk).
+mkdir -p "$WORK/cxbig/code/p/.codex"
+python3 - "$WORK/cxbig/code/p/.codex/config.toml" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('args = [' + '"a",' * 131072 + '"""x"""]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n')
+PY3
+T0=$(date +%s); HOME="$WORK/cxbig" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/cxbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "a one-line Codex config full of quotes is read whole" '! Codex ~/code/p/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxbig.txt"
+if [ "$T" -le 30 ]; then ok "and in linear time, with three quotes in a row on that line" "${T}s"; else bad "and in linear time, with three quotes in a row on that line" "took ${T}s"; fi
+rm -rf "$WORK/cxbig"
 # Antigravity installs from Open VSX: Antigravity IDE keeps its extensions in ~/.antigravity-ide, the
 # Antigravity before it in ~/.antigravity. A GlassWorm extension that names Antigravity, in each.
 rm -rf "$WORK/dz-ag"; cp -R "$WORK/clean" "$WORK/dz-ag"

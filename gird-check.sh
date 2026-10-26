@@ -2184,34 +2184,61 @@ aa_hit() { # file pattern|pattern...
     # The multi-line string a .toml line leaves open: "" for none, "b" inside a basic one (""") and "l"
     # inside a literal one (three single quotes). One-line strings and # comments are read as TOML reads
     # them, so quotes in them open nothing; a basic string skips the quotes an odd run of \ escapes, and
-    # the three closing quotes can carry up to two more, the end of the text.
-    function mlstate(s, st,   c, k, m, r) {
-      while (s != "") {
-        if (st != "") {
-          c = (st == "b") ? "\"" : "\047"; k = 0
-          for (;;) {
-            m = index(substr(s, k + 1), c c c)
-            if (m == 0) return st
-            k += m
-            if (st == "l" || trail(substr(s, 1, k - 1)) % 2 == 0) break
-          }
-          k += 3; for (r = 0; r < 2 && substr(s, k, 1) == c; r++) k++
-          s = substr(s, k); st = ""; continue
+    # the three closing quotes can carry up to two more, the end of the text. A line without three
+    # quotes in a row can neither open nor close one. Any other line is split at its quotes and # signs,
+    # one kind at a time, and mlev reads each one with the text before it: linear on every awk, where
+    # reading on from each quote with substr is quadratic on a long line.
+    function mlstate(s, st,   i, j, k, t, nq, nl, nh, Q, L, H) {
+      if (st == "" && !index(s, "\"\"\"") && !index(s, "\047\047\047")) return ""
+      if (st == "b" && !index(s, "\"\"\"")) return "b"
+      if (st == "l" && !index(s, "\047\047\047")) return "l"
+      mS = st; mP = ""; mR = 0; mX = 0; mEat = 0; mEmp = 0; mN = 0
+      nq = split(s, Q, "\""); if (nq == 0) { nq = 1; Q[1] = "" }
+      for (i = 1; i <= nq && mS != "#"; i++) {
+        t = Q[i]
+        # Text with no single quote or # sign before a quote opens a one-line basic string, and the text
+        # of one with no \ at its end closes it: read here, as mlev would, which is most of a long line.
+        if (i < nq && t != "" && (mS == "q" ? t !~ /\\$/ : mS == "" && !index(t, "\047") && !index(t, "#"))) {
+          if (mS == "q") { mS = ""; mEmp = 0; mEc = "\"" } else { mS = "q"; mEat = 0; mEmp = 0; mN = 0 }
+          mP = "\""; continue
         }
-        if (!match(s, /["\047#]/)) return ""
-        c = substr(s, RSTART, 1); s = substr(s, RSTART + 1)
-        if (c == "#") return ""
-        if (substr(s, 1, 2) == c c) { st = (c == "\"") ? "b" : "l"; s = substr(s, 3); continue }
-        k = 0
-        for (;;) {
-          m = index(substr(s, k + 1), c)
-          if (m == 0) return ""
-          k += m
-          if (c == "\047" || trail(substr(s, 1, k - 1)) % 2 == 0) break
+        # Inside a basic string, and in text with no single quote or # sign, the quote that ends the text is
+        # all there is.
+        if (mS == "q" || mS == "b" || (!index(t, "\047") && !index(t, "#"))) { if (i < nq) mlev("\"", t); continue }
+        nl = split(t, L, "\047"); if (nl == 0) { nl = 1; L[1] = "" }
+        for (j = 1; j <= nl && mS != "#"; j++) {
+          nh = 1; H[1] = L[j]; if (index(L[j], "#")) nh = split(L[j], H, "#")
+          for (k = 1; k <= nh && mS != "#"; k++)
+            if (k < nh) mlev("#", H[k]); else if (j < nl) mlev("\047", H[k]); else if (i < nq) mlev("\"", H[k])
         }
-        s = substr(s, k + 1)
       }
-      return st
+      return (mS == "b" || mS == "l") ? mS : ""
+    }
+    # One quote or # sign c of a .toml line, with the text t between it and the one before (mlstate).
+    # mS is "" outside strings, "b" or "l" inside a multi-line string, "q" or "a" inside a one-line
+    # basic or literal string, "#" in a comment. mR counts the quotes in a row inside a multi-line
+    # string, and mX is 1 when a \ escapes the first; mEat counts the quotes (mEc) the closing three can
+    # carry; mEmp marks a one-line string that closed right after it opened, as "" does, so a third
+    # quote makes three in a row; mN counts what came since a one-line string opened.
+    function mlev(c, t,   a, q) {
+      a = (t == "" && mP != "")
+      if (mS == "b" || mS == "l") {
+        q = (mS == "b") ? "\"" : "\047"
+        if (c == q) {
+          if (a && mP == q && mR > 0) mR++; else { mR = 1; mX = (mS == "b") ? trail(t) % 2 : 0 }
+          if (mR >= 3 + mX) { mS = ""; mEat = 2; mEc = q; mR = 0 }
+        }
+      } else if (mS == "q" || mS == "a") {
+        q = (mS == "q") ? "\"" : "\047"; mN++
+        if (c == q && (mS == "a" || trail(t) % 2 == 0)) { mEmp = (mN == 1 && a); mEc = q; mS = "" }
+      } else {
+        if (mEat > 0 && c == mEc && a && mP == mEc) { mEat--; mP = c; return }
+        mEat = 0
+        if (mEmp && c == mEc && a && mP == mEc) { mEmp = 0; mS = (c == "\"") ? "b" : "l"; mR = 0; mP = c; return }
+        mEmp = 0
+        if (c == "#") mS = "#"; else { mS = (c == "\"") ? "q" : "a"; mN = 0 }
+      }
+      mP = c
     }
     BEGIN { n = split(ENVIRON["AA_P"], p, "|")
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); q = p[i]; gsub(/"/, "\047", q)
