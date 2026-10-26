@@ -551,6 +551,8 @@ $WormRefNote = 'runs a file a worm plants'
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 $AaTable = @(
   ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"permissions": {"defaultMode": "bypassPermissions"'))
+  ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'permissions.allow: Bash', @('"permissions": {"allow": ["Bash"'))
+  ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'permissions.allow: Bash(*)', @('"permissions": {"allow": ["Bash(*)"'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access profile', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
   ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'never asks, full access, when the project is trusted', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
@@ -574,17 +576,25 @@ $AaTable = @(
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('Claude Code', 'all', (J $AppData 'Cursor/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('Claude Code', 'all', (J $AppData 'Cursor/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
 )
@@ -1288,30 +1298,37 @@ function Flat-Text([string]$f) {
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 # The object each top-level key in $keys (written with its quotes) holds, with every value nested in
 # it emptied ({} or []), as gird-check.sh's aa_keys prints it: a pattern written "key": {... matches its
-# rest only directly inside that object, as Claude Code reads defaultMode only inside permissions. A
-# token is a string, a bracket or the text between them, so one regex pass reads the file.
+# rest only directly inside that object, as Claude Code reads defaultMode only inside permissions. Under
+# the key, a tab and an array's key (each with its quotes), the strings directly inside that array, for
+# a pattern written "key": {"sub": ["text" (Claude Code's permissions.allow). A token is a string, a
+# bracket or the text between them, so one regex pass reads the file.
 $RxJsonTok = New-Object regex('"(?:[^"\\]|\\.)*"?|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
 function Aa-Keys([string]$f, [string]$l, $keys) {
   $objs = @{}
   try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $objs }
-  $dep = 0; $cur = $null; $key = $null; $pend = $null; $sb = $null
+  $dep = 0; $cur = $null; $key = $null; $pend = $null; $sb = $null; $key2 = $null; $pend2 = $null; $ak = $null
   foreach ($m in $ms) {
     $t = $m.Value; $c = [string]$t[0]
     if ($c -eq '"') {
       # A string at the top level is a key when a : comes right after it.
       if ($dep -eq 1) { $pend = $t } else { $pend = $null }
-      if ($cur -and $dep -eq 2) { [void]$sb.Append($t) }
+      if ($cur -and $dep -eq 2) { [void]$sb.Append($t); $pend2 = $t } else { $pend2 = $null }
+      if ($ak -and $dep -eq 3 -and $t.Length -ge 2 -and $t.EndsWith('"')) {
+        if (-not $objs.ContainsKey($ak)) { $objs[$ak] = New-Object System.Collections.Generic.List[string] }
+        $objs[$ak].Add($t)
+      }
       continue
     }
     if ($null -ne $pend -and $c -eq ':') { $key = $pend }
-    $pend = $null
+    if ($null -ne $pend2 -and $c -eq ':') { $key2 = $pend2 }
+    $pend = $null; $pend2 = $null
     if ($c -eq '{' -or $c -eq '[') {
       if ($dep -eq 1 -and $c -eq '{' -and $keys -ccontains $key) { $cur = $key; $sb = New-Object System.Text.StringBuilder; [void]$sb.Append('{') }
-      elseif ($cur -and $dep -eq 2) { [void]$sb.Append($c) }
+      elseif ($cur -and $dep -eq 2) { [void]$sb.Append($c); if ($c -eq '[' -and $key2) { $ak = $cur + "`t" + $key2 } else { $ak = $null } }
       $dep++
     } elseif ($c -eq '}' -or $c -eq ']') {
       $dep--
-      if ($cur -and $dep -eq 2) { [void]$sb.Append($c) }
+      if ($cur -and $dep -eq 2) { [void]$sb.Append($c); $ak = $null }
       elseif ($cur -and $dep -eq 1) {
         [void]$sb.Append($c)
         if (-not $objs.ContainsKey($cur)) { $objs[$cur] = New-Object System.Collections.Generic.List[string] }
@@ -1400,11 +1417,15 @@ function Aa-Hit([string]$f, $pats) {
   $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
   $got = New-Object bool[] $pp.Count
   $par = New-Object string[] $pp.Count
+  $sub = New-Object string[] $pp.Count
   # !key in a .toml file: the line counts only when no line sets that key.
   $neg = New-Object bool[] $pp.Count
   if ($toml) { for ($i = 0; $i -lt $pp.Count; $i++) { if ($pp[$i].StartsWith('!')) { $neg[$i] = $true; $pp[$i] = $pp[$i].Substring(1) + '=' } } }
   if (-not $toml) {
     for ($i = 0; $i -lt $pp.Count; $i++) {
+      # "key": {"sub": ["text": that string in the array sub holds in the object (Aa-Keys lists them).
+      $m = [regex]::Match($pp[$i], '^("[A-Za-z0-9_.-]+"):\{("[A-Za-z0-9_.-]+"):\[')
+      if ($m.Success) { $par[$i] = $m.Groups[1].Value; $sub[$i] = $m.Groups[2].Value; $pp[$i] = $pp[$i].Substring($m.Length); continue }
       $m = [regex]::Match($pp[$i], '^("[A-Za-z0-9_.-]+"):\{')
       if ($m.Success) { $par[$i] = $m.Groups[1].Value; $pp[$i] = $pp[$i].Substring($m.Length) }
     }
@@ -1432,6 +1453,11 @@ function Aa-Hit([string]$f, $pats) {
       $texts = @($l)
       if ($par[$i]) {
         if ($null -eq $objs) { $objs = Aa-Keys $f $l @($par | Where-Object { $_ }) }
+        if ($sub[$i]) {
+          $ek = $par[$i] + "`t" + $sub[$i]
+          if ($objs.ContainsKey($ek) -and $objs[$ek].Contains($pp[$i])) { $got[$i] = $true }
+          continue
+        }
         $texts = @(); if ($objs.ContainsKey($par[$i])) { $texts = @($objs[$par[$i]]) }
       }
       foreach ($tx in $texts) {
@@ -1485,6 +1511,17 @@ foreach ($f in $AllowFiles) {
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
   if ((Flat-Match $f $t $RxBypass) -and (Aa-Hit $f @('"permissions": {"defaultMode": "bypassPermissions"'))) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
+  # Claude Code's permissions page: Bash, or Bash(*), in permissions.allow runs every Bash command without
+  # asking. It applies a project's settings.json allow rules once you trust the folder, and a
+  # settings.local.json's (normally your own file) without that step. A rule for some commands
+  # (Bash(npm *)) is not one. The test spares the files that never name them.
+  if ($t.Contains('"Bash"') -or $t.Contains('"Bash(*)"')) {
+    $ab = $null
+    if (Aa-Hit $f @('"permissions": {"allow": ["Bash"')) { $ab = 'Bash' } elseif (Aa-Hit $f @('"permissions": {"allow": ["Bash(*)"')) { $ab = 'Bash(*)' }
+    $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
+    if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '' }
+    if ($ab) { $w.Add("run every Bash command without asking, with permissions.allow: $ab$tr") }
+  }
   Auto-Row $f ($w -join ', ') $t
 }
 foreach ($f in $TaskFiles) {
@@ -1498,7 +1535,13 @@ foreach ($f in $TaskFiles) {
 # "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
-# Both are things to look at in a project, not an agent set to run without asking.
+# "chat.defaultConfiguration" with approvals set to "allowAll" (or its older "autoApprove") starts new
+# agent sessions that run every tool call without asking, and VS Code reads its workspace value too.
+# Claude Code's VS Code extension before 2.1.225 took claudeCode.initialPermissionMode from a workspace's
+# settings (its VS Code docs), and in bypassPermissions started new conversations in bypass mode when
+# claudeCode.allowDangerouslySkipPermissions was on, which a workspace could set as well: neither
+# declared a scope before 2.1.225, and both are machine from then on (its package.json).
+# All are things to look at in a project, not an agent set to run without asking.
 foreach ($f in $VscSettings) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   $w = New-Object System.Collections.Generic.List[string]
@@ -1506,6 +1549,11 @@ foreach ($f in $VscSettings) {
   elseif (Aa-Hit $f @('"chat.permissions.default": "autoApprove"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove') }
   if (Aa-Hit $f @('"chat.tools.autoApprove": true')) {
     $w.Add('auto-approve Copilot''s tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it')
+  }
+  if (Aa-Hit $f @('"chat.defaultConfiguration": {"approvals": "allowAll"')) { $w.Add('run every tool call without asking in new agent sessions, with chat.defaultConfiguration: allowAll') }
+  elseif (Aa-Hit $f @('"chat.defaultConfiguration": {"approvals": "autoApprove"')) { $w.Add('run every tool call without asking in new agent sessions, with chat.defaultConfiguration: autoApprove') }
+  if (Aa-Hit $f @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true')) {
+    $w.Add('start Claude Code''s VS Code extension in bypassPermissions, with claudeCode.initialPermissionMode and claudeCode.allowDangerouslySkipPermissions. The extension applies them from a project only before version 2.1.225')
   }
   if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') ([string](Flat-Text $f)) }
 }

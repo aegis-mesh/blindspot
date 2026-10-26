@@ -2171,6 +2171,41 @@ has    "a VS Code profile set to start chats in Autopilot" '! VS Code Copilot ~/
 hasnot "a profile's chat.tools.global.autoApprove is not in force" 'profiles/-5a1f2e3d/settings\.json [^!]*global' "$WORK/dz-prof.txt"
 has    "VS Code Insiders' user settings are read" '! VS Code Copilot ~/AppData/Roaming/Code - Insiders/User/settings\.json chat\.tools\.global\.autoApprove' "$WORK/dz-prof.txt"
 has    "a Cursor profile with Claude Code set to bypass permissions" '! Claude Code ~/AppData/Roaming/Cursor/User/profiles/6b2c/settings\.json claudeCode\.initialPermissionMode: bypassPermissions' "$WORK/dz-prof.txt"
+# Claude Code's permissions page: Bash or Bash(*) in permissions.allow runs every Bash command without
+# asking, an agent set so in the person's settings (section 1) and a setting that acts once the folder is
+# trusted in a project's (section 2; a local settings file needs no trust). VS Code's agent sessions start
+# from chat.defaultConfiguration, whose approvals allowAll, or its older autoApprove, runs tool calls
+# without asking, from user settings, profiles and a project's settings. Claude Code's VS Code extension
+# before 2.1.225 took its bypass settings from a project's settings too.
+rm -rf "$WORK/s4"; mkdir -p "$WORK/s4/AppData/Local/Temp" "$WORK/s4/.claude" "$WORK/s4/AppData/Roaming/Code/User/profiles/p2" "$WORK/s4/AppData/Roaming/Code - Insiders/User/profiles/abc"
+for p in a b c d; do mkdir -p "$WORK/s4/code/$p/.claude"; done; for p in e f g h i; do mkdir -p "$WORK/s4/code/$p/.vscode"; done
+printf '{\n  "permissions": {\n    "allow": [\n      "Read",\n      "Bash"\n    ]\n  }\n}\n' > "$WORK/s4/.claude/settings.json"
+printf '{"permissions":{"allow":["Bash"]}}\n' > "$WORK/s4/code/a/.claude/settings.json"
+printf '{"permissions":{"allow":["Edit", "Bash(*)"]}}\n' > "$WORK/s4/code/b/.claude/settings.local.json"
+printf '{"permissions":{"allow":["Bash(npm *)"],"deny":["Bash"]}}\n' > "$WORK/s4/code/c/.claude/settings.json"
+printf '{"allow":["Bash"],"permissions":{"ask":["Bash(*)"]}}\n' > "$WORK/s4/code/d/.claude/settings.json"
+printf '{\n  // agents\n  "chat.defaultConfiguration": {"mode": "autopilot", "approvals": "allowAll"}\n}\n' > "$WORK/s4/code/e/.vscode/settings.json"
+printf '{"chat.defaultConfiguration": {"mode": "autopilot", "approvals": "manual"}}\n' > "$WORK/s4/code/f/.vscode/settings.json"
+printf '{"claudeCode.initialPermissionMode": "bypassPermissions", "claudeCode.allowDangerouslySkipPermissions": true}\n' > "$WORK/s4/code/g/.vscode/settings.json"
+printf '{"claudeCode.initialPermissionMode": "bypassPermissions"}\n' > "$WORK/s4/code/h/.vscode/settings.json"
+printf '{"chat.defaultConfiguration": {"approvals": "autoApprove"}}\n' > "$WORK/s4/code/i/.vscode/settings.json"
+printf '{"chat.defaultConfiguration": {"approvals": "allowAll"}}\n' > "$WORK/s4/AppData/Roaming/Code/User/settings.json"
+printf '{"chat.defaultConfiguration": {"mode": "autopilot"}}\n' > "$WORK/s4/AppData/Roaming/Code/User/profiles/p2/settings.json"
+printf '{"chat.defaultConfiguration": {"approvals": "autoApprove", "mode": "plan"}}\n' > "$WORK/s4/AppData/Roaming/Code - Insiders/User/profiles/abc/settings.json"
+dzrun "$WORK/s4" | tr -s ' \n' '  ' > "$WORK/s4.txt"
+has    "an allow rule for Bash in the person's Claude Code settings runs every command without asking" '! Claude Code ~/\.claude/settings\.json permissions\.allow: Bash( !| A prompt)' "$WORK/s4.txt"
+has    "a project's allow rule for Bash acts once the folder is trusted" '! ~/code/a/\.claude/settings\.json Set to run every Bash command without asking, with permissions\.allow: Bash\. Claude Code applies a project.s allow rules once you trust the folder\.' "$WORK/s4.txt"
+has    "and Bash(*) in a local settings file, which needs no trust" '! ~/code/b/\.claude/settings\.local\.json Set to run every Bash command without asking, with permissions\.allow: Bash\(\*\)\. !' "$WORK/s4.txt"
+hasnot "near miss: a rule for some commands, and Bash in deny, are not listed" 'code/c/' "$WORK/s4.txt"
+hasnot "near miss: Bash outside permissions, or in its ask list, is not listed" 'code/d/' "$WORK/s4.txt"
+has    "VS Code's user settings with chat.defaultConfiguration approvals allowAll" '! VS Code Copilot ~/AppData/Roaming/Code/User/settings\.json chat\.defaultConfiguration: allowAll' "$WORK/s4.txt"
+has    "and an Insiders profile with the older autoApprove" '! VS Code Copilot ~/AppData/Roaming/Code - Insiders/User/profiles/abc/settings\.json chat\.defaultConfiguration: autoApprove' "$WORK/s4.txt"
+hasnot "near miss: a profile with only the autopilot mode is not listed" 'profiles/p2' "$WORK/s4.txt"
+has    "a project's chat.defaultConfiguration approvals allowAll is listed in section 2" '! ~/code/e/\.vscode/settings\.json Set to run every tool call without asking in new agent sessions, with chat\.defaultConfiguration: allowAll\.' "$WORK/s4.txt"
+has    "and its older autoApprove"                     '! ~/code/i/\.vscode/settings\.json Set to run every tool call without asking in new agent sessions, with chat\.defaultConfiguration: autoApprove\.' "$WORK/s4.txt"
+hasnot "near miss: manual approvals in a project are not listed" 'code/f/' "$WORK/s4.txt"
+has    "a project's bypass settings for Claude Code's VS Code extension, which it applied before 2.1.225" '! ~/code/g/\.vscode/settings\.json Set to start Claude Code.s VS Code extension in bypassPermissions, with claudeCode\.initialPermissionMode and claudeCode\.allowDangerouslySkipPermissions\. The extension applies them from a project only before version 2\.1\.225\.' "$WORK/s4.txt"
+hasnot "near miss: initialPermissionMode without the allow setting is not listed" 'code/h/' "$WORK/s4.txt"
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/AppData/Roaming/Code/User" "$WORK/dz-unr/AppData/Roaming/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/AppData/Roaming/Code/User/settings.json" > "$WORK/dz-unr/AppData/Roaming/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.

@@ -923,6 +923,8 @@ WORM_REF_NOTE='runs a file a worm plants'
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
+Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|permissions.allow: Bash|\"permissions\": {\"allow\": [\"Bash\"
+Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|permissions.allow: Bash(*)|\"permissions\": {\"allow\": [\"Bash(*)\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access, when the project is trusted|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
@@ -946,17 +948,25 @@ Codex|all|{PROJECT}/.codex/config.toml|full access profile, granular approvals, 
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code - Insiders/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
@@ -1823,10 +1833,12 @@ auto_row() { # file what flattened-text
 # For aa_hit, a .json file's text (one line, spaces removed), then a line for each object that is the
 # value of a top-level key a pattern names as "key": {...: the key, a tab, and that object with every
 # value nested in it emptied ({} or []), so the rest of the pattern matches only directly inside it, as
-# Claude Code reads defaultMode only inside permissions. Strings are split on their quotes as flat
-# splits them (a key with an escaped quote in it is never one a pattern names), and the code between
-# them on each kind of bracket, one character at a time, and the object is printed as it is read:
-# linear on every awk, where building it up as one string is quadratic on macOS's awk.
+# Claude Code reads defaultMode only inside permissions. Then a line for each string directly inside an
+# array that is a value in such an object: the key, a tab, the array's key, a tab and the string, for a
+# pattern written "key": {"sub": ["text" (Claude Code's permissions.allow). Strings are split on their
+# quotes as flat splits them (a key or string with an escaped quote in it is never one a pattern names),
+# and the code between them on each kind of bracket, one character at a time, and the object is printed
+# as it is read: linear on every awk, where building it up as one string is quadratic on macOS's awk.
 aa_keys() { # pattern|pattern...
   AA_P=$1 awk '
     function trail(s) {
@@ -1835,7 +1847,8 @@ aa_keys() { # pattern|pattern...
       return length(s)
     }
     function out(s) { if (cur != "" && dep == 2) printf "%s", s }
-    function ob(c) { if (dep == 1 && c == "{" && (key in want)) { cur = key; printf "%s\t{", cur } else out(c); dep++ }
+    # Inside a wanted object, a value that opens a bracket of its own: which bracket, and the key it is for.
+    function ob(c) { if (dep == 1 && c == "{" && (key in want)) { cur = key; printf "%s\t{", cur } else { out(c); if (cur != "" && dep == 2) { d3 = c; ak = key2 } }; dep++ }
     function cb(c) { dep--; out(c); if (cur != "" && dep == 1) { print "}"; cur = "" } }
     # The code between two strings, its brackets in order: split on {, each part on }, then [ and ].
     function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
@@ -1858,30 +1871,36 @@ aa_keys() { # pattern|pattern...
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); if (match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { want[substr(p[i], 2, RLENGTH - 4)] = 1; nw++ } } }
     { print
       if (!nw) next
-      nq = split($0, q, "\""); st = 0; dep = 0; cur = ""; key = ""; hp = 0
+      nq = split($0, q, "\""); st = 0; dep = 0; cur = ""; key = ""; hp = 0; key2 = ""; hp2 = 0; ne = 0
       for (i = 1; i <= nq; i++) {
         if (st == 0) {            # code: right after a string at the top level, a : makes it the key
           if (hp && q[i] ~ /^:/) key = pv
-          hp = 0; code(q[i])
+          if (hp2 && q[i] ~ /^:/) key2 = pv2
+          hp = 0; hp2 = 0; code(q[i])
           if (i < nq) { out("\""); st = 1; one = 1 }
           continue
         }
         out(q[i])                 # a string, up to a quote that no odd run of \ escapes
         if (dep == 1) pv = one ? q[i] : ""
+        if (dep == 2) pv2 = one ? q[i] : ""
         esc = (i < nq && trail(q[i]) % 2 == 1)
         if (i < nq) out("\"")
         if (esc) { one = 0; continue }
         if (dep == 1) hp = 1
+        if (dep == 2) hp2 = 1
+        if (cur != "" && dep == 3 && d3 == "[" && one) el[++ne] = cur "\t" ak "\t\"" q[i] "\""
         st = 0
       }
       if (cur != "") print ""
+      for (i = 1; i <= ne; i++) print el[i]
     }'
 }
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through flat (comments are its job), and a match starts at the text, a {
 # or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts; a
 # pattern written "key": {... matches its rest the same way, inside that top-level key's object only
-# (aa_keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
+# (aa_keys), and one written "key": {"sub": ["text" matches that string in the array sub holds there,
+# in any place in it, as Claude Code reads permissions.allow. A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
 # comment (so a setting inside an inline table, a profile written as one, does not count; a pattern
 # that ends in { matches the start of a line instead, an inline table's first line), a value in
 # double quotes also matches the same value in single quotes (a TOML literal string), and only the
@@ -1942,7 +1961,8 @@ aa_hit() { # file pattern|pattern...
     }
     BEGIN { n = split(ENVIRON["AA_P"], p, "|")
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); q = p[i]; gsub(/"/, "\047", q)
-        if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { in_[i] = 1; re[i] = "^" lit(substr(p[i], 2, RLENGTH - 4)) "\t(.*[{,])?" lit(substr(p[i], RLENGTH + 1)) "($|[,}#/])" }
+        if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{"[A-Za-z0-9_.-]+":\[/)) { split(p[i], ka, "\""); in_[i] = 1; re[i] = "^" lit(ka[2]) "\t" lit(ka[4]) "\t" lit(substr(p[i], RLENGTH + 1)) "$" }
+        else if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { in_[i] = 1; re[i] = "^" lit(substr(p[i], 2, RLENGTH - 4)) "\t(.*[{,])?" lit(substr(p[i], RLENGTH + 1)) "($|[,}#/])" }
         # !key in a .toml file: the line counts only when no line sets that key.
         else if (toml && substr(p[i], 1, 1) == "!") { neg[i] = 1; re[i] = "^" lit(substr(p[i], 2)) "=" }
         else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")" (p[i] ~ /\{$/ ? "" : "(#|$)") : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
@@ -2021,6 +2041,18 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && aa_hit "$f" '"permissions": {"defaultMode": "bypassPermissions"'; then
     _w="${_w:+$_w, }skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257"
   fi
+  # Claude Code's permissions page: Bash, or Bash(*), in permissions.allow runs every Bash command without
+  # asking. It applies a project's settings.json allow rules once you trust the folder, and a
+  # settings.local.json's (normally your own file) without that step. A rule for some commands
+  # (Bash(npm *)) is not one. The grep spares the files that never name them.
+  _ab=""
+  if printf '%s' "$_t" | grep -qE '"Bash(\(\*\))?"'; then
+    if aa_hit "$f" '"permissions": {"allow": ["Bash"'; then _ab=Bash; elif aa_hit "$f" '"permissions": {"allow": ["Bash(*)"'; then _ab='Bash(*)'; fi
+  fi
+  if [ -n "$_ab" ]; then
+    case "$f" in */settings.local.json) _tr="" ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
+    _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab$_tr"
+  fi
   auto_row "$f" "$_w" "$_t"
 done <<EOF
 $ALLOW_FILES
@@ -2039,17 +2071,28 @@ EOF
 # "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
-# Both are things to look at in a project, not an agent set to run without asking. A file that names
-# neither setting (most do not) is skipped before it is flattened: flat only takes comments out and
-# writes escapes as their characters, so a setting's name stays as written unless it has an escape.
+# "chat.defaultConfiguration" with approvals set to "allowAll" (or its older "autoApprove") starts new
+# agent sessions that run every tool call without asking, and VS Code reads its workspace value too.
+# Claude Code's VS Code extension before 2.1.225 took claudeCode.initialPermissionMode from a workspace's
+# settings (its VS Code docs), and in bypassPermissions started new conversations in bypass mode when
+# claudeCode.allowDangerouslySkipPermissions was on, which a workspace could set as well: neither
+# declared a scope before 2.1.225, and both are machine from then on (its package.json).
+# All are things to look at in a project, not an agent set to run without asking. A file that names
+# none of these settings (most do not) is skipped before it is flattened: flat only takes comments out
+# and writes escapes as their characters, so a setting's name stays as written unless it has an escape.
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
-  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)|\\u|\\/' || continue
+  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove|defaultConfiguration)|claudeCode\.initialPermissionMode|\\u|\\/' || continue
   _w=""
   if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
   elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
   if aa_hit "$f" '"chat.tools.autoApprove": true'; then
     _w="${_w:+$_w, }auto-approve Copilot's tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it"
+  fi
+  if aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "allowAll"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: allowAll"
+  elif aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "autoApprove"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: autoApprove"; fi
+  if aa_hit "$f" '"claudeCode.initialPermissionMode": "bypassPermissions"|"claudeCode.allowDangerouslySkipPermissions": true'; then
+    _w="${_w:+$_w, }start Claude Code's VS Code extension in bypassPermissions, with claudeCode.initialPermissionMode and claudeCode.allowDangerouslySkipPermissions. The extension applies them from a project only before version 2.1.225"
   fi
   [ -n "$_w" ] && auto_row "$f" "$_w" "$(flat "$f")"
 done <<EOF

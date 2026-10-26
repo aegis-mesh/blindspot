@@ -149,6 +149,8 @@ prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf o
 # <<< keys
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
+Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|permissions.allow: Bash|\"permissions\": {\"allow\": [\"Bash\"
+Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|permissions.allow: Bash(*)|\"permissions\": {\"allow\": [\"Bash(*)\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access, when the project is trusted|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
@@ -172,17 +174,25 @@ Codex|all|{PROJECT}/.codex/config.toml|full access profile, granular approvals, 
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code - Insiders/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
