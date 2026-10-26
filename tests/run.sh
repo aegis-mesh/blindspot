@@ -971,6 +971,26 @@ hasnot "nor a settings file of theirs that is a link elsewhere" '~/dots/\.claude
 has    "a project with the same hook is still listed" '~/code/p/\.claude/settings\.json Set to run commands while the agent works' "$WORK/stw.txt"
 has    "section 4 names their saved command under ~/.claude" '✗ ~/\.claude/settings\.json A saved command contains a key' "$WORK/stw.txt"
 has    "and counts it once"                          ' 1 key in allow lists' "$WORK/stw.txt"
+# A key in a Claude Code settings file's env is a key in plain text (section 3), the person's or a
+# project's; one in a permission rule (allow, ask or deny) is a saved command (section 4) and is not
+# counted again in section 3, unless the same key is elsewhere in the file too.
+mkdir -p "$WORK/eky/.claude" "$WORK/eky/code/a/.claude" "$WORK/eky/code/b/.claude" "$WORK/eky/code/c/.claude" "$WORK/eky/code/d/.claude"
+printf '{"env":{"ANTHROPIC_API_KEY":"%s"}}\n' "sk-""ant-api03-$(upper 95)" > "$WORK/eky/.claude/settings.json"
+printf '{"env":{"ANTHROPIC_API_KEY":"%s"},"permissions":{"allow":["Bash(npm test)"]}}\n' "sk-""ant-api03-$(upper 95)" > "$WORK/eky/code/a/.claude/settings.local.json"
+printf '{"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 npm test)"]}}\n' > "$WORK/eky/code/b/.claude/settings.json"
+printf '{"permissions":{"deny":["Bash(curl -H x-api-key:%s x)"]}}\n' "sk-""ant-api03-$(upper 95)" > "$WORK/eky/code/c/.claude/settings.json"
+EKD="sk-""ant-api03-$(upper 95)"
+printf '{"env":{"ANTHROPIC_API_KEY":"%s"},"permissions":{"allow":["Bash(ANTHROPIC_API_KEY=%s claude)"]}}\n' "$EKD" "$EKD" > "$WORK/eky/code/d/.claude/settings.json"; EKD=""
+HOME="$WORK/eky" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/eky.txt"
+has    "a key in the person's Claude Code env is a key in plain text" '✗ ~/\.claude/settings\.json Anthropic' "$WORK/eky.txt"
+hasnot "and not a saved command"                      '✗ ~/\.claude/settings\.json A saved command' "$WORK/eky.txt"
+has    "so is a key in a project's env"               '✗ ~/code/a/\.claude/settings\.local\.json Anthropic' "$WORK/eky.txt"
+hasnot "which is not a saved command either"          'code/a/\.claude/settings\.local\.json A saved command' "$WORK/eky.txt"
+has    "a token in an allow rule is a saved command"  '✗ ~/code/b/\.claude/settings\.json A saved command contains a key' "$WORK/eky.txt"
+has    "a key in a deny rule is a saved command"      '✗ ~/code/c/\.claude/settings\.json A saved command contains a key' "$WORK/eky.txt"
+hasnot "and is not counted again as a key in plain text" '✗ ~/code/c/\.claude/settings\.json Anthropic' "$WORK/eky.txt"
+has    "a key in a rule and in the env counts in both sections" '✗ ~/code/d/\.claude/settings\.json Anthropic .*✗ ~/code/d/\.claude/settings\.json A saved command contains a key' "$WORK/eky.txt"
+has    "the header counts the saved commands only"    ' 3 keys in allow lists' "$WORK/eky.txt"
 # Hooks that run nothing are not commands: an event with an empty list, and hooks in a file whose
 # disableAllHooks is true, unless the project's settings.local.json, which comes first, sets it back to
 # false. It turns off the status line too, not the credential helpers, and counts only at the top of the

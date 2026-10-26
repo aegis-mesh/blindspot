@@ -764,6 +764,19 @@ providers_in() {
       if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
     END { printf "%s", out }'
 }
+# The providers of a Claude Code settings file's keys that are not in its permission rules (cc_rules),
+# which section 4 counts as saved commands. Each match in the rules takes one match of the same key out
+# of the file's, so a key that is also elsewhere in the file still counts. The file is read whole,
+# comments too, as providers_in reads a file, and the keys stay inside the pipe.
+cc_providers() { # file
+  { cc_rules "$1" | grep -aoE "$TR_KEYS" | sed 's/^/R /'; grep -aoE "$TR_KEYS" "$1" 2>/dev/null | sed 's/^/F /'; } | awk "$PROV_AWK"'
+    function norm(s) { sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s); return s }
+    substr($0, 1, 2) == "R " { r[norm(substr($0, 3))]++; next }
+    { k = norm(substr($0, 3)); if (r[k] > 0) { r[k]--; next }
+      p = prov(k); if (p == "") next
+      if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
+    END { printf "%s", out }'
+}
 # Print the files in a newline list that contain a match, in order, with one grep pass.
 files_matching() { # pattern; list on stdin
   tr '\n' '\0' | xargs -0 grep -alE "$1" 2>/dev/null
@@ -771,8 +784,10 @@ files_matching() { # pattern; list on stdin
 inline_secret() {
   grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
 }
+# A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
+# elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
 command_secret() {
-  grep -aoE "$TR_KEYS|$P_ASSIGN" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
+  cc_rules "$1" | grep -aoE "$TR_KEYS|$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -q .
 }
 
 # ---------------------------------------------------------------------------
@@ -1902,6 +1917,62 @@ aa_keys() { # pattern|pattern...
       for (i = 1; i <= ne; i++) print el[i]
     }'
 }
+# The text of a Claude Code settings file's permission rules, permissions.allow, ask and deny (Claude
+# Code's permissions page), each list on a line of its own. The file is read as flat reads it and split
+# as aa_keys splits it, spaces kept, so a command's words stay apart: printed as it is read, linear.
+cc_rules() { # file
+  flat "$1" | awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    function out(s) { if (on) printf "%s", s }
+    function ob(c) {
+      out(c)
+      if (!on && dep == 1 && c == "{" && key == "permissions") perm = 1
+      else if (!on && perm && dep == 2 && c == "[" && (key2 == "allow" || key2 == "ask" || key2 == "deny")) on = 1
+      dep++
+    }
+    function cb(c) { dep--; if (on && dep == 2) { on = 0; print "" } else out(c); if (perm && dep == 1) perm = 0 }
+    function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
+      na = split(s, a, "{")
+      for (i = 1; i <= na; i++) {
+        nb = split(a[i], b, "}")
+        for (j = 1; j <= nb; j++) {
+          nc = split(b[j], c, "[")
+          for (k = 1; k <= nc; k++) {
+            nd = split(c[k], d, "]")
+            for (l = 1; l <= nd; l++) { out(d[l]); if (l < nd) cb("]") }
+            if (k < nc) ob("[")
+          }
+          if (j < nb) cb("}")
+        }
+        if (i < na) ob("{")
+      }
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; key = ""; hp = 0; key2 = ""; hp2 = 0; perm = 0; on = 0
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {            # code: right after a key, a : makes it the key
+          if (hp && q[i] ~ /^[[:space:]]*:/) key = pv
+          if (hp2 && q[i] ~ /^[[:space:]]*:/) key2 = pv2
+          hp = 0; hp2 = 0; code(q[i])
+          if (i < nq) { out("\""); st = 1; one = 1 }
+          continue
+        }
+        out(q[i])                 # a string, up to a quote that no odd run of \ escapes
+        if (dep == 1) pv = one ? q[i] : ""
+        if (dep == 2 && perm) pv2 = one ? q[i] : ""
+        esc = (i < nq && trail(q[i]) % 2 == 1)
+        if (i < nq) out("\"")
+        if (esc) { one = 0; continue }
+        if (dep == 1) hp = 1
+        if (dep == 2 && perm) hp2 = 1
+        st = 0
+      }
+      if (on) print ""
+    }'
+}
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through flat (comments are its job), and a match starts at the text, a {
 # or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts; a
@@ -2187,10 +2258,18 @@ CANDIDATES=$(
 # counts these through fleet_ok, as files not checked, so its not_read leaves them out.
 KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && [ ! -r "$f" ] && printf '%s\n' "$f"; done)
 N_KEY_UNREAD=$(count_lines "$KEY_UNREAD")
-MATCHED=$(printf '%s\n' "$CANDIDATES" | fleet_filter | files_matching "$TR_KEYS")
+# A project's Claude Code settings (section 2 reads them): a key in them, in its env for one, is a key
+# in plain text too, and one in a permission rule a saved command as well (section 4). The person's own
+# under another name (own_cc), plugin folders and files over 16 MB are left out; one that can't be read
+# is named in sections 2 and 4.
+CC_PROJECT=$(printf '%s\n' "$ALLOW_FILES" | while IFS= read -r _f; do
+  case "$_f" in (""|"$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
+  own_cc "$_f" || too_big "$_f" || printf '%s\n' "$_f"
+done)
+MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching "$TR_KEYS")
 # For the report: one place id per file, and one provider id per file and provider.
 KEY_PLACES=""; PROV_TALLY=""
-MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n' "$PROJECT_FILES" | tr '\n' '|')"
+MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n%s\n' "$PROJECT_FILES" "$CC_PROJECT" | tr '\n' '|')"
 key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
   case "$1" in
     "$H/.zshrc"|"$H/.zprofile"|"$H/.zshenv"|"$H/.zlogin"|"$H/.bashrc"|"$H/.bash_profile"|"$H/.profile"|"$H/.config/fish/config.fish")
@@ -2214,7 +2293,8 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
 }
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  _p=$(providers_in "$f")
+  # A Claude Code settings file: the keys in its permission rules are section 4's, as saved commands.
+  case "$f" in */.claude/settings.json|*/.claude/settings.local.json) _p=$(cc_providers "$f") ;; *) _p=$(providers_in "$f") ;; esac
   [ -n "$_p" ] || continue
   KEY_FILES=$((KEY_FILES + 1)); [ -n "$KEY_FIRST" ] || KEY_FIRST="$_p|$f"
   progress x "Key in plain text: $(short "$f") ($_p)"

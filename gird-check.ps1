@@ -343,12 +343,23 @@ function Is-CliOwnKey([string]$f, [string]$k) {
 }
 '@
 . ([scriptblock]::Create($KeyFns))
-function Providers-In([string]$f) {
+# A matched key without what came before it, as Key-Provider reads it.
+function Key-Norm([string]$k) { $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' }
+# The providers of the keys in a file. With $minus, a Claude Code settings file's permission rules
+# (Cc-Rules), each match there takes one match of the same key out of the file's, so a key that is also
+# elsewhere in the file still counts: section 4 counts the rules' keys as saved commands. The same as
+# gird-check.sh's providers_in and cc_providers.
+function Providers-In([string]$f, [string]$minus = '') {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
   $seen = New-Object System.Collections.Generic.List[string]
   try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
+  $skip = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+  if ($minus) {
+    try { foreach ($m in $RxKeys.Matches($minus)) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
+  }
   foreach ($m in $all) {
+    if ($skip.Count -gt 0) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k) -and $skip[$k] -gt 0) { $skip[$k] = $skip[$k] - 1; continue } }
     $p = Key-Provider $m.Value
     if ($p -and -not $seen.Contains($p)) { $seen.Add($p) }
   }
@@ -1383,6 +1394,40 @@ function Json-Top([string]$f, [string]$t, [string]$key) {
   }
   $v
 }
+# The text of a Claude Code settings file's permission rules, permissions.allow, ask and deny (Claude
+# Code's permissions page), each list on a line of its own. Tokens are read as Aa-Keys reads them, spaces
+# kept, so a command's words stay apart. The same as gird-check.sh's cc_rules.
+function Cc-Rules([string]$f) {
+  $t = Flat-Text $f; if ($null -eq $t) { return '' }
+  try { $ms = $RxJsonTok.Matches($t); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  $sb = New-Object System.Text.StringBuilder
+  $dep = 0; $key = $null; $pend = $null; $key2 = $null; $pend2 = $null; $perm = $false; $on = $false
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') {
+      if ($dep -eq 1) { $pend = $x } else { $pend = $null }
+      if ($perm -and $dep -eq 2) { $pend2 = $x } else { $pend2 = $null }
+      if ($on) { [void]$sb.Append($x) }
+      continue
+    }
+    $lead = $x.TrimStart()
+    if ($null -ne $pend -and $lead.StartsWith(':')) { $key = $pend }
+    if ($null -ne $pend2 -and $lead.StartsWith(':')) { $key2 = $pend2 }
+    $pend = $null; $pend2 = $null
+    if ($c -eq '{' -or $c -eq '[') {
+      if ($on) { [void]$sb.Append($c) }
+      elseif ($dep -eq 1 -and $c -eq '{' -and $key -ceq '"permissions"') { $perm = $true }
+      elseif ($perm -and $dep -eq 2 -and $c -eq '[' -and ($key2 -ceq '"allow"' -or $key2 -ceq '"ask"' -or $key2 -ceq '"deny"')) { $on = $true }
+      $dep++
+    } elseif ($c -eq '}' -or $c -eq ']') {
+      $dep--
+      if ($on -and $dep -eq 2) { $on = $false; [void]$sb.Append("`n") }
+      elseif ($on) { [void]$sb.Append($c) }
+      if ($perm -and $dep -eq 1) { $perm = $false }
+    } elseif ($on) { [void]$sb.Append($x) }
+  }
+  $sb.ToString()
+}
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
 # a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts;
@@ -1652,7 +1697,14 @@ foreach ($f in @('.zsh_history', '.bash_history', '.local/share/fish/fish_histor
 # PSReadLine keeps one history file per host: ConsoleHost_history.txt, and one each for VS Code and others.
 $PsrlDir = J $AppData 'Microsoft/Windows/PowerShell/PSReadLine'
 if (Is-Dir $PsrlDir) { try { foreach ($f in ([IO.Directory]::GetFiles($PsrlDir, '*_history.txt') | Sort-Object)) { $ShellHist.Add($f) } } catch { } }
-$ProjectFiles = @($EnvFiles) + @($ProjectMcp)
+# A project's Claude Code settings (section 2 reads them): a key in them, in its env for one, is a key
+# in plain text too, and one in a permission rule a saved command as well (section 4). The person's own
+# under another name (Own-Cc), plugin folders and files over 16 MB are left out; one that can't be read
+# is named in sections 2 and 4.
+$CcProject = @($AllowFiles | Where-Object { -not [IO.Path]::GetDirectoryName($_).Equals($homeClaude, $PathCmp) -and ($_ -replace '\\', '/') -notmatch '/\.claude/plugins/' -and (Is-File $_) -and -not (Too-Big $_) -and -not (Own-Cc $_) })
+$CcProjectSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($f in $CcProject) { [void]$CcProjectSet.Add($f) }
+$ProjectFiles = @($EnvFiles) + @($ProjectMcp) + @($CcProject)
 # Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
 # .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
 # under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data; providers.json at
@@ -1694,10 +1746,12 @@ $KeyPlaces = New-Object System.Collections.Generic.List[string]; $ProvTally = Ne
 $KeyUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $Candidates) {
   if (-not (Has-Match $f $RxKeys)) {
-    if ((Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $KeyUnread.Add($f) }
+    if ((Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f) -and -not $CcProjectSet.Contains($f)) { $KeyUnread.Add($f) }
     continue
   }
-  $p = @(Providers-In $f)
+  # A Claude Code settings file: the keys in its permission rules are section 4's, as saved commands.
+  if ([IO.Path]::GetFileName($f) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) -ceq '.claude') { $p = @(Providers-In $f (Cc-Rules $f)) }
+  else { $p = @(Providers-In $f) }
   if ($p.Count -eq 0) { continue }
   $ptxt = $p -join ', '
   $KEY_FILES++; if ($null -eq $KeyFirst) { $KeyFirst = @($f, $ptxt) }
@@ -1779,6 +1833,11 @@ $AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   if (-not (Has-RealMatch $f $RxCommand)) { continue }
+  # A key in its permission rules (Cc-Rules) is a saved command; one elsewhere, such as its env, is a key
+  # in plain text (section 3) and nothing more.
+  $rules = Cc-Rules $f; $real = $false
+  try { foreach ($m in $RxCommand.Matches($rules)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { $real = $true; break } } } catch { Mark-Slow $f }
+  if (-not $real) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
   $marker = $Sep + '.claude' + $Sep
