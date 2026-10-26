@@ -84,6 +84,12 @@ if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match
 # rewritten through it would come back empty.
 if grep -nE '\$([0-9]+|NF)(\+\+|--)' gird-check.sh gird-fleet.sh > "$WORK/inc.txt"; then bad "no ++ or -- on an awk field, which BusyBox refuses" "$(head -n 3 "$WORK/inc.txt" | tr '\n' '|')"
 else ok "no ++ or -- on an awk field, which BusyBox refuses"; fi
+# gird-fleet.sh's copy of the ownership walk has its home in gird-check.sh: a hand edit to the copy is drift.
+mkdir -p "$WORK/ow"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/ow/"
+sed 's/^    case "\${_oo_m#\* }" in ?\[2367\]?|??\[2367\]) return 1 ;; esac$/    :/' gird-fleet.sh > "$WORK/ow/gird-fleet.sh"
+if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "the edit did not apply"
+elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
+else bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "$(cat "$WORK/ow.txt")"; fi
 
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
@@ -3817,11 +3823,16 @@ hasnot "fleet: a marker that must be its owner's never counts for the Mac" '^mac
 if [ -e /tmp/gh-token-monitor.out.log ] || [ -L /tmp/gh-token-monitor.out.log ]; then
   skip "fleet: and counts for the account that owns it" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
   skip "fleet: but a link there never counts" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
+  skip "fleet: nor a hard link there" "/tmp/gh-token-monitor.out.log is already on this Mac; the test leaves it alone"
 else
   : > /tmp/gh-token-monitor.out.log; fl_run ownmark2; rm -f /tmp/gh-token-monitor.out.log
   has  "fleet: and counts for the account that owns it" '^itadmin\.shared_tmp_wiper_logs=true$' "$FL/ownmark2.flat"
   : > "$FL/itadmin-file"; ln -s "$FL/itadmin-file" /tmp/gh-token-monitor.out.log; fl_run ownmark3; rm -f /tmp/gh-token-monitor.out.log
   hasnot "fleet: but a link there never counts" '^itadmin\.shared_tmp_wiper_logs=true$' "$FL/ownmark3.flat"
+  : > "$FL/itadmin-file2"; ln "$FL/itadmin-file2" /tmp/gh-token-monitor.out.log 2>/dev/null; HL=$?
+  fl_run ownmark4; rm -f /tmp/gh-token-monitor.out.log
+  if [ "$HL" -ne 0 ]; then skip "fleet: nor a hard link there" "can't make a hard link into /tmp from the test folder here"
+  else hasnot "fleet: nor a hard link there" '^itadmin\.shared_tmp_wiper_logs=true$' "$FL/ownmark4.flat"; fi
 fi
 # A machine check that does not answer in time leaves the Mac partly checked.
 users "clean:$U:$FL/clean:/bin/zsh"
@@ -3851,12 +3862,53 @@ s = open(d + '/last.json').read(); open(d + '/last.json', 'w').write(re.sub(r'"c
 open(d + '/attempt', 'w').write('%d 10\n' % (now - 50))
 PY2
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/attempt-old.out" 2>&1
-has    "fleet: --inventory says failed when a later run did not finish by its deadline" '^failed: the run started 20[0-9-]{8}T[0-9:]{5}Z did not finish$' "$FL/attempt-old.out"
+has    "fleet: --inventory says failed when a later run did not finish by its deadline" '^failed: the run started 20[0-9-]{8}T[0-9:]{5}Z did not finish or could not save its result$' "$FL/attempt-old.out"
 python3 -c "import sys, time; open(sys.argv[1], 'w').write('%d 3000\n' % (int(time.time()) - 5))" "$FL/state/attempt"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory > "$FL/attempt-run.out" 2>&1
 has    "fleet: and the last result while that run still has time" '^v1 ' "$FL/attempt-run.out"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --stale-days=31 > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "fleet: --stale-days is at most 30"; else bad "fleet: --stale-days is at most 30" "exit $RC"; fi
+# An account run uses ripgrep only from the admin path (FLL_RG_ADMIN in tests), as a regular file
+# whose folders are real folders, all root's (FLL_RG_ROOTUID stands in for root); otherwise perl.
+users "asha:$U:$FL/asha:/bin/zsh"
+mk_rg() { mkdir -p "$1"; printf '#!/bin/sh\ncase "$1" in --version) echo "ripgrep 14.1.0"; exit 0 ;; esac\n: > "$(dirname "$0")/ran"\nexit 1\n' > "$1/rg"; chmod 755 "$1/rg"; }
+FLP=$(cd "$FL" && pwd -P)   # the test folder without links above it, as /Library is
+for d in rgok rgmine rgw rgacl rgfolder; do mk_rg "$FLP/$d/bin"; done
+chmod 775 "$FLP/rgw/bin"
+mkdir -p "$FLP/rglinkroot/bin"; ln -s /usr/bin/true "$FLP/rglinkroot/bin/rg"
+mkdir -p "$FLP/rgviafolder"; ln -s "$FLP/rgfolder/bin" "$FLP/rgviafolder/bin"
+FLL_RG_ADMIN="$FLP/rgmine/bin/rg" fl_run rgmine
+if grep -q '^asha\.session_engine=perl$' "$FL/rgmine.flat" && [ ! -e "$FLP/rgmine/bin/ran" ]; then ok "fleet: a ripgrep the account owns is never run"; else bad "fleet: a ripgrep the account owns is never run" "$(grep session_engine "$FL/rgmine.flat")"; fi
+FLL_RG_ADMIN="$FLP/rgok/bin/rg" FLL_RG_ROOTUID=$U fl_run rgok
+if grep -q '^asha\.session_engine=rg$' "$FL/rgok.flat" && [ -e "$FLP/rgok/bin/ran" ]; then ok "fleet: a ripgrep root alone can change is used"; else bad "fleet: a ripgrep root alone can change is used" "$(grep session_engine "$FL/rgok.flat")"; fi
+FLL_RG_ADMIN="$FLP/rglinkroot/bin/rg" FLL_RG_ROOTUID=$U fl_run rglinkroot
+has    "fleet: a link at the ripgrep path is never run, even to a root-owned program" '^asha\.session_engine=perl$' "$FL/rglinkroot.flat"
+# A link to a ripgrep that would itself qualify: refused because it is a link, not for what it points to.
+mk_rg "$FLP/rgtarget/bin"; mkdir -p "$FLP/rglinkok/bin"; ln -s "$FLP/rgtarget/bin/rg" "$FLP/rglinkok/bin/rg"
+FLL_RG_ADMIN="$FLP/rglinkok/bin/rg" FLL_RG_ROOTUID=$U fl_run rglinkok
+if grep -q '^asha\.session_engine=perl$' "$FL/rglinkok.flat" && [ ! -e "$FLP/rgtarget/bin/ran" ]; then ok "fleet: a link at the ripgrep path is never followed"; else bad "fleet: a link at the ripgrep path is never followed" "$(grep session_engine "$FL/rglinkok.flat")"; fi
+FLL_RG_ADMIN="$FLP/rgviafolder/bin/rg" FLL_RG_ROOTUID=$U fl_run rgviafolder
+if grep -q '^asha\.session_engine=perl$' "$FL/rgviafolder.flat" && [ ! -e "$FLP/rgfolder/bin/ran" ]; then ok "fleet: a ripgrep reached through a linked folder is never run"; else bad "fleet: a ripgrep reached through a linked folder is never run" "$(grep session_engine "$FL/rgviafolder.flat")"; fi
+FLL_RG_ADMIN="$FLP/rgw/bin/rg" FLL_RG_ROOTUID=$U fl_run rgw
+has    "fleet: a ripgrep in a folder others can write to is not used" '^asha\.session_engine=perl$' "$FL/rgw.flat"
+if chmod +a "everyone allow write" "$FLP/rgacl/bin/rg" 2>/dev/null; then
+  FLL_RG_ADMIN="$FLP/rgacl/bin/rg" FLL_RG_ROOTUID=$U fl_run rgacl; chmod -N "$FLP/rgacl/bin/rg"
+  has  "fleet: a ripgrep whose ACL lets anyone write is not used" '^asha\.session_engine=perl$' "$FL/rgacl.flat"
+else skip "fleet: a ripgrep whose ACL lets anyone write is not used" "chmod +a is not available here"; fi
+# Only the admin path is ever looked at: no Homebrew or /usr/local ripgrep, which an account may re-point.
+sed -n '/^fleet_rg() {/,/^}/p' "$SCRIPT" > "$FL/fleet_rg.txt"
+if grep -q 'Library/Application Support/Blindspot/rg' "$FL/fleet_rg.txt" && ! grep -qE 'homebrew|/usr/local|\.local/bin|\.cargo|abs_path|realpath|readlink' "$FL/fleet_rg.txt"; then ok "fleet: a Homebrew or /usr/local ripgrep is never looked at"; else bad "fleet: a Homebrew or /usr/local ripgrep is never looked at" "$(grep -nE 'homebrew|/usr/local|abs_path' "$FL/fleet_rg.txt")"; fi
+fl_run rgnone
+if grep -q '^asha\.session_engine=perl$' "$FL/rgnone.flat" && grep -q '^asha\.session_files_with_keys=3$' "$FL/rgnone.flat"; then ok "fleet: with no ripgrep that qualifies, perl checks the sessions"; else bad "fleet: with no ripgrep that qualifies, perl checks the sessions" "$(grep -E 'session' "$FL/rgnone.flat" | tr '\n' ' ')"; fi
+# A real ripgrep, where this Mac has one, finds what perl finds (a copy at a test admin path).
+RRG=$(command -v rg 2>/dev/null)
+if [ -z "$RRG" ]; then skip "fleet: a real ripgrep finds the same session keys as perl" "ripgrep is not installed here"
+else
+  mkdir -p "$FLP/rgreal/bin"; cp "$RRG" "$FLP/rgreal/bin/rg"; chmod 755 "$FLP/rgreal/bin/rg"
+  FLL_RG_ADMIN="$FLP/rgreal/bin/rg" FLL_RG_ROOTUID=$U fl_run rgreal
+  if grep -q '^asha\.session_engine=rg$' "$FL/rgreal.flat" && [ "$(grep '^asha\.session_files_with_keys=' "$FL/rgreal.flat")" = "$(grep '^asha\.session_files_with_keys=' "$FL/rgnone.flat")" ] && grep -q '^asha\.sessions_partly_checked=false$' "$FL/rgreal.flat"; then ok "fleet: a real ripgrep finds the same session keys as perl"
+  else bad "fleet: a real ripgrep finds the same session keys as perl" "$(grep -E 'session' "$FL/rgreal.flat" | tr '\n' ' ')"; fi
+fi
 # Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 mkdir -p "$FL/inst700"; cp "$SCRIPT" "$FLEETSH" "$FL/inst700/"; chmod 755 "$FL/inst700/gird-check.sh"; chmod 700 "$FL/inst700/gird-fleet.sh"
@@ -3876,6 +3928,17 @@ if chmod +a "everyone allow add_file,delete_child" "$FL/acl" 2>/dev/null; then
 else skip "fleet: a folder whose ACL lets anyone write is refused" "chmod +a is not available here"; fi
 }
 SKIPPING=""
+# Root tests a path anyone could make as a link before anything that would follow it.
+if python3 - "$FLEETSH" > "$FL/linkorder.txt" <<'PY2'
+import re, sys
+src = open(sys.argv[1]).read()
+bad = []
+for m in re.finditer(r'\[ (!? ?)-[efdrO] "(\$[A-Za-z_][A-Za-z0-9_/.$"{}-]*?)" \] (&&|\|\|) \[ !? ?-L "\2" \]', src):
+    bad.append(m.group(0))
+print("\n".join(bad))
+sys.exit(1 if bad else 0)
+PY2
+then ok "fleet: gird-fleet.sh tests a path for a link before it stats it"; else bad "fleet: gird-fleet.sh tests a path for a link before it stats it" "$(head -n 3 "$FL/linkorder.txt")"; fi
 # gird-check.sh, the script each person runs, carries no root work.
 if grep -v '^[[:space:]]*#' "$SCRIPT" | grep -qE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)'; then bad "gird-check.sh runs no sudo or dscl" "$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -nE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)' | head -n 3)"; else ok "gird-check.sh runs no sudo or dscl"; fi
 bash "$SCRIPT" --all-users > "$FL/cs-all.out" 2> "$FL/cs-all.err"; RC=$?

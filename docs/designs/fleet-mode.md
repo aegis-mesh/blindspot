@@ -62,8 +62,8 @@ files. If `sudo` fails, the account is reported as not checked.
   each start. No account can change the code a later account runs.
 - An account run reads only regular files, and leaves out any over a size limit. A fifo, socket,
   device or oversized file is counted as not checked. Session files are the exception to the size
-  limit: the session check, which uses the system's perl, never ripgrep, reads them in 1 MB pieces
-  whatever their size.
+  limit: the session check reads them whatever their size, with the system's perl (in 1 MB pieces)
+  or with a ripgrep only root can change (see "As built").
 - An account run cannot speak for anyone else. It writes a fixed line format (`key=value`, known keys
   only, numbers, and names from the fixed lists) to a pipe root created. Root reads at most a set
   number of bytes, checks every line against the format, and builds the account's row itself. Any
@@ -250,6 +250,9 @@ real Mac.
   as a process left running; one that let go of the pipe is not seen.
 - A run as `bash /dev/fd/0 < gird-fleet.sh` reads its own source from a path that is not the file;
   it is not refused by name, and is left to the "run it from a file" and ownership checks.
+- The saved result has no lock. Two runs at once can make a finished run read `failed`; a step in
+  the clock can delay or hide `failed`; and a run that was killed leaves the previous result
+  reading as it was until the killed run's deadline passes.
 - Collecting results from many machines in one place. The result is for the MDM's own inventory.
 - Containers, servers and CI runners.
 
@@ -292,7 +295,7 @@ real Mac.
 - The inventory reader is the script itself: `--inventory` (root only) prints the saved inventory
   value, `stale: last run <time>` past `--stale-days` (3 by default, at most 30), `none` before the
   first run, `unreadable` when the saved file is not root's own 0600 file in a 0700 folder, and
-  `failed: the run started <time> did not finish` when a later run's start, saved as
+  `failed: the run started <time> did not finish or could not save its result` when a later run's start, saved as
   `/var/db/blindspot/attempt` with its deadline, is past that deadline with no newer result.
   `--result-tags` wraps it for Jamf Pro.
 - Deployment: the MDM installs both files once in `/Library/Application Support/Blindspot`
@@ -332,12 +335,26 @@ real Mac.
   that through root's own copy of gird-check.sh, which root now empties and gives away before
   deleting it); a running LiteLLM loader counts only when root's own process holds its lock; a
   shell profile that moves an agent's folders leaves the account partly checked; each run is told
-  its time, so its session check stops in time;
-  shared temp entries are looked at as links first and never followed; a `find` or `lsof` that does
-  not answer in time leaves the Mac's row not complete; agents in the account's own install folders
+  its time, so its session check stops in time; every path an account or admin could make is
+  tested as a link first and never followed; a `find` or `lsof` that does not answer in time
+  leaves the Mac's row not complete; agents in the account's own install folders
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A
   normal run of `gird-check.sh` now names a key file it can't read and doesn't call the keys check
   clean over it.
+- Session engine. An account run inherits the Full Disk Access of the MDM agent that started root:
+  macOS judges it by the responsible process, and it passes through `sudo` to the account run and
+  everything it starts. So the account run never runs anything an account could have written or
+  re-pointed. An account can re-point any link in a folder it can write (Homebrew's `bin` belongs to
+  whoever installed Homebrew), and a link to any root-owned program would run that program; some,
+  such as a Python or a Ruby, then load the account's own code, inside the Full Disk Access chain.
+  So ripgrep is used only from `/Library/Application Support/Blindspot/rg`, which the guide installs
+  as an optional, pinned and hash-checked step: as a regular file, not a link, with every folder
+  above it a real folder, all owned by root and writable by no one else, by mode or by ACL. Links
+  are never resolved and no other place is looked at. Otherwise the system perl checks the
+  sessions. The cost: with a large session store (5.2 GB measured on one Mac), minutes per account
+  on perl, seconds with the admin-installed ripgrep. ripgrep gets no handle to root's pipe. Root
+  never runs ripgrep. The account run reports `engine=rg|perl|none`, and the row carries it as
+  `session_engine`; the inventory value does not.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
 - Two files. `gird-fleet.sh` holds all the root work: the fixed PATH, the ownership checks, the

@@ -33,6 +33,11 @@ while [ $# -gt 0 ] && [ "$1" != -H ]; do shift; done; shift
 envv=$1; shift 2   # /usr/bin/env -i
 # Each account's own temp folder, so an account run never looks in the real one of the person testing.
 extra=("GIRD_CHECK_FLEET_USER_TMP=$FLL_DIR/usertmp-$acct")
+# The ripgrep an account run may use sits at the admin path; tests name their own (FLL_RG_ADMIN, by
+# default one that does not exist), so they never depend on this Mac. FLL_RG_ROOTUID stands in for
+# root's uid.
+extra+=("GIRD_CHECK_FLEET_RG_ADMIN=${FLL_RG_ADMIN:-$FLL_DIR/no-admin-rg/rg}")
+[ -n "${FLL_RG_ROOTUID:-}" ] && extra+=("GIRD_CHECK_FLEET_RG_ROOTUID=$FLL_RG_ROOTUID")
 [ -n "${FLL_API:-}" ] && extra+=("GIRD_CHECK_API=$FLL_API" "GIRD_CHECK_WEB=$FLL_API")
 case "$mode" in
   fail) echo "sudo: a password is required" >&2; exit 1 ;;

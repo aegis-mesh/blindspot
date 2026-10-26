@@ -46,6 +46,24 @@ FLEET_REAL=0
 # account's run starts with env -i, so as root no test setting is read or passed on.
 if [ "$EUID" -eq 0 ] || [ "${GIRD_CHECK_FLEET_REAL_ROOT:-}" = 1 ]; then FLEET_REAL=1; fi
 fleet_usage() { printf 'blindspot: %s\n' "$1" >&2; exit "${2:-2}"; }
+# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
+# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
+# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
+owned_only() {
+  _oo_p=$2
+  while :; do
+    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
+    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
+    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
+    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
+    [ "$_oo_p" = / ] && return 0
+    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
+  done
+}
+# <<< owned-walk
 case "$DEADLINE" in ''|[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;; *) fleet_usage "--deadline takes a number of seconds, up to 99999" ;; esac
 case "$STALE_DAYS" in ''|[1-9]|[12][0-9]|30) ;; *) fleet_usage "--stale-days takes a number of days, from 1 to 30" ;; esac
 case "$HASHKEY" in *[!A-Za-z0-9._~+/=-]*) fleet_usage "--hash-accounts takes letters, digits and . _ ~ + / = - only" ;; esac
@@ -78,32 +96,23 @@ fi
   if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
     fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13
   fi
-  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || [ ! -f "$FL_SELF" ]; }; then
+  # Each path an account or admin could make is tested as a link first and never followed.
+  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || { [ ! -L "$FL_SELF" ] && [ ! -f "$FL_SELF" ]; }; }; then
     fleet_usage "run it from a file: it copies gird-check.sh from its own folder for each account" 13
   fi
   # What root runs, and copies for every account, must be root's alone: gird-fleet.sh, gird-check.sh
   # next to it and every folder above them owned by root (the tests' stand-in owns them in a test
-  # run) and writable by nobody else. The mode is read with three digits, so 002 is not read as 2.
-  # Root then copies the path it checked.
+  # run) and writable by nobody else (owned_only). Root then copies the path it checked.
   if [ "$ALLUSERS" -eq 1 ]; then
     _own=0; [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && _own=$EUID
     _d=$(cd "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
     _bad=""; [ -n "$_d" ] && [ ! -L "$FL_SELF" ] || _bad=1
     if [ -z "$_bad" ]; then
       FL_SELF="${_d%/}/${FL_SELF##*/}"; FL_CHECK="${_d%/}/gird-check.sh"
-      [ -f "$FL_CHECK" ] && [ ! -L "$FL_CHECK" ] || fleet_usage "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link" 13
-      set -- "$FL_SELF" "$FL_CHECK"; _p=$_d
-      while :; do set -- "$@" "$_p"; [ "$_p" = / ] && break; _p=${_p%/*}; [ -n "$_p" ] || _p=/; done
+      [ ! -L "$FL_CHECK" ] && [ -f "$FL_CHECK" ] || fleet_usage "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link" 13
+      owned_only "$_own" "$FL_SELF" && owned_only "$_own" "$FL_CHECK" || _bad=1
       # tests only: a path whose mode a test run can't give the script or a folder it must reach
-      [ "$_own" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && set -- "$@" "$GIRD_CHECK_FLEET_CHECK_ALSO"
-      for _q in "$@"; do
-        _m=$(/usr/bin/stat -f '%u %03Lp' "$_q" 2>/dev/null)
-        case "$_m" in "0 "*|"$_own "*) ;; *) _bad=1 ;; esac
-        case "${_m#* }" in [0-7][0-7][0-7]) ;; *) _bad=1 ;; esac
-        case "${_m#* }" in ?[2367]?|??[2367]) _bad=1 ;; esac
-        # An ACL entry that lets anyone write, add or delete counts as writable by someone else.
-        /bin/ls -lde "$_q" 2>/dev/null | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && _bad=1
-      done
+      [ "$_own" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && { owned_only "$_own" "$GIRD_CHECK_FLEET_CHECK_ALSO" || _bad=1; }
     fi
     [ -z "$_bad" ] || fleet_usage "gird-fleet.sh, gird-check.sh and every folder above them must be owned by root and writable by no one else: install them in such a folder and run them from there" 13
     [ -r "$FL_CHECK" ] || fleet_usage "gird-check.sh next to gird-fleet.sh could not be read" 13
@@ -289,7 +298,7 @@ FL_US=$(printf '\037'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
 fl_cleanup() {
   # An account can hard-link the copy it ran under a marker's name in /tmp; emptied and given away first,
   # such a link is left neither root's nor anything.
-  if [ -n "$FL_COPY" ] && [ -f "$FL_COPY" ] && [ ! -L "$FL_COPY" ]; then
+  if [ -n "$FL_COPY" ] && [ ! -L "$FL_COPY" ] && [ -f "$FL_COPY" ]; then
     : > "$FL_COPY" 2>/dev/null; /usr/sbin/chown -h nobody "$FL_COPY" 2>/dev/null || :   # best-effort: a test run is not root
   fi
   [ -n "$FL_TMP" ] && /bin/rm -rf -- "$FL_TMP"
@@ -417,7 +426,7 @@ FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected end"
+FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected engine end"
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -458,6 +467,7 @@ fl_parse() {
       possible|updates|lock_only|remove|tmp_marks) fl_incidents_ok "$_v" || return 1 ;;
       sessions_partial|wiper|moved|tmp_wiper) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
       protected) case "$_v" in ok|refused|unknown) ;; *) return 1 ;; esac ;;
+      engine) case "$_v" in rg|perl|none) ;; *) return 1 ;; esac ;;
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
     case "$_k" in
@@ -467,7 +477,7 @@ fl_parse() {
       allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;;
       planted) FA_planted=$_v ;; possible) FA_possible=$_v ;; incidents) FA_incidents=$_v ;; platforms) FA_platforms=$_v ;;
       on_open) FA_on_open=$_v ;; to_read) FA_to_read=$_v ;; updates) FA_updates=$_v ;; wiper) FA_wiper=$_v ;; lock_only) FA_lock_only=$_v ;; remove) FA_remove=$_v ;;
-      not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;;
+      not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;; engine) FA_engine=$_v ;;
       moved) FA_moved=$_v ;; tmp_marks) FA_tmp_marks=$_v ;; tmp_wiper) FA_tmp_wiper=$_v ;;
     esac
     shift
@@ -475,7 +485,7 @@ fl_parse() {
   [ $# -eq 0 ]
 }
 fl_copy_ok() { # the copy each account runs: owned by root, nobody else can change it
-  [ -d "$FL_COPYDIR" ] && [ ! -L "$FL_COPYDIR" ] && [ -f "$FL_COPY" ] && [ ! -L "$FL_COPY" ] || return 1
+  [ ! -L "$FL_COPYDIR" ] && [ -d "$FL_COPYDIR" ] && [ ! -L "$FL_COPY" ] && [ -f "$FL_COPY" ] || return 1
   [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPYDIR" 2>/dev/null)" = "$FL_OWNER 755" ] || return 1
   # Not its link count: any account can hard-link a file in /tmp, and a link can't change a file
   # root owns at 0644, so counting links would let one account stop every later account's check.
@@ -511,8 +521,8 @@ fl_machine() {
   while IFS='|' read -r _nm _bins _paths _acts _id; do
     [ -n "$_nm" ] || continue
     _hit=0; _ifs=$IFS; IFS=';'
-    for _p in $_paths; do case "$_p" in /Applications/*) [ -e "$_p" ] && _hit=1 ;; esac; done
-    for _b in $_bins; do [ -n "$_b" ] && { [ -e "/usr/local/bin/$_b" ] || [ -e "/opt/homebrew/bin/$_b" ]; } && _hit=1; done
+    for _p in $_paths; do case "$_p" in /Applications/*) { [ -L "$_p" ] || [ -e "$_p" ]; } && _hit=1 ;; esac; done
+    for _b in $_bins; do [ -n "$_b" ] && { [ -L "/usr/local/bin/$_b" ] || [ -e "/usr/local/bin/$_b" ] || [ -L "/opt/homebrew/bin/$_b" ] || [ -e "/opt/homebrew/bin/$_b" ]; } && _hit=1; done
     IFS=$_ifs
     [ "$_hit" -eq 1 ] && FM_AGENTS="$FM_AGENTS $_id"
   done <<EOF
@@ -541,7 +551,7 @@ EOF
         # one root owns under one name is a possible sign for the Mac, as above (gh-token-monitor's logs).
         if [ "$_iown" = yes ]; then
           case "$_ip" in /tmp/*) _ip="$FL_SHARED_TMP/${_ip#/tmp/}" ;; *) continue ;; esac
-          if [ -f "$_ip" ] && [ ! -L "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
             if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
           fi
           continue
@@ -551,7 +561,7 @@ EOF
         # not a link, and then only as a possible sign, as the markers above.
         case "$_ip" in /tmp/*)
           _ip="$FL_SHARED_TMP/${_ip#/tmp/}"
-          if [ -f "$_ip" ] && [ ! -L "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
             if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
           fi
           continue ;;
@@ -565,7 +575,7 @@ EOF
   # The LiteLLM loader holds its lock file open while it runs.
   _lk="$FL_SHARED_TMP/remote_code_loader.lock"
   # Only a lock file root made: one an account owns is that account's marker, found by its own run.
-  if [ -f "$_lk" ] && [ ! -L "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+  if [ ! -L "$_lk" ] && [ -f "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
     fl_timed "${FM_LSOF_S:-10}" "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
     # A running loader is a sign only when root's own process holds the lock: any account can open a
     # root-owned file it can read, and keep it open.
@@ -583,10 +593,10 @@ EOF
 
 # The saved result: /var/db/blindspot/last.json, readable by root only. A folder that is a link,
 # not a folder, or not root's with mode 0700 is moved aside and made again.
-fl_state_ok() { [ -d "$FL_STATE" ] && [ ! -L "$FL_STATE" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$FL_STATE" 2>/dev/null)" = "$FL_OWNER 700" ]; }
+fl_state_ok() { [ ! -L "$FL_STATE" ] && [ -d "$FL_STATE" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$FL_STATE" 2>/dev/null)" = "$FL_OWNER 700" ]; }
 fl_state_prep() {
   if ! fl_state_ok; then
-    if [ -e "$FL_STATE" ] || [ -L "$FL_STATE" ]; then
+    if [ -L "$FL_STATE" ] || [ -e "$FL_STATE" ]; then
       /bin/mv -f -- "$FL_STATE" "$FL_STATE.replaced-$(/bin/date -u +%Y%m%d%H%M%S)-$$" 2>/dev/null || return 1
     fi
     /bin/mkdir -m 700 -- "$FL_STATE" 2>/dev/null || return 1
@@ -606,19 +616,19 @@ fl_attempt() { fl_write attempt "$FL_EPOCH ${DEADLINE:-3000}"; }
 # --inventory: reads the saved result, never scans. An MDM's inventory field shows the line it
 # prints: the inventory value, "stale" when the last run is older than --stale-days (3 by
 # default, at most 30), "none" before the first run, "unreadable" when the file is not root's own,
-# and "failed" when a later run started and did not finish by its deadline.
+# and "failed" when a later run started and did not finish, or could not save, by its deadline.
 # --result-tags puts it between <result> tags.
 fl_inv_out() { if [ "$RESULTTAGS" -eq 1 ]; then printf '<result>%s</result>\n' "$1"; else printf '%s\n' "$1"; fi; }
 fl_unfinished() { # epoch of the last finished run, 0 for none: prints "failed" when a later run stopped part-way
   _a="$FL_STATE/attempt"
-  [ -f "$_a" ] && [ ! -L "$_a" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
+  [ ! -L "$_a" ] && [ -f "$_a" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
   _at=$(/usr/bin/head -c 64 "$_a" | /usr/bin/sed -n '1s/^\([0-9]\{1,12\}\) \([0-9]\{1,5\}\)$/\1 \2/p')
   [ -n "$_at" ] && [ "${_at% *}" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - ${_at% *} )) -gt "${_at#* }" ] || return 1
-  fl_inv_out "failed: the run started $(/bin/date -u -r "${_at% *}" +%Y-%m-%dT%H:%MZ) did not finish"
+  fl_inv_out "failed: the run started $(/bin/date -u -r "${_at% *}" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
 }
 fl_inventory() {
   _f="$FL_STATE/last.json"
-  if [ ! -e "$_f" ] && [ ! -L "$_f" ]; then fl_state_ok && fl_unfinished 0 && return 0; fl_inv_out none; return 0; fi
+  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then fl_state_ok && fl_unfinished 0 && return 0; fl_inv_out none; return 0; fi
   if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(/usr/bin/stat -f '%u %Lp' "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
   _ep=$(/usr/bin/sed -n 's/^  "checked_epoch": \([0-9]\{1,12\}\),$/\1/p' "$_f" | /usr/bin/head -n 1)
   _iv=$(/usr/bin/sed -n 's/^  "inventory": "\([A-Za-z0-9 ._:;,|+-]*\)",$/\1/p' "$_f" | /usr/bin/head -n 1)
@@ -772,7 +782,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"

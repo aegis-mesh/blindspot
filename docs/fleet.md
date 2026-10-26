@@ -170,10 +170,44 @@ The install step has not yet been run end to end on a real Mac.
    exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
    ```
 
+5. **Install ripgrep (optional).** Each account's check reads agent sessions with the system's
+   perl, unless ripgrep is installed at `/Library/Application Support/Blindspot/rg`: there and
+   nowhere else, as a regular file, not a link, root:wheel 0755. A ripgrep anywhere an account can
+   write, or a link an account could re-point, is never run, because each account's check runs
+   with your MDM agent's Full Disk Access. To install a pinned ripgrep, 14.1.1 (published 9
+   September 2024), add these lines to the end of the install script. They download it from the
+   ripgrep release, check its SHA-256 against the hash the release publishes, and install it. If
+   any of that fails they say so and the install carries on without it. This step has not yet been
+   run end to end on a real Mac.
+
+   ```sh
+   blindspot_rg() {
+     v=14.1.1
+     case "$(/usr/bin/uname -m)" in
+       arm64) a=aarch64-apple-darwin; h=24ad76777745fbff131c8fbc466742b011f925bfa4fffa2ded6def23b5b937be ;;
+       x86_64) a=x86_64-apple-darwin; h=fc87e78f7cb3fea12d69072e7ef3b21509754717b746368fd40d88963630e2b3 ;;
+       *) return 1 ;;
+     esac
+     t=$(/usr/bin/mktemp -d) || return 1
+     /usr/bin/curl -fsSL -o "$t/rg.tar.gz" "https://github.com/BurntSushi/ripgrep/releases/download/$v/ripgrep-$v-$a.tar.gz" &&
+       [ "$(/usr/bin/shasum -a 256 "$t/rg.tar.gz" | /usr/bin/awk '{ print $1 }')" = "$h" ] &&
+       /usr/bin/tar -xzf "$t/rg.tar.gz" -C "$t" &&
+       /usr/bin/install -o root -g wheel -m 0755 "$t/ripgrep-$v-$a/rg" "$d/rg"
+     r=$?; /bin/rm -rf "$t"; return "$r"
+   }
+   blindspot_rg || echo "Blindspot: ripgrep was not installed; each account's check uses perl"
+   ```
+
+   This download is your MDM's, once, at install. Blindspot itself still sends nothing anywhere.
+
 Set `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the
-number. Each account gets an equal share of the time left, so one stuck account cannot hold up the
-rest. The run keeps a tenth of the deadline, up to 40 seconds, in reserve for its own steps, which sit
-outside the shares and are timed to fit it, so set the deadline a little below the limit, not at it. Run from standard input instead of a file,
+number. How long an account takes depends on its agent sessions: with a large session store,
+minutes with the system's perl, seconds with the ripgrep "Install ripgrep (optional)" puts at
+`/Library/Application Support/Blindspot/rg`. The default deadline, 3000 seconds, covers both. Each row's
+`session_engine` says which ran. Each account gets an equal share of the time left, so one stuck
+account cannot hold up the rest. The run keeps a tenth of the deadline, up to 40 seconds, in reserve
+for its own steps, which sit outside the shares and are timed to fit it, so set the deadline a little
+below the limit, not at it. Run from standard input instead of a file,
 `gird-fleet.sh` stops with `run it from a file`: it copies `gird-check.sh` from its own folder for
 each account.
 
@@ -225,8 +259,8 @@ then `review`), then as many clear ones as fit, and cuts details before accounts
 details don't fit keeps its outcome, and an `act` one its `wiper` and `incidents` too. It ends with
 `+more` whenever anything was cut. The full result is
 in `/var/db/blindspot/last.json`. The inventory field shows `stale: last run <time>` when the last run
-is older than `--stale-days`, `failed: the run started <time> did not finish` when a later run
-stopped part-way (your MDM's time limit, a restart), `none` before the first run, and `unreadable`
+is older than `--stale-days`, `failed: the run started <time> did not finish or could not save its
+result` when a later run stopped part-way (your MDM's time limit, a restart) or could not save, `none` before the first run, and `unreadable`
 when the saved file is not root's own. Treat each of those, and any outcome your MDM does not show,
 as not checked. An account whose name Blindspot does not read shows as `invalid-name`, not checked.
 
@@ -292,9 +326,9 @@ extension folders or the session check can't open, count as not checked, never a
 (`~/.local/bin`, `~/bin`, npm, Volta, Bun, Deno, pnpm, asdf, mise and nvm) by path. It looks for the
 malware markers in the account's own temp folder, the one macOS gives each account under
 `/var/folders`. The markers in `/tmp` that must be the person's own, such as gh-token-monitor's logs,
-count for the account that owns them under one name, never through a link, and only as a possible
-sign: another account can hard-link one of this account's files there, once the original is renamed
-away. The clean environment drops any variable that moves an agent's folders, such as
+count for the account that owns them under one name, never through a link, symbolic or hard, and
+only as a possible sign: another account can hard-link one of this account's files there, once the
+original is renamed away. The clean environment drops any variable that moves an agent's folders, such as
 `CLAUDE_CONFIG_DIR`: when a shell profile sets one, the account reads partly checked. Each run is
 told its time, so its session check stops in time and what it found still counts, with the sessions
 partly checked. `sudo` writes one line to the system log for each account.

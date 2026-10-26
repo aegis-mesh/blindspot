@@ -1427,9 +1427,42 @@ sess_filter() { # [rg]
     }'
 }
 SESS_ENGINE=none; SESS_RC=""
-RG_BIN=$(type -P rg 2>/dev/null); [ "$ACCTRUN" -eq 1 ] && RG_BIN=""   # an account run uses the system perl
+RG_BIN=$(type -P rg 2>/dev/null)
+# >>> owned-walk: this function's home; tools/gen.sh copies it into gird-fleet.sh.
+# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
+# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
+# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
+owned_only() {
+  _oo_p=$2
+  while :; do
+    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
+    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
+    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
+    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
+    [ "$_oo_p" = / ] && return 0
+    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
+  done
+}
+# <<< owned-walk
+# An account run inherits the Full Disk Access of the MDM agent that started root, so it runs
+# nothing an account could have written or re-pointed: ripgrep only from the path an admin installs
+# it to, as a regular file, not a link, with every folder above it a real folder, all root's and
+# writable by no one else (docs/designs/fleet-mode.md, Session engine). Otherwise perl.
+fleet_rg() {
+  _ru=0
+  case "${GIRD_CHECK_FLEET_RG_ROOTUID:-}" in ''|*[!0-9]*) ;; *) _ru=$GIRD_CHECK_FLEET_RG_ROOTUID ;; esac   # tests only: stands in for root
+  _rc=${GIRD_CHECK_FLEET_RG_ADMIN:-/Library/Application Support/Blindspot/rg}
+  case "$_rc" in /*) ;; *) return 1 ;; esac
+  [ ! -L "$_rc" ] && [ -f "$_rc" ] || return 1
+  _p=${_rc%/*}
+  while [ -n "$_p" ]; do [ -L "$_p" ] && return 1; _p=${_p%/*}; done
+  owned_only "$_ru" "$_rc" && printf '%s' "$_rc"
+}
+[ "$ACCTRUN" -eq 1 ] && RG_BIN=$(fleet_rg)
 if [ -n "$GIRD_CHECK_SESSIONS_ENGINE" ]; then SESS_ENGINE=$GIRD_CHECK_SESSIONS_ENGINE
-elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null | sed -n '1s/^ripgrep \([0-9]*\).*/\1/p')" -ge 13 ] 2>/dev/null; then SESS_ENGINE=rg
+elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null 3>&- | sed -n '1s/^ripgrep \([0-9]*\).*/\1/p')" -ge 13 ] 2>/dev/null; then SESS_ENGINE=rg
 elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
 [ "$SESS_ENGINE" = rg ] && [ -z "$RG_BIN" ] && SESS_ENGINE=none
 [ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
@@ -1453,9 +1486,10 @@ EOF
     SESS_FILTER_PID=$!
     # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
     # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed. The
-    # patterns are byte patterns, as perl and grep read them under LC_ALL=C.
+    # patterns are byte patterns, as perl and grep read them under LC_ALL=C. 3>&-: in an account run
+    # fd 3 is root's pipe, and ripgrep gets no handle to it.
     "$RG_BIN" -a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
-      -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+      -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null 3>&- &
     SESS_PID=$!
     [ "$WIN" -eq 1 ] && SESS_WIN=1
   else
@@ -7080,8 +7114,9 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   [ "$_ik" = startup ] && case " $PY_INCIDENTS " in *" $_ii "*) continue ;; esac
   case "$_io" in all|"$_os") ;; *) continue ;; esac
   # Shared places are root's, except a marker that must be this person's own (checked just below).
-  # A link there could point at any account's file, so an account run never counts one.
-  if [ "$ACCTRUN" -eq 1 ]; then case "$_ip" in "$H"/*) ;; *) [ "$_iown" = yes ] && [ ! -L "$_ip" ] || continue ;; esac; fi
+  # A link there, symbolic or hard, could be any account's file: an account run counts only a
+  # regular file, not a link, and only under its one name (just below).
+  if [ "$ACCTRUN" -eq 1 ]; then case "$_ip" in "$H"/*) ;; *) [ "$_iown" = yes ] && [ ! -L "$_ip" ] && [ -f "$_ip" ] || continue ;; esac; fi
   [ -n "$_ip" ] && [ -e "$_ip" ] || continue
   # A marker that must be this person's own counts only under its one name: in a shared folder, a link,
   # symbolic or hard, could put another person's file under it.
@@ -7563,6 +7598,7 @@ EOF
     echo "tmp_marks=$(printf '%s\n' $FLEET_TMPMARK | fleet_ids)"
     echo "tmp_wiper=$FLEET_TMPWIPER"
     echo "protected=$FLEET_PROT"
+    echo "engine=$SESS_ENGINE"
     echo "end=1"
   } >&3
   exit 0
