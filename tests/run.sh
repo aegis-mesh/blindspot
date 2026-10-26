@@ -1897,6 +1897,29 @@ has    "a pipe at a key file's place is named as not read" '! No AI or cloud key
 has    "and a pipe at an MCP config's place in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: ~/\.cursor/mcp\.json' "$WORK/ff.txt"
 has    "and one at Claude Code's settings in section 4" '! No saved commands with keys in the files read, but 1 file could not be read: ~/\.claude/settings\.json' "$WORK/ff.txt"
 hasnot "a history file linked to /dev/null is not named as not read" '~/\.bash_history' "$WORK/ff.txt"
+# An agent folder that can't be entered (made 000, or left root's by a run with sudo) hides what is in
+# it, and the home scan skips ~/.cursor and ~/.codeium: each key file, MCP config or settings file whose
+# place is behind such a folder, the nearest one on its way, is named as not read in the rows that read
+# it, so they don't read clean. A file in a folder that can be entered but not listed is read as usual,
+# and one missing from it is not named.
+rm -rf "$WORK/cl" "$WORK/cl2"; mkdir -p "$WORK/cl/.cursor" "$WORK/cl/.codeium/windsurf" "$WORK/cl2/.claude" "$WORK/cl2/.gemini"
+printf '{"mcpServers":{"github":{"command":"npx","env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"%s"}}}}\n' "$(sed -n 3p "$WORK/keys.txt")" > "$WORK/cl/.cursor/mcp.json"
+printf '{"mcpServers":{}}\n' > "$WORK/cl/.codeium/windsurf/mcp_config.json"; printf '{"permissions":{"allow":[]}}\n' > "$WORK/cl2/.claude/settings.local.json"
+printf '{"apiKey":"%s"}\n' "AI""za$(rnd 35)" > "$WORK/cl2/.gemini/settings.json"
+chmod 000 "$WORK/cl/.cursor" "$WORK/cl/.codeium" "$WORK/cl2/.claude"; chmod 311 "$WORK/cl2/.gemini"
+for _c in cl cl2; do
+  HOME="$WORK/$_c" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_c.txt"
+  HOME="$WORK/$_c" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_c-c.txt"
+done
+chmod 755 "$WORK/cl/.cursor" "$WORK/cl/.codeium" "$WORK/cl2/.claude" "$WORK/cl2/.gemini"
+has    "an MCP config in an agent folder that can't be entered is named in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: [^!]*~/\.cursor/mcp\.json' "$WORK/cl.txt"
+has    "and row 02 does not read clean over it"        'MCP servers .*but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
+has    "a key file behind such a folder, deeper down, is named in section 3" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.codeium/windsurf/mcp_config\.json' "$WORK/cl.txt"
+has    "and row 03 does not read clean over it"        'Keys in plain text none found, but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
+has    "Claude Code's settings in a folder that can't be entered are named in section 4" '! No saved commands with keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.claude/settings\.local\.json' "$WORK/cl2.txt"
+has    "and row 04 does not read clean over them"      'Allow lists none found, but [0-9]+ files? could not be read' "$WORK/cl2-c.txt"
+has    "a key file in a folder that can be entered but not listed is read" '~/\.gemini/settings\.json Google' "$WORK/cl2.txt"
+hasnot "and a file missing from it is not named as not read" '~/\.gemini/\.env' "$WORK/cl2.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "checks from the incident dossier"

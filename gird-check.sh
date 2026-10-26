@@ -2071,13 +2071,25 @@ CANDIDATES=$(
     printf '%s\n' "$PROJECT_FILES"
   } | awk 'NF && !seen[$0]++'
 )
+# A path behind a folder on its way that is there but can't be entered (an agent folder made 000, or
+# left root's by a run with sudo): whether a file is there can't be told. The nearest folder on its
+# way that is there is the one that counts, as a stat of the path meets it.
+behind_closed() { # path
+  _bc=$1
+  while :; do
+    case "$_bc" in */*) _bc=${_bc%/*} ;; *) return 1 ;; esac
+    [ -n "$_bc" ] || return 1
+    if [ -d "$_bc" ]; then [ ! -x "$_bc" ]; return; fi
+  done
+}
 # A file that is there but not read: one that can't be read (a root-owned .env a container wrote, a
-# file made 000), or a pipe, socket or device (a fifo made at ~/.zsh_history), as only a regular
-# file is read. A link to nothing, a folder, and /dev/null (where people link a history file to keep
-# none, and which holds nothing) are none of these.
+# file made 000), a pipe, socket or device (a fifo made at ~/.zsh_history), as only a regular file is
+# read, or one behind a folder that can't be entered. A link to nothing, a folder, and /dev/null
+# (where people link a history file to keep none, and which holds nothing) are none of these.
 not_read() { # path
   if [ -f "$1" ]; then [ ! -r "$1" ]; return; fi
-  [ -e "$1" ] && [ ! -d "$1" ] && ! [ "$1" -ef /dev/null ]
+  if [ -e "$1" ]; then [ ! -d "$1" ] && ! [ "$1" -ef /dev/null ]; return; fi
+  behind_closed "$1"
 }
 # Such a file was not checked: section 3 names it and the check is partial, never "no keys". An
 # account run counts these through fleet_ok, as files not checked, so its not_read leaves them out.

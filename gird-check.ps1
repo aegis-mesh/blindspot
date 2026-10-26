@@ -335,10 +335,23 @@ function Is-Special([string]$p) {
   if ($t -ceq '/dev/null') { return $false }
   -not (Is-PlainFile $t)
 }
-# A file that is there but not read, as gird-check.sh's not_read: one that can't be read, or a pipe,
-# socket or device. A link to nothing and a folder are neither.
+# A path behind a folder on its way that is there but can't be entered (an agent folder made 000, or
+# left root's by a run with sudo): whether a file is there can't be told, as gird-check.sh's
+# behind_closed reads it. Its attributes then can't be read for want of access, where a path with
+# nothing there fails as not found.
+function Behind-Closed([string]$p) {
+  try { [void][IO.File]::GetAttributes($p); return $false } catch {
+    $xe = $_.Exception
+    while ($xe) { if ($xe -is [UnauthorizedAccessException]) { return $true }; $xe = $xe.InnerException }
+    return $false
+  }
+}
+# A file that is there but not read, as gird-check.sh's not_read: one that can't be read, a pipe,
+# socket or device, or one behind a folder that can't be entered. A link to nothing and a folder are
+# none of these.
 function Not-Read([string]$f) {
-  (Is-File $f) -and $null -eq (Read-Text $f) -and ((Is-RegularFile $f) -or (Is-Special $f))
+  if (Is-File $f) { return ($null -eq (Read-Text $f)) -and ((Is-RegularFile $f) -or (Is-Special $f)) }
+  Behind-Closed $f
 }
 function Has-Match([string]$f, [regex]$rx) {
   if ($SlowFiles.Contains($f)) { return $false }
