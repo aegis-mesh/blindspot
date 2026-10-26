@@ -1262,7 +1262,8 @@ SESS_PRE=$KEY_STARTS
 # found inside a folder are not followed, as ripgrep does not follow them.
 # One perl parent lists the files newest first and forks workers, each with its own pipe back to
 # the parent, which is the only writer to its output, so lines never interleave. A worker prints K
-# (a match) and then D (done) for a file, Z for a compressed one or U for one it can't open; the
+# (a match) and then D (done) for a file, Z for a compressed one (.zst, as Codex compresses a session
+# older than a week, or .gz) or U for one it can't open; the
 # parent prints T (the total) first, and S (the folders it could not open, whose files are not in
 # the total) when there are any. Before printing, control characters become ? in a file name and a
 # space in a match, so neither a hostile folder name nor a newline or tab that happens to be the
@@ -1298,7 +1299,7 @@ for my $w (0 .. $n - 1) {
     FILE: for (my $i = $w; $i < @f; $i += $n) {
       exit 0 unless $alive->();
       my $file = $f[$i]; (my $fn = $file) =~ tr/\x00-\x1f\x7f/?/;
-      if ($file =~ /\.zst$/) { print "Z\t$fn\n"; next }
+      if ($file =~ /\.(zst|gz)$/) { print "Z\t$fn\n"; next }
       my $h; unless (open($h, "<", $file)) { print "U\t$fn\n"; next }
       binmode $h; local $/ = \1048576; my $buf = "";
       my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { (my $k = $&) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n" } } };
@@ -6808,7 +6809,7 @@ EOF
     # Counted by the NUL after each name, so a newline in a file name counts once. -H follows a
     # location that is a link, as ripgrep does, and no link found inside a folder.
     SESS_TOTAL=$(find -H "${_rs[@]}" -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
-    SESS_ZST=$(find -H "${_rs[@]}" -type f -name '*.zst' -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+    SESS_ZST=$(find -H "${_rs[@]}" -type f \( -name '*.zst' -o -name '*.gz' \) -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
     # ripgrep reports no progress per file: it finished (0 or 1), finished but could not read
     # some file or folder (2), or was stopped before the end.
     case "$SESS_RC" in 0|1) SESS_DONE=$((SESS_TOTAL - SESS_ZST)) ;; 2) SESS_DONE=$((SESS_TOTAL - SESS_ZST)); SESS_UNREAD=-1 ;; *) SESS_DONE=-1 ;; esac

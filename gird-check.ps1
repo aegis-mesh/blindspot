@@ -991,7 +991,8 @@ $SessWorker = {
     if ($st.Stop) { break }
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
-    if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
+    # Compressed (.zst, as Codex compresses a session older than a week, or .gz): not read, counted.
+    if ($f.Name.EndsWith('.zst') -or $f.Name.EndsWith('.gz')) { $st.Zst++; continue }
     # An empty file holds nothing: it counts as read once it opens, as perl's open does, and one that
     # can't be opened was not read. Never a link: Windows gives a link's own size, 0.
     if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
@@ -6137,7 +6138,7 @@ $SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [i
 if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
   $cnt = @{ Skipped = 0; Stop = $false }
   $sessAll = Sess-List $SessRoots $cnt
-  $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.Name.EndsWith('.zst') }).Count; $SESS_UNREAD = [int]$cnt.Skipped
+  $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.Name.EndsWith('.zst') -or $_.Name.EndsWith('.gz') }).Count; $SESS_UNREAD = [int]$cnt.Skipped
   # rg.exe reports no progress per file: it finished (0 or 1), finished but could not read some
   # file or folder (2), or was stopped before the end.
   if ($SessEngine -eq 'none' -or $SessSt.Failed) { $SESS_NOTRUN = $SESS_TOTAL; $SESS_DONE = 0 }

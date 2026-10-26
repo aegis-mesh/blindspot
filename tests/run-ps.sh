@@ -401,6 +401,9 @@ for D in zst zst1 aq kiro aqk unr3 aidur; do mkdir -p "$SE/$D/AppData/Roaming" "
 mkdir -p "$SE/zst/.codex/sessions/2026/10" "$SE/zst1/.codex/sessions/2026/10"
 printf '{}\n' > "$SE/zst/.codex/sessions/2026/10/rollout-a.jsonl"; printf 'x' > "$SE/zst/.codex/sessions/2026/10/rollout-b.jsonl.zst"
 printf 'x' > "$SE/zst1/.codex/sessions/2026/10/rollout-b.jsonl.zst"
+# A gzip session file is compressed too: the key in it can't be read, so it is named as not checked.
+mkdir -p "$SE/gz/.claude/projects/p" "$SE/gz/AppData/Roaming" "$SE/gz/AppData/Local/Temp"; printf '{}\n' > "$SE/gz/.claude/projects/p/a.jsonl"
+printf '{"t":"OPENAI_API_KEY=%s"}\n' "s""k-proj-$(rnd 130)" | gzip -c > "$SE/gz/.claude/projects/p/b.jsonl.gz"
 # Amazon Q CLI keeps temporary AWS credentials for its own telemetry in its database, and so does
 # Kiro CLI: an ASIA key id there is not a key an agent read. A long-term key or another provider's
 # key in that database still counts. Real SQLite files, built by python3; keys from pieces.
@@ -427,6 +430,8 @@ for E in net rg; do
   has    "$E: and a compressed session makes the summary row partly checked" 'Keys in plain text none in files; agent sessions partly checked' "$SE/zst-sum-$E.txt"
   psrun "$SE/zst1" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst1-$E.txt"
   hasnot "$E: a home with only compressed sessions is never told no keys" 'No keys in' "$SE/zst1-$E.txt"
+  psrun "$SE/gz" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/gz-$E.txt"
+  has    "$E: a gzip session file is named as not checked, as a compressed one" 'No keys in 1 agent session file\. ! 1 compressed session file was not checked' "$SE/gz-$E.txt"
   psrun "$SE/aq" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/aq-$E.txt" 2>&1
   has    "$E: Amazon Q's own telemetry key in its database is not counted" 'No keys in 1 agent session file\.' "$SE/aq-$E.txt"
   psrun "$SE/kiro" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/kiro-$E.txt" 2>&1
