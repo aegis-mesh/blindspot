@@ -331,3 +331,5 @@ fleet: a link at the ripgrep path is never run, even to a root-owned program	gir
 fleet: a ripgrep reached through a linked folder is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a Homebrew or /usr/local ripgrep is never looked at	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a link at the ripgrep path is never followed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker folder in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

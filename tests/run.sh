@@ -1842,7 +1842,7 @@ hasnot "and nothing names guardrails-ai as found"    'GUARDRAILS|guardrails-ai 0
 cp -R "$WORK/clean" "$WORK/lmark"; mkdir -p "$WORK/lmark/tmp"; : > "$WORK/lmark/tmp/.pc_once_1"
 HOME="$WORK/lmark" TMPDIR="$WORK/lmark/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmark.txt"
 has    "finds a malware marker in TEMP"               'LiteLLM 1\.107\.0 +signs of the malware found ~/tmp/\.pc_once_1' "$WORK/lmark.txt"
-has    "with LiteLLM's own advice"                    'These files mean the malware ran here, and a \.pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
+has    "with LiteLLM's own advice"                    'These markers mean the malware ran here, and a \.pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/lmark.txt"
 hasnot "a marker alone names no environment to stop"  "Don't run Python or pip in these environments" "$WORK/lmark.txt"
 # A link in the shared temp folder to another user's file is not this person's sign.
 cp -R "$WORK/clean" "$WORK/lmo"; mkdir -p "$WORK/lmo/tmp"; ln -s /etc/passwd "$WORK/lmo/tmp/.pc_once_1"
@@ -1866,6 +1866,15 @@ has    "a hard link to this person's own file under a marker's name is not a hit
 cp -R "$WORK/clean" "$WORK/lms"; mkdir -p "$WORK/lms/tmp"; : > "$WORK/lms/notes.txt"; ln -s "$WORK/lms/notes.txt" "$WORK/lms/tmp/.pc_once_1"
 HOME="$WORK/lms" TMPDIR="$WORK/lms/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lms.txt"
 has    "nor a symbolic link to it" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lms.txt"
+# LiteLLM's .pc_sq_ and .pc_e_ markers are folders (its issue's IOC table calls them temp dirs): one
+# this person owns counts, as a file does, since a folder can't be hard-linked; a link to one does not.
+cp -R "$WORK/clean" "$WORK/lmd"; mkdir -p "$WORK/lmd/tmp/.pc_sq_abc123" "$WORK/lmd/tmp/.pc_e_def456"
+HOME="$WORK/lmd" TMPDIR="$WORK/lmd/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmd.txt"
+has    "a LiteLLM marker folder this person owns is a hit" 'LiteLLM 1\.107\.0 +signs of the malware found' "$WORK/lmd.txt"
+has    "and both folders are listed"                  '\.pc_e_def456.*\.pc_sq_abc123|\.pc_sq_abc123.*\.pc_e_def456' "$WORK/lmd.txt"
+cp -R "$WORK/clean" "$WORK/lmdl"; mkdir -p "$WORK/lmdl/tmp" "$WORK/lmdl/notes"; ln -s "$WORK/lmdl/notes" "$WORK/lmdl/tmp/.pc_sq_abc123"
+HOME="$WORK/lmdl" TMPDIR="$WORK/lmdl/tmp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmdl.txt"
+has    "a link to a folder under a marker's name is not a hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmdl.txt"
 # A version read from a folder name is printed with control characters replaced.
 cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"
 HOME="$WORK/esc" bash "$SCRIPT" --offline --full > "$WORK/esc.txt" 2>&1
@@ -3931,6 +3940,14 @@ has    "fleet: and its account is to review, not act now" '^gw\.outcome=review$'
 has    "fleet: a malware marker in the account's own temp folder counts for that account" '^tm\.incidents=litellm$' "$FL/own.flat"
 hasnot "fleet: and not for the Mac" '^machine\.incidents=.*litellm' "$FL/own.flat"
 rm -rf "$FL/usertmp-tm"
+# LiteLLM's .pc_sq_ marker is a folder: in the account's own temp folder it counts as a file does, and
+# one root owns in the shared temp folder is a possible sign for the Mac, as a file is.
+mkdir -p "$FL/usertmp-tm/.pc_sq_abc123" "$FL/sharedtmp/.pc_e_def456"
+users "tm:$U:$FL/tm:/bin/zsh"
+fl_run ownd
+rm -rf "$FL/usertmp-tm" "$FL/sharedtmp/.pc_e_def456"
+has    "fleet: a marker folder in the account's own temp folder counts for that account" '^tm\.incidents=litellm$' "$FL/ownd.flat"
+has    "fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac" '^machine\.possible_signs=litellm$' "$FL/ownd.flat"
 
 # Project settings that act when a folder opens, a file named like a worm's, a version to update and
 # the gh-token-monitor wiper reach the account's row, as they reach the one-person report.

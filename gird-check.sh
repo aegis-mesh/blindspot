@@ -1225,10 +1225,10 @@ litellm|all|site|no|cook.pth|-
 litellm|all|site|no|cook.py|-
 litellmmar|all|site|no|litellm_init.pth|-
 litellmmar|all|startup|no|$H/.config/sysmon/sysmon.py|the backdoor the March LiteLLM malware leaves, which a systemd service starts at login on Linux
-litellm|all|temp|yes|remote_code_loader.lock|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm|all|temp|yes|.pc_once_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm|all|temp|yes|.pc_sq_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm|all|temp|yes|.pc_e_*|These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm|all|temp|yes|remote_code_loader.lock|These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm|all|temp|yes|.pc_once_*|These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm|all|temp|yes|.pc_sq_*|These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm|all|temp|yes|.pc_e_*|These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 mistralpy|linux|temp|yes|transformers.pyz|Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.
 guardrails|linux|temp|yes|transformers.pyz|SafeDep shows guardrails-ai 0.10.1 writing this file on Linux and running it. Guardrails AI says to treat such a machine as compromised: rotate every credential it could reach and check your GitHub account for workflows, repositories or commits you did not make.
 durabletask|linux|temp|yes|managed.pyz|Wiz lists this file as the payload it downloads: stop any python3 process running /tmp/managed.pyz, then rotate every secret this machine could reach and rebuild it, as GitHub's malware advisory says.
@@ -2823,9 +2823,10 @@ for t in /tmp "${TMPDIR%/}" "$WTEMP" "$_utmp"; do
       [ -e "$m" ] || continue
       # Another user's file in the shared /tmp is not this person's sign (owner yes in
       # data/indicators.tsv), and nor is one linked, symbolically or hard, under a marker's name; %TEMP%
-      # on Windows is the person's own folder.
+      # on Windows is the person's own folder. A folder can't be hard-linked, so one this person owns
+      # counts: LiteLLM's .pc_sq_ and .pc_e_ markers are folders.
       if [ "$_own" = yes ] && [ "$WIN" -eq 0 ]; then
-        [ -O "$m" ] && [ ! -L "$m" ] && [ -n "$(find "$m" -prune -links 1 -print 2>/dev/null)" ] || continue
+        [ -O "$m" ] && [ ! -L "$m" ] && { [ -d "$m" ] || [ -n "$(find "$m" -prune -links 1 -print 2>/dev/null)" ]; } || continue
         # In fleet mode, another account can leave a file of this account's under a marker's name in the
         # shared /tmp (a hard link to it, once the original is renamed away): a possible sign there.
         if [ "$ACCTRUN" -eq 1 ] && [ "$t" = /tmp ] && [ "$t" != "$_utmp" ]; then FLEET_TMPMARK="$FLEET_TMPMARK $_i"; continue; fi

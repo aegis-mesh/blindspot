@@ -2996,7 +2996,7 @@ has    "finds 1.107.0 in the python.org install folder" 'signs of the LiteLLM ma
 cp -R "$WORK/clean" "$WORK/mark"; : > "$WORK/mark/AppData/Local/Temp/.pc_once_1"
 psrun "$WORK/mark" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mark.txt"
 has    "finds a malware marker in TEMP"        'LiteLLM 1\.107\.0 +signs of the malware found ~/AppData/Local/Temp/\.pc_once_1' "$WORK/mark.txt"
-has    "with LiteLLM's own advice"             'These files mean the malware ran here, and a \.pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/mark.txt"
+has    "with LiteLLM's own advice"             'These markers mean the malware ran here, and a \.pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader\.lock\. Don.t run Python or pip in the environment that had litellm 1\.107\.0 until cook\.pth, cook\.py, sitecustomize\.py and their compiled copies in __pycache__ are deleted from it\. Advisory: docs\.litellm\.ai' "$WORK/mark.txt"
 hasnot "a marker alone names no environment to stop" "Don't run Python or pip in these environments" "$WORK/mark.txt"
 # A link in the shared temp folder to another user's file is not this person's sign.
 cp -R "$WORK/clean" "$WORK/lmo"; ln -s /etc/passwd "$WORK/lmo/AppData/Local/Temp/.pc_once_1"
@@ -3020,6 +3020,15 @@ has    "a hard link to this person's own file under a marker's name is not a hit
 cp -R "$WORK/clean" "$WORK/lms"; : > "$WORK/lms/notes.txt"; ln -s "$WORK/lms/notes.txt" "$WORK/lms/AppData/Local/Temp/.pc_once_1"
 psrun "$WORK/lms" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lms.txt"
 has    "nor a symbolic link to it" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lms.txt"
+# LiteLLM's .pc_sq_ and .pc_e_ markers are folders (its issue's IOC table calls them temp dirs): one
+# this person owns counts, as a file does, since a folder can't be hard-linked; a link to one does not.
+cp -R "$WORK/clean" "$WORK/lmd"; mkdir -p "$WORK/lmd/AppData/Local/Temp/.pc_sq_abc123" "$WORK/lmd/AppData/Local/Temp/.pc_e_def456"
+psrun "$WORK/lmd" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmd.txt"
+has    "a LiteLLM marker folder this person owns is a hit" 'LiteLLM 1\.107\.0 +signs of the malware found' "$WORK/lmd.txt"
+has    "and both folders are listed"                  '\.pc_e_def456.*\.pc_sq_abc123|\.pc_sq_abc123.*\.pc_e_def456' "$WORK/lmd.txt"
+cp -R "$WORK/clean" "$WORK/lmdl"; mkdir -p "$WORK/lmdl/notes"; ln -s "$WORK/lmdl/notes" "$WORK/lmdl/AppData/Local/Temp/.pc_sq_abc123"
+psrun "$WORK/lmdl" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lmdl.txt"
+has    "a link to a folder under a marker's name is not a hit" 'LiteLLM 1\.107\.0 +no signs' "$WORK/lmdl.txt"
 
 echo "saving the report"
 mkdir -p "$WORK/cwd"

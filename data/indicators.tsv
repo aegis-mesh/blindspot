@@ -9,10 +9,11 @@
 #                      malware, and must be in the home folder (~) with owner no
 #             site     a file in any Python environment's site-packages: a Python incident's hit
 #             temp     an entry in /tmp, TMPDIR or %TEMP%: a Python incident's hit. May end in *
-#   owner     yes: counts only if this person owns it (for files in the shared /tmp; %TEMP% on Windows is the
-#             person's own folder, so there it always counts). no otherwise
+#   owner     yes: counts only if this person owns it (a file under its one name, or a folder, which can't be
+#             hard-linked, in the shared /tmp; %TEMP% on Windows is the person's own folder, so there it always
+#             counts). no otherwise
 #   path      wiper and startup: a file or folder, with the path tokens data/sessions.tsv uses, an
-#             absolute path, or {PROGRAMDATA} (Windows' ProgramData). site and temp: a file name
+#             absolute path, or {PROGRAMDATA} (Windows' ProgramData). site and temp: a file or folder name
 #   note      startup: what the file does, as shown under it. temp: what to do about the files, from the
 #             incident's advisory, shown under the incident's row when they are found (the temp lines of one
 #             incident carry the same note). - for wiper and site
@@ -60,9 +61,8 @@
 # and their %TEMP% copies have no line, as for the AntV wave, nor %USERPROFILE%\.bun\bin\bun.exe, where
 # Bun's own installer puts Bun.
 # durabletask 1.4.1 to 1.4.3: Wiz's post on it, which names /tmp/managed.pyz, the payload it downloads (as
-# GitHub's malware advisory does). Not its /tmp/rope-*.pyz (a temp line's * may only end the name), its
-# /tmp/.rope_state folder (a temp line in the shared /tmp counts a file this person owns under one name,
-# never a folder), its ~/.cache/.sys-update-check markers (no kind fits a marker in the home folder: it
+# GitHub's malware advisory does). Not its /tmp/rope-*.pyz (a temp line's * may only end the name), nor, for
+# now, its /tmp/.rope_state folder, its ~/.cache/.sys-update-check markers (no kind fits a marker in the home folder: it
 # starts nothing, and a temp line is in the temp folder), nor its systemd unit, pgsql-monitor.service,
 # whose folder no source gives and whose name monitoring tools can use.
 # telnyx 4.87.2: Telnyx's own advisory, which names ~/.config/audiomon/audiomon.py (Linux and macOS),
@@ -97,10 +97,10 @@ litellm	all	site	no	cook.pth	-
 litellm	all	site	no	cook.py	-
 litellmmar	all	site	no	litellm_init.pth	-
 litellmmar	all	startup	no	~/.config/sysmon/sysmon.py	the backdoor the March LiteLLM malware leaves, which a systemd service starts at login on Linux
-litellm	all	temp	yes	remote_code_loader.lock	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm	all	temp	yes	.pc_once_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm	all	temp	yes	.pc_sq_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
-litellm	all	temp	yes	.pc_e_*	These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm	all	temp	yes	remote_code_loader.lock	These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm	all	temp	yes	.pc_once_*	These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm	all	temp	yes	.pc_sq_*	These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
+litellm	all	temp	yes	.pc_e_*	These markers mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don't run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.
 mistralpy	linux	temp	yes	transformers.pyz	Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.
 guardrails	linux	temp	yes	transformers.pyz	SafeDep shows guardrails-ai 0.10.1 writing this file on Linux and running it. Guardrails AI says to treat such a machine as compromised: rotate every credential it could reach and check your GitHub account for workflows, repositories or commits you did not make.
 durabletask	linux	temp	yes	managed.pyz	Wiz lists this file as the payload it downloads: stop any python3 process running /tmp/managed.pyz, then rotate every secret this machine could reach and rebuild it, as GitHub's malware advisory says.
