@@ -207,3 +207,4 @@ fleet: a real ripgrep finds the same session keys as perl	gird-check.ps1 has no 
 fleet: a link at the ripgrep path is never run, even to a root-owned program	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a ripgrep reached through a linked folder is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a Homebrew or /usr/local ripgrep is never looked at	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a link at the ripgrep path is never followed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

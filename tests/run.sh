@@ -1346,6 +1346,10 @@ FLL_RG_ADMIN="$FLP/rgok/bin/rg" FLL_RG_ROOTUID=$U fl_run rgok
 if grep -q '^asha\.session_engine=rg$' "$FL/rgok.flat" && [ -e "$FLP/rgok/bin/ran" ]; then ok "fleet: a ripgrep root alone can change is used"; else bad "fleet: a ripgrep root alone can change is used" "$(grep session_engine "$FL/rgok.flat")"; fi
 FLL_RG_ADMIN="$FLP/rglinkroot/bin/rg" FLL_RG_ROOTUID=$U fl_run rglinkroot
 has    "fleet: a link at the ripgrep path is never run, even to a root-owned program" '^asha\.session_engine=perl$' "$FL/rglinkroot.flat"
+# A link to a ripgrep that would itself qualify: refused because it is a link, not for what it points to.
+mk_rg "$FLP/rgtarget/bin"; mkdir -p "$FLP/rglinkok/bin"; ln -s "$FLP/rgtarget/bin/rg" "$FLP/rglinkok/bin/rg"
+FLL_RG_ADMIN="$FLP/rglinkok/bin/rg" FLL_RG_ROOTUID=$U fl_run rglinkok
+if grep -q '^asha\.session_engine=perl$' "$FL/rglinkok.flat" && [ ! -e "$FLP/rgtarget/bin/ran" ]; then ok "fleet: a link at the ripgrep path is never followed"; else bad "fleet: a link at the ripgrep path is never followed" "$(grep session_engine "$FL/rglinkok.flat")"; fi
 FLL_RG_ADMIN="$FLP/rgviafolder/bin/rg" FLL_RG_ROOTUID=$U fl_run rgviafolder
 if grep -q '^asha\.session_engine=perl$' "$FL/rgviafolder.flat" && [ ! -e "$FLP/rgfolder/bin/ran" ]; then ok "fleet: a ripgrep reached through a linked folder is never run"; else bad "fleet: a ripgrep reached through a linked folder is never run" "$(grep session_engine "$FL/rgviafolder.flat")"; fi
 FLL_RG_ADMIN="$FLP/rgw/bin/rg" FLL_RG_ROOTUID=$U fl_run rgw
