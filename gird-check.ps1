@@ -5648,6 +5648,11 @@ function Add-NpmRoot([string]$r) {
 }
 foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'),
     '/opt/homebrew/lib/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules')) { Add-NpmRoot $r }
+# Claude Code's npm "local" install, which its migrate-installer command puts in the local folder of its
+# config folder: CLAUDE_CONFIG_DIR, else ~/.claude (Claude Code 2.0.0's code), or $XDG_CONFIG_HOME/claude
+# when that is set (1.0.30's).
+Add-NpmRoot (J (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'local') 'node_modules')
+if (-not $env:CLAUDE_CONFIG_DIR -and $env:XDG_CONFIG_HOME -and $env:XDG_CONFIG_HOME.StartsWith('/')) { Add-NpmRoot (J $env:XDG_CONFIG_HOME 'claude/local/node_modules') }
 # Folders holding one folder per version or package, and where node_modules sits in each.
 $NpmGlobs = New-Object System.Collections.Generic.List[object]
 foreach ($g in @(@('.nvm/versions/node', 'lib/node_modules'), @('.volta/tools/image/node', 'lib/node_modules'), @('.volta/tools/image/packages', 'lib/node_modules'),

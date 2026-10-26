@@ -6273,6 +6273,11 @@ _npm_roots=$(
            "$H/.bun/install/global/node_modules"; do
     npm_root "$r"
   done
+  # Claude Code's npm "local" install, which its migrate-installer command puts in the local folder of its
+  # config folder: CLAUDE_CONFIG_DIR, else ~/.claude (Claude Code 2.0.0's code), or $XDG_CONFIG_HOME/claude
+  # when that is set (1.0.30's).
+  npm_root "${CLAUDE_CONFIG_DIR:-$H/.claude}/local/node_modules"
+  case "${XDG_CONFIG_HOME:-}" in (/*) [ -n "${CLAUDE_CONFIG_DIR:-}" ] || npm_root "${XDG_CONFIG_HOME%/}/claude/local/node_modules" ;; esac
   npm_roots_in "$H/.nvm/versions/node" lib/node_modules; npm_roots_in "$H/.volta/tools/image/node" lib/node_modules
   npm_roots_in "$H/.volta/tools/image/packages" lib/node_modules; npm_roots_in "$H/.local/share/fnm/node-versions" installation/lib/node_modules
   npm_roots_in "$H/Library/Application Support/fnm/node-versions" installation/lib/node_modules

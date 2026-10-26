@@ -2095,6 +2095,16 @@ psrun "$WORK/mrx" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mrx.txt"
 hasnot "mcp-remote 0.1.20, which only an advisory with no fix covers, has no row" 'mcp-remote 0\.1\.20' "$WORK/mrx.txt"
 has    "an MCP config in a plugin catalog is not a configured server" 'No MCP servers configured\.' "$WORK/mrx.txt"
 hasnot "and mcp-remote named there is not a tool to update" 'mcp-remote 0\.1\.10|Tools with a security fix' "$WORK/mrx.txt"
+# Claude Code's npm "local" install, which its migrate-installer command puts in the local folder of its
+# config folder (~/.claude/local, or CLAUDE_CONFIG_DIR's, by Claude Code's own code): its version is read as
+# a global install's is.
+rm -rf "$WORK/ccl"; cp -R "$WORK/clean" "$WORK/ccl"; mkdir -p "$WORK/ccl/.claude/local/node_modules/@anthropic-ai/claude-code" "$WORK/ccl/cfg/local/node_modules/@anthropic-ai/claude-code"
+printf '{"name":"@anthropic-ai/claude-code","version":"2.0.0"}\n' > "$WORK/ccl/.claude/local/node_modules/@anthropic-ai/claude-code/package.json"
+printf '{"name":"@anthropic-ai/claude-code","version":"1.0.3"}\n' > "$WORK/ccl/cfg/local/node_modules/@anthropic-ai/claude-code/package.json"
+psrun "$WORK/ccl" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ccl.txt"
+psrun "$WORK/ccl" CLAUDE_CONFIG_DIR="$WORK/ccl/cfg" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ccl-cfg.txt"
+has    "Claude Code's npm local install in ~/.claude/local is read" '! Claude Code 2\.0\.0, update to 2\.1\.260 or later' "$WORK/ccl.txt"
+has    "and the one in CLAUDE_CONFIG_DIR's local folder when that is set" '! Claude Code 1\.0\.3, update to 2\.1\.260 or later' "$WORK/ccl-cfg.txt"
 hasnot "the old chat.tools.autoApprove in user settings is not reported: VS Code 1.104 and later ignore it" 'Code/User/settings\.json' "$D"
 hasnot "a project's chat.tools.global.autoApprove is not reported: VS Code reads it from user settings only" 'p/global/' "$D"
 # A link to an authorized_keys that does not exist yet still counts: an agent writing through it
