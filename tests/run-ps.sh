@@ -78,7 +78,8 @@ has    "reads Cline's config under AppData"    'Cline in Cursor ~/AppData/Roamin
 has    "and counts its servers"                '^ {56}3 servers$' "$OUT"
 has    "reads Goose's config under AppData"    'Goose +~/AppData/Roaming/Block/goose/config/config\.yaml' "$OUT"
 has    "counts MCP servers in total"           'MCP SERVERS +14 servers' "$OUT"
-has    "spots a token in an MCP config"        'Cursor +~/\.cursor/mcp\.json +1 server, token in the file' "$OUT"
+tr -s ' \n' '  ' < "$OUT" > "$OUT.flat"   # a row's detail can wrap under itself
+has    "spots a token in an MCP config"        'Cursor ~/\.cursor/mcp\.json 1 server, token in the file' "$OUT.flat"
 has    "flags a key in a Claude allow list"    'code/app/\.claude/settings\.local\.json' "$OUT"
 has    "warns an npm publish would ship it"    'npm publish from this folder would include it' "$OUT"
 hasnot "ignores placeholder allow lists"       'code/lib/\.claude' "$OUT"

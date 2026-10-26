@@ -38,7 +38,8 @@ for B in $BASHES; do
   hasnot "ignores placeholders in .env.example"  'env\.example' "$OUT"
   has    "counts Claude Code MCP servers"        'Claude Code +~/\.claude\.json +3 servers' "$OUT"
   has    "counts Codex MCP servers"              '~/\.codex/config\.toml +2 servers' "$OUT"
-  has    "spots a token in an MCP config"        'token in the file' "$OUT"
+  tr -s ' \n' '  ' < "$OUT" > "$OUT.flat"   # a row's detail can wrap under itself
+  has    "spots a token in an MCP config"        'Cursor ~/\.cursor/mcp\.json 1 server, token in the file' "$OUT.flat"
   has    "flags a key in a Claude allow list"    'code/app/\.claude/settings\.local\.json' "$OUT"
   has    "warns an npm publish would ship it"    'npm publish from this folder would include it' "$OUT"
   hasnot "ignores placeholder allow lists"       'code/lib/\.claude' "$OUT"
