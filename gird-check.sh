@@ -1003,10 +1003,19 @@ EOF
   _ld='for d; do case "${d##*/}" in .claude) n="settings.json settings.local.json $BS_PC" ;; *) n="tasks.json settings.json $BS_PV" ;; esac
     if [ -d "$d" ] && [ ! -x "$d" ]; then printf "find: %s: Permission denied\n" "$d" >&2; continue; fi
     for f in $n; do if [ -e "$d/$f" ] || [ -L "$d/$f" ]; then printf "S %s\n" "$d/$f"; fi; done; done'
+  # A project's .tox folder holds its tox environments (.tox/<env>, tox's env_dir): sh prints the
+  # pyvenv.cfg of each, as the scan finds a venv's, and nothing else in .tox is read. A folder there it
+  # can't enter is named in find's own words.
+  # shellcheck disable=SC2016  # $d and $e are for the sh that find starts
+  _tz='for d; do if [ ! -r "$d" ] || [ ! -x "$d" ]; then printf "find: %s: Permission denied\n" "$d" >&2; continue; fi
+    for e in "$d"/* "$d"/.[!.]*; do [ -d "$e" ] && [ ! -L "$e" ] || continue
+      if [ ! -x "$e" ]; then printf "find: %s: Permission denied\n" "$e" >&2
+      elif [ -f "$e/pyvenv.cfg" ] && [ ! -L "$e/pyvenv.cfg" ]; then printf "%s\n" "$e/pyvenv.cfg"; fi; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
     _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
     [ -e "$H/.ssh/authorized_keys" ] && _lk=(\( -ilname '*authorized_keys' -o ! -lname '/*' -o -lname "$H/*" \) -exec printf 'L %s\n' {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); fi
+    _tx=(-exec sh -c "$_tz" sh {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -1030,12 +1039,13 @@ EOF
   _nl=$'\n'
   # shellcheck disable=SC2016  # $1 is the folder, for the sh that find starts
   BS_PC=$_pc BS_PV=$_pv find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
+    \( -type d -name .tox -prune "${_tx[@]}" \) -o \
     \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
-       -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
+       -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock -o -name bun.lockb -o -name deno.lock \
        -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.vscode/settings.json' "${_pf[@]}" -o -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json \
@@ -1064,7 +1074,9 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
 # Tables the checks below read. tools/gen.sh writes the same tables into gird-fleet.sh.
 # ---------------------------------------------------------------------------
 case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
-_pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-}"); _pd=${_pd%/}; fi
+# Git Bash, MSYS2 and Cygwin uppercase only a few Windows variables' names (PROGRAMFILES and SYSTEMDRIVE
+# among them, their runtime's environ.cc), so ProgramData keeps its Windows spelling.
+_pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-${ProgramData:-}}"); _pd=${_pd%/}; fi
 # Coding agents: name | commands | install paths | folders that change when it is used | id
 # Windsurf became Devin Desktop on 2 June 2026: Devin.app, the devin-desktop command, and editor data
 # under Devin, not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
@@ -1515,7 +1527,10 @@ ak_link() { # link
 # Code writes .claude/settings.local.json itself.
 AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^[LS] //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) ak_link "$_f" && printf '%s\n' "$_f" ;; esac; done)
 FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LSN] ')
-LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
+LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|deno\.lock)$')
+# bun's binary lockfile (bun.lockb, its default before bun 1.2) can't be read: it is named as not read,
+# unless a bun.lock is beside it, which bun reads first (its lockfile loader) and which is read here.
+LOCKB=$(printf '%s\n' "$FOUND" | grep -E '/bun\.lockb$' | while IFS= read -r _f; do [ -e "${_f%/*}/bun.lock" ] || printf '%s\n' "$_f"; done)
 TASK_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
 # name projects use too (setup.mjs) counts in a project that also holds one of those, or when the file
@@ -1580,7 +1595,7 @@ VSC_SETTINGS=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/setting
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
-FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|deno\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -2264,6 +2279,7 @@ $H/.local/share/uv
 # folders on Linux.
 if [ "$WIN" -eq 1 ]; then
   PY_ROOTS="$PY_ROOTS
+$H/.pyenv/pyenv-win/versions
 $H/pipx
 $WLAPP/pipx
 $WAPP/uv
@@ -2286,11 +2302,47 @@ $_xc/pypoetry/virtualenvs
 $_xd/virtualenvs
 $_xd/hatch/env/virtual"
 fi
+# asdf's, mise's, micromamba's, pipx's and uv's own folders, as each documents them: asdf's data folder's
+# installs/python (ASDF_DATA_DIR, else ~/.asdf); mise's (MISE_INSTALLS_DIR, else the installs of its
+# data folder: MISE_DATA_DIR, else XDG_DATA_HOME/mise, %LOCALAPPDATA%\mise on Windows); micromamba's
+# root (MAMBA_ROOT_PREFIX, else ~/micromamba, else the mamba folder of its data folder, %APPDATA% on
+# Windows) and Mambaforge's ~/mambaforge; pipx's home (PIPX_HOME, else ~/.local/pipx, else its data
+# folder: XDG_DATA_HOME/pipx, ~/Library/Application Support/pipx on a Mac) and its global home
+# (PIPX_GLOBAL_HOME, else /opt/pipx); uv's data folder (XDG_DATA_HOME/uv, %APPDATA%\uv on Windows) with
+# its UV_TOOL_DIR and UV_PYTHON_INSTALL_DIR.
+py_dir() { # a setting's value, printed when it is an absolute path (or a Windows one, on Windows)
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    [A-Za-z]:[\\/]*) [ "$WIN" -eq 1 ] && winpath "$1" && echo ;;
+  esac
+}
+_ad=$(py_dir "${ASDF_DATA_DIR:-}"); [ -n "$_ad" ] || _ad="$H/.asdf"
+_md=$(py_dir "${MISE_DATA_DIR:-}")
+if [ "$WIN" -eq 1 ]; then
+  [ -n "$_md" ] || _md="$WLAPP/mise"
+  PY_ROOTS="$PY_ROOTS
+$WAPP/mamba"
+else
+  [ -n "$_md" ] || _md="$_xd/mise"
+  PY_ROOTS="$PY_ROOTS
+$_xd/mamba
+$_xd/pipx
+$H/Library/Application Support/pipx
+$_xd/uv
+/opt/pipx"
+fi
+_mi=$(py_dir "${MISE_INSTALLS_DIR:-}"); [ -n "$_mi" ] || _mi="$_md/installs"
+PY_ROOTS="$PY_ROOTS
+$_ad/installs/python
+$_mi/python
+$H/micromamba
+$H/mambaforge"
 # Each tool's own setting moves its folder: POETRY_VIRTUALENVS_PATH (or POETRY_CACHE_DIR's virtualenvs),
-# pipenv's WORKON_HOME and HATCH_DATA_DIR's env/virtual.
-for _pv in "${POETRY_VIRTUALENVS_PATH:-}" "${POETRY_CACHE_DIR:+$POETRY_CACHE_DIR/virtualenvs}" "${WORKON_HOME:-}" "${HATCH_DATA_DIR:+$HATCH_DATA_DIR/env/virtual}"; do
-  case "$_pv" in /*) PY_ROOTS="$PY_ROOTS
-$_pv" ;; esac
+# pipenv's WORKON_HOME, HATCH_DATA_DIR's env/virtual, and those above.
+for _pv in "${POETRY_VIRTUALENVS_PATH:-}" "${POETRY_CACHE_DIR:+$POETRY_CACHE_DIR/virtualenvs}" "${WORKON_HOME:-}" "${HATCH_DATA_DIR:+$HATCH_DATA_DIR/env/virtual}" \
+           "${MAMBA_ROOT_PREFIX:-}" "${PIPX_HOME:-}" "${PIPX_GLOBAL_HOME:-}" "${UV_TOOL_DIR:-}" "${UV_PYTHON_INSTALL_DIR:-}"; do
+  _pv=$(py_dir "$_pv"); [ -n "$_pv" ] && PY_ROOTS="$PY_ROOTS
+${_pv%/}"
 done
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
@@ -2307,11 +2359,29 @@ telnyx 4.87.1 telnyx none
 telnyx 4.87.2 telnyx all"
 PY_INCIDENTS="litellm litellmmar mistralpy guardrails lightning durabletask telnyx"
 # <<< bad-pypi
+# A folder the walks below could not enter (find's error), or the folder on the way to a root that can't
+# be read, is printed as "?<TAB>folder" and counted as an environment not read (PY_UNREAD), never as one
+# with no signs. find's errors are taken apart from what it prints and read once it has exited, so no
+# line of one can land inside a line of the other.
+py_find() { # find arguments: what find prints, then a "?<TAB>folder" line for each folder it could not enter
+  { _pe=$(find "$@" 2>&1 1>&3 3>&-); } 3>&1
+  [ -n "$_pe" ] || return 0
+  printf '%s\n' "$_pe" | awk '/^find: .*: (Permission denied|Operation not permitted)$/ { p = $0; sub(/^find: /, "", p)
+    sub(/: (Permission denied|Operation not permitted)$/, "", p); if (p ~ /^\047.*\047$/) p = substr(p, 2, length(p) - 2); print "?\t" p }'
+}
+py_blocked() { # root: "?<TAB>folder" for the nearest folder on its way that exists, when that can't be read
+  _bd=$1
+  while :; do
+    case "$_bd" in */*) _bd=${_bd%/*} ;; *) return 0 ;; esac
+    [ -n "$_bd" ] || return 0
+    if [ -d "$_bd" ]; then { [ -r "$_bd" ] && [ -x "$_bd" ]; } || printf '?\t%s\n' "$_bd"; return 0; fi
+  done
+}
 SITES_ALL=$(
   {
     printf '%s\n' "$SITES"
     printf '%s\n' "$VENVS" | while IFS= read -r v; do
-      [ -n "$v" ] && find "$v" -maxdepth 4 -type d -name site-packages -prune -print 2>/dev/null
+      [ -n "$v" ] && py_find "$v" -maxdepth 4 -type d -name site-packages -prune -print
     done
     for sp in /opt/homebrew/lib/python3*/site-packages /usr/local/lib/python3*/site-packages \
               /Library/Frameworks/Python.framework/Versions/*/lib/python3*/site-packages \
@@ -2319,11 +2389,26 @@ SITES_ALL=$(
               /usr/lib/python3/dist-packages /usr/lib/python3*/site-packages /usr/local/lib/python3*/dist-packages; do
       [ -d "$sp" ] && printf '%s\n' "$sp"
     done
-    printf '%s\n' "$PY_ROOTS" | while IFS= read -r r; do
-      [ -d "$r" ] && find "$r" -maxdepth 6 \( -name node_modules -prune \) -o \( -type d \( -name site-packages -o -name dist-packages \) -prune -print \) 2>/dev/null
+    # On Windows, the places gird-check.ps1 reads by name: the Microsoft Store Python's user site and the
+    # Pythons installed for every user in %ProgramFiles%, %ProgramFiles(x86)% and the system drive's root.
+    if [ "$WIN" -eq 1 ]; then
+      for sp in "$WLAPP"/Packages/PythonSoftwareFoundation.Python.3*/LocalCache/local-packages/Python3*/site-packages; do
+        [ -d "$sp" ] && printf '%s\n' "$sp"
+      done
+      for _wf in "${PROGRAMFILES:-}" "$(printenv 'ProgramFiles(x86)' 2>/dev/null)" "${SYSTEMDRIVE:+$SYSTEMDRIVE\\}"; do
+        _wf=$(py_dir "$_wf"); _wf=${_wf%/}; [ -n "$_wf" ] || continue
+        for sp in "$_wf"/Python3*/Lib/site-packages; do [ -d "$sp" ] && printf '%s\n' "$sp"; done
+      done
+    fi
+    printf '%s\n' "$PY_ROOTS" | awk '!s[$0]++' | while IFS= read -r r; do
+      [ -n "$r" ] || continue
+      if [ -d "$r" ]; then py_find "$r" -maxdepth 6 \( -name node_modules -prune \) -o \( -type d \( -name site-packages -o -name dist-packages \) -prune -print \)
+      else py_blocked "$r"; fi
     done
   } | grep -v '^$' | sort -u
 )
+PY_WALK_UNREAD=$(printf '%s\n' "$SITES_ALL" | sed -n "s/^?$TAB//p")
+SITES_ALL=$(printf '%s\n' "$SITES_ALL" | grep -v "^?$TAB")
 # Python incidents (data/bad-pypi.tsv and the site and temp lines of data/indicators.tsv). LITE_BAD
 # and MARKS hold "incident<TAB>what was found"; PY_UPD holds "incident<TAB>os<TAB>what was found" for
 # a bad version installed where its malware could not run (bad-pypi's os column): a version to
@@ -2386,6 +2471,16 @@ EOF
 "; break; }; done
 done <<EOF
 $SITES_ALL
+EOF
+# Each folder the walks could not enter is an environment not read, as an unreadable site-packages is.
+py_unread() { # "?<TAB>folder" lines: each one counts in PY_UNREAD (an account run counts it as not checked)
+  while IFS= read -r _u; do
+    _u=${_u#\?$TAB}; [ -n "$_u" ] || continue
+    PY_UNREAD=$((PY_UNREAD + 1)); [ -n "$FLEET_NR" ] && printf '%s\n' "$_u" >> "$FLEET_NR"
+  done
+}
+py_unread <<EOF
+$PY_WALK_UNREAD
 EOF
 MARKS=""; _seen_t="|"; FLEET_TMPMARK=""; FLEET_TMPWIPER=0
 # An account run looks in the account's own temp folder, the one macOS gives each account under
@@ -2457,14 +2552,23 @@ while read -r _n _v _i _o; do
 done <<EOF
 $BAD_PYPI
 EOF
+# uv's cache: UV_CACHE_DIR, else XDG_CACHE_HOME/uv (~/.cache/uv), %LOCALAPPDATA%\uv\cache on Windows.
+_uvc=$(py_dir "${UV_CACHE_DIR:-}"); _uvc=${_uvc%/}
+_uvx=""; [ "$WIN" -eq 1 ] || _uvx="$_xc/uv"
 _uvf=""
 if [ "${#_uvn[@]}" -gt 0 ]; then
-  for _uc in "$H/.cache/uv" ${WLAPP:+"$WLAPP/uv/cache"}; do
-    [ -d "$_uc" ] || continue
-    _uvf="$_uvf$(find "$_uc" -maxdepth 6 \( "${_uvn[@]}" \) -print 2>/dev/null)
-"
-  done
+  while IFS= read -r _uc; do
+    if [ -d "$_uc" ]; then _uvf="$_uvf$(py_find "$_uc" -maxdepth 6 \( "${_uvn[@]}" \) -print)
+"; else _uvf="$_uvf$(py_blocked "$_uc")
+"; fi
+  done <<EOF
+$(printf '%s\n' "$_uvc" "$_uvx" "$H/.cache/uv" "${WLAPP:+$WLAPP/uv/cache}" | awk 'NF && !s[$0]++')
+EOF
 fi
+py_unread <<EOF
+$(printf '%s\n' "$_uvf" | grep "^?$TAB" | sort -u)
+EOF
+_uvf=$(printf '%s\n' "$_uvf" | grep -v "^?$TAB")
 UV_BAD=""; UV_HIT=""
 while read -r _n _v _i _o; do
   [ -n "$_i" ] || continue
@@ -6241,7 +6345,7 @@ npm_hits() {
       if (k in bad) t = bad[k]; else if (nm in any) t = any[nm]
       if (t != "" && !((FILENAME "|" k) in seen)) { seen[FILENAME "|" k] = 1; fn = FILENAME; gsub(/[[:cntrl:]]/, "?", fn); print fn "\t" nm " " v "\t" t }
     }
-    FNR == 1 { over = 0; depth = 0; pend = ""; yn = "" }
+    FNR == 1 { over = 0; depth = 0; pend = ""; pnm = 0; yn = "" }
     FILENAME ~ /pnpm-lock\.yaml$/ && /^[^ #]/ { over = ($0 ~ /^overrides:/) }
     FILENAME ~ /bun\.lock$/ {
       if (over) { o = $0; depth += gsub(/\{/, "", o); o = $0; depth -= gsub(/\}/, "", o); if (depth <= 0) over = 0; next }
@@ -6261,11 +6365,28 @@ npm_hits() {
     FILENAME ~ /yarn\.lock$/ && yn != "" && match($0, /^[ \t]+version "[^"]+"/) {
       v = substr($0, RSTART, RLENGTH); sub(/^[ \t]+version "/, "", v); sub(/"$/, "", v); hit(yn, v); yn = ""
     }
+    # Every "key": { on a line is read, in order, so a lockfile npm writes on one line (with
+    # format-package-lock=false) reads as a pretty-printed one does: the piece before each { can hold
+    # the version of the entry opened before it, then ends with the key of the next. A key is where
+    # the entry installs (node_modules/a/node_modules/b, or packages/w/node_modules/b in a workspace),
+    # or a name (lockfile 1); any other key (the project itself, a workspace) opens no package. An
+    # entry under node_modules with a "name" is installed under another name (an npm alias): npm
+    # writes the real name there, ahead of the version (arborist, shrinkwrap.js), and it is the package.
     FILENAME ~ /(package-lock|npm-shrinkwrap)\.json$/ {
-      if (match($0, /"(node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+"[[:space:]]*:[[:space:]]*\{/)) {
-        pend = substr($0, RSTART + 1); sub(/"[[:space:]]*:.*/, "", pend); sub(/^.*node_modules\//, "", pend)
-      } else if (pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) {
-        v = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v); hit(pend, v); pend = ""
+      nb = split($0, B, "[{]")
+      for (b = 1; b <= nb; b++) {
+        q = B[b]
+        if (pend != "") {
+          np = 0; vp = 0
+          if (pnm && match(q, /"name"[[:space:]]*:[[:space:]]*"[^"]+"/)) { np = RSTART; x = substr(q, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x) }
+          if (match(q, /"version"[[:space:]]*:[[:space:]]*"[^"]+"/)) { vp = RSTART; v = substr(q, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", v); sub(/"$/, "", v) }
+          if (np && (!vp || np < vp) && x ~ /^(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+$/) pend = x
+          if (vp) { hit(pend, v); pend = "" }
+        }
+        if (b < nb && match(q, /"[^"]*"[[:space:]]*:[[:space:]]*$/)) {
+          k = substr(q, RSTART + 1); sub(/"[[:space:]]*:[[:space:]]*$/, "", k); pend = ""; pnm = 0
+          if (k ~ /^(([^"]*\/)?node_modules\/([A-Za-z0-9._~@-]+\/)*)?(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+$/) { pnm = (k ~ /(^|\/)node_modules\//); pend = k; sub(/^.*node_modules\//, "", pend) }
+        }
       }
     }
     FILENAME ~ /pnpm-lock\.yaml$/ && match($0, /^[[:space:]]+\/(@[A-Za-z0-9._~-]+\/)?[A-Za-z0-9._~-]+\/[0-9][^:(_\/]*/) {
@@ -6308,6 +6429,9 @@ while IFS= read -r f; do
 done <<EOF
 $LOCKFILES
 EOF
+# A bun.lockb with no bun.lock beside it is a lockfile not read too (LOCKB).
+[ -n "$LOCKB" ] && LOCK_UNREAD="$LOCK_UNREAD$LOCKB
+"
 N_LOCK_UNREAD=$(count_lines "$LOCK_UNREAD")
 # One awk for up to 100 lockfiles at a time: each awk loads the whole list of bad versions first,
 # which once per lockfile costs a home with hundreds of projects seconds. awk stops at a file it can't
@@ -6342,6 +6466,33 @@ npm_roots_in() { # folder holding one folder per version or package, where node_
   if [ ! -r "$1" ] || [ ! -x "$1" ]; then printf '?\t%s\n' "$1"; return; fi
   for _rv in "$1"/*/; do if [ -d "$_rv" ]; then npm_root "${_rv%/}/$2"; fi; done
 }
+# Where a setting moves npm's, nvm's, n's, Volta's or bun's global folder, as each tool documents it.
+npm_dir() { # a setting's value: printed when it is an absolute path, or ~/ for the home folder
+  case "$1" in \~/*|\~\\*) printf '%s\n' "$H/${1#??}" ;; *) py_dir "$1" ;; esac
+}
+npm_prefix() { # npm's prefix: npm_config_prefix, else prefix in your npmrc with ${VAR} replaced, as npm reads them
+  _nf=${npm_config_prefix:-${NPM_CONFIG_PREFIX:-}}
+  if [ -z "$_nf" ]; then
+    _uc=$(npm_dir "${npm_config_userconfig:-${NPM_CONFIG_USERCONFIG:-}}"); [ -n "$_uc" ] || _uc="$H/.npmrc"
+    if [ -f "$_uc" ] && fleet_ok "$_uc" && ! too_big "$_uc"; then
+      _nf=$(awk '{ l = $0; sub(/\r$/, "", l) }
+        l ~ /^[ \t]*[;#]/ { next }
+        match(l, /^[ \t]*prefix[ \t]*=/) {
+          v = substr(l, RLENGTH + 1); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+          if (v ~ /^".*"$/ || v ~ /^\047.*\047$/) v = substr(v, 2, length(v) - 2)
+          o = ""
+          while (match(v, /\$\{[A-Za-z_][A-Za-z0-9_]*\??\}/)) {
+            n = substr(v, RSTART + 2, RLENGTH - 3); q = 0; if (n ~ /\?$/) { q = 1; n = substr(n, 1, length(n) - 1) }
+            if (n in ENVIRON) r = ENVIRON[n]; else if (q) r = ""; else r = substr(v, RSTART, RLENGTH)
+            o = o substr(v, 1, RSTART - 1) r; v = substr(v, RSTART + RLENGTH)
+          }
+          p = o v
+        }
+        END { if (p != "") print p }' "$_uc" 2>/dev/null)
+    fi
+  fi
+  npm_dir "$_nf"
+}
 _npm_roots=$(
   for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
            "$H/.bun/install/global/node_modules"; do
@@ -6352,6 +6503,28 @@ _npm_roots=$(
   # when that is set (1.0.30's).
   npm_root "${CLAUDE_CONFIG_DIR:-$H/.claude}/local/node_modules"
   case "${XDG_CONFIG_HOME:-}" in (/*) [ -n "${CLAUDE_CONFIG_DIR:-}" ] || npm_root "${XDG_CONFIG_HOME%/}/claude/local/node_modules" ;; esac
+  # npm's prefix where it is set: global installs go in its lib/node_modules, its node_modules on Windows
+  # (npm's folders docs).
+  _npx=$(npm_prefix); _npx=${_npx%/}
+  if [ -n "$_npx" ]; then if [ "$WIN" -eq 1 ]; then npm_root "$_npx/node_modules"; else npm_root "$_npx/lib/node_modules"; fi; fi
+  # nvm's NVM_DIR, else XDG_CONFIG_HOME/nvm (its install script); n's N_PREFIX, where it puts the Node in
+  # use, and ~/n, n-install's; Volta's VOLTA_HOME; bun's BUN_INSTALL_GLOBAL_DIR, else BUN_INSTALL's
+  # install/global, else XDG_CACHE_HOME/.bun/install/global (bun's global folder, its source).
+  _nvd=$(npm_dir "${NVM_DIR:-}")
+  [ -n "$_nvd" ] || case "${XDG_CONFIG_HOME:-}" in (/*) [ "$WIN" -eq 1 ] || _nvd="${XDG_CONFIG_HOME%/}/nvm" ;; esac
+  [ -n "$_nvd" ] && npm_roots_in "${_nvd%/}/versions/node" lib/node_modules
+  _npn=$(npm_dir "${N_PREFIX:-}"); [ -n "$_npn" ] && npm_root "${_npn%/}/lib/node_modules"
+  npm_root "$H/n/lib/node_modules"
+  _vh=$(npm_dir "${VOLTA_HOME:-}"); _vh=${_vh%/}
+  if [ -n "$_vh" ] && [ "$WIN" -eq 1 ]; then
+    npm_roots_in "$_vh/tools/image/node" node_modules; npm_roots_in "$_vh/tools/image/packages" node_modules; npm_roots_in "$_vh/tools/image/packages" lib/node_modules
+  elif [ -n "$_vh" ]; then
+    npm_roots_in "$_vh/tools/image/node" lib/node_modules; npm_roots_in "$_vh/tools/image/packages" lib/node_modules
+  fi
+  _bg=$(npm_dir "${BUN_INSTALL_GLOBAL_DIR:-}")
+  if [ -z "$_bg" ]; then _bi=$(npm_dir "${BUN_INSTALL:-}"); [ -n "$_bi" ] && _bg="${_bi%/}/install/global"; fi
+  [ -n "$_bg" ] || case "${XDG_CACHE_HOME:-}" in (/*) _bg="${XDG_CACHE_HOME%/}/.bun/install/global" ;; esac
+  [ -n "$_bg" ] && npm_root "${_bg%/}/node_modules"
   npm_roots_in "$H/.nvm/versions/node" lib/node_modules; npm_roots_in "$H/.volta/tools/image/node" lib/node_modules
   npm_roots_in "$H/.volta/tools/image/packages" lib/node_modules; npm_roots_in "$H/.local/share/fnm/node-versions" installation/lib/node_modules
   npm_roots_in "$H/Library/Application Support/fnm/node-versions" installation/lib/node_modules
@@ -6371,7 +6544,7 @@ _npm_roots=$(
   _ph=$(winpath "${PNPM_HOME:-}"); _ph=${_ph%/}
   if [ -n "$_ph" ]; then npm_roots_in "$_ph/global" node_modules; fi
 )
-NPM_ROOTS=$(printf '%s\n' "$_npm_roots" | grep -v "^?$TAB" | grep -v '^$')
+NPM_ROOTS=$(printf '%s\n' "$_npm_roots" | grep -v "^?$TAB" | grep -v '^$' | awk '!s[$0]++')
 # Each root is read as a node_modules folder: the package.json of every package in it, and of every
 # dependency in the node_modules folders nested in theirs, 16 levels deep, so a tool's dependency's own
 # dependency is read too. A store in a dot folder beside them (pnpm's .pnpm/<id>/node_modules, where a
@@ -6702,19 +6875,25 @@ lock_paths() { # lockfile name version
       for (i = 1; i <= n; i++) { s = c[i]; if (s ~ /^@/ && i < n) { i++; s = s "/" c[i] }; p = p (p == "" ? "" : "/") "node_modules/" s }
       print p; next
     }
-    match($0, /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/) {
-      k = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*"/, "", k); sub(/".*$/, "", k)
-      pend = ""; ok = 0
-      if (k ~ /(^|\/)node_modules\//) { pend = k; nm = k; sub(/^.*node_modules\//, "", nm); ok = (nm == N) }
-      next
-    }
-    pend != "" && match($0, /"name"[[:space:]]*:[[:space:]]*"[^"]*"/) {
-      x = substr($0, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x); if (x == N) ok = 1
-    }
-    pend != "" && match($0, /"version"[[:space:]]*:[[:space:]]*"[^"]*"/) {
-      x = substr($0, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", x); sub(/"$/, "", x)
-      if (ok && x == V) print pend
-      pend = ""
+    # An npm lockfile: every "key": { on a line, as npm_hits reads them, one line or pretty-printed. The
+    # "name" of an entry (an alias) is the package at that path.
+    {
+      nb = split($0, B, "[{]")
+      for (b = 1; b <= nb; b++) {
+        q = B[b]
+        if (pend != "") {
+          np = 0; vp = 0
+          if (match(q, /"name"[[:space:]]*:[[:space:]]*"[^"]*"/)) { np = RSTART; xn = substr(q, RSTART, RLENGTH); sub(/^"name"[[:space:]]*:[[:space:]]*"/, "", xn); sub(/"$/, "", xn) }
+          if (match(q, /"version"[[:space:]]*:[[:space:]]*"[^"]*"/)) { vp = RSTART; xv = substr(q, RSTART, RLENGTH); sub(/^"version"[[:space:]]*:[[:space:]]*"/, "", xv); sub(/"$/, "", xv) }
+          if (np && (!vp || np < vp)) ok = (xn == N)
+          if (vp) { if (ok && xv == V) print pend; pend = "" }
+        }
+        if (b < nb && match(q, /"[^"]*"[[:space:]]*:[[:space:]]*$/)) {
+          k = substr(q, RSTART + 1); sub(/"[[:space:]]*:[[:space:]]*$/, "", k)
+          pend = ""; ok = 0
+          if (k ~ /(^|\/)node_modules\//) { pend = k; nm = k; sub(/^.*node_modules\//, "", nm); ok = (nm == N) }
+        }
+      }
     }' "$1" 2>/dev/null
 }
 # node_modules folders nested in a project's, 16 levels deep: npm, yarn 1, yarn's node-modules linker,
@@ -6726,6 +6905,7 @@ lock_nm_walk() { # project folder, name, version
     _wn=()
     for _wm in "${_wq[@]}"; do
       pkg_at "$_wm/$2" "$3" && return 0
+      if [ -d "$_wm" ] && { [ ! -r "$_wm" ] || [ ! -x "$_wm" ]; }; then [ -n "$LI_UNREAD" ] || LI_UNREAD=$_wm; continue; fi
       for _wc in "$_wm"/*/node_modules "$_wm"/@*/*/node_modules; do
         [ -d "$_wc" ] && [ ! -L "$_wc" ] || continue
         [ "$_wl" -eq 0 ] || [ ! -L "${_wc%/node_modules}" ] || continue
@@ -6763,16 +6943,22 @@ yarn_mirror() { # .yarnrc
   printf '%s' "$_ym"
 }
 # Whether a lockfile's entry is installed where that lockfile puts it, at its version: the folder npm's
-# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm,
-# yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's offline mirror
-# when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz, a scoped name
-# written @scope-name (yarn 1's tarball-fetcher).
+# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm, bun's
+# isolated store, yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's
+# offline mirror when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz,
+# a scoped name written @scope-name (yarn 1's tarball-fetcher). Not found, with a folder on the way that
+# could not be read (LI_UNREAD), it can't tell: it returns 2, never "not installed".
+lock_blocked() { _lbk=$(py_blocked "$1"); printf '%s' "${_lbk#\?$TAB}"; } # path: the folder on its way that can't be read
 lock_installed() { # lockfile name version
-  _ld=${1%/*}
+  _ld=${1%/*}; LI_UNREAD=""
   [ "$3" != "?" ] || return 1
   case "$1" in
     */package-lock.json|*/npm-shrinkwrap.json|*/bun.lock)
-      while IFS= read -r _lp; do [ -n "$_lp" ] && pkg_at "$_ld/$_lp" "$3" && return 0; done <<EOF
+      while IFS= read -r _lp; do
+        [ -n "$_lp" ] || continue
+        pkg_at "$_ld/$_lp" "$3" && return 0
+        [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/$_lp/package.json")
+      done <<EOF
 $(lock_paths "$1" "$2" "$3")
 EOF
       ;;
@@ -6780,7 +6966,14 @@ EOF
   lock_nm_walk "$_ld" "$2" "$3" && return 0
   case "$1" in
     */pnpm-lock.yaml)
-      for _lp in "$_ld"/node_modules/.pnpm/*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done ;;
+      for _lp in "$_ld"/node_modules/.pnpm/*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done
+      [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/node_modules/.pnpm/x") ;;
+    */bun.lock)
+      # bun's isolated layout: node_modules/.bun/<name>@<version>/node_modules/<name>, with a / in the
+      # name written + and, for a build with other peer dependencies, + and a hash after the version.
+      _lb=$(printf '%s' "$2" | tr / +)
+      for _lp in "$_ld/node_modules/.bun/$_lb@$3/node_modules/$2" "$_ld/node_modules/.bun/$_lb@$3+"*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done
+      [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/node_modules/.bun/x") ;;
     */yarn.lock)
       _ly=$2; case "$2" in @*/*) _ly="${2%%/*}-${2#*/}" ;; esac
       yarn_zip "$_ld/.yarn/cache" "$_ly" "$3" && return 0
@@ -6788,30 +6981,54 @@ EOF
       for _yr in "$_ld/.yarnrc" "$H/.yarnrc"; do
         _ym=$(yarn_mirror "$_yr") || continue
         [ -f "$_ym/$_ly-$3.tgz" ] && return 0
-      done ;;
+      done
+      [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/.yarn/cache/x") ;;
   esac
+  [ -n "$LI_UNREAD" ] && return 2
   return 1
+}
+# A row shows its lockfile's path with control characters as ?, so the install check looks in the folder
+# the scan found: each lockfile whose path shows as the row's (a TAB in a project folder's name).
+lock_raw() { # the row's lockfile: the lockfiles found whose shown path is that
+  case "$1" in *\?*) ;; *) printf '%s\n' "$1"; return ;; esac
+  while IFS= read -r _r; do [ -n "$_r" ] && [ "${_r//[[:cntrl:]]/?}" = "$1" ] && printf '%s\n' "$_r"; done <<EOF
+$LOCKFILES
+EOF
 }
 # NPM_INST_TAGS: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
 # NPM_UPD_INST: a version to update (an update-level incident's) found installed, not only in a lockfile.
-NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "; NPM_UPD_INST=0
+# NM_UNREAD: the folders that kept the install check from telling whether a lockfile's hit was installed.
+# NPM_INST_ROWS: the lockfile rows found installed ("lockfile<TAB>name version"), which section 5 says.
+NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "; NPM_UPD_INST=0; NM_UNREAD=""; NPM_INST_ROWS=""
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] || continue
   _lv=$(incident_level "$_t")
   case "$_lv" in act|update) ;; *) continue ;; esac
   _in=1
   case "$_f" in
-    */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
-      lock_installed "$_f" "${_p% *}" "${_p##* }" || _in=0 ;;
+    */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock|*/deno.lock)
+      _in=0; _lu=""
+      while IFS= read -r _rf; do
+        [ -n "$_rf" ] || continue
+        lock_installed "$_rf" "${_p% *}" "${_p##* }"; _lr=$?
+        [ "$_lr" -eq 0 ] && { _in=1; break; }
+        [ "$_lr" -eq 2 ] && [ -z "$_lu" ] && _lu=$LI_UNREAD
+      done <<EOF
+$(lock_raw "$_f")
+EOF
+      [ "$_in" -eq 1 ] && NPM_INST_ROWS="$NPM_INST_ROWS$_f$TAB$_p
+" ;;
   esac
   if [ "$_lv" = update ]; then [ "$_in" -eq 1 ] && NPM_UPD_INST=1
   elif [ "$_in" -eq 1 ]; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
   else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
+"; [ -n "$_lu" ] && NM_UNREAD="$NM_UNREAD$_lu
 "; fi
 done <<EOF
 $NPM_ROWS
 EOF
 N_LOCKPROJ=$(printf '%s' "$NPM_LOCKPROJ" | sort -u | grep -c .)
+NM_UNREAD=$(printf '%s' "$NM_UNREAD" | awk 'NF && !s[$0]++'); N_NM_UNREAD=$(count_lines "$NM_UNREAD")
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
 # when the stolen GitHub token stops working (in the TanStack wave it tries to run rm -rf ~/, Wiz; in
 # the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
@@ -7195,7 +7412,9 @@ N_AK=$(count_lines "$AK_LINKS")
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
 _upd_fix=0; for _t in $NPM_TAGS; do [ "$(incident_level "$_t")" = update ] || continue; case "$(incident_advice "$_t")" in *[Uu]pdate*) ;; *) _upd_fix=1 ;; esac; done
 { [ "$MAL_HIT" -eq 0 ] || [ "$MAL_LOCKONLY" -eq 1 ]; } && [ "$_upd_fix" -eq 1 ] && todo 5 "Update the npm packages listed in section 5 to a version without the malware, and clear npm's cache with npm cache clean --force."
-[ "$PY_HIT" -eq 0 ] && [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
+# A Python hit's fix follows its advisory for its own packages and deletes nothing else, so a version to
+# update keeps its fix beside one.
+[ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 [ "$EXT_HIT" -eq 0 ] && [ -n "$EXT_UPD" ] && todo 5 "Uninstall the editor extensions listed in section 5. Their malware could not run on this system."
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
 
@@ -7840,7 +8059,12 @@ if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
     emit "        $(short "$f")"
     case "$f" in
       *"(npm's download cache)") _w="downloaded into npm's cache" ;;
-      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock) _w="listed in this lockfile" ;;
+      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock|*/deno.lock)
+        _w="listed in this lockfile"
+        case "
+$NPM_INST_ROWS" in *"
+$f$TAB$p
+"*) _w="installed from this lockfile" ;; esac ;;
       *) _w="installed" ;;
     esac
     emit "          ${p} ${DIM}($(npm_label "$t")), ${_w}${RST}"
@@ -7875,11 +8099,20 @@ elif [ "$WIPER_HIT" -eq 0 ] && [ -n "$_np" ]; then
   lock_unread
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm malware" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
-  emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
+  # The home scan's own bounds keep its time short; a lockfile past them is not read, and the row says so.
+  wrap "checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache. Lockfiles more than 6 folders deep, or in build, dist, target or vendor folders, are not read." 26 "                          " "                          " "$DIM"
 fi
 if [ -n "$_np" ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
   wrap "$(printf '%s' "${_np:0:1}" | tr 'a-z' 'A-Z')${_np:1} could not be read, so this is not the full list." 8 "        " "        " "$YEL"
   lock_unread
+fi
+# A lockfile's hit whose install could not be checked, for a folder where it would be installed that
+# could not be read: never called not installed.
+if [ "$N_NM_UNREAD" -gt 0 ]; then
+  wrap "$(plural "$N_NM_UNREAD" folder folders) could not be read, so whether these versions were installed is not known:" 8 "        " "        " "$YEL"
+  while IFS= read -r _f; do [ -n "$_f" ] && emit "        $(short "$_f")"; done <<EOF
+$NM_UNREAD
+EOF
 fi
 # Extensions whose malware could not run on this OS (data/bad-extensions.tsv's os): each, and why it is
 # one to remove, not a sign of a compromised machine.

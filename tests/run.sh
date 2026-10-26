@@ -13,8 +13,10 @@ trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 . tests/lib.sh
 # The fixture homes decide every place the script looks: variables that move an agent's folders
 # elsewhere are cleared (GitHub's Ubuntu runners set XDG_CONFIG_HOME, for one).
-unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
-  QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
+  QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME \
+  ASDF_DATA_DIR MISE_DATA_DIR MISE_INSTALLS_DIR MAMBA_ROOT_PREFIX PIPX_HOME PIPX_GLOBAL_HOME UV_TOOL_DIR UV_PYTHON_INSTALL_DIR UV_CACHE_DIR \
+  npm_config_prefix NPM_CONFIG_PREFIX npm_config_userconfig NPM_CONFIG_USERCONFIG NVM_DIR N_PREFIX VOLTA_HOME BUN_INSTALL BUN_INSTALL_GLOBAL_DIR
 command -v python3 >/dev/null 2>&1 || { echo "tests/run.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt"
@@ -1246,6 +1248,115 @@ has    "a yarn 2 entry's zip in the project's cache is an install" 'ACT NOW: SIG
 has    "so is its zip in the shared cache yarn 4 uses" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/gc.txt"
 has    "a yarn 1 entry's tarball in the offline mirror its .yarnrc names is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$LI/mir.txt"
 has    "another version in each of those places is not an install" 'ACT NOW IF YOU INSTALLED THEM: LOCKFILES LIST NPM MALWARE' "$LI/miss.txt"
+# A lockfile npm writes on one line (format-package-lock=false), with no URLs (omit-lockfile-registry-
+# resolved=true), reads as a pretty-printed one does: its entries, a bundled one and one in a workspace's
+# node_modules (neither has a URL, in either format), and where each installs.
+OL=$WORK/ol; rm -rf "$OL"
+for d in ol olw ala alb; do mkdir -p "$OL/$d/AppData/Roaming" "$OL/$d/AppData/Local/Temp"; done
+mkdir -p "$OL/ol/code/oneline" "$OL/ol/code/bundled" "$OL/ol/code/mono" "$OL/olw/code/mono/packages/web/node_modules/axios"
+printf '{"name":"oneline","lockfileVersion":3,"requires":true,"packages":{"":{"name":"oneline","dependencies":{"axios":"^1.14.0"}},"node_modules/left-pad":{"version":"1.3.0","integrity":"sha512-y"},"node_modules/axios":{"version":"1.14.1","integrity":"sha512-x"}}}' > "$OL/ol/code/oneline/package-lock.json"
+printf '{"name":"bundled","lockfileVersion":3,"requires":true,"packages":{"":{"name":"bundled"},"node_modules/some-tool":{"version":"2.0.0","resolved":"https://registry.npmjs.org/some-tool/-/some-tool-2.0.0.tgz","bundleDependencies":["@keyv/redis"]},"node_modules/some-tool/node_modules/@keyv/redis":{"version":"6.0.0","inBundle":true}}}' > "$OL/ol/code/bundled/package-lock.json"
+for d in ol olw; do printf '{"name":"mono","lockfileVersion":3,"packages":{"":{"name":"mono","workspaces":["packages/web"]},"node_modules/web":{"resolved":"packages/web","link":true},"packages/web":{"name":"web","version":"1.0.0"},"packages/web/node_modules/axios":{"version":"0.30.4"}}}' > "$OL/$d/code/mono/package-lock.json"; done
+printf '{"name":"axios","version":"0.30.4"}\n' > "$OL/olw/code/mono/packages/web/node_modules/axios/package.json"
+# A checkout of a package's own monorepo at a bad version's number: the workspace is the project's own source,
+# linked into node_modules with no version of its own.
+mkdir -p "$OL/ol/code/tsmono"; printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "": {"name": "router", "workspaces": ["packages/router-core"]},\n    "node_modules/@tanstack/router-core": {\n      "resolved": "packages/router-core",\n      "link": true\n    },\n    "packages/router-core": {\n      "name": "@tanstack/router-core",\n      "version": "1.169.5"\n    }\n  }\n}\n' > "$OL/ol/code/tsmono/package-lock.json"
+# npm writes an alias's real name in its entry's "name" (arborist's shrinkwrap.js): a fork installed as axios is
+# not axios, in either format; axios installed under another name is axios, installed where that name puts it.
+mkdir -p "$OL/ala/code/fork/node_modules/axios" "$OL/ala/code/fork1/node_modules/axios" "$OL/alb/code/http/node_modules/my-http"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "": {"dependencies": {"axios": "npm:@acme/axios-fork@1.14.1"}},\n    "node_modules/axios": {\n      "name": "@acme/axios-fork",\n      "version": "1.14.1",\n      "resolved": "https://registry.npmjs.org/@acme/axios-fork/-/axios-fork-1.14.1.tgz"\n    }\n  }\n}\n' > "$OL/ala/code/fork/package-lock.json"
+printf '{"lockfileVersion":3,"packages":{"":{"dependencies":{"axios":"npm:@acme/axios-fork@1.14.1"}},"node_modules/axios":{"name":"@acme/axios-fork","version":"1.14.1"}}}' > "$OL/ala/code/fork1/package-lock.json"
+for d in fork fork1; do printf '{"name":"@acme/axios-fork","version":"1.14.1"}\n' > "$OL/ala/code/$d/node_modules/axios/package.json"; done
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/my-http": {\n      "name": "axios",\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$OL/alb/code/http/package-lock.json"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$OL/alb/code/http/node_modules/my-http/package.json"
+for d in ol olw ala alb; do HOME="$OL/$d" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$OL/$d.txt"; done
+has    "a one-line npm lockfile without URLs is read" '~/code/oneline/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$OL/ol.txt"
+has    "and a bundled entry in one, which has no URL" '~/code/bundled/package-lock\.json @keyv/redis 6\.0\.0 \(keyv account takeover' "$OL/ol.txt"
+has    "and an entry in a workspace's node_modules, which has none either" '~/code/mono/package-lock\.json axios 0\.30\.4 \(Axios takeover' "$OL/ol.txt"
+hasnot "a workspace's own version is not taken for the entry before it" '@tanstack/router-core 1\.169\.5' "$OL/ol.txt"
+has    "a one-line lockfile's entry installed where it names is an install" 'ACT NOW: SIGNS OF NPM MALWARE' "$OL/olw.txt"
+hasnot "an npm alias of a fork is not flagged as the package it replaces" 'axios 1\.14\.1|NPM MALWARE' "$OL/ala.txt"
+has    "an alias of a bad version is flagged by its own name" '~/code/http/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$OL/alb.txt"
+has    "and is an install where the alias puts it" 'ACT NOW: SIGNS OF NPM MALWARE' "$OL/alb.txt"
+# bun's isolated layout keeps a package in node_modules/.bun/<name>@<version>/node_modules/<name> (bun's
+# isolated-installs docs), a / in a scoped name written + and a build with other peer dependencies given +
+# and a hash after the version: a dependency's dependency there is an install. A node_modules folder that
+# can't be read is named, never read as no install.
+BI=$WORK/bi; [ -d "$BI" ] && chmod -R u+rwx "$BI"; rm -rf "$BI"
+for d in iso iso2 unr; do mkdir -p "$BI/$d/code/app" "$BI/$d/AppData/Roaming" "$BI/$d/AppData/Local/Temp"; done
+printf '{\n  "lockfileVersion": 1,\n  "workspaces": {"": {"name": "app", "dependencies": {"tool": "^1.0.0"}}},\n  "packages": {\n    "tool": ["tool@1.0.0", "", {"dependencies": {"axios": "^1.14.0"}}, "sha512-x"],\n    "axios": ["axios@1.14.1", "", {}, "sha512-y"],\n  }\n}\n' > "$BI/iso/code/app/bun.lock"
+mkdir -p "$BI/iso/code/app/node_modules/.bun/axios@1.14.1/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$BI/iso/code/app/node_modules/.bun/axios@1.14.1/node_modules/axios/package.json"
+printf '{\n  "lockfileVersion": 1,\n  "workspaces": {"": {"name": "app", "dependencies": {"tool": "^1.0.0"}}},\n  "packages": {\n    "tool": ["tool@1.0.0", "", {"dependencies": {"@keyv/redis": "^6.0.0"}}, "sha512-x"],\n    "@keyv/redis": ["@keyv/redis@6.0.0", "", {}, "sha512-z"],\n  }\n}\n' > "$BI/iso2/code/app/bun.lock"
+mkdir -p "$BI/iso2/code/app/node_modules/.bun/@keyv+redis@6.0.0+0123456789abcdef/node_modules/@keyv/redis"
+printf '{"name":"@keyv/redis","version":"6.0.0"}\n' > "$BI/iso2/code/app/node_modules/.bun/@keyv+redis@6.0.0+0123456789abcdef/node_modules/@keyv/redis/package.json"
+mkdir -p "$BI/unr/code/app/node_modules/axios"; printf '{"name":"axios","version":"1.14.1"}\n' > "$BI/unr/code/app/node_modules/axios/package.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$BI/unr/code/app/package-lock.json"
+chmod 000 "$BI/unr/code/app/node_modules"
+for d in iso iso2 unr; do HOME="$BI/$d" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$BI/$d.txt"; done
+chmod 755 "$BI/unr/code/app/node_modules"
+has    "an install in bun's isolated store is found" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso.txt"
+has    "and a scoped package's build with other peer dependencies there" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso2.txt"
+has    "a node_modules that can't be read is named, never read as no install" '1 folder could not be read, so whether these versions were installed is not known: ~/code/app/node_modules ' "$BI/unr.txt"
+# A lockfile's row says whether its version was found installed, so an installed row and a lockfile-only
+# one read differently.
+LW=$WORK/lw; rm -rf "$LW"; mkdir -p "$LW/code/k" "$LW/code/w/node_modules/claud-code" "$LW/AppData/Roaming" "$LW/AppData/Local/Temp"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/bigmap": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$LW/code/k/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/claud-code": {\n      "version": "1.0.3"\n    }\n  }\n}\n' > "$LW/code/w/package-lock.json"
+printf '{"name":"claud-code","version":"1.0.3"}\n' > "$LW/code/w/node_modules/claud-code/package.json"
+HOME="$LW" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lw.txt"
+has    "a lockfile's version found installed says so" '~/code/w/package-lock\.json claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed from this lockfile' "$WORK/lw.txt"
+has    "and one only listed there says only that"     '~/code/k/package-lock\.json @keyv/bigmap 6\.0\.0 \(keyv account takeover, August 2026\), listed in this lockfile' "$WORK/lw.txt"
+# bun's binary lockfile (bun.lockb, before bun 1.2) can't be read: it is named as not read, never skipped
+# without a word, unless a bun.lock beside it, which bun reads first, is read. A deno.lock keeps its npm
+# packages as name@version (Deno's lockfile docs), and is read.
+LB=$WORK/lb; rm -rf "$LB"; for d in lb lb1; do mkdir -p "$LB/$d/code/app/node_modules/axios" "$LB/$d/AppData/Roaming" "$LB/$d/AppData/Local/Temp"; done
+for d in lb lb1; do printf '#!/usr/bin/env bun\nbun-lockfile-format-v0\n\000\001x' > "$LB/$d/code/app/bun.lockb"; printf '{"name":"axios","version":"1.14.1"}\n' > "$LB/$d/code/app/node_modules/axios/package.json"; done
+mkdir -p "$LB/lb/code/both" "$LB/lb/code/deno"; printf '\000x' > "$LB/lb/code/both/bun.lockb"
+printf '{\n  "lockfileVersion": 1,\n  "packages": {\n    "left-pad": ["left-pad@1.3.0", "", {}, "sha512-x"],\n  }\n}\n' > "$LB/lb/code/both/bun.lock"
+printf '{\n  "version": "5",\n  "specifiers": {\n    "npm:axios@^1.14.0": "1.14.1",\n    "npm:@keyv/redis@^6.0.0": "6.0.0"\n  },\n  "npm": {\n    "axios@1.14.1": {\n      "integrity": "sha512-x"\n    },\n    "@keyv/redis@6.0.0": {\n      "integrity": "sha512-y"\n    }\n  },\n  "workspace": {\n    "dependencies": ["npm:axios@^1.14.0", "npm:@keyv/redis@^6.0.0"]\n  }\n}\n' > "$LB/lb/code/deno/deno.lock"
+HOME="$LB/lb" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lb.txt"
+HOME="$LB/lb1" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lb1.txt"
+sed 's/\[ "\$N_IDLE" -gt 0 \]/[ 0 -gt 1 ]/g' "$SCRIPT" > "$WORK/no-idle-lb.sh"   # no idle agents, whose fix would take the headline
+HOME="$LB/lb1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle-lb.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lb1-c.txt"
+has    "bun's binary lockfile is named as not read"    'npm malware not fully checked: 1 lockfile could not be read ~/code/app/bun\.lockb' "$WORK/lb1.txt"
+hasnot "and the summary is not clean over it"          'NO FINDINGS IN THIS SCAN' "$WORK/lb1-c.txt"
+has    "beside other findings it is named too"         '1 lockfile could not be read, so this is not the full list\. ~/code/app/bun\.lockb' "$WORK/lb.txt"
+hasnot "but not beside a bun.lock, which bun reads first" 'code/both/bun\.lockb' "$WORK/lb.txt"
+has    "a deno.lock is read"                           '~/code/deno/deno\.lock axios 1\.14\.1 \(Axios takeover' "$WORK/lb.txt"
+has    "and its scoped packages"                       '~/code/deno/deno\.lock @keyv/redis 6\.0\.0 \(keyv account takeover' "$WORK/lb.txt"
+# Global installs under npm's prefix where your npmrc (its ${VAR} replaced, ~/ for the home folder) or
+# npm_config_prefix sets it, nvm's NVM_DIR (else XDG_CONFIG_HOME/nvm), n's N_PREFIX, Volta's VOLTA_HOME and
+# bun's global folder (BUN_INSTALL_GLOBAL_DIR, BUN_INSTALL's, else XDG_CACHE_HOME's), as each tool documents it.
+GP=$WORK/gp; rm -rf "$GP"; gp_pkg() { mkdir -p "$1/$2"; printf '{"name":"%s","version":"1.0.0"}\n' "$2" > "$1/$2/package.json"; }
+for d in h1 h2 h3 h4 h5; do mkdir -p "$GP/$d/AppData/Roaming" "$GP/$d/AppData/Local/Temp"; done
+printf '; npm settings\nprefix=${HOME}/.local\n' > "$GP/h1/.npmrc"; gp_pkg "$GP/h1/.local/lib/node_modules" claud-code
+printf 'prefix = "~/.npm-packages"\n' > "$GP/h2/.npmrc"; gp_pkg "$GP/h2/.npm-packages/lib/node_modules" cloude
+gp_pkg "$GP/x/npp/lib/node_modules" opencraw; gp_pkg "$GP/x/nvm/versions/node/v22.0.0/lib/node_modules" cloude-code
+gp_pkg "$GP/x/n/lib/node_modules" rimarf; gp_pkg "$GP/x/volta/tools/image/packages/tool/lib/node_modules" naniod
+gp_pkg "$GP/x/bun/install/global/node_modules" suport-color; gp_pkg "$GP/x/bgd/node_modules" iruchache
+gp_pkg "$GP/x/xc/.bun/install/global/node_modules" claud-code; gp_pkg "$GP/x/xcfg/nvm/versions/node/v20.0.0/lib/node_modules" opencraw
+for d in h1 h2; do HOME="$GP/$d" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$GP/$d.txt"; done
+HOME="$GP/h3" npm_config_prefix="$GP/x/npp" NVM_DIR="$GP/x/nvm" N_PREFIX="$GP/x/n" VOLTA_HOME="$GP/x/volta" BUN_INSTALL="$GP/x/bun" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$GP/h3.txt"
+HOME="$GP/h4" BUN_INSTALL_GLOBAL_DIR="$GP/x/bgd" XDG_CONFIG_HOME="$GP/x/xcfg" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$GP/h4.txt"
+HOME="$GP/h5" XDG_CACHE_HOME="$GP/x/xc" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$GP/h5.txt"
+has    "a global install under the prefix your npmrc sets is found" '~/\.local/lib/node_modules/claud-code claud-code 1\.0\.0' "$GP/h1.txt"
+has    "and one given with ~/ there"                   '~/\.npm-packages/lib/node_modules/cloude cloude 1\.0\.0' "$GP/h2.txt"
+has    "and under npm_config_prefix"                   'gp/x/npp/lib/node_modules/opencraw opencraw 1\.0\.0' "$GP/h3.txt"
+has    "and under nvm's NVM_DIR"                       'gp/x/nvm/versions/node/v22\.0\.0/lib/node_modules/cloude-code cloude-code 1\.0\.0' "$GP/h3.txt"
+has    "and under n's N_PREFIX"                        'gp/x/n/lib/node_modules/rimarf rimarf 1\.0\.0' "$GP/h3.txt"
+has    "and under VOLTA_HOME"                          'gp/x/volta/tools/image/packages/tool/lib/node_modules/naniod naniod 1\.0\.0' "$GP/h3.txt"
+has    "and in bun's global folder under BUN_INSTALL"  'gp/x/bun/install/global/node_modules/suport-color suport-color 1\.0\.0' "$GP/h3.txt"
+has    "and under BUN_INSTALL_GLOBAL_DIR"              'gp/x/bgd/node_modules/iruchache iruchache 1\.0\.0' "$GP/h4.txt"
+has    "and nvm's under XDG_CONFIG_HOME"               'gp/x/xcfg/nvm/versions/node/v20\.0\.0/lib/node_modules/opencraw opencraw 1\.0\.0' "$GP/h4.txt"
+has    "and bun's under XDG_CACHE_HOME"                'gp/x/xc/\.bun/install/global/node_modules/claud-code claud-code 1\.0\.0' "$GP/h5.txt"
+# The home scan stops 6 folders deep and skips build, dist, target and vendor folders, which keeps it short:
+# a lockfile past those bounds is not read, and the clean npm row says so.
+DL=$WORK/dl; rm -rf "$DL"; mkdir -p "$DL/code/a/b/c/d/e/f" "$DL/code/app/dist/pkg" "$DL/AppData/Roaming" "$DL/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1"}}}' > "$DL/code/a/b/c/d/e/f/package-lock.json"
+cp "$DL/code/a/b/c/d/e/f/package-lock.json" "$DL/code/app/dist/pkg/package-lock.json"
+HOME="$DL" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dl.txt"
+has    "a lockfile past the scan's bounds is not read, and the npm row says so" "checked 0 lockfiles, global installs and npm's cache\. Lockfiles more than 6 folders deep, or in build, dist, target or vendor folders, are not read\." "$WORK/dl.txt"
 # Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
 # folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
 # version deep down is not a hit.
@@ -1726,6 +1837,30 @@ mkdir -p "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"; : 
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-tlx.txt"
 rm -f "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe"
 has    "Windows: telnyx's msbuild.exe in the Startup folder is its sign" 'telnyx 4\.87\.1 and 4\.87\.2 +signs of the malware found ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild\.exe the telnyx malware, which Windows starts at every login from the Startup folder' "$WORK/win-tlx.txt"
+has    "Windows: next to a Python hit, a version to update keeps its fix" 'Update the Python packages listed in section 5 to a version without the malware' "$WORK/win1.txt"
+# mise's and micromamba's Windows folders (%LOCALAPPDATA%\mise, %APPDATA%\mamba), and a tool's setting given
+# as a Windows path, as Windows sets it.
+for _d in AppData/Local/mise/installs/python/3.12.1 AppData/Roaming/mamba/envs/e1; do mkdir -p "$WP/$_d/Lib/site-packages/litellm-1.82.7.dist-info"; done
+mkdir -p "$WR/px/venvs/t3/Lib/site-packages/litellm-1.82.7.dist-info"
+PIPX_HOME='C:\px' winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-py.txt"
+rm -rf "${WP:?}/AppData/Local/mise" "${WP:?}/AppData/Roaming/mamba" "${WR:?}/px"
+has    "Windows: a Python environment in mise's folder is checked" '~/AppData/Local/mise/installs/python/3\.12\.1/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
+has    "Windows: and in micromamba's"                 '~/AppData/Roaming/mamba/envs/e1/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
+has    "Windows: a setting given as a Windows path is followed" 'px/venvs/t3/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
+# The Windows places gird-check.ps1 reads by name: pyenv-win's Pythons, the Microsoft Store Python's user site,
+# Pythons installed for every user in %ProgramFiles% and at the system drive's root, and conda in
+# %ProgramData%, whose name Git Bash keeps as Windows spells it.
+mkdir -p "$WP/.pyenv/pyenv-win/versions/3.11.9/Lib/site-packages/litellm-1.82.8.dist-info" \
+  "$WP/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages/lightning-2.6.2.dist-info" \
+  "$WR/Program Files/Python311/Lib/site-packages/litellm-1.82.7.dist-info" "$WR/Python39/Lib/site-packages/litellm-1.82.7.dist-info" \
+  "$WR/ProgramData/miniconda3/Lib/site-packages/litellm-1.82.7.dist-info"
+PROGRAMFILES='C:\Program Files' SYSTEMDRIVE='C:' ProgramData='C:\ProgramData' winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-pyw.txt"
+rm -rf "${WP:?}/.pyenv" "${WP:?}/AppData/Local/Packages" "${WR:?}/Program Files" "${WR:?}/Python39" "${WR:?}/ProgramData"
+has    "Windows: pyenv-win's Pythons are checked"     '~/\.pyenv/pyenv-win/versions/3\.11\.9/Lib/site-packages: litellm 1\.82\.8' "$WORK/win-pyw.txt"
+has    "Windows: and the Microsoft Store Python's user site" 'PythonSoftwareFoundation\.Python\.3\.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages: lightning 2\.6\.2' "$WORK/win-pyw.txt"
+has    "Windows: and a Python in %ProgramFiles%"       'Program Files/Python311/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-pyw.txt"
+has    "Windows: and one at the system drive's root"  '/Python39/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-pyw.txt"
+has    "Windows: and conda in %ProgramData%"          'ProgramData/miniconda3/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-pyw.txt"
 # An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
 mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
@@ -2767,6 +2902,13 @@ has    "a TAB in a folder name: a lockfile hit keeps its package and source" "co
 has    "a TAB in a folder name: a planted file keeps its note"       "code/plant$X/\.vscode/router_runtime\.js a file the TanStack worm plants" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a key in an Aider history is found"  "code/aider$X/\.aider\.chat\.history\.md" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a link to authorized_keys is listed" "code/link$X/notes\.txt" "$WORK/hostile-flat.txt"
+# A TAB in a project folder's name: the row shows it as ?, and the install check still looks in the folder
+# itself, where the bad version is installed.
+rm -rf "$WORK/tabi"; _tb=$(printf '\t'); mkdir -p "$WORK/tabi/code/tab${_tb}dir/node_modules/axios" "$WORK/tabi/AppData/Roaming" "$WORK/tabi/AppData/Local/Temp"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$WORK/tabi/code/tab${_tb}dir/package-lock.json"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/tabi/code/tab${_tb}dir/node_modules/axios/package.json"
+HOME="$WORK/tabi" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tabi.txt"
+has    "a TAB in a folder name: an install beside the lockfile is found" 'ACT NOW: SIGNS OF NPM MALWARE' "$WORK/tabi.txt"
 has    "a | in a folder name: an MCP config keeps its count and token" "code/mcp\|\?\[2Jpipe$X/\.mcp\.json 1 server, token in the file" "$WORK/hostile-flat.txt"
 has    "a | in a folder name: a key file keeps its provider"         "code/key\|\?\[2Jpipe$X/\.env OpenAI" "$WORK/hostile-flat.txt"
 has    "a | in a folder name: an allow list keeps its finding"       "code/allow\|\?\[2Jpipe$X/\.claude/settings\.local\.json A saved command contains a key" "$WORK/hostile-flat.txt"
@@ -2816,6 +2958,40 @@ has    "a Python environment under WORKON_HOME is checked" 'pyo/wh/[^ ]*site-pac
 has    "and under POETRY_VIRTUALENVS_PATH"            'pyo/pv/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyo.txt"
 has    "and under POETRY_CACHE_DIR's virtualenvs"     'pyo/pc/virtualenvs/[^ ]*site-packages: lightning 2\.6\.3' "$WORK/pyo.txt"
 has    "and under HATCH_DATA_DIR's env/virtual"       'pyo/hd/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyo.txt"
+# asdf's, mise's, micromamba's, pipx's and uv's own folders, as each tool documents them, and a project's
+# tox environments, which the home scan finds by their pyvenv.cfg as it finds a venv's: each holds a bad
+# version here, mise's, micromamba's, pipx's and uv's under XDG_DATA_HOME and uv's cache under
+# XDG_CACHE_HOME.
+rm -rf "$WORK/pyr" "$WORK/pyr-x"; _sp=lib/python3.12/site-packages/litellm-1.82.7.dist-info
+for _d in .asdf/installs/python/3.12.1 code/proj/.tox/py311 "Library/Application Support/pipx/venvs/t1"; do mkdir -p "$WORK/pyr/$_d/$_sp"; done
+printf 'home = /usr\n' > "$WORK/pyr/code/proj/.tox/py311/pyvenv.cfg"
+for _d in mise/installs/python/3.12.1 mamba/envs/e1 pipx/venvs/t2 uv/tools/t3 uv/python/cpython-3.12.1-linux-x86_64-gnu; do mkdir -p "$WORK/pyr-x/xd/$_d/$_sp"; done
+mkdir -p "$WORK/pyr-x/xc/uv/archive-v0/x1/$_sp"
+HOME="$WORK/pyr" XDG_DATA_HOME="$WORK/pyr-x/xd" XDG_CACHE_HOME="$WORK/pyr-x/xc" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyr.txt"
+has    "a Python environment in asdf's folder is checked" '~/\.asdf/installs/python/3\.12\.1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in mise's, under XDG_DATA_HOME"           'pyr-x/xd/mise/installs/python/3\.12\.1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in micromamba's"                          'pyr-x/xd/mamba/envs/e1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in pipx's"                                'pyr-x/xd/pipx/venvs/t2/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in pipx's on a Mac"                       '~/Library/Application Support/pipx/venvs/t1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in uv's tools"                            'pyr-x/xd/uv/tools/t3/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in uv's Pythons"                          'pyr-x/xd/uv/python/cpython-3\.12\.1-linux-x86_64-gnu/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in uv's cache under XDG_CACHE_HOME"       "uv's cache: litellm 1\\.82\\.7" "$WORK/pyr.txt"
+has    "a project's tox environment is checked"       '~/code/proj/\.tox/py311/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+# Each tool's own setting that moves its folder is followed too.
+rm -rf "$WORK/pys" "$WORK/pys-x"; mkdir -p "$WORK/pys"
+for _d in ad/installs/python/3.12.1 md/installs/python/3.11.0 mi/python/3.13.0 mr/envs/e1 ph/venvs/t1 pg/venvs/t2 ut/t3 up/cpython-3.12.1-linux-x86_64-gnu uc/archive-v0/x1; do mkdir -p "$WORK/pys-x/$_d/$_sp"; done
+HOME="$WORK/pys" ASDF_DATA_DIR="$WORK/pys-x/ad" MISE_DATA_DIR="$WORK/pys-x/md" MAMBA_ROOT_PREFIX="$WORK/pys-x/mr" PIPX_HOME="$WORK/pys-x/ph" PIPX_GLOBAL_HOME="$WORK/pys-x/pg" \
+  UV_TOOL_DIR="$WORK/pys-x/ut" UV_PYTHON_INSTALL_DIR="$WORK/pys-x/up" UV_CACHE_DIR="$WORK/pys-x/uc" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pys.txt"
+HOME="$WORK/pys" MISE_INSTALLS_DIR="$WORK/pys-x/mi" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pys-mi.txt"
+has    "a Python environment under ASDF_DATA_DIR is checked" 'pys-x/ad/installs/python/3\.12\.1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under MISE_DATA_DIR"                      'pys-x/md/installs/python/3\.11\.0/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under MISE_INSTALLS_DIR"                  'pys-x/mi/python/3\.13\.0/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys-mi.txt"
+has    "and under MAMBA_ROOT_PREFIX"                  'pys-x/mr/envs/e1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under PIPX_HOME"                          'pys-x/ph/venvs/t1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under PIPX_GLOBAL_HOME"                   'pys-x/pg/venvs/t2/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under UV_TOOL_DIR"                        'pys-x/ut/t3/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under UV_PYTHON_INSTALL_DIR"              'pys-x/up/cpython-3\.12\.1-linux-x86_64-gnu/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and uv's cache under UV_CACHE_DIR"            "uv's cache: litellm 1\\.82\\.7" "$WORK/pys.txt"
 chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
 HOME="$WORK/pyu" bash "$SCRIPT" --offline > "$WORK/pyu-raw.txt" 2>&1; tr -s ' \n' '  ' < "$WORK/pyu-raw.txt" > "$WORK/pyu.txt"
 HOME="$WORK/pyu" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"   # no idle agents, whose fix would take the headline
@@ -2838,6 +3014,23 @@ if [ -z "$SKIPPING" ]; then
 fi
 has    "and this person's own lock a process holds still counts" 'A process holds the loader lock' "$WORK/llk-own.txt"
 SKIPPING=""
+# A Python environment behind a folder the walks can't enter is not read clean, under each kind of root:
+# a folder in pyenv's versions and in pipenv's environments (roots it searches), a venv's own folder past
+# the home scan's depth (a venv found by its pyvenv.cfg), a folder of uv's cache, and Poetry's folder
+# behind one that can't be opened. The home scan skips all five, so only those walks can name them.
+rm -rf "$WORK/pyh"; mkdir -p "$WORK/pyh/.pyenv/versions/3.11.9/lib/python3.11/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.local/share/virtualenvs/p-AbC/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/code/a/b/c/env/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.cache/uv/archive-v0/x1/lib/python3.12/site-packages/litellm-1.82.8.dist-info" \
+  "$WORK/pyh/.cache/pypoetry/virtualenvs/p-Cd34-py3.12/lib/python3.12/site-packages/litellm-1.82.8.dist-info"
+printf 'home = /usr\n' > "$WORK/pyh/code/a/b/c/env/pyvenv.cfg"
+_pyh=".pyenv/versions/3.11.9 .local/share/virtualenvs/p-AbC code/a/b/c/env/lib .cache/uv/archive-v0/x1 .cache/pypoetry"
+for _d in $_pyh; do chmod 000 "$WORK/pyh/$_d"; done
+HOME="$WORK/pyh" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyh.txt"
+HOME="$WORK/pyh" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyh-c.txt"
+for _d in $_pyh; do chmod 755 "$WORK/pyh/$_d"; done
+has    "a Python environment behind a folder the walks can't enter is not read clean" '! LiteLLM 1\.82\.7 and 1\.82\.8 (no signs in [0-9]+ Python environments?, but 5 more|5 Python environments) could not be read' "$WORK/pyh.txt"
+has    "and row 05 says Python was not fully checked either" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyh-c.txt"
 # The scan keeps find's errors in a temp file: in /tmp when TMPDIR can't be written to, and with no temp
 # folder at all, it can't tell which folders it read, and says so.
 mkdir -p "$WORK/nomk"; printf '#!/bin/sh\nexit 1\n' > "$WORK/nomk/mktemp"; chmod +x "$WORK/nomk/mktemp"

@@ -572,6 +572,9 @@ $LinkSettings = New-Object System.Collections.Generic.List[string]
 # A project's linked .env and MCP files, read as linked settings files are, when they end at a regular file.
 $LinkFiles = New-Object System.Collections.Generic.List[string]
 $LockFiles = New-Object System.Collections.Generic.List[string]
+# bun's binary lockfile (bun.lockb, its default before bun 1.2) can't be read: it is named as not read,
+# unless a bun.lock is beside it, which bun reads first (its lockfile loader) and which is read here.
+$LockBin = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
 $AiderFiles = New-Object System.Collections.Generic.List[string]
@@ -743,6 +746,17 @@ function Scan-LinkedDir([string]$dir, [string]$name) {
     if ((Is-Link $e) -and (Is-AkLink $dir $p (Link-Target $e)) -and -not $p.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($p) }
   }
 }
+# A project's .tox folder holds its tox environments (.tox/<env>, tox's env_dir): the pyvenv.cfg of each is
+# listed, as the scan lists a venv's, and nothing else in .tox is read. A folder there it can't list is
+# named as a folder not read.
+function Scan-Tox([string]$dir) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
+    if ((Is-Link $e) -or -not (Is-DirInfo $e)) { continue }
+    try { $cs = @(([IO.DirectoryInfo]$e.FullName).GetFiles('pyvenv.cfg')) } catch { $UnreadDirs.Add($e.FullName); continue }
+    foreach ($c in $cs) { if ($c.Name -ceq 'pyvenv.cfg' -and -not (Is-Link $c)) { Add-Plain $Found $c } }
+  }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
@@ -752,6 +766,7 @@ function Scan-Home([string]$dir, [int]$depth) {
         if ($name -ceq '.claude' -or ($name -ceq '.vscode' -and -not $path.Equals((J $HomeDir '.vscode'), $PathCmp))) { Scan-LinkedDir $path $name }
         continue
       }
+      if ($name -ceq '.tox') { Scan-Tox $path; continue }
       if (Is-Pruned $path $name $d) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
       if ($d -lt 6) { Scan-Home $path $d }
@@ -776,7 +791,8 @@ function Scan-Home([string]$dir, [int]$depth) {
       Add-Plain $Found $e
       $script:ScanN++
       if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
-    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { Add-Plain $LockFiles $e }
+    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock' -or $name -ceq 'deno.lock') { Add-Plain $LockFiles $e }
+    elseif ($name -ceq 'bun.lockb') { Add-Plain $LockBin $e }
     elseif ($name -ceq '.aider.chat.history.md' -or $name -ceq '.aider.input.history') { Add-Plain $AiderFiles $e }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { Add-Plain $TaskFiles $e }
     elseif (Is-WormFile $parent $name) { Add-Plain $WormFiles $e }
@@ -797,9 +813,11 @@ function Activity([string]$dir, [int]$depth, $since, $state) {
     if ($e.LastWriteTimeUtc -gt $since) { $state.Recent = $true }
   }
 }
-# Python environments under a folder, a few levels deep, skipping node_modules.
+# Python environments under a folder, a few levels deep, skipping node_modules. A folder it can't list
+# goes in $PyWalkUnread: an environment not read, never one with no signs.
 function Find-Sites([string]$dir, [int]$depth, [int]$max, $out) {
-  foreach ($e in (Entries $dir)) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { [void]$PyWalkUnread.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
     if ((Is-Link $e) -or -not (Is-DirInfo $e)) { continue }
     if ($e.Name -ceq 'node_modules') { continue }
     if ($e.Name -ceq 'site-packages' -or $e.Name -ceq 'dist-packages') { $out.Add($e.FullName); continue }
@@ -1700,13 +1718,28 @@ foreach ($f in $allowAll) {
 # Folders that hold Python environments. Fixed install locations are read by name;
 # the rest are searched a few levels deep, skipping node_modules.
 $SitesAll = New-Object System.Collections.Generic.List[string]
+# The folders the walks below could not enter, and the folder on the way to a root that can't be read:
+# each counts as an environment not read ($PyUnread).
+$PyWalkUnread = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+function Py-Blocked([string]$p) { # the nearest folder on its way that exists, when that can't be read; '' otherwise
+  $d = $p
+  while ($true) {
+    try { $d = [IO.Path]::GetDirectoryName($d) } catch { return '' }
+    if (-not $d) { return '' }
+    if (Is-Dir $d) { try { [void][IO.Directory]::GetFileSystemEntries($d); return '' } catch { return $d } }
+  }
+}
 foreach ($s in $Sites) { $SitesAll.Add($s) }
 foreach ($v in $Venvs) { Find-Sites $v 0 4 $SitesAll }
 $pyParents = New-Object System.Collections.Generic.List[object]
 $pyParents.Add(@((J $LocalAppData 'Programs/Python'), 'Python3*', 'Lib/site-packages'))
 $pyParents.Add(@((J $AppData 'Python'), 'Python3*', 'site-packages'))
+# A drive alone, as %SystemDrive% gives it (C:), is that drive's current folder to .NET, not its root, so
+# it gets its separator back.
 foreach ($pf in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:SystemDrive)) {
-  if ($pf) { $pyParents.Add(@(($pf.TrimEnd('\', '/')), 'Python3*', 'Lib/site-packages')) }
+  if (-not $pf) { continue }
+  $pr = $pf.TrimEnd('\', '/'); if ($pr -match '^[A-Za-z]:$') { $pr += '\' }
+  $pyParents.Add(@($pr, 'Python3*', 'Lib/site-packages'))
 }
 foreach ($pp in $pyParents) {
   foreach ($d in (Glob-Dirs $pp[0] $pp[1])) { $sp = J $d $pp[2]; if (Is-Dir $sp) { $SitesAll.Add($sp) } }
@@ -1727,13 +1760,35 @@ if (-not $OnWindows) {
   $xc = [Environment]::GetEnvironmentVariable('XDG_CACHE_HOME'); if (-not ($xc -and $xc.StartsWith('/'))) { $xc = J $HomeDir '.cache' }
   $PyRoots += @((J $HomeDir 'Library/Caches/pypoetry/virtualenvs'), (J $HomeDir 'Library/Application Support/hatch/env/virtual'), (J $xc 'pypoetry/virtualenvs'), (J $xd 'virtualenvs'), (J $xd 'hatch/env/virtual'))
 }
+# asdf's, mise's, micromamba's, pipx's and uv's own folders, as each documents them: asdf's data folder's
+# installs/python (ASDF_DATA_DIR, else ~/.asdf); mise's (MISE_INSTALLS_DIR, else the installs of its data
+# folder: MISE_DATA_DIR, else XDG_DATA_HOME/mise, %LOCALAPPDATA%\mise on Windows); micromamba's root
+# (MAMBA_ROOT_PREFIX, else ~/micromamba, else the mamba folder of its data folder, %APPDATA% on Windows)
+# and Mambaforge's ~/mambaforge; pipx's home (PIPX_HOME, else ~/.local/pipx, else its data folder:
+# XDG_DATA_HOME/pipx, ~/Library/Application Support/pipx on a Mac) and its global home (PIPX_GLOBAL_HOME,
+# else /opt/pipx); uv's data folder (XDG_DATA_HOME/uv, %APPDATA%\uv on Windows) with its UV_TOOL_DIR and
+# UV_PYTHON_INSTALL_DIR.
+function Py-Dir([string]$v) { if ($v -and [IO.Path]::IsPathRooted($v)) { $v } else { '' } }
+$asdfData = Py-Dir ([Environment]::GetEnvironmentVariable('ASDF_DATA_DIR')); if (-not $asdfData) { $asdfData = J $HomeDir '.asdf' }
+$miseData = Py-Dir ([Environment]::GetEnvironmentVariable('MISE_DATA_DIR'))
+if ($OnWindows) {
+  if (-not $miseData) { $miseData = J $LocalAppData 'mise' }
+  $PyRoots += @((J $AppData 'mamba'))
+} else {
+  if (-not $miseData) { $miseData = J $xd 'mise' }
+  $PyRoots += @((J $xd 'mamba'), (J $xd 'pipx'), (J $HomeDir 'Library/Application Support/pipx'), (J $xd 'uv'), '/opt/pipx')
+}
+$miseInst = Py-Dir ([Environment]::GetEnvironmentVariable('MISE_INSTALLS_DIR')); if (-not $miseInst) { $miseInst = J $miseData 'installs' }
+$PyRoots += @((J $asdfData 'installs/python'), (J $miseInst 'python'), (J $HomeDir 'micromamba'), (J $HomeDir 'mambaforge'))
 # Each tool's own setting moves its folder: POETRY_VIRTUALENVS_PATH (or POETRY_CACHE_DIR's virtualenvs),
-# pipenv's WORKON_HOME and HATCH_DATA_DIR's env/virtual.
+# pipenv's WORKON_HOME, HATCH_DATA_DIR's env/virtual, and those above.
 $PoetryCache = [Environment]::GetEnvironmentVariable('POETRY_CACHE_DIR'); $HatchData = [Environment]::GetEnvironmentVariable('HATCH_DATA_DIR')
-foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH'), $(if ($PoetryCache) { J $PoetryCache 'virtualenvs' }), [Environment]::GetEnvironmentVariable('WORKON_HOME'), $(if ($HatchData) { J $HatchData 'env/virtual' }))) {
+foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH'), $(if ($PoetryCache) { J $PoetryCache 'virtualenvs' }), [Environment]::GetEnvironmentVariable('WORKON_HOME'), $(if ($HatchData) { J $HatchData 'env/virtual' }),
+    [Environment]::GetEnvironmentVariable('MAMBA_ROOT_PREFIX'), [Environment]::GetEnvironmentVariable('PIPX_HOME'), [Environment]::GetEnvironmentVariable('PIPX_GLOBAL_HOME'),
+    [Environment]::GetEnvironmentVariable('UV_TOOL_DIR'), [Environment]::GetEnvironmentVariable('UV_PYTHON_INSTALL_DIR'))) {
   if ($pv -and [IO.Path]::IsPathRooted($pv)) { $PyRoots += $pv }
 }
-foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
+foreach ($r in @($PyRoots | Select-Object -Unique)) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } else { $b = Py-Blocked $r; if ($b) { [void]$PyWalkUnread.Add($b) } } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
 function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'minishai' { 'Mini Shai-Hulud worm, April 2026' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3, May 2026' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2, March 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'antv' { 'AntV account takeover, May 2026' } 'nxconsole' { 'Nx Console 18.95.0, May 2026' } 'redhat' { 'Red Hat Cloud Services packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'keyvspread' { 'keyv worm spread, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormzig' { 'GlassWorm extensions, April 2026' } 'glasswormdec' { 'GlassWorm native extensions, November 2025' } 'glasswormoct' { 'GlassWorm-linked themes, December 2025' } 'glasswormuni' { 'GlassWorm invisible code, March 2026' } 'glasswasm' { 'GlassWASM extensions, June 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
@@ -1877,19 +1932,26 @@ $LOADER = 0
 # once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or 2.4.6.post1.
 $uvWant = @(); foreach ($r in $BadPypiRows) { $uvWant += ('^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$') }
 $uvFound = @{}
-foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
-  if ($uvFound.Count -ge $uvWant.Count -or -not (Is-Dir $uv)) { continue }
+# uv's cache: UV_CACHE_DIR, else XDG_CACHE_HOME/uv (~/.cache/uv), %LOCALAPPDATA%\uv\cache on Windows.
+$uvDirs = @(); $uvc = Py-Dir ([Environment]::GetEnvironmentVariable('UV_CACHE_DIR')); if ($uvc) { $uvDirs += $uvc }
+if (-not $OnWindows) { $uvDirs += (J $xc 'uv') }
+foreach ($uv in @($uvDirs + @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv')) | Select-Object -Unique)) {
+  if ($uvFound.Count -ge $uvWant.Count) { continue }
+  if (-not (Is-Dir $uv)) { $b = Py-Blocked $uv; if ($b) { [void]$PyWalkUnread.Add($b) }; continue }
   try {
     $q = New-Object System.Collections.Generic.Queue[object]; $q.Enqueue(@($uv, 0))
     while ($q.Count -gt 0 -and $uvFound.Count -lt $uvWant.Count) {
       $it = $q.Dequeue()
-      foreach ($e in (Entries $it[0])) {
+      try { $es = ([IO.DirectoryInfo]$it[0]).GetFileSystemInfos() } catch { [void]$PyWalkUnread.Add($it[0]); continue }
+      foreach ($e in $es) {
         for ($i = 0; $i -lt $uvWant.Count; $i++) { if (-not $uvFound.ContainsKey($i) -and $e.Name -cmatch $uvWant[$i]) { $uvFound[$i] = $true } }
         if ((Is-DirInfo $e) -and -not (Is-Link $e) -and $it[1] + 1 -lt 6) { $q.Enqueue(@($e.FullName, ($it[1] + 1))) }
       }
     }
   } catch { }
 }
+# Each folder the walks could not enter is an environment not read, as an unreadable site-packages is.
+$PyUnread += $PyWalkUnread.Count
 $UvBad = New-Object System.Collections.Generic.List[object]
 for ($i = 0; $i -lt $BadPypiRows.Count; $i++) { if ($uvFound.ContainsKey($i)) { $UvBad.Add($BadPypiRows[$i]) } }
 # uv keeps what it installs in its cache (and uvx runs a tool from an environment it makes there), so a
@@ -5654,7 +5716,14 @@ function Npm-Hit([string]$where, [string]$nm, [string]$v) {
 # overrides are skipped.
 $RxTgz = New-Object regex('/((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))/-/([A-Za-z0-9._~-]+)\.tgz', $RxOpt, $RxTimeout)
 $RxTok = New-Object regex('(?<![A-Za-z0-9._~@-])((?:@(?>[A-Za-z0-9._~-]+)/)?(?>[A-Za-z0-9._~-]+))@(?:npm:)?([0-9](?>[0-9A-Za-z.+-]*))', $RxOpt, $RxTimeout)
-$RxLockEntry = New-Object regex('^[^\n]*?"((?:node_modules/(?:[A-Za-z0-9._~@-]+/)*)?(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)"[^\S\n]*:[^\S\n]*\{|^[^\n]*?"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
+# An npm lockfile's entries: every "key": {, "name" and "version" in order, so a lockfile npm writes on one
+# line (with format-package-lock=false) reads as a pretty-printed one does. A key is where the entry installs
+# (node_modules/a/node_modules/b, or packages/w/node_modules/b in a workspace), or a name (lockfile 1); any
+# other key (the project itself, a workspace) opens no package. An entry under node_modules with a "name" is
+# installed under another name (an npm alias): npm writes the real name there, ahead of the version
+# (arborist, shrinkwrap.js), and it is the package.
+$RxLockEntry = New-Object regex('"([^"\n]*)"[^\S\n]*:[^\S\n]*\{|"name"[^\S\n]*:[^\S\n]*"([^"\n]+)"|"version"[^\S\n]*:[^\S\n]*"([^"\n]+)"', $RxOpt, $RxTimeout)
+$RxLockKey = '^((?:[^"]*/)?node_modules/(?:[A-Za-z0-9._~@-]+/)*)?(?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+\z'
 $RxPnpmKey = New-Object regex('^[^\S\n]+/((?:@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+)/([0-9][^:(_/\n]*)', $RxOpt, $RxTimeout)
 $RxPnpmOver = New-Object regex('^overrides:', $RxOpt, $RxTimeout)
 $RxBunOver = New-Object regex('"overrides"[^\S\n]*:[^\S\n]*\{', $RxOpt, $RxTimeout)
@@ -5701,10 +5770,14 @@ function Npm-Scan([string]$where, [string]$text, [string]$kind) {
       $text = $RxYarnKey.Replace($text, '')
     }
     if ($kind -ceq 'package-lock.json' -or $kind -ceq 'npm-shrinkwrap.json') {
-      $pend = ''
+      $pend = ''; $pnm = $false
       foreach ($m in $RxLockEntry.Matches($text)) {
-        if ($m.Groups[1].Success) { $pend = $m.Groups[1].Value -replace '^.*node_modules/', '' }
-        elseif ($pend) { Npm-Hit $where $pend $m.Groups[2].Value; $pend = '' }
+        if ($m.Groups[1].Success) {
+          $k = $m.Groups[1].Value; $pend = ''; $pnm = $false
+          if ($k -cmatch $RxLockKey) { $pnm = $k -cmatch '(^|/)node_modules/'; $pend = $k -creplace '^.*node_modules/', '' }
+        } elseif ($m.Groups[2].Success) {
+          if ($pend -and $pnm -and $m.Groups[2].Value -cmatch '^(@[A-Za-z0-9._~-]+/)?[A-Za-z0-9._~-]+\z') { $pend = $m.Groups[2].Value }
+        } elseif ($pend) { Npm-Hit $where $pend $m.Groups[3].Value; $pend = '' }
       }
     }
     if ($kind -ceq 'pnpm-lock.yaml') { foreach ($m in $RxPnpmKey.Matches($text)) { Npm-Hit $where $m.Groups[1].Value $m.Groups[2].Value } }
@@ -5719,6 +5792,7 @@ function Npm-Scan([string]$where, [string]$text, [string]$kind) {
 # A lockfile the scan found but can't read leaves npm not fully checked, as the cache does.
 $N_LOCK = 0; $NpmSlow = 0; $NpmUnread = 0; $LockUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { $LockUnread.Add($f); continue }; $N_LOCK++; Npm-Scan $f $t ([IO.Path]::GetFileName($f)) }
+foreach ($f in $LockBin) { if (-not (Exists (J ([IO.Path]::GetDirectoryName($f)) 'bun.lock'))) { $LockUnread.Add($f) } }
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv,
 # nvm-windows), pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
 $NpmRoots = New-Object System.Collections.Generic.List[string]
@@ -5745,6 +5819,43 @@ foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/n
 # when that is set (1.0.30's).
 Add-NpmRoot (J (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'local') 'node_modules')
 if (-not $env:CLAUDE_CONFIG_DIR -and $env:XDG_CONFIG_HOME -and $env:XDG_CONFIG_HOME.StartsWith('/')) { Add-NpmRoot (J $env:XDG_CONFIG_HOME 'claude/local/node_modules') }
+# Where a setting moves npm's, nvm's, n's, Volta's or bun's global folder, as each tool documents it.
+function Npm-Dir([string]$v) { # a setting's value, when it is an absolute path, or ~/ for the home folder
+  if (-not $v) { return '' }
+  if ($v.StartsWith('~/') -or $v.StartsWith('~\')) { return J $HomeDir $v.Substring(2) }
+  if ([IO.Path]::IsPathRooted($v)) { return $v }
+  ''
+}
+function Npm-Prefix { # npm's prefix: npm_config_prefix, else prefix in your npmrc with ${VAR} replaced, as npm reads them
+  $pf = [Environment]::GetEnvironmentVariable('npm_config_prefix'); if (-not $pf) { $pf = [Environment]::GetEnvironmentVariable('NPM_CONFIG_PREFIX') }
+  if (-not $pf) {
+    $uc = Npm-Dir ([Environment]::GetEnvironmentVariable('npm_config_userconfig')); if (-not $uc) { $uc = Npm-Dir ([Environment]::GetEnvironmentVariable('NPM_CONFIG_USERCONFIG')) }
+    if (-not $uc) { $uc = J $HomeDir '.npmrc' }
+    $t = $null; if ((Is-File $uc) -and -not (Too-Big $uc)) { $t = Read-Text $uc }
+    if ($null -ne $t) {
+      foreach ($l in ($t -split "`n")) {
+        $l = $l.TrimEnd("`r"); if ($l -match '^[ \t]*[;#]') { continue }
+        $m = [regex]::Match($l, '^[ \t]*prefix[ \t]*=(.*)$'); if (-not $m.Success) { continue }
+        $v = $m.Groups[1].Value.Trim([char[]]" `t")
+        if ($v.Length -ge 2 -and (($v.StartsWith('"') -and $v.EndsWith('"')) -or ($v.StartsWith("'") -and $v.EndsWith("'")))) { $v = $v.Substring(1, $v.Length - 2) }
+        $pf = [regex]::Replace($v, '\$\{([A-Za-z_][A-Za-z0-9_]*)(\?)?\}', { param($mm) $ev = [Environment]::GetEnvironmentVariable($mm.Groups[1].Value); if ($null -ne $ev) { $ev } elseif ($mm.Groups[2].Success) { '' } else { $mm.Value } })
+      }
+    }
+  }
+  Npm-Dir $pf
+}
+# npm's prefix where it is set: global installs go in its lib/node_modules, its node_modules on Windows
+# (npm's folders docs). n's N_PREFIX, where it puts the Node in use, and ~/n, n-install's. bun's
+# BUN_INSTALL_GLOBAL_DIR, else BUN_INSTALL's install/global, else XDG_CACHE_HOME/.bun/install/global (bun's
+# global folder, its source).
+$npx = Npm-Prefix
+if ($npx) { if ($OnWindows) { Add-NpmRoot (J $npx 'node_modules') } else { Add-NpmRoot (J $npx 'lib/node_modules') } }
+$nN = Npm-Dir ([Environment]::GetEnvironmentVariable('N_PREFIX')); if ($nN) { Add-NpmRoot (J $nN 'lib/node_modules') }
+Add-NpmRoot (J $HomeDir 'n/lib/node_modules')
+$bg = Npm-Dir ([Environment]::GetEnvironmentVariable('BUN_INSTALL_GLOBAL_DIR'))
+if (-not $bg) { $bi = Npm-Dir ([Environment]::GetEnvironmentVariable('BUN_INSTALL')); if ($bi) { $bg = J $bi 'install/global' } }
+if (-not $bg) { $xcb = [Environment]::GetEnvironmentVariable('XDG_CACHE_HOME'); if ($xcb -and $xcb.StartsWith('/')) { $bg = J $xcb '.bun/install/global' } }
+if ($bg) { Add-NpmRoot (J $bg 'node_modules') }
 # Folders holding one folder per version or package, and where node_modules sits in each.
 $NpmGlobs = New-Object System.Collections.Generic.List[object]
 foreach ($g in @(@('.nvm/versions/node', 'lib/node_modules'), @('.volta/tools/image/node', 'lib/node_modules'), @('.volta/tools/image/packages', 'lib/node_modules'),
@@ -5758,6 +5869,13 @@ foreach ($g in @(@($nvmWin, 'node_modules'), @((J $fnmWin 'node-versions'), 'ins
     @((J $LocalAppData 'Volta/tools/image/packages'), 'lib/node_modules'), @((J $LocalAppData 'mise/installs/node'), 'node_modules'),
     @((J $LocalAppData 'pnpm/global'), 'node_modules'), @((J $LocalAppData 'npm-cache/_npx'), 'node_modules'))) { $NpmGlobs.Add($g) }
 if ($env:PNPM_HOME) { $NpmGlobs.Add(@((J $env:PNPM_HOME 'global'), 'node_modules')) }
+# nvm's NVM_DIR, else XDG_CONFIG_HOME/nvm (its install script), and Volta's VOLTA_HOME.
+$nvd = Npm-Dir ([Environment]::GetEnvironmentVariable('NVM_DIR'))
+if (-not $nvd -and -not $OnWindows) { $xcf = [Environment]::GetEnvironmentVariable('XDG_CONFIG_HOME'); if ($xcf -and $xcf.StartsWith('/')) { $nvd = J $xcf 'nvm' } }
+if ($nvd) { $NpmGlobs.Add(@((J $nvd 'versions/node'), 'lib/node_modules')) }
+$vh = Npm-Dir ([Environment]::GetEnvironmentVariable('VOLTA_HOME'))
+if ($vh -and $OnWindows) { foreach ($g in @(@('tools/image/node', 'node_modules'), @('tools/image/packages', 'node_modules'), @('tools/image/packages', 'lib/node_modules'))) { $NpmGlobs.Add(@((J $vh $g[0]), $g[1])) } }
+elseif ($vh) { foreach ($g in @(@('tools/image/node', 'lib/node_modules'), @('tools/image/packages', 'lib/node_modules'))) { $NpmGlobs.Add(@((J $vh $g[0]), $g[1])) } }
 foreach ($g in $NpmGlobs) {
   if (Is-Dir $g[0]) {
     try { $gk = @([IO.Directory]::GetDirectories($g[0]) | Sort-Object) } catch { [void]$NpmGUnread.Add($g[0]); continue }
@@ -6072,32 +6190,30 @@ function Pkg-At([string]$d, [string]$v) {
 # or bun's names for an entry: node_modules/a/node_modules/b, or a workspace's packages/w/node_modules/b.
 # bun's key is that path without the node_modules (a/b), and its value starts with the name@version.
 $RxBunKey = New-Object regex('^\s*"([^"]+)"\s*:\s*\[\s*"([^"]*)"')
-$RxLockOpen = New-Object regex('^\s*"([^"]*)"\s*:\s*\{')
-$RxLockName = New-Object regex('"name"\s*:\s*"([^"]*)"')
-$RxLockVer = New-Object regex('"version"\s*:\s*"([^"]*)"')
+# An npm lockfile: every "key": {, "name" and "version" in order, as Npm-Scan reads them, one line or
+# pretty-printed. The "name" of an entry (an alias) is the package at that path.
+$RxLockTok = New-Object regex('"([^"\n]*)"[^\S\n]*:[^\S\n]*\{|"name"[^\S\n]*:[^\S\n]*"([^"\n]*)"|"version"[^\S\n]*:[^\S\n]*"([^"\n]*)"')
 function Lock-Paths([string]$f, [string]$n, [string]$v) {
   try { $t = [IO.File]::ReadAllText($f) } catch { return }
-  $bun = $f.EndsWith('bun.lock', [StringComparison]::Ordinal); $pend = ''; $ok = $false
-  foreach ($l in $t.Split("`n")) {
-    if ($bun) {
+  if ($f.EndsWith('bun.lock', [StringComparison]::Ordinal)) {
+    foreach ($l in $t.Split("`n")) {
       $m = $RxBunKey.Match($l)
       if ($m.Success -and $m.Groups[2].Value -ceq "$n@$v") {
         $seg = $m.Groups[1].Value.Split('/'); $p = New-Object System.Collections.Generic.List[string]
         for ($i = 0; $i -lt $seg.Count; $i++) { $s = $seg[$i]; if ($s.StartsWith('@') -and $i + 1 -lt $seg.Count) { $i++; $s = "$s/$($seg[$i])" }; $p.Add("node_modules/$s") }
         $p -join '/'
       }
-      continue
     }
-    $m = $RxLockOpen.Match($l)
-    if ($m.Success) {
+    return
+  }
+  $pend = ''; $ok = $false
+  foreach ($m in $RxLockTok.Matches($t)) {
+    if ($m.Groups[1].Success) {
       $k = $m.Groups[1].Value; $pend = ''; $ok = $false
       if ($k -cmatch '(^|/)node_modules/') { $pend = $k; $ok = (($k -creplace '^.*node_modules/', '') -ceq $n) }
-      continue
-    }
-    if (-not $pend) { continue }
-    $m = $RxLockName.Match($l); if ($m.Success -and $m.Groups[1].Value -ceq $n) { $ok = $true }
-    $m = $RxLockVer.Match($l)
-    if ($m.Success) { if ($ok -and $m.Groups[1].Value -ceq $v) { $pend }; $pend = '' }
+    } elseif (-not $pend) { continue }
+    elseif ($m.Groups[2].Success) { $ok = ($m.Groups[2].Value -ceq $n) }
+    else { if ($ok -and $m.Groups[3].Value -ceq $v) { $pend }; $pend = '' }
   }
 }
 # node_modules folders nested in a project's, 16 levels deep: npm, yarn 1, yarn's node-modules linker,
@@ -6109,7 +6225,9 @@ function Lock-NmWalk([string]$d, [string]$n, [string]$v) {
     $nq = New-Object System.Collections.Generic.List[string]
     foreach ($m in $q) {
       if (Pkg-At (J $m $n) $v) { return $true }
-      foreach ($c in (Glob-Dirs $m '*')) {
+      if (-not (Is-Dir $m)) { continue }
+      try { $cs = @([IO.Directory]::GetDirectories($m) | Sort-Object) } catch { if (-not $script:LiUnread) { $script:LiUnread = $m }; continue }
+      foreach ($c in $cs) {
         $cn = [IO.Path]::GetFileName($c); if ($cn.StartsWith('.')) { continue }
         if ($cn.StartsWith('@')) { $kids = @(foreach ($k in (Glob-Dirs $c '*')) { if (-not [IO.Path]::GetFileName($k).StartsWith('.')) { $k } }) } else { $kids = @($c) }
         foreach ($p in $kids) {
@@ -6151,37 +6269,57 @@ function Yarn-Mirror([string]$rc) {
   J ([IO.Path]::GetDirectoryName($rc)) $mv
 }
 # Whether a lockfile's entry is installed where that lockfile puts it, at its version: the folder npm's
-# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm,
-# yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's offline mirror
-# when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz, a scoped name
-# written @scope-name (yarn 1's tarball-fetcher).
+# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm, bun's
+# isolated store, yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's
+# offline mirror when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz,
+# a scoped name written @scope-name (yarn 1's tarball-fetcher). It answers yes or no, or, not found with a
+# folder on the way that could not be read ($LiUnread), unread: never "not installed" then.
+$LiUnread = ''
+function Lock-Blocked([string]$p) { if (-not $script:LiUnread) { $b = Py-Blocked $p; if ($b) { $script:LiUnread = $b } } }
 function Lock-Installed([string]$f, [string]$n, [string]$v) {
-  if ($v -ceq '?') { return $false }
+  $script:LiUnread = ''
+  if ($v -ceq '?') { return 'no' }
   $ld = [IO.Path]::GetDirectoryName($f); $kind = [IO.Path]::GetFileName($f)
   if ($kind -ceq 'package-lock.json' -or $kind -ceq 'npm-shrinkwrap.json' -or $kind -ceq 'bun.lock') {
-    foreach ($lp in @(Lock-Paths $f $n $v)) { if (Pkg-At (J $ld $lp) $v) { return $true } }
+    foreach ($lp in @(Lock-Paths $f $n $v)) { if (Pkg-At (J $ld $lp) $v) { return 'yes' }; Lock-Blocked (J (J $ld $lp) 'package.json') }
   }
-  if (Lock-NmWalk $ld $n $v) { return $true }
+  if (Lock-NmWalk $ld $n $v) { return 'yes' }
   if ($kind -ceq 'pnpm-lock.yaml') {
-    foreach ($x in (Glob-Dirs (J $ld 'node_modules/.pnpm') '*')) { if (Pkg-At (J (J $x 'node_modules') $n) $v) { return $true } }
+    foreach ($x in (Glob-Dirs (J $ld 'node_modules/.pnpm') '*')) { if (Pkg-At (J (J $x 'node_modules') $n) $v) { return 'yes' } }
+    Lock-Blocked (J $ld 'node_modules/.pnpm/x')
+  } elseif ($kind -ceq 'bun.lock') {
+    # bun's isolated layout: node_modules/.bun/<name>@<version>/node_modules/<name>, with a / in the name
+    # written + and, for a build with other peer dependencies, + and a hash after the version.
+    $bn = $n.Replace('/', '+'); $bs = J $ld 'node_modules/.bun'
+    if (Pkg-At (J (J $bs "$bn@$v") "node_modules/$n") $v) { return 'yes' }
+    foreach ($x in (Glob-Dirs $bs "$bn@$v+*")) { if (Pkg-At (J (J $x 'node_modules') $n) $v) { return 'yes' } }
+    Lock-Blocked (J $bs 'x')
   } elseif ($kind -ceq 'yarn.lock') {
     $slug = $n; if ($n.StartsWith('@') -and $n.Contains('/')) { $slug = $n.Replace('/', '-') }
-    if ((Yarn-Zip (J $ld '.yarn/cache') $slug $v) -or (Yarn-Zip $YarnGCache $slug $v)) { return $true }
+    if ((Yarn-Zip (J $ld '.yarn/cache') $slug $v) -or (Yarn-Zip $YarnGCache $slug $v)) { return 'yes' }
     foreach ($rc in @((J $ld '.yarnrc'), (J $HomeDir '.yarnrc'))) {
       $mir = Yarn-Mirror $rc
-      if ($mir -and (Is-File (J $mir "$slug-$v.tgz"))) { return $true }
+      if ($mir -and (Is-File (J $mir "$slug-$v.tgz"))) { return 'yes' }
     }
+    Lock-Blocked (J $ld '.yarn/cache/x')
   }
-  $false
+  if ($script:LiUnread) { return 'unread' }
+  'no'
 }
 # $NpmInstTags: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
+# $NmUnread: the folders that kept the install check from telling whether a lockfile's hit was installed.
 $NpmInst = 0; $LockProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $NpmInstTags = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+$NmUnread = New-Object System.Collections.Generic.List[string]
+# $NpmInstRows: the lockfile rows found installed ("lockfile|name version"), which section 5 says.
+$NpmInstRows = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($r in $NpmRows) {
   if ((Incident-Level $r[2]) -ne 'act') { continue }
-  if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
+  if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|deno\.lock)$') {
     $isp = $r[1].LastIndexOf(' ')
-    if (Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)) { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
+    $li = Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)
+    if ($li -ceq 'yes') { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]); [void]$NpmInstRows.Add("$($r[0])|$($r[1])") }
+    else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])); if ($li -ceq 'unread' -and -not $NmUnread.Contains($LiUnread)) { $NmUnread.Add($LiUnread) } }
   } else { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) }
 }
 $N_LOCKPROJ = $LockProj.Count
@@ -6478,7 +6616,9 @@ if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like fi
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
 $UpdFix = @(foreach ($t in $NpmTags) { if ((Incident-Level $t) -eq 'update' -and (Incident-Advice $t) -cnotmatch '[Uu]pdate') { $t } }).Count -gt 0
 if (($MAL_HIT -eq 0 -or $MAL_LOCKONLY -eq 1) -and $UpdFix) { Add-Todo 5 'Update the npm packages listed in section 5 to a version without the malware, and clear npm''s cache with npm cache clean --force.' }
-if ($PY_HIT -eq 0 -and $PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
+# A Python hit's fix follows its advisory for its own packages and deletes nothing else, so a version to
+# update keeps its fix beside one.
+if ($PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 if ($EXT_HIT -eq 0 -and $ExtUpd.Count -gt 0) { Add-Todo 5 'Uninstall the editor extensions listed in section 5. Their malware could not run on this system.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
 $ISSUES = $Todo.Count
@@ -6864,7 +7004,9 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   } else { Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}a bad version to update$cRst" }
   foreach ($r in $NpmRows) {
     if ($r[0].EndsWith($NpmCacheTag)) { $w = "downloaded into npm's cache" }
-    elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') { $w = 'listed in this lockfile' }
+    elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|deno\.lock)$') {
+      $w = 'listed in this lockfile'; if ($NpmInstRows.Contains("$($r[0])|$($r[1])")) { $w = 'installed from this lockfile' }
+    }
     else { $w = 'installed' }
     Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), $w$cRst"
   }
@@ -6889,7 +7031,8 @@ if (-not $npFound -and $WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $npText)) {
   foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
 } elseif (-not $npFound -and $WIPER_HIT -eq 0) {
   Pair "$cGrn$gOk$cRst" 'npm malware' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
-  Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
+  # The home scan's own bounds keep its time short; a lockfile past them is not read, and the row says so.
+  Wrap "checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache. Lockfiles more than 6 folders deep, or in build, dist, target or vendor folders, are not read." 26 $ind26 $ind26 $cDim
 }
 # With findings above, a part of the check that did not finish still has to be said.
 if (($NpmSlow -gt 0 -or $npText) -and ($WIPER_HIT -eq 1 -or $npFound)) {
@@ -6898,6 +7041,12 @@ if (($NpmSlow -gt 0 -or $npText) -and ($WIPER_HIT -eq 1 -or $npFound)) {
     Wrap "$($npText.Substring(0, 1).ToUpperInvariant())$($npText.Substring(1)) could not be read, so this is not the full list." 8 '        ' '        ' $cYel
     foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
   }
+}
+# A lockfile's hit whose install could not be checked, for a folder where it would be installed that could
+# not be read: never called not installed.
+if ($NmUnread.Count -gt 0) {
+  Wrap "$(Plural $NmUnread.Count 'folder' 'folders') could not be read, so whether these versions were installed is not known:" 8 '        ' '        ' $cYel
+  foreach ($f in $NmUnread) { Emit "        $(Short $f)" }
 }
 # Extensions whose malware could not run on this OS (data/bad-extensions.tsv's os): each, and why it is
 # one to remove, not a sign of a compromised machine.
