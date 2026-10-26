@@ -29,9 +29,11 @@ while [ $# -gt 0 ] && [ "$1" != -H ]; do shift; done; shift
 envv=$1; shift 2   # /usr/bin/env -i
 extra=()
 # The ripgreps an account run may use: none unless a test names some (FLL_RG, colon-separated),
-# so the tests never depend on this Mac's own ripgrep. FLL_RG_UID stands in for the account's uid.
-extra+=("GIRD_CHECK_FLEET_RG_PATHS=${FLL_RG:-}")
-[ -n "${FLL_RG_UID:-}" ] && extra+=("GIRD_CHECK_FLEET_RG_UID=$FLL_RG_UID")
+# so the tests never depend on this Mac's own ripgrep; FLL_RG=default keeps the script's own list,
+# with FLL_RG_ADMIN in place of the admin-installed path. FLL_RG_ROOTUID stands in for root's uid.
+[ "${FLL_RG:-}" = default ] || extra+=("GIRD_CHECK_FLEET_RG_PATHS=${FLL_RG:-}")
+[ -n "${FLL_RG_ADMIN:-}" ] && extra+=("GIRD_CHECK_FLEET_RG_ADMIN=$FLL_RG_ADMIN")
+[ -n "${FLL_RG_ROOTUID:-}" ] && extra+=("GIRD_CHECK_FLEET_RG_ROOTUID=$FLL_RG_ROOTUID")
 [ -n "${FLL_API:-}" ] && extra+=("GIRD_CHECK_API=$FLL_API" "GIRD_CHECK_WEB=$FLL_API")
 case "$mode" in
   fail) echo "sudo: a password is required" >&2; exit 1 ;;

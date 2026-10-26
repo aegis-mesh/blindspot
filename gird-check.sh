@@ -1156,10 +1156,6 @@ sess_filter() {
 }
 SESS_ENGINE=none; SESS_RC=""
 RG_BIN=$(type -P rg 2>/dev/null)
-# An account run runs as its account, so a ripgrep that only root or that account can change gives
-# nobody new rights: it is used when found at a fixed path, as a regular file (a link is followed
-# to its real file), with that file and every folder above it owned by root or the account and
-# writable by no one else, by mode or by ACL. Otherwise the system perl checks the sessions.
 # >>> owned-walk: this function's home; tools/gen.sh copies it into gird-fleet.sh.
 # owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
 # by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
@@ -1178,24 +1174,27 @@ owned_only() {
   done
 }
 # <<< owned-walk
+# An account run inherits the Full Disk Access of the MDM agent that started root, so it runs
+# nothing an account could have written: a ripgrep is used only when its real file and every folder
+# above it are root's and writable by no one else (docs/designs/fleet-mode.md, Session engine).
+# Otherwise the system perl checks the sessions.
 fleet_rg() {
-  _uid=$EUID
-  case "${GIRD_CHECK_FLEET_RG_UID:-}" in ''|*[!0-9]*) ;; *) _uid=$GIRD_CHECK_FLEET_RG_UID ;; esac   # tests only
-  _ifs=$IFS; IFS=:
-  # shellcheck disable=SC2086  # a colon-separated list, as PATH is
-  set -- ${GIRD_CHECK_FLEET_RG_PATHS-/opt/homebrew/bin/rg:/usr/local/bin/rg:$H/.local/bin/rg:$H/.cargo/bin/rg}
-  IFS=$_ifs
-  for _rc in "$@"; do
+  _ru=0
+  case "${GIRD_CHECK_FLEET_RG_ROOTUID:-}" in ''|*[!0-9]*) ;; *) _ru=$GIRD_CHECK_FLEET_RG_ROOTUID ;; esac   # tests only: stands in for root
+  _rl=${GIRD_CHECK_FLEET_RG_PATHS-"${GIRD_CHECK_FLEET_RG_ADMIN:-/Library/Application Support/Blindspot/rg}:/opt/homebrew/bin/rg:/usr/local/bin/rg"}
+  while IFS= read -r _rc; do
     [ -n "$_rc" ] && { [ -L "$_rc" ] || [ -e "$_rc" ]; } || continue
     _rr=$(/usr/bin/perl -MCwd -e 'my $p = Cwd::abs_path($ARGV[0]); print $p if defined $p' -- "$_rc" 2>/dev/null)
     [ -n "$_rr" ] && [ ! -L "$_rr" ] && [ -f "$_rr" ] || continue
-    owned_only "$_uid" "$_rr" && { printf '%s' "$_rr"; return 0; }
-  done
+    owned_only "$_ru" "$_rr" && { printf '%s' "$_rr"; return 0; }
+  done <<EOF
+$(printf '%s\n' "$_rl" | tr ':' '\n')
+EOF
   return 1
 }
 [ "$ACCTRUN" -eq 1 ] && RG_BIN=$(fleet_rg)
 if [ -n "$GIRD_CHECK_SESSIONS_ENGINE" ]; then SESS_ENGINE=$GIRD_CHECK_SESSIONS_ENGINE
-elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null | sed -n '1s/^ripgrep \([0-9]*\).*/\1/p')" -ge 13 ] 2>/dev/null; then SESS_ENGINE=rg
+elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null 3>&- | sed -n '1s/^ripgrep \([0-9]*\).*/\1/p')" -ge 13 ] 2>/dev/null; then SESS_ENGINE=rg
 elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
 [ "$SESS_ENGINE" = rg ] && [ -z "$RG_BIN" ] && SESS_ENGINE=none
 [ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
@@ -1212,7 +1211,7 @@ $SESS_ROOTS
 EOF
   if [ "$SESS_ENGINE" = rg ]; then
     "$RG_BIN" -a --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename \
-      --field-match-separator="$(printf '\t')" -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+      --field-match-separator="$(printf '\t')" -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null 3>&- &
     SESS_PID=$!
     [ "$WIN" -eq 1 ] && SESS_WIN=1
   else
