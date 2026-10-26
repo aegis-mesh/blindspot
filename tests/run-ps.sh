@@ -1994,12 +1994,14 @@ has    "a real key beside a placeholder still counts, alone" '~/code/app/\.env +
 # The run gets 60 s and is killed and failed after.
 rm -rf "$WORK/ff"; mkdir -p "$WORK/ff/.claude" "$WORK/ff/.cursor" "$WORK/ff/AppData/Roaming" "$WORK/ff/AppData/Local/Temp"
 mkfifo "$WORK/ff/.zsh_history" "$WORK/ff/.cursor/mcp.json" "$WORK/ff/.claude/settings.json"; ln -s /dev/null "$WORK/ff/.bash_history"
+mkdir -p "$WORK/ff/.npm/_cacache/index-v5/aa"; mkfifo "$WORK/ff/.npm/_cacache/index-v5/aa/held"
 psrun "$WORK/ff" -- -Offline > "$WORK/ff-raw.txt" 2>&1 &
 BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
 if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/ff-raw.txt"; fi
 wait "$BP" 2>/dev/null
 tr -s ' \n' '  ' < "$WORK/ff-raw.txt" > "$WORK/ff.txt"
 has    "a pipe at a fixed path does not hold up the check" 'Your AI Exposure Check' "$WORK/ff.txt"
+has    "and neither does one in npm's cache"          'npm malware +(none of|checked)' "$WORK/ff.txt"
 has    "a pipe at a key file's place is named as not read" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: ~/\.zsh_history ' "$WORK/ff.txt"
 has    "and a pipe at an MCP config's place in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: ~/\.cursor/mcp\.json' "$WORK/ff.txt"
 has    "and one at Claude Code's settings in section 4" '! No saved commands with keys in the files read, but 1 file could not be read: ~/\.claude/settings\.json' "$WORK/ff.txt"

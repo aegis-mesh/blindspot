@@ -6111,6 +6111,9 @@ foreach ($c in @((J $LocalAppData 'npm-cache'), (J $HomeDir '.npm'))) {
     foreach ($e in $ents) {
       if (Is-Link $e) { continue }
       if (Is-DirInfo $e) { $q.Enqueue($e.FullName); continue }
+      # A cache entry is never empty: an empty one holds nothing, and a pipe or device, which reports a
+      # length of 0, would hold the read forever (bash's find -type f leaves them out too).
+      if ($e.Length -eq 0) { continue }
       try { $t = [IO.File]::ReadAllText($e.FullName) } catch { $NpmUnread++; continue }
       Npm-Scan "$c$NpmCacheTag" $t ''
     }
