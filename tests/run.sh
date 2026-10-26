@@ -2616,6 +2616,14 @@ has    "and one of 60 KB with three quotes in a row on it" '! Codex ~/code/m/\.c
 has    "past 64 KB such a line's file is named as not read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/q/\.codex/config\.toml' "$WORK/cxbig.txt"
 if [ "$T" -le 30 ]; then ok "and all in linear time" "${T}s"; else bad "and all in linear time" "took ${T}s"; fi
 rm -rf "$WORK/cxbig"
+# Two project Codex configs that can't be read are named as two, each on its own line, under ~.
+mkdir -p "$WORK/cxur/code/a/.codex" "$WORK/cxur/code/b/.codex"
+for p in a b; do printf 'approval_policy = "never"\n' > "$WORK/cxur/code/$p/.codex/config.toml"; chmod 000 "$WORK/cxur/code/$p/.codex/config.toml"; done
+HOME="$WORK/cxur" bash "$SCRIPT" --offline > "$WORK/cxur.txt" 2>&1
+chmod 644 "$WORK/cxur/code/a/.codex/config.toml" "$WORK/cxur/code/b/.codex/config.toml"
+has    "two Codex configs that can't be read are named as two" '2 config or settings files could not be read' "$WORK/cxur.txt"
+has    "each on its own line, under ~"                '^ +~/code/a/\.codex/config\.toml$' "$WORK/cxur.txt"
+has    "the second too"                               '^ +~/code/b/\.codex/config\.toml$' "$WORK/cxur.txt"
 # A settings read whose awk fails, as one a hostile file runs out of memory does, names the file as not
 # read: never a file with nothing set.
 mkdir -p "$WORK/aafail/code/p/.codex" "$WORK/aafail-bin"

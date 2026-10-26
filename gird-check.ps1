@@ -6368,7 +6368,8 @@ foreach ($r in $AaList) { [void]$yoloAg.Add($r.Agent) }
 $N_YOLO_AG = $yoloAg.Count
 # One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
 # it with the other settings files it could not read, so the summary doesn't read clean over it.
-foreach ($f in @(@(Unread-Files $aaTried $true) + @($AaCut))) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in (Unread-Files $aaTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in $AaCut) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 if ($N_YOLO -gt 0) { Progress "Agents set to run commands without asking: $($AaList[0].Agent)" }
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
