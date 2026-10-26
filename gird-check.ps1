@@ -1750,10 +1750,13 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
 $homeClaude = J $HomeDir '.claude'
-# A file's physical path, as bash's -ef compares files: a link at the file itself is followed, and its
-# folder's links resolved (Real-Dir; on Windows, where Real-Dir keeps the path as given, a folder that is
-# itself a link is followed to its target). $null when it can't be resolved.
+# A file's physical path, as bash's -ef compares files. Off Windows it is Link-End's: each link's text is
+# read from the folder the link really is in, so a relative link in a folder that is itself a link
+# (~/.claude, linked to a dotfiles folder) goes where the system takes it. On Windows, where Real-Dir
+# keeps the path as given, a link at the file itself is followed, and so is a folder that is itself a
+# link. $null when it can't be resolved.
 function Real-File([string]$p) {
+  if (-not $OnWindows) { return (Link-End $p) }
   try {
     $it = Get-Item -LiteralPath $p -Force -ErrorAction Stop
     if (Is-Link $it) {
@@ -1765,19 +1768,15 @@ function Real-File([string]$p) {
       }
     }
     $d = [IO.Path]::GetDirectoryName($p)
-    if ($OnWindows) {
-      $di = Get-Item -LiteralPath $d -Force -ErrorAction Stop
-      if (Is-Link $di) {
-        $dt = $null; try { $dt = [IO.Directory]::ResolveLinkTarget($d, $true) } catch { }
-        if ($dt) { $d = $dt.FullName } else {
-          $dl = Link-Target $di
-          if ($dl) { if (-not [IO.Path]::IsPathRooted($dl)) { $dl = J ([IO.Path]::GetDirectoryName($d)) $dl }; $d = $dl }
-        }
+    $di = Get-Item -LiteralPath $d -Force -ErrorAction Stop
+    if (Is-Link $di) {
+      $dt = $null; try { $dt = [IO.Directory]::ResolveLinkTarget($d, $true) } catch { }
+      if ($dt) { $d = $dt.FullName } else {
+        $dl = Link-Target $di
+        if ($dl) { if (-not [IO.Path]::IsPathRooted($dl)) { $dl = J ([IO.Path]::GetDirectoryName($d)) $dl }; $d = $dl }
       }
-      $r = [IO.Path]::GetFullPath($d)
-    } else { $r = Real-Dir $d }
-    if (-not $r) { return $null }
-    J $r ([IO.Path]::GetFileName($p))
+    }
+    J ([IO.Path]::GetFullPath($d)) ([IO.Path]::GetFileName($p))
   } catch { $null }
 }
 # The person's own Claude Code settings can sit in a folder that looks like a project's, such as the
