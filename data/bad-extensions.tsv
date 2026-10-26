@@ -15,7 +15,7 @@
 #             where its malware could not run, the report shows it as a malicious extension to remove,
 #             not a compromised machine (as data/bad-pypi.tsv's os does)
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
-# GlassWorm, from Socket's posts and two of Aikido's, each its own incident. A version where the post gives one, every
+# GlassWorm, from Socket's posts, two of Aikido's and one of Koi's, each its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
 # update themselves, so a version from before an extension was turned counts too. Left out: what a post
 # calls a sleeper (not malicious yet), the 17 extensions turned on 29 April, whose payload Open VSX
@@ -70,6 +70,16 @@
 #     quartz.quartz-markdown-editor 0.3.0, a VS Code extension the post names, which Microsoft's list removes
 #     (11 March 2026, as untrustworthy): any. Its loader is JavaScript: all. The two npm packages of that
 #     post are in data/bad-npm.tsv.
+#   Koi, November 2025 (glasswormdec, its post of 10 December 2025, GlassWorm Goes Native, which Aikido's
+#     April post links; koi.ai now sends its readers to Palo Alto Networks, whose blog republished it, the
+#     copy the incident links): the 15 Open VSX and 19 Marketplace extensions it lists of the wave
+#     that began on 22 November, at every version, but for
+#     bphpburnsus.iconesvscode, which the post shows clean at 12.15.0 and malicious at 12.15.1 and 12.15.2.
+#     An id on its Marketplace list, or on Microsoft's list of removed extensions (as its Open VSX ones
+#     eamodas.shiny-vscode and svltsweet.svetle-for-cursor are), is any; the other nine are openvsx. Their
+#     loader runs a native binary built for macOS (darwin.node) or Windows (os.node), so their os is mac,win.
+#     Koi's other GlassWorm posts (October and November 2025, GlassWorm Goes Mac of late December 2025, and
+#     March 2026) are not covered here.
 # GlassWASM, June 2026 (glasswasm): the two Open VSX extensions of Socket's post, which it ties to GlassWorm,
 #   exargd.vsblack 0.0.1 and noellee-doc.flint-debug 0.1.1. They clone Marketplace extensions under the same
 #   ids and versions, and Socket says those Marketplace builds are clean: openvsx. Their loader picks a
@@ -190,6 +200,37 @@ floktokbok.autoimport	*	glasswormzig	any	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win
 cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any	all
 quartz.quartz-markdown-editor	0.3.0	glasswormuni	any	all
+bphpburn.icons-vscode	*	glasswormdec	openvsx	mac,win
+clangdcode.clangd-vscode	*	glasswormdec	openvsx	mac,win
+csvmech.csv-sql-tsv-rainbow	*	glasswormdec	openvsx	mac,win
+iconkief.icon-theme-material	*	glasswormdec	openvsx	mac,win
+msjsdreact.react-native-vscode	*	glasswormdec	openvsx	mac,win
+saoudrizvsce.claude-dev	*	glasswormdec	openvsx	mac,win
+solblanco.svelte-vscode	*	glasswormdec	openvsx	mac,win
+tailwind-nuxt.tailwindcss-for-react	*	glasswormdec	openvsx	mac,win
+vitalik.solidity	*	glasswormdec	openvsx	mac,win
+bphpburnsus.iconesvscode	12.15.1	glasswormdec	any	mac,win
+bphpburnsus.iconesvscode	12.15.2	glasswormdec	any	mac,win
+cweijamysq.sync-settings-vscode	*	glasswormdec	any	mac,win
+eamodas.shiny-vscode	*	glasswormdec	any	mac,win
+flutcode.flutter-extension	*	glasswormdec	any	mac,win
+saoudrizvsce.claude-devsce	*	glasswormdec	any	mac,win
+svltsweet.svetle-for-cursor	*	glasswormdec	any	mac,win
+yamlcode.yaml-vscode-extension	*	glasswormdec	any	mac,win
+iconkieftwo.icon-theme-materiall	*	glasswormdec	any	mac,win
+clangdcode.clangd-vsce	*	glasswormdec	any	mac,win
+codevsce.codelddb-vscode	*	glasswormdec	any	mac,win
+csvmech.csvrainbow	*	glasswormdec	any	mac,win
+dart-vsc.code-dart	*	glasswormdec	any	mac,win
+klustfix.kluster-code-verify	*	glasswormdec	any	mac,win
+lyywemhan.code-formatter-and-minifier-vscode	*	glasswormdec	any	mac,win
+msjsdreact.react-native-vsce	*	glasswormdec	any	mac,win
+prettier-vsc.vsce-prettier	*	glasswormdec	any	mac,win
+prisma-inc.prisma-studio-assistance	*	glasswormdec	any	mac,win
+redmat.vscode-quarkus-pro	*	glasswormdec	any	mac,win
+solblanco.svetle-vsce	*	glasswormdec	any	mac,win
+vims-vsce.vscode-vim	*	glasswormdec	any	mac,win
+vsceue.volar-vscode	*	glasswormdec	any	mac,win
 exargd.vsblack	0.0.1	glasswasm	openvsx	all
 noellee-doc.flint-debug	0.1.1	glasswasm	openvsx	all
 nrwl.angular-console	18.95.0	nxconsole	any	all

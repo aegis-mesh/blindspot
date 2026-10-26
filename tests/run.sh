@@ -2089,6 +2089,20 @@ has    "oorzc.ssh-tools 0.5.1, the build Socket names, in an Open VSX editor's f
 hasnot "an oorzc.ssh-tools build from before the compromise is not flagged" 'oorzc\.ssh-tools-0\.4\.0|oorzc\.ssh-tools 0\.4\.0' "$WORK/dz-ms.txt"
 hasnot "Open VSX's oorzc.ssh-tool is another extension" 'oorzc\.ssh-tool-0\.5\.1|oorzc\.ssh-tool 0\.5\.1' "$WORK/dz-ms.txt"
 hasnot "the October cluster's themes with no payload are not listed" 'theme-coca-cola-christmas|theme-charcoal-mint|theme-aurora-borealis' "$WORK/dz-ms.txt"
+# Koi's post on GlassWorm's November 2025 wave (glasswormdec): an Open VSX id in an Open VSX editor's folder, a
+# Marketplace id in VS Code's own folder too, and the vscode-icons clone only at the versions the post shows
+# malicious. Its loader has a native binary for macOS and Windows only.
+rm -rf "$WORK/dz-dec"; cp -R "$WORK/clean" "$WORK/dz-dec"
+mkdir -p "$WORK/dz-dec/.cursor/extensions/iconkief.icon-theme-material-1.0.0" "$WORK/dz-dec/.vscode/extensions/vsceue.volar-vscode-1.0.0" \
+  "$WORK/dz-dec/.vscode/extensions/vitalik.solidity-1.0.0" "$WORK/dz-dec/.vscode/extensions/bphpburnsus.iconesvscode-12.15.0" "$WORK/dz-dec/.cursor/extensions/bphpburnsus.iconesvscode-12.15.1"
+dzrun "$WORK/dz-dec" | tr -s ' \n' '  ' > "$WORK/dz-dec.txt"
+has    "GlassWorm's November 2025 wave: an Open VSX id in an Open VSX editor's folder" '~/\.cursor/extensions/iconkief\.icon-theme-material-1\.0\.0 iconkief\.icon-theme-material 1\.0\.0 \(GlassWorm native extensions, November 2025\), installed' "$WORK/dz-dec.txt"
+has    "and a Marketplace id of that wave in VS Code's own folder" '~/\.vscode/extensions/vsceue\.volar-vscode-1\.0\.0 vsceue\.volar-vscode 1\.0\.0 \(GlassWorm native extensions, November 2025\), installed' "$WORK/dz-dec.txt"
+hasnot "an Open VSX-only id of that wave in VS Code's own folder is not flagged" 'vitalik\.solidity' "$WORK/dz-dec.txt"
+has    "the vscode-icons clone at 12.15.1, which the post shows malicious" 'bphpburnsus\.iconesvscode 12\.15\.1 \(GlassWorm native extensions, November 2025\)' "$WORK/dz-dec.txt"
+hasnot "and not at 12.15.0, which it shows clean"     'iconesvscode-12\.15\.0|iconesvscode 12\.15\.0' "$WORK/dz-dec.txt"
+env HOME="$WORK/dz-dec" PATH="$WORK/linbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-dec-linux.txt"
+has    "on Linux, where that loader has no binary, they are extensions to remove" 'Editor extensions a malicious extension to remove .*Their malware runs on macOS and Windows only, so it did not run here' "$WORK/dz-dec-linux.txt"
 # A folder is split the way the editors split it: the id is the longest start that leaves a version of
 # three numbers, so oorzc.ssh-tools-2-0.1.0 is the extension oorzc.ssh-tools-2 at 0.1.0.
 rm -rf "$WORK/dz-id"; cp -R "$WORK/clean" "$WORK/dz-id"

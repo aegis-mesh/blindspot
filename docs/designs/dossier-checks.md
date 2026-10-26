@@ -166,6 +166,10 @@ agent that edits this file adds a login to this computer. Delete the link." Fix 
     wave, every version, `openvsx`, `os` `mac,win` (it loads win.node on Windows and mac.node anywhere
     else), and `floktokbok.autoimport`, the dropper its native code installs from GitHub into every
     editor, every version, `any`.
+  - Koi's post on GlassWorm's November 2025 wave (GlassWorm Goes Native, republished on Palo Alto
+    Networks' blog), its own incident: its 15 Open VSX and 19 Marketplace extensions, every version but
+    `bphpburnsus.iconesvscode` (12.15.1 and 12.15.2), `any` for its Marketplace ids and the two Open VSX
+    ids Microsoft's list removes, `openvsx` for the other nine, `os` `mac,win` (darwin.node and os.node).
   - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
     `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too; the
     first hid a Windows downloader, so its `os` is `win`: on a Mac or Linux it is a yellow "malicious

@@ -37,6 +37,7 @@ and on Linux the systemd unit that starts it	gird-check.ps1 takes Linux from the
 durabletask 1.4.2 is an act-now row on Linux	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
 durabletask 1.4.0, the version to pin, is not flagged	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
 on Linux, managed.pyz in the temp folder is durabletask's sign	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on Linux, where that loader has no binary, they are extensions to remove	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
 on a Mac, durabletask 1.4.2 is a version to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
 on a Mac it is not looked for	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
 mistralai 2.4.6 from PyPI is its own act-now row	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
