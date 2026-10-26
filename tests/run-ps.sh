@@ -1084,38 +1084,64 @@ has    "and a base64 secret that starts with a /"     '~/code/d/\.mcp\.json 1 se
 # A token written into an MCP server's HTTP headers is a token in the file: Authorization or a name
 # ending in -Key, -Token or -Secret, in JSON, in Codex's http_headers and in Goose's YAML. A header that
 # names an environment variable, or one that is not a secret, is not.
-mkdir -p "$WORK/hdr/.codex" "$WORK/hdr/AppData/Roaming/Block/goose/config" "$WORK/hdr/code/a" "$WORK/hdr/code/b" "$WORK/hdr/code/c" "$WORK/hdr/AppData/Local/Temp"
+mkdir -p "$WORK/hdr/.codex" "$WORK/hdr/AppData/Roaming/Block/goose/config" "$WORK/hdr/code/a" "$WORK/hdr/code/b" "$WORK/hdr/code/c" "$WORK/hdr/code/d" "$WORK/hdr/.continue" "$WORK/hdr/AppData/Local/Temp"
 printf '{"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer lin_api_%s"}}}}\n' "$FT20" > "$WORK/hdr/.claude.json"
 printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"X-API-Key":"%s"}}}}\n' "$FT20" > "$WORK/hdr/code/a/.mcp.json"
 printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"Authorization":"Bearer ${LINEAR_TOKEN}"}}}}\n' > "$WORK/hdr/code/b/.mcp.json"
 printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"Content-Type":"application/json-q8w7e6"}}}}\n' > "$WORK/hdr/code/c/.mcp.json"
 printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\nhttp_headers = { "Authorization" = "Bearer %s" }\n' "$FT20" > "$WORK/hdr/.codex/config.toml"
+printf 'mcpServers:\n  - name: linear\n    type: streamable-http\n    url: https://mcp.linear.app/mcp\n    requestOptions:\n      headers: {Authorization: Bearer %s}\n' "$FT20" > "$WORK/hdr/.continue/config.yaml"
+printf '{"mcpServers":{"rem":{"command":"npx","args":["mcp-remote","https://mcp.example.net/sse","--header","Authorization:Bearer %s"]}}}\n' "$FT20" > "$WORK/hdr/code/d/.mcp.json"
 printf 'extensions:\n  linear:\n    type: streamable_http\n    uri: https://mcp.linear.app/mcp\n    headers:\n      Authorization: Bearer %s\n' "$FT20" > "$WORK/hdr/AppData/Roaming/Block/goose/config/config.yaml"
 psrun "$WORK/hdr" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdr.txt"
 has    "a token in an MCP server's Authorization header is a token in the file" 'Claude Code ~/\.claude\.json 1 server, token in the file' "$WORK/hdr.txt"
 has    "and one in an X-API-Key header"               '~/code/a/\.mcp\.json 1 server, token in the file' "$WORK/hdr.txt"
 has    "and one in Codex's http_headers"              'Codex ~/\.codex/config\.toml 1 server, token in the file' "$WORK/hdr.txt"
 has    "and one in a YAML headers map"                'Goose ~/[^ ]+/config\.yaml [^,]*, token in the file' "$WORK/hdr.txt"
+has    "and one in a YAML flow map"                   'Continue ~/\.continue/config\.yaml servers configured, token in the file' "$WORK/hdr.txt"
+has    "and one in mcp-remote's --header argument"   '~/code/d/\.mcp\.json 1 server, token in the file' "$WORK/hdr.txt"
 has    "near miss: a header that names an environment variable is not a token" '~/code/b/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdr.txt"
 has    "near miss: a header that is not a secret is not a token" '~/code/c/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdr.txt"
-# Text about a header is not a token: a prompt Claude Code keeps in ~/.claude.json, a rule in Continue's
-# config.yaml, a server's description in a project's .mcp.json. Nor are Codex's env_http_headers, which
-# name an environment variable, inline or as a table, nor opencode's {env:NAME} template. A token in an
-# http_headers table that follows an env_http_headers table still counts.
+# Text about a header is not a token: a prompt Claude Code keeps in ~/.claude.json, code in one that reads
+# a header from the environment, a rule in Continue's config.yaml and code in a rule written as a block,
+# a server's description in a project's .mcp.json, Codex's developer_instructions and opencode's
+# instructions. Nor are Codex's env_http_headers, which name an environment variable, inline or as a
+# table, nor opencode's {env:NAME} template. A token in an http_headers table that follows an
+# env_http_headers table still counts.
 mkdir -p "$WORK/hdrn/.codex" "$WORK/hdrn/.continue" "$WORK/hdrn/.config/opencode" "$WORK/hdrn/code/a" "$WORK/hdrt/.codex" "$WORK/hdrn/AppData/Local/Temp" "$WORK/hdrt/AppData/Local/Temp"
-printf '{"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp"}},"projects":{"/w":{"history":[{"display":"add an Authorization: Bearer header from the env to the fetch call in api.ts"}]}}}\n' > "$WORK/hdrn/.claude.json"
-printf 'name: Mine\nrules:\n  - send the X-Api-Key: header from the environment, never inline\nmcpServers:\n  - name: linear\n    type: streamable-http\n    url: https://mcp.linear.app/mcp\n' > "$WORK/hdrn/.continue/config.yaml"
+cat > "$WORK/hdrn/.claude.json" <<'EOF'
+{"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp"}},"projects":{"/w":{"history":[
+{"display":"add an Authorization: Bearer header from the env to the fetch call in api.ts"},
+{"display":"fetch(url, { headers: { Authorization: process.env.API_TOKEN, Accept: \"application/json\" } })"},
+{"display":"In api.ts, Authorization: Bearer process.env.LINEAR_TOKEN"},
+{"display":"fetch(url, {headers: {Authorization: process.env.API_TOKEN}})"}]}}}
+EOF
+cat > "$WORK/hdrn/.continue/config.yaml" <<'EOF'
+name: Mine
+rules:
+  - send the X-Api-Key: header from the environment, never inline
+  - |
+    Call the API like this:
+      fetch(url, {
+        headers: { Authorization: process.env.API_TOKEN },
+      })
+      Authorization: process.env.LINEAR_API_TOKEN
+mcpServers:
+  - name: linear
+    type: streamable-http
+    url: https://mcp.linear.app/mcp
+EOF
 printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","description":"Send the X-Api-Key: header from the environment"}}}\n' > "$WORK/hdrn/code/a/.mcp.json"
-printf '[mcp_servers.google]\nurl = "https://mcp.example.net/google"\nenv_http_headers = { "X-Goog-Api-Key" = "GOOGLE_API_KEY_FOR_MCP" }\n\n[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nAuthorization = "LINEAR_AUTHORIZATION_HEADER"\n' > "$WORK/hdrn/.codex/config.toml"
-printf '{"mcp":{"linear":{"type":"remote","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer {env:LINEAR_API_TOKEN}"}}}}\n' > "$WORK/hdrn/.config/opencode/opencode.json"
+printf 'developer_instructions = """\n- X-Api-Key: read-from-the-environment\n"""\n[mcp_servers.google]\nurl = "https://mcp.example.net/google"\nenv_http_headers = { "X-Goog-Api-Key" = "GOOGLE_API_KEY_FOR_MCP" }\n\n[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nAuthorization = "LINEAR_AUTHORIZATION_HEADER"\n' > "$WORK/hdrn/.codex/config.toml"
+printf '{"mcp":{"linear":{"type":"remote","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer {env:LINEAR_API_TOKEN}"}}},"instructions":["When you call the API, Authorization: Bearer process.env.LINEAR_TOKEN"]}\n' > "$WORK/hdrn/.config/opencode/opencode.json"
 printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nX-Env-Key = "LINEAR_ENV_HEADER_NAME"\n\n[mcp_servers.linear.http_headers]\nAuthorization = "Bearer %s"\n' "$FT20" > "$WORK/hdrt/.codex/config.toml"
 psrun "$WORK/hdrn" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrn.txt"
 psrun "$WORK/hdrt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrt.txt"
-has    "near miss: a prompt about a header kept in ~/.claude.json is not a token" 'Claude Code ~/\.claude\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
-has    "nor a rule about one in Continue's config"    'Continue ~/\.continue/config\.yaml servers configured( [^,]|$)' "$WORK/hdrn.txt"
+has    "near miss: a prompt about a header, or with code that reads one, kept in ~/.claude.json is not a token" 'Claude Code ~/\.claude\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
+has    "nor a rule about one in Continue's config, or code in a rule written as a block" 'Continue ~/\.continue/config\.yaml servers configured( [^,]|$)' "$WORK/hdrn.txt"
 has    "nor a server's description about one"         '~/code/a/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
-has    "nor Codex's env_http_headers, inline or as a table" 'Codex ~/\.codex/config\.toml 2 servers( [^,]|$)' "$WORK/hdrn.txt"
-has    "nor opencode's {env:NAME} template"           'OpenCode ~/\.config/opencode/opencode\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
+has    "nor Codex's env_http_headers, inline or as a table, nor its developer_instructions" 'Codex ~/\.codex/config\.toml 2 servers( [^,]|$)' "$WORK/hdrn.txt"
+has    "nor opencode's {env:NAME} template, nor its instructions" 'OpenCode ~/\.config/opencode/opencode\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
 hasnot "so no MCP config there has a token"           'token in the file|Replace tokens written into MCP configs' "$WORK/hdrn.txt"
 has    "a token in an http_headers table after an env_http_headers table still counts" 'Codex ~/\.codex/config\.toml 1 server, token in the file' "$WORK/hdrt.txt"
 # An npm publish ships .claude/settings.local.json unless package.json's own private or files setting,

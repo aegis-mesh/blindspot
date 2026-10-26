@@ -780,16 +780,18 @@ P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{
 P_JSONSECRET='"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[[:space:]]*:[[:space:]]*"[^"$<{][^"]{11,}"'
 P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"$<{][^"]{11,}"'
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
-# A token in an HTTP header an MCP server is sent with (headers in JSON, http_headers in Codex's TOML, a
-# YAML map): Authorization, or a name ending in -Key, -Token or -Secret, in any case, as header names
-# are. The value has to be token-shaped (P_HTOKEN): at most one word such as Bearer, then 12 or more
-# characters with no space, no $ (an environment variable), no < and no { (a placeholder, or a template
-# such as opencode's {env:NAME}). A YAML header starts a line or follows a { or a comma, as a map's key
-# does, and its value ends at a quote, a comma, a }, a comment or the line end, so a sentence about a
-# header, in a prompt Claude Code keeps or in a rule, is not one.
+# A token in an HTTP header an MCP server is sent with: headers in JSON, http_headers in Codex's TOML,
+# a whole string "Name: value" (mcp-remote's --header argument), or a YAML headers map (P_HEADERYAML,
+# read only in a YAML file's headers: maps, yaml_headers). The name is Authorization, or one ending in
+# -Key, -Token or -Secret, in any case, as header names are. The value has to be token-shaped
+# (P_HTOKEN): at most one word such as Bearer, then 12 or more characters with no space, no $ (an
+# environment variable), no < and no { (a placeholder, or a template such as opencode's {env:NAME}),
+# and no bracket. So text about a header, in a prompt Claude Code keeps or in a rule, is not one, nor
+# is code that reads one from the environment.
 P_HNAME='([Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-([Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
-P_HTOKEN="([A-Za-z][A-Za-z-]*[[:space:]]+)?[^\"'\$<{}[:space:],]{12,}"
-P_HEADERSECRET="\"${P_HNAME}\"[[:space:]]*[:=][[:space:]]*\"${P_HTOKEN}\"|(^|[[:space:]{,])${P_HNAME}[[:space:]]*=[[:space:]]*\"${P_HTOKEN}\"|(^|[{,])[[:space:]]*(-[[:space:]]+)?\"?${P_HNAME}\"?:[[:space:]]+[\"']?${P_HTOKEN}([\"',}]|[[:space:]]*\$|[[:space:]]+#)"
+P_HTOKEN="([A-Za-z][A-Za-z-]*[[:space:]]+)?[^]\"'\$<{}()[:space:],[]{12,}"
+P_HEADERSECRET="\"${P_HNAME}\"[[:space:]]*[:=][[:space:]]*\"${P_HTOKEN}\"|(^|[[:space:]{,])${P_HNAME}[[:space:]]*=[[:space:]]*\"${P_HTOKEN}\"|(^|[^\\])[\"']${P_HNAME}:[[:space:]]*${P_HTOKEN}[\"']"
+P_HEADERYAML="^[[:space:]]*[\"']?${P_HNAME}[\"']?:[[:space:]]+[\"']?${P_HTOKEN}([\"',}]|[[:space:]]*\$|[[:space:]]+#)"
 # Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
 # value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
 # under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
@@ -833,8 +835,23 @@ no_env_headers() { # file
     *) cat "$1" 2>/dev/null ;;
   esac
 }
+# The entries of a YAML file's headers: maps, one a line: a block map's lines, and a flow map's entries
+# on its headers: line. Text in a block scalar (| or >), such as a rule with code in it, is never one.
+yaml_headers() { # file
+  awk '{ sub(/\r$/, ""); t = $0; sub(/^ +/, "", t); ind = length($0) - length(t) }
+    insc { if (t == "" || ind > scind) next; insc = 0 }
+    inh { if (t == "" || substr(t, 1, 1) == "#") next
+      if (ind > hind) { print t; next }
+      inh = 0 }
+    t ~ /^(- +)?["\047]?headers["\047]?: *(#.*)?$/ { inh = 1; hind = ind; next }
+    t ~ /^(- +)?["\047]?headers["\047]?: *[{]/ { f = t; sub(/^[^{]*[{]/, "", f); sub(/[}].*$/, "", f)
+      n = split(f, e, ","); for (i = 1; i <= n; i++) print e[i]; next }
+    t ~ /(:|^-) +[|>][-+0-9]* *(#.*)?$/ { insc = 1; scind = ind }' "$1" 2>/dev/null
+}
 inline_secret() {
-  no_env_headers "$1" | grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
+  { no_env_headers "$1" | grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET"
+    case "$1" in *.yaml|*.yml) yaml_headers "$1" | grep -aoE "$P_HEADERYAML" ;; esac
+  } | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
 # A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
 # elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
@@ -1861,7 +1878,8 @@ mcp_row() { # who file client-id
     *.yaml|*.yml) grep -qE '^[[:space:]]*(mcpServers|extensions):' "$_f" 2>/dev/null || _c=0 ;;
   esac
   _tok=0
-  case "$MCP_FLAGGED" in *"|$_f|"*) inline_secret "$_f" && _tok=1 ;; esac
+  # A YAML config is always read: a header in a flow map is not a line of its own for MCP_FLAGGED.
+  case "$_f" in *.yaml|*.yml) inline_secret "$_f" && _tok=1 ;; *) case "$MCP_FLAGGED" in *"|$_f|"*) inline_secret "$_f" && _tok=1 ;; esac ;; esac
   [ "$_c" = 0 ] && [ "$_tok" -eq 0 ] && return
   _ci=$3; in_list "$_ci" "$MCP_CLIENT_IDS" || _ci=other
   _pl=0; is_plugin_path "$_f" && _pl=1

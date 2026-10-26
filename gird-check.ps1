@@ -285,17 +285,18 @@ $P_ASSIGN = '(?<![A-Z0-9_])(?=(?>[0-9_]*)[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASS
 $P_JSONSECRET = '"(?:(?=[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))(?>[A-Z0-9_]*)|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[^\S\n]*:[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_TOMLSECRET = $P_NAME + '[^\S\n]*=[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
-# A token in an HTTP header an MCP server is sent with (headers in JSON, http_headers in Codex's TOML, a
-# YAML map): Authorization, or a name ending in -Key, -Token or -Secret, in any case, as header names
-# are. The value has to be token-shaped ($P_HTOKEN): at most one word such as Bearer, then 12 or more
-# characters with no space, no $ (an environment variable), no < and no { (a placeholder, or a template
-# such as opencode's {env:NAME}). A YAML header starts a line or follows a { or a comma, as a map's key
-# does, and its value ends at a quote, a comma, a }, a comment or the line end, so a sentence about a
-# header is not one. The same as gird-check.sh's P_HEADERSECRET; a name starts after a quote, a space,
-# { or , so each is read once.
+# A token in an HTTP header an MCP server is sent with: headers in JSON, http_headers in Codex's TOML,
+# a whole string "Name: value" (mcp-remote's --header argument), or a YAML headers map ($P_HEADERYAML,
+# read only in a YAML file's headers: maps, Yaml-Headers). The name is Authorization, or one ending in
+# -Key, -Token or -Secret, in any case, as header names are. The value has to be token-shaped
+# ($P_HTOKEN): at most one word such as Bearer, then 12 or more characters with no space, no $ (an
+# environment variable), no < and no { (a placeholder, or a template such as opencode's {env:NAME}),
+# and no bracket. So text about a header, in a prompt Claude Code keeps or in a rule, is not one, nor
+# is code that reads one from the environment. The same as gird-check.sh's P_HEADERSECRET.
 $P_HNAME = '(?:[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-(?:[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
-$P_HTOKEN = '(?:[A-Za-z][A-Za-z-]*[^\S\n]+)?[^"''$<{}\s,]{12,}'
-$P_HEADERSECRET = '"' + $P_HNAME + '"[^\S\n]*[:=][^\S\n]*"' + $P_HTOKEN + '"|(?:^|(?<=[\s{,]))' + $P_HNAME + '[^\S\n]*=[^\S\n]*"' + $P_HTOKEN + '"|(?:^|(?<=[{,]))[^\S\n]*(?:-[^\S\n]+)?"?' + $P_HNAME + '"?:[^\S\n]+["'']?' + $P_HTOKEN + '(?:["'',}]|[^\S\n]*$|[^\S\n]+#)'
+$P_HTOKEN = '(?:[A-Za-z][A-Za-z-]*[^\S\n]+)?[^\]"''$<{}()\s,\[]{12,}'
+$P_HEADERSECRET = '"' + $P_HNAME + '"[^\S\n]*[:=][^\S\n]*"' + $P_HTOKEN + '"|(?:^|(?<=[\s{,]))' + $P_HNAME + '[^\S\n]*=[^\S\n]*"' + $P_HTOKEN + '"|(?<!\\)["'']' + $P_HNAME + ':[^\S\n]*' + $P_HTOKEN + '["'']'
+$P_HEADERYAML = '^[^\S\n]*["'']?' + $P_HNAME + '["'']?:[^\S\n]+["'']?' + $P_HTOKEN + '(?:["'',}]|[^\S\n]*$|[^\S\n]+#)'
 # Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
 # value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
 # under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
@@ -309,6 +310,7 @@ $RxTimeout = [TimeSpan]::FromSeconds(2)
 if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS -gt 0) { $RxTimeout = [TimeSpan]::FromMilliseconds([int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS) }
 $RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
 $RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxOpt, $RxTimeout)
+$RxHeaderYaml = New-Object regex($P_HEADERYAML, $RxOpt, $RxTimeout)
 $RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
 $RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
@@ -396,10 +398,30 @@ function No-EnvHeaders([string]$t) {
   }
   $keep -join "`n"
 }
-function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders) {
+# The entries of a YAML file's headers: maps, one a line: a block map's lines, and a flow map's entries
+# on its headers: line. Text in a block scalar (| or >), such as a rule with code in it, is never one.
+# The same as gird-check.sh's yaml_headers.
+function Yaml-Headers([string]$t) {
+  $inh = $false; $hind = 0; $insc = $false; $scind = 0
+  $keep = foreach ($line in $t.Split("`n")) {
+    $l = $line.TrimEnd("`r"); $u = $l.TrimStart(' '); $ind = $l.Length - $u.Length
+    if ($insc) { if ($u -eq '' -or $ind -gt $scind) { continue }; $insc = $false }
+    if ($inh) {
+      if ($u -eq '' -or $u.StartsWith('#')) { continue }
+      if ($ind -gt $hind) { $u; continue }
+      $inh = $false
+    }
+    if ($u -cmatch '^(?:- +)?["'']?headers["'']?: *(?:#.*)?$') { $inh = $true; $hind = $ind; continue }
+    if ($u -cmatch '^(?:- +)?["'']?headers["'']?: *\{') { (($u -replace '^[^{]*\{', '') -replace '\}.*$', '').Split(','); continue }
+    if ($u -cmatch '(?::|^-) +[|>][-+0-9]* *(?:#.*)?$') { $insc = $true; $scind = $ind }
+  }
+  $keep -join "`n"
+}
+function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders, [switch]$YamlHeaders) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
   if ($NoEnvHeaders) { $t = No-EnvHeaders $t }
+  if ($YamlHeaders) { $t = Yaml-Headers $t }
   try { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } catch { Mark-Slow $f }
   $false
 }
@@ -1391,6 +1413,7 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
   }
   $tok = $false; $toml = $f.EndsWith('.toml')
   if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline -NoEnvHeaders:$toml)) { $tok = $true }
+  elseif (($f.EndsWith('.yaml') -or $f.EndsWith('.yml')) -and (Has-RealMatch $f $RxHeaderYaml -YamlHeaders)) { $tok = $true }
   if ($c -eq 0 -and $null -ne $c -and -not $tok) { return }
   if (-not ((Ids $MCP_CLIENT_IDS) -contains $cid)) { $cid = 'other' }
   $pl = Is-PluginPath $f
