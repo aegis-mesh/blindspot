@@ -329,15 +329,17 @@ real Mac.
   https://github.com/aegis-mesh/blindspot/issues/24.
 - Session engine. An account run inherits the Full Disk Access of the MDM agent that started root:
   macOS judges it by the responsible process, and it passes through `sudo` to the account run and
-  everything it starts. So the account run never runs anything the account, or anyone but root,
-  could have written: ripgrep is used only when its real file (a link is followed) and every folder
-  above it are owned by root and writable by no one else, by mode or by ACL. It looks first at
-  `/Library/Application Support/Blindspot/rg`, which the guide installs as an optional, pinned and
-  hash-checked step, then `/opt/homebrew/bin/rg` and `/usr/local/bin/rg`; a ripgrep in an account's
-  own folders, or a Homebrew one the account owns, is never run. Otherwise the system perl checks
-  the sessions. The cost: with a large session store (5.2 GB measured on one Mac), minutes per
-  account on perl, seconds with the admin-installed ripgrep. ripgrep gets no handle to root's pipe.
-  Root never runs ripgrep. The account run reports `engine=rg|perl|none`, and the row carries it as
+  everything it starts. So the account run never runs anything an account could have written or
+  re-pointed. An account can re-point any link in a folder it can write (Homebrew's `bin` belongs to
+  whoever installed Homebrew), and a link to any root-owned program would run that program; some,
+  such as a Python or a Ruby, then load the account's own code, inside the Full Disk Access chain.
+  So ripgrep is used only from `/Library/Application Support/Blindspot/rg`, which the guide installs
+  as an optional, pinned and hash-checked step: as a regular file, not a link, with every folder
+  above it a real folder, all owned by root and writable by no one else, by mode or by ACL. Links
+  are never resolved and no other place is looked at. Otherwise the system perl checks the
+  sessions. The cost: with a large session store (5.2 GB measured on one Mac), minutes per account
+  on perl, seconds with the admin-installed ripgrep. ripgrep gets no handle to root's pipe. Root
+  never runs ripgrep. The account run reports `engine=rg|perl|none`, and the row carries it as
   `session_engine`; the inventory value does not.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
