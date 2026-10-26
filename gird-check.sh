@@ -6693,6 +6693,7 @@ lock_nm_walk() { # project folder, name, version
     _wn=()
     for _wm in "${_wq[@]}"; do
       pkg_at "$_wm/$2" "$3" && return 0
+      if [ -d "$_wm" ] && { [ ! -r "$_wm" ] || [ ! -x "$_wm" ]; }; then [ -n "$LI_UNREAD" ] || LI_UNREAD=$_wm; continue; fi
       for _wc in "$_wm"/*/node_modules "$_wm"/@*/*/node_modules; do
         [ -d "$_wc" ] && [ ! -L "$_wc" ] || continue
         [ "$_wl" -eq 0 ] || [ ! -L "${_wc%/node_modules}" ] || continue
@@ -6730,16 +6731,22 @@ yarn_mirror() { # .yarnrc
   printf '%s' "$_ym"
 }
 # Whether a lockfile's entry is installed where that lockfile puts it, at its version: the folder npm's
-# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm,
-# yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's offline mirror
-# when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz, a scoped name
-# written @scope-name (yarn 1's tarball-fetcher).
+# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm, bun's
+# isolated store, yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's
+# offline mirror when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz,
+# a scoped name written @scope-name (yarn 1's tarball-fetcher). Not found, with a folder on the way that
+# could not be read (LI_UNREAD), it can't tell: it returns 2, never "not installed".
+lock_blocked() { _lbk=$(py_blocked "$1"); printf '%s' "${_lbk#\?$TAB}"; } # path: the folder on its way that can't be read
 lock_installed() { # lockfile name version
-  _ld=${1%/*}
+  _ld=${1%/*}; LI_UNREAD=""
   [ "$3" != "?" ] || return 1
   case "$1" in
     */package-lock.json|*/npm-shrinkwrap.json|*/bun.lock)
-      while IFS= read -r _lp; do [ -n "$_lp" ] && pkg_at "$_ld/$_lp" "$3" && return 0; done <<EOF
+      while IFS= read -r _lp; do
+        [ -n "$_lp" ] || continue
+        pkg_at "$_ld/$_lp" "$3" && return 0
+        [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/$_lp/package.json")
+      done <<EOF
 $(lock_paths "$1" "$2" "$3")
 EOF
       ;;
@@ -6747,7 +6754,14 @@ EOF
   lock_nm_walk "$_ld" "$2" "$3" && return 0
   case "$1" in
     */pnpm-lock.yaml)
-      for _lp in "$_ld"/node_modules/.pnpm/*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done ;;
+      for _lp in "$_ld"/node_modules/.pnpm/*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done
+      [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/node_modules/.pnpm/x") ;;
+    */bun.lock)
+      # bun's isolated layout: node_modules/.bun/<name>@<version>/node_modules/<name>, with a / in the
+      # name written + and, for a build with other peer dependencies, + and a hash after the version.
+      _lb=$(printf '%s' "$2" | tr / +)
+      for _lp in "$_ld/node_modules/.bun/$_lb@$3/node_modules/$2" "$_ld/node_modules/.bun/$_lb@$3+"*/node_modules/"$2"; do pkg_at "$_lp" "$3" && return 0; done
+      [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/node_modules/.bun/x") ;;
     */yarn.lock)
       _ly=$2; case "$2" in @*/*) _ly="${2%%/*}-${2#*/}" ;; esac
       yarn_zip "$_ld/.yarn/cache" "$_ly" "$3" && return 0
@@ -6755,8 +6769,10 @@ EOF
       for _yr in "$_ld/.yarnrc" "$H/.yarnrc"; do
         _ym=$(yarn_mirror "$_yr") || continue
         [ -f "$_ym/$_ly-$3.tgz" ] && return 0
-      done ;;
+      done
+      [ -n "$LI_UNREAD" ] || LI_UNREAD=$(lock_blocked "$_ld/.yarn/cache/x") ;;
   esac
+  [ -n "$LI_UNREAD" ] && return 2
   return 1
 }
 # A row shows its lockfile's path with control characters as ?, so the install check looks in the folder
@@ -6768,17 +6784,24 @@ $LOCKFILES
 EOF
 }
 # NPM_INST_TAGS: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
-NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "
+# NM_UNREAD: the folders that kept the install check from telling whether a lockfile's hit was installed.
+NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "; NM_UNREAD=""
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
   case "$_f" in
     */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
-      _li=1
-      while IFS= read -r _rf; do [ -n "$_rf" ] && lock_installed "$_rf" "${_p% *}" "${_p##* }" && { _li=0; break; }; done <<EOF
+      _li=1; _lu=""
+      while IFS= read -r _rf; do
+        [ -n "$_rf" ] || continue
+        lock_installed "$_rf" "${_p% *}" "${_p##* }"; _lr=$?
+        [ "$_lr" -eq 0 ] && { _li=0; break; }
+        [ "$_lr" -eq 2 ] && [ -z "$_lu" ] && _lu=$LI_UNREAD
+      done <<EOF
 $(lock_raw "$_f")
 EOF
       if [ "$_li" -eq 0 ]; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
       else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
+"; [ -n "$_lu" ] && NM_UNREAD="$NM_UNREAD$_lu
 "; fi ;;
     *) NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t " ;;
   esac
@@ -6786,6 +6809,7 @@ done <<EOF
 $NPM_ROWS
 EOF
 N_LOCKPROJ=$(printf '%s' "$NPM_LOCKPROJ" | sort -u | grep -c .)
+NM_UNREAD=$(printf '%s' "$NM_UNREAD" | awk 'NF && !s[$0]++'); N_NM_UNREAD=$(count_lines "$NM_UNREAD")
 # What these worms leave behind (data/indicators.tsv). gh-token-monitor runs a destructive command
 # when the stolen GitHub token stops working (in the TanStack wave it tries to run rm -rf ~/, Wiz; in
 # the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
@@ -7835,6 +7859,14 @@ fi
 if [ -n "$_np" ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
   wrap "$(printf '%s' "${_np:0:1}" | tr 'a-z' 'A-Z')${_np:1} could not be read, so this is not the full list." 8 "        " "        " "$YEL"
   lock_unread
+fi
+# A lockfile's hit whose install could not be checked, for a folder where it would be installed that
+# could not be read: never called not installed.
+if [ "$N_NM_UNREAD" -gt 0 ]; then
+  wrap "$(plural "$N_NM_UNREAD" folder folders) could not be read, so whether these versions were installed is not known:" 8 "        " "        " "$YEL"
+  while IFS= read -r _f; do [ -n "$_f" ] && emit "        $(short "$_f")"; done <<EOF
+$NM_UNREAD
+EOF
 fi
 # Extensions whose malware could not run on this OS (data/bad-extensions.tsv's os): each, and why it is
 # one to remove, not a sign of a compromised machine.

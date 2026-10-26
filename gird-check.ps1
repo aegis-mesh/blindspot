@@ -6016,7 +6016,9 @@ function Lock-NmWalk([string]$d, [string]$n, [string]$v) {
     $nq = New-Object System.Collections.Generic.List[string]
     foreach ($m in $q) {
       if (Pkg-At (J $m $n) $v) { return $true }
-      foreach ($c in (Glob-Dirs $m '*')) {
+      if (-not (Is-Dir $m)) { continue }
+      try { $cs = @([IO.Directory]::GetDirectories($m) | Sort-Object) } catch { if (-not $script:LiUnread) { $script:LiUnread = $m }; continue }
+      foreach ($c in $cs) {
         $cn = [IO.Path]::GetFileName($c); if ($cn.StartsWith('.')) { continue }
         if ($cn.StartsWith('@')) { $kids = @(foreach ($k in (Glob-Dirs $c '*')) { if (-not [IO.Path]::GetFileName($k).StartsWith('.')) { $k } }) } else { $kids = @($c) }
         foreach ($p in $kids) {
@@ -6058,37 +6060,55 @@ function Yarn-Mirror([string]$rc) {
   J ([IO.Path]::GetDirectoryName($rc)) $mv
 }
 # Whether a lockfile's entry is installed where that lockfile puts it, at its version: the folder npm's
-# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm,
-# yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's offline mirror
-# when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz, a scoped name
-# written @scope-name (yarn 1's tarball-fetcher).
+# or bun's lockfile names, a node_modules folder nested in the project's, pnpm's node_modules/.pnpm, bun's
+# isolated store, yarn 2 and later's cache zip (the project's .yarn/cache or the shared one), or yarn 1's
+# offline mirror when the project's .yarnrc or yours names one. Its tarball there is <name>-<version>.tgz,
+# a scoped name written @scope-name (yarn 1's tarball-fetcher). It answers yes or no, or, not found with a
+# folder on the way that could not be read ($LiUnread), unread: never "not installed" then.
+$LiUnread = ''
+function Lock-Blocked([string]$p) { if (-not $script:LiUnread) { $b = Py-Blocked $p; if ($b) { $script:LiUnread = $b } } }
 function Lock-Installed([string]$f, [string]$n, [string]$v) {
-  if ($v -ceq '?') { return $false }
+  $script:LiUnread = ''
+  if ($v -ceq '?') { return 'no' }
   $ld = [IO.Path]::GetDirectoryName($f); $kind = [IO.Path]::GetFileName($f)
   if ($kind -ceq 'package-lock.json' -or $kind -ceq 'npm-shrinkwrap.json' -or $kind -ceq 'bun.lock') {
-    foreach ($lp in @(Lock-Paths $f $n $v)) { if (Pkg-At (J $ld $lp) $v) { return $true } }
+    foreach ($lp in @(Lock-Paths $f $n $v)) { if (Pkg-At (J $ld $lp) $v) { return 'yes' }; Lock-Blocked (J (J $ld $lp) 'package.json') }
   }
-  if (Lock-NmWalk $ld $n $v) { return $true }
+  if (Lock-NmWalk $ld $n $v) { return 'yes' }
   if ($kind -ceq 'pnpm-lock.yaml') {
-    foreach ($x in (Glob-Dirs (J $ld 'node_modules/.pnpm') '*')) { if (Pkg-At (J (J $x 'node_modules') $n) $v) { return $true } }
+    foreach ($x in (Glob-Dirs (J $ld 'node_modules/.pnpm') '*')) { if (Pkg-At (J (J $x 'node_modules') $n) $v) { return 'yes' } }
+    Lock-Blocked (J $ld 'node_modules/.pnpm/x')
+  } elseif ($kind -ceq 'bun.lock') {
+    # bun's isolated layout: node_modules/.bun/<name>@<version>/node_modules/<name>, with a / in the name
+    # written + and, for a build with other peer dependencies, + and a hash after the version.
+    $bn = $n.Replace('/', '+'); $bs = J $ld 'node_modules/.bun'
+    if (Pkg-At (J (J $bs "$bn@$v") "node_modules/$n") $v) { return 'yes' }
+    foreach ($x in (Glob-Dirs $bs "$bn@$v+*")) { if (Pkg-At (J (J $x 'node_modules') $n) $v) { return 'yes' } }
+    Lock-Blocked (J $bs 'x')
   } elseif ($kind -ceq 'yarn.lock') {
     $slug = $n; if ($n.StartsWith('@') -and $n.Contains('/')) { $slug = $n.Replace('/', '-') }
-    if ((Yarn-Zip (J $ld '.yarn/cache') $slug $v) -or (Yarn-Zip $YarnGCache $slug $v)) { return $true }
+    if ((Yarn-Zip (J $ld '.yarn/cache') $slug $v) -or (Yarn-Zip $YarnGCache $slug $v)) { return 'yes' }
     foreach ($rc in @((J $ld '.yarnrc'), (J $HomeDir '.yarnrc'))) {
       $mir = Yarn-Mirror $rc
-      if ($mir -and (Is-File (J $mir "$slug-$v.tgz"))) { return $true }
+      if ($mir -and (Is-File (J $mir "$slug-$v.tgz"))) { return 'yes' }
     }
+    Lock-Blocked (J $ld '.yarn/cache/x')
   }
-  $false
+  if ($script:LiUnread) { return 'unread' }
+  'no'
 }
 # $NpmInstTags: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
+# $NmUnread: the folders that kept the install check from telling whether a lockfile's hit was installed.
 $NpmInst = 0; $LockProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $NpmInstTags = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+$NmUnread = New-Object System.Collections.Generic.List[string]
 foreach ($r in $NpmRows) {
   if ((Incident-Level $r[2]) -ne 'act') { continue }
   if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
     $isp = $r[1].LastIndexOf(' ')
-    if (Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)) { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) } else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])) }
+    $li = Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)
+    if ($li -ceq 'yes') { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) }
+    else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])); if ($li -ceq 'unread' -and -not $NmUnread.Contains($LiUnread)) { $NmUnread.Add($LiUnread) } }
   } else { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) }
 }
 $N_LOCKPROJ = $LockProj.Count
@@ -6798,6 +6818,12 @@ if (($NpmSlow -gt 0 -or $npText) -and ($WIPER_HIT -eq 1 -or $npFound)) {
     Wrap "$($npText.Substring(0, 1).ToUpperInvariant())$($npText.Substring(1)) could not be read, so this is not the full list." 8 '        ' '        ' $cYel
     foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
   }
+}
+# A lockfile's hit whose install could not be checked, for a folder where it would be installed that could
+# not be read: never called not installed.
+if ($NmUnread.Count -gt 0) {
+  Wrap "$(Plural $NmUnread.Count 'folder' 'folders') could not be read, so whether these versions were installed is not known:" 8 '        ' '        ' $cYel
+  foreach ($f in $NmUnread) { Emit "        $(Short $f)" }
 }
 # Extensions whose malware could not run on this OS (data/bad-extensions.tsv's os): each, and why it is
 # one to remove, not a sign of a compromised machine.

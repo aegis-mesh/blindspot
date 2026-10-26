@@ -1215,6 +1215,26 @@ has    "a one-line lockfile's entry installed where it names is an install" 'ACT
 hasnot "an npm alias of a fork is not flagged as the package it replaces" 'axios 1\.14\.1|NPM MALWARE' "$OL/ala.txt"
 has    "an alias of a bad version is flagged by its own name" '~/code/http/package-lock\.json axios 1\.14\.1 \(Axios takeover' "$OL/alb.txt"
 has    "and is an install where the alias puts it" 'ACT NOW: SIGNS OF NPM MALWARE' "$OL/alb.txt"
+# bun's isolated layout keeps a package in node_modules/.bun/<name>@<version>/node_modules/<name> (bun's
+# isolated-installs docs), a / in a scoped name written + and a build with other peer dependencies given +
+# and a hash after the version: a dependency's dependency there is an install. A node_modules folder that
+# can't be read is named, never read as no install.
+BI=$WORK/bi; [ -d "$BI" ] && chmod -R u+rwx "$BI"; rm -rf "$BI"
+for d in iso iso2 unr; do mkdir -p "$BI/$d/code/app" "$BI/$d/AppData/Roaming" "$BI/$d/AppData/Local/Temp"; done
+printf '{\n  "lockfileVersion": 1,\n  "workspaces": {"": {"name": "app", "dependencies": {"tool": "^1.0.0"}}},\n  "packages": {\n    "tool": ["tool@1.0.0", "", {"dependencies": {"axios": "^1.14.0"}}, "sha512-x"],\n    "axios": ["axios@1.14.1", "", {}, "sha512-y"],\n  }\n}\n' > "$BI/iso/code/app/bun.lock"
+mkdir -p "$BI/iso/code/app/node_modules/.bun/axios@1.14.1/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$BI/iso/code/app/node_modules/.bun/axios@1.14.1/node_modules/axios/package.json"
+printf '{\n  "lockfileVersion": 1,\n  "workspaces": {"": {"name": "app", "dependencies": {"tool": "^1.0.0"}}},\n  "packages": {\n    "tool": ["tool@1.0.0", "", {"dependencies": {"@keyv/redis": "^6.0.0"}}, "sha512-x"],\n    "@keyv/redis": ["@keyv/redis@6.0.0", "", {}, "sha512-z"],\n  }\n}\n' > "$BI/iso2/code/app/bun.lock"
+mkdir -p "$BI/iso2/code/app/node_modules/.bun/@keyv+redis@6.0.0+0123456789abcdef/node_modules/@keyv/redis"
+printf '{"name":"@keyv/redis","version":"6.0.0"}\n' > "$BI/iso2/code/app/node_modules/.bun/@keyv+redis@6.0.0+0123456789abcdef/node_modules/@keyv/redis/package.json"
+mkdir -p "$BI/unr/code/app/node_modules/axios"; printf '{"name":"axios","version":"1.14.1"}\n' > "$BI/unr/code/app/node_modules/axios/package.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$BI/unr/code/app/package-lock.json"
+chmod 000 "$BI/unr/code/app/node_modules"
+for d in iso iso2 unr; do psrun "$BI/$d" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$BI/$d.txt"; done
+chmod 755 "$BI/unr/code/app/node_modules"
+has    "an install in bun's isolated store is found" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso.txt"
+has    "and a scoped package's build with other peer dependencies there" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso2.txt"
+has    "a node_modules that can't be read is named, never read as no install" '1 folder could not be read, so whether these versions were installed is not known: ~/code/app/node_modules ' "$BI/unr.txt"
 # Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
 # folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
 # version deep down is not a hit.
