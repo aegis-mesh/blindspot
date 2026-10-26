@@ -27,7 +27,8 @@ printf ": 1729000000:0;curl -H 'Authorization: token %s' https://api.github.com/
 
 mkdir -p "$F/code/app/.claude" "$F/code/lib/.claude"
 printf 'AWS_ACCESS_KEY_ID=%s\nGROQ_API_KEY=%s\nOPENAI_API_KEY=your-key-here\n' "$AWSK" "$GROQ" > "$F/code/app/.env"
-printf 'OPENAI_API_KEY=%s-your-key\n' "$s" > "$F/code/app/.env.example"
+# A placeholder shaped like a key, as .env.example files hold one: sk- and 48 x's is not a key.
+printf 'OPENAI_API_KEY=%s%s%s\n' "$s" "$d" "$(printf 'x%.0s' $(seq 1 48))" > "$F/code/app/.env.example"
 printf '{"permissions":{"allow":["Bash(npm test)","Bash(OPENAI_API_KEY=%s npm run eval)"]}}\n' "$OPENAI" > "$F/code/app/.claude/settings.local.json"
 printf '{"name":"app","version":"1.0.0"}\n' > "$F/code/app/package.json"
 printf 'node_modules\n' > "$F/code/app/.gitignore"

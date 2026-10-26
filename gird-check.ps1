@@ -354,6 +354,8 @@ function Is-CliOwnKey([string]$f, [string]$k) {
 }
 '@
 . ([scriptblock]::Create($KeyFns))
+# The providers of the keys in a file, in order, each once. A key that looks made up (a run of x's, a
+# documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either, as in the sessions.
 function Providers-In([string]$f) {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
@@ -361,7 +363,7 @@ function Providers-In([string]$f) {
   try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
   foreach ($m in $all) {
     $p = Key-Provider $m.Value
-    if ($p -and -not $seen.Contains($p)) { $seen.Add($p) }
+    if ($p -and -not (Made-Up $m.Value) -and -not $seen.Contains($p)) { $seen.Add($p) }
   }
   $seen.ToArray()
 }

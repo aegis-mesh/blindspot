@@ -766,11 +766,13 @@ P_JSONSECRET='"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|a
 P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"$<{][^"]{11,}"'
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 
+# The providers of the keys in a file, in order, each once. The matches go through the session check's
+# filter (sess_filter), as an Aider history's do, so a key that looks made up (a run of x's, a
+# documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either. Control
+# characters become spaces first, so the match is one field.
 providers_in() {
-  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk "$PROV_AWK"'
-    { p = prov($0); if (p == "") next
-      if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
-    END { printf "%s", out }'
+  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
+    awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
 # Print the files in a newline list that contain a match, in order, with one grep pass.
 files_matching() { # pattern; list on stdin
