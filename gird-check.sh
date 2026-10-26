@@ -1976,7 +1976,7 @@ FLAT_SED="s/$(printf '\342\200[\250\251]')/\\
 /g
 $(printf 's/\302\240/ /g\ns/\341\232\200/ /g\ns/\342\200[\200\201\202\203\204\205\206\207\210\211\212\213\257]/ /g\ns/\342\201\237/ /g\ns/\343\200\200/ /g\ns/\357\273\277/ /g')"
 flat() {
-  { tr '\r\t' '\n ' < "$1"; } 2>/dev/null | sed "$FLAT_SED" | awk '
+  { tr '\r\t\000' '\n  ' < "$1"; } 2>/dev/null | sed "$FLAT_SED" | awk '
     # How many backslashes s ends with. A match anchored at the last other character starts once per
     # run of backslashes, where /\\+$/ restarts at every backslash of a long run.
     function trail(s) {
