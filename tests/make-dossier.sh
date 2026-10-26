@@ -44,7 +44,7 @@ if [ "$MODE" = miss ]; then
   # does not name and whose package holds none of the IOCs Socket publishes for the January loader
   # (data/bad-extensions.tsv); the near-miss versions and name
   # sit in an Open VSX editor's folder, where the bad builds are looked for: an earlier and a longer
-  # version of oorzc.mind-map, and a longer name than oorzc.ssh-tools, of which every version counts.
+  # version of oorzc.mind-map, and a longer name than oorzc.ssh-tools at its bad version.
   mkdir -p "$F/.vscode/extensions/oorzc.ssh-tools-0.5.1" "$F/.cursor/extensions/oorzc.mind-map-1.0.6" "$F/.cursor/extensions/oorzc.mind-map-1.0.610" "$F/.cursor/extensions/oorzc.ssh-tools-pro-0.5.1"
   exit 0
 fi

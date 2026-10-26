@@ -7,15 +7,18 @@
 #   kind      plist   an Info.plist's CFBundleShortVersionString (an XML plist; a binary one is not read)
 #             folder  the highest version-named folder in a folder
 #             npm     a package's package.json in the global npm installs and npx's cache
-#             mcparg  name@version in the MCP configs section 2 reads
+#             mcparg  name@version in the MCP configs section 2 counts (not those in plugin catalogs and caches)
 #   where     plist and folder: a path, with the path tokens of data/sessions.tsv or an absolute path.
 #             npm and mcparg: the package name
-#   affected  <fixed, or >=first <fixed
+#   affected  <fixed, or >=first <fixed, or >=first <=last for an advisory that names first to last and that no
+#             version fixes: such a line makes no row of its own, as there is nothing to install, and a row
+#             whose fix it covers shows its hole as not fixed yet
 #   hole      what the hole allows, a few words from the advisory
 #   advisory  the advisory's https link
 # Lines of one tool agree on its name, and lines of one advisory on its range and hole. Each tool has a
-# line for its newest fix, and the version a row says to update to is never in another line's range, so
-# it has no published fix of its own; an older advisory may have a line too, for what its hole allows.
+# line for its newest fix, and the version a row says to update to is never in another line's range with
+# a fix, so it has no published fix of its own; an older advisory may have a line too, for what its hole
+# allows.
 # Versions compare part by part as numbers. A version that is not numbers and dots is not reported.
 # Each tool's advisories were read in October 2026 from its vendor's repository, GitHub's global
 # database and OSV: a repository can publish one that neither of the other two lists.
@@ -34,12 +37,20 @@
 # (GHSA-v234-4jrq-mgg6, macOS), and GHSA-3rwf-2g6p-c2f9 has lines for its hole. No kind reads its version
 # on Windows or Linux, so the two Windows advisories, GHSA-4p2j-qj3c-6x84 (below 1.8089.0) and
 # GHSA-5p5x-5294-qhp3 (below 1.3834.0), have no line.
-# mcp-remote: GHSA-6xpm-ggf7-wc3p is its only advisory with a fixed version. GitHub's database also
+# mcp-remote: GHSA-6xpm-ggf7-wc3p is its only advisory with a fixed version, 0.1.16. GitHub's database also
 # holds six unreviewed ones with no package field, which ?affects= does not find: GHSA-8rrr-xx35-4q6h,
 # GHSA-5wmf-76f4-cg47, GHSA-mvq8-g2rm-4rhm, GHSA-v65w-6crh-cp3h and GHSA-4gh6-j99c-x6g2, from one
 # researcher's review of 0.1.16 to 0.1.38, and GHSA-jrvg-vw6c-rp59, on 0.8.0 to 0.14.3. None names a fix,
 # OSV gives each only a last affected commit, and its repository (now punkpeye/mcp-remote) publishes no
-# advisory and no release note that names one, so they have no line.
+# advisory and no release note that names one. Two of them cover 0.1.16 itself. GHSA-v65w-6crh-cp3h
+# (CVE-2026-51997) says code execution, but the write-up it cites (playb0t/mcp-remote-oauth-security,
+# v1.0.1, F-08) shows a hostile authorization endpoint opening an internal address in the browser, which
+# its hole says; the code it names still opens that URL after only sanitizeUrl in 0.15.2, the newest on
+# npm (20 October 2026), so no version fixes it, and it has a line of that kind: the row of a version
+# below 0.1.16 says to update to 0.1.16 for the command injection and that no version fixes this yet.
+# GHSA-mvq8-g2rm-4rhm (CVE-2026-51996) has no line: its write-up (F-04) says MD5 names the token files
+# (still so in 0.15.2) but that no token takeover or real-token access was demonstrated, and claims no CVE.
+# The other four cover only versions above 0.1.16 and name no fix, so they have no line.
 # Amazon Q: the version folder is the language server's (Language Servers for AWS), which the bulletin
 # fixes in 1.69.0 (aws/language-servers publishes the bulletin's two advisories, and no later bulletin
 # names it). The extension's own version is not read. Amazon Q keeps the server in
@@ -56,12 +67,14 @@ claudedesktop	Claude Desktop	mac	plist	/Applications/Claude.app/Contents/Info.pl
 claudedesktop	Claude Desktop	mac	plist	~/Applications/Claude.app/Contents/Info.plist	>=1.1.3918 <1.15962.0	a file an agent leaves in a Cowork folder could run commands on the Mac when opened	https://github.com/anthropics/claude-code/security/advisories/GHSA-v234-4jrq-mgg6
 claudedesktop	Claude Desktop	mac	plist	/Applications/Claude.app/Contents/Info.plist	>=1.2581.0 <1.4304.0	an attacker on the network could intercept its remote SSH sessions	https://github.com/anthropics/claude-code/security/advisories/GHSA-3rwf-2g6p-c2f9
 claudedesktop	Claude Desktop	mac	plist	~/Applications/Claude.app/Contents/Info.plist	>=1.2581.0 <1.4304.0	an attacker on the network could intercept its remote SSH sessions	https://github.com/anthropics/claude-code/security/advisories/GHSA-3rwf-2g6p-c2f9
-amazonq	Amazon Q language server	mac	folder	~/Library/Caches/aws/toolkits/language-servers/AmazonQ	<1.69.0	a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
-amazonq	Amazon Q language server	linux	folder	~/.cache/aws/toolkits/language-servers/AmazonQ	<1.69.0	a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
-amazonq	Amazon Q language server	win	folder	{LOCALAPPDATA}/aws/toolkits/language-servers/AmazonQ	<1.69.0	a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq	Amazon Q language server	mac	folder	~/Library/Caches/aws/toolkits/language-servers/AmazonQ	<1.69.0	a link in a workspace can let the agent write files outside it, and before 1.65.0 a workspace you trust can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq	Amazon Q language server	linux	folder	~/.cache/aws/toolkits/language-servers/AmazonQ	<1.69.0	a link in a workspace can let the agent write files outside it, and before 1.65.0 a workspace you trust can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
+amazonq	Amazon Q language server	win	folder	{LOCALAPPDATA}/aws/toolkits/language-servers/AmazonQ	<1.69.0	a link in a workspace can let the agent write files outside it, and before 1.65.0 a workspace you trust can run its commands	https://aws.amazon.com/security/security-bulletins/2026-047-aws/
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=0.2.116 <1.0.24	a web page could reach the editor connection	https://github.com/advisories/GHSA-9f65-56v6-gxw7
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=2.1.38 <2.1.163	a malicious repository could run code outside the sandbox	https://github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	<2.1.179	a plugin repository could install code that bypasses its pinned hash	https://github.com/advisories/GHSA-pq7j-f95f-qfcv
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=2.0.68 <2.1.260	a stored API key could start sessions without the managed settings of an Enterprise or Team organization	https://github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
 mcpremote	mcp-remote	all	npm	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p
+mcpremote	mcp-remote	all	npm	mcp-remote	>=0.1.16 <=0.1.38	a hostile server could open an internal address in your browser	https://github.com/advisories/GHSA-v65w-6crh-cp3h
+mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.1.16 <=0.1.38	a hostile server could open an internal address in your browser	https://github.com/advisories/GHSA-v65w-6crh-cp3h

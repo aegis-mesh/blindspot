@@ -594,7 +594,7 @@ function Is-Pruned([string]$path, [string]$name, [int]$depth) {
 $WormNameAlone = '\.(claude|vscode)[/\\]+(router_runtime\.js|math_init\.js)'
 $WormNameWeak = '\.(claude|vscode)[/\\]+(setup\.mjs|execution\.js|index\.js)'
 function Planted-Note([string]$p) { switch -CaseSensitive ($p) { '.claude/router_runtime.js' { 'a file the TanStack and Mini Shai-Hulud worms plant' } '.vscode/router_runtime.js' { 'a file the TanStack worm plants' } '.claude/setup.mjs' { 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' } '.claude/math_init.js' { 'a file the keyv worm plants' } '.vscode/setup.mjs' { 'a file the TanStack, keyv and Mini Shai-Hulud worms plant' } '.claude/execution.js' { 'a file the Mini Shai-Hulud worm plants' } '.claude/index.js' { 'a file the AntV wave plants' } default { $null } } }
-function Planted-Sha([string]$p) { switch -CaseSensitive ($p) { '.claude/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' } '.vscode/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34' } '.claude/execution.js' { 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' } '.claude/index.js' { 'a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c' } default { '' } } }
+function Planted-Sha([string]$p) { switch -CaseSensitive ($p) { '.claude/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34 fe64699649591948d6f960705caac86fe99600bf76e3eae29b4517705a58f0e2' } '.vscode/setup.mjs' { 'fd3ca4007b225fdf8de7af4345a19179d5efa8c4bb9205f88cda806e5684b1eb 54dc7ea54a1317cca0e890a2770630cf7fa6c97813e0cb9d2caa93012b350668 2258284d65f63829bd67eaba01ef6f1ada2f593f9bbe41678b2df360bd90d3df 4066781fa830224c8bbcc3aa005a396657f9c8f9016f9a64ad44a9d7f5f45e34 fe64699649591948d6f960705caac86fe99600bf76e3eae29b4517705a58f0e2' } '.claude/execution.js' { 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' } '.claude/index.js' { 'a68dd1e6a6e35ec3771e1f94fe796f55dfe65a2b94560516ff4ac189390dfa1c' } default { '' } } }
 $PlantedAlone = @('.claude/router_runtime.js', '.vscode/router_runtime.js', '.claude/math_init.js')
 $WormRefNote = 'runs a file a worm plants'
 # <<< planted
@@ -1736,11 +1736,11 @@ foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH
 foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'minishai' { 'Mini Shai-Hulud worm, April 2026' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'antv' { 'AntV account takeover, May 2026' } 'nxconsole' { 'Nx Console 18.95.0, May 2026' } 'redhat' { 'Red Hat Cloud Services packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'keyvspread' { 'keyv worm spread, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormzig' { 'GlassWorm extensions, April 2026' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026' } 'glasswormuni' { 'GlassWorm invisible code, March 2026' } 'glasswasm' { 'GlassWASM extensions, June 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
-function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'uipath' { 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'minishai' { 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' } 'mastra' { 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' } 'antv' { 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' } 'nxconsole' { 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' } 'redhat' { 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'keyvscope' { 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' } 'keyvspread' { 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' } 'glasswormmar' { 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' } 'glasswormzig' { 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' } 'glasswormuni' { 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' } 'glasswasm' { 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' } 'injective' { 'Injective SDK, July 2026: sent out the seed phrases, and the private keys given as hex strings, that apps loaded into it. github.com' } default { $t } } }
+function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'minishai' { 'Mini Shai-Hulud worm, April 2026' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3, May 2026' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2, March 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'antv' { 'AntV account takeover, May 2026' } 'nxconsole' { 'Nx Console 18.95.0, May 2026' } 'redhat' { 'Red Hat Cloud Services packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'keyvspread' { 'keyv worm spread, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormzig' { 'GlassWorm extensions, April 2026' } 'glasswormdec' { 'GlassWorm native extensions, November 2025' } 'glasswormoct' { 'GlassWorm-linked themes, December 2025' } 'glasswormuni' { 'GlassWorm invisible code, March 2026' } 'glasswasm' { 'GlassWASM extensions, June 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
+function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'uipath' { 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'minishai' { 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' } 'mastra' { 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' } 'antv' { 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' } 'nxconsole' { 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' } 'redhat' { 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'keyvscope' { 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' } 'keyvspread' { 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' } 'glasswormmar' { 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' } 'glasswormzig' { 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' } 'glasswormdec' { 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' } 'glasswormoct' { 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' } 'glasswormuni' { 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' } 'glasswasm' { 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' } 'injective' { 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' } default { $t } } }
 function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'uipath' { 'update' } 'opencode' { 'leak' } 'railway' { 'leak' } 'zeabur' { 'leak' } 'injective' { 'update' } default { 'act' } } }
-function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'uipath' { 'UiPath npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'minishai' { 'Mini Shai-Hulud worm' } 'lightning' { 'lightning 2.6.2 and 2.6.3' } 'mastra' { 'Mastra npm packages' } 'antv' { 'AntV account takeover' } 'nxconsole' { 'Nx Console 18.95.0' } 'redhat' { 'Red Hat Cloud Services packages' } 'keyv' { 'keyv worm' } 'keyvscope' { 'keyv account takeover' } 'keyvspread' { 'keyv worm spread' } 'sandworm' { 'SANDWORM_MODE worm' } 'sandsleep' { 'SANDWORM_MODE sleeper packages' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormzig' { 'GlassWorm extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'glasswormuni' { 'GlassWorm invisible code' } 'glasswasm' { 'GlassWASM extensions' } 'injective' { 'Injective SDK' } default { $t } } }
-function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'uipath' { 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'minishai' { 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' } 'lightning' { 'github.com/advisories/GHSA-g4wr-mm54-799x' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'antv' { 'osv.dev/vulnerability/MAL-2026-3973' } 'nxconsole' { 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' } 'redhat' { 'osv.dev/vulnerability/MAL-2026-5111' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'keyvscope' { 'github.com/advisories/GHSA-q99r-cjmf-3xrf' } 'keyvspread' { 'osv.dev/vulnerability/MAL-2026-11952' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'sandsleep' { 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'litellmmar' { 'docs.litellm.ai/blog/security-update-march-2026' } 'opencode' { 'x.com/opencode/status/2111519637049319818' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormzig' { 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'glasswormuni' { 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' } 'glasswasm' { 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
+function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'uipath' { 'UiPath npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'minishai' { 'Mini Shai-Hulud worm' } 'lightning' { 'lightning 2.6.2 and 2.6.3' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2' } 'mastra' { 'Mastra npm packages' } 'antv' { 'AntV account takeover' } 'nxconsole' { 'Nx Console 18.95.0' } 'redhat' { 'Red Hat Cloud Services packages' } 'keyv' { 'keyv worm' } 'keyvscope' { 'keyv account takeover' } 'keyvspread' { 'keyv worm spread' } 'sandworm' { 'SANDWORM_MODE worm' } 'sandsleep' { 'SANDWORM_MODE sleeper packages' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormzig' { 'GlassWorm extensions' } 'glasswormdec' { 'GlassWorm native extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'glasswormuni' { 'GlassWorm invisible code' } 'glasswasm' { 'GlassWASM extensions' } 'injective' { 'Injective SDK' } default { $t } } }
+function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'uipath' { 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'minishai' { 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' } 'lightning' { 'github.com/advisories/GHSA-g4wr-mm54-799x' } 'durabletask' { 'github.com/advisories/GHSA-3qf7-886j-9wrc' } 'telnyx' { 'github.com/advisories/GHSA-955r-262c-33jc' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'antv' { 'osv.dev/vulnerability/MAL-2026-3973' } 'nxconsole' { 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' } 'redhat' { 'osv.dev/vulnerability/MAL-2026-5111' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'keyvscope' { 'github.com/advisories/GHSA-q99r-cjmf-3xrf' } 'keyvspread' { 'osv.dev/vulnerability/MAL-2026-11952' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'sandsleep' { 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'litellmmar' { 'docs.litellm.ai/blog/security-update-march-2026' } 'opencode' { 'x.com/opencode/status/2111519637049319818' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormzig' { 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' } 'glasswormdec' { 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'glasswormuni' { 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' } 'glasswasm' { 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
 function Incident-Advice([string]$t) { switch ($t) { 'uipath' { 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' } 'keyvscope' { 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' } 'sandworm' { 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' } 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'glasswormvsix' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormapr' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormzig' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'injective' { 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
 function Incident-Summary([string]$t) { switch ($t) { 'uipath' { 'UiPath builds: update them, UiPath says no risk' } 'injective' { 'Injective SDK: move the funds out of its wallets' } default { '' } } }
 # <<< incidents
@@ -1753,8 +1753,13 @@ mistralai 2.4.6 mistralpy linux
 guardrails_ai 0.10.1 guardrails linux
 lightning 2.6.2 lightning all
 lightning 2.6.3 lightning all
+durabletask 1.4.1 durabletask linux
+durabletask 1.4.2 durabletask linux
+durabletask 1.4.3 durabletask linux
+telnyx 4.87.1 telnyx none
+telnyx 4.87.2 telnyx all
 '@
-$PyIncidents = @('litellm', 'litellmmar', 'mistralpy', 'guardrails', 'lightning')
+$PyIncidents = @('litellm', 'litellmmar', 'mistralpy', 'guardrails', 'lightning', 'durabletask', 'telnyx')
 # <<< bad-pypi
 # >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
 $IndTable = @(
@@ -1787,6 +1792,14 @@ $IndTable = @(
   ,@('litellm', 'all', 'temp', 'yes', '.pc_sq_*', 'These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
   ,@('litellm', 'all', 'temp', 'yes', '.pc_e_*', 'These files mean the malware ran here, and a .pc_once_ file that it sent data out, LiteLLM says: rotate what that environment could reach, and kill the detached python process that holds remote_code_loader.lock. Don''t run Python or pip in the environment that had litellm 1.107.0 until cook.pth, cook.py, sitecustomize.py and their compiled copies in __pycache__ are deleted from it.')
   ,@('mistralpy', 'linux', 'temp', 'yes', 'transformers.pyz', 'Mistral lists this file, and a process started through python /tmp/transformers.pyz, as signs of the stealer: clean this machine, rotate all secrets it could reach and check cloud audit logs for suspicious activity.')
+  ,@('guardrails', 'linux', 'temp', 'yes', 'transformers.pyz', 'SafeDep shows guardrails-ai 0.10.1 writing this file on Linux and running it. Guardrails AI says to treat such a machine as compromised: rotate every credential it could reach and check your GitHub account for workflows, repositories or commits you did not make.')
+  ,@('durabletask', 'linux', 'temp', 'yes', 'managed.pyz', 'Wiz lists this file as the payload it downloads: stop any python3 process running /tmp/managed.pyz, then rotate every secret this machine could reach and rebuild it, as GitHub''s malware advisory says.')
+  ,@('telnyx', 'mac', 'startup', 'no', (J $HomeDir '.config/audiomon/audiomon.py'), 'the backdoor the telnyx malware leaves, which a systemd service starts at login on Linux')
+  ,@('telnyx', 'linux', 'startup', 'no', (J $HomeDir '.config/audiomon/audiomon.py'), 'the backdoor the telnyx malware leaves, which a systemd service starts at login on Linux')
+  ,@('telnyx', 'linux', 'startup', 'no', (J $HomeDir '.config/systemd/user/audiomon.service'), 'starts the backdoor the telnyx malware leaves, at login')
+  ,@('telnyx', 'win', 'startup', 'no', (J $HomeDir 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe'), 'the telnyx malware, which Windows starts at every login from the Startup folder')
+  ,@('telnyx', 'mac', 'temp', 'yes', '.initd_state', 'Telnyx lists this file as the malware''s state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.')
+  ,@('telnyx', 'linux', 'temp', 'yes', '.initd_state', 'Telnyx lists this file as the malware''s state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.')
 )
 # <<< indicators
 if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
@@ -1885,6 +1898,23 @@ for ($i = 0; $i -lt $BadPypiRows.Count; $i++) { if ($uvFound.ContainsKey($i)) { 
 $UvHit = New-Object System.Collections.Generic.List[object]
 foreach ($r in $UvBad) {
   if ($r[3] -eq 'all' -or $r[3] -eq $IndOs) { $UvHit.Add(@($r[2], "uv's cache: $($r[0]) $($r[1])")) } else { $PyUpd.Add(@($r[2], $r[3], "uv's cache: $($r[0]) $($r[1])")) }
+}
+# A temp file the lines of more than one Python incident name (mistralai 2.4.6 and guardrails-ai
+# 0.10.1 both write /tmp/transformers.pyz) is listed once, so a hit never names a package that is not
+# there: with the first of those incidents whose package was found, in an environment or uv's cache,
+# else with the first of them, and then $MarksBy (keyed "incident<TAB>file") says it was written by either.
+$MarksBy = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
+$pyFound = @{}; foreach ($l in $LiteBad) { $pyFound[$l[0]] = $true }; foreach ($l in $UvHit) { $pyFound[$l[0]] = $true }
+$markIncs = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
+foreach ($l in $Marks) { if (-not $markIncs.ContainsKey($l[1])) { $markIncs[$l[1]] = New-Object System.Collections.Generic.List[string] }; if (-not $markIncs[$l[1]].Contains($l[0])) { $markIncs[$l[1]].Add($l[0]) } }
+foreach ($mp in @($markIncs.Keys)) {
+  if ($markIncs[$mp].Count -lt 2) { continue }
+  $incs = @($PyIncidents | Where-Object { $markIncs[$mp].Contains($_) })
+  $own = @($incs | Where-Object { $pyFound.ContainsKey($_) }) | Select-Object -First 1
+  if (-not $own) { $own = $incs[0]; $MarksBy["$own`t$mp"] = @($incs | ForEach-Object { Incident-Name $_ }) -join ' or ' }
+  $keep = New-Object System.Collections.Generic.List[object]
+  foreach ($l in $Marks) { if ($l[1] -cne $mp -or $l[0] -ceq $own) { $keep.Add($l) } }
+  $Marks = $keep
 }
 $PyHits = New-Object System.Collections.Generic.List[string]
 foreach ($pi in $PyIncidents) {
@@ -5453,7 +5483,7 @@ uudi * sandsleep
 # <<< bad-npm
 # >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it.
 $BadExt = @'
-oorzc.ssh-tools * glassworm openvsx mac
+oorzc.ssh-tools 0.5.1 glassworm openvsx mac
 oorzc.i18n-tools-plus 1.6.8 glassworm openvsx mac
 oorzc.mind-map 1.0.61 glassworm openvsx mac
 oorzc.scss-to-css-compile 1.3.4 glassworm openvsx mac
@@ -5549,6 +5579,8 @@ daeumer-web.align-format-tool 1.4.6 glasswormvsix openvsx all
 baksmink.vscode-quokka-extension 1.0.756 glasswormvsix openvsx all
 bansheejust22.retro-vhs-theme 1.0.1 glasswormvsix openvsx all
 quickrunn.auto-run-command-quick 1.6.2 glasswormvsix openvsx all
+craz2team.vscode-todo-extension 1.0.9 glasswormvsix openvsx all
+craz2team.vscode-todo-extension 1.0.10 glasswormvsix openvsx all
 outsidestormcommand.monochromator-theme * glasswormapr openvsx all
 keyacrosslaud.auto-loop-for-antigravity * glasswormapr openvsx all
 krundoven.ironplc-fast-hub * glasswormapr openvsx all
@@ -5560,6 +5592,37 @@ floktokbok.autoimport * glasswormzig any all
 microsoftvs.microsoftvs * glasswormoct any win
 cosmic-themes.theme-cosmic-nebula * glasswormoct any all
 quartz.quartz-markdown-editor 0.3.0 glasswormuni any all
+bphpburn.icons-vscode * glasswormdec openvsx mac,win
+clangdcode.clangd-vscode * glasswormdec openvsx mac,win
+csvmech.csv-sql-tsv-rainbow * glasswormdec openvsx mac,win
+iconkief.icon-theme-material * glasswormdec openvsx mac,win
+msjsdreact.react-native-vscode * glasswormdec openvsx mac,win
+saoudrizvsce.claude-dev * glasswormdec openvsx mac,win
+solblanco.svelte-vscode * glasswormdec openvsx mac,win
+tailwind-nuxt.tailwindcss-for-react * glasswormdec openvsx mac,win
+vitalik.solidity * glasswormdec openvsx mac,win
+bphpburnsus.iconesvscode 12.15.1 glasswormdec any mac,win
+bphpburnsus.iconesvscode 12.15.2 glasswormdec any mac,win
+cweijamysq.sync-settings-vscode * glasswormdec any mac,win
+eamodas.shiny-vscode * glasswormdec any mac,win
+flutcode.flutter-extension * glasswormdec any mac,win
+saoudrizvsce.claude-devsce * glasswormdec any mac,win
+svltsweet.svetle-for-cursor * glasswormdec any mac,win
+yamlcode.yaml-vscode-extension * glasswormdec any mac,win
+iconkieftwo.icon-theme-materiall * glasswormdec any mac,win
+clangdcode.clangd-vsce * glasswormdec any mac,win
+codevsce.codelddb-vscode * glasswormdec any mac,win
+csvmech.csvrainbow * glasswormdec any mac,win
+dart-vsc.code-dart * glasswormdec any mac,win
+klustfix.kluster-code-verify * glasswormdec any mac,win
+lyywemhan.code-formatter-and-minifier-vscode * glasswormdec any mac,win
+msjsdreact.react-native-vsce * glasswormdec any mac,win
+prettier-vsc.vsce-prettier * glasswormdec any mac,win
+prisma-inc.prisma-studio-assistance * glasswormdec any mac,win
+redmat.vscode-quarkus-pro * glasswormdec any mac,win
+solblanco.svetle-vsce * glasswormdec any mac,win
+vims-vsce.vscode-vim * glasswormdec any mac,win
+vsceue.volar-vscode * glasswormdec any mac,win
 exargd.vsblack 0.0.1 glasswasm openvsx all
 noellee-doc.flint-debug 0.1.1 glasswasm openvsx all
 nrwl.angular-console 18.95.0 nxconsole any all
@@ -5677,6 +5740,11 @@ function Add-NpmRoot([string]$r) {
 }
 foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'),
     '/opt/homebrew/lib/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules')) { Add-NpmRoot $r }
+# Claude Code's npm "local" install, which its migrate-installer command puts in the local folder of its
+# config folder: CLAUDE_CONFIG_DIR, else ~/.claude (Claude Code 2.0.0's code), or $XDG_CONFIG_HOME/claude
+# when that is set (1.0.30's).
+Add-NpmRoot (J (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'local') 'node_modules')
+if (-not $env:CLAUDE_CONFIG_DIR -and $env:XDG_CONFIG_HOME -and $env:XDG_CONFIG_HOME.StartsWith('/')) { Add-NpmRoot (J $env:XDG_CONFIG_HOME 'claude/local/node_modules') }
 # Folders holding one folder per version or package, and where node_modules sits in each.
 $NpmGlobs = New-Object System.Collections.Generic.List[object]
 foreach ($g in @(@('.nvm/versions/node', 'lib/node_modules'), @('.volta/tools/image/node', 'lib/node_modules'), @('.volta/tools/image/packages', 'lib/node_modules'),
@@ -5772,15 +5840,17 @@ $OutTable = @(
   ,@('claudedesktop', 'Claude Desktop', 'mac', 'plist', (J $HomeDir 'Applications/Claude.app/Contents/Info.plist'), '1.1.3918', '1.15962.0', 'a file an agent leaves in a Cowork folder could run commands on the Mac when opened', 'github.com/anthropics/claude-code/security/advisories/GHSA-v234-4jrq-mgg6')
   ,@('claudedesktop', 'Claude Desktop', 'mac', 'plist', '/Applications/Claude.app/Contents/Info.plist', '1.2581.0', '1.4304.0', 'an attacker on the network could intercept its remote SSH sessions', 'github.com/anthropics/claude-code/security/advisories/GHSA-3rwf-2g6p-c2f9')
   ,@('claudedesktop', 'Claude Desktop', 'mac', 'plist', (J $HomeDir 'Applications/Claude.app/Contents/Info.plist'), '1.2581.0', '1.4304.0', 'an attacker on the network could intercept its remote SSH sessions', 'github.com/anthropics/claude-code/security/advisories/GHSA-3rwf-2g6p-c2f9')
-  ,@('amazonq', 'Amazon Q language server', 'mac', 'folder', (J $HomeDir 'Library/Caches/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
-  ,@('amazonq', 'Amazon Q language server', 'linux', 'folder', (J $HomeDir '.cache/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
-  ,@('amazonq', 'Amazon Q language server', 'win', 'folder', (J $LocalAppData 'aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'a link in a workspace can reach files outside it, and before 1.65.0 a workspace you trust can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
+  ,@('amazonq', 'Amazon Q language server', 'mac', 'folder', (J $HomeDir 'Library/Caches/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'a link in a workspace can let the agent write files outside it, and before 1.65.0 a workspace you trust can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
+  ,@('amazonq', 'Amazon Q language server', 'linux', 'folder', (J $HomeDir '.cache/aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'a link in a workspace can let the agent write files outside it, and before 1.65.0 a workspace you trust can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
+  ,@('amazonq', 'Amazon Q language server', 'win', 'folder', (J $LocalAppData 'aws/toolkits/language-servers/AmazonQ'), '-', '1.69.0', 'a link in a workspace can let the agent write files outside it, and before 1.65.0 a workspace you trust can run its commands', 'aws.amazon.com/security/security-bulletins/2026-047-aws/')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '0.2.116', '1.0.24', 'a web page could reach the editor connection', 'github.com/advisories/GHSA-9f65-56v6-gxw7')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '2.1.38', '2.1.163', 'a malicious repository could run code outside the sandbox', 'github.com/advisories/GHSA-7835-87q9-rgvv')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '-', '2.1.179', 'a plugin repository could install code that bypasses its pinned hash', 'github.com/advisories/GHSA-pq7j-f95f-qfcv')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '2.0.68', '2.1.260', 'a stored API key could start sessions without the managed settings of an Enterprise or Team organization', 'github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
 )
 # <<< outdated
 # --- 1. Coding agents: settings and versions -------------------------------------
@@ -5847,6 +5917,9 @@ function Pkg-Args([string]$nm, [string]$t) {
 $OldList = New-Object System.Collections.Generic.List[object]; $oldSeen = @{}
 foreach ($r in $OutTable) {
   if ($r[2] -ne 'all' -and $r[2] -ne $IndOs) { continue }
+  # A line whose advisory no version fixes (its fixed field !last) makes no row of its own: there is
+  # nothing to install. A row whose fix it covers says so (below).
+  if ($r[6].StartsWith('!')) { continue }
   $vs = @()
   switch ($r[3]) {
     'plist' { $t = Read-Text $r[4]; if ($null -ne $t) { $m = [regex]::Match($t, '<key>CFBundleShortVersionString</key>\s*<string>([^<]*)</string>'); if ($m.Success) { $vs = @($m.Groups[1].Value) } } }
@@ -5856,7 +5929,8 @@ foreach ($r in $OutTable) {
       if ($best) { $vs = @($best) }
     }
     'npm' { $vs = @(foreach ($nr in $NpmRoots) { $pj = J (J $nr $r[4]) 'package.json'; if (Is-File $pj) { $m = [regex]::Match([string](Read-Text $pj), '"version"\s*:\s*"([^"]+)"'); if ($m.Success) { $m.Groups[1].Value } } }) }
-    'mcparg' { $vs = @(foreach ($f in $McpList) { if (Is-File $f) { Pkg-Args $r[4] (Read-Text $f) } }) }
+    # The MCP configs section 2 counts: not those in plugin catalogs and caches, copies of other people's.
+    'mcparg' { $vs = @(foreach ($f in $McpList) { if ((Is-File $f) -and -not (Is-PluginPath $f)) { Pkg-Args $r[4] (Read-Text $f) } }) }
   }
   foreach ($v in $vs) {
     if (-not (Ver-Ok $v)) { continue }
@@ -5868,7 +5942,7 @@ foreach ($r in $OutTable) {
     # among those its versions fall under, and shows each of their holes with its advisory.
     if ($oldSeen.ContainsKey($r[0])) { $o = $oldSeen[$r[0]]; if (-not $o.Vers.Contains($v)) { $o.Vers.Add($v) } }
     else {
-      $o = @{ Id = $r[0]; Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
+      $o = @{ Id = $r[0]; Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)); Unfixed = (New-Object System.Collections.Generic.List[object]) }
       $o.Vers.Add($v); $oldSeen[$r[0]] = $o; $OldList.Add($o)
     }
     if ((Ver-Cmp $r[6] $o.Fixed) -gt 0) { $o.Fixed = $r[6] }
@@ -5877,14 +5951,20 @@ foreach ($r in $OutTable) {
 }
 # When the version a row says to update to is in the range of another of the tool's lines, the row
 # takes that line's fix, until no line covers it: the version it names has no published fix of its own.
+# When a line whose advisory no version fixes covers it, the row shows that line's hole as not fixed yet.
 foreach ($o in $OldList) {
   do {
     $moved = $false
     foreach ($r in $OutTable) {
-      if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs)) { continue }
+      if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs) -or $r[6].StartsWith('!')) { continue }
       if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6]) -lt 0) { $o.Fixed = $r[6]; $moved = $true }
     }
   } while ($moved)
+  $ufSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($r in $OutTable) {
+    if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs) -or -not $r[6].StartsWith('!')) { continue }
+    if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6].Substring(1)) -le 0 -and $ufSeen.Add("$($r[7])|$($r[8])")) { $o.Unfixed.Add(@($r[7], $r[8])) }
+  }
 }
 $N_OLD = $OldList.Count
 if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldList[0].Name)" }
@@ -5960,14 +6040,17 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
     # a version of three numbers, alone or before a -, so oorzc.ssh-tools-2-0.1.0 is oorzc.ssh-tools-2.
     $m = [regex]::Match($e.Name, '^([^.]+\..+)-([0-9]+\.[0-9]+\.[0-9]+)(-(.+))?\z')
     if (-not $m.Success) { continue }
+    # A line for this exact version wins over the id's every-version line, whatever their order.
+    $hit = $null
     foreach ($x in $BadExtRows) {
       if ($x[3] -ne 'any' -and $x[3] -ne $reg) { continue }
       if (-not $m.Groups[1].Value.Equals($x[0], [StringComparison]::OrdinalIgnoreCase)) { continue }
-      if ($x[1] -ceq '*' -or $x[1] -ceq $m.Groups[2].Value) {
-        if ($x[4] -eq 'all' -or @($x[4] -split ',') -contains $IndOs) { $ExtRows.Add(@($e.FullName, "$($x[0]) $($m.Groups[2].Value)", $x[2])) }
-        else { $ExtUpd.Add(@($e.FullName, "$($x[0]) $($m.Groups[2].Value)", $x[2], $x[4])) }
-        break
-      }
+      if ($x[1] -ceq $m.Groups[2].Value) { $hit = $x; break }
+      if ($x[1] -ceq '*' -and $null -eq $hit) { $hit = $x }
+    }
+    if ($null -ne $hit) {
+      if ($hit[4] -eq 'all' -or @($hit[4] -split ',') -contains $IndOs) { $ExtRows.Add(@($e.FullName, "$($hit[0]) $($m.Groups[2].Value)", $hit[2])) }
+      else { $ExtUpd.Add(@($e.FullName, "$($hit[0]) $($m.Groups[2].Value)", $hit[2], $hit[4])) }
     }
   }
 }
@@ -6577,6 +6660,8 @@ if ($N_OLD -gt 0) {
   foreach ($r in $OldList) {
     Pair "$cYel!$cRst" $r.Name 20 "$($r.Vers -join ', '), update to $($r.Fixed) or later"
     foreach ($h in $r.Holes) { Wrap "$($h[0].Substring(0, 1).ToUpperInvariant())$($h[0].Substring(1)). $($h[1])" 8 '        ' '        ' $cDim }
+    # A later advisory that covers the version named, and that no version fixes.
+    foreach ($h in $r.Unfixed) { Wrap "No version fixes this yet: $($h[0]). $($h[1])" 8 '        ' '        ' $cDim }
   }
 }
 $Sec1 = Take-Cap
@@ -6718,7 +6803,8 @@ foreach ($pi in $PyIncidents) {
   if ($PyHits -contains $pi) {
     Pair "$cRed$gX$cRst" $pl 16 "${cRed}signs of the malware found$cRst"
     foreach ($l in $LiteBad) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
-    foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
+    # A temp file both incidents write, listed with this one while neither package was found.
+    foreach ($l in $Marks) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])"; $mk = "$pi`t$($l[1])"; if ($MarksBy.ContainsKey($mk)) { Emit "          written by $($MarksBy[$mk])" } } }
     foreach ($l in $UvHit) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])" } }
     foreach ($l in $PyStart) { if ($l[0] -ceq $pi) { Emit "        $(Short $l[1])"; Emit "          $($l[2])" } }
     $hasMark = @($Marks | Where-Object { $_[0] -ceq $pi }).Count -gt 0
@@ -6743,9 +6829,13 @@ foreach ($pi in $PyIncidents) {
     if ($pi -eq 'litellm' -and $N_LITE -gt 0) { Emit "$ind26${cDim}installed: $(Short ($LiteVers -join ' '))$cRst" }
   }
   if ($upd.Count -gt 0) {
-    $oss = @()
-    foreach ($u in $upd) { Emit "        $(Short $u[2])"; $osn = Os-Name $u[1]; if ($oss -notcontains $osn) { $oss += $osn } }
-    $do = (@($do, "Its malware runs on $($oss -join ' and ') only, so it did not run here. Update to a version without it.") | Where-Object { $_ }) -join ' '
+    $oss = @(); $onone = $false
+    # none: its maintainer says the malware in that version could not run (data/bad-pypi.tsv).
+    foreach ($u in $upd) { Emit "        $(Short $u[2])"; if ($u[1] -eq 'none') { $onone = $true; continue }; $osn = Os-Name $u[1]; if ($oss -notcontains $osn) { $oss += $osn } }
+    $why = @()
+    if ($oss.Count -gt 0) { $why += "Its malware runs on $($oss -join ' and ') only, so it did not run here." }
+    if ($onone) { $why += 'Its maintainer says the malware in this version could not run.' }
+    $do = (@($do, (@($why + 'Update to a version without it.') -join ' ')) | Where-Object { $_ }) -join ' '
   }
   if ($do) { Wrap "$(Rotate-Wait $do) Advisory: $(Incident-Source $pi)" 8 '        ' '        ' }
   foreach ($r in $UvBad) { if ($r[2] -ceq $pi) { Wrap "Your uv cache holds the $($r[1]) package. Clear it with: uv cache clean $($r[0])" 8 '        ' '        ' $cYel } }
@@ -6753,7 +6843,7 @@ foreach ($pi in $PyIncidents) {
 if ($WIPER_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'npm malware' 16 "${cRed}a wiper is waiting$cRst"
   foreach ($l in $Wiper) { Emit "        $(Short $l)" }
-  # On Windows a scheduled task named gh-token-monitor starts it at logon (Tensorlake's advisory). Deleting the
+  # On Windows, Tensorlake's advisory says to delete a scheduled task named gh-token-monitor. Deleting the
   # task does not end its running program, so the process is ended too.
   # The commands go one to a line, never wrapped, so each can be copied whole.
   if ($OnWindows) { $stop = @('schtasks /Delete /TN gh-token-monitor /F', 'Get-CimInstance Win32_Process | Where-Object CommandLine -like ''*gh-token-monitor*'' | Invoke-CimMethod -MethodName Terminate') }

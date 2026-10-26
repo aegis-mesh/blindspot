@@ -189,6 +189,6 @@ needs the Worker and the D1 schema to accept them: a separate decision.
   thread's first prompt and queued prompts); Goose's old `~/.config/goose/history.txt`, which
   Goose moves to its state folder; Factory's `FACTORY_HOME_OVERRIDE`.
 - Cursor's per-workspace `workspaceStorage/*/state.vscdb` and `~/.cursor/acp-sessions`, Hugging
-  Face organization tokens (`api_org_`), AWS `ABIA` and `ACCA` key ids, and the `QWEN_RUNTIME_DIR`
-  and `OPENCODE_DB` overrides.
+  Face organization tokens (`api_org_`), AWS `ABIA` and `ACCA` key ids, and the `OPENCODE_DB`
+  override.
 - Keys that were pasted and later deleted from a session by the agent itself.

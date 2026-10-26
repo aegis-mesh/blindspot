@@ -15,7 +15,7 @@
 #             where its malware could not run, the report shows it as a malicious extension to remove,
 #             not a compromised machine (as data/bad-pypi.tsv's os does)
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
-# GlassWorm, from Socket's posts and two of Aikido's, each its own incident. A version where the post gives one, every
+# GlassWorm, from Socket's posts, two of Aikido's and one of Koi's, each its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
 # update themselves, so a version from before an extension was turned counts too. Left out: what a post
 # calls a sleeper (not malicious yet), the 17 extensions turned on 29 April, whose payload Open VSX
@@ -28,13 +28,20 @@
 # the cluster's two other Open VSX extensions, aurora-them-creator.theme-aurora-nocturne (which Microsoft's
 # list removes as impersonation, 30 January 2026) and solidity-syntax.deep-focus: Socket shows no payload
 # in either.
-#   January 2026: the four oorzc extensions, Open VSX only: Socket's findings concern the Open VSX
-#     builds, and it does not suggest the publisher's Marketplace listings were compromised. The
-#     Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30 March 2026, after that post:
-#     Microsoft's list of removed extensions does not name it (24 October 2026), and its package
-#     holds none of the loader IOCs Socket publishes (the AES key and IVs, the Solana address, the
-#     IP). Three at their malicious versions, and oorzc.ssh-tools at every version: Open VSX removed them all and added it
-#     to its malware list, Socket says. Their os is mac: Socket shows their loader going on only when
+#   January 2026: the four oorzc extensions at the versions the post names, Open VSX only: Socket's
+#     findings concern the Open VSX builds, and it does not suggest the publisher's Marketplace
+#     listings were compromised. The Marketplace still offers them, oorzc.ssh-tools with a 0.5.1 of 30
+#     March 2026, after that post: Microsoft's list of removed extensions does not name it (24 October
+#     2026), and its package holds none of the loader IOCs Socket publishes (the AES key and IVs, the
+#     Solana address, the IP). These are a real developer's extensions, published with a stolen token
+#     on 30 January 2026, so a build from before then is the developer's own and is not listed. Open
+#     VSX removed every oorzc.ssh-tools version and lists the id as malware "because multiple recent
+#     oorzc.ssh-tools versions scanned as malware and many versions were published" (Socket): a
+#     removal, not a finding that each build was malware. Socket's page for the extension names 0.5.1
+#     as its only affected version, and its list of the Open VSX versions has none after 0.5.0 (June
+#     2025) but that 0.5.1; the Wayback Machine has Open VSX serving the developer's 0.0.6 to 0.4.7
+#     from October 2023 to April 2025. oorzc.ssh-tool, which Open VSX has offered since 30 March 2026,
+#     is another id. Their os is mac: Socket shows their loader going on only when
 #     os.platform() is darwin, to a second stage that is a macOS implant. And the thirteen earlier
 #     extensions it lists, which the Marketplace does not offer and Microsoft's list does not name
 #     (all: the post does not show what their code checks).
@@ -47,7 +54,10 @@
 #     without showing those versions deliver malware, and Socket's campaign page lists them among its
 #     affected artifacts with no word on which are malware and which sleepers. Three of them, later made
 #     into extension packs that delivered it, are listed at those versions, and one more from Aikido's
-#     post, which shows it delivering malware (below).
+#     post, which shows it delivering malware (below). So is craz2team.vscode-todo-extension, at the 1.0.9
+#     and 1.0.10 the post shows pulling in the malware, though the 13 March list has it at every version:
+#     a line for a folder's exact version wins over its id's every-version line, so those carry this
+#     wave's advice to check every editor.
 #   25 April 2026: the six it confirms as malicious; its 67 sleepers are left out. The post shows
 #     boulderzitunnel.vscode-buddies loading its native installer only on win32 and darwin, so its
 #     os is mac,win.
@@ -58,11 +68,24 @@
 #     anywhere else, so its malware runs on Windows and macOS only: mac,win. Aikido says to treat a
 #     machine with either as compromised, and gives no version: every version.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
-#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe).
+#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe). The
+#     incident is dated December 2025, when they ran, as the others are: the post shows the cluster's
+#     themes committed on 6 December 2025 and promoted on 14 December, and Microsoft's list removes
+#     Cosmic Nebula on 4 February 2026.
 #   Aikido, March 2026 (glasswormuni, its post of 13 March on GlassWorm's invisible-code wave):
 #     quartz.quartz-markdown-editor 0.3.0, a VS Code extension the post names, which Microsoft's list removes
 #     (11 March 2026, as untrustworthy): any. Its loader is JavaScript: all. The two npm packages of that
 #     post are in data/bad-npm.tsv.
+#   Koi, November 2025 (glasswormdec, its post of 10 December 2025, GlassWorm Goes Native, which Aikido's
+#     April post links; koi.ai now sends its readers to Palo Alto Networks, whose blog republished it, the
+#     copy the incident links): the 15 Open VSX and 19 Marketplace extensions it lists of the wave
+#     that began on 22 November, at every version, but for
+#     bphpburnsus.iconesvscode, which the post shows clean at 12.15.0 and malicious at 12.15.1 and 12.15.2.
+#     An id on its Marketplace list, or on Microsoft's list of removed extensions (as its Open VSX ones
+#     eamodas.shiny-vscode and svltsweet.svetle-for-cursor are), is any; the other nine are openvsx. Their
+#     loader runs a native binary built for macOS (darwin.node) or Windows (os.node), so their os is mac,win.
+#     Koi's other GlassWorm posts (October and November 2025, GlassWorm Goes Mac of late December 2025, and
+#     March 2026) are not covered here.
 # GlassWASM, June 2026 (glasswasm): the two Open VSX extensions of Socket's post, which it ties to GlassWorm,
 #   exargd.vsblack 0.0.1 and noellee-doc.flint-debug 0.1.1. They clone Marketplace extensions under the same
 #   ids and versions, and Socket says those Marketplace builds are clean: openvsx. Their loader picks a
@@ -76,7 +99,7 @@
 #   minutes and on Open VSX for 36 (any), and gives its signs on macOS, Linux and Windows (all). The
 #   kitty-monitor files it leaves have lines of their own in data/indicators.tsv, beside the AntV wave's.
 # id	version	incident	registry	os
-oorzc.ssh-tools	*	glassworm	openvsx	mac
+oorzc.ssh-tools	0.5.1	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
 oorzc.mind-map	1.0.61	glassworm	openvsx	mac
 oorzc.scss-to-css-compile	1.3.4	glassworm	openvsx	mac
@@ -172,6 +195,8 @@ daeumer-web.align-format-tool	1.4.6	glasswormvsix	openvsx	all
 baksmink.vscode-quokka-extension	1.0.756	glasswormvsix	openvsx	all
 bansheejust22.retro-vhs-theme	1.0.1	glasswormvsix	openvsx	all
 quickrunn.auto-run-command-quick	1.6.2	glasswormvsix	openvsx	all
+craz2team.vscode-todo-extension	1.0.9	glasswormvsix	openvsx	all
+craz2team.vscode-todo-extension	1.0.10	glasswormvsix	openvsx	all
 outsidestormcommand.monochromator-theme	*	glasswormapr	openvsx	all
 keyacrosslaud.auto-loop-for-antigravity	*	glasswormapr	openvsx	all
 krundoven.ironplc-fast-hub	*	glasswormapr	openvsx	all
@@ -183,6 +208,37 @@ floktokbok.autoimport	*	glasswormzig	any	all
 microsoftvs.microsoftvs	*	glasswormoct	any	win
 cosmic-themes.theme-cosmic-nebula	*	glasswormoct	any	all
 quartz.quartz-markdown-editor	0.3.0	glasswormuni	any	all
+bphpburn.icons-vscode	*	glasswormdec	openvsx	mac,win
+clangdcode.clangd-vscode	*	glasswormdec	openvsx	mac,win
+csvmech.csv-sql-tsv-rainbow	*	glasswormdec	openvsx	mac,win
+iconkief.icon-theme-material	*	glasswormdec	openvsx	mac,win
+msjsdreact.react-native-vscode	*	glasswormdec	openvsx	mac,win
+saoudrizvsce.claude-dev	*	glasswormdec	openvsx	mac,win
+solblanco.svelte-vscode	*	glasswormdec	openvsx	mac,win
+tailwind-nuxt.tailwindcss-for-react	*	glasswormdec	openvsx	mac,win
+vitalik.solidity	*	glasswormdec	openvsx	mac,win
+bphpburnsus.iconesvscode	12.15.1	glasswormdec	any	mac,win
+bphpburnsus.iconesvscode	12.15.2	glasswormdec	any	mac,win
+cweijamysq.sync-settings-vscode	*	glasswormdec	any	mac,win
+eamodas.shiny-vscode	*	glasswormdec	any	mac,win
+flutcode.flutter-extension	*	glasswormdec	any	mac,win
+saoudrizvsce.claude-devsce	*	glasswormdec	any	mac,win
+svltsweet.svetle-for-cursor	*	glasswormdec	any	mac,win
+yamlcode.yaml-vscode-extension	*	glasswormdec	any	mac,win
+iconkieftwo.icon-theme-materiall	*	glasswormdec	any	mac,win
+clangdcode.clangd-vsce	*	glasswormdec	any	mac,win
+codevsce.codelddb-vscode	*	glasswormdec	any	mac,win
+csvmech.csvrainbow	*	glasswormdec	any	mac,win
+dart-vsc.code-dart	*	glasswormdec	any	mac,win
+klustfix.kluster-code-verify	*	glasswormdec	any	mac,win
+lyywemhan.code-formatter-and-minifier-vscode	*	glasswormdec	any	mac,win
+msjsdreact.react-native-vsce	*	glasswormdec	any	mac,win
+prettier-vsc.vsce-prettier	*	glasswormdec	any	mac,win
+prisma-inc.prisma-studio-assistance	*	glasswormdec	any	mac,win
+redmat.vscode-quarkus-pro	*	glasswormdec	any	mac,win
+solblanco.svetle-vsce	*	glasswormdec	any	mac,win
+vims-vsce.vscode-vim	*	glasswormdec	any	mac,win
+vsceue.volar-vscode	*	glasswormdec	any	mac,win
 exargd.vsblack	0.0.1	glasswasm	openvsx	all
 noellee-doc.flint-debug	0.1.1	glasswasm	openvsx	all
 nrwl.angular-console	18.95.0	nxconsole	any	all

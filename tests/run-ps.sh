@@ -906,6 +906,9 @@ has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool
 _es=$("$PWSH" -NoProfile -NonInteractive -Command "$(grep '^function Planted-Sha' "$SCRIPT"); Planted-Sha '.claude/execution.js'" 2>&1)
 if [ "$_es" = 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' ]; then ok "execution.js counts by the three SHA-256 values Wiz publishes for its payload"
 else bad "execution.js counts by the three SHA-256 values Wiz publishes for its payload" "got: $_es"; fi
+# setup.mjs counts by every loader's SHA-256 its sources publish, intercom-client's (StepSecurity) among them.
+_ss=$("$PWSH" -NoProfile -NonInteractive -Command "$(grep '^function Planted-Sha' "$SCRIPT"); Planted-Sha '.vscode/setup.mjs'" 2>&1)
+case " $_ss " in *" fe64699649591948d6f960705caac86fe99600bf76e3eae29b4517705a58f0e2 "*) ok "setup.mjs counts by intercom-client's loader SHA-256 too" ;; *) bad "setup.mjs counts by intercom-client's loader SHA-256 too" "got: $_ss" ;; esac
 # The AntV wave (SafeDep): the kitty-monitor backdoor's systemd unit and LaunchAgent, the cat.py they start, and
 # the payload copies that the hooks it adds to Claude Code and Codex settings run are signs of its malware. It also
 # commits .claude/index.js, a name projects use too: alone, and not the published payload, it is a file to read;
@@ -1400,7 +1403,7 @@ has    "with a fix to update it"                      'Update the Python package
 has    "the link does not flag a Python incident"     '&ll=0&.*&py=0&' "$WORK/mpy.txt"
 has    "row 05 says a Python package to update"       'Recent leaks a Python package to update, see section 5' "$WORK/mpy-c.txt"
 SKIPPING=""
-# guardrails-ai 0.10.1, published in the same wave, runs its stealer on Linux only too (Wiz).
+# guardrails-ai 0.10.1, published in the same wave, runs its stealer on Linux only too (the code SafeDep recovered).
 cp -R "$WORK/clean" "$WORK/gpy"; mkdir -p "$WORK/gpy/code/venv/lib/site-packages/guardrails_ai-0.10.1.dist-info"
 psrun "$WORK/gpy" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpy.txt"
 [ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
@@ -1417,6 +1420,41 @@ psrun "$WORK/lpy" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lpy.txt"
 has    "lightning 2.6.3 from PyPI is its own act-now row" 'lightning 2\.6\.2 and 2\.6\.3 +signs of the malware found ~/code/venv/lib/site-packages: lightning 2\.6\.3' "$WORK/lpy.txt"
 has    "with its fix, naming lightning"               "Treat this machine as compromised\. Don't run Python in the affected environments\. From another computer, rotate every key the machine could reach, then follow lightning's advisory" "$WORK/lpy.txt"
 hasnot "the version Lightning AI says to pin is not flagged" 'lightning 2\.6\.1' "$WORK/lpy.txt"
+# telnyx 4.87.1 and 4.87.2 (Telnyx's own advisory): 4.87.2's malware ran on Linux, macOS and Windows, and
+# 4.87.1's typo kept its malware from running, Telnyx says, so 4.87.1 is a version to update everywhere.
+cp -R "$WORK/clean" "$WORK/tlx"; mkdir -p "$WORK/tlx/code/venv/lib/site-packages/telnyx-4.87.2.dist-info" "$WORK/tlx/code/old/lib/site-packages/telnyx-4.87.0.dist-info"
+cp -R "$WORK/clean" "$WORK/tlx1"; mkdir -p "$WORK/tlx1/code/venv/lib/site-packages/telnyx-4.87.1.dist-info"
+psrun "$WORK/tlx" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlx.txt"
+psrun "$WORK/tlx1" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlx1.txt"
+psrun "$WORK/tlx1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlx1-c.txt"
+has    "telnyx 4.87.2 is an act-now row of its own"   'telnyx 4\.87\.1 and 4\.87\.2 +signs of the malware found ~/code/venv/lib/site-packages: telnyx 4\.87\.2' "$WORK/tlx.txt"
+hasnot "telnyx 4.87.0, the version Telnyx says is safe, is not flagged" 'telnyx 4\.87\.0' "$WORK/tlx.txt"
+has    "telnyx 4.87.1, whose malware could not run, is a version to update" 'telnyx 4\.87\.1 and 4\.87\.2 +a bad version to update ~/code/venv/lib/site-packages: telnyx 4\.87\.1 Its maintainer says the malware in this version could not run\. Update to a version without it\. Advisory: github\.com/advisories/GHSA-955r-262c-33jc' "$WORK/tlx1.txt"
+hasnot "and it is not a compromised machine"          'ACT NOW|Treat this machine as compromised|signs of the malware found' "$WORK/tlx1.txt"
+has    "row 05 says a Python package to update for it" 'Recent leaks a Python package to update, see section 5' "$WORK/tlx1-c.txt"
+# The files Telnyx names: its backdoor, the systemd unit that starts it on Linux, and its state file.
+cp -R "$WORK/clean" "$WORK/tlxf"; mkdir -p "$WORK/tlxf/.config/audiomon" "$WORK/tlxf/.config/systemd/user"
+: > "$WORK/tlxf/.config/audiomon/audiomon.py"; : > "$WORK/tlxf/.config/systemd/user/audiomon.service"; : > "$WORK/tlxf/AppData/Local/Temp/.initd_state"
+psrun "$WORK/tlxf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tlxf.txt"
+has    "telnyx's backdoor is a sign of it, in its row" 'telnyx 4\.87\.1 and 4\.87\.2 +signs of the malware found .*~/\.config/audiomon/audiomon\.py the backdoor the telnyx malware leaves' "$WORK/tlxf.txt"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
+has    "and on Linux the systemd unit that starts it" '~/\.config/systemd/user/audiomon\.service starts the backdoor the telnyx malware leaves, at login' "$WORK/tlxf.txt"
+SKIPPING=""
+has    "and its state file, with Telnyx's advice"     '\.initd_state .*Telnyx lists this file as the malware.s state file' "$WORK/tlxf.txt"
+hasnot "and none of it is called npm malware"         'npm malware +signs of the malware found|SIGNS OF NPM MALWARE' "$WORK/tlxf.txt"
+# durabletask 1.4.1 to 1.4.3 (GitHub's malware advisory; Wiz ties it to the AntV wave): its dropper runs
+# on Linux only, and fetches the payload to /tmp/managed.pyz. 1.4.0, the version to pin, is not one of them.
+cp -R "$WORK/clean" "$WORK/dtk"; mkdir -p "$WORK/dtk/code/venv/lib/site-packages/durabletask-1.4.2.dist-info" "$WORK/dtk/code/old/lib/site-packages/durabletask-1.4.0.dist-info"
+psrun "$WORK/dtk" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dtk.txt"
+cp -R "$WORK/clean" "$WORK/dtkt"; : > "$WORK/dtkt/AppData/Local/Temp/managed.pyz"
+psrun "$WORK/dtkt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dtkt.txt"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
+has    "durabletask 1.4.2 is an act-now row on Linux" 'durabletask 1\.4\.1 to 1\.4\.3 +signs of the malware found ~/code/venv/lib/site-packages: durabletask 1\.4\.2' "$WORK/dtk.txt"
+hasnot "durabletask 1.4.0, the version to pin, is not flagged" 'durabletask 1\.4\.0' "$WORK/dtk.txt"
+has    "on Linux, managed.pyz in the temp folder is durabletask's sign" 'durabletask 1\.4\.1 to 1\.4\.3 +signs of the malware found ~/AppData/Local/Temp/managed\.pyz Wiz lists this file as the payload it downloads' "$WORK/dtkt.txt"
+SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
+has    "on a Mac, durabletask 1.4.2 is a version to update" 'durabletask 1\.4\.1 to 1\.4\.3 +a bad version to update ~/code/venv/lib/site-packages: durabletask 1\.4\.2 Its malware runs on Linux only, so it did not run here\.' "$WORK/dtk.txt"
+SKIPPING=""
 # litellm 1.82.7 and 1.82.8, March 2026 (OpenSSF's MAL-2026-2144, GitHub's GHSA-5mg7-485q-xm76), on any OS: a row
 # of their own beside LiteLLM 1.107.0's, with the litellm_init.pth 1.82.8 leaves (LiteLLM's post). 1.82.6, the
 # version LiteLLM says to pin, is not one of them. With both LiteLLM incidents found, row 05 says LiteLLM once.
@@ -1449,6 +1487,24 @@ has    "on a Mac it is not looked for"                'mistralai 2\.4\.6 +no sig
 SKIPPING=""; [ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
 has    "on Linux, transformers.pyz is the mistralai hit" 'mistralai 2\.4\.6 +signs of the malware found ~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt.txt"
 has    "and the link flags it"                        '&ll=0&.*&py=1&' "$WORK/mpyt.txt"
+# guardrails-ai 0.10.1 writes /tmp/transformers.pyz too (SafeDep): the file is listed once, with the
+# incident whose package was found, so a hit never names a package that is not there; alone, with
+# mistralai's row, as written by either.
+if [ -n "$SKIPPING" ]; then skip "transformers.pyz alone is listed once" "$SKIPPING"
+elif [ "$(grep -o '~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt.txt" | grep -c .)" -eq 1 ]; then ok "transformers.pyz alone is listed once"; else bad "transformers.pyz alone is listed once"; fi
+has    "and said to be written by either package"     'mistralai 2\.4\.6 +signs of the malware found ~/AppData/Local/Temp/transformers\.pyz written by mistralai 2\.4\.6 or guardrails-ai 0\.10\.1' "$WORK/mpyt.txt"
+has    "and guardrails-ai's row does not list it too" 'guardrails-ai 0\.10\.1 +no signs' "$WORK/mpyt.txt"
+cp -R "$WORK/clean" "$WORK/gpyt"; mkdir -p "$WORK/gpyt/code/venv/lib/site-packages/guardrails_ai-0.10.1.dist-info"; : > "$WORK/gpyt/AppData/Local/Temp/transformers.pyz"
+psrun "$WORK/gpyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/gpyt.txt"
+has    "guardrails-ai with transformers.pyz: the file is listed with it" 'guardrails-ai 0\.10\.1 +signs of the malware found ~/code/venv/lib/site-packages: guardrails_ai 0\.10\.1 ~/AppData/Local/Temp/transformers\.pyz' "$WORK/gpyt.txt"
+has    "with guardrails-ai's own advice for the file" 'SafeDep shows guardrails-ai 0\.10\.1 writing this file on Linux and running it\. Guardrails AI says to treat such a machine as compromised' "$WORK/gpyt.txt"
+has    "and mistralai's row stays clean"             'mistralai 2\.4\.6 +no signs' "$WORK/gpyt.txt"
+hasnot "and nothing names mistralai as found"        'MISTRALAI|mistralai 2\.4\.6 +signs|written by' "$WORK/gpyt.txt"
+cp -R "$WORK/clean" "$WORK/mpyt2"; mkdir -p "$WORK/mpyt2/code/venv/lib/site-packages/mistralai-2.4.6.dist-info"; : > "$WORK/mpyt2/AppData/Local/Temp/transformers.pyz"
+psrun "$WORK/mpyt2" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mpyt2.txt"
+has    "mistralai with transformers.pyz: the file is listed with it" 'mistralai 2\.4\.6 +signs of the malware found ~/code/venv/lib/site-packages: mistralai 2\.4\.6 ~/AppData/Local/Temp/transformers\.pyz' "$WORK/mpyt2.txt"
+has    "and guardrails-ai's row stays clean"         'guardrails-ai 0\.10\.1 +no signs' "$WORK/mpyt2.txt"
+hasnot "and nothing names guardrails-ai as found"    'GUARDRAILS|guardrails-ai 0\.10\.1 +signs|written by' "$WORK/mpyt2.txt"
 SKIPPING=""
 # A version read from a folder name is printed with control characters replaced.
 cp -R "$WORK/clean" "$WORK/esc"; mkdir -p "$WORK/esc/code/venv/lib/site-packages/litellm-1.0$(printf '\033')[31m.dist-info"
@@ -1665,7 +1721,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 10 recent leaks or malware it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 12 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -1676,7 +1732,7 @@ hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftove
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +10 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +12 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -1844,9 +1900,10 @@ has    "and the fix"                                  'Turn off run-without-aski
 [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS: Cursor's version is read from its app bundle"
 has    "Cursor below the fixed version" '! Cursor 2\.9\.1, update to 3\.1\.2 or later A malicious agent could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$D"
 SKIPPING=""
-has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can reach files outside it' "$D"
+has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can let the agent write files outside it' "$D"
 has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.260 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
+has    "and that no version fixes a later advisory that covers 0.1.16" 'update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p No version fixes this yet: a hostile server could open an internal address in your browser\. github\.com/advisories/GHSA-v65w-6crh-cp3h' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
 has    "with the fix to delete the link"              'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
@@ -1859,7 +1916,7 @@ hasnot "and never to delete every LaunchAgent not recognized" 'delete [^.]*Launc
 has    "the Injective fix: move the funds out of its wallets" 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective fix comes before the update it has to come before" 'into a new wallet\. .*Update the npm packages listed in section 5' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
-has    "with its sourced line"                        'Injective SDK, July 2026: sent out the seed phrases, and the private keys given as hex strings, that apps loaded into it\. github\.com' "$D"
+has    "with its sourced line"                        'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it\. github\.com' "$D"
 # Injective alone: moving the funds outranks every fix that is not act-now, and row 05 names the wallets.
 rm -rf "$WORK/dz-inj"; cp -R "$WORK/clean" "$WORK/dz-inj"; mkdir -p "$WORK/dz-inj/code/inj"
 printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$WORK/dz-inj/code/inj/package-lock.json"
@@ -1930,8 +1987,8 @@ has    "a GlassWorm extension of Socket's 13 March list, at any version" '~/\.cu
 has    "a version the 18 March post shows delivering malware" '~/\.windsurf/extensions/spacetoow\.vsc-python-indent-1\.21\.4 spacetoow\.vsc-python-indent 1\.21\.4 \(GlassWorm sleeper extensions, March 2026\), installed' "$WORK/dz-waves.txt"
 has    "Devin Desktop's extension folder is read, as an Open VSX editor's" '~/\.devin/extensions/oorzc\.i18n-tools-plus-1\.6\.8 oorzc\.i18n-tools-plus 1\.6\.8 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-waves.txt"
 has    "one of the six the April post confirms"      '~/\.kiro/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-waves.txt"
-has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-waves.txt"
-has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
+has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, December 2025\), installed' "$WORK/dz-waves.txt"
+has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
 if [ "$(grep -o 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-waves.txt" | grep -c .)" -eq 1 ]; then ok "the fix two waves share is said once"; else bad "the fix two waves share is said once"; fi
 hasnot "a version the 18 March post does not name is not flagged" 'spacetoow\.vsc-python-indent 1\.21\.0' "$WORK/dz-waves.txt"
 hasnot "an Open VSX extension's id in VS Code's own folder is not flagged" '~/\.vscode/extensions/aadarkcode' "$WORK/dz-waves.txt"
@@ -2027,18 +2084,42 @@ has    "the VS Code Server folders are read, as VS Code's" '~/\.vscode-server/ex
 hasnot "an Open VSX build's id in a VS Code Server folder is not flagged" '~/\.vscode-server/extensions/aadarkcode' "$WORK/dz-rem.txt"
 has    "the Cursor, Windsurf and Devin Desktop server folders are read, as Open VSX editors'" '~/\.cursor-server/extensions/aadarkcode\.one-dark-material-3\.20\.1 aadarkcode\.one-dark-material 3\.20\.1 \(GlassWorm extensions, March 2026\), installed ~/\.windsurf-server/extensions/spacetoow\.vsc-python-indent-1\.21\.4 .*~/\.devin-server/extensions/littensy-studio\.magical-icons-1\.0\.61 littensy-studio\.magical-icons 1\.0\.61 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-rem.txt"
 # Microsoft's list of extensions removed from the Marketplace: a GlassWorm theme it removed as malware and
-# an extension it removed as impersonation are looked for in VS Code's own folder too. Open VSX removed
-# every oorzc.ssh-tools version, so any of them in an Open VSX editor's folder counts. The three themes of
+# an extension it removed as impersonation are looked for in VS Code's own folder too. oorzc.ssh-tools
+# counts at 0.5.1, the build Socket names, and not at a build from before the developer's token was
+# stolen, though Open VSX removed every version; oorzc.ssh-tool is another id. The three themes of
 # the October cluster that Microsoft removed as malware, and no source shows a payload in, are not listed.
 rm -rf "$WORK/dz-ms"; cp -R "$WORK/clean" "$WORK/dz-ms"
 mkdir -p "$WORK/dz-ms/.vscode/extensions/lavender-studio.theme-lavender-dreams-1.0.2" "$WORK/dz-ms/.vscode/extensions/kwitch-studio.auto-run-command-extension-1.4.0" \
-  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.2" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" \
+  "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.5.1" "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tools-0.4.0" "$WORK/dz-ms/.cursor/extensions/oorzc.ssh-tool-0.5.1" "$WORK/dz-ms/.cursor/extensions/holiday-themes.theme-coca-cola-christmas-1.0.2" \
   "$WORK/dz-ms/.cursor/extensions/charcoal-mint-studio.theme-charcoal-mint-1.0.2" "$WORK/dz-ms/.vscode/extensions/lohsebhipolg2s.theme-aurora-borealis-1.0.1"
 dzrun "$WORK/dz-ms" | tr -s ' \n' '  ' > "$WORK/dz-ms.txt"
 has    "a theme Microsoft removed from its Marketplace as malware, in VS Code's own folder" '~/\.vscode/extensions/lavender-studio\.theme-lavender-dreams-1\.0\.2 lavender-studio\.theme-lavender-dreams 1\.0\.2 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
 has    "one it removed as impersonation, in VS Code's own folder too" '~/\.vscode/extensions/kwitch-studio\.auto-run-command-extension-1\.4\.0 kwitch-studio\.auto-run-command-extension 1\.4\.0 \(GlassWorm extensions, March 2026\), installed' "$WORK/dz-ms.txt"
-has    "any oorzc.ssh-tools version in an Open VSX editor's folder, as Open VSX removed them all" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.2 oorzc\.ssh-tools 0\.5\.2 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
+has    "oorzc.ssh-tools 0.5.1, the build Socket names, in an Open VSX editor's folder" '~/\.cursor/extensions/oorzc\.ssh-tools-0\.5\.1 oorzc\.ssh-tools 0\.5\.1 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-ms.txt"
+hasnot "an oorzc.ssh-tools build from before the compromise is not flagged" 'oorzc\.ssh-tools-0\.4\.0|oorzc\.ssh-tools 0\.4\.0' "$WORK/dz-ms.txt"
+hasnot "Open VSX's oorzc.ssh-tool is another extension" 'oorzc\.ssh-tool-0\.5\.1|oorzc\.ssh-tool 0\.5\.1' "$WORK/dz-ms.txt"
 hasnot "the October cluster's themes with no payload are not listed" 'theme-coca-cola-christmas|theme-charcoal-mint|theme-aurora-borealis' "$WORK/dz-ms.txt"
+# Koi's post on GlassWorm's November 2025 wave (glasswormdec): an Open VSX id in an Open VSX editor's folder, a
+# Marketplace id in VS Code's own folder too, and the vscode-icons clone only at the versions the post shows
+# malicious. Its loader has a native binary for macOS and Windows only.
+rm -rf "$WORK/dz-dec"; cp -R "$WORK/clean" "$WORK/dz-dec"
+mkdir -p "$WORK/dz-dec/.cursor/extensions/iconkief.icon-theme-material-1.0.0" "$WORK/dz-dec/.vscode/extensions/vsceue.volar-vscode-1.0.0" \
+  "$WORK/dz-dec/.vscode/extensions/vitalik.solidity-1.0.0" "$WORK/dz-dec/.vscode/extensions/bphpburnsus.iconesvscode-12.15.0" "$WORK/dz-dec/.cursor/extensions/bphpburnsus.iconesvscode-12.15.1"
+dzrun "$WORK/dz-dec" | tr -s ' \n' '  ' > "$WORK/dz-dec.txt"
+has    "GlassWorm's November 2025 wave: an Open VSX id in an Open VSX editor's folder" '~/\.cursor/extensions/iconkief\.icon-theme-material-1\.0\.0 iconkief\.icon-theme-material 1\.0\.0 \(GlassWorm native extensions, November 2025\), installed' "$WORK/dz-dec.txt"
+has    "and a Marketplace id of that wave in VS Code's own folder" '~/\.vscode/extensions/vsceue\.volar-vscode-1\.0\.0 vsceue\.volar-vscode 1\.0\.0 \(GlassWorm native extensions, November 2025\), installed' "$WORK/dz-dec.txt"
+hasnot "an Open VSX-only id of that wave in VS Code's own folder is not flagged" 'vitalik\.solidity' "$WORK/dz-dec.txt"
+has    "the vscode-icons clone at 12.15.1, which the post shows malicious" 'bphpburnsus\.iconesvscode 12\.15\.1 \(GlassWorm native extensions, November 2025\)' "$WORK/dz-dec.txt"
+hasnot "and not at 12.15.0, which it shows clean"     'iconesvscode-12\.15\.0|iconesvscode 12\.15\.0' "$WORK/dz-dec.txt"
+# craz2team.vscode-todo-extension is on the 13 March list at every version, and the 18 March post shows its
+# 1.0.9 and 1.0.10 pulling in the malware: a line for the exact version wins, so 1.0.10 carries that wave's advice.
+rm -rf "$WORK/dz-crz"; cp -R "$WORK/clean" "$WORK/dz-crz"; mkdir -p "$WORK/dz-crz/.cursor/extensions/craz2team.vscode-todo-extension-1.0.10"
+dzrun "$WORK/dz-crz" | tr -s ' \n' '  ' > "$WORK/dz-crz.txt"
+has    "an exact version's line wins over the every-version line of its id" 'craz2team\.vscode-todo-extension 1\.0\.10 \(GlassWorm sleeper extensions, March 2026\), installed' "$WORK/dz-crz.txt"
+has    "with the advice of the wave that shows it dropping malware" 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-crz.txt"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
+has    "on Linux, where that loader has no binary, they are extensions to remove" 'Editor extensions a malicious extension to remove .*Their malware runs on macOS and Windows only, so it did not run here' "$WORK/dz-dec.txt"
+SKIPPING=""
 # A folder is split the way the editors split it: the id is the longest start that leaves a version of
 # three numbers, so oorzc.ssh-tools-2-0.1.0 is the extension oorzc.ssh-tools-2 at 0.1.0.
 rm -rf "$WORK/dz-id"; cp -R "$WORK/clean" "$WORK/dz-id"
@@ -2050,7 +2131,7 @@ hasnot "an id that runs on past a bad one, before its own version, is another ex
 rm -rf "$WORK/dz-os"; cp -R "$WORK/clean" "$WORK/dz-os"; mkdir -p "$WORK/dz-os/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os.txt"
 dzrun "$WORK/dz-os" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-os-sum.txt"
-has    "an extension whose malware runs on Windows only is one to remove elsewhere" 'Editor extensions a malicious extension to remove ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os.txt"
+has    "an extension whose malware runs on Windows only is one to remove elsewhere" 'Editor extensions a malicious extension to remove ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os.txt"
 hasnot "and is not a compromised machine there"     'ACT NOW|Treat this machine as compromised|signs of the malware found' "$WORK/dz-os.txt"
 has    "with a fix to uninstall the extension"      'Uninstall the editor extensions listed in section 5\. Their malware could not run on this system\.' "$WORK/dz-os.txt"
 has    "row 05 says an editor extension to remove"  'Recent leaks +an editor extension to remove, see section 5' "$WORK/dz-os-sum.txt"
@@ -2091,7 +2172,7 @@ has    "below the newest fix's range the row still names it, not 2.1.179, which 
 hasnot "and it does not show the newest fix's hole, which that version does not have" 'A stored API key could start sessions' "$WORK/dz-cc2.0.67.txt"
 mkdir -p "$WORK/dz-os/.cursor/extensions/littensy-studio.magical-icons-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
-has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
+has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
 hasnot "and the fix to uninstall it alone is not given then" 'Their malware could not run on this system' "$WORK/dz-os2.txt"
 # The January wave's oorzc extensions go on only on macOS (Socket): on a Mac, one means a compromised machine.
 rm -rf "$WORK/dz-jan"; cp -R "$WORK/clean" "$WORK/dz-jan"; mkdir -p "$WORK/dz-jan/.cursor/extensions/oorzc.mind-map-1.0.61"
@@ -2127,6 +2208,26 @@ hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc'
 hasnot "the Marketplace build of oorzc.ssh-tools 0.5.1 in VS Code's own folder is not the bad build" 'oorzc\.ssh-tools 0\.5\.1' "$D"
 hasnot "Codex: a profile written as an inline table is not the top level" '! Codex ' "$D"
 hasnot "mcp-remote@0.1 in an MCP config is a range, not a version" 'mcp-remote 0\.1,|mcp-remote 0\.1 ' "$D"
+# A version only an advisory with no fix covers (mcp-remote 0.1.16 to 0.1.38, GHSA-v65w-6crh-cp3h) has no
+# row: there is no fix to install. mcp-remote named only in a plugin catalog's config is not a server this
+# person set up: section 2 counts it apart, and the version check reads the configs section 2 counts.
+rm -rf "$WORK/mrx"; mkdir -p "$WORK/mrx/.npm-global/lib/node_modules/mcp-remote" "$WORK/mrx/.codex/.tmp/plugins/catalog/someplugin" "$WORK/mrx/AppData/Roaming" "$WORK/mrx/AppData/Local/Temp"
+printf '{"name":"mcp-remote","version":"0.1.20"}\n' > "$WORK/mrx/.npm-global/lib/node_modules/mcp-remote/package.json"
+printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.10","https://example.com/sse"]}}}\n' > "$WORK/mrx/.codex/.tmp/plugins/catalog/someplugin/.mcp.json"
+psrun "$WORK/mrx" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mrx.txt"
+hasnot "mcp-remote 0.1.20, which only an advisory with no fix covers, has no row" 'mcp-remote 0\.1\.20' "$WORK/mrx.txt"
+has    "an MCP config in a plugin catalog is not a configured server" 'No MCP servers configured\.' "$WORK/mrx.txt"
+hasnot "and mcp-remote named there is not a tool to update" 'mcp-remote 0\.1\.10|Tools with a security fix' "$WORK/mrx.txt"
+# Claude Code's npm "local" install, which its migrate-installer command puts in the local folder of its
+# config folder (~/.claude/local, or CLAUDE_CONFIG_DIR's, by Claude Code's own code): its version is read as
+# a global install's is.
+rm -rf "$WORK/ccl"; cp -R "$WORK/clean" "$WORK/ccl"; mkdir -p "$WORK/ccl/.claude/local/node_modules/@anthropic-ai/claude-code" "$WORK/ccl/cfg/local/node_modules/@anthropic-ai/claude-code"
+printf '{"name":"@anthropic-ai/claude-code","version":"2.0.0"}\n' > "$WORK/ccl/.claude/local/node_modules/@anthropic-ai/claude-code/package.json"
+printf '{"name":"@anthropic-ai/claude-code","version":"1.0.3"}\n' > "$WORK/ccl/cfg/local/node_modules/@anthropic-ai/claude-code/package.json"
+psrun "$WORK/ccl" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ccl.txt"
+psrun "$WORK/ccl" CLAUDE_CONFIG_DIR="$WORK/ccl/cfg" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ccl-cfg.txt"
+has    "Claude Code's npm local install in ~/.claude/local is read" '! Claude Code 2\.0\.0, update to 2\.1\.260 or later' "$WORK/ccl.txt"
+has    "and the one in CLAUDE_CONFIG_DIR's local folder when that is set" '! Claude Code 1\.0\.3, update to 2\.1\.260 or later' "$WORK/ccl-cfg.txt"
 hasnot "the old chat.tools.autoApprove in user settings is not reported: VS Code 1.104 and later ignore it" 'Code/User/settings\.json' "$D"
 hasnot "a project's chat.tools.global.autoApprove is not reported: VS Code reads it from user settings only" 'p/global/' "$D"
 # A link to an authorized_keys that does not exist yet still counts: an agent writing through it
@@ -2330,7 +2431,7 @@ mups() { # home out [compact]
 mups "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +12 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +14 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -2354,7 +2455,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
 mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 12 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 14 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
@@ -2782,11 +2883,16 @@ has    "Windows: flags a key in PowerShell history"     '~/AppData/Roaming/Micro
 has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python312/Lib/site-packages: cook\.pth' "$WORK/win1.txt"
 has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
 has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/AppData/Local/Programs/Python/Python312/Lib/site-packages: mistralai 2\.4\.6' "$WORK/win1.txt"
+# telnyx 4.87.2's Windows payload drops msbuild.exe in the Startup folder (Telnyx's advisory): a sign of it.
+mkdir -p "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"; : > "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe"
+winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-tlx.txt"
+rm -f "$WP/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe"
+has    "Windows: telnyx's msbuild.exe in the Startup folder is its sign" 'telnyx 4\.87\.1 and 4\.87\.2 +signs of the malware found ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild\.exe the telnyx malware, which Windows starts at every login from the Startup folder' "$WORK/win-tlx.txt"
 # An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
 mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
 rm -rf "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
-has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/win-ext.txt"
+has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed' "$WORK/win-ext.txt"
 # The January wave's oorzc extensions go on only on macOS (Socket): on Windows, one is an extension to remove.
 mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
 winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
