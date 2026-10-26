@@ -295,7 +295,10 @@ $P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 # is code that reads one from the environment. The same as gird-check.sh's P_HEADERSECRET.
 $P_HNAME = '(?:[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-(?:[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
 $P_HTOKEN = '(?:[A-Za-z][A-Za-z-]*[^\S\n]+)?[^\]"''$<{}()\s,\[]{12,}'
-$P_HEADERSECRET = '"' + $P_HNAME + '"[^\S\n]*[:=][^\S\n]*"' + $P_HTOKEN + '"|(?:^|(?<=[\s{,]))' + $P_HNAME + '[^\S\n]*=[^\S\n]*"' + $P_HTOKEN + '"|(?<!\\)["'']' + $P_HNAME + ':[^\S\n]*' + $P_HTOKEN + '["'']'
+$P_HEADERSECRET = '"' + $P_HNAME + '"[^\S\n]*[:=][^\S\n]*"' + $P_HTOKEN + '"|(?:^|(?<=[\s{,]))' + $P_HNAME + '[^\S\n]*=[^\S\n]*"' + $P_HTOKEN + '"|(?<!\\)"' + $P_HNAME + ':[^\S\n]*' + $P_HTOKEN + '"'
+# The whole string in single quotes, a literal string in TOML and a quoted scalar in YAML: in JSON a
+# single quote is only text, as in a prompt that quotes a header, so a .json file is not read for it.
+$P_HEADERSQ = '(?<!\\)''' + $P_HNAME + ':[^\S\n]*' + $P_HTOKEN + ''''
 $P_HEADERYAML = '^[^\S\n]*["'']?' + $P_HNAME + '["'']?:[^\S\n]+["'']?' + $P_HTOKEN + '(?:["'',}]|[^\S\n]*$|[^\S\n]+#)'
 # Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
 # value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
@@ -311,6 +314,7 @@ if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_C
 $RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
 $RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxOpt, $RxTimeout)
 $RxHeaderYaml = New-Object regex($P_HEADERYAML, $RxOpt, $RxTimeout)
+$RxHeaderSq = New-Object regex($P_HEADERSQ, $RxOpt, $RxTimeout)
 $RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
 $RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
@@ -1413,8 +1417,10 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
     if (-not ($null -ne $t -and $t -cmatch '(?m)^\s*(mcpServers|extensions):')) { $c = 0 }
   }
   $tok = $false; $toml = $f.EndsWith('.toml')
+  $yaml = $f.EndsWith('.yaml') -or $f.EndsWith('.yml')
   if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline -NoEnvHeaders:$toml)) { $tok = $true }
-  elseif (($f.EndsWith('.yaml') -or $f.EndsWith('.yml')) -and (Has-RealMatch $f $RxHeaderYaml -YamlHeaders)) { $tok = $true }
+  elseif (($toml -or $yaml) -and (Has-RealMatch $f $RxHeaderSq -NoEnvHeaders:$toml)) { $tok = $true }
+  elseif ($yaml -and (Has-RealMatch $f $RxHeaderYaml -YamlHeaders)) { $tok = $true }
   if ($c -eq 0 -and $null -ne $c -and -not $tok) { return }
   if (-not ((Ids $MCP_CLIENT_IDS) -contains $cid)) { $cid = 'other' }
   $pl = Is-PluginPath $f

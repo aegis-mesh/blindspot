@@ -790,7 +790,10 @@ P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 # is code that reads one from the environment.
 P_HNAME='([Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-([Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
 P_HTOKEN="([A-Za-z][A-Za-z-]*[[:space:]]+)?[^]\"'\$<{}()[:space:],[]{12,}"
-P_HEADERSECRET="\"${P_HNAME}\"[[:space:]]*[:=][[:space:]]*\"${P_HTOKEN}\"|(^|[[:space:]{,])${P_HNAME}[[:space:]]*=[[:space:]]*\"${P_HTOKEN}\"|(^|[^\\])[\"']${P_HNAME}:[[:space:]]*${P_HTOKEN}[\"']"
+P_HEADERSECRET="\"${P_HNAME}\"[[:space:]]*[:=][[:space:]]*\"${P_HTOKEN}\"|(^|[[:space:]{,])${P_HNAME}[[:space:]]*=[[:space:]]*\"${P_HTOKEN}\"|(^|[^\\])\"${P_HNAME}:[[:space:]]*${P_HTOKEN}\""
+# The whole string in single quotes, a literal string in TOML and a quoted scalar in YAML: in JSON a
+# single quote is only text, as in a prompt that quotes a header, so a .json file is not read for it.
+P_HEADERSQ="(^|[^\\])'${P_HNAME}:[[:space:]]*${P_HTOKEN}'"
 P_HEADERYAML="^[[:space:]]*[\"']?${P_HNAME}[\"']?:[[:space:]]+[\"']?${P_HTOKEN}([\"',}]|[[:space:]]*\$|[[:space:]]+#)"
 # Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
 # value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
@@ -850,7 +853,9 @@ yaml_headers() { # file
     t ~ /(:|^-) +[|>][-+0-9]* *(#.*)?$/ { insc = 1; scind = ind }' "$1" 2>/dev/null
 }
 inline_secret() {
-  { no_env_headers "$1" | grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET"
+  _ip="$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET"
+  case "$1" in *.toml|*.yaml|*.yml) _ip="$_ip|$P_HEADERSQ" ;; esac
+  { no_env_headers "$1" | grep -aoE "$_ip"
     case "$1" in *.yaml|*.yml) yaml_headers "$1" | grep -aoE "$P_HEADERYAML" ;; esac
   } | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
@@ -1861,7 +1866,7 @@ is_plugin_path() {
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
-MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET" | tr '\n' '|')"
+MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET|$P_HEADERSQ" | tr '\n' '|')"
 mcp_row() { # who file client-id
   _f=$2; _c=""; _nm=""
   case "$_f" in

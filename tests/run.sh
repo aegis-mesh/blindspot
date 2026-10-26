@@ -1085,13 +1085,16 @@ has    "near miss: a header that is not a secret is not a token" '~/code/c/\.mcp
 # instructions. Nor are Codex's env_http_headers, which name an environment variable, inline, as dotted
 # keys or as a table, nor opencode's {env:NAME} template. A token in an http_headers table that follows
 # an env_http_headers table still counts.
-mkdir -p "$WORK/hdrn/.codex" "$WORK/hdrn/.continue" "$WORK/hdrn/.config/opencode" "$WORK/hdrn/code/a" "$WORK/hdrt/.codex"
+mkdir -p "$WORK/hdrn/.codex" "$WORK/hdrn/.continue" "$WORK/hdrn/.config/opencode" "$WORK/hdrn/code/a" "$WORK/hdrt/.codex" "$WORK/hdrt/.continue"
 cat > "$WORK/hdrn/.claude.json" <<'EOF'
 {"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp"}},"projects":{"/w":{"history":[
 {"display":"add an Authorization: Bearer header from the env to the fetch call in api.ts"},
 {"display":"fetch(url, { headers: { Authorization: process.env.API_TOKEN, Accept: \"application/json\" } })"},
 {"display":"In api.ts, Authorization: Bearer process.env.LINEAR_TOKEN"},
-{"display":"fetch(url, {headers: {Authorization: process.env.API_TOKEN}})"}]}}}
+{"display":"fetch(url, {headers: {Authorization: process.env.API_TOKEN}})"},
+{"display":"add the header 'Authorization: Bearer process.env.LINEAR_TOKEN' to the fetch call"},
+{"display":"curl -H 'Authorization: Bearer process.env.LINEAR_TOKEN' https://api.linear.app/graphql"},
+{"display":"the API wants 'X-Api-Key: SERVICE_API_KEY_FROM_ENV' on every call"}]}}}
 EOF
 cat > "$WORK/hdrn/.continue/config.yaml" <<'EOF'
 name: Mine
@@ -1113,14 +1116,16 @@ printf 'developer_instructions = """\n- X-Api-Key: read-from-the-environment\n""
 printf '{"mcp":{"linear":{"type":"remote","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer {env:LINEAR_API_TOKEN}"}}},"instructions":["When you call the API, Authorization: Bearer process.env.LINEAR_TOKEN"]}\n' > "$WORK/hdrn/.config/opencode/opencode.json"
 printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nX-Env-Key = "LINEAR_ENV_HEADER_NAME"\n\n[mcp_servers.linear.http_headers]\nAuthorization = "Bearer %s"\n' "$FT20" > "$WORK/hdrt/.codex/config.toml"
 HOME="$WORK/hdrn" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrn.txt"
+printf 'mcpServers:\n  - name: rem\n    command: npx\n    args: [\047mcp-remote\047, \047https://mcp.example.net/sse\047, \047--header\047, \047X-Api-Key: %s\047]\n' "$FT20" > "$WORK/hdrt/.continue/config.yaml"
 HOME="$WORK/hdrt" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrt.txt"
-has    "near miss: a prompt about a header, or with code that reads one, kept in ~/.claude.json is not a token" 'Claude Code ~/\.claude\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
+has    "near miss: a prompt about a header, or that quotes one, or with code that reads one, kept in ~/.claude.json is not a token" 'Claude Code ~/\.claude\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
 has    "nor a rule about one in Continue's config, or code in a rule written as a block" 'Continue ~/\.continue/config\.yaml servers configured( [^,]|$)' "$WORK/hdrn.txt"
 has    "nor a server's description about one"         '~/code/a/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
 has    "nor Codex's env_http_headers, inline, as dotted keys or as a table, nor its developer_instructions" 'Codex ~/\.codex/config\.toml 3 servers( [^,]|$)' "$WORK/hdrn.txt"
 has    "nor opencode's {env:NAME} template, nor its instructions" 'OpenCode ~/\.config/opencode/opencode\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
 hasnot "so no MCP config there has a token"           'token in the file|Replace tokens written into MCP configs' "$WORK/hdrn.txt"
 has    "a token in an http_headers table after an env_http_headers table still counts" 'Codex ~/\.codex/config\.toml 1 server, token in the file' "$WORK/hdrt.txt"
+has    "and one in a single-quoted --header argument in YAML" 'Continue ~/\.continue/config\.yaml servers configured, token in the file' "$WORK/hdrt.txt"
 # An npm publish ships .claude/settings.local.json unless package.json's own private or files setting,
 # at its top level, or an ignore entry for .claude itself or the file, leaves it out. An entry for
 # something else in .claude, a files key inside another setting, and a ! entry that brings the file back
