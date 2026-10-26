@@ -1264,9 +1264,25 @@ $RxCmdAlways = New-Object regex('"(apiKeyHelper|awsAuthRefresh|awsCredentialExpo
 $RxCmdHooked = New-Object regex('"(statusLine|fileSuggestion|subagentStatusLine)"\s*:', $RxOpt, $RxTimeout)
 $RxHookRun = New-Object regex('"hooks"\s*:\s*\{(\s*"([^"\\]|\\.)*"\s*:\s*\[\s*\]\s*,)*\s*"([^"\\]|\\.)*"\s*:\s*\[\s*[^\]\s]', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
-# An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
-# docs call its own, is not another server.
-$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?!([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
+# Claude Code's endpoint variables, and each one's provider's own API host (its env-vars page and each
+# provider's page): ANTHROPIC_BASE_URL at api.anthropic.com; Amazon Bedrock at bedrock-runtime in an AWS
+# region, and its Mantle endpoint at bedrock-mantle (AWS's Bedrock endpoints page, as Claude Code builds
+# it from the region); Claude Platform on AWS at aws-external-anthropic; Google's Agent Platform at
+# aiplatform.googleapis.com, a region's -aiplatform host or a multi-region's aiplatform.<eu|us>.rep host;
+# and a Microsoft Foundry resource at <resource>.services.ai.azure.com. A project's env sets any of them
+# once the folder is trusted: none is on Claude Code's list of variables a project can't set. An empty
+# one sets nothing, and neither localhost nor its provider's own API host is another server. Host names
+# compare without case, in ASCII as gird-check.sh's grep -i under LC_ALL=C does (CultureInvariant: a
+# Turkish culture would not fold I to i). The same as gird-check.sh's EP_HOSTS.
+$EpHosts = [ordered]@{
+  'ANTHROPIC_BASE_URL' = 'api\.anthropic\.com'
+  'ANTHROPIC_BEDROCK_BASE_URL' = 'bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com'
+  'ANTHROPIC_BEDROCK_MANTLE_BASE_URL' = 'bedrock-mantle\.[a-z0-9-]+\.api\.aws'
+  'ANTHROPIC_AWS_BASE_URL' = 'aws-external-anthropic\.[a-z0-9-]+\.api\.aws'
+  'ANTHROPIC_VERTEX_BASE_URL' = '([a-z0-9-]+-)?aiplatform\.googleapis\.com|aiplatform\.[a-z]+\.rep\.googleapis\.com'
+  'ANTHROPIC_FOUNDRY_BASE_URL' = '[a-z0-9-]+\.services\.ai\.azure\.com'
+}
+$RxBaseUrl = New-Object regex((@($EpHosts.Keys | ForEach-Object { '"' + $_ + '"\s*:\s*"(?=[^"]*[^"\s])(?!(?i:[a-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://(' + $EpHosts[$_] + '))(:[0-9]+)?[/"])[^"]*"' }) -join '|'), ($RxOpt -bor [Text.RegularExpressions.RegexOptions]::CultureInvariant), $RxTimeout)
 # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
 # versions take it only from the person's own or managed settings (Claude Code's settings docs). It
 # reads defaultMode only inside permissions (Aa-Hit); this regex spares the files that never name it.

@@ -2009,6 +2009,25 @@ json_top() { # key
       print v; exit
     }'
 }
+# Claude Code's endpoint variables, and each one's provider's own API host (its env-vars page and each
+# provider's page): ANTHROPIC_BASE_URL at api.anthropic.com; Amazon Bedrock at bedrock-runtime in an AWS
+# region, and its Mantle endpoint at bedrock-mantle (AWS's Bedrock endpoints page, as Claude Code builds
+# it from the region); Claude Platform on AWS at aws-external-anthropic; Google's Agent Platform at
+# aiplatform.googleapis.com, a region's -aiplatform host or a multi-region's aiplatform.<eu|us>.rep host;
+# and a Microsoft Foundry resource at <resource>.services.ai.azure.com. A project's env sets any of them
+# once the folder is trusted: none is on Claude Code's list of variables a project can't set.
+EP_HOSTS='ANTHROPIC_BASE_URL api\.anthropic\.com
+ANTHROPIC_BEDROCK_BASE_URL bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com
+ANTHROPIC_BEDROCK_MANTLE_BASE_URL bedrock-mantle\.[a-z0-9-]+\.api\.aws
+ANTHROPIC_AWS_BASE_URL aws-external-anthropic\.[a-z0-9-]+\.api\.aws
+ANTHROPIC_VERTEX_BASE_URL ([a-z0-9-]+-)?aiplatform\.googleapis\.com|aiplatform\.[a-z]+\.rep\.googleapis\.com
+ANTHROPIC_FOUNDRY_BASE_URL [a-z0-9-]+\.services\.ai\.azure\.com'
+EP_NAMES=$(printf '%s\n' "$EP_HOSTS" | cut -d' ' -f1 | paste -sd '|' -)
+# A "name": "value" the scan pulled out is fine when its value is localhost on any scheme, or https to
+# that name's provider host, with a port and a path or not.
+EP_OK=$(printf '%s\n' "$EP_HOSTS" | while read -r _n _h; do
+  printf '^"%s"[[:space:]]*:[[:space:]]*"([a-z]+://(localhost|127\\.0\\.0\\.1|\\[::1\\])|https://(%s))(:[0-9]+)?(/[^"]*)?"$\n' "$_n" "$_h"
+done | paste -sd '|' -)
 # Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
 # reference lists each as running your own command, set from any settings file. disableAllHooks set to
 # true turns off hooks, the status line, the file suggestion command and the subagent status line, but
@@ -2037,9 +2056,9 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
   fi
-  # An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
-  # docs call its own, is not another server.
-  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*[^"[:space:]][^"]*"' | grep -qvE ':[[:space:]]*"([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?(/[^"]*)?"$'; then
+  # Claude Code's endpoint variables (EP_HOSTS): an empty one sets nothing, and neither localhost nor
+  # its provider's own API host is another server. Host names compare without case.
+  if printf '%s' "$_t" | grep -oE "\"($EP_NAMES)\"[[:space:]]*:[[:space:]]*\"[^\"]*[^\"[:space:]][^\"]*\"" | grep -qviE "$EP_OK"; then
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
   # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
