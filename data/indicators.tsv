@@ -37,7 +37,8 @@
 # was found (in a Python environment or uv's cache), so a hit never names a package that is not there,
 # else with the first of them, as written by either.
 # LiteLLM: its advisory, and the GitHub issue the advisory links for the attack's details
-# (BerriAI/litellm#47826), which names the .pc_ temp files and PRIVCOLLECT_ACTIVE: the .pc_once_ marker is
+# (BerriAI/litellm#47826), which names the .pc_ temp markers (the .pc_sq_ and .pc_e_ folders and the
+# .pc_once_ files) and PRIVCOLLECT_ACTIVE: the .pc_once_ marker is
 # written only once the data was sent, the advisory's "the exfil is confirmed".
 # LiteLLM 1.82.7 and 1.82.8: LiteLLM's March post, which says to look for litellm_init.pth in
 # site-packages and remove it (1.82.8). And ~/.config/sysmon/sysmon.py, the backdoor its payload writes:
