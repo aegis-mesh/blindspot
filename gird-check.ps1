@@ -1518,8 +1518,54 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
 $homeClaude = J $HomeDir '.claude'
+# A file's physical path, as bash's -ef compares files: a link at the file itself is followed, and its
+# folder's links resolved (Real-Dir; on Windows, where Real-Dir keeps the path as given, a folder that is
+# itself a link is followed to its target). $null when it can't be resolved.
+function Real-File([string]$p) {
+  try {
+    $it = Get-Item -LiteralPath $p -Force -ErrorAction Stop
+    if (Is-Link $it) {
+      $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
+      if ($t) { $p = $t.FullName } else {
+        $lt = Link-Target $it; if (-not $lt) { return $null }
+        if (-not [IO.Path]::IsPathRooted($lt)) { $lt = J ([IO.Path]::GetDirectoryName($p)) $lt }
+        $p = $lt
+      }
+    }
+    $d = [IO.Path]::GetDirectoryName($p)
+    if ($OnWindows) {
+      $di = Get-Item -LiteralPath $d -Force -ErrorAction Stop
+      if (Is-Link $di) {
+        $dt = $null; try { $dt = [IO.Directory]::ResolveLinkTarget($d, $true) } catch { }
+        if ($dt) { $d = $dt.FullName } else {
+          $dl = Link-Target $di
+          if ($dl) { if (-not [IO.Path]::IsPathRooted($dl)) { $dl = J ([IO.Path]::GetDirectoryName($d)) $dl }; $d = $dl }
+        }
+      }
+      $r = [IO.Path]::GetFullPath($d)
+    } else { $r = Real-Dir $d }
+    if (-not $r) { return $null }
+    J $r ([IO.Path]::GetFileName($p))
+  } catch { $null }
+}
+# The person's own Claude Code settings can sit in a folder that looks like a project's, such as the
+# dotfiles folder ~/.claude links to (as GNU stow sets it up): a settings file that is the same file as
+# ~/.claude's, or CLAUDE_CONFIG_DIR's, is theirs, under any name (Own-Cc). Own-Alias is one of
+# ~/.claude's under another name, which section 4 reads already under its own. The same as gird-check.sh.
+$OwnHomeCc = @(@((J $homeClaude 'settings.json'), (J $homeClaude 'settings.local.json')) | Where-Object { Is-File $_ } | ForEach-Object { Real-File $_ } | Where-Object { $_ })
+$OwnCc = @($OwnHomeCc)
+if ($env:CLAUDE_CONFIG_DIR) { $OwnCc += @(@((J $env:CLAUDE_CONFIG_DIR 'settings.json'), (J $env:CLAUDE_CONFIG_DIR 'settings.local.json')) | Where-Object { Is-File $_ } | ForEach-Object { Real-File $_ } | Where-Object { $_ }) }
+function Same-As([string]$f, $list) {
+  if ($list.Count -eq 0) { return $false }
+  $r = Real-File $f; if (-not $r) { return $false }
+  foreach ($o in $list) { if ($r.Equals($o, $PathCmp)) { return $true } }
+  $false
+}
+function Own-Cc([string]$f) { Same-As $f $OwnCc }
+function Own-Alias([string]$f) { if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp)) { return $false }; Same-As $f $OwnHomeCc }
 foreach ($f in $AllowFiles) {
   if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f) -or (Too-Big $f)) { continue }
+  if (Own-Cc $f) { continue }
   $t = Flat-Text $f; if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
@@ -1728,7 +1774,7 @@ function Unread-Files($files, [bool]$big = $false) {
 $Sec2Unread = Unread-Files @($McpList)
 foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
-$allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
+$allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive | Where-Object { -not (Own-Alias $_) })
 $AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }

@@ -986,6 +986,21 @@ hasnot "near miss: each provider's own API host is not another server" 'code/e(6
 hasnot "an upper-case localhost is localhost"         'code/e8/' "$WORK/epv.txt"
 hasnot "and an upper-case Anthropic host is Anthropic's" 'code/e9/' "$WORK/epv.txt"
 has    "another provider's host in ANTHROPIC_BASE_URL is another server" '~/code/e14/\.claude/settings\.json Set to send the agent.s API traffic' "$WORK/epv.txt"
+# The person's own settings in the dotfiles folder ~/.claude links to (as GNU stow sets it up), and one
+# of theirs that is a link to a file elsewhere, are theirs, not a project's: the same file (-ef) as
+# ~/.claude's. Section 4 names a saved command in them once, under ~/.claude.
+mkdir -p "$WORK/stw/dotfiles/claude/.claude" "$WORK/stw/code/p/.claude" "$WORK/stw/dots/.claude" "$WORK/stw/AppData/Local/Temp"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]},"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 npm test)"]}}\n' > "$WORK/stw/dotfiles/claude/.claude/settings.json"
+ln -s dotfiles/claude/.claude "$WORK/stw/.claude"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}\n' > "$WORK/stw/code/p/.claude/settings.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make"}]}]}}\n' > "$WORK/stw/dots/.claude/settings.json"
+ln -s ../../../dots/.claude/settings.json "$WORK/stw/dotfiles/claude/.claude/settings.local.json"
+psrun "$WORK/stw" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stw.txt"
+hasnot "the person's own settings in a dotfiles folder ~/.claude links to are not a project's" 'dotfiles/claude/\.claude/settings' "$WORK/stw.txt"
+hasnot "nor a settings file of theirs that is a link elsewhere" '~/dots/\.claude' "$WORK/stw.txt"
+has    "a project with the same hook is still listed" '~/code/p/\.claude/settings\.json Set to run commands while the agent works' "$WORK/stw.txt"
+has    "section 4 names their saved command under ~/.claude" '✗ ~/\.claude/settings\.json A saved command contains a key' "$WORK/stw.txt"
+has    "and counts it once"                          ' 1 key in allow lists' "$WORK/stw.txt"
 # Hooks that run nothing are not commands: an event with an empty list, and hooks in a file whose
 # disableAllHooks is true, unless the project's settings.local.json, which comes first, sets it back to
 # false. It turns off the status line too, not the credential helpers, and counts only at the top of the

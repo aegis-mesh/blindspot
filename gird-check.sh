@@ -2035,9 +2035,25 @@ done | paste -sd '|' -)
 CMD_ALWAYS='apiKeyHelper|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
 CMD_KEYS="$CMD_ALWAYS|statusLine|fileSuggestion|subagentStatusLine"
 HOOK_RUN='"hooks"[[:space:]]*:[[:space:]]*\{([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*\][[:space:]]*,)*[[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]'
+# The person's own Claude Code settings can sit in a folder that looks like a project's, such as the
+# dotfiles folder ~/.claude links to (as GNU stow sets it up): a settings file that is the same file
+# (-ef) as ~/.claude's, or CLAUDE_CONFIG_DIR's, is theirs, under any name (own_cc). own_alias is one of
+# ~/.claude's under another name, which section 4 reads already under its own.
+own_cc() { # file
+  for _o in "$H/.claude/settings.json" "$H/.claude/settings.local.json" ${CLAUDE_CONFIG_DIR:+"$CLAUDE_CONFIG_DIR/settings.json" "$CLAUDE_CONFIG_DIR/settings.local.json"}; do
+    [ -e "$_o" ] && [ "$1" -ef "$_o" ] && return 0
+  done
+  return 1
+}
+own_alias() { # file
+  case "$1" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json") return 1 ;; esac
+  for _o in "$H/.claude/settings.json" "$H/.claude/settings.local.json"; do [ -e "$_o" ] && [ "$1" -ef "$_o" ] && return 0; done
+  return 1
+}
 while IFS= read -r f; do
   case "$f" in */.claude/settings.json|*/.claude/settings.local.json) ;; *) continue ;; esac
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
+  own_cc "$f" && continue
   [ -f "$f" ] && ! too_big "$f" || continue
   _t=$(flat "$f"); _w=""
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
@@ -2281,7 +2297,7 @@ N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
-  while IFS= read -r _f; do too_big "$_f" || printf '%s\n' "$_f"; done | files_matching "$TR_KEYS|$P_ASSIGN")
+  while IFS= read -r _f; do too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; done | files_matching "$TR_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
