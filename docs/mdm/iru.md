@@ -29,6 +29,8 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
    starting the second line of `gird-fleet.sh` (`--deadline=1800` for Iru), each pasted between its
    marker lines in the install script. This install step has not yet been run end to end on a real
    Mac.
+   Optional: add the ripgrep lines from [step 3.5 of docs/fleet.md](../fleet.md#3-add-it-to-your-mdm)
+   to its end, so large agent session stores take seconds per account rather than minutes.
 2. Add a Custom Script library item named `Blindspot install`
    ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)),
    and assign it to your Blueprints.

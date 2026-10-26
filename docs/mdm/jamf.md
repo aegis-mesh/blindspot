@@ -29,6 +29,8 @@ the result either way: each account's `protected_folders` is `checked` once acce
    starting the second line of `gird-fleet.sh` (`--deadline=3000` for Jamf), each pasted between its
    marker lines in the install script. This install step has not yet been run end to end on a real
    Mac.
+   Optional: add the ripgrep lines from [step 3.5 of docs/fleet.md](../fleet.md#3-add-it-to-your-mdm)
+   to its end, so large agent session stores take seconds per account rather than minutes.
 2. In Jamf Pro, click **Settings**, then in **Computer management** click **Scripts**, then **New**
    ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Adding_a_Script_to_Jamf_Pro)).
 3. In the **General** pane, name it `Blindspot install`.

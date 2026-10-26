@@ -29,6 +29,8 @@ Check the result: each account's `protected_folders` is `checked` once access wo
    starting the second line of `gird-fleet.sh` (`--deadline=3000` for Intune), each pasted between
    its marker lines in the install script. This install step has not yet been run end to end on a
    real Mac.
+   Optional: add the ripgrep lines from [step 3.5 of docs/fleet.md](../fleet.md#3-add-it-to-your-mdm)
+   to its end, so large agent session stores take seconds per account rather than minutes.
 2. Save the install script as a file, `blindspot-install.sh`.
 3. In the Microsoft Intune admin center, select **Devices** > **By platform** > **macOS** >
    **Manage devices** > **Scripts** > **Add**

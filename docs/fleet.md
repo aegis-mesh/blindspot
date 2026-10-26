@@ -168,11 +168,35 @@ The install step has not yet been run end to end on a real Mac.
    exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
    ```
 
+5. **Optional: a ripgrep for large session stores.** Each account's check reads agent sessions
+   with the system's perl unless a ripgrep that only root can change is installed. To install a
+   pinned ripgrep, 14.1.1 (published 9 September 2024), add these lines to the end of the install
+   script. They download it from the ripgrep release, check its SHA-256 against the hash the
+   release publishes, and install it root:wheel 0755. This step has not yet been run end to end on
+   a real Mac.
+
+   ```sh
+   v=14.1.1
+   case "$(/usr/bin/uname -m)" in
+     arm64) a=aarch64-apple-darwin; h=24ad76777745fbff131c8fbc466742b011f925bfa4fffa2ded6def23b5b937be ;;
+     x86_64) a=x86_64-apple-darwin; h=fc87e78f7cb3fea12d69072e7ef3b21509754717b746368fd40d88963630e2b3 ;;
+     *) exit 1 ;;
+   esac
+   t=$(/usr/bin/mktemp -d)
+   /usr/bin/curl -fsSL -o "$t/rg.tar.gz" "https://github.com/BurntSushi/ripgrep/releases/download/$v/ripgrep-$v-$a.tar.gz"
+   [ "$(/usr/bin/shasum -a 256 "$t/rg.tar.gz" | /usr/bin/awk '{ print $1 }')" = "$h" ] || { /bin/rm -rf "$t"; exit 1; }
+   /usr/bin/tar -xzf "$t/rg.tar.gz" -C "$t"
+   /usr/bin/install -o root -g wheel -m 0755 "$t/ripgrep-$v-$a/rg" "$d/rg"
+   /bin/rm -rf "$t"
+   ```
+
+   This download is your MDM's, once, at install. Blindspot itself still sends nothing anywhere.
+
 Set `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the
 number. How long an account takes depends on its agent sessions: with a large session store,
-minutes with the system's perl, seconds when the account has its own ripgrep (at
-`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` or `~/.cargo/bin`, changeable only by root
-or that account). The default deadline, 3000 seconds, covers both. Each row's `session_engine`
+minutes with the system's perl, seconds with a ripgrep only root can change (the one step 5
+installs, or one in `/opt/homebrew/bin` or `/usr/local/bin` whose file and folders are all
+root's). The default deadline, 3000 seconds, covers both. Each row's `session_engine`
 says which ran. Each account gets an equal share of the time left, so one stuck account cannot hold up the
 rest. The run keeps a few seconds in reserve for its own steps, which sit outside the shares, so set
 the deadline a little below the limit, not at it. Run from standard input instead of a file,

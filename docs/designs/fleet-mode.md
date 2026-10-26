@@ -63,7 +63,7 @@ files. If `sudo` fails, the account is reported as not checked.
 - An account run reads only regular files, and leaves out any over a size limit. A fifo, socket,
   device or oversized file is counted as not checked. Session files are the exception to the size
   limit: the session check reads them whatever their size, with the system's perl (in 1 MB pieces)
-  or with a ripgrep that only root or that account can change (see "As built").
+  or with a ripgrep only root can change (see "As built").
 - An account run cannot speak for anyone else. It writes a fixed line format (`key=value`, known keys
   only, numbers, and names from the fixed lists) to a pipe root created. Root reads at most a set
   number of bytes, checks every line against the format, and builds the account's row itself. Any
@@ -327,15 +327,18 @@ real Mac.
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A
   normal run of `gird-check.sh` still counts a profile it can't read as no keys:
   https://github.com/aegis-mesh/blindspot/issues/24.
-- Session engine. With perl, a large session store (5.2 GB measured on one Mac) takes minutes per
-  account; ripgrep takes seconds. An account run runs as its account, so a ripgrep that only root or
-  that same account can change gives nobody a right they do not already have: no account's code
-  runs with another account's rights. It is used when found at `/opt/homebrew/bin/rg`,
-  `/usr/local/bin/rg`, `~/.local/bin/rg` or `~/.cargo/bin/rg`, as a regular file (a link is followed
-  to its real file, and the test applies there), with the file and every folder above it owned by
-  root or the account, writable by no one else by mode or by ACL. Otherwise perl checks the sessions
-  as before. Root never runs ripgrep. The account run reports `engine=rg|perl|none`, and the row
-  carries it as `session_engine`; the inventory value does not.
+- Session engine. An account run inherits the Full Disk Access of the MDM agent that started root:
+  macOS judges it by the responsible process, and it passes through `sudo` to the account run and
+  everything it starts. So the account run never runs anything the account, or anyone but root,
+  could have written: ripgrep is used only when its real file (a link is followed) and every folder
+  above it are owned by root and writable by no one else, by mode or by ACL. It looks first at
+  `/Library/Application Support/Blindspot/rg`, which the guide installs as an optional, pinned and
+  hash-checked step, then `/opt/homebrew/bin/rg` and `/usr/local/bin/rg`; a ripgrep in an account's
+  own folders, or a Homebrew one the account owns, is never run. Otherwise the system perl checks
+  the sessions. The cost: with a large session store (5.2 GB measured on one Mac), minutes per
+  account on perl, seconds with the admin-installed ripgrep. ripgrep gets no handle to root's pipe.
+  Root never runs ripgrep. The account run reports `engine=rg|perl|none`, and the row carries it as
+  `session_engine`; the inventory value does not.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
 - Two files. `gird-fleet.sh` holds all the root work: the fixed PATH, the ownership checks, the
