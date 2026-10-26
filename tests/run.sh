@@ -335,6 +335,9 @@ random.seed(7); cs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345
 run = 'sk-' + 'proj-' + ''.join(random.choice(cs) for _ in range(2 * 1024 * 1024))
 open(sys.argv[1], 'w').write('{\"x\":\"' + run + '\"}\n'); open(sys.argv[2], 'w').write('#### output\n' + run + '\n')" "$SE/long/.claude/projects/p/a.jsonl" "$SE/long/code/big/.aider.chat.history.md"
 mkdir -p "$SE/urdir/.claude/projects/p" "$SE/urdir/.claude/projects/locked"; printf '{}\n' > "$SE/urdir/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/urdir/.claude/projects/locked/b.jsonl"; chmod 000 "$SE/urdir/.claude/projects/locked"
+# OpenCode's session store behind its folder made 000: its three locations there are one folder not read.
+mkdir -p "$SE/clsd/.claude/projects/p" "$SE/clsd/.local/share/opencode/storage/session"; printf '{}\n' > "$SE/clsd/.claude/projects/p/a.jsonl"
+printf '{"a":"x %s y"}\n' "AK""IA$(upper 16)" > "$SE/clsd/.local/share/opencode/storage/session/s1.json"; chmod 000 "$SE/clsd/.local/share/opencode"
 for E in perl rg; do
   SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
   HOME="$SE/pos" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | sed -n '/Keys in agent sessions/,/^$/p' > "$SE/pos-$E.block"
@@ -355,9 +358,12 @@ for E in perl rg; do
   HOME="$SE/urdir" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/urdir-$E.txt"
   has    "$E: a session folder that cannot be read is named" 'Agent sessions were partly checked: (1 folder|some files or folders) could not be read' "$SE/urdir-$E.txt"
   hasnot "$E: and the sessions are not called clean" 'No keys in' "$SE/urdir-$E.txt"
+  HOME="$SE/clsd" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/clsd-$E.txt"
+  has    "$E: a session store behind a folder that can't be entered is a folder not read" 'Agent sessions were partly checked: 1 folder could not be read' "$SE/clsd-$E.txt"
+  hasnot "$E: and the sessions read beside it are not called clean" 'No keys in' "$SE/clsd-$E.txt"
 done
 SKIPPING=""
-chmod 755 "$SE/urdir/.claude/projects/locked"
+chmod 755 "$SE/urdir/.claude/projects/locked" "$SE/clsd/.local/share/opencode"
 # A compressed session is not read: the check line counts only the files read, the summary row
 # says partly checked, and a home whose only session is compressed is never told no keys.
 mkdir -p "$SE/zst/.codex/sessions/2026/10" "$SE/zst1/.codex/sessions/2026/10"

@@ -363,6 +363,14 @@ function Behind-Closed([string]$p) {
     return $false
   }
 }
+# The folder that can't be entered on such a path's way: the nearest one whose own attributes can be
+# read, as gird-check.sh's behind_closed leaves in $_bc. $null when the path is not behind one.
+function Closed-Folder([string]$p) {
+  if (-not (Behind-Closed $p)) { return $null }
+  $d = [IO.Path]::GetDirectoryName($p)
+  while ($d -and (Behind-Closed $d)) { $d = [IO.Path]::GetDirectoryName($d) }
+  $d
+}
 # A file that is there but not read, as gird-check.sh's not_read: one that can't be read, a pipe,
 # socket or device, or one behind a folder that can't be entered. A link to nothing and a folder are
 # none of these.
@@ -6772,6 +6780,12 @@ if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
   elseif ($SessEngine -eq 'rg') { $SESS_DONE = -1 }
   else { $SESS_DONE = 0 }
 }
+# A session location behind a folder that can't be entered (~/.local/share/goose made 000) is not in
+# $SessRoots, as nothing there can be listed: each such folder (Closed-Folder) is a folder not read,
+# once however many locations are behind it, so the check is partly done, never "no keys". The same
+# as gird-check.sh's SESS_CLOSED.
+$sessClosed = @(@(foreach ($sessRow in $SessTable) { if ($sessRow[0] -eq 'read' -or $sessRow[0] -eq 'db') { Closed-Folder $sessRow[2] } }) | Where-Object { $_ } | Select-Object -Unique)
+if ($SESS_UNREAD -ge 0) { $SESS_UNREAD += $sessClosed.Count }
 $sessHits = New-Object System.Collections.Generic.List[string]
 foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)

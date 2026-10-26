@@ -7594,6 +7594,14 @@ fi
 case "$SESS_TOTAL" in ''|*[!0-9]*) SESS_TOTAL=0 ;; esac
 case "$SESS_UNREAD" in ''|*[!0-9-]*) SESS_UNREAD=0 ;; esac
 case "$SESS_UNREAD_FILES" in ''|*[!0-9]*) SESS_UNREAD_FILES=0 ;; esac
+# A session location behind a folder that can't be entered (~/.local/share/goose made 000) is not in
+# SESS_ROOTS, as nothing there can be listed: each such folder (behind_closed's _bc) is a folder not
+# read, once however many locations are behind it, so the check is partly done, never "no keys".
+SESS_CLOSED=$(printf '%s\n' "$SESS_TABLE" | awk -F '|' -v o="$_os" '($1 == "all" || $1 == o) && ($2 == "read" || $2 == "db") { print $4 }' | while IFS= read -r _p; do
+  [ -n "$_p" ] && [ ! -e "$_p" ] && [ ! -L "$_p" ] && behind_closed "$_p" && printf '%s\n' "$_bc"
+done | awk '!seen[$0]++' | grep -c .)
+case "$SESS_CLOSED" in ''|*[!0-9]*) SESS_CLOSED=0 ;; esac
+[ "$SESS_UNREAD" -ge 0 ] && SESS_UNREAD=$((SESS_UNREAD + SESS_CLOSED))
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
 # in each project, found by the home scan, and they are checked here. The file name and the match
 # are cleaned of control characters as the perl engine cleans its own, so a tab in a cloned repo's
