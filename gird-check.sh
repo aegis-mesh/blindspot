@@ -7461,7 +7461,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
   _inc=$(printf '%s\n' $_npm_inc $EXT_ACT_TAGS $PY_HITS $IND_HITS | fleet_ids)
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
-  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + N_NL_DIRS + _fe))
+  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
   # Planted files that count (WORM_HIT), as the report lists them; one named like them alone is to read.
   _planted=$(( $(count_lines "$WORM_HIT") + $(count_lines "$WORM_REFS") ))
   # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
@@ -7471,10 +7471,45 @@ if [ "$ACCTRUN" -eq 1 ]; then
   # Root starts the run with a clean environment, so a variable a shell profile sets to move an agent's
   # folders (CLAUDE_CONFIG_DIR and the like) is not followed: the account is partly checked then. The
   # profiles are read, never run.
+  # The npm and Python tools' folder variables move a folder only when set somewhere other than the
+  # default the run reads: nvm's, Volta's and bun's installers write their own default into a profile.
+  # One with no default here counts whenever it is set.
+  fleet_dflt() { # variable: the folders the run reads when it is not set
+    case "$1" in
+      NVM_DIR) printf '%s\n' "$H/.nvm" ;;
+      VOLTA_HOME) printf '%s\n' "$H/.volta" ;;
+      BUN_INSTALL) printf '%s\n' "$H/.bun" ;;
+      N_PREFIX) printf '%s\n' "$H/n" ;;
+      ASDF_DATA_DIR) printf '%s\n' "$H/.asdf" ;;
+      MISE_DATA_DIR) printf '%s\n' "$H/.local/share/mise" ;;
+      MAMBA_ROOT_PREFIX) printf '%s\n' "$H/micromamba" ;;
+      PIPX_HOME) printf '%s\n%s\n' "$H/.local/pipx" "$H/.local/share/pipx" ;;
+      WORKON_HOME) printf '%s\n%s\n' "$H/.virtualenvs" "$H/.local/share/virtualenvs" ;;
+      UV_CACHE_DIR) printf '%s\n' "$H/.cache/uv" ;;
+      XDG_CACHE_HOME) printf '%s\n' "$H/.cache" ;;
+      POETRY_CACHE_DIR) printf '%s\n%s\n' "$H/Library/Caches/pypoetry" "$H/.cache/pypoetry" ;;
+      POETRY_VIRTUALENVS_PATH) printf '%s\n%s\n' "$H/Library/Caches/pypoetry/virtualenvs" "$H/.cache/pypoetry/virtualenvs" ;;
+      HATCH_DATA_DIR) printf '%s\n%s\n' "$H/Library/Application Support/hatch" "$H/.local/share/hatch" ;;
+      npm_config_prefix|NPM_CONFIG_PREFIX) printf '%s\n' "$H/.npm-global" ;;
+    esac
+  }
+  _mv_set='^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?'
+  _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR'
   _moved=0
   for _pf in "$H/.zshenv" "$H/.zprofile" "$H/.zshrc" "$H/.bash_profile" "$H/.bashrc" "$H/.profile" "$H/.config/fish/config.fish"; do
     [ -f "$_pf" ] && fleet_ok "$_pf" || continue
-    grep -qE '^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?(CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME)([=[:space:]])' "$_pf" 2>/dev/null && _moved=1
+    grep -qE "${_mv_set}(CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME)([=[:space:]])" "$_pf" 2>/dev/null && _moved=1
+    _mvl=$(awk -v re="${_mv_set}(${_mv_tool})([=[:space:]])" 'match($0, re) { n = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?/, "", n); sub(/[=[:space:]]$/, "", n); v = substr($0, RSTART + RLENGTH); sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+#.*$/, "", v); sub(/[[:space:]]*;.*$/, "", v); sub(/[[:space:]]+$/, "", v); print n "\t" v }' "$_pf" 2>/dev/null)
+    while IFS="$TAB" read -r _mvn _mvv; do
+      [ -n "$_mvn" ] || continue
+      _mvv=${_mvv#\"}; _mvv=${_mvv%\"}; _mvv=${_mvv#\'}; _mvv=${_mvv%\'}
+      case "$_mvv" in '$HOME'*) _mvv="$H${_mvv#\$HOME}" ;; '${HOME}'*) _mvv="$H${_mvv#\$\{HOME\}}" ;; '~'*) _mvv="$H${_mvv#\~}" ;; esac
+      _mvv=${_mvv%/}
+      _mvd=$(fleet_dflt "$_mvn")
+      if [ -z "$_mvd" ] || ! printf '%s\n' "$_mvd" | grep -qxF -- "$_mvv"; then _moved=1; fi
+    done <<EOF
+$_mvl
+EOF
   done
   {
     echo "v=1"
@@ -8237,7 +8272,8 @@ if [ "$OS" = Darwin ]; then
   elif [ "$MAL_LOCKONLY" -eq 1 ] && [ "$EXT_HIT" -eq 0 ] && [ "$PY_HIT" -eq 0 ]; then
     _t="THIS SCAN IS A SNAPSHOT"
     # A version to update found installed is said as that: it is no sign the lockfile's malware ran.
-    if [ "$NPM_UPD_INST" -eq 1 ]; then _p1="It found a bad npm version to update installed here, and npm malware listed in a lockfile with no sign it was installed. It can't tell you what your agents do after you close this window."
+    if [ "${N_NM_UNREAD:-0}" -gt 0 ]; then _p1="It found npm malware listed in a lockfile, and a folder it would be installed in could not be read, so whether it was installed here can't be told. It can't tell you what your agents do after you close this window."
+    elif [ "$NPM_UPD_INST" -eq 1 ]; then _p1="It found a bad npm version to update installed here, and npm malware listed in a lockfile with no sign it was installed. It can't tell you what your agents do after you close this window."
     else _p1="It found npm malware listed in a lockfile, with no sign it was installed here. It can't tell you what your agents do after you close this window."; fi
   elif [ "$ANY_MAL" -eq 1 ] || [ "$PY_HIT" -eq 1 ]; then
     _t="THIS SCAN IS A SNAPSHOT"

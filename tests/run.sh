@@ -1298,6 +1298,9 @@ chmod 755 "$BI/unr/code/app/node_modules"
 has    "an install in bun's isolated store is found" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso.txt"
 has    "and a scoped package's build with other peer dependencies there" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso2.txt"
 has    "a node_modules that can't be read is named, never read as no install" '1 folder could not be read, so whether these versions were installed is not known: ~/code/app/node_modules ' "$BI/unr.txt"
+[ "$(uname -s)" = Darwin ] || SKIPPING="the snapshot note with the Argus offer is printed on a Mac only"
+has    "and on a Mac the closing note says whether it was installed can't be told" 'It found npm malware listed in a lockfile, and a folder it would be' "$BI/unr.txt"
+SKIPPING=""
 # A lockfile's row says whether its version was found installed, so an installed row and a lockfile-only
 # one read differently.
 LW=$WORK/lw; rm -rf "$LW"; mkdir -p "$LW/code/k" "$LW/code/w/node_modules/claud-code" "$LW/AppData/Roaming" "$LW/AppData/Local/Temp"
@@ -3759,6 +3762,14 @@ users "moved:$U:$FL/moved:/bin/zsh"
 fl_run moved --json
 if grep -q '^moved\.agent_folders_moved=true$' "$FL/moved.flat" && grep -q '^moved\.outcome=not_checked$' "$FL/moved.flat"; then ok "fleet: a profile that moves an agent's folders leaves the account partly checked"
 else bad "fleet: a profile that moves an agent's folders leaves the account partly checked" "$(grep '^moved\.' "$FL/moved.flat" | tr '\n' ' ')"; fi
+# The npm and Python tools' folders: a profile that sets one to its own default (as nvm's, Volta's and
+# bun's installers do) moves nothing; one set elsewhere leaves the account partly checked.
+fl_home dflt; printf 'export NVM_DIR="$HOME/.nvm"\nexport BUN_INSTALL="$HOME/.bun"\nexport VOLTA_HOME=~/.volta\n' > "$FL/dflt/.zshrc"
+fl_home toolmv; printf 'export WORKON_HOME=/opt/envs\n' > "$FL/toolmv/.zshrc"
+users "dflt:$U:$FL/dflt:/bin/zsh" "toolmv:$U:$FL/toolmv:/bin/zsh"
+fl_run toolmv --json
+has    "fleet: a profile that sets a tool's folder to its default moves nothing" '^dflt\.agent_folders_moved=false$' "$FL/toolmv.flat"
+has    "fleet: one that sets it elsewhere leaves the account partly checked" '^toolmv\.agent_folders_moved=true$' "$FL/toolmv.flat"
 # A session check that would never end on its own: told its time, the account run stops it and still
 # sends what it found, with the sessions partly checked, instead of being stopped whole.
 users "asha:$U:$FL/asha:/bin/zsh"; printf 'slowsess\n' > "$FL/mode-asha"

@@ -313,3 +313,6 @@ fleet: a home whose path holds a character it does not read says so, not that it
 fleet: a config behind a folder the account can't enter counts as not read	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: so that account is never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a history file linked to /dev/null is not counted as not read	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a profile that sets a tool's folder to its default moves nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: one that sets it elsewhere leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+and on a Mac the closing note says whether it was installed can't be told	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
