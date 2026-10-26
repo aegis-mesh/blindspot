@@ -16,7 +16,7 @@ trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
   QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME \
   ASDF_DATA_DIR MISE_DATA_DIR MISE_INSTALLS_DIR MAMBA_ROOT_PREFIX PIPX_HOME PIPX_GLOBAL_HOME UV_TOOL_DIR UV_PYTHON_INSTALL_DIR UV_CACHE_DIR \
-  npm_config_prefix NPM_CONFIG_PREFIX npm_config_userconfig NPM_CONFIG_USERCONFIG NVM_DIR N_PREFIX VOLTA_HOME BUN_INSTALL BUN_INSTALL_GLOBAL_DIR
+  npm_config_prefix NPM_CONFIG_PREFIX npm_config_userconfig NPM_CONFIG_USERCONFIG NVM_DIR N_PREFIX VOLTA_HOME BUN_INSTALL BUN_INSTALL_GLOBAL_DIR PNPM_HOME
 command -v python3 >/dev/null 2>&1 || { echo "tests/run.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt"
@@ -4074,14 +4074,20 @@ users "moved:$U:$FL/moved:/bin/zsh"
 fl_run moved --json
 if grep -q '^moved\.agent_folders_moved=true$' "$FL/moved.flat" && grep -q '^moved\.outcome=not_checked$' "$FL/moved.flat"; then ok "fleet: a profile that moves an agent's folders leaves the account partly checked"
 else bad "fleet: a profile that moves an agent's folders leaves the account partly checked" "$(grep '^moved\.' "$FL/moved.flat" | tr '\n' ' ')"; fi
-# The npm and Python tools' folders: a profile that sets one to its own default (as nvm's, Volta's and
-# bun's installers do) moves nothing; one set elsewhere leaves the account partly checked.
-fl_home dflt; printf 'export NVM_DIR="$HOME/.nvm"\nexport BUN_INSTALL="$HOME/.bun"\nexport VOLTA_HOME=~/.volta\n' > "$FL/dflt/.zshrc"
+# The npm and Python tools' folders: a profile that sets one to its own default (as nvm's, Volta's,
+# bun's and pnpm's installers do) moves nothing; one set elsewhere leaves the account partly checked. So
+# does pnpm's folder moved where the home scan does not look, with a bad axios in its global store.
+fl_home dflt; printf 'export NVM_DIR="$HOME/.nvm"\nexport BUN_INSTALL="$HOME/.bun"\nexport VOLTA_HOME=~/.volta\nexport PNPM_HOME="$HOME/Library/pnpm"\n' > "$FL/dflt/.zshrc"
 fl_home toolmv; printf 'export WORKON_HOME=/opt/envs\n' > "$FL/toolmv/.zshrc"
-users "dflt:$U:$FL/dflt:/bin/zsh" "toolmv:$U:$FL/toolmv:/bin/zsh"
+fl_home pnmv; printf 'export PNPM_HOME="$HOME/.cache/pnpm"\n' > "$FL/pnmv/.zshrc"
+mkdir -p "$FL/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$FL/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios/package.json"
+users "dflt:$U:$FL/dflt:/bin/zsh" "toolmv:$U:$FL/toolmv:/bin/zsh" "pnmv:$U:$FL/pnmv:/bin/zsh"
 fl_run toolmv --json
 has    "fleet: a profile that sets a tool's folder to its default moves nothing" '^dflt\.agent_folders_moved=false$' "$FL/toolmv.flat"
 has    "fleet: one that sets it elsewhere leaves the account partly checked" '^toolmv\.agent_folders_moved=true$' "$FL/toolmv.flat"
+has    "fleet: and so does one that moves pnpm's folder (PNPM_HOME)" '^pnmv\.agent_folders_moved=true$' "$FL/toolmv.flat"
+hasnot "fleet: so a bad package only there never reads clear" '^pnmv\.outcome=clear$' "$FL/toolmv.flat"
 # A session check that would never end on its own: told its time, the account run stops it and still
 # sends what it found, with the sessions partly checked, instead of being stopped whole.
 users "asha:$U:$FL/asha:/bin/zsh"; printf 'slowsess\n' > "$FL/mode-asha"

@@ -7881,10 +7881,11 @@ if [ "$ACCTRUN" -eq 1 ]; then
       POETRY_VIRTUALENVS_PATH) printf '%s\n%s\n' "$H/Library/Caches/pypoetry/virtualenvs" "$H/.cache/pypoetry/virtualenvs" ;;
       HATCH_DATA_DIR) printf '%s\n%s\n' "$H/Library/Application Support/hatch" "$H/.local/share/hatch" ;;
       npm_config_prefix|NPM_CONFIG_PREFIX) printf '%s\n' "$H/.npm-global" ;;
+      PNPM_HOME) printf '%s\n%s\n' "$H/Library/pnpm" "$H/.local/share/pnpm" ;;
     esac
   }
   _mv_set='^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?'
-  _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR'
+  _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR|PNPM_HOME'
   _moved=0
   for _pf in "$H/.zshenv" "$H/.zprofile" "$H/.zshrc" "$H/.bash_profile" "$H/.bashrc" "$H/.profile" "$H/.config/fish/config.fish"; do
     [ -f "$_pf" ] && fleet_ok "$_pf" || continue
