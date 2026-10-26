@@ -981,9 +981,18 @@ EOF
   _ld='for d; do case "${d##*/}" in .claude) n="settings.json settings.local.json $BS_PC" ;; *) n="tasks.json settings.json $BS_PV" ;; esac
     if [ -d "$d" ] && [ ! -x "$d" ]; then printf "find: %s: Permission denied\n" "$d" >&2; continue; fi
     for f in $n; do if [ -e "$d/$f" ] || [ -L "$d/$f" ]; then printf "S %s\n" "$d/$f"; fi; done; done'
+  # A project's .tox folder holds its tox environments (.tox/<env>, tox's env_dir): sh prints the
+  # pyvenv.cfg of each, as the scan finds a venv's, and nothing else in .tox is read. A folder there it
+  # can't enter is named in find's own words.
+  # shellcheck disable=SC2016  # $d and $e are for the sh that find starts
+  _tz='for d; do if [ ! -r "$d" ] || [ ! -x "$d" ]; then printf "find: %s: Permission denied\n" "$d" >&2; continue; fi
+    for e in "$d"/* "$d"/.[!.]*; do [ -d "$e" ] && [ ! -L "$e" ] || continue
+      if [ ! -x "$e" ]; then printf "find: %s: Permission denied\n" "$e" >&2
+      elif [ -f "$e/pyvenv.cfg" ] && [ ! -L "$e/pyvenv.cfg" ]; then printf "%s\n" "$e/pyvenv.cfg"; fi; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
     _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); fi
+    _tx=(-exec sh -c "$_tz" sh {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -1007,6 +1016,7 @@ EOF
   _nl=$'\n'
   # shellcheck disable=SC2016  # $1 is the folder, for the sh that find starts
   BS_PC=$_pc BS_PV=$_pv find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
+    \( -type d -name .tox -prune "${_tx[@]}" \) -o \
     \( -type d \( "$@" \) -prune \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
@@ -2219,11 +2229,47 @@ $_xc/pypoetry/virtualenvs
 $_xd/virtualenvs
 $_xd/hatch/env/virtual"
 fi
+# asdf's, mise's, micromamba's, pipx's and uv's own folders, as each documents them: asdf's data folder's
+# installs/python (ASDF_DATA_DIR, else ~/.asdf); mise's (MISE_INSTALLS_DIR, else the installs of its
+# data folder: MISE_DATA_DIR, else XDG_DATA_HOME/mise, %LOCALAPPDATA%\mise on Windows); micromamba's
+# root (MAMBA_ROOT_PREFIX, else ~/micromamba, else the mamba folder of its data folder, %APPDATA% on
+# Windows) and Mambaforge's ~/mambaforge; pipx's home (PIPX_HOME, else ~/.local/pipx, else its data
+# folder: XDG_DATA_HOME/pipx, ~/Library/Application Support/pipx on a Mac) and its global home
+# (PIPX_GLOBAL_HOME, else /opt/pipx); uv's data folder (XDG_DATA_HOME/uv, %APPDATA%\uv on Windows) with
+# its UV_TOOL_DIR and UV_PYTHON_INSTALL_DIR.
+py_dir() { # a setting's value, printed when it is an absolute path (or a Windows one, on Windows)
+  case "$1" in
+    /*) printf '%s\n' "$1" ;;
+    [A-Za-z]:[\\/]*) [ "$WIN" -eq 1 ] && winpath "$1" && echo ;;
+  esac
+}
+_ad=$(py_dir "${ASDF_DATA_DIR:-}"); [ -n "$_ad" ] || _ad="$H/.asdf"
+_md=$(py_dir "${MISE_DATA_DIR:-}")
+if [ "$WIN" -eq 1 ]; then
+  [ -n "$_md" ] || _md="$WLAPP/mise"
+  PY_ROOTS="$PY_ROOTS
+$WAPP/mamba"
+else
+  [ -n "$_md" ] || _md="$_xd/mise"
+  PY_ROOTS="$PY_ROOTS
+$_xd/mamba
+$_xd/pipx
+$H/Library/Application Support/pipx
+$_xd/uv
+/opt/pipx"
+fi
+_mi=$(py_dir "${MISE_INSTALLS_DIR:-}"); [ -n "$_mi" ] || _mi="$_md/installs"
+PY_ROOTS="$PY_ROOTS
+$_ad/installs/python
+$_mi/python
+$H/micromamba
+$H/mambaforge"
 # Each tool's own setting moves its folder: POETRY_VIRTUALENVS_PATH (or POETRY_CACHE_DIR's virtualenvs),
-# pipenv's WORKON_HOME and HATCH_DATA_DIR's env/virtual.
-for _pv in "${POETRY_VIRTUALENVS_PATH:-}" "${POETRY_CACHE_DIR:+$POETRY_CACHE_DIR/virtualenvs}" "${WORKON_HOME:-}" "${HATCH_DATA_DIR:+$HATCH_DATA_DIR/env/virtual}"; do
-  case "$_pv" in /*) PY_ROOTS="$PY_ROOTS
-$_pv" ;; esac
+# pipenv's WORKON_HOME, HATCH_DATA_DIR's env/virtual, and those above.
+for _pv in "${POETRY_VIRTUALENVS_PATH:-}" "${POETRY_CACHE_DIR:+$POETRY_CACHE_DIR/virtualenvs}" "${WORKON_HOME:-}" "${HATCH_DATA_DIR:+$HATCH_DATA_DIR/env/virtual}" \
+           "${MAMBA_ROOT_PREFIX:-}" "${PIPX_HOME:-}" "${PIPX_GLOBAL_HOME:-}" "${UV_TOOL_DIR:-}" "${UV_PYTHON_INSTALL_DIR:-}"; do
+  _pv=$(py_dir "$_pv"); [ -n "$_pv" ] && PY_ROOTS="$PY_ROOTS
+${_pv%/}"
 done
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
 BAD_PYPI="litellm 1.107.0 litellm all
@@ -2265,7 +2311,7 @@ SITES_ALL=$(
               /usr/lib/python3/dist-packages /usr/lib/python3*/site-packages /usr/local/lib/python3*/dist-packages; do
       [ -d "$sp" ] && printf '%s\n' "$sp"
     done
-    printf '%s\n' "$PY_ROOTS" | while IFS= read -r r; do
+    printf '%s\n' "$PY_ROOTS" | awk '!s[$0]++' | while IFS= read -r r; do
       [ -n "$r" ] || continue
       if [ -d "$r" ]; then py_find "$r" -maxdepth 6 \( -name node_modules -prune \) -o \( -type d \( -name site-packages -o -name dist-packages \) -prune -print \)
       else py_blocked "$r"; fi
@@ -2413,13 +2459,18 @@ while read -r _n _v _i _o; do
 done <<EOF
 $BAD_PYPI
 EOF
+# uv's cache: UV_CACHE_DIR, else XDG_CACHE_HOME/uv (~/.cache/uv), %LOCALAPPDATA%\uv\cache on Windows.
+_uvc=$(py_dir "${UV_CACHE_DIR:-}"); _uvc=${_uvc%/}
+_uvx=""; [ "$WIN" -eq 1 ] || _uvx="$_xc/uv"
 _uvf=""
 if [ "${#_uvn[@]}" -gt 0 ]; then
-  for _uc in "$H/.cache/uv" ${WLAPP:+"$WLAPP/uv/cache"}; do
+  while IFS= read -r _uc; do
     if [ -d "$_uc" ]; then _uvf="$_uvf$(py_find "$_uc" -maxdepth 6 \( "${_uvn[@]}" \) -print)
 "; else _uvf="$_uvf$(py_blocked "$_uc")
 "; fi
-  done
+  done <<EOF
+$(printf '%s\n' "$_uvc" "$_uvx" "$H/.cache/uv" "${WLAPP:+$WLAPP/uv/cache}" | awk 'NF && !s[$0]++')
+EOF
 fi
 py_unread <<EOF
 $(printf '%s\n' "$_uvf" | grep "^?$TAB" | sort -u)

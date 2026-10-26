@@ -670,6 +670,17 @@ function Scan-LinkedDir([string]$dir, [string]$name) {
     if (Is-RegularFile $p) { $l.Add($p) }
   }
 }
+# A project's .tox folder holds its tox environments (.tox/<env>, tox's env_dir): the pyvenv.cfg of each is
+# listed, as the scan lists a venv's, and nothing else in .tox is read. A folder there it can't list is
+# named as a folder not read.
+function Scan-Tox([string]$dir) {
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
+    if ((Is-Link $e) -or -not (Is-DirInfo $e)) { continue }
+    try { $cs = @(([IO.DirectoryInfo]$e.FullName).GetFiles('pyvenv.cfg')) } catch { $UnreadDirs.Add($e.FullName); continue }
+    foreach ($c in $cs) { if ($c.Name -ceq 'pyvenv.cfg' -and -not (Is-Link $c)) { Add-Plain $Found $c } }
+  }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
@@ -679,6 +690,7 @@ function Scan-Home([string]$dir, [int]$depth) {
         if ($name -ceq '.claude' -or ($name -ceq '.vscode' -and -not $path.Equals((J $HomeDir '.vscode'), $PathCmp))) { Scan-LinkedDir $path $name }
         continue
       }
+      if ($name -ceq '.tox') { Scan-Tox $path; continue }
       if (Is-Pruned $path $name $d) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
       if ($d -lt 6) { Scan-Home $path $d }
@@ -1663,13 +1675,35 @@ if (-not $OnWindows) {
   $xc = [Environment]::GetEnvironmentVariable('XDG_CACHE_HOME'); if (-not ($xc -and $xc.StartsWith('/'))) { $xc = J $HomeDir '.cache' }
   $PyRoots += @((J $HomeDir 'Library/Caches/pypoetry/virtualenvs'), (J $HomeDir 'Library/Application Support/hatch/env/virtual'), (J $xc 'pypoetry/virtualenvs'), (J $xd 'virtualenvs'), (J $xd 'hatch/env/virtual'))
 }
+# asdf's, mise's, micromamba's, pipx's and uv's own folders, as each documents them: asdf's data folder's
+# installs/python (ASDF_DATA_DIR, else ~/.asdf); mise's (MISE_INSTALLS_DIR, else the installs of its data
+# folder: MISE_DATA_DIR, else XDG_DATA_HOME/mise, %LOCALAPPDATA%\mise on Windows); micromamba's root
+# (MAMBA_ROOT_PREFIX, else ~/micromamba, else the mamba folder of its data folder, %APPDATA% on Windows)
+# and Mambaforge's ~/mambaforge; pipx's home (PIPX_HOME, else ~/.local/pipx, else its data folder:
+# XDG_DATA_HOME/pipx, ~/Library/Application Support/pipx on a Mac) and its global home (PIPX_GLOBAL_HOME,
+# else /opt/pipx); uv's data folder (XDG_DATA_HOME/uv, %APPDATA%\uv on Windows) with its UV_TOOL_DIR and
+# UV_PYTHON_INSTALL_DIR.
+function Py-Dir([string]$v) { if ($v -and [IO.Path]::IsPathRooted($v)) { $v } else { '' } }
+$asdfData = Py-Dir ([Environment]::GetEnvironmentVariable('ASDF_DATA_DIR')); if (-not $asdfData) { $asdfData = J $HomeDir '.asdf' }
+$miseData = Py-Dir ([Environment]::GetEnvironmentVariable('MISE_DATA_DIR'))
+if ($OnWindows) {
+  if (-not $miseData) { $miseData = J $LocalAppData 'mise' }
+  $PyRoots += @((J $AppData 'mamba'))
+} else {
+  if (-not $miseData) { $miseData = J $xd 'mise' }
+  $PyRoots += @((J $xd 'mamba'), (J $xd 'pipx'), (J $HomeDir 'Library/Application Support/pipx'), (J $xd 'uv'), '/opt/pipx')
+}
+$miseInst = Py-Dir ([Environment]::GetEnvironmentVariable('MISE_INSTALLS_DIR')); if (-not $miseInst) { $miseInst = J $miseData 'installs' }
+$PyRoots += @((J $asdfData 'installs/python'), (J $miseInst 'python'), (J $HomeDir 'micromamba'), (J $HomeDir 'mambaforge'))
 # Each tool's own setting moves its folder: POETRY_VIRTUALENVS_PATH (or POETRY_CACHE_DIR's virtualenvs),
-# pipenv's WORKON_HOME and HATCH_DATA_DIR's env/virtual.
+# pipenv's WORKON_HOME, HATCH_DATA_DIR's env/virtual, and those above.
 $PoetryCache = [Environment]::GetEnvironmentVariable('POETRY_CACHE_DIR'); $HatchData = [Environment]::GetEnvironmentVariable('HATCH_DATA_DIR')
-foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH'), $(if ($PoetryCache) { J $PoetryCache 'virtualenvs' }), [Environment]::GetEnvironmentVariable('WORKON_HOME'), $(if ($HatchData) { J $HatchData 'env/virtual' }))) {
+foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH'), $(if ($PoetryCache) { J $PoetryCache 'virtualenvs' }), [Environment]::GetEnvironmentVariable('WORKON_HOME'), $(if ($HatchData) { J $HatchData 'env/virtual' }),
+    [Environment]::GetEnvironmentVariable('MAMBA_ROOT_PREFIX'), [Environment]::GetEnvironmentVariable('PIPX_HOME'), [Environment]::GetEnvironmentVariable('PIPX_GLOBAL_HOME'),
+    [Environment]::GetEnvironmentVariable('UV_TOOL_DIR'), [Environment]::GetEnvironmentVariable('UV_PYTHON_INSTALL_DIR'))) {
   if ($pv -and [IO.Path]::IsPathRooted($pv)) { $PyRoots += $pv }
 }
-foreach ($r in $PyRoots) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } else { $b = Py-Blocked $r; if ($b) { [void]$PyWalkUnread.Add($b) } } }
+foreach ($r in @($PyRoots | Select-Object -Unique)) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } else { $b = Py-Blocked $r; if ($b) { [void]$PyWalkUnread.Add($b) } } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
 function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'minishai' { 'Mini Shai-Hulud worm, April 2026' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'antv' { 'AntV account takeover, May 2026' } 'nxconsole' { 'Nx Console 18.95.0, May 2026' } 'redhat' { 'Red Hat Cloud Services packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'keyvspread' { 'keyv worm spread, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormzig' { 'GlassWorm extensions, April 2026' } 'glasswormoct' { 'GlassWorm-linked themes, October 2026' } 'glasswormuni' { 'GlassWorm invisible code, March 2026' } 'glasswasm' { 'GlassWASM extensions, June 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
@@ -1800,7 +1834,10 @@ $LOADER = 0
 # once, for every version at once; the exact version only, so 2.4.6 is not 2.4.60 or 2.4.6.post1.
 $uvWant = @(); foreach ($r in $BadPypiRows) { $uvWant += ('^' + [regex]::Escape("$($r[0])-$($r[1])") + '(-.*|\.dist-info|\.tar\.gz|\.zip)?$') }
 $uvFound = @{}
-foreach ($uv in @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv'))) {
+# uv's cache: UV_CACHE_DIR, else XDG_CACHE_HOME/uv (~/.cache/uv), %LOCALAPPDATA%\uv\cache on Windows.
+$uvDirs = @(); $uvc = Py-Dir ([Environment]::GetEnvironmentVariable('UV_CACHE_DIR')); if ($uvc) { $uvDirs += $uvc }
+if (-not $OnWindows) { $uvDirs += (J $xc 'uv') }
+foreach ($uv in @($uvDirs + @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv')) | Select-Object -Unique)) {
   if ($uvFound.Count -ge $uvWant.Count) { continue }
   if (-not (Is-Dir $uv)) { $b = Py-Blocked $uv; if ($b) { [void]$PyWalkUnread.Add($b) }; continue }
   try {

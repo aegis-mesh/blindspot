@@ -14,7 +14,8 @@ trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 # The fixture homes decide every place the script looks: variables that move an agent's folders
 # elsewhere are cleared (GitHub's Ubuntu runners set XDG_CONFIG_HOME, for one).
 unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
-  QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
+  QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME \
+  ASDF_DATA_DIR MISE_DATA_DIR MISE_INSTALLS_DIR MAMBA_ROOT_PREFIX PIPX_HOME PIPX_GLOBAL_HOME UV_TOOL_DIR UV_PYTHON_INSTALL_DIR UV_CACHE_DIR
 command -v python3 >/dev/null 2>&1 || { echo "tests/run.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt"
@@ -1636,6 +1637,15 @@ has    "Windows: finds LiteLLM files in Windows Python" 'Programs/Python/Python3
 has    "Windows: finds the markers in %TEMP%"           'Temp/\.pc_once_1' "$WORK/win1.txt"
 has    "Windows: mistralai 2.4.6 is a version to update" 'mistralai 2\.4\.6 +a bad version to update ~/AppData/Local/Programs/Python/Python312/Lib/site-packages: mistralai 2\.4\.6' "$WORK/win1.txt"
 has    "Windows: next to a Python hit, a version to update keeps its fix" 'Update the Python packages listed in section 5 to a version without the malware' "$WORK/win1.txt"
+# mise's and micromamba's Windows folders (%LOCALAPPDATA%\mise, %APPDATA%\mamba), and a tool's setting given
+# as a Windows path, as Windows sets it.
+for _d in AppData/Local/mise/installs/python/3.12.1 AppData/Roaming/mamba/envs/e1; do mkdir -p "$WP/$_d/Lib/site-packages/litellm-1.82.7.dist-info"; done
+mkdir -p "$WR/px/venvs/t3/Lib/site-packages/litellm-1.82.7.dist-info"
+PIPX_HOME='C:\px' winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-py.txt"
+rm -rf "${WP:?}/AppData/Local/mise" "${WP:?}/AppData/Roaming/mamba" "${WR:?}/px"
+has    "Windows: a Python environment in mise's folder is checked" '~/AppData/Local/mise/installs/python/3\.12\.1/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
+has    "Windows: and in micromamba's"                 '~/AppData/Roaming/mamba/envs/e1/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
+has    "Windows: a setting given as a Windows path is followed" 'px/venvs/t3/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
 # An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
 mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
@@ -2578,6 +2588,40 @@ has    "a Python environment under WORKON_HOME is checked" 'pyo/wh/[^ ]*site-pac
 has    "and under POETRY_VIRTUALENVS_PATH"            'pyo/pv/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyo.txt"
 has    "and under POETRY_CACHE_DIR's virtualenvs"     'pyo/pc/virtualenvs/[^ ]*site-packages: lightning 2\.6\.3' "$WORK/pyo.txt"
 has    "and under HATCH_DATA_DIR's env/virtual"       'pyo/hd/env/virtual/[^ ]*site-packages: lightning 2\.6\.2' "$WORK/pyo.txt"
+# asdf's, mise's, micromamba's, pipx's and uv's own folders, as each tool documents them, and a project's
+# tox environments, which the home scan finds by their pyvenv.cfg as it finds a venv's: each holds a bad
+# version here, mise's, micromamba's, pipx's and uv's under XDG_DATA_HOME and uv's cache under
+# XDG_CACHE_HOME.
+rm -rf "$WORK/pyr" "$WORK/pyr-x"; _sp=lib/python3.12/site-packages/litellm-1.82.7.dist-info
+for _d in .asdf/installs/python/3.12.1 code/proj/.tox/py311 "Library/Application Support/pipx/venvs/t1"; do mkdir -p "$WORK/pyr/$_d/$_sp"; done
+printf 'home = /usr\n' > "$WORK/pyr/code/proj/.tox/py311/pyvenv.cfg"
+for _d in mise/installs/python/3.12.1 mamba/envs/e1 pipx/venvs/t2 uv/tools/t3 uv/python/cpython-3.12.1-linux-x86_64-gnu; do mkdir -p "$WORK/pyr-x/xd/$_d/$_sp"; done
+mkdir -p "$WORK/pyr-x/xc/uv/archive-v0/x1/$_sp"
+HOME="$WORK/pyr" XDG_DATA_HOME="$WORK/pyr-x/xd" XDG_CACHE_HOME="$WORK/pyr-x/xc" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyr.txt"
+has    "a Python environment in asdf's folder is checked" '~/\.asdf/installs/python/3\.12\.1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in mise's, under XDG_DATA_HOME"           'pyr-x/xd/mise/installs/python/3\.12\.1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in micromamba's"                          'pyr-x/xd/mamba/envs/e1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in pipx's"                                'pyr-x/xd/pipx/venvs/t2/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in pipx's on a Mac"                       '~/Library/Application Support/pipx/venvs/t1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in uv's tools"                            'pyr-x/xd/uv/tools/t3/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in uv's Pythons"                          'pyr-x/xd/uv/python/cpython-3\.12\.1-linux-x86_64-gnu/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+has    "and in uv's cache under XDG_CACHE_HOME"       "uv's cache: litellm 1\\.82\\.7" "$WORK/pyr.txt"
+has    "a project's tox environment is checked"       '~/code/proj/\.tox/py311/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyr.txt"
+# Each tool's own setting that moves its folder is followed too.
+rm -rf "$WORK/pys" "$WORK/pys-x"; mkdir -p "$WORK/pys"
+for _d in ad/installs/python/3.12.1 md/installs/python/3.11.0 mi/python/3.13.0 mr/envs/e1 ph/venvs/t1 pg/venvs/t2 ut/t3 up/cpython-3.12.1-linux-x86_64-gnu uc/archive-v0/x1; do mkdir -p "$WORK/pys-x/$_d/$_sp"; done
+HOME="$WORK/pys" ASDF_DATA_DIR="$WORK/pys-x/ad" MISE_DATA_DIR="$WORK/pys-x/md" MAMBA_ROOT_PREFIX="$WORK/pys-x/mr" PIPX_HOME="$WORK/pys-x/ph" PIPX_GLOBAL_HOME="$WORK/pys-x/pg" \
+  UV_TOOL_DIR="$WORK/pys-x/ut" UV_PYTHON_INSTALL_DIR="$WORK/pys-x/up" UV_CACHE_DIR="$WORK/pys-x/uc" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pys.txt"
+HOME="$WORK/pys" MISE_INSTALLS_DIR="$WORK/pys-x/mi" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pys-mi.txt"
+has    "a Python environment under ASDF_DATA_DIR is checked" 'pys-x/ad/installs/python/3\.12\.1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under MISE_DATA_DIR"                      'pys-x/md/installs/python/3\.11\.0/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under MISE_INSTALLS_DIR"                  'pys-x/mi/python/3\.13\.0/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys-mi.txt"
+has    "and under MAMBA_ROOT_PREFIX"                  'pys-x/mr/envs/e1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under PIPX_HOME"                          'pys-x/ph/venvs/t1/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under PIPX_GLOBAL_HOME"                   'pys-x/pg/venvs/t2/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under UV_TOOL_DIR"                        'pys-x/ut/t3/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and under UV_PYTHON_INSTALL_DIR"              'pys-x/up/cpython-3\.12\.1-linux-x86_64-gnu/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pys.txt"
+has    "and uv's cache under UV_CACHE_DIR"            "uv's cache: litellm 1\\.82\\.7" "$WORK/pys.txt"
 chmod 000 "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages"
 HOME="$WORK/pyu" bash "$SCRIPT" --offline > "$WORK/pyu-raw.txt" 2>&1; tr -s ' \n' '  ' < "$WORK/pyu-raw.txt" > "$WORK/pyu.txt"
 HOME="$WORK/pyu" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$WORK/no-idle.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyu-c.txt"   # no idle agents, whose fix would take the headline
