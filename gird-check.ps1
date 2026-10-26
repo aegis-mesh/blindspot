@@ -398,8 +398,7 @@ function No-EnvHeaders([string]$t) {
   $skip = $false
   $keep = foreach ($line in $t.Split("`n")) {
     if ($line -match '^[ \t]*\[') { $skip = $line.Contains('env_http_headers') }
-    if ($line -cmatch 'env_http_headers"?[ \t]*\.') { continue }
-    if (-not $skip) { $line -creplace 'env_http_headers"?[ \t]*=[ \t]*\{[^}]*\}?', '' }
+    if (-not $skip) { ($line -creplace 'env_http_headers"?[ \t]*\.[ \t]*(?:"[^"]*"|[A-Za-z0-9_-]+)[ \t]*=[ \t]*"[^"]*"', '') -creplace 'env_http_headers"?[ \t]*=[ \t]*\{[^}]*\}?', '' }
   }
   $keep -join "`n"
 }

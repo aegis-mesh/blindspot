@@ -1108,7 +1108,7 @@ has    "near miss: a header that is not a secret is not a token" '~/code/c/\.mcp
 # instructions. Nor are Codex's env_http_headers, which name an environment variable, inline, as dotted
 # keys or as a table, nor opencode's {env:NAME} template. A token in an http_headers table that follows
 # an env_http_headers table still counts.
-mkdir -p "$WORK/hdrn/.codex" "$WORK/hdrn/.continue" "$WORK/hdrn/.config/opencode" "$WORK/hdrn/code/a" "$WORK/hdrt/.codex" "$WORK/hdrt/.continue" "$WORK/hdrn/AppData/Local/Temp" "$WORK/hdrt/AppData/Local/Temp"
+mkdir -p "$WORK/hdrn/.codex" "$WORK/hdrn/.continue" "$WORK/hdrn/.config/opencode" "$WORK/hdrn/code/a" "$WORK/hdrt/.codex" "$WORK/hdrt/.continue" "$WORK/hdrd/.codex" "$WORK/hdrd/AppData/Local/Temp" "$WORK/hdrn/AppData/Local/Temp" "$WORK/hdrt/AppData/Local/Temp"
 cat > "$WORK/hdrn/.claude.json" <<'EOF'
 {"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp"}},"projects":{"/w":{"history":[
 {"display":"add an Authorization: Bearer header from the env to the fetch call in api.ts"},
@@ -1140,7 +1140,9 @@ printf '{"mcp":{"linear":{"type":"remote","url":"https://mcp.linear.app/mcp","he
 printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nX-Env-Key = "LINEAR_ENV_HEADER_NAME"\n\n[mcp_servers.linear.http_headers]\nAuthorization = "Bearer %s"\n' "$FT20" > "$WORK/hdrt/.codex/config.toml"
 psrun "$WORK/hdrn" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrn.txt"
 printf 'mcpServers:\n  - name: rem\n    command: npx\n    args: [\047mcp-remote\047, \047https://mcp.example.net/sse\047, \047--header\047, \047X-Api-Key: %s\047]\n' "$FT20" > "$WORK/hdrt/.continue/config.yaml"
+printf '[mcp_servers]\nlinear = { url = "https://mcp.linear.app/mcp", env_http_headers.X-Env = "LINEAR_ENV_HEADER_NAME", http_headers = { Authorization = "Bearer %s" } }\n' "$FT20" > "$WORK/hdrd/.codex/config.toml"
 psrun "$WORK/hdrt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrt.txt"
+psrun "$WORK/hdrd" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrd.txt"
 has    "near miss: a prompt about a header, or that quotes one, or with code that reads one, kept in ~/.claude.json is not a token" 'Claude Code ~/\.claude\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
 has    "nor a rule about one in Continue's config, or code in a rule written as a block" 'Continue ~/\.continue/config\.yaml servers configured( [^,]|$)' "$WORK/hdrn.txt"
 has    "nor a server's description about one"         '~/code/a/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
@@ -1149,6 +1151,7 @@ has    "nor opencode's {env:NAME} template, nor its instructions" 'OpenCode ~/\.
 hasnot "so no MCP config there has a token"           'token in the file|Replace tokens written into MCP configs' "$WORK/hdrn.txt"
 has    "a token in an http_headers table after an env_http_headers table still counts" 'Codex ~/\.codex/config\.toml 1 server, token in the file' "$WORK/hdrt.txt"
 has    "and one in a single-quoted --header argument in YAML" 'Continue ~/\.continue/config\.yaml servers configured, token in the file' "$WORK/hdrt.txt"
+has    "and one beside a dotted env_http_headers key on the same line" 'Codex ~/\.codex/config\.toml [0-9]+ servers?, token in the file' "$WORK/hdrd.txt"
 # An npm publish ships .claude/settings.local.json unless package.json's own private or files setting,
 # at its top level, or an ignore entry for .claude itself or the file, leaves it out. An entry for
 # something else in .claude, a files key inside another setting, and a ! entry that brings the file back

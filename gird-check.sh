@@ -834,8 +834,8 @@ files_matching() { # pattern; list on stdin
 no_env_headers() { # file
   case "$1" in
     *.toml) awk '/^[ \t]*\[/ { skip = (index($0, "env_http_headers") > 0) } skip { next }
-      /env_http_headers"?[ \t]*\./ { next }
-      { gsub(/env_http_headers"?[ \t]*=[ \t]*\{[^}]*\}?/, ""); print }' "$1" 2>/dev/null ;;
+      { gsub(/env_http_headers"?[ \t]*\.[ \t]*("[^"]*"|[A-Za-z0-9_-]+)[ \t]*=[ \t]*"[^"]*"/, "")
+        gsub(/env_http_headers"?[ \t]*=[ \t]*\{[^}]*\}?/, ""); print }' "$1" 2>/dev/null ;;
     *) cat "$1" 2>/dev/null ;;
   esac
 }
