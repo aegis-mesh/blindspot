@@ -151,6 +151,15 @@ has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2
 nokeys "never prints a planted key" "$WORK/keys.txt" "$OUT"
 if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 
+echo "agent activity"
+# Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
+# today means Codex is in use, not an agent to remove.
+mkdir -p "$WORK/cxday/.codex/sessions/2026/10/26" "$WORK/cxday/AppData/Roaming" "$WORK/cxday/AppData/Local/Temp"
+printf '{}\n' > "$WORK/cxday/.codex/sessions/2026/10/26/rollout-2026-10-26T10-00-00-a.jsonl"
+psrun "$WORK/cxday" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/cxday.txt"
+has    "Codex used today, its session four folders down, reads in use" 'Codex used in the last 30 days' "$WORK/cxday.txt"
+hasnot "and is not named as an agent to remove"  'Remove agents you no longer use: [^.]*Codex' "$WORK/cxday.txt"
+
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE/rgbin"
 RG=$(command -v rg 2>/dev/null); [ -n "$RG" ] && ln -s "$RG" "$SE/rgbin/rg"

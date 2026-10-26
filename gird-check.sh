@@ -1588,10 +1588,12 @@ while IFS='|' read -r name bins paths acts aid; do
     state=installed
   else
     any=0; recent=0; IFS=';'
+    # Four levels down: Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl
+    # (codex-rs/rollout/src/recorder.rs); the other agents' files sit within three.
     for a in $acts; do
       [ -d "$a" ] || continue
-      [ -n "$(find "$a" -maxdepth 3 -type f -print -quit 2>/dev/null)" ] && any=1
-      [ -n "$(find "$a" -maxdepth 3 -type f -mtime -30 -print -quit 2>/dev/null)" ] && recent=1
+      [ -n "$(find "$a" -maxdepth 4 -type f -print -quit 2>/dev/null)" ] && any=1
+      [ -n "$(find "$a" -maxdepth 4 -type f -mtime -30 -print -quit 2>/dev/null)" ] && recent=1
     done
     IFS=$old_ifs
     if [ "$recent" -eq 1 ]; then state=active

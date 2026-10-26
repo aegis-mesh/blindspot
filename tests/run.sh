@@ -82,6 +82,14 @@ if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match
 if grep -nE '\$([0-9]+|NF)(\+\+|--)' gird-check.sh gird-fleet.sh > "$WORK/inc.txt"; then bad "no ++ or -- on an awk field, which BusyBox refuses" "$(head -n 3 "$WORK/inc.txt" | tr '\n' '|')"
 else ok "no ++ or -- on an awk field, which BusyBox refuses"; fi
 
+echo "agent activity"
+# Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
+# today means Codex is in use, not an agent to remove.
+mkdir -p "$WORK/cxday/.codex/sessions/2026/10/26"; printf '{}\n' > "$WORK/cxday/.codex/sessions/2026/10/26/rollout-2026-10-26T10-00-00-a.jsonl"
+HOME="$WORK/cxday" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/cxday.txt"
+has    "Codex used today, its session four folders down, reads in use" 'Codex used in the last 30 days' "$WORK/cxday.txt"
+hasnot "and is not named as an agent to remove"  'Remove agents you no longer use: [^.]*Codex' "$WORK/cxday.txt"
+
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE"
 # Random key pieces, as tests/make-fixture.sh builds them: no key-shaped string is written here.

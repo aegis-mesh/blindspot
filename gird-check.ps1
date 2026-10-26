@@ -711,12 +711,13 @@ function Scan-Home([string]$dir, [int]$depth) {
     }
   }
 }
-# Whether a folder holds any file within three levels, and any changed in 30 days.
+# Whether a folder holds any file within four levels, and any changed in 30 days. Codex writes each
+# session to sessions/YYYY/MM/DD/rollout-*.jsonl (codex-rs/rollout/src/recorder.rs), four levels down.
 function Activity([string]$dir, [int]$depth, $since, $state) {
   foreach ($e in (Entries $dir)) {
     if ($state.Recent) { return }
     if (Is-Link $e) { continue }
-    if (Is-DirInfo $e) { if ($depth + 1 -lt 3) { Activity $e.FullName ($depth + 1) $since $state }; continue }
+    if (Is-DirInfo $e) { if ($depth + 1 -lt 4) { Activity $e.FullName ($depth + 1) $since $state }; continue }
     $state.Any = $true
     if ($e.LastWriteTimeUtc -gt $since) { $state.Recent = $true }
   }
