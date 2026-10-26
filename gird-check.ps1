@@ -285,6 +285,17 @@ $P_ASSIGN = '(?<![A-Z0-9_])(?=(?>[0-9_]*)[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASS
 $P_JSONSECRET = '"(?:(?=[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))(?>[A-Z0-9_]*)|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[^\S\n]*:[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_TOMLSECRET = $P_NAME + '[^\S\n]*=[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
+# A token in an HTTP header an MCP server is sent with (headers in JSON, http_headers in Codex's TOML, a
+# YAML map): Authorization, or a name ending in -Key, -Token or -Secret, in any case, as header names
+# are. A value with a $ in it names an environment variable, not a token. The same as gird-check.sh's
+# P_HEADERSECRET; a name starts after a quote, a space, { or , so each is read once.
+$P_HNAME = '(?:[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-(?:[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
+$P_HEADERSECRET = '"' + $P_HNAME + '"[^\S\n]*[:=][^\S\n]*"[^"$<{\n][^"$\n]{11,}"|(?:^|(?<=[\s{,]))' + $P_HNAME + '[^\S\n]*=[^\S\n]*"[^"$<{\n][^"$\n]{11,}"|(?:^|(?<=[\s{,]))"?' + $P_HNAME + '"?:[^\S\n]+["'']?[^"''$<{\s][^"''$#\n]{11,}'
+# Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
+# value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
+# under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
+# can start with one. The same as gird-check.sh's P_NOTSECRET.
+$P_NOTSECRET = '(?:_PATH|_FILE|_DIR)S?"?[^\S\n]*[:=]|[:=][^\S\n]*"?(?:~|\.\.?/|[A-Za-z]:[\\/]|/(?:Users|home|root|etc|opt|var|tmp|private|Volumes|mnt|usr|srv|run|media|workspace|workspaces)/)'
 # grep reads line by line, so ^ and $ are line ends here too.
 # Every pattern has a time limit. A file that hits it is listed as skipped, never
 # taken as clean. GIRD_CHECK_REGEX_TIMEOUT_MS is for tests.
@@ -292,9 +303,10 @@ $RxOpt = [Text.RegularExpressions.RegexOptions]::Multiline
 $RxTimeout = [TimeSpan]::FromSeconds(2)
 if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS -gt 0) { $RxTimeout = [TimeSpan]::FromMilliseconds([int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS) }
 $RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
-$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET", $RxOpt, $RxTimeout)
+$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxOpt, $RxTimeout)
 $RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
+$RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
 $SlowFiles = New-Object System.Collections.Generic.List[string]
 function Mark-Slow([string]$f) {
   if (-not $SlowFiles.Contains($f)) { $SlowFiles.Add($f); Progress "Skipped, took too long to check: $(Short $f)" }
@@ -358,11 +370,12 @@ function Has-Match([string]$f, [regex]$rx) {
   $t = Read-Text $f; if ($null -eq $t) { return $false }
   try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false }
 }
-# A match that is not a placeholder like your-key-here.
+# A match that is not a placeholder like your-key-here, nor a path ($RxNotSecret).
+function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) }
 function Has-RealMatch([string]$f, [regex]$rx) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
-  try { foreach ($m in $rx.Matches($t)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { return $true } } } catch { Mark-Slow $f }
+  try { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } catch { Mark-Slow $f }
   $false
 }
 # The provider of a matched key (generated above) and whether a key looks made up. Text, so the
@@ -390,14 +403,25 @@ function Is-CliOwnKey([string]$f, [string]$k) {
 }
 '@
 . ([scriptblock]::Create($KeyFns))
+# A matched key without what came before it, as Key-Provider reads it.
+function Key-Norm([string]$k) { $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' }
 # The providers of the keys in a file, in order, each once. A key that looks made up (a run of x's, a
 # documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either, as in the sessions.
-function Providers-In([string]$f) {
+# With $minus, a Claude Code settings file's permission rules (Cc-Rules), each match there takes one
+# match of the same key out of the file's, so a key that is also elsewhere in the file still counts:
+# section 4 counts the rules' keys as saved commands. The same as gird-check.sh's providers_in and
+# cc_providers.
+function Providers-In([string]$f, [string]$minus = '') {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
   $seen = New-Object System.Collections.Generic.List[string]
   try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
+  $skip = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+  if ($minus) {
+    try { foreach ($m in $RxKeys.Matches($minus)) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
+  }
   foreach ($m in $all) {
+    if ($skip.Count -gt 0) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k) -and $skip[$k] -gt 0) { $skip[$k] = $skip[$k] - 1; continue } }
     $p = Key-Provider $m.Value
     if ($p -and -not (Made-Up $m.Value) -and -not $seen.Contains($p)) { $seen.Add($p) }
   }
@@ -509,15 +533,56 @@ function Json-Servers([string]$f) {
 }
 
 # An npm publish from this folder would ship .claude\ unless something excludes it.
-function Npm-WouldShip([string]$dir) {
-  $pkg = J $dir 'package.json'; $t = Read-Text $pkg
-  if ($null -eq $t) { return $false }
-  if ($t -cmatch '"private"\s*:\s*true') { return $false }
-  if ($t -cmatch '"files"\s*:') { return $false }
+# Whether an ignore file's text keeps a project's .claude/<file> out, read in order as git and npm read
+# one: an entry that is .claude itself (with a leading / or **/, and a trailing / or not) leaves the
+# folder out, and .claude/* , .claude/**, .claude/<file> or <file> the file; a ! entry brings each back.
+# An entry for something else inside .claude, such as .claude/worktrees/, leaves the file in. The same
+# as gird-check.sh's ignores_claude.
+function Ignores-Claude([string]$t, [string]$file) {
+  $dx = $false; $fx = $false
+  foreach ($line in ($t -split "`n")) {
+    $e = $line -replace '\r', '' -replace '[ \t]+$', ''
+    if (-not $e -or $e.StartsWith('#')) { continue }
+    $neg = $e.StartsWith('!'); if ($neg) { $e = $e.Substring(1) }
+    if ($e.StartsWith('/')) { $e = $e.Substring(1) }
+    if ($e.StartsWith('**/')) { $e = $e.Substring(3) }
+    if ($e -ceq '.claude' -or $e -ceq '.claude/') { $dx = -not $neg }
+    elseif ($e -ceq '.claude/*' -or $e -ceq '.claude/**' -or $e -ceq ('.claude/' + $file) -or $e -ceq $file) { $fx = -not $neg }
+  }
+  $dx -or $fx
+}
+# Whether a .json file's top-level object has this key, its text read as Json-Top reads it.
+function Json-Has([string]$f, [string]$t, [string]$key) {
+  $l = $t -replace '[ \t\n\v\f\r]', ''
+  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $false }
+  $dep = 0; $pend = $null
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') { if ($dep -eq 1) { $pend = $x } else { $pend = $null }; continue }
+    if ($dep -eq 1 -and $null -ne $pend -and $pend -ceq ('"' + $key + '"') -and $x.StartsWith(':')) { return $true }
+    $pend = $null
+    if ($c -eq '{' -or $c -eq '[') { $dep++ } elseif ($c -eq '}' -or $c -eq ']') { $dep-- }
+  }
+  $false
+}
+# An npm publish from this folder would ship .claude/<file> unless something leaves it out: the
+# package's own private or files setting (at the top of package.json, not inside another setting), or
+# its .npmignore, or its .gitignore when it has no .npmignore, as npm reads them. The same as
+# gird-check.sh's npm_would_ship.
+function Npm-WouldShip([string]$dir, [string]$file) {
+  $pkg = J $dir 'package.json'
+  if (-not (Is-File $pkg)) { return $false }
+  if (-not (Too-Big $pkg)) {
+    $t = Flat-Text $pkg
+    if ($null -ne $t) {
+      if ((Json-Top $pkg $t 'private') -eq 'true') { return $false }
+      if (Json-Has $pkg $t 'files') { return $false }
+    }
+  }
   $ni = Read-Text (J $dir '.npmignore')
-  if ($null -ne $ni) { return -not ($ni -cmatch '(?m)(^|/)\.claude') }
+  if ($null -ne $ni) { return -not (Ignores-Claude $ni $file) }
   $gi = Read-Text (J $dir '.gitignore')
-  if ($null -ne $gi -and $gi -cmatch '\.claude') { return $false }
+  if ($null -ne $gi -and (Ignores-Claude $gi $file)) { return $false }
   $true
 }
 
@@ -605,24 +670,50 @@ $WormRefNote = 'runs a file a worm plants'
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 $AaTable = @(
   ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'bypassPermissions', @('"permissions": {"defaultMode": "bypassPermissions"'))
+  ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'permissions.allow: Bash', @('"permissions": {"allow": ["Bash"'))
+  ,@('Claude Code', 'all', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), 'permissions.allow: Bash(*)', @('"permissions": {"allow": ["Bash(*)"'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
   ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'never asks, full access profile', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
   ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'never asks, full access, when the project is trusted', @('approval_policy = "never"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
   ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'never asks, full access profile, when the project is trusted', @('approval_policy = "never"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, default approvals', @('sandbox_mode = "danger-full-access"', '!approval_policy', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, on-request approvals', @('approval_policy = "on-request"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, on-failure approvals', @('approval_policy = "on-failure"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access, granular approvals', @('approval_policy = { granular = {', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, default approvals', @('default_permissions = ":danger-full-access"', '!approval_policy'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, on-request approvals', @('approval_policy = "on-request"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, on-failure approvals', @('approval_policy = "on-failure"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'config.toml'), 'full access profile, granular approvals', @('approval_policy = { granular = {', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, default approvals, when the project is trusted', @('sandbox_mode = "danger-full-access"', '!approval_policy', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, on-request approvals, when the project is trusted', @('approval_policy = "on-request"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, on-failure approvals, when the project is trusted', @('approval_policy = "on-failure"', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access, granular approvals, when the project is trusted', @('approval_policy = { granular = {', 'sandbox_mode = "danger-full-access"', '!default_permissions'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, default approvals, when the project is trusted', @('default_permissions = ":danger-full-access"', '!approval_policy'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, on-request approvals, when the project is trusted', @('approval_policy = "on-request"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, on-failure approvals, when the project is trusted', @('approval_policy = "on-failure"', 'default_permissions = ":danger-full-access"'))
+  ,@('Codex', 'all', '{PROJECT}/.codex/config.toml', 'full access profile, granular approvals, when the project is trusted', @('approval_policy = { granular = {', 'default_permissions = ":danger-full-access"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('Claude Code', 'all', (J $AppData 'Cursor/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.tools.global.autoApprove', @('"chat.tools.global.autoApprove": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autoApprove', @('"chat.permissions.default": "autoApprove"'))
   ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.permissions.default: autopilot', @('"chat.permissions.default": "autopilot"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.defaultConfiguration: allowAll', @('"chat.defaultConfiguration": {"approvals": "allowAll"'))
+  ,@('VS Code Copilot', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'chat.defaultConfiguration: autoApprove', @('"chat.defaultConfiguration": {"approvals": "autoApprove"'))
   ,@('Claude Code', 'all', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
   ,@('Claude Code', 'all', (J $AppData 'Cursor/User/profiles/*/settings.json'), 'claudeCode.initialPermissionMode: bypassPermissions', @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true'))
 )
@@ -1346,17 +1437,38 @@ $RxCmdAlways = New-Object regex('"(apiKeyHelper|awsAuthRefresh|awsCredentialExpo
 $RxCmdHooked = New-Object regex('"(statusLine|fileSuggestion|subagentStatusLine)"\s*:', $RxOpt, $RxTimeout)
 $RxHookRun = New-Object regex('"hooks"\s*:\s*\{(\s*"([^"\\]|\\.)*"\s*:\s*\[\s*\]\s*,)*\s*"([^"\\]|\\.)*"\s*:\s*\[\s*[^\]\s]', $RxOpt, $RxTimeout)
 $RxMcpAuto = New-Object regex('"enableAllProjectMcpServers"\s*:\s*true|"enabledMcpjsonServers"\s*:\s*\[\s*"', $RxOpt, $RxTimeout)
-# An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
-# docs call its own, is not another server.
-$RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?!([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?[/"])[^"]*"', $RxOpt, $RxTimeout)
+# Claude Code's endpoint variables, and each one's provider's own API host (its env-vars page and each
+# provider's page): ANTHROPIC_BASE_URL at api.anthropic.com; Amazon Bedrock at bedrock-runtime in an AWS
+# region, and its Mantle endpoint at bedrock-mantle (AWS's Bedrock endpoints page, as Claude Code builds
+# it from the region); Claude Platform on AWS at aws-external-anthropic; Google's Agent Platform at
+# aiplatform.googleapis.com, a region's -aiplatform host or a multi-region's aiplatform.<eu|us>.rep host;
+# and a Microsoft Foundry resource at <resource>.services.ai.azure.com. A project's env sets any of them
+# once the folder is trusted: none is on Claude Code's list of variables a project can't set. An empty
+# one sets nothing, and neither localhost nor its provider's own API host is another server. Host names
+# compare without case, in ASCII as gird-check.sh's grep -i under LC_ALL=C does (CultureInvariant: a
+# Turkish culture would not fold I to i). The same as gird-check.sh's EP_HOSTS.
+$EpHosts = [ordered]@{
+  'ANTHROPIC_BASE_URL' = 'api\.anthropic\.com'
+  'ANTHROPIC_BEDROCK_BASE_URL' = 'bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com'
+  'ANTHROPIC_BEDROCK_MANTLE_BASE_URL' = 'bedrock-mantle\.[a-z0-9-]+\.api\.aws'
+  'ANTHROPIC_AWS_BASE_URL' = 'aws-external-anthropic\.[a-z0-9-]+\.api\.aws'
+  'ANTHROPIC_VERTEX_BASE_URL' = '([a-z0-9-]+-)?aiplatform\.googleapis\.com|aiplatform\.[a-z]+\.rep\.googleapis\.com'
+  'ANTHROPIC_FOUNDRY_BASE_URL' = '[a-z0-9-]+\.services\.ai\.azure\.com'
+}
+$RxBaseUrl = New-Object regex((@($EpHosts.Keys | ForEach-Object { '"' + $_ + '"\s*:\s*"(?=[^"]*[^"\s])(?!(?i:[a-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://(' + $EpHosts[$_] + '))(:[0-9]+)?[/"])[^"]*"' }) -join '|'), ($RxOpt -bor [Text.RegularExpressions.RegexOptions]::CultureInvariant), $RxTimeout)
 # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
 # versions take it only from the person's own or managed settings (Claude Code's settings docs). It
 # reads defaultMode only inside permissions (Aa-Hit); this regex spares the files that never name it.
 $RxBypass = New-Object regex('"defaultMode"\s*:\s*"bypassPermissions"', $RxOpt, $RxTimeout)
-$RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
+# VS Code reads a task's runOn without case (taskConfiguration.ts, RunOnOptions.fromString). folderOpen
+# runs it when the folder opens; worktreeCreated when VS Code creates a worktree of the project (its git
+# extension's createWorktree runs every such task, and its Agents window runs those marked inAgents).
+$RxFolderOpen = New-Object regex('"runOn"\s*:\s*"(?i:folderopen)"', $RxOpt, $RxTimeout)
+$RxWorktreeTask = New-Object regex('"runOn"\s*:\s*"(?i:worktreecreated)"', $RxOpt, $RxTimeout)
 # A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
-# A \ escapes one character, so after \ and CRLF the LF still ends the string, as in VS Code.
-$RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
+# A \ escapes one character, so after \ and CRLF the LF still ends the string, as in VS Code. U+2028
+# and U+2029 end a line as well, as VS Code's JSON scanner reads them.
+$RxJsonc = New-Object regex('("(?:[^"\\\r\n\u2028\u2029]|\\[\s\S])*(?:"|(?=[\r\n\u2028\u2029])|$))|//[^\r\n\u2028\u2029]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
 # Inside strings, \uXXXX for a printable character other than " and \, and \/, are written as that
 # character, as JSON reads them: "\u0068ooks" is "hooks", and a setting can't hide behind its escapes.
 # Each \\ is taken whole, so escapes pair up as in JSON. Only a file with such an escape takes this path.
@@ -1374,36 +1486,45 @@ function Flat-Text([string]$f) {
   $t = Read-Text $f; if ($null -eq $t) { return $null }
   try {
     if ($t.Contains('\u') -or $t.Contains('\/')) { $o = $RxJsonc.Replace($t, $JsoncEsc) } else { $o = $RxJsonc.Replace($t, '$1') }
-    $o -replace '[\r\n\t]', ' '
+    # VS Code's JSON scanner also reads these as whitespace (U+2028 and U+2029 as line ends): each is a
+    # space here, in strings too, as gird-check.sh's flat makes them.
+    $o -replace '[\r\n\t\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000\uFEFF]', ' '
   } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
 # The object each top-level key in $keys (written with its quotes) holds, with every value nested in
 # it emptied ({} or []), as gird-check.sh's aa_keys prints it: a pattern written "key": {... matches its
-# rest only directly inside that object, as Claude Code reads defaultMode only inside permissions. A
-# token is a string, a bracket or the text between them, so one regex pass reads the file.
+# rest only directly inside that object, as Claude Code reads defaultMode only inside permissions. Under
+# the key, a tab and an array's key (each with its quotes), the strings directly inside that array, for
+# a pattern written "key": {"sub": ["text" (Claude Code's permissions.allow). A token is a string, a
+# bracket or the text between them, so one regex pass reads the file.
 $RxJsonTok = New-Object regex('"(?:[^"\\]|\\.)*"?|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
 function Aa-Keys([string]$f, [string]$l, $keys) {
   $objs = @{}
   try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $objs }
-  $dep = 0; $cur = $null; $key = $null; $pend = $null; $sb = $null
+  $dep = 0; $cur = $null; $key = $null; $pend = $null; $sb = $null; $key2 = $null; $pend2 = $null; $ak = $null
   foreach ($m in $ms) {
     $t = $m.Value; $c = [string]$t[0]
     if ($c -eq '"') {
       # A string at the top level is a key when a : comes right after it.
       if ($dep -eq 1) { $pend = $t } else { $pend = $null }
-      if ($cur -and $dep -eq 2) { [void]$sb.Append($t) }
+      if ($cur -and $dep -eq 2) { [void]$sb.Append($t); $pend2 = $t } else { $pend2 = $null }
+      if ($ak -and $dep -eq 3 -and $t.Length -ge 2 -and $t.EndsWith('"')) {
+        if (-not $objs.ContainsKey($ak)) { $objs[$ak] = New-Object System.Collections.Generic.List[string] }
+        $objs[$ak].Add($t)
+      }
       continue
     }
     if ($null -ne $pend -and $c -eq ':') { $key = $pend }
-    $pend = $null
+    if ($null -ne $pend2 -and $c -eq ':') { $key2 = $pend2 }
+    $pend = $null; $pend2 = $null
     if ($c -eq '{' -or $c -eq '[') {
       if ($dep -eq 1 -and $c -eq '{' -and $keys -ccontains $key) { $cur = $key; $sb = New-Object System.Text.StringBuilder; [void]$sb.Append('{') }
-      elseif ($cur -and $dep -eq 2) { [void]$sb.Append($c) }
+      elseif ($cur -and $dep -eq 2) { [void]$sb.Append($c); if ($c -eq '[' -and $key2) { $ak = $cur + "`t" + $key2 } else { $ak = $null } }
       $dep++
     } elseif ($c -eq '}' -or $c -eq ']') {
       $dep--
-      if ($cur -and $dep -eq 2) { [void]$sb.Append($c) }
+      if ($cur -and $dep -eq 2) { [void]$sb.Append($c); $ak = $null }
       elseif ($cur -and $dep -eq 1) {
         [void]$sb.Append($c)
         if (-not $objs.ContainsKey($cur)) { $objs[$cur] = New-Object System.Collections.Generic.List[string] }
@@ -1421,7 +1542,7 @@ function Aa-Keys([string]$f, [string]$l, $keys) {
 # as Aa-Keys reads them, so the same key inside another setting's object is not it. The last one wins,
 # as in JSON.parse. The same as gird-check.sh's json_top.
 function Json-Top([string]$f, [string]$t, [string]$key) {
-  $l = $t -replace '\s', ''
+  $l = $t -replace '[ \t\n\v\f\r]', ''
   try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return '' }
   $dep = 0; $pend = $null; $v = ''
   foreach ($m in $ms) {
@@ -1435,15 +1556,90 @@ function Json-Top([string]$f, [string]$t, [string]$key) {
   }
   $v
 }
+# The text of a Claude Code settings file's permission rules, permissions.allow, ask and deny (Claude
+# Code's permissions page), each list on a line of its own. Tokens are read as Aa-Keys reads them, spaces
+# kept, so a command's words stay apart. The same as gird-check.sh's cc_rules.
+function Cc-Rules([string]$f) {
+  $t = Flat-Text $f; if ($null -eq $t) { return '' }
+  try { $ms = $RxJsonTok.Matches($t); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  $sb = New-Object System.Text.StringBuilder
+  $dep = 0; $key = $null; $pend = $null; $key2 = $null; $pend2 = $null; $perm = $false; $on = $false
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') {
+      if ($dep -eq 1) { $pend = $x } else { $pend = $null }
+      if ($perm -and $dep -eq 2) { $pend2 = $x } else { $pend2 = $null }
+      if ($on) { [void]$sb.Append($x) }
+      continue
+    }
+    $lead = $x.TrimStart()
+    if ($null -ne $pend -and $lead.StartsWith(':')) { $key = $pend }
+    if ($null -ne $pend2 -and $lead.StartsWith(':')) { $key2 = $pend2 }
+    $pend = $null; $pend2 = $null
+    if ($c -eq '{' -or $c -eq '[') {
+      if ($on) { [void]$sb.Append($c) }
+      elseif ($dep -eq 1 -and $c -eq '{' -and $key -ceq '"permissions"') { $perm = $true }
+      elseif ($perm -and $dep -eq 2 -and $c -eq '[' -and ($key2 -ceq '"allow"' -or $key2 -ceq '"ask"' -or $key2 -ceq '"deny"')) { $on = $true }
+      $dep++
+    } elseif ($c -eq '}' -or $c -eq ']') {
+      $dep--
+      if ($on -and $dep -eq 2) { $on = $false; [void]$sb.Append("`n") }
+      elseif ($on) { [void]$sb.Append($c) }
+      if ($perm -and $dep -eq 1) { $perm = $false }
+    } elseif ($on) { [void]$sb.Append($x) }
+  }
+  $sb.ToString()
+}
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through Flat-Text (comments are its job), and a match starts at the text,
 # a { or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts;
 # a pattern written "key": {... matches its rest the same way, inside that top-level key's object only
 # (Aa-Keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
-# comment (so a setting inside an inline table, a profile written as one, does not count), a value in
+# comment (so a setting inside an inline table, a profile written as one, does not count; a pattern
+# that ends in { matches the start of a line instead, an inline table's first line), a value in
 # double quotes also matches the same value in single quotes (a TOML literal string), and only the
 # lines before the first [table] count: a setting under [profiles.x] applies only when that profile is
-# used, and Codex 0.134.0 and later read no such table from config.toml.
+# used, and Codex 0.134.0 and later read no such table from config.toml. A line inside a multi-line
+# string (""" or ''') is that string's text: never a setting, a comment or a [table].
+# The multi-line string a .toml line leaves open: '' for none, 'b' inside """ and 'l' inside '''. One-line
+# strings and # comments are read as TOML reads them, so quotes in them open nothing; a basic string
+# skips the quotes an odd run of \ escapes, and the three closing quotes can carry up to two more, the
+# end of the text. The same as gird-check.sh's mlstate.
+function Toml-Ml([string]$s, [string]$st) {
+  $i = 0
+  while ($i -lt $s.Length) {
+    if ($st) {
+      if ($st -eq 'b') { $c = '"' } else { $c = "'" }
+      $k = $i
+      while ($true) {
+        $k = $s.IndexOf($c + $c + $c, $k, [StringComparison]::Ordinal)
+        if ($k -lt 0) { return $st }
+        $b = 0; while ($k - $b - 1 -ge $i -and $s[$k - $b - 1] -eq '\') { $b++ }
+        if ($st -eq 'l' -or $b % 2 -eq 0) { break }
+        $k++
+      }
+      $k += 3; $r = 0; while ($r -lt 2 -and $k -lt $s.Length -and [string]$s[$k] -eq $c) { $k++; $r++ }
+      $i = $k; $st = ''; continue
+    }
+    $k = $s.IndexOfAny([char[]]@('"', "'", '#'), $i)
+    if ($k -lt 0) { return '' }
+    $c = [string]$s[$k]
+    if ($c -eq '#') { return '' }
+    if ($k + 2 -lt $s.Length -and [string]$s[$k + 1] -eq $c -and [string]$s[$k + 2] -eq $c) {
+      if ($c -eq '"') { $st = 'b' } else { $st = 'l' }; $i = $k + 3; continue
+    }
+    $j = $k + 1
+    while ($true) {
+      $j = $s.IndexOf($c, $j, [StringComparison]::Ordinal)
+      if ($j -lt 0) { return '' }
+      $b = 0; while ($j - $b - 1 -gt $k -and $s[$j - $b - 1] -eq '\') { $b++ }
+      if ($c -eq "'" -or $b % 2 -eq 0) { break }
+      $j++
+    }
+    $i = $j + 1
+  }
+  $st
+}
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
   if ($toml) { $t = Read-Text $f } else { $t = Flat-Text $f }
@@ -1451,18 +1647,25 @@ function Aa-Hit([string]$f, $pats) {
   $pp = @($pats | ForEach-Object { $_ -replace '\s', '' })
   $got = New-Object bool[] $pp.Count
   $par = New-Object string[] $pp.Count
+  $sub = New-Object string[] $pp.Count
   # !key in a .toml file: the line counts only when no line sets that key.
   $neg = New-Object bool[] $pp.Count
   if ($toml) { for ($i = 0; $i -lt $pp.Count; $i++) { if ($pp[$i].StartsWith('!')) { $neg[$i] = $true; $pp[$i] = $pp[$i].Substring(1) + '=' } } }
   if (-not $toml) {
     for ($i = 0; $i -lt $pp.Count; $i++) {
+      # "key": {"sub": ["text": that string in the array sub holds in the object (Aa-Keys lists them).
+      $m = [regex]::Match($pp[$i], '^("[A-Za-z0-9_.-]+"):\{("[A-Za-z0-9_.-]+"):\[')
+      if ($m.Success) { $par[$i] = $m.Groups[1].Value; $sub[$i] = $m.Groups[2].Value; $pp[$i] = $pp[$i].Substring($m.Length); continue }
       $m = [regex]::Match($pp[$i], '^("[A-Za-z0-9_.-]+"):\{')
       if ($m.Success) { $par[$i] = $m.Groups[1].Value; $pp[$i] = $pp[$i].Substring($m.Length) }
     }
   }
   $lines = @($t); if ($toml) { $lines = $t.Split("`n") }
+  $ml = ''
   foreach ($line in $lines) {
-    $l = $line -replace '\s', ''
+    # TOML's whitespace is a space or a tab: as gird-check.sh's tr, no other character is taken out.
+    if ($toml) { $l = $line -replace '[ \t\r\f\v]', '' } else { $l = $line -replace '[ \t\n\v\f\r]', '' }
+    if ($toml) { $s0 = $ml; $ml = Toml-Ml $l $ml; if ($s0) { continue } }
     # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
     if ($toml) { $l = $l -replace '^("([A-Za-z0-9_-]+)"|''([A-Za-z0-9_-]+)'')=', '$2$3=' }
     if ($toml -and $l.StartsWith('#')) { continue }
@@ -1473,13 +1676,18 @@ function Aa-Hit([string]$f, $pats) {
       if ($toml) {
         if ($neg[$i]) { if ($l.StartsWith($pp[$i], [StringComparison]::Ordinal)) { $got[$i] = $true }; continue }
         foreach ($q in @($pp[$i], $pp[$i].Replace('"', "'"))) {
-          if ($l.StartsWith($q, [StringComparison]::Ordinal) -and ($l.Length -eq $q.Length -or [string]$l[$q.Length] -eq '#')) { $got[$i] = $true }
+          if ($l.StartsWith($q, [StringComparison]::Ordinal) -and ($l.Length -eq $q.Length -or [string]$l[$q.Length] -eq '#' -or $q.EndsWith('{'))) { $got[$i] = $true }
         }
         continue
       }
       $texts = @($l)
       if ($par[$i]) {
         if ($null -eq $objs) { $objs = Aa-Keys $f $l @($par | Where-Object { $_ }) }
+        if ($sub[$i]) {
+          $ek = $par[$i] + "`t" + $sub[$i]
+          if ($objs.ContainsKey($ek) -and $objs[$ek].Contains($pp[$i])) { $got[$i] = $true }
+          continue
+        }
         $texts = @(); if ($objs.ContainsKey($par[$i])) { $texts = @($objs[$par[$i]]) }
       }
       foreach ($tx in $texts) {
@@ -1517,8 +1725,54 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
 $homeClaude = J $HomeDir '.claude'
+# A file's physical path, as bash's -ef compares files: a link at the file itself is followed, and its
+# folder's links resolved (Real-Dir; on Windows, where Real-Dir keeps the path as given, a folder that is
+# itself a link is followed to its target). $null when it can't be resolved.
+function Real-File([string]$p) {
+  try {
+    $it = Get-Item -LiteralPath $p -Force -ErrorAction Stop
+    if (Is-Link $it) {
+      $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
+      if ($t) { $p = $t.FullName } else {
+        $lt = Link-Target $it; if (-not $lt) { return $null }
+        if (-not [IO.Path]::IsPathRooted($lt)) { $lt = J ([IO.Path]::GetDirectoryName($p)) $lt }
+        $p = $lt
+      }
+    }
+    $d = [IO.Path]::GetDirectoryName($p)
+    if ($OnWindows) {
+      $di = Get-Item -LiteralPath $d -Force -ErrorAction Stop
+      if (Is-Link $di) {
+        $dt = $null; try { $dt = [IO.Directory]::ResolveLinkTarget($d, $true) } catch { }
+        if ($dt) { $d = $dt.FullName } else {
+          $dl = Link-Target $di
+          if ($dl) { if (-not [IO.Path]::IsPathRooted($dl)) { $dl = J ([IO.Path]::GetDirectoryName($d)) $dl }; $d = $dl }
+        }
+      }
+      $r = [IO.Path]::GetFullPath($d)
+    } else { $r = Real-Dir $d }
+    if (-not $r) { return $null }
+    J $r ([IO.Path]::GetFileName($p))
+  } catch { $null }
+}
+# The person's own Claude Code settings can sit in a folder that looks like a project's, such as the
+# dotfiles folder ~/.claude links to (as GNU stow sets it up): a settings file that is the same file as
+# ~/.claude's, or CLAUDE_CONFIG_DIR's, is theirs, under any name (Own-Cc). Own-Alias is one of
+# ~/.claude's under another name, which section 4 reads already under its own. The same as gird-check.sh.
+$OwnHomeCc = @(@((J $homeClaude 'settings.json'), (J $homeClaude 'settings.local.json')) | Where-Object { Is-File $_ } | ForEach-Object { Real-File $_ } | Where-Object { $_ })
+$OwnCc = @($OwnHomeCc)
+if ($env:CLAUDE_CONFIG_DIR) { $OwnCc += @(@((J $env:CLAUDE_CONFIG_DIR 'settings.json'), (J $env:CLAUDE_CONFIG_DIR 'settings.local.json')) | Where-Object { Is-File $_ } | ForEach-Object { Real-File $_ } | Where-Object { $_ }) }
+function Same-As([string]$f, $list) {
+  if ($list.Count -eq 0) { return $false }
+  $r = Real-File $f; if (-not $r) { return $false }
+  foreach ($o in $list) { if ($r.Equals($o, $PathCmp)) { return $true } }
+  $false
+}
+function Own-Cc([string]$f) { Same-As $f $OwnCc }
+function Own-Alias([string]$f) { if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp)) { return $false }; Same-As $f $OwnHomeCc }
 foreach ($f in $AllowFiles) {
   if ([IO.Path]::GetDirectoryName($f).Equals($homeClaude, $PathCmp) -or ($f -replace '\\', '/') -match '/\.claude/plugins/' -or -not (Is-File $f) -or (Too-Big $f)) { continue }
+  if (Own-Cc $f) { continue }
   $t = Flat-Text $f; if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
@@ -1533,12 +1787,27 @@ foreach ($f in $AllowFiles) {
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
   if ((Flat-Match $f $t $RxBypass) -and (Aa-Hit $f @('"permissions": {"defaultMode": "bypassPermissions"'))) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
+  # Claude Code's permissions page: Bash, or Bash(*), in permissions.allow runs every Bash command without
+  # asking. It applies a project's settings.json allow rules once you trust the folder, and a
+  # settings.local.json's (normally your own file) without that step. A rule for some commands
+  # (Bash(npm *)) is not one. The test spares the files that never name them.
+  if ($t.Contains('"Bash"') -or $t.Contains('"Bash(*)"')) {
+    $ab = $null
+    if (Aa-Hit $f @('"permissions": {"allow": ["Bash"')) { $ab = 'Bash' } elseif (Aa-Hit $f @('"permissions": {"allow": ["Bash(*)"')) { $ab = 'Bash(*)' }
+    $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
+    if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '' }
+    if ($ab) { $w.Add("run every Bash command without asking, with permissions.allow: $ab$tr") }
+  }
   Auto-Row $f ($w -join ', ') $t
 }
 foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/' -or (Too-Big $f)) { continue }
   $t = Flat-Text $f
-  if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
+  if ($null -eq $t) { continue }
+  $w = New-Object System.Collections.Generic.List[string]
+  if (Flat-Match $f $t $RxFolderOpen) { $w.Add('run a task when the folder opens in VS Code or Cursor') }
+  if (Flat-Match $f $t $RxWorktreeTask) { $w.Add('run a task when VS Code creates a worktree of the project') }
+  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
 }
 # A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" or "autopilot"
 # starts new Copilot chats that run every tool call without asking, and the setting
@@ -1546,7 +1815,13 @@ foreach ($f in $TaskFiles) {
 # "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
-# Both are things to look at in a project, not an agent set to run without asking.
+# "chat.defaultConfiguration" with approvals set to "allowAll" (or its older "autoApprove") starts new
+# agent sessions that run every tool call without asking, and VS Code reads its workspace value too.
+# Claude Code's VS Code extension before 2.1.225 took claudeCode.initialPermissionMode from a workspace's
+# settings (its VS Code docs), and in bypassPermissions started new conversations in bypass mode when
+# claudeCode.allowDangerouslySkipPermissions was on, which a workspace could set as well: neither
+# declared a scope before 2.1.225, and both are machine from then on (its package.json).
+# All are things to look at in a project, not an agent set to run without asking.
 foreach ($f in $VscSettings) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   $w = New-Object System.Collections.Generic.List[string]
@@ -1554,6 +1829,11 @@ foreach ($f in $VscSettings) {
   elseif (Aa-Hit $f @('"chat.permissions.default": "autoApprove"')) { $w.Add('run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove') }
   if (Aa-Hit $f @('"chat.tools.autoApprove": true')) {
     $w.Add('auto-approve Copilot''s tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it')
+  }
+  if (Aa-Hit $f @('"chat.defaultConfiguration": {"approvals": "allowAll"')) { $w.Add('run every tool call without asking in new agent sessions, with chat.defaultConfiguration: allowAll') }
+  elseif (Aa-Hit $f @('"chat.defaultConfiguration": {"approvals": "autoApprove"')) { $w.Add('run every tool call without asking in new agent sessions, with chat.defaultConfiguration: autoApprove') }
+  if (Aa-Hit $f @('"claudeCode.initialPermissionMode": "bypassPermissions"', '"claudeCode.allowDangerouslySkipPermissions": true')) {
+    $w.Add('start Claude Code''s VS Code extension in bypassPermissions, with claudeCode.initialPermissionMode and claudeCode.allowDangerouslySkipPermissions. The extension applies them from a project only before version 2.1.225')
   }
   if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') ([string](Flat-Text $f)) }
 }
@@ -1579,7 +1859,14 @@ foreach ($f in @('.zsh_history', '.bash_history', '.local/share/fish/fish_histor
 # PSReadLine keeps one history file per host: ConsoleHost_history.txt, and one each for VS Code and others.
 $PsrlDir = J $AppData 'Microsoft/Windows/PowerShell/PSReadLine'
 if (Is-Dir $PsrlDir) { try { foreach ($f in ([IO.Directory]::GetFiles($PsrlDir, '*_history.txt') | Sort-Object)) { $ShellHist.Add($f) } } catch { } }
-$ProjectFiles = @($EnvFiles) + @($ProjectMcp)
+# A project's Claude Code settings (section 2 reads them): a key in them, in its env for one, is a key
+# in plain text too, and one in a permission rule a saved command as well (section 4). The person's own
+# under another name (Own-Cc), plugin folders and files over 16 MB are left out; one that can't be read
+# is named in sections 2 and 4.
+$CcProject = @($AllowFiles | Where-Object { -not [IO.Path]::GetDirectoryName($_).Equals($homeClaude, $PathCmp) -and ($_ -replace '\\', '/') -notmatch '/\.claude/plugins/' -and (Is-File $_) -and -not (Too-Big $_) -and -not (Own-Cc $_) })
+$CcProjectSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($f in $CcProject) { [void]$CcProjectSet.Add($f) }
+$ProjectFiles = @($EnvFiles) + @($ProjectMcp) + @($CcProject)
 # Cline 4.x keeps API keys in plain JSON in its data folder: secrets.json (its extension's store,
 # .clinerules/storage.md) and settings/providers.json (its SDK's, docs/getting-started/config.mdx),
 # under CLINE_DATA_DIR, else CLINE_DIR/data, else ~/.cline/data; providers.json at
@@ -1621,10 +1908,12 @@ $KeyPlaces = New-Object System.Collections.Generic.List[string]; $ProvTally = Ne
 $KeyUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $Candidates) {
   if (-not (Has-Match $f $RxKeys)) {
-    if (Not-Read $f) { $KeyUnread.Add($f) }
+    if ((Not-Read $f) -and -not $CcProjectSet.Contains($f)) { $KeyUnread.Add($f) }
     continue
   }
-  $p = @(Providers-In $f)
+  # A Claude Code settings file: the keys in its permission rules are section 4's, as saved commands.
+  if ([IO.Path]::GetFileName($f) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($f)) -ceq '.claude') { $p = @(Providers-In $f (Cc-Rules $f)) }
+  else { $p = @(Providers-In $f) }
   if ($p.Count -eq 0) { continue }
   $ptxt = $p -join ', '
   $KEY_FILES++; if ($null -eq $KeyFirst) { $KeyFirst = @($f, $ptxt) }
@@ -1701,15 +1990,20 @@ function Unread-Files($files, [bool]$big = $false) {
 $Sec2Unread = Unread-Files @($McpList)
 foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
-$allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive)
+$allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive | Where-Object { -not (Own-Alias $_) })
 $AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }
   if (-not (Has-RealMatch $f $RxCommand)) { continue }
+  # A key in its permission rules (Cc-Rules) is a saved command; one elsewhere, such as its env, is a key
+  # in plain text (section 3) and nothing more.
+  $rules = Cc-Rules $f; $real = $false
+  try { foreach ($m in $RxCommand.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } } } catch { Mark-Slow $f }
+  if (-not $real) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
   $marker = $Sep + '.claude' + $Sep
-  $npm = Npm-WouldShip $f.Substring(0, $f.LastIndexOf($marker))
+  $npm = Npm-WouldShip $f.Substring(0, $f.LastIndexOf($marker)) ([IO.Path]::GetFileName($f))
   if ($npm) { $N_ALLOW_NPM++ }
   $AllowRows.Add(@($f, $npm))
 }

@@ -778,6 +778,16 @@ P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{
 P_JSONSECRET='"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[[:space:]]*:[[:space:]]*"[^"$<{][^"]{11,}"'
 P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"$<{][^"]{11,}"'
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
+# A token in an HTTP header an MCP server is sent with (headers in JSON, http_headers in Codex's TOML, a
+# YAML map): Authorization, or a name ending in -Key, -Token or -Secret, in any case, as header names
+# are. A value with a $ in it names an environment variable, not a token.
+P_HNAME='([Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-([Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
+P_HEADERSECRET="\"${P_HNAME}\"[[:space:]]*[:=][[:space:]]*\"[^\"\$<{][^\"\$]{11,}\"|(^|[[:space:]{,])${P_HNAME}[[:space:]]*=[[:space:]]*\"[^\"\$<{][^\"\$]{11,}\"|(^|[[:space:]{,])\"?${P_HNAME}\"?:[[:space:]]+[\"']?[^\"'\$<{[:space:]][^\"'\$#]{11,}"
+# Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
+# value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
+# under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
+# can start with one.
+P_NOTSECRET='(_PATH|_FILE|_DIR)S?"?[[:space:]]*[:=]|[:=][[:space:]]*"?(~|\.\.?/|[A-Za-z]:[\\/]|/(Users|home|root|etc|opt|var|tmp|private|Volumes|mnt|usr|srv|run|media|workspace|workspaces)/)'
 
 # The providers of the keys in a file, in order, each once. The matches go through the session check's
 # filter (sess_filter), as an Aider history's do, so a key that looks made up (a run of x's, a
@@ -787,6 +797,19 @@ providers_in() {
   grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
     awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
+# The providers of a Claude Code settings file's keys that are not in its permission rules (cc_rules),
+# which section 4 counts as saved commands. Each match in the rules takes one match of the same key out
+# of the file's, so a key that is also elsewhere in the file still counts. The file is read whole,
+# comments too, as providers_in reads a file, and the keys stay inside the pipe.
+cc_providers() { # file
+  { cc_rules "$1" | grep -aoE "$TR_KEYS" | sed 's/^/R /'; grep -aoE "$TR_KEYS" "$1" 2>/dev/null | sed 's/^/F /'; } | awk "$PROV_AWK"'
+    function norm(s) { sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s); return s }
+    substr($0, 1, 2) == "R " { r[norm(substr($0, 3))]++; next }
+    { k = norm(substr($0, 3)); if (r[k] > 0) { r[k]--; next }
+      p = prov(k); if (p == "") next
+      if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
+    END { printf "%s", out }'
+}
 # Print the files in a newline list that contain a match, in order, with one grep pass. Only regular
 # files are read, following links: a pipe, socket or device at a fixed path (a fifo made at
 # ~/.zsh_history, a link to /dev/tty) would hold the read for ever.
@@ -794,10 +817,12 @@ files_matching() { # pattern; list on stdin
   while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$1" 2>/dev/null
 }
 inline_secret() {
-  grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
+  grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
+# A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
+# elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
 command_secret() {
-  grep -aoE "$TR_KEYS|$P_ASSIGN" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
+  cc_rules "$1" | grep -aoE "$TR_KEYS|$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
 
 # ---------------------------------------------------------------------------
@@ -917,13 +942,58 @@ JXA
   fi
 }
 
-# An npm publish from this folder would ship .claude/ unless something excludes it.
-npm_would_ship() {
+# Whether an ignore file keeps a project's .claude/<file> out, read in order as git and npm read one: an
+# entry that is .claude itself (with a leading / or **/, and a trailing / or not) leaves the folder out,
+# and .claude/* , .claude/**, .claude/<file> or <file> the file; a ! entry brings each back. An entry
+# for something else inside .claude, such as .claude/worktrees/, leaves the file in.
+ignores_claude() { # ignore-file settings-file-name
+  { tr -d '\r' < "$1"; } 2>/dev/null | F=$2 awk '
+    { sub(/[ \t]+$/, "") }
+    /^#/ || $0 == "" { next }
+    { e = $0; neg = 0; if (substr(e, 1, 1) == "!") { neg = 1; e = substr(e, 2) }
+      sub(/^\//, "", e); sub(/^\*\*\//, "", e)
+      if (e == ".claude" || e == ".claude/") dx = !neg
+      else if (e == ".claude/*" || e == ".claude/**" || e == ".claude/" ENVIRON["F"] || e == ENVIRON["F"]) fx = !neg }
+    END { exit !(dx || fx) }'
+}
+# Whether a .json file's top-level object has this key, from its text as one line with the spaces
+# removed, read as json_top reads it: prints 1 when it does.
+json_has() { # key
+  K=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; hp = 0; pv = ""; one = 1; v = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {
+          if (hp && dep == 1 && pv == ENVIRON["K"] && q[i] ~ /^:/) v = 1
+          hp = 0
+          dep += split(q[i], a, "{") + split(q[i], b, "[") - split(q[i], c, "}") - split(q[i], d, "]")
+          if (i < nq) { st = 1; one = 1 }
+          continue
+        }
+        if (dep == 1) pv = one ? q[i] : ""
+        if (i < nq && trail(q[i]) % 2 == 1) { one = 0; continue }
+        if (dep == 1) hp = 1
+        st = 0
+      }
+      print v; exit
+    }'
+}
+# An npm publish from this folder would ship .claude/<file> unless something leaves it out: the
+# package's own private or files setting (at the top of package.json, not inside another setting), or
+# its .npmignore, or its .gitignore when it has no .npmignore, as npm reads them.
+npm_would_ship() { # project-folder settings-file-name
   [ -f "$1/package.json" ] || return 1
-  grep -qE '"private"[[:space:]]*:[[:space:]]*true' "$1/package.json" && return 1
-  grep -qE '"files"[[:space:]]*:' "$1/package.json" && return 1
-  if [ -f "$1/.npmignore" ]; then grep -qE '(^|/)\.claude' "$1/.npmignore" && return 1; return 0; fi
-  if [ -f "$1/.gitignore" ]; then grep -qE '\.claude' "$1/.gitignore" && return 1; fi
+  if ! too_big "$1/package.json"; then
+    _pj=$(flat "$1/package.json" | tr -d '[:space:]')
+    [ "$(printf '%s' "$_pj" | json_top private)" = true ] && return 1
+    [ "$(printf '%s' "$_pj" | json_has files)" = 1 ] && return 1
+  fi
+  if [ -f "$1/.npmignore" ]; then ignores_claude "$1/.npmignore" "$2" && return 1; return 0; fi
+  if [ -f "$1/.gitignore" ]; then ignores_claude "$1/.gitignore" "$2" && return 1; fi
   return 0
 }
 
@@ -948,24 +1018,50 @@ WORM_REF_NOTE='runs a file a worm plants'
 # Agents set to run commands without asking (data/auto-approve.tsv), read in section 1.
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
+Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|permissions.allow: Bash|\"permissions\": {\"allow\": [\"Bash\"
+Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|permissions.allow: Bash(*)|\"permissions\": {\"allow\": [\"Bash(*)\"
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|never asks, full access profile|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access, when the project is trusted|approval_policy = \"never\"|sandbox_mode = \"danger-full-access\"|!default_permissions
 Codex|all|{PROJECT}/.codex/config.toml|never asks, full access profile, when the project is trusted|approval_policy = \"never\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, default approvals|sandbox_mode = \"danger-full-access\"|!approval_policy|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, on-request approvals|approval_policy = \"on-request\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, on-failure approvals|approval_policy = \"on-failure\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access, granular approvals|approval_policy = { granular = {|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, default approvals|default_permissions = \":danger-full-access\"|!approval_policy
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, on-request approvals|approval_policy = \"on-request\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, on-failure approvals|approval_policy = \"on-failure\"|default_permissions = \":danger-full-access\"
+Codex|all|${CODEX_HOME:-$H/.codex}/config.toml|full access profile, granular approvals|approval_policy = { granular = {|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access, default approvals, when the project is trusted|sandbox_mode = \"danger-full-access\"|!approval_policy|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, on-request approvals, when the project is trusted|approval_policy = \"on-request\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, on-failure approvals, when the project is trusted|approval_policy = \"on-failure\"|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access, granular approvals, when the project is trusted|approval_policy = { granular = {|sandbox_mode = \"danger-full-access\"|!default_permissions
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, default approvals, when the project is trusted|default_permissions = \":danger-full-access\"|!approval_policy
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, on-request approvals, when the project is trusted|approval_policy = \"on-request\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, on-failure approvals, when the project is trusted|approval_policy = \"on-failure\"|default_permissions = \":danger-full-access\"
+Codex|all|{PROJECT}/.codex/config.toml|full access profile, granular approvals, when the project is trusted|approval_policy = { granular = {|default_permissions = \":danger-full-access\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code/User/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code/User/profiles/*/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.tools.global.autoApprove|\"chat.tools.global.autoApprove\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code - Insiders/User/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code - Insiders/User/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autoApprove|\"chat.permissions.default\": \"autoApprove\"
 VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.permissions.default: autopilot|\"chat.permissions.default\": \"autopilot\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.defaultConfiguration: allowAll|\"chat.defaultConfiguration\": {\"approvals\": \"allowAll\"
+VS Code Copilot|all|$AS/Code - Insiders/User/profiles/*/settings.json|chat.defaultConfiguration: autoApprove|\"chat.defaultConfiguration\": {\"approvals\": \"autoApprove\"
 Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
@@ -1730,7 +1826,7 @@ is_plugin_path() {
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
-MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" | tr '\n' '|')"
+MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET" | tr '\n' '|')"
 mcp_row() { # who file client-id
   _f=$2; _c=""; _nm=""
   case "$_f" in
@@ -1831,8 +1927,15 @@ TAB=$(printf '\t')
 # A file that can't be opened reads as nothing, and silently: bash reports a failed < itself, with the
 # raw path, before a 2>/dev/null after it takes effect, so the redirect sits inside the braces. The
 # same goes for every read of a scanned path below.
+# VS Code's JSON scanner (base/common/json.ts) also ends a line at U+2028 and U+2029, and reads U+00A0,
+# U+1680, U+2000 to U+200B, U+202F, U+205F, U+3000 and U+FEFF as whitespace. As UTF-8 bytes, sed makes
+# the first two line breaks and the rest a space, in strings too, as a plain space there is, which the
+# matchers ignore: one sed pass is linear, where a regex split or gsub with many matches in awk is not.
+FLAT_SED="s/$(printf '\342\200[\250\251]')/\\
+/g
+$(printf 's/\302\240/ /g\ns/\341\232\200/ /g\ns/\342\200[\200\201\202\203\204\205\206\207\210\211\212\213\257]/ /g\ns/\342\201\237/ /g\ns/\343\200\200/ /g\ns/\357\273\277/ /g')"
 flat() {
-  { tr '\r\t' '\n ' < "$1"; } 2>/dev/null | awk '
+  { tr '\r\t' '\n ' < "$1"; } 2>/dev/null | sed "$FLAT_SED" | awk '
     # How many backslashes s ends with. A match anchored at the last other character starts once per
     # run of backslashes, where /\\+$/ restarts at every backslash of a long run.
     function trail(s) {
@@ -1913,10 +2016,12 @@ auto_row() { # file what flattened-text
 # For aa_hit, a .json file's text (one line, spaces removed), then a line for each object that is the
 # value of a top-level key a pattern names as "key": {...: the key, a tab, and that object with every
 # value nested in it emptied ({} or []), so the rest of the pattern matches only directly inside it, as
-# Claude Code reads defaultMode only inside permissions. Strings are split on their quotes as flat
-# splits them (a key with an escaped quote in it is never one a pattern names), and the code between
-# them on each kind of bracket, one character at a time, and the object is printed as it is read:
-# linear on every awk, where building it up as one string is quadratic on macOS's awk.
+# Claude Code reads defaultMode only inside permissions. Then a line for each string directly inside an
+# array that is a value in such an object: the key, a tab, the array's key, a tab and the string, for a
+# pattern written "key": {"sub": ["text" (Claude Code's permissions.allow). Strings are split on their
+# quotes as flat splits them (a key or string with an escaped quote in it is never one a pattern names),
+# and the code between them on each kind of bracket, one character at a time, and the object is printed
+# as it is read: linear on every awk, where building it up as one string is quadratic on macOS's awk.
 aa_keys() { # pattern|pattern...
   AA_P=$1 awk '
     function trail(s) {
@@ -1925,7 +2030,8 @@ aa_keys() { # pattern|pattern...
       return length(s)
     }
     function out(s) { if (cur != "" && dep == 2) printf "%s", s }
-    function ob(c) { if (dep == 1 && c == "{" && (key in want)) { cur = key; printf "%s\t{", cur } else out(c); dep++ }
+    # Inside a wanted object, a value that opens a bracket of its own: which bracket, and the key it is for.
+    function ob(c) { if (dep == 1 && c == "{" && (key in want)) { cur = key; printf "%s\t{", cur } else { out(c); if (cur != "" && dep == 2) { d3 = c; ak = key2 } }; dep++ }
     function cb(c) { dep--; out(c); if (cur != "" && dep == 1) { print "}"; cur = "" } }
     # The code between two strings, its brackets in order: split on {, each part on }, then [ and ].
     function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
@@ -1948,37 +2054,101 @@ aa_keys() { # pattern|pattern...
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); if (match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { want[substr(p[i], 2, RLENGTH - 4)] = 1; nw++ } } }
     { print
       if (!nw) next
-      nq = split($0, q, "\""); st = 0; dep = 0; cur = ""; key = ""; hp = 0
+      nq = split($0, q, "\""); st = 0; dep = 0; cur = ""; key = ""; hp = 0; key2 = ""; hp2 = 0; ne = 0
       for (i = 1; i <= nq; i++) {
         if (st == 0) {            # code: right after a string at the top level, a : makes it the key
           if (hp && q[i] ~ /^:/) key = pv
-          hp = 0; code(q[i])
+          if (hp2 && q[i] ~ /^:/) key2 = pv2
+          hp = 0; hp2 = 0; code(q[i])
           if (i < nq) { out("\""); st = 1; one = 1 }
           continue
         }
         out(q[i])                 # a string, up to a quote that no odd run of \ escapes
         if (dep == 1) pv = one ? q[i] : ""
+        if (dep == 2) pv2 = one ? q[i] : ""
         esc = (i < nq && trail(q[i]) % 2 == 1)
         if (i < nq) out("\"")
         if (esc) { one = 0; continue }
         if (dep == 1) hp = 1
+        if (dep == 2) hp2 = 1
+        if (cur != "" && dep == 3 && d3 == "[" && one) el[++ne] = cur "\t" ak "\t\"" q[i] "\""
         st = 0
       }
       if (cur != "") print ""
+      for (i = 1; i <= ne; i++) print el[i]
+    }'
+}
+# The text of a Claude Code settings file's permission rules, permissions.allow, ask and deny (Claude
+# Code's permissions page), each list on a line of its own. The file is read as flat reads it and split
+# as aa_keys splits it, spaces kept, so a command's words stay apart: printed as it is read, linear.
+cc_rules() { # file
+  flat "$1" | awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    function out(s) { if (on) printf "%s", s }
+    function ob(c) {
+      out(c)
+      if (!on && dep == 1 && c == "{" && key == "permissions") perm = 1
+      else if (!on && perm && dep == 2 && c == "[" && (key2 == "allow" || key2 == "ask" || key2 == "deny")) on = 1
+      dep++
+    }
+    function cb(c) { dep--; if (on && dep == 2) { on = 0; print "" } else out(c); if (perm && dep == 1) perm = 0 }
+    function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
+      na = split(s, a, "{")
+      for (i = 1; i <= na; i++) {
+        nb = split(a[i], b, "}")
+        for (j = 1; j <= nb; j++) {
+          nc = split(b[j], c, "[")
+          for (k = 1; k <= nc; k++) {
+            nd = split(c[k], d, "]")
+            for (l = 1; l <= nd; l++) { out(d[l]); if (l < nd) cb("]") }
+            if (k < nc) ob("[")
+          }
+          if (j < nb) cb("}")
+        }
+        if (i < na) ob("{")
+      }
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; key = ""; hp = 0; key2 = ""; hp2 = 0; perm = 0; on = 0
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {            # code: right after a key, a : makes it the key
+          if (hp && q[i] ~ /^[[:space:]]*:/) key = pv
+          if (hp2 && q[i] ~ /^[[:space:]]*:/) key2 = pv2
+          hp = 0; hp2 = 0; code(q[i])
+          if (i < nq) { out("\""); st = 1; one = 1 }
+          continue
+        }
+        out(q[i])                 # a string, up to a quote that no odd run of \ escapes
+        if (dep == 1) pv = one ? q[i] : ""
+        if (dep == 2 && perm) pv2 = one ? q[i] : ""
+        esc = (i < nq && trail(q[i]) % 2 == 1)
+        if (i < nq) out("\"")
+        if (esc) { one = 0; continue }
+        if (dep == 1) hp = 1
+        if (dep == 2 && perm) hp2 = 1
+        st = 0
+      }
+      if (on) print ""
     }'
 }
 # A setting of data/auto-approve.tsv in a file: every pattern must match, spaces ignored. A .json
 # file is read as one line through flat (comments are its job), and a match starts at the text, a {
 # or a , and ends at the text's end, a , } # or /, so a longer key or another value never counts; a
 # pattern written "key": {... matches its rest the same way, inside that top-level key's object only
-# (aa_keys). A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
-# comment (so a setting inside an inline table, a profile written as one, does not count), a value in
+# (aa_keys), and one written "key": {"sub": ["text" matches that string in the array sub holds there,
+# in any place in it, as Claude Code reads permissions.allow. A .toml file is read line by line: a # line is skipped, a match is a whole line up to a #
+# comment (so a setting inside an inline table, a profile written as one, does not count; a pattern
+# that ends in { matches the start of a line instead, an inline table's first line), a value in
 # double quotes also matches the same value in single quotes (a TOML literal string), and only the
 # lines before the first [table] count: a setting under [profiles.x] applies only when that profile
-# is used, and Codex 0.134.0 and later read no such table from config.toml. tr removes the spaces in
-# one pass, and each pattern becomes one regex with its boundaries in it, tried once per line:
-# linear on every awk, where a gsub on the joined text, or an index() of the rest of the line at
-# every near miss, is quadratic on macOS's awk for a large file.
+# is used, and Codex 0.134.0 and later read no such table from config.toml. A line inside a
+# multi-line string (""" or ''') is that string's text: never a setting, a comment or a [table].
+# tr removes the spaces in one pass, and each pattern becomes one regex with its boundaries in it,
+# tried once per line: linear on every awk, where a gsub on the joined text, or an index() of the rest
+# of the line at every near miss, is quadratic on macOS's awk for a large file.
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
   if [ "$_tm" -eq 1 ]; then { tr -d ' \t\r\f\v' < "$1"; } 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
@@ -1991,12 +2161,51 @@ aa_hit() { # file pattern|pattern...
       }
       return o
     }
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    # The multi-line string a .toml line leaves open: "" for none, "b" inside a basic one (""") and "l"
+    # inside a literal one (three single quotes). One-line strings and # comments are read as TOML reads
+    # them, so quotes in them open nothing; a basic string skips the quotes an odd run of \ escapes, and
+    # the three closing quotes can carry up to two more, the end of the text.
+    function mlstate(s, st,   c, k, m, r) {
+      while (s != "") {
+        if (st != "") {
+          c = (st == "b") ? "\"" : "\047"; k = 0
+          for (;;) {
+            m = index(substr(s, k + 1), c c c)
+            if (m == 0) return st
+            k += m
+            if (st == "l" || trail(substr(s, 1, k - 1)) % 2 == 0) break
+          }
+          k += 3; for (r = 0; r < 2 && substr(s, k, 1) == c; r++) k++
+          s = substr(s, k); st = ""; continue
+        }
+        if (!match(s, /["\047#]/)) return ""
+        c = substr(s, RSTART, 1); s = substr(s, RSTART + 1)
+        if (c == "#") return ""
+        if (substr(s, 1, 2) == c c) { st = (c == "\"") ? "b" : "l"; s = substr(s, 3); continue }
+        k = 0
+        for (;;) {
+          m = index(substr(s, k + 1), c)
+          if (m == 0) return ""
+          k += m
+          if (c == "\047" || trail(substr(s, 1, k - 1)) % 2 == 0) break
+        }
+        s = substr(s, k + 1)
+      }
+      return st
+    }
     BEGIN { n = split(ENVIRON["AA_P"], p, "|")
       for (i = 1; i <= n; i++) { gsub(/[[:space:]]/, "", p[i]); q = p[i]; gsub(/"/, "\047", q)
-        if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { in_[i] = 1; re[i] = "^" lit(substr(p[i], 2, RLENGTH - 4)) "\t(.*[{,])?" lit(substr(p[i], RLENGTH + 1)) "($|[,}#/])" }
+        if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{"[A-Za-z0-9_.-]+":\[/)) { split(p[i], ka, "\""); in_[i] = 1; re[i] = "^" lit(ka[2]) "\t" lit(ka[4]) "\t" lit(substr(p[i], RLENGTH + 1)) "$" }
+        else if (!toml && match(p[i], /^"[A-Za-z0-9_.-]+":\{/)) { in_[i] = 1; re[i] = "^" lit(substr(p[i], 2, RLENGTH - 4)) "\t(.*[{,])?" lit(substr(p[i], RLENGTH + 1)) "($|[,}#/])" }
         # !key in a .toml file: the line counts only when no line sets that key.
         else if (toml && substr(p[i], 1, 1) == "!") { neg[i] = 1; re[i] = "^" lit(substr(p[i], 2)) "=" }
-        else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")(#|$)" : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+        else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")" (p[i] ~ /\{$/ ? "" : "(#|$)") : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
+    toml { s0 = ml; ml = mlstate($0, ml); if (s0 != "") next }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
     # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
@@ -2032,6 +2241,25 @@ json_top() { # key
       print v; exit
     }'
 }
+# Claude Code's endpoint variables, and each one's provider's own API host (its env-vars page and each
+# provider's page): ANTHROPIC_BASE_URL at api.anthropic.com; Amazon Bedrock at bedrock-runtime in an AWS
+# region, and its Mantle endpoint at bedrock-mantle (AWS's Bedrock endpoints page, as Claude Code builds
+# it from the region); Claude Platform on AWS at aws-external-anthropic; Google's Agent Platform at
+# aiplatform.googleapis.com, a region's -aiplatform host or a multi-region's aiplatform.<eu|us>.rep host;
+# and a Microsoft Foundry resource at <resource>.services.ai.azure.com. A project's env sets any of them
+# once the folder is trusted: none is on Claude Code's list of variables a project can't set.
+EP_HOSTS='ANTHROPIC_BASE_URL api\.anthropic\.com
+ANTHROPIC_BEDROCK_BASE_URL bedrock-runtime\.[a-z0-9-]+\.amazonaws\.com
+ANTHROPIC_BEDROCK_MANTLE_BASE_URL bedrock-mantle\.[a-z0-9-]+\.api\.aws
+ANTHROPIC_AWS_BASE_URL aws-external-anthropic\.[a-z0-9-]+\.api\.aws
+ANTHROPIC_VERTEX_BASE_URL ([a-z0-9-]+-)?aiplatform\.googleapis\.com|aiplatform\.[a-z]+\.rep\.googleapis\.com
+ANTHROPIC_FOUNDRY_BASE_URL [a-z0-9-]+\.services\.ai\.azure\.com'
+EP_NAMES=$(printf '%s\n' "$EP_HOSTS" | cut -d' ' -f1 | paste -sd '|' -)
+# A "name": "value" the scan pulled out is fine when its value is localhost on any scheme, or https to
+# that name's provider host, with a port and a path or not.
+EP_OK=$(printf '%s\n' "$EP_HOSTS" | while read -r _n _h; do
+  printf '^"%s"[[:space:]]*:[[:space:]]*"([a-z]+://(localhost|127\\.0\\.0\\.1|\\[::1\\])|https://(%s))(:[0-9]+)?(/[^"]*)?"$\n' "$_n" "$_h"
+done | paste -sd '|' -)
 # Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
 # reference lists each as running your own command, set from any settings file. disableAllHooks set to
 # true turns off hooks, the status line, the file suggestion command and the subagent status line, but
@@ -2039,9 +2267,25 @@ json_top() { # key
 CMD_ALWAYS='apiKeyHelper|awsAuthRefresh|awsCredentialExport|gcpAuthRefresh|otelHeadersHelper'
 CMD_KEYS="$CMD_ALWAYS|statusLine|fileSuggestion|subagentStatusLine"
 HOOK_RUN='"hooks"[[:space:]]*:[[:space:]]*\{([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*\][[:space:]]*,)*[[:space:]]*"([^"\\]|\\.)*"[[:space:]]*:[[:space:]]*\[[[:space:]]*[^][:space:]]'
+# The person's own Claude Code settings can sit in a folder that looks like a project's, such as the
+# dotfiles folder ~/.claude links to (as GNU stow sets it up): a settings file that is the same file
+# (-ef) as ~/.claude's, or CLAUDE_CONFIG_DIR's, is theirs, under any name (own_cc). own_alias is one of
+# ~/.claude's under another name, which section 4 reads already under its own.
+own_cc() { # file
+  for _o in "$H/.claude/settings.json" "$H/.claude/settings.local.json" ${CLAUDE_CONFIG_DIR:+"$CLAUDE_CONFIG_DIR/settings.json" "$CLAUDE_CONFIG_DIR/settings.local.json"}; do
+    [ -e "$_o" ] && [ "$1" -ef "$_o" ] && return 0
+  done
+  return 1
+}
+own_alias() { # file
+  case "$1" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json") return 1 ;; esac
+  for _o in "$H/.claude/settings.json" "$H/.claude/settings.local.json"; do [ -e "$_o" ] && [ "$1" -ef "$_o" ] && return 0; done
+  return 1
+}
 while IFS= read -r f; do
   case "$f" in */.claude/settings.json|*/.claude/settings.local.json) ;; *) continue ;; esac
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
+  own_cc "$f" && continue
   [ -f "$f" ] && ! too_big "$f" || continue
   _t=$(flat "$f"); _w=""
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
@@ -2060,9 +2304,9 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
   fi
-  # An empty ANTHROPIC_BASE_URL sets nothing, and https://api.anthropic.com, the API host Claude Code's
-  # docs call its own, is not another server.
-  if printf '%s' "$_t" | grep -oE '"ANTHROPIC_BASE_URL"[[:space:]]*:[[:space:]]*"[^"]*[^"[:space:]][^"]*"' | grep -qvE ':[[:space:]]*"([A-Za-z]+://(localhost|127\.0\.0\.1|\[::1\])|https://api\.anthropic\.com)(:[0-9]+)?(/[^"]*)?"$'; then
+  # Claude Code's endpoint variables (EP_HOSTS): an empty one sets nothing, and neither localhost nor
+  # its provider's own API host is another server. Host names compare without case.
+  if printf '%s' "$_t" | grep -oE "\"($EP_NAMES)\"[[:space:]]*:[[:space:]]*\"[^\"]*[^\"[:space:]][^\"]*\"" | grep -qviE "$EP_OK"; then
     _w="${_w:+$_w, }send the agent's API traffic, key included, to another server"
   fi
   # Claude Code before 2.1.257 took bypassPermissions from any settings file, a project's too; later
@@ -2071,15 +2315,32 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"defaultMode"[[:space:]]*:[[:space:]]*"bypassPermissions"' && aa_hit "$f" '"permissions": {"defaultMode": "bypassPermissions"'; then
     _w="${_w:+$_w, }skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257"
   fi
+  # Claude Code's permissions page: Bash, or Bash(*), in permissions.allow runs every Bash command without
+  # asking. It applies a project's settings.json allow rules once you trust the folder, and a
+  # settings.local.json's (normally your own file) without that step. A rule for some commands
+  # (Bash(npm *)) is not one. The grep spares the files that never name them.
+  _ab=""
+  if printf '%s' "$_t" | grep -qE '"Bash(\(\*\))?"'; then
+    if aa_hit "$f" '"permissions": {"allow": ["Bash"'; then _ab=Bash; elif aa_hit "$f" '"permissions": {"allow": ["Bash(*)"'; then _ab='Bash(*)'; fi
+  fi
+  if [ -n "$_ab" ]; then
+    case "$f" in */settings.local.json) _tr="" ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
+    _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab$_tr"
+  fi
   auto_row "$f" "$_w" "$_t"
 done <<EOF
 $ALLOW_FILES
 EOF
+# VS Code reads a task's runOn without case (taskConfiguration.ts, RunOnOptions.fromString). folderOpen
+# runs it when the folder opens; worktreeCreated when VS Code creates a worktree of the project (its git
+# extension's createWorktree runs every such task, and its Agents window runs those marked inAgents).
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
-  _t=$(flat "$f")
-  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' && auto_row "$f" "run a task when the folder opens in VS Code or Cursor" "$_t"
+  _t=$(flat "$f"); _w=""
+  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo][Ll][Dd][Ee][Rr][Oo][Pp][Ee][Nn]"' && _w="run a task when the folder opens in VS Code or Cursor"
+  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ww][Oo][Rr][Kk][Tt][Rr][Ee][Ee][Cc][Rr][Ee][Aa][Tt][Ee][Dd]"' && _w="${_w:+$_w, }run a task when VS Code creates a worktree of the project"
+  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
 done <<EOF
 $TASK_FILES
 EOF
@@ -2089,17 +2350,28 @@ EOF
 # "chat.tools.autoApprove": true is the setting the CVE-2025-53773 prompt injection made Copilot
 # write so it could run commands without asking. VS Code 1.104 renamed it without migration, so
 # current VS Code ignores it: a sign of that attack, or of an old VS Code, not a setting in force.
-# Both are things to look at in a project, not an agent set to run without asking. A file that names
-# neither setting (most do not) is skipped before it is flattened: flat only takes comments out and
-# writes escapes as their characters, so a setting's name stays as written unless it has an escape.
+# "chat.defaultConfiguration" with approvals set to "allowAll" (or its older "autoApprove") starts new
+# agent sessions that run every tool call without asking, and VS Code reads its workspace value too.
+# Claude Code's VS Code extension before 2.1.225 took claudeCode.initialPermissionMode from a workspace's
+# settings (its VS Code docs), and in bypassPermissions started new conversations in bypass mode when
+# claudeCode.allowDangerouslySkipPermissions was on, which a workspace could set as well: neither
+# declared a scope before 2.1.225, and both are machine from then on (its package.json).
+# All are things to look at in a project, not an agent set to run without asking. A file that names
+# none of these settings (most do not) is skipped before it is flattened: flat only takes comments out
+# and writes escapes as their characters, so a setting's name stays as written unless it has an escape.
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
-  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove)|\\u|\\/' || continue
+  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove|defaultConfiguration)|claudeCode\.initialPermissionMode|\\u|\\/' || continue
   _w=""
   if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
   elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
   if aa_hit "$f" '"chat.tools.autoApprove": true'; then
     _w="${_w:+$_w, }auto-approve Copilot's tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it"
+  fi
+  if aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "allowAll"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: allowAll"
+  elif aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "autoApprove"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: autoApprove"; fi
+  if aa_hit "$f" '"claudeCode.initialPermissionMode": "bypassPermissions"|"claudeCode.allowDangerouslySkipPermissions": true'; then
+    _w="${_w:+$_w, }start Claude Code's VS Code extension in bypassPermissions, with claudeCode.initialPermissionMode and claudeCode.allowDangerouslySkipPermissions. The extension applies them from a project only before version 2.1.225"
   fi
   [ -n "$_w" ] && auto_row "$f" "$_w" "$(flat "$f")"
 done <<EOF
@@ -2172,10 +2444,18 @@ not_read() { # path
 # account run counts these through fleet_ok, as files not checked, so its not_read leaves them out.
 KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && not_read "$f" && printf '%s\n' "$f"; done)
 N_KEY_UNREAD=$(count_lines "$KEY_UNREAD")
-MATCHED=$(printf '%s\n' "$CANDIDATES" | fleet_filter | files_matching "$TR_KEYS")
+# A project's Claude Code settings (section 2 reads them): a key in them, in its env for one, is a key
+# in plain text too, and one in a permission rule a saved command as well (section 4). The person's own
+# under another name (own_cc), plugin folders and files over 16 MB are left out; one that can't be read
+# is named in sections 2 and 4.
+CC_PROJECT=$(printf '%s\n' "$ALLOW_FILES" | while IFS= read -r _f; do
+  case "$_f" in (""|"$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
+  own_cc "$_f" || too_big "$_f" || printf '%s\n' "$_f"
+done)
+MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching "$TR_KEYS")
 # For the report: one place id per file, and one provider id per file and provider.
 KEY_PLACES=""; PROV_TALLY=""
-MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n' "$PROJECT_FILES" | tr '\n' '|')"
+MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n%s\n' "$PROJECT_FILES" "$CC_PROJECT" | tr '\n' '|')"
 key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
   case "$1" in
     "$H/.zshrc"|"$H/.zprofile"|"$H/.zshenv"|"$H/.zlogin"|"$H/.bashrc"|"$H/.bash_profile"|"$H/.profile"|"$H/.config/fish/config.fish")
@@ -2200,7 +2480,8 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
 }
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  _p=$(providers_in "$f")
+  # A Claude Code settings file: the keys in its permission rules are section 4's, as saved commands.
+  case "$f" in */.claude/settings.json|*/.claude/settings.local.json) _p=$(cc_providers "$f") ;; *) _p=$(providers_in "$f") ;; esac
   [ -n "$_p" ] || continue
   KEY_FILES=$((KEY_FILES + 1)); [ -n "$KEY_FIRST" ] || KEY_FIRST="$_p|$f"
   progress x "Key in plain text: $(short "$f") ($_p)"
@@ -2286,13 +2567,13 @@ N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
-  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || printf '%s\n' "$_f"; }; done | files_matching "$TR_KEYS|$P_ASSIGN")
+  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; }; done | files_matching "$TR_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
   N_ALLOW=$((N_ALLOW + 1)); [ -n "$ALLOW_FIRST" ] || ALLOW_FIRST=$f
   progress x "Saved Claude Code command with a key: $(short "$f")"
-  npm=0; npm_would_ship "${f%/.claude/*}" && { npm=1; N_ALLOW_NPM=$((N_ALLOW_NPM + 1)); }
+  npm=0; npm_would_ship "${f%/.claude/*}" "${f##*/}" && { npm=1; N_ALLOW_NPM=$((N_ALLOW_NPM + 1)); }
   ALLOW_ROWS="$ALLOW_ROWS$npm|$(rowsafe "$f")
 "
 done <<EOF
