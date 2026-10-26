@@ -13,4 +13,6 @@ expect {
   timeout { puts "  FAIL  no results after a fast scan"; exit 1 }
 }
 send "q"
+# The run does not end on that q: wait 30 seconds for it, as before, not the whole minute and a half.
+set timeout 30
 expect eof
