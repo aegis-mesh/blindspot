@@ -676,7 +676,9 @@ game_loop() {
   printf '%s' "$HIDE"
   # A fast scan never shows the game: it waits out G_HOLD seconds behind a one-line
   # spinner, and leaves without drawing if the results are ready first.
+  # GIRD_CHECK_GAME_HOLD is for tests: a longer hold makes a scan fast on any machine.
   G_HOLD=2; _hi=0
+  case "${GIRD_CHECK_GAME_HOLD:-}" in ''|*[!0-9]*) ;; *) G_HOLD=$GIRD_CHECK_GAME_HOLD ;; esac
   while [ "$G_READY" -eq 0 ] && [ $((SECONDS - G_T0)) -le "$G_HOLD" ]; do
     printf '%s  %s%s%s  %sChecking your agents, configs and keys%s' "$CR${E}[K" "$TEAL" "${G_SPIN:$(( (_hi % 10) * 3 )):3}" "$RST" "$DIM" "$RST"
     _hi=$((_hi + 1)); sleep 0.1

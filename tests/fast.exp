@@ -1,9 +1,11 @@
 # Used by tests/interactive.sh: a scan that finishes inside the game's hold never
-# draws the game, and goes straight to the results.
-set timeout 30
+# draws the game, and goes straight to the results. The hold is a minute here, so the
+# scan finishes inside it on any machine: the release's checks take about 2 seconds of
+# a Mac's time, the length of the usual hold.
+set timeout 90
 log_user 0
 match_max 100000
-spawn -noecho env HOME=$env(FAKEHOME) TERM=xterm-256color GIRD_CHECK_NO_OPEN=1 $env(BASHBIN) $env(SCRIPT) --offline
+spawn -noecho env HOME=$env(FAKEHOME) TERM=xterm-256color GIRD_CHECK_NO_OPEN=1 GIRD_CHECK_GAME_HOLD=60 $env(BASHBIN) $env(SCRIPT) --offline
 stty rows 50 columns 90 < $spawn_out(slave,name)
 expect {
   "Press SPACE to jump" { puts "  FAIL  a fast scan drew the game"; exit 1 }
