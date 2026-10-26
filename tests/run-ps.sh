@@ -2798,17 +2798,15 @@ has    "Windows: a bad package in pnpm's global folder"  'AppData/Local/pnpm/glo
 has    "Windows: a bad package in npx's cache"           'AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache' "$WORK/win1.txt"
 has    "Windows is pointed at Credential Manager"       'into Windows Credential Manager or a secrets manager' "$WORK/win1.txt"
 nokeys "Windows: never prints a planted key" "$WORK/keys.txt" "$WORK/win.txt"
-# PowerShell's profiles, which it runs at every start, hold keys set with $env:, read in Documents and
-# in the folder Windows keeps Documents in (GetFolderPath, here HOME's, as .NET gives it off Windows).
+# PowerShell's profiles, which it runs at every start, hold keys set with $env:, read in Documents. (The
+# folder Windows moved Documents to comes from GetFolderPath, which can't be faked here: bash-only.txt.)
 WPR=$WORK/winprof; cp -R "$WP" "$WPR"
-mkdir -p "$WPR/Documents/PowerShell" "$WPR/Documents/WindowsPowerShell" "$WPR/OneDrive/Documents/WindowsPowerShell"
+mkdir -p "$WPR/Documents/PowerShell" "$WPR/Documents/WindowsPowerShell"
 printf '$env:OPENAI_API_KEY = "%s"\n' "$(sed -n 2p "$WORK/keys.txt")" > "$WPR/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
 printf '$env:GITHUB_TOKEN = "%s"\n' "$(sed -n 3p "$WORK/keys.txt")" > "$WPR/Documents/WindowsPowerShell/profile.ps1"
-printf '$env:GROQ_API_KEY = "%s"\n' "$(sed -n 5p "$WORK/keys.txt")" > "$WPR/OneDrive/Documents/WindowsPowerShell/Microsoft.VSCode_profile.ps1"
-winprof() { psrun "$WPR" OS=Windows_NT PROCESSOR_ARCHITECTURE=AMD64 WT_SESSION=1 GIRD_CHECK_TEST_MACHINEGUID="$WGUID" HOME="$WPR/OneDrive/Documents" "$@"; }
+winprof() { psrun "$WPR" OS=Windows_NT PROCESSOR_ARCHITECTURE=AMD64 WT_SESSION=1 GIRD_CHECK_TEST_MACHINEGUID="$WGUID" "$@"; }
 winprof -- -Offline -Full 2>&1 | tr -s ' \n' '  ' > "$WORK/winprof.txt"
 has    "Windows: keys in PowerShell's profiles are found" '~/Documents/PowerShell/Microsoft\.PowerShell_profile\.ps1 OpenAI .*~/Documents/WindowsPowerShell/profile\.ps1 GitHub' "$WORK/winprof.txt"
-has    "Windows: and in the profile where Windows moved Documents" '~/OneDrive/Documents/WindowsPowerShell/Microsoft\.VSCode_profile\.ps1 Groq' "$WORK/winprof.txt"
 nokeys "Windows: a profile's keys are never printed" "$WORK/keys.txt" "$WORK/winprof.txt"
 report_of "$WORK/report-win.json" winps GIRD_CHECK_API="$API" --
 WANT_ID=$(printf 'gird-check-v1:%s' "$WGUID" | shasum -a 256 | cut -c1-64)
@@ -2819,7 +2817,7 @@ has    "Windows: the agents found in Windows places are reported" '"agents":\["c
 has    "Windows: PowerShell history counts as shell history" '"history_keys":1,' "$WORK/report-win.json"
 has    "Windows: key_places puts PSReadLine history in shell_history" '"shell_history":1' "$WORK/report-win.json"
 report_of "$WORK/report-winprof.json" winprof GIRD_CHECK_API="$API" --
-has    "Windows: key_places puts PowerShell's profiles in shell_rc" '"shell_rc":3' "$WORK/report-winprof.json"
+has    "Windows: key_places puts PowerShell's profiles in shell_rc" '"shell_rc":2' "$WORK/report-winprof.json"
 hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|winp|_netrc' "$WORK/report-win.json"
 
 # The Worker's own validation. It must keep the Windows values as sent, not turn
