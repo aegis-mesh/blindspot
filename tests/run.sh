@@ -1881,6 +1881,22 @@ HOME="$WORK/mu" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/mu.txt" 2>&
 hasnot "a placeholder of x's shaped like a key is not a key in plain text" 'env\.example' "$WORK/mu.txt"
 hasnot "nor is AWS's documented example key id"        '~/\.zshrc' "$WORK/mu.txt"
 has    "a real key beside a placeholder still counts, alone" '~/code/app/\.env +Groq$' "$WORK/mu.txt"
+# A pipe at a fixed path (a fifo made at ~/.zsh_history, at an MCP config, at Claude Code's own
+# settings) is never read, as a read of one waits for ever: the check ends and names each one as not
+# read, in the rows that read it. A history file linked to /dev/null, which keeps none, is not named.
+# The run gets 60 s and is killed and failed after.
+rm -rf "$WORK/ff"; mkdir -p "$WORK/ff/.claude" "$WORK/ff/.cursor"
+mkfifo "$WORK/ff/.zsh_history" "$WORK/ff/.cursor/mcp.json" "$WORK/ff/.claude/settings.json"; ln -s /dev/null "$WORK/ff/.bash_history"
+HOME="$WORK/ff" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/ff-raw.txt" 2>&1 &
+BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; pkill -9 -f "$WORK/ff/" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/ff-raw.txt"; fi
+wait "$BP" 2>/dev/null
+tr -s ' \n' '  ' < "$WORK/ff-raw.txt" > "$WORK/ff.txt"
+has    "a pipe at a fixed path does not hold up the check" 'Your AI Exposure Check' "$WORK/ff.txt"
+has    "a pipe at a key file's place is named as not read" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: ~/\.zsh_history ' "$WORK/ff.txt"
+has    "and a pipe at an MCP config's place in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: ~/\.cursor/mcp\.json' "$WORK/ff.txt"
+has    "and one at Claude Code's settings in section 4" '! No saved commands with keys in the files read, but 1 file could not be read: ~/\.claude/settings\.json' "$WORK/ff.txt"
+hasnot "a history file linked to /dev/null is not named as not read" '~/\.bash_history' "$WORK/ff.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "checks from the incident dossier"

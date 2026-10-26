@@ -306,7 +306,7 @@ $TextCache = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
 function Read-Text([string]$f) {
   if ($TextCache.ContainsKey($f)) { return $TextCache[$f] }
   $t = $null
-  try { if ([IO.File]::Exists($f)) { $t = [IO.File]::ReadAllText($f) } } catch { $t = $null }
+  try { if ([IO.File]::Exists($f) -and (Is-SafeToRead $f)) { $t = [IO.File]::ReadAllText($f) } } catch { $t = $null }
   $TextCache[$f] = $t
   $t
 }
@@ -315,7 +315,30 @@ function Read-Text([string]$f) {
 # then named as not read; a planted file is not hashed, so one that projects name too stays a file to read.
 $ReadMax = 16777216
 function Too-Big([string]$f) {
+  if (-not (Is-SafeToRead $f)) { return $false }
   try { $fs = [IO.File]::Open($f, 'Open', 'Read', 'ReadWrite'); try { $fs.Length -gt $ReadMax } finally { $fs.Dispose() } } catch { $false }
+}
+# Whether a file is one a read can't wait on for ever: a regular file, following links, never a pipe,
+# socket or device (a fifo made at ~/.zsh_history, a link to /dev/tty), which Read-Text and Too-Big
+# never open. Those are all empty, so only an empty file or a link is asked about (Is-PlainFile).
+function Is-SafeToRead([string]$f) {
+  try { $fi = [IO.FileInfo]$f; if ($fi.Length -gt 0 -and ($fi.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { return $true } } catch { }
+  Is-PlainFile $f
+}
+# A pipe, socket or device at a path, following links: a file is there, but it is not read, so it is
+# named as not read, as gird-check.sh's not_read names it. /dev/null, where people link a history file
+# to keep none, holds nothing. Never on Windows.
+function Is-Special([string]$p) {
+  if ($OnWindows -or -not (Is-File $p)) { return $false }
+  $t = $p
+  try { $r = [IO.File]::ResolveLinkTarget($p, $true); if ($r) { if (-not $r.Exists) { return $false }; $t = $r.FullName } } catch { }
+  if ($t -ceq '/dev/null') { return $false }
+  -not (Is-PlainFile $t)
+}
+# A file that is there but not read, as gird-check.sh's not_read: one that can't be read, or a pipe,
+# socket or device. A link to nothing and a folder are neither.
+function Not-Read([string]$f) {
+  (Is-File $f) -and $null -eq (Read-Text $f) -and ((Is-RegularFile $f) -or (Is-Special $f))
 }
 function Has-Match([string]$f, [regex]$rx) {
   if ($SlowFiles.Contains($f)) { return $false }
@@ -1200,7 +1223,7 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
   }
   $McpRows.Add(@{ Who = $who; File = $f; Count = $c; Tok = $tok; Pl = $pl })
 }
-foreach ($m in $McpFiles) { if (Is-File $m[2]) { Mcp-Row $m[0] $m[2] $m[1] } }
+foreach ($m in $McpFiles) { if ((Is-File $m[2]) -and -not (Is-Special $m[2])) { Mcp-Row $m[0] $m[2] $m[1] } }
 foreach ($f in $ProjectMcp) {
   if (-not (Is-File $f)) { continue }
   $fs = $f -replace '\\', '/'
@@ -1524,13 +1547,13 @@ function Key-Place([string]$f) {
 $KeyRows = New-Object System.Collections.Generic.List[object]
 $KEY_FILES = 0; $HIST_KEYS = 0; $ProvIds = New-Object System.Collections.Generic.List[string]; $KeyFirst = $null
 $KeyPlaces = New-Object System.Collections.Generic.List[string]; $ProvTally = New-Object System.Collections.Generic.List[string]
-# A file that is there but can't be read (a root-owned .env a container wrote, a file made 000, one
-# another program holds open) was not checked: section 3 names it and the check is partial, never
-# "no keys". A link to nothing is not one, as in gird-check.sh.
+# A file that is there but not read (a root-owned .env a container wrote, a file made 000, one another
+# program holds open, a pipe made at ~/.zsh_history) was not checked: section 3 names it and the check
+# is partial, never "no keys". A link to nothing is not one, as in gird-check.sh.
 $KeyUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $Candidates) {
   if (-not (Has-Match $f $RxKeys)) {
-    if ((Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $KeyUnread.Add($f) }
+    if (Not-Read $f) { $KeyUnread.Add($f) }
     continue
   }
   $p = @(Providers-In $f)
@@ -1604,7 +1627,7 @@ if ($LoginsText) { Progress "Login files any agent you run can read: $LoginsText
 # With $big, a file too big to read counts too, checked before any read.
 function Unread-Files($files, [bool]$big = $false) {
   $out = New-Object System.Collections.Generic.List[string]
-  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (Is-File $f) -and (($big -and (Too-Big $f)) -or $null -eq (Read-Text $f)) -and (Is-RegularFile $f)) { $out.Add($f) } }
+  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (($big -and (Is-File $f) -and (Is-RegularFile $f) -and (Too-Big $f)) -or (Not-Read $f))) { $out.Add($f) } }
   ,$out
 }
 $Sec2Unread = Unread-Files @($McpList)
@@ -5730,8 +5753,8 @@ foreach ($r in $AaTable) {
   # The home folder is not a project: its own file there is the user's, such as ~/.codex/config.toml.
   if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $own = (J $HomeDir $r[2].Substring(10)) -replace '\\', '/'; $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) -and ($_ -replace '\\', '/') -ne $own }) } else { $files = @(Aa-Glob $r[2]) }
   foreach ($f in $files) {
-    if (-not (Is-File $f) -or -not (Is-RegularFile $f)) { continue }
     if (-not $aaTried.Contains($f)) { $aaTried.Add($f) }
+    if (-not (Is-File $f) -or -not (Is-RegularFile $f)) { continue }
     if ((Too-Big $f) -or -not (Aa-Hit $f $r[4])) { continue }
     # One row per file and agent: VS Code's settings file can hold two agents'.
     $k = $f + [char]9 + $r[0]

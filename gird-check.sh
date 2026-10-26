@@ -774,9 +774,11 @@ providers_in() {
   grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
     awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
-# Print the files in a newline list that contain a match, in order, with one grep pass.
+# Print the files in a newline list that contain a match, in order, with one grep pass. Only regular
+# files are read, following links: a pipe, socket or device at a fixed path (a fifo made at
+# ~/.zsh_history, a link to /dev/tty) would hold the read for ever.
 files_matching() { # pattern; list on stdin
-  tr '\n' '\0' | xargs -0 grep -alE "$1" 2>/dev/null
+  while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$1" 2>/dev/null
 }
 inline_secret() {
   grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
@@ -2069,10 +2071,17 @@ CANDIDATES=$(
     printf '%s\n' "$PROJECT_FILES"
   } | awk 'NF && !seen[$0]++'
 )
-# A file that is there but can't be read (a root-owned .env a container wrote, a file made 000)
-# was not checked: section 3 names it and the check is partial, never "no keys". An account run
-# counts these through fleet_ok, as files not checked, so its not_read leaves them out.
-KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && [ ! -r "$f" ] && printf '%s\n' "$f"; done)
+# A file that is there but not read: one that can't be read (a root-owned .env a container wrote, a
+# file made 000), or a pipe, socket or device (a fifo made at ~/.zsh_history), as only a regular
+# file is read. A link to nothing, a folder, and /dev/null (where people link a history file to keep
+# none, and which holds nothing) are none of these.
+not_read() { # path
+  if [ -f "$1" ]; then [ ! -r "$1" ]; return; fi
+  [ -e "$1" ] && [ ! -d "$1" ] && ! [ "$1" -ef /dev/null ]
+}
+# Such a file was not checked: section 3 names it and the check is partial, never "no keys". An
+# account run counts these through fleet_ok, as files not checked, so its not_read leaves them out.
+KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && not_read "$f" && printf '%s\n' "$f"; done)
 N_KEY_UNREAD=$(count_lines "$KEY_UNREAD")
 MATCHED=$(printf '%s\n' "$CANDIDATES" | fleet_filter | files_matching "$TR_KEYS")
 # For the report: one place id per file, and one provider id per file and provider.
@@ -2175,8 +2184,11 @@ N_LOGIN=0; for _x in $LOGIN_IDS; do N_LOGIN=$((N_LOGIN + 1)); done
 
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
 ALLOW_ROWS=""; N_ALLOW=0; N_ALLOW_NPM=0; ALLOW_FIRST=""
-unread_files() { # files on stdin that are there but can't be read, each once; with "big", or too big to read
-  while IFS= read -r _uf; do [ -n "$_uf" ] && [ -f "$_uf" ] && { [ ! -r "$_uf" ] || { [ -n "${1:-}" ] && too_big "$_uf"; }; } && printf '%s\n' "$_uf"; done | awk '!s[$0]++'
+unread_files() { # files on stdin that are there but not read (not_read), each once; with "big", or too big to read
+  while IFS= read -r _uf; do
+    [ -n "$_uf" ] || continue
+    if not_read "$_uf" || { [ -n "${1:-}" ] && [ -f "$_uf" ] && too_big "$_uf"; }; then printf '%s\n' "$_uf"; fi
+  done | awk '!s[$0]++'
 }
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
@@ -2185,7 +2197,7 @@ N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
-  while IFS= read -r _f; do too_big "$_f" || printf '%s\n' "$_f"; done | files_matching "$TR_KEYS|$P_ASSIGN")
+  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || printf '%s\n' "$_f"; }; done | files_matching "$TR_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue

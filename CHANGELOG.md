@@ -37,6 +37,7 @@
 - Zeabur joins OpenCode and Railway in the check for this week's leaks: if the Zeabur CLI or its settings folder is on your Mac, it says to rotate the keys stored there. A leftover compiled `cook` file from the LiteLLM malware, which stays behind after `cook.py` is deleted, is reported as a possible leftover to check.
 - That line is the only one that mentions the first 1,000: until 1,000 AI builders have run it, the line of totals under the banner is left out.
 - Keys in plain text: a placeholder shaped like a key (a run of x's, AWS's documented example key id) is not counted, as in the sessions.
+- A pipe, socket or device where a key, MCP config or settings file should be (a fifo made at `~/.zsh_history`) is never read, so it can't hold up the check, and is named as not read. A history file linked to `/dev/null`, which keeps none, is not.
 - Codex used in the last 30 days reads as in use, not as an agent to remove: its sessions sit four folders down (`sessions/YYYY/MM/DD`), and every agent's folder is now read that deep.
 - A scan that finishes within about two seconds goes straight to the results. The game only appears when the scan is still running after that, instead of flashing up for a moment.
 - The advice for keys in plain text names the place to keep them for your system: the macOS Keychain on a Mac, GNOME Keyring or KWallet on Linux, Windows Credential Manager under Git Bash, MSYS or Cygwin, and a secrets manager anywhere else.
