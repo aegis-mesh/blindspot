@@ -1607,6 +1607,13 @@ has    "a TAB in a folder name: a lockfile hit keeps its package and source" "co
 has    "a TAB in a folder name: a planted file keeps its note"       "code/plant$X/\.vscode/router_runtime\.js a file the TanStack worm plants" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a key in an Aider history is found"  "code/aider$X/\.aider\.chat\.history\.md" "$WORK/hostile-flat.txt"
 has    "a TAB in a folder name: a link to authorized_keys is listed" "code/link$X/notes\.txt" "$WORK/hostile-flat.txt"
+# A TAB in a project folder's name: the row shows it as ?, and the install check still looks in the folder
+# itself, where the bad version is installed.
+rm -rf "$WORK/tabi"; _tb=$(printf '\t'); mkdir -p "$WORK/tabi/code/tab${_tb}dir/node_modules/axios" "$WORK/tabi/AppData/Roaming" "$WORK/tabi/AppData/Local/Temp"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/axios": {\n      "version": "1.14.1"\n    }\n  }\n}\n' > "$WORK/tabi/code/tab${_tb}dir/package-lock.json"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$WORK/tabi/code/tab${_tb}dir/node_modules/axios/package.json"
+psrun "$WORK/tabi" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tabi.txt"
+has    "a TAB in a folder name: an install beside the lockfile is found" 'ACT NOW: SIGNS OF NPM MALWARE' "$WORK/tabi.txt"
 has    "a | in a folder name: an MCP config keeps its count and token" "code/mcp\|\?\[2Jpipe$X/\.mcp\.json 1 server, token in the file" "$WORK/hostile-flat.txt"
 has    "a | in a folder name: a key file keeps its provider"         "code/key\|\?\[2Jpipe$X/\.env OpenAI" "$WORK/hostile-flat.txt"
 has    "a | in a folder name: an allow list keeps its finding"       "code/allow\|\?\[2Jpipe$X/\.claude/settings\.local\.json A saved command contains a key" "$WORK/hostile-flat.txt"

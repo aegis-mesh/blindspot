@@ -6759,13 +6759,25 @@ EOF
   esac
   return 1
 }
+# A row shows its lockfile's path with control characters as ?, so the install check looks in the folder
+# the scan found: each lockfile whose path shows as the row's (a TAB in a project folder's name).
+lock_raw() { # the row's lockfile: the lockfiles found whose shown path is that
+  case "$1" in *\?*) ;; *) printf '%s\n' "$1"; return ;; esac
+  while IFS= read -r _r; do [ -n "$_r" ] && [ "${_r//[[:cntrl:]]/?}" = "$1" ] && printf '%s\n' "$_r"; done <<EOF
+$LOCKFILES
+EOF
+}
 # NPM_INST_TAGS: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
 NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
   case "$_f" in
     */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
-      if lock_installed "$_f" "${_p% *}" "${_p##* }"; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
+      _li=1
+      while IFS= read -r _rf; do [ -n "$_rf" ] && lock_installed "$_rf" "${_p% *}" "${_p##* }" && { _li=0; break; }; done <<EOF
+$(lock_raw "$_f")
+EOF
+      if [ "$_li" -eq 0 ]; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
       else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
 "; fi ;;
     *) NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t " ;;
