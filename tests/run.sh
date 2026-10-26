@@ -3144,6 +3144,16 @@ T0=$SECONDS; fl_run odd --deadline=60; T1=$((SECONDS - T0))
 if grep -q '^odd\.files_not_checked=3$' "$FL/odd.flat" && grep -q '^odd\.key_files=0$' "$FL/odd.flat" && [ "$T1" -lt 30 ]; then ok "fleet: a fifo, a link to a device and an oversized file are not read, and are counted"; else bad "fleet: a fifo, a link to a device and an oversized file are not read, and are counted" "${T1}s $(grep '^odd' "$FL/odd.flat" | tr '\n' ' ')"; fi
 has    "fleet: so the account is not_checked, never clear" '^odd\.outcome=not_checked$' "$FL/odd.flat"
 rm -f "$FL/mode-odd"
+# A config behind a folder this account can't enter was not read, and counts; a history file linked to
+# /dev/null, where people link one to keep none, holds nothing, and does not.
+mkdir -p "$FL/closed/.cursor" "$FL/devnull"; fl_home closed; fl_home devnull
+printf '{"mcpServers":{}}\n' > "$FL/closed/.cursor/mcp.json"; chmod 000 "$FL/closed/.cursor"; ln -s /dev/null "$FL/devnull/.zsh_history"
+users "closed:$U:$FL/closed:/bin/zsh" "devnull:$U:$FL/devnull:/bin/zsh"
+fl_run closedf --deadline=60
+chmod 755 "$FL/closed/.cursor"
+has    "fleet: a config behind a folder the account can't enter counts as not read" '^closed\.files_not_checked=[1-9]' "$FL/closedf.flat"
+has    "fleet: so that account is never clear"        '^closed\.outcome=not_checked$' "$FL/closedf.flat"
+has    "fleet: a history file linked to /dev/null is not counted as not read" '^devnull\.files_not_checked=0$' "$FL/closedf.flat"
 users "clean:$U:$FL/clean:/bin/zsh"
 printf 'noprot\n' > "$FL/mode-clean"; fl_run prot
 if grep -q '^clean\.protected_folders=not_checked$' "$FL/prot.flat" && grep -q '^clean\.outcome=not_checked$' "$FL/prot.flat"; then ok "fleet: a refused protected folder is not checked, never clear"; else bad "fleet: a refused protected folder is not checked, never clear" "$(grep '^clean' "$FL/prot.flat" | tr '\n' ' ')"; fi

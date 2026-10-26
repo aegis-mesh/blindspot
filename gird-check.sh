@@ -148,13 +148,26 @@ if [ "$ACCTRUN" -eq 1 ]; then
     break
   done
 fi
+# A path behind a folder on its way that is there but can't be entered (an agent folder made 000, or
+# left root's by a run with sudo): whether a file is there can't be told. The nearest folder on its
+# way that is there is the one that counts, as a stat of the path meets it.
+behind_closed() { # path
+  _bc=$1
+  while :; do
+    case "$_bc" in */*) _bc=${_bc%/*} ;; *) return 1 ;; esac
+    [ -n "$_bc" ] || return 1
+    if [ -d "$_bc" ]; then [ ! -x "$_bc" ]; return; fi
+  done
+}
 fleet_ok() { # file: 0 when it may be read; outside an account run, always
   [ "$ACCTRUN" -eq 1 ] || return 0
-  # A file this account can't read counts as not checked, never as holding nothing.
+  # A file this account can't read counts as not checked, never as holding nothing: one behind a folder
+  # that can't be entered too. /dev/null, where people link a history file to keep none, holds nothing.
   if [ -f "$1" ] && [ -r "$1" ]; then
     _fs=$(/usr/bin/stat -L -f %z -- "$1" 2>/dev/null)
     case "$_fs" in ''|*[!0-9]*) ;; *) [ "$_fs" -le "$FLEET_MAX" ] && return 0 ;; esac
-  elif [ ! -e "$1" ]; then return 1; fi
+  elif [ ! -e "$1" ]; then behind_closed "$1" && printf '%s\n' "$1" >> "$FLEET_NR"; return 1
+  elif [ "$1" -ef /dev/null ]; then return 1; fi
   printf '%s\n' "$1" >> "$FLEET_NR"; return 1
 }
 fleet_filter() { # the paths on stdin that may be read; folders and the scan's "L path" lines pass
@@ -2079,17 +2092,6 @@ CANDIDATES=$(
     printf '%s\n' "$PROJECT_FILES"
   } | awk 'NF && !seen[$0]++'
 )
-# A path behind a folder on its way that is there but can't be entered (an agent folder made 000, or
-# left root's by a run with sudo): whether a file is there can't be told. The nearest folder on its
-# way that is there is the one that counts, as a stat of the path meets it.
-behind_closed() { # path
-  _bc=$1
-  while :; do
-    case "$_bc" in */*) _bc=${_bc%/*} ;; *) return 1 ;; esac
-    [ -n "$_bc" ] || return 1
-    if [ -d "$_bc" ]; then [ ! -x "$_bc" ]; return; fi
-  done
-}
 # A file that is there but not read: one that can't be read (a root-owned .env a container wrote, a
 # file made 000), a pipe, socket or device (a fifo made at ~/.zsh_history), as only a regular file is
 # read, or one behind a folder that can't be entered. A link to nothing, a folder, and /dev/null
