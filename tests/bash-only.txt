@@ -320,6 +320,8 @@ fleet: a profile that sets a tool's folder to its default moves nothing	gird-che
 fleet: one that sets it elsewhere leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and so does one that moves pnpm's folder (PNPM_HOME)	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: so a bad package only there never reads clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a settings file read only in part leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and counts as a file not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 and on a Mac the closing note says whether it was installed can't be told	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
 fleet: nor a hard link there	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: gird-fleet.sh tests a path for a link before it stats it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

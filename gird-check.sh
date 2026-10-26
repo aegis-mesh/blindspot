@@ -2283,10 +2283,11 @@ aa_hit() { # file pattern|pattern...
     END { if (mCut) exit 2; for (i = 1; i <= n; i++) if ((i in neg) == (i in got)) exit 1; exit 0 }'; } 2>/dev/null
   # awk exits 0 on a match and 1 on none, 2 on a line too long to read (mlstate), and with anything
   # else when it failed or was killed, as a hostile file can make it run out of memory. A file not read
-  # in full goes in AA_CUT, which section 2 names as not read, and is never a file with no match.
+  # in full goes in AA_CUT, which section 2 names as not read, and in an account run in FLEET_NR, as a
+  # file not checked: it is never a file with no match.
   _ah=$?
   [ "$_ah" -le 1 ] && return "$_ah"
-  AA_CUT="$AA_CUT$1$NL"; return 2
+  AA_CUT="$AA_CUT$1$NL"; [ -n "$FLEET_NR" ] && printf '%s\n' "$1" >> "$FLEET_NR"; return 2
 }
 # The value of a top-level key of a .json file, from its text as one line with the spaces removed:
 # true, false, or nothing. Strings and brackets are read as aa_keys reads them, so the same key inside
