@@ -1036,6 +1036,23 @@ hasnot "nor a saved command with a key"               'code/a/\.claude/settings\
 has    "a real token in a saved command still is"     '✗ ~/code/b/\.claude/settings\.local\.json A saved command contains a key' "$WORK/kpv.txt"
 has    "and a token in an MCP config"                 '~/code/c/\.mcp\.json 1 server, token in the file' "$WORK/kpv.txt"
 has    "and a base64 secret that starts with a /"     '~/code/d/\.mcp\.json 1 server, token in the file' "$WORK/kpv.txt"
+# A token written into an MCP server's HTTP headers is a token in the file: Authorization or a name
+# ending in -Key, -Token or -Secret, in JSON, in Codex's http_headers and in Goose's YAML. A header that
+# names an environment variable, or one that is not a secret, is not.
+mkdir -p "$WORK/hdr/.codex" "$WORK/hdr/AppData/Roaming/Block/goose/config" "$WORK/hdr/code/a" "$WORK/hdr/code/b" "$WORK/hdr/code/c" "$WORK/hdr/AppData/Local/Temp"
+printf '{"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer lin_api_q8w7e6r5t4y3u2i1o9p0"}}}}\n' > "$WORK/hdr/.claude.json"
+printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"X-API-Key":"q8w7e6r5t4y3u2i1o9p0"}}}}\n' > "$WORK/hdr/code/a/.mcp.json"
+printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"Authorization":"Bearer ${LINEAR_TOKEN}"}}}}\n' > "$WORK/hdr/code/b/.mcp.json"
+printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"Content-Type":"application/json-q8w7e6"}}}}\n' > "$WORK/hdr/code/c/.mcp.json"
+printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\nhttp_headers = { "Authorization" = "Bearer q8w7e6r5t4y3u2i1o9p0" }\n' > "$WORK/hdr/.codex/config.toml"
+printf 'extensions:\n  linear:\n    type: streamable_http\n    uri: https://mcp.linear.app/mcp\n    headers:\n      Authorization: Bearer q8w7e6r5t4y3u2i1o9p0\n' > "$WORK/hdr/AppData/Roaming/Block/goose/config/config.yaml"
+psrun "$WORK/hdr" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdr.txt"
+has    "a token in an MCP server's Authorization header is a token in the file" 'Claude Code ~/\.claude\.json 1 server, token in the file' "$WORK/hdr.txt"
+has    "and one in an X-API-Key header"               '~/code/a/\.mcp\.json 1 server, token in the file' "$WORK/hdr.txt"
+has    "and one in Codex's http_headers"              'Codex ~/\.codex/config\.toml 1 server, token in the file' "$WORK/hdr.txt"
+has    "and one in a YAML headers map"                'Goose ~/[^ ]+/config\.yaml [^,]*, token in the file' "$WORK/hdr.txt"
+has    "near miss: a header that names an environment variable is not a token" '~/code/b/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdr.txt"
+has    "near miss: a header that is not a secret is not a token" '~/code/c/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdr.txt"
 # Hooks that run nothing are not commands: an event with an empty list, and hooks in a file whose
 # disableAllHooks is true, unless the project's settings.local.json, which comes first, sets it back to
 # false. It turns off the status line too, not the credential helpers, and counts only at the top of the

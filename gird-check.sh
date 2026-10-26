@@ -757,6 +757,11 @@ P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{
 P_JSONSECRET='"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[[:space:]]*:[[:space:]]*"[^"$<{][^"]{11,}"'
 P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"$<{][^"]{11,}"'
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
+# A token in an HTTP header an MCP server is sent with (headers in JSON, http_headers in Codex's TOML, a
+# YAML map): Authorization, or a name ending in -Key, -Token or -Secret, in any case, as header names
+# are. A value with a $ in it names an environment variable, not a token.
+P_HNAME='([Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-([Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
+P_HEADERSECRET="\"${P_HNAME}\"[[:space:]]*[:=][[:space:]]*\"[^\"\$<{][^\"\$]{11,}\"|(^|[[:space:]{,])${P_HNAME}[[:space:]]*=[[:space:]]*\"[^\"\$<{][^\"\$]{11,}\"|(^|[[:space:]{,])\"?${P_HNAME}\"?:[[:space:]]+[\"']?[^\"'\$<{[:space:]][^\"'\$#]{11,}"
 # Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
 # value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
 # under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
@@ -787,7 +792,7 @@ files_matching() { # pattern; list on stdin
   tr '\n' '\0' | xargs -0 grep -alE "$1" 2>/dev/null
 }
 inline_secret() {
-  grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
+  grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
 # A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
 # elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
@@ -1670,7 +1675,7 @@ is_plugin_path() {
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
-MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" | tr '\n' '|')"
+MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET" | tr '\n' '|')"
 mcp_row() { # who file client-id
   _f=$2; _c=""; _nm=""
   case "$_f" in
