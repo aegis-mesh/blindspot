@@ -2591,17 +2591,32 @@ hasnot "near miss: full access under a profiles table is not listed" 'code/h/' "
 hasnot "near miss: the workspace-write sandbox alone is not listed" 'code/k/' "$WORK/cxa.txt"
 has    "a [ line inside a multi-line TOML string does not hide the settings after it" '! Codex ~/code/i/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxa.txt"
 hasnot "and settings written inside a multi-line string are not read as settings" 'code/j/' "$WORK/cxa.txt"
-# A project's .codex/config.toml of one 512 KB line, with a quote every two characters and three in
-# a row at its end, then the settings: read whole, in linear time (it took two minutes on macOS's awk).
-mkdir -p "$WORK/cxbig/code/p/.codex"
-python3 - "$WORK/cxbig/code/p/.codex/config.toml" <<'PY3'
+# A project's .codex/config.toml of one long line, then the settings. A line of 4 MB without three
+# quotes in a row can neither open nor close a multi-line string: it is read whole, in linear time (one
+# of 512 KB took two minutes on macOS's awk). One of 60 KB with three quotes in a row is walked and read
+# whole too. Past 64 KB such a line is not walked, as its walk would grow without bound (2 GB of memory
+# for 16 MB of quotes, and quadratic time on BusyBox): the file is named as not read.
+mkdir -p "$WORK/cxbig/code/p/.codex" "$WORK/cxbig/code/m/.codex" "$WORK/cxbig/code/q/.codex"
+python3 - "$WORK/cxbig/code" <<'PY3'
 import sys
-open(sys.argv[1], 'w').write('args = [' + '"a",' * 131072 + '"""x"""]\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n')
+d = sys.argv[1]; tail = '\napproval_policy = "never"\nsandbox_mode = "danger-full-access"\n'
+open(d + '/p/.codex/config.toml', 'w').write('args = [' + '"a",' * 1048576 + '"z"]' + tail)
+open(d + '/m/.codex/config.toml', 'w').write('args = [' + '"a",' * 15000 + '"""x"""]' + tail)
+open(d + '/q/.codex/config.toml', 'w').write('x = ' + '"' * 4194304 + tail)
 PY3
 T0=$(date +%s); HOME="$WORK/cxbig" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/cxbig.txt"; T=$(( $(date +%s) - T0 ))
-has    "a one-line Codex config full of quotes is read whole" '! Codex ~/code/p/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxbig.txt"
-if [ "$T" -le 30 ]; then ok "and in linear time, with three quotes in a row on that line" "${T}s"; else bad "and in linear time, with three quotes in a row on that line" "took ${T}s"; fi
+has    "a one-line Codex config of 4 MB is read whole" '! Codex ~/code/p/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxbig.txt"
+has    "and one of 60 KB with three quotes in a row on it" '! Codex ~/code/m/\.codex/config\.toml never asks, full access, when the project is trusted' "$WORK/cxbig.txt"
+has    "past 64 KB such a line's file is named as not read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/q/\.codex/config\.toml' "$WORK/cxbig.txt"
+if [ "$T" -le 30 ]; then ok "and all in linear time" "${T}s"; else bad "and all in linear time" "took ${T}s"; fi
 rm -rf "$WORK/cxbig"
+# A settings read whose awk fails, as one a hostile file runs out of memory does, names the file as not
+# read: never a file with nothing set.
+mkdir -p "$WORK/aafail/code/p/.codex" "$WORK/aafail-bin"
+printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$WORK/aafail/code/p/.codex/config.toml"
+printf '#!/bin/sh\n[ -n "${AA_P:-}" ] && exit 3\nexec %s "$@"\n' "$(command -v awk)" > "$WORK/aafail-bin/awk"; chmod +x "$WORK/aafail-bin/awk"
+HOME="$WORK/aafail" PATH="$WORK/aafail-bin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/aafail.txt"
+has    "a settings read whose awk fails names the file as not read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/p/\.codex/config\.toml' "$WORK/aafail.txt"
 # Antigravity installs from Open VSX: Antigravity IDE keeps its extensions in ~/.antigravity-ide, the
 # Antigravity before it in ~/.antigravity. A GlassWorm extension that names Antigravity, in each.
 rm -rf "$WORK/dz-ag"; cp -R "$WORK/clean" "$WORK/dz-ag"

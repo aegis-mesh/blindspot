@@ -1654,6 +1654,10 @@ function Cc-Rules([string]$f) {
 # skips the quotes an odd run of \ escapes, and the three closing quotes can carry up to two more, the
 # end of the text. The same as gird-check.sh's mlstate.
 function Toml-Ml([string]$s, [string]$st) {
+  # A line without three quotes in a row can neither open nor close one, so it is not walked.
+  if (-not $st -and -not $s.Contains('"""') -and -not $s.Contains("'''")) { return '' }
+  if ($st -eq 'b' -and -not $s.Contains('"""')) { return 'b' }
+  if ($st -eq 'l' -and -not $s.Contains("'''")) { return 'l' }
   $i = 0
   while ($i -lt $s.Length) {
     if ($st) {
@@ -1688,6 +1692,7 @@ function Toml-Ml([string]$s, [string]$st) {
   }
   $st
 }
+$AaCut = New-Object System.Collections.Generic.List[string]
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
   if ($toml) { $t = Read-Text $f } else { $t = Flat-Text $f }
@@ -1713,6 +1718,12 @@ function Aa-Hit([string]$f, $pats) {
   foreach ($line in $lines) {
     # TOML's whitespace is a space or a tab: as gird-check.sh's tr, no other character is taken out.
     if ($toml) { $l = $line -replace '[ \t\r\f\v]', '' } else { $l = $line -replace '[ \t\n\v\f\r]', '' }
+    # Past 64 KB a line that can open or close a multi-line string is not read: the file is named as not
+    # read in full ($AaCut), never read as holding nothing. The same as gird-check.sh's mlstate.
+    if ($toml -and $l.Length -gt 65536 -and ((-not $ml -and ($l.Contains('"""') -or $l.Contains("'''"))) -or ($ml -eq 'b' -and $l.Contains('"""')) -or ($ml -eq 'l' -and $l.Contains("'''")))) {
+      if (-not $AaCut.Contains($f)) { $AaCut.Add($f) }
+      return $false
+    }
     if ($toml) { $s0 = $ml; $ml = Toml-Ml $l $ml; if ($s0) { continue } }
     # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
     if ($toml) { $l = $l -replace '^("([A-Za-z0-9_-]+)"|''([A-Za-z0-9_-]+)'')=', '$2$3=' }
@@ -6356,7 +6367,7 @@ foreach ($r in $AaList) { [void]$yoloAg.Add($r.Agent) }
 $N_YOLO_AG = $yoloAg.Count
 # One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
 # it with the other settings files it could not read, so the summary doesn't read clean over it.
-foreach ($f in (Unread-Files $aaTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in @(@(Unread-Files $aaTried $true) + @($AaCut))) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 if ($N_YOLO -gt 0) { Progress "Agents set to run commands without asking: $($AaList[0].Agent)" }
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.

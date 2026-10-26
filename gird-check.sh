@@ -2184,9 +2184,10 @@ cc_rules() { # file
 # tr removes the spaces in one pass, and each pattern becomes one regex with its boundaries in it,
 # tried once per line: linear on every awk, where a gsub on the joined text, or an index() of the rest
 # of the line at every near miss, is quadratic on macOS's awk for a large file.
+AA_CUT=""
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
-  if [ "$_tm" -eq 1 ]; then { tr -d ' \t\r\f\v' < "$1"; } 2>/dev/null; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
+  { if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1"; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
     # A pattern as a regex that matches only its own text: every character a regex reads is quoted.
     function lit(s,   o, c, j) {
       o = ""
@@ -2212,6 +2213,10 @@ aa_hit() { # file pattern|pattern...
       if (st == "" && !index(s, "\"\"\"") && !index(s, "\047\047\047")) return ""
       if (st == "b" && !index(s, "\"\"\"")) return "b"
       if (st == "l" && !index(s, "\047\047\047")) return "l"
+      # Past 64 KB such a line is not walked: one array element per quote would grow without bound
+      # (2 GB of memory for 16 MB of quotes in gawk, and quadratic on BusyBox), so the file is named as
+      # not read in full (mCut, aa_hit) and never read as holding nothing.
+      if (length(s) > 65536) { mCut = 1; return st }
       mS = st; mP = ""; mR = 0; mX = 0; mEat = 0; mEmp = 0; mN = 0
       nq = split(s, Q, "\""); if (nq == 0) { nq = 1; Q[1] = "" }
       for (i = 1; i <= nq && mS != "#"; i++) {
@@ -2267,14 +2272,20 @@ aa_hit() { # file pattern|pattern...
         # !key in a .toml file: the line counts only when no line sets that key.
         else if (toml && substr(p[i], 1, 1) == "!") { neg[i] = 1; re[i] = "^" lit(substr(p[i], 2)) "=" }
         else re[i] = toml ? "^(" lit(p[i]) "|" lit(q) ")" (p[i] ~ /\{$/ ? "" : "(#|$)") : "(^|[{,])" lit(p[i]) "($|[,}#/])" } }
-    toml { s0 = ml; ml = mlstate($0, ml); if (s0 != "") next }
+    toml { s0 = ml; ml = mlstate($0, ml); if (mCut) exit; if (s0 != "") next }
     toml && /^#/ { next }
     toml && /^\[/ { exit }
     # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
     toml && match($0, "^(\"[A-Za-z0-9_-]+\"|\047[A-Za-z0-9_-]+\047)=") { $0 = substr($0, 2, RLENGTH - 3) "=" substr($0, RLENGTH + 1) }
     # A .json file: its text is the first line, the objects aa_keys printed come after it.
     { for (i = 1; i <= n; i++) if (!(i in got) && (toml || (NR == 1) == !(i in in_)) && $0 ~ re[i]) got[i] = 1 }
-    END { for (i = 1; i <= n; i++) if ((i in neg) == (i in got)) exit 1; exit 0 }'
+    END { if (mCut) exit 2; for (i = 1; i <= n; i++) if ((i in neg) == (i in got)) exit 1; exit 0 }'; } 2>/dev/null
+  # awk exits 0 on a match and 1 on none, 2 on a line too long to read (mlstate), and with anything
+  # else when it failed or was killed, as a hostile file can make it run out of memory. A file not read
+  # in full goes in AA_CUT, which section 2 names as not read, and is never a file with no match.
+  _ah=$?
+  [ "$_ah" -le 1 ] && return "$_ah"
+  AA_CUT="$AA_CUT$1$NL"; return 2
 }
 # The value of a top-level key of a .json file, from its text as one line with the spaces removed:
 # true, false, or nothing. Strings and brackets are read as aa_keys reads them, so the same key inside
@@ -7053,7 +7064,7 @@ $AA_TABLE
 EOF
 # One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
 # it with the other settings files it could not read, so the summary doesn't read clean over it.
-_aau=$(printf '%s\n' "$AA_TRIED" | unread_files big)
+_aau=$({ printf '%s\n' "$AA_TRIED" | unread_files big; printf '%s' "$AA_CUT"; } | awk 'length && !s[$0]++')
 if [ -n "$_aau" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_aau" | awk 'length && !s[$0]++'); N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD"); fi
 # One row per file and agent: file<TAB>agent<TAB>settings. VS Code's settings file can hold two agents'.
 AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '{ k = $1 FS $2 } !(k in o) { o[k] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[k]] = st[o[k]] ", " $3 }
