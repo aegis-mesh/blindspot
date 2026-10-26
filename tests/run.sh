@@ -104,6 +104,8 @@ SE=$WORK/sess; mkdir -p "$SE"
 # Random key pieces, as tests/make-fixture.sh builds them: no key-shaped string is written here.
 rnd()   { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c "$1"; }
 upper() { head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c "$1"; }
+# A fake token for the settings and MCP fixtures, built from pieces: no token-shaped string is committed.
+FT=$(printf '%s%s' q8w7e6r5 t4y3u2i1); FT20="${FT}o9p0"
 _tab=$(printf '\t'); _nl=$(printf '\nx'); _nl=${_nl%x}
 # Without ripgrep its engine's tests are skipped. A CI job that installs ripgrep sets
 # GIRD_CHECK_TEST_REQUIRE_RG, so a missing ripgrep fails there instead of skipping.
@@ -1010,7 +1012,7 @@ has    "another provider's host in ANTHROPIC_BASE_URL is another server" '~/code
 # of theirs that is a link to a file elsewhere, are theirs, not a project's: the same file (-ef) as
 # ~/.claude's. Section 4 names a saved command in them once, under ~/.claude.
 mkdir -p "$WORK/stw/dotfiles/claude/.claude" "$WORK/stw/code/p/.claude" "$WORK/stw/dots/.claude"
-printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]},"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 npm test)"]}}\n' > "$WORK/stw/dotfiles/claude/.claude/settings.json"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]},"permissions":{"allow":["Bash(MY_TOKEN=%s npm test)"]}}\n' "$FT" > "$WORK/stw/dotfiles/claude/.claude/settings.json"
 ln -s dotfiles/claude/.claude "$WORK/stw/.claude"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}\n' > "$WORK/stw/code/p/.claude/settings.json"
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"make"}]}]}}\n' > "$WORK/stw/dots/.claude/settings.json"
@@ -1027,7 +1029,7 @@ has    "and counts it once"                          ' 1 key in allow lists' "$W
 mkdir -p "$WORK/eky/.claude" "$WORK/eky/code/a/.claude" "$WORK/eky/code/b/.claude" "$WORK/eky/code/c/.claude" "$WORK/eky/code/d/.claude"
 printf '{"env":{"ANTHROPIC_API_KEY":"%s"}}\n' "sk-""ant-api03-$(upper 95)" > "$WORK/eky/.claude/settings.json"
 printf '{"env":{"ANTHROPIC_API_KEY":"%s"},"permissions":{"allow":["Bash(npm test)"]}}\n' "sk-""ant-api03-$(upper 95)" > "$WORK/eky/code/a/.claude/settings.local.json"
-printf '{"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 npm test)"]}}\n' > "$WORK/eky/code/b/.claude/settings.json"
+printf '{"permissions":{"allow":["Bash(MY_TOKEN=%s npm test)"]}}\n' "$FT" > "$WORK/eky/code/b/.claude/settings.json"
 printf '{"permissions":{"deny":["Bash(curl -H x-api-key:%s x)"]}}\n' "sk-""ant-api03-$(upper 95)" > "$WORK/eky/code/c/.claude/settings.json"
 EKD="sk-""ant-api03-$(upper 95)"
 printf '{"env":{"ANTHROPIC_API_KEY":"%s"},"permissions":{"allow":["Bash(ANTHROPIC_API_KEY=%s claude)"]}}\n' "$EKD" "$EKD" > "$WORK/eky/code/d/.claude/settings.json"; EKD=""
@@ -1047,8 +1049,8 @@ has    "the header counts the saved commands only"    ' 3 keys in allow lists' "
 mkdir -p "$WORK/kpv/.cursor" "$WORK/kpv/code/a/.claude" "$WORK/kpv/code/b/.claude" "$WORK/kpv/code/c" "$WORK/kpv/code/d"
 printf '{"mcpServers":{"gh":{"command":"npx","args":["-y","gh-mcp"],"env":{"GITHUB_APP_PRIVATE_KEY_PATH":"/Users/me/keys/github-app.pem","SERVICE_KEY":"C:\\\\keys\\\\svc.json","API_KEY":"~/secrets/api.key"}}}}\n' > "$WORK/kpv/.cursor/mcp.json"
 printf '{"permissions":{"allow":["Bash(SOPS_AGE_KEY_FILE=/Users/me/.config/sops/age/keys.txt sops -d secrets.yaml)"]}}\n' > "$WORK/kpv/code/a/.claude/settings.local.json"
-printf '{"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 make)"]}}\n' > "$WORK/kpv/code/b/.claude/settings.local.json"
-printf '{"mcpServers":{"t":{"command":"node","args":["s.js"],"env":{"GITHUB_TOKEN":"q8w7e6r5t4y3u2i1o9p0"}}}}\n' > "$WORK/kpv/code/c/.mcp.json"
+printf '{"permissions":{"allow":["Bash(MY_TOKEN=%s make)"]}}\n' "$FT" > "$WORK/kpv/code/b/.claude/settings.local.json"
+printf '{"mcpServers":{"t":{"command":"node","args":["s.js"],"env":{"GITHUB_TOKEN":"%s"}}}}\n' "$FT20" > "$WORK/kpv/code/c/.mcp.json"
 printf '{"mcpServers":{"s":{"command":"node","args":["s.js"],"env":{"AWS_SECRET_KEY":"/aB3xY9zQ1wE5rT7uI8oP0"}}}}\n' > "$WORK/kpv/code/d/.mcp.json"
 HOME="$WORK/kpv" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/kpv.txt"
 has    "paths in settings named like secrets are not a token in an MCP config" 'Cursor ~/\.cursor/mcp\.json 1 server( [^,]|$)' "$WORK/kpv.txt"
@@ -1060,12 +1062,12 @@ has    "and a base64 secret that starts with a /"     '~/code/d/\.mcp\.json 1 se
 # ending in -Key, -Token or -Secret, in JSON, in Codex's http_headers and in Goose's YAML. A header that
 # names an environment variable, or one that is not a secret, is not.
 mkdir -p "$WORK/hdr/.codex" "$WORK/hdr/.config/goose" "$WORK/hdr/code/a" "$WORK/hdr/code/b" "$WORK/hdr/code/c"
-printf '{"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer lin_api_q8w7e6r5t4y3u2i1o9p0"}}}}\n' > "$WORK/hdr/.claude.json"
-printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"X-API-Key":"q8w7e6r5t4y3u2i1o9p0"}}}}\n' > "$WORK/hdr/code/a/.mcp.json"
+printf '{"mcpServers":{"linear":{"type":"http","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer lin_api_%s"}}}}\n' "$FT20" > "$WORK/hdr/.claude.json"
+printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"X-API-Key":"%s"}}}}\n' "$FT20" > "$WORK/hdr/code/a/.mcp.json"
 printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"Authorization":"Bearer ${LINEAR_TOKEN}"}}}}\n' > "$WORK/hdr/code/b/.mcp.json"
 printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","headers":{"Content-Type":"application/json-q8w7e6"}}}}\n' > "$WORK/hdr/code/c/.mcp.json"
-printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\nhttp_headers = { "Authorization" = "Bearer q8w7e6r5t4y3u2i1o9p0" }\n' > "$WORK/hdr/.codex/config.toml"
-printf 'extensions:\n  linear:\n    type: streamable_http\n    uri: https://mcp.linear.app/mcp\n    headers:\n      Authorization: Bearer q8w7e6r5t4y3u2i1o9p0\n' > "$WORK/hdr/.config/goose/config.yaml"
+printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\nhttp_headers = { "Authorization" = "Bearer %s" }\n' "$FT20" > "$WORK/hdr/.codex/config.toml"
+printf 'extensions:\n  linear:\n    type: streamable_http\n    uri: https://mcp.linear.app/mcp\n    headers:\n      Authorization: Bearer %s\n' "$FT20" > "$WORK/hdr/.config/goose/config.yaml"
 HOME="$WORK/hdr" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdr.txt"
 has    "a token in an MCP server's Authorization header is a token in the file" 'Claude Code ~/\.claude\.json 1 server, token in the file' "$WORK/hdr.txt"
 has    "and one in an X-API-Key header"               '~/code/a/\.mcp\.json 1 server, token in the file' "$WORK/hdr.txt"
@@ -1083,7 +1085,7 @@ printf 'name: Mine\nrules:\n  - send the X-Api-Key: header from the environment,
 printf '{"mcpServers":{"svc":{"type":"http","url":"https://mcp.example.net/mcp","description":"Send the X-Api-Key: header from the environment"}}}\n' > "$WORK/hdrn/code/a/.mcp.json"
 printf '[mcp_servers.google]\nurl = "https://mcp.example.net/google"\nenv_http_headers = { "X-Goog-Api-Key" = "GOOGLE_API_KEY_FOR_MCP" }\n\n[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nAuthorization = "LINEAR_AUTHORIZATION_HEADER"\n' > "$WORK/hdrn/.codex/config.toml"
 printf '{"mcp":{"linear":{"type":"remote","url":"https://mcp.linear.app/mcp","headers":{"Authorization":"Bearer {env:LINEAR_API_TOKEN}"}}}}\n' > "$WORK/hdrn/.config/opencode/opencode.json"
-printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nX-Env-Key = "LINEAR_ENV_HEADER_NAME"\n\n[mcp_servers.linear.http_headers]\nAuthorization = "Bearer %s%s"\n' q8w7e6r5 t4y3u2i1o9p0 > "$WORK/hdrt/.codex/config.toml"
+printf '[mcp_servers.linear]\nurl = "https://mcp.linear.app/mcp"\n\n[mcp_servers.linear.env_http_headers]\nX-Env-Key = "LINEAR_ENV_HEADER_NAME"\n\n[mcp_servers.linear.http_headers]\nAuthorization = "Bearer %s"\n' "$FT20" > "$WORK/hdrt/.codex/config.toml"
 HOME="$WORK/hdrn" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrn.txt"
 HOME="$WORK/hdrt" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/hdrt.txt"
 has    "near miss: a prompt about a header kept in ~/.claude.json is not a token" 'Claude Code ~/\.claude\.json 1 server( [^,]|$)' "$WORK/hdrn.txt"
@@ -1097,7 +1099,7 @@ has    "a token in an http_headers table after an env_http_headers table still c
 # at its top level, or an ignore entry for .claude itself or the file, leaves it out. An entry for
 # something else in .claude, a files key inside another setting, and a ! entry that brings the file back
 # do not.
-for n in n1 n2 n3 n4 n5 n6 n7 n8; do mkdir -p "$WORK/nps/code/$n/.claude"; printf '{"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 make)"]}}\n' > "$WORK/nps/code/$n/.claude/settings.local.json"; printf '{"name":"%s","version":"1.0.0"}\n' "$n" > "$WORK/nps/code/$n/package.json"; done
+for n in n1 n2 n3 n4 n5 n6 n7 n8; do mkdir -p "$WORK/nps/code/$n/.claude"; printf '{"permissions":{"allow":["Bash(MY_TOKEN=%s make)"]}}\n' "$FT" > "$WORK/nps/code/$n/.claude/settings.local.json"; printf '{"name":"%s","version":"1.0.0"}\n' "$n" > "$WORK/nps/code/$n/package.json"; done
 printf 'node_modules\n.claude/worktrees/\n' > "$WORK/nps/code/n1/.gitignore"
 printf '{"name":"n2","version":"1.0.0","eslintConfig":{"overrides":[{"files":["*.js"]}],"files":["x"]}}\n' > "$WORK/nps/code/n2/package.json"
 printf '{"name":"n3","version":"1.0.0","files":["dist"]}\n' > "$WORK/nps/code/n3/package.json"
