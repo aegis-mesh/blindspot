@@ -2436,7 +2436,7 @@ while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   # The names it holds, read once: each check below runs only for a name the file holds, or for all of
   # them when an escape could spell one, so a large file is not parsed seven times (BusyBox awk is slow).
-  _nm=$({ tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -oE 'chat\.(permissions\.default|tools\.autoApprove|defaultConfiguration)|claudeCode\.(initialPermissionMode|allowDangerouslySkipPermissions)|\\u|\\/' | sort -u)
+  _nm=$({ tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -aoE 'chat\.(permissions\.default|tools\.autoApprove|defaultConfiguration)|claudeCode\.(initialPermissionMode|allowDangerouslySkipPermissions)|\\u|\\/' | sort -u)
   case "$_nm" in *chat.*|*claudeCode.initialPermissionMode*|*'\u'*|*'\/'*) ;; *) continue ;; esac
   _esc=0; case "$_nm" in *'\u'*|*'\/'*) _esc=1 ;; esac
   _w=""

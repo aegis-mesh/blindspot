@@ -1226,8 +1226,9 @@ has    "a linked .claude folder that can't be entered is named as not read" '1 f
 hasnot "a .claude link to nothing reads as nothing" 'p/gone/' "$WORK/hid.txt"
 # VS Code reads a task's runOn without case, and runs worktreeCreated tasks when it creates a worktree
 # of the project. Its JSON scanner ends a // comment at U+2028 and U+2029 too, and reads a no-break
-# space as whitespace: the scripts read tasks and settings the same way, and agree.
-for p in t1 t2 t3 t4 t5 t6 t7 t8 v1 v2 v3; do mkdir -p "$WORK/vsf/code/$p/.vscode"; done; mkdir -p "$WORK/vsf/AppData/Local/Temp"
+# space as whitespace: the scripts read tasks and settings the same way, and agree. A NUL in a // comment
+# is comment text to VS Code: the setting after it still counts.
+for p in t1 t2 t3 t4 t5 t6 t7 t8 v1 v2 v3 v4 v5; do mkdir -p "$WORK/vsf/code/$p/.vscode"; done; mkdir -p "$WORK/vsf/AppData/Local/Temp"
 VT='{"version": "2.0.0", "tasks": [{"label": "build", "type": "shell", "command": "make", %b}]}\n'
 printf "$VT" '"runOptions": {"runOn": "FolderOpen"}' > "$WORK/vsf/code/t1/.vscode/tasks.json"
 printf "$VT" '"runOptions": {"runOn": "folderopen"}' > "$WORK/vsf/code/t2/.vscode/tasks.json"
@@ -1240,7 +1241,9 @@ printf "$VT" '"detail": "runOn folderOpen", // "runOptions": {"runOn": "folderOp
 printf '{\n  // x\342\200\251"chat.permissions.default": "autopilot"\n}\n' > "$WORK/vsf/code/v1/.vscode/settings.json"
 printf '{"chat.permissions.default":\302\240"autopilot"}\n' > "$WORK/vsf/code/v2/.vscode/settings.json"
 printf '{\n  // x "chat.permissions.default": "autopilot"\n}\n' > "$WORK/vsf/code/v3/.vscode/settings.json"
-psrun "$WORK/vsf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsf.txt"
+printf '{\n  // a\000b\n  "chat.permissions.default": "autopilot"\n}\n' > "$WORK/vsf/code/v4/.vscode/settings.json"
+printf '{\n  // \000\n  "chat.tools.autoApprove": true\n}\n' > "$WORK/vsf/code/v5/.vscode/settings.json"
+psrun "$WORK/vsf" -- -Offline 2> "$WORK/vsf.err" | tr -s ' \n' '  ' > "$WORK/vsf.txt"
 has    "a runOn value in another case is read, as VS Code reads it" '~/code/t1/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/vsf.txt"
 has    "and in lower case"                            '~/code/t2/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/vsf.txt"
 has    "a no-break space before the value is whitespace, as in VS Code" '~/code/t3/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/vsf.txt"
@@ -1252,6 +1255,9 @@ hasnot "near miss: a commented-out runOn and a string that names it are not list
 has    "a VS Code setting after a comment that U+2029 ends is read" '~/code/v1/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/vsf.txt"
 has    "and one after a no-break space"               '~/code/v2/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/vsf.txt"
 hasnot "near miss: a setting inside a // comment is not read" 'code/v3/' "$WORK/vsf.txt"
+has    "a NUL in a // comment, which VS Code reads as comment text, hides no setting after it" '~/code/v4/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/vsf.txt"
+has    "nor chat.tools.autoApprove after one"         '~/code/v5/\.vscode/settings\.json Set to' "$WORK/vsf.txt"
+if [ -s "$WORK/vsf.err" ]; then bad "and nothing is written to stderr over a NUL" "$(head -c 200 "$WORK/vsf.err")"; else ok "and nothing is written to stderr over a NUL"; fi
 # A tasks.json of 100,000 tasks with U+2028 and no-break spaces between their tokens, the folderOpen task
 # last: read whole, in linear time.
 mkdir -p "$WORK/vsfbig/p/.vscode" "$WORK/vsfbig/AppData/Local/Temp"
