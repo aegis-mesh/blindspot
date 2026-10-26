@@ -2361,16 +2361,25 @@ EOF
 # and writes escapes as their characters, so a setting's name stays as written unless it has an escape.
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
-  { tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -qE 'chat\.(permissions\.default|tools\.autoApprove|defaultConfiguration)|claudeCode\.initialPermissionMode|\\u|\\/' || continue
+  # The names it holds, read once: each check below runs only for a name the file holds, or for all of
+  # them when an escape could spell one, so a large file is not parsed seven times (BusyBox awk is slow).
+  _nm=$({ tr -d '[:space:]' < "$f"; } 2>/dev/null | grep -oE 'chat\.(permissions\.default|tools\.autoApprove|defaultConfiguration)|claudeCode\.(initialPermissionMode|allowDangerouslySkipPermissions)|\\u|\\/' | sort -u)
+  case "$_nm" in *chat.*|*claudeCode.initialPermissionMode*|*'\u'*|*'\/'*) ;; *) continue ;; esac
+  _esc=0; case "$_nm" in *'\u'*|*'\/'*) _esc=1 ;; esac
   _w=""
-  if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
-  elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
-  if aa_hit "$f" '"chat.tools.autoApprove": true'; then
+  if [ "$_esc" -eq 1 ] || case "$_nm" in *chat.permissions.default*) true ;; *) false ;; esac; then
+    if aa_hit "$f" '"chat.permissions.default": "autopilot"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autopilot"
+    elif aa_hit "$f" '"chat.permissions.default": "autoApprove"'; then _w="run every Copilot tool call without asking in new chats, with chat.permissions.default: autoApprove"; fi
+  fi
+  if { [ "$_esc" -eq 1 ] || case "$_nm" in *chat.tools.autoApprove*) true ;; *) false ;; esac; } && aa_hit "$f" '"chat.tools.autoApprove": true'; then
     _w="${_w:+$_w, }auto-approve Copilot's tools with chat.tools.autoApprove, the setting the CVE-2025-53773 attack wrote into projects. VS Code 1.104 and later ignore it"
   fi
-  if aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "allowAll"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: allowAll"
-  elif aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "autoApprove"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: autoApprove"; fi
-  if aa_hit "$f" '"claudeCode.initialPermissionMode": "bypassPermissions"|"claudeCode.allowDangerouslySkipPermissions": true'; then
+  if [ "$_esc" -eq 1 ] || case "$_nm" in *chat.defaultConfiguration*) true ;; *) false ;; esac; then
+    if aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "allowAll"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: allowAll"
+    elif aa_hit "$f" '"chat.defaultConfiguration": {"approvals": "autoApprove"'; then _w="${_w:+$_w, }run every tool call without asking in new agent sessions, with chat.defaultConfiguration: autoApprove"; fi
+  fi
+  if { [ "$_esc" -eq 1 ] || case "$_nm" in *claudeCode.*) true ;; *) false ;; esac; } &&
+     aa_hit "$f" '"claudeCode.initialPermissionMode": "bypassPermissions"|"claudeCode.allowDangerouslySkipPermissions": true'; then
     _w="${_w:+$_w, }start Claude Code's VS Code extension in bypassPermissions, with claudeCode.initialPermissionMode and claudeCode.allowDangerouslySkipPermissions. The extension applies them from a project only before version 2.1.225"
   fi
   [ -n "$_w" ] && auto_row "$f" "$_w" "$(flat "$f")"
