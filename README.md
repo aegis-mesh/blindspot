@@ -112,7 +112,7 @@ macOS 13 or later, Linux, or Windows. It runs on the bash that ships with macOS 
 
 ### Windows
 
-Run `gird-check.sh` in Git Bash (it comes with Git for Windows), MSYS2 or Cygwin, the same way as above. It checks the Windows places: agents and MCP configs in your user folder and in `%APPDATA%` and `%LOCALAPPDATA%` (Claude Desktop, Cursor, VS Code, Windsurf, Goose), PowerShell's command history, Python installs and the uv cache under `AppData`, the npm global-install folders the PowerShell version reads (npm's own, nvm-windows, fnm, Volta, mise, pnpm and npx's cache), and the files Python malware leaves in `%TEMP%`. Without jq, which Git Bash doesn't include, it finds MCP config files but can't count the servers in JSON ones.
+Run `gird-check.sh` in Git Bash (it comes with Git for Windows), MSYS2 or Cygwin, the same way as above. It checks the Windows places: agents and MCP configs in your user folder and in `%APPDATA%` and `%LOCALAPPDATA%` (Claude Desktop, Cursor, VS Code, Windsurf, Goose), PowerShell's command history, Python installs (under `AppData`, in `%ProgramFiles%` and at the system drive's root, pyenv-win's and the Microsoft Store's) and the uv cache, the npm global-install folders the PowerShell version reads (npm's own, nvm-windows, fnm, Volta, mise, pnpm and npx's cache), and the files Python malware leaves in `%TEMP%`. Without jq, which Git Bash doesn't include, it finds MCP config files but can't count the servers in JSON ones.
 
 In WSL it checks the Linux system you run it in, not the files on the Windows side, and says so at the end.
 

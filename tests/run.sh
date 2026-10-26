@@ -1646,6 +1646,20 @@ rm -rf "${WP:?}/AppData/Local/mise" "${WP:?}/AppData/Roaming/mamba" "${WR:?}/px"
 has    "Windows: a Python environment in mise's folder is checked" '~/AppData/Local/mise/installs/python/3\.12\.1/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
 has    "Windows: and in micromamba's"                 '~/AppData/Roaming/mamba/envs/e1/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
 has    "Windows: a setting given as a Windows path is followed" 'px/venvs/t3/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-py.txt"
+# The Windows places gird-check.ps1 reads by name: pyenv-win's Pythons, the Microsoft Store Python's user site,
+# Pythons installed for every user in %ProgramFiles% and at the system drive's root, and conda in
+# %ProgramData%, whose name Git Bash keeps as Windows spells it.
+mkdir -p "$WP/.pyenv/pyenv-win/versions/3.11.9/Lib/site-packages/litellm-1.82.8.dist-info" \
+  "$WP/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages/lightning-2.6.2.dist-info" \
+  "$WR/Program Files/Python311/Lib/site-packages/litellm-1.82.7.dist-info" "$WR/Python39/Lib/site-packages/litellm-1.82.7.dist-info" \
+  "$WR/ProgramData/miniconda3/Lib/site-packages/litellm-1.82.7.dist-info"
+PROGRAMFILES='C:\Program Files' SYSTEMDRIVE='C:' ProgramData='C:\ProgramData' winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-pyw.txt"
+rm -rf "${WP:?}/.pyenv" "${WP:?}/AppData/Local/Packages" "${WR:?}/Program Files" "${WR:?}/Python39" "${WR:?}/ProgramData"
+has    "Windows: pyenv-win's Pythons are checked"     '~/\.pyenv/pyenv-win/versions/3\.11\.9/Lib/site-packages: litellm 1\.82\.8' "$WORK/win-pyw.txt"
+has    "Windows: and the Microsoft Store Python's user site" 'PythonSoftwareFoundation\.Python\.3\.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages: lightning 2\.6\.2' "$WORK/win-pyw.txt"
+has    "Windows: and a Python in %ProgramFiles%"       'Program Files/Python311/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-pyw.txt"
+has    "Windows: and one at the system drive's root"  '/Python39/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-pyw.txt"
+has    "Windows: and conda in %ProgramData%"          'ProgramData/miniconda3/Lib/site-packages: litellm 1\.82\.7' "$WORK/win-pyw.txt"
 # An extension whose malware runs on Windows only (data/bad-extensions.tsv's os) is malware here.
 mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"

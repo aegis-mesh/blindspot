@@ -1050,7 +1050,9 @@ scan_progress() { # pass the home scan's output through, showing some paths as t
 # Tables the checks below read. tools/gen.sh writes the same tables into gird-fleet.sh.
 # ---------------------------------------------------------------------------
 case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=win
-_pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-}"); _pd=${_pd%/}; fi
+# Git Bash, MSYS2 and Cygwin uppercase only a few Windows variables' names (PROGRAMFILES and SYSTEMDRIVE
+# among them, their runtime's environ.cc), so ProgramData keeps its Windows spelling.
+_pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-${ProgramData:-}}"); _pd=${_pd%/}; fi
 # Coding agents: name | commands | install paths | folders that change when it is used | id
 # Windsurf became Devin Desktop on 2 June 2026: Devin.app, the devin-desktop command, and editor data
 # under Devin, not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
@@ -2207,6 +2209,7 @@ $H/.local/share/uv
 # folders on Linux.
 if [ "$WIN" -eq 1 ]; then
   PY_ROOTS="$PY_ROOTS
+$H/.pyenv/pyenv-win/versions
 $H/pipx
 $WLAPP/pipx
 $WAPP/uv
@@ -2311,6 +2314,17 @@ SITES_ALL=$(
               /usr/lib/python3/dist-packages /usr/lib/python3*/site-packages /usr/local/lib/python3*/dist-packages; do
       [ -d "$sp" ] && printf '%s\n' "$sp"
     done
+    # On Windows, the places gird-check.ps1 reads by name: the Microsoft Store Python's user site and the
+    # Pythons installed for every user in %ProgramFiles%, %ProgramFiles(x86)% and the system drive's root.
+    if [ "$WIN" -eq 1 ]; then
+      for sp in "$WLAPP"/Packages/PythonSoftwareFoundation.Python.3*/LocalCache/local-packages/Python3*/site-packages; do
+        [ -d "$sp" ] && printf '%s\n' "$sp"
+      done
+      for _wf in "${PROGRAMFILES:-}" "$(printenv 'ProgramFiles(x86)' 2>/dev/null)" "${SYSTEMDRIVE:+$SYSTEMDRIVE\\}"; do
+        _wf=$(py_dir "$_wf"); _wf=${_wf%/}; [ -n "$_wf" ] || continue
+        for sp in "$_wf"/Python3*/Lib/site-packages; do [ -d "$sp" ] && printf '%s\n' "$sp"; done
+      done
+    fi
     printf '%s\n' "$PY_ROOTS" | awk '!s[$0]++' | while IFS= read -r r; do
       [ -n "$r" ] || continue
       if [ -d "$r" ]; then py_find "$r" -maxdepth 6 \( -name node_modules -prune \) -o \( -type d \( -name site-packages -o -name dist-packages \) -prune -print \)

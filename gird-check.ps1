@@ -1653,8 +1653,12 @@ foreach ($v in $Venvs) { Find-Sites $v 0 4 $SitesAll }
 $pyParents = New-Object System.Collections.Generic.List[object]
 $pyParents.Add(@((J $LocalAppData 'Programs/Python'), 'Python3*', 'Lib/site-packages'))
 $pyParents.Add(@((J $AppData 'Python'), 'Python3*', 'site-packages'))
+# A drive alone, as %SystemDrive% gives it (C:), is that drive's current folder to .NET, not its root, so
+# it gets its separator back.
 foreach ($pf in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:SystemDrive)) {
-  if ($pf) { $pyParents.Add(@(($pf.TrimEnd('\', '/')), 'Python3*', 'Lib/site-packages')) }
+  if (-not $pf) { continue }
+  $pr = $pf.TrimEnd('\', '/'); if ($pr -match '^[A-Za-z]:$') { $pr += '\' }
+  $pyParents.Add(@($pr, 'Python3*', 'Lib/site-packages'))
 }
 foreach ($pp in $pyParents) {
   foreach ($d in (Glob-Dirs $pp[0] $pp[1])) { $sp = J $d $pp[2]; if (Is-Dir $sp) { $SitesAll.Add($sp) } }
