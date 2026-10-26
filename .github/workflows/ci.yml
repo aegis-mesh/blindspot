@@ -26,7 +26,8 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # The suite runs about 23 minutes on an M-series Mac: the limits leave room for slower runners.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,7 +37,7 @@ jobs:
   powershell:
     name: tests (pwsh, ubuntu-latest)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     # With ripgrep installed, both suites test the ripgrep session engine too; the variable makes a
     # missing ripgrep fail those tests instead of skipping them.
     env:
@@ -52,7 +53,7 @@ jobs:
   ripgrep-macos:
     name: tests with ripgrep (macOS)
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     env:
       GIRD_CHECK_TEST_REQUIRE_RG: 1
     steps:
@@ -65,7 +66,7 @@ jobs:
   interactive:
     name: game and menu (macOS)
     runs-on: macos-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
