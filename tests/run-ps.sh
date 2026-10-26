@@ -1244,6 +1244,23 @@ printf '{"name":"claud-code","version":"1.0.3"}\n' > "$LW/code/w/node_modules/cl
 psrun "$LW" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lw.txt"
 has    "a lockfile's version found installed says so" '~/code/w/package-lock\.json claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed from this lockfile' "$WORK/lw.txt"
 has    "and one only listed there says only that"     '~/code/k/package-lock\.json @keyv/bigmap 6\.0\.0 \(keyv account takeover, August 2026\), listed in this lockfile' "$WORK/lw.txt"
+# bun's binary lockfile (bun.lockb, before bun 1.2) can't be read: it is named as not read, never skipped
+# without a word, unless a bun.lock beside it, which bun reads first, is read. A deno.lock keeps its npm
+# packages as name@version (Deno's lockfile docs), and is read.
+LB=$WORK/lb; rm -rf "$LB"; for d in lb lb1; do mkdir -p "$LB/$d/code/app/node_modules/axios" "$LB/$d/AppData/Roaming" "$LB/$d/AppData/Local/Temp"; done
+for d in lb lb1; do printf '#!/usr/bin/env bun\nbun-lockfile-format-v0\n\000\001x' > "$LB/$d/code/app/bun.lockb"; printf '{"name":"axios","version":"1.14.1"}\n' > "$LB/$d/code/app/node_modules/axios/package.json"; done
+mkdir -p "$LB/lb/code/both" "$LB/lb/code/deno"; printf '\000x' > "$LB/lb/code/both/bun.lockb"
+printf '{\n  "lockfileVersion": 1,\n  "packages": {\n    "left-pad": ["left-pad@1.3.0", "", {}, "sha512-x"],\n  }\n}\n' > "$LB/lb/code/both/bun.lock"
+printf '{\n  "version": "5",\n  "specifiers": {\n    "npm:axios@^1.14.0": "1.14.1",\n    "npm:@keyv/redis@^6.0.0": "6.0.0"\n  },\n  "npm": {\n    "axios@1.14.1": {\n      "integrity": "sha512-x"\n    },\n    "@keyv/redis@6.0.0": {\n      "integrity": "sha512-y"\n    }\n  },\n  "workspace": {\n    "dependencies": ["npm:axios@^1.14.0", "npm:@keyv/redis@^6.0.0"]\n  }\n}\n' > "$LB/lb/code/deno/deno.lock"
+psrun "$LB/lb" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lb.txt"
+psrun "$LB/lb1" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lb1.txt"
+psrun "$LB/lb1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lb1-c.txt"
+has    "bun's binary lockfile is named as not read"    'npm malware not fully checked: 1 lockfile could not be read ~/code/app/bun\.lockb' "$WORK/lb1.txt"
+hasnot "and the summary is not clean over it"          'NO FINDINGS IN THIS SCAN' "$WORK/lb1-c.txt"
+has    "beside other findings it is named too"         '1 lockfile could not be read, so this is not the full list\. ~/code/app/bun\.lockb' "$WORK/lb.txt"
+hasnot "but not beside a bun.lock, which bun reads first" 'code/both/bun\.lockb' "$WORK/lb.txt"
+has    "a deno.lock is read"                           '~/code/deno/deno\.lock axios 1\.14\.1 \(Axios takeover' "$WORK/lb.txt"
+has    "and its scoped packages"                       '~/code/deno/deno\.lock @keyv/redis 6\.0\.0 \(keyv account takeover' "$WORK/lb.txt"
 # Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
 # folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
 # version deep down is not a hit.

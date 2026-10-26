@@ -532,6 +532,9 @@ $Found = New-Object System.Collections.Generic.List[string]
 # project checks, and linked settings files, which are checked like the files but are not files.
 $LinkSettings = New-Object System.Collections.Generic.List[string]
 $LockFiles = New-Object System.Collections.Generic.List[string]
+# bun's binary lockfile (bun.lockb, its default before bun 1.2) can't be read: it is named as not read,
+# unless a bun.lock is beside it, which bun reads first (its lockfile loader) and which is read here.
+$LockBin = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
 $AiderFiles = New-Object System.Collections.Generic.List[string]
@@ -713,7 +716,8 @@ function Scan-Home([string]$dir, [int]$depth) {
       Add-Plain $Found $e
       $script:ScanN++
       if ($script:ScanN % 4 -eq 1) { Progress "Checking $(Short $path)" }
-    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock') { Add-Plain $LockFiles $e }
+    } elseif ($name -ceq 'package-lock.json' -or $name -ceq 'npm-shrinkwrap.json' -or $name -ceq 'pnpm-lock.yaml' -or $name -ceq 'yarn.lock' -or $name -ceq 'bun.lock' -or $name -ceq 'deno.lock') { Add-Plain $LockFiles $e }
+    elseif ($name -ceq 'bun.lockb') { Add-Plain $LockBin $e }
     elseif ($name -ceq '.aider.chat.history.md' -or $name -ceq '.aider.input.history') { Add-Plain $AiderFiles $e }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { Add-Plain $TaskFiles $e }
     elseif (Is-WormFile $parent $name) { Add-Plain $WormFiles $e }
@@ -5648,6 +5652,7 @@ function Npm-Scan([string]$where, [string]$text, [string]$kind) {
 # A lockfile the scan found but can't read leaves npm not fully checked, as the cache does.
 $N_LOCK = 0; $NpmSlow = 0; $NpmUnread = 0; $LockUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $LockFiles) { try { $t = [IO.File]::ReadAllText($f) } catch { $LockUnread.Add($f); continue }; $N_LOCK++; Npm-Scan $f $t ([IO.Path]::GetFileName($f)) }
+foreach ($f in $LockBin) { if (-not (Exists (J ([IO.Path]::GetDirectoryName($f)) 'bun.lock'))) { $LockUnread.Add($f) } }
 # Global installs: npm's own folders, the version managers (nvm, volta, fnm, asdf, mise, nodenv,
 # nvm-windows), pnpm's and bun's global folders, and npx's cache, read from each package's package.json.
 $NpmRoots = New-Object System.Collections.Generic.List[string]
@@ -6106,7 +6111,7 @@ $NmUnread = New-Object System.Collections.Generic.List[string]
 $NpmInstRows = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($r in $NpmRows) {
   if ((Incident-Level $r[2]) -ne 'act') { continue }
-  if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
+  if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|deno\.lock)$') {
     $isp = $r[1].LastIndexOf(' ')
     $li = Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)
     if ($li -ceq 'yes') { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]); [void]$NpmInstRows.Add("$($r[0])|$($r[1])") }
@@ -6786,7 +6791,7 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   } else { Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}a bad version to update$cRst" }
   foreach ($r in $NpmRows) {
     if ($r[0].EndsWith($NpmCacheTag)) { $w = "downloaded into npm's cache" }
-    elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
+    elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|deno\.lock)$') {
       $w = 'listed in this lockfile'; if ($NpmInstRows.Contains("$($r[0])|$($r[1])")) { $w = 'installed from this lockfile' }
     }
     else { $w = 'installed' }

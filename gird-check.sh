@@ -1022,7 +1022,7 @@ EOF
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
-       -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
+       -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock -o -name bun.lockb -o -name deno.lock \
        -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.vscode/settings.json' "${_pf[@]}" \) "${_ls[@]}" \) -o \
@@ -1491,7 +1491,10 @@ ak_link() { # link
 # Code writes .claude/settings.local.json itself.
 AK_LINKS=$(printf '%s\n' "$FOUND" | sed -n 's/^[LS] //p' | while IFS= read -r _f; do case "$_f" in ("$H"/.ssh/*) ;; (*) ak_link "$_f" && printf '%s\n' "$_f" ;; esac; done)
 FOUND=$(printf '%s\n' "$FOUND" | grep -v '^[LSN] ')
-LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$')
+LOCKFILES=$(printf '%s\n' "$FOUND" | grep -E '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|deno\.lock)$')
+# bun's binary lockfile (bun.lockb, its default before bun 1.2) can't be read: it is named as not read,
+# unless a bun.lock is beside it, which bun reads first (its lockfile loader) and which is read here.
+LOCKB=$(printf '%s\n' "$FOUND" | grep -E '/bun\.lockb$' | while IFS= read -r _f; do [ -e "${_f%/*}/bun.lock" ] || printf '%s\n' "$_f"; done)
 TASK_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/tasks\.json$')
 # Files worms plant in a project, from data/planted.tsv. A name only a worm uses counts on its own. A
 # name projects use too (setup.mjs) counts in a project that also holds one of those, or when the file
@@ -1556,7 +1559,7 @@ VSC_SETTINGS=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.vscode/setting
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
-FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|deno\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
 ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -6290,6 +6293,9 @@ while IFS= read -r f; do
 done <<EOF
 $LOCKFILES
 EOF
+# A bun.lockb with no bun.lock beside it is a lockfile not read too (LOCKB).
+[ -n "$LOCKB" ] && LOCK_UNREAD="$LOCK_UNREAD$LOCKB
+"
 N_LOCK_UNREAD=$(count_lines "$LOCK_UNREAD")
 # One awk for up to 100 lockfiles at a time: each awk loads the whole list of bad versions first,
 # which once per lockfile costs a home with hundreds of projects seconds. awk stops at a file it can't
@@ -6790,7 +6796,7 @@ NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "; NM_UNREAD=""; NPM_INST_ROWS=""
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
   case "$_f" in
-    */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
+    */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock|*/deno.lock)
       _li=1; _lu=""
       while IFS= read -r _rf; do
         [ -n "$_rf" ] || continue
@@ -7821,7 +7827,7 @@ if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
     emit "        $(short "$f")"
     case "$f" in
       *"(npm's download cache)") _w="downloaded into npm's cache" ;;
-      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
+      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock|*/deno.lock)
         _w="listed in this lockfile"
         case "
 $NPM_INST_ROWS" in *"
