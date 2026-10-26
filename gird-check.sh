@@ -917,13 +917,58 @@ JXA
   fi
 }
 
-# An npm publish from this folder would ship .claude/ unless something excludes it.
-npm_would_ship() {
+# Whether an ignore file keeps a project's .claude/<file> out, read in order as git and npm read one: an
+# entry that is .claude itself (with a leading / or **/, and a trailing / or not) leaves the folder out,
+# and .claude/* , .claude/**, .claude/<file> or <file> the file; a ! entry brings each back. An entry
+# for something else inside .claude, such as .claude/worktrees/, leaves the file in.
+ignores_claude() { # ignore-file settings-file-name
+  { tr -d '\r' < "$1"; } 2>/dev/null | F=$2 awk '
+    { sub(/[ \t]+$/, "") }
+    /^#/ || $0 == "" { next }
+    { e = $0; neg = 0; if (substr(e, 1, 1) == "!") { neg = 1; e = substr(e, 2) }
+      sub(/^\//, "", e); sub(/^\*\*\//, "", e)
+      if (e == ".claude" || e == ".claude/") dx = !neg
+      else if (e == ".claude/*" || e == ".claude/**" || e == ".claude/" ENVIRON["F"] || e == ENVIRON["F"]) fx = !neg }
+    END { exit !(dx || fx) }'
+}
+# Whether a .json file's top-level object has this key, from its text as one line with the spaces
+# removed, read as json_top reads it: prints 1 when it does.
+json_has() { # key
+  K=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; hp = 0; pv = ""; one = 1; v = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) {
+          if (hp && dep == 1 && pv == ENVIRON["K"] && q[i] ~ /^:/) v = 1
+          hp = 0
+          dep += split(q[i], a, "{") + split(q[i], b, "[") - split(q[i], c, "}") - split(q[i], d, "]")
+          if (i < nq) { st = 1; one = 1 }
+          continue
+        }
+        if (dep == 1) pv = one ? q[i] : ""
+        if (i < nq && trail(q[i]) % 2 == 1) { one = 0; continue }
+        if (dep == 1) hp = 1
+        st = 0
+      }
+      print v; exit
+    }'
+}
+# An npm publish from this folder would ship .claude/<file> unless something leaves it out: the
+# package's own private or files setting (at the top of package.json, not inside another setting), or
+# its .npmignore, or its .gitignore when it has no .npmignore, as npm reads them.
+npm_would_ship() { # project-folder settings-file-name
   [ -f "$1/package.json" ] || return 1
-  grep -qE '"private"[[:space:]]*:[[:space:]]*true' "$1/package.json" && return 1
-  grep -qE '"files"[[:space:]]*:' "$1/package.json" && return 1
-  if [ -f "$1/.npmignore" ]; then grep -qE '(^|/)\.claude' "$1/.npmignore" && return 1; return 0; fi
-  if [ -f "$1/.gitignore" ]; then grep -qE '\.claude' "$1/.gitignore" && return 1; fi
+  if ! too_big "$1/package.json"; then
+    _pj=$(flat "$1/package.json" | tr -d '[:space:]')
+    [ "$(printf '%s' "$_pj" | json_top private)" = true ] && return 1
+    [ "$(printf '%s' "$_pj" | json_has files)" = 1 ] && return 1
+  fi
+  if [ -f "$1/.npmignore" ]; then ignores_claude "$1/.npmignore" "$2" && return 1; return 0; fi
+  if [ -f "$1/.gitignore" ]; then ignores_claude "$1/.gitignore" "$2" && return 1; fi
   return 0
 }
 
@@ -2393,7 +2438,7 @@ while IFS= read -r f; do
   command_secret "$f" || continue
   N_ALLOW=$((N_ALLOW + 1)); [ -n "$ALLOW_FIRST" ] || ALLOW_FIRST=$f
   progress x "Saved Claude Code command with a key: $(short "$f")"
-  npm=0; npm_would_ship "${f%/.claude/*}" && { npm=1; N_ALLOW_NPM=$((N_ALLOW_NPM + 1)); }
+  npm=0; npm_would_ship "${f%/.claude/*}" "${f##*/}" && { npm=1; N_ALLOW_NPM=$((N_ALLOW_NPM + 1)); }
   ALLOW_ROWS="$ALLOW_ROWS$npm|$(rowsafe "$f")
 "
 done <<EOF

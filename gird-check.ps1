@@ -484,15 +484,56 @@ function Json-Servers([string]$f) {
 }
 
 # An npm publish from this folder would ship .claude\ unless something excludes it.
-function Npm-WouldShip([string]$dir) {
-  $pkg = J $dir 'package.json'; $t = Read-Text $pkg
-  if ($null -eq $t) { return $false }
-  if ($t -cmatch '"private"\s*:\s*true') { return $false }
-  if ($t -cmatch '"files"\s*:') { return $false }
+# Whether an ignore file's text keeps a project's .claude/<file> out, read in order as git and npm read
+# one: an entry that is .claude itself (with a leading / or **/, and a trailing / or not) leaves the
+# folder out, and .claude/* , .claude/**, .claude/<file> or <file> the file; a ! entry brings each back.
+# An entry for something else inside .claude, such as .claude/worktrees/, leaves the file in. The same
+# as gird-check.sh's ignores_claude.
+function Ignores-Claude([string]$t, [string]$file) {
+  $dx = $false; $fx = $false
+  foreach ($line in ($t -split "`n")) {
+    $e = $line -replace '\r', '' -replace '[ \t]+$', ''
+    if (-not $e -or $e.StartsWith('#')) { continue }
+    $neg = $e.StartsWith('!'); if ($neg) { $e = $e.Substring(1) }
+    if ($e.StartsWith('/')) { $e = $e.Substring(1) }
+    if ($e.StartsWith('**/')) { $e = $e.Substring(3) }
+    if ($e -ceq '.claude' -or $e -ceq '.claude/') { $dx = -not $neg }
+    elseif ($e -ceq '.claude/*' -or $e -ceq '.claude/**' -or $e -ceq ('.claude/' + $file) -or $e -ceq $file) { $fx = -not $neg }
+  }
+  $dx -or $fx
+}
+# Whether a .json file's top-level object has this key, its text read as Json-Top reads it.
+function Json-Has([string]$f, [string]$t, [string]$key) {
+  $l = $t -replace '[ \t\n\v\f\r]', ''
+  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $false }
+  $dep = 0; $pend = $null
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') { if ($dep -eq 1) { $pend = $x } else { $pend = $null }; continue }
+    if ($dep -eq 1 -and $null -ne $pend -and $pend -ceq ('"' + $key + '"') -and $x.StartsWith(':')) { return $true }
+    $pend = $null
+    if ($c -eq '{' -or $c -eq '[') { $dep++ } elseif ($c -eq '}' -or $c -eq ']') { $dep-- }
+  }
+  $false
+}
+# An npm publish from this folder would ship .claude/<file> unless something leaves it out: the
+# package's own private or files setting (at the top of package.json, not inside another setting), or
+# its .npmignore, or its .gitignore when it has no .npmignore, as npm reads them. The same as
+# gird-check.sh's npm_would_ship.
+function Npm-WouldShip([string]$dir, [string]$file) {
+  $pkg = J $dir 'package.json'
+  if (-not (Is-File $pkg)) { return $false }
+  if (-not (Too-Big $pkg)) {
+    $t = Flat-Text $pkg
+    if ($null -ne $t) {
+      if ((Json-Top $pkg $t 'private') -eq 'true') { return $false }
+      if (Json-Has $pkg $t 'files') { return $false }
+    }
+  }
   $ni = Read-Text (J $dir '.npmignore')
-  if ($null -ne $ni) { return -not ($ni -cmatch '(?m)(^|/)\.claude') }
+  if ($null -ne $ni) { return -not (Ignores-Claude $ni $file) }
   $gi = Read-Text (J $dir '.gitignore')
-  if ($null -ne $gi -and $gi -cmatch '\.claude') { return $false }
+  if ($null -ne $gi -and (Ignores-Claude $gi $file)) { return $false }
   $true
 }
 
@@ -1854,7 +1895,7 @@ foreach ($f in $allowAll) {
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
   $marker = $Sep + '.claude' + $Sep
-  $npm = Npm-WouldShip $f.Substring(0, $f.LastIndexOf($marker))
+  $npm = Npm-WouldShip $f.Substring(0, $f.LastIndexOf($marker)) ([IO.Path]::GetFileName($f))
   if ($npm) { $N_ALLOW_NPM++ }
   $AllowRows.Add(@($f, $npm))
 }

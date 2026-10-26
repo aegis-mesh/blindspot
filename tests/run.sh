@@ -1023,6 +1023,28 @@ has    "and one in Codex's http_headers"              'Codex ~/\.codex/config\.t
 has    "and one in a YAML headers map"                'Goose ~/[^ ]+/config\.yaml [^,]*, token in the file' "$WORK/hdr.txt"
 has    "near miss: a header that names an environment variable is not a token" '~/code/b/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdr.txt"
 has    "near miss: a header that is not a secret is not a token" '~/code/c/\.mcp\.json 1 server( [^,]|$)' "$WORK/hdr.txt"
+# An npm publish ships .claude/settings.local.json unless package.json's own private or files setting,
+# at its top level, or an ignore entry for .claude itself or the file, leaves it out. An entry for
+# something else in .claude, a files key inside another setting, and a ! entry that brings the file back
+# do not.
+for n in n1 n2 n3 n4 n5 n6 n7 n8; do mkdir -p "$WORK/nps/code/$n/.claude"; printf '{"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 make)"]}}\n' > "$WORK/nps/code/$n/.claude/settings.local.json"; printf '{"name":"%s","version":"1.0.0"}\n' "$n" > "$WORK/nps/code/$n/package.json"; done
+printf 'node_modules\n.claude/worktrees/\n' > "$WORK/nps/code/n1/.gitignore"
+printf '{"name":"n2","version":"1.0.0","eslintConfig":{"overrides":[{"files":["*.js"]}],"files":["x"]}}\n' > "$WORK/nps/code/n2/package.json"
+printf '{"name":"n3","version":"1.0.0","files":["dist"]}\n' > "$WORK/nps/code/n3/package.json"
+printf 'node_modules\n.claude/\n' > "$WORK/nps/code/n4/.gitignore"
+printf '.claude/*\n!.claude/settings.local.json\n' > "$WORK/nps/code/n5/.gitignore"
+printf '{"name":"n6","version":"1.0.0","config":{"private":true}}\n' > "$WORK/nps/code/n6/package.json"
+printf '/.claude\n' > "$WORK/nps/code/n7/.npmignore"
+printf '**/.claude/settings.local.json\n' > "$WORK/nps/code/n8/.gitignore"
+HOME="$WORK/nps" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/nps.txt"
+has    "a .gitignore entry for .claude/worktrees/ does not keep the settings file out of an npm publish" 'code/n1/\.claude/settings\.local\.json A saved command contains a key\. An npm publish from this folder would include it' "$WORK/nps.txt"
+has    "nor does a files key inside another setting"  'code/n2/\.claude/settings\.local\.json A saved command contains a key\. An npm publish from this folder would include it' "$WORK/nps.txt"
+has    "nor a private key inside another setting"     'code/n6/\.claude/settings\.local\.json A saved command contains a key\. An npm publish from this folder would include it' "$WORK/nps.txt"
+has    "and a ! entry brings the file back"           'code/n5/\.claude/settings\.local\.json A saved command contains a key\. An npm publish from this folder would include it' "$WORK/nps.txt"
+hasnot "near miss: a top-level files list keeps it out" 'code/n3/\.claude/settings\.local\.json A saved command contains a key\. An npm publish' "$WORK/nps.txt"
+hasnot "near miss: a .claude/ entry keeps it out"     'code/n4/\.claude/settings\.local\.json A saved command contains a key\. An npm publish' "$WORK/nps.txt"
+hasnot "near miss: an .npmignore entry for /.claude keeps it out" 'code/n7/\.claude/settings\.local\.json A saved command contains a key\. An npm publish' "$WORK/nps.txt"
+hasnot "near miss: an entry for the file itself keeps it out" 'code/n8/\.claude/settings\.local\.json A saved command contains a key\. An npm publish' "$WORK/nps.txt"
 # Hooks that run nothing are not commands: an event with an empty list, and hooks in a file whose
 # disableAllHooks is true, unless the project's settings.local.json, which comes first, sets it back to
 # false. It turns off the status line too, not the credential helpers, and counts only at the top of the
