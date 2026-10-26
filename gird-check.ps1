@@ -6102,12 +6102,14 @@ function Lock-Installed([string]$f, [string]$n, [string]$v) {
 $NpmInst = 0; $LockProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $NpmInstTags = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $NmUnread = New-Object System.Collections.Generic.List[string]
+# $NpmInstRows: the lockfile rows found installed ("lockfile|name version"), which section 5 says.
+$NpmInstRows = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($r in $NpmRows) {
   if ((Incident-Level $r[2]) -ne 'act') { continue }
   if ($r[0] -cmatch '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
     $isp = $r[1].LastIndexOf(' ')
     $li = Lock-Installed $r[0] $r[1].Substring(0, $isp) $r[1].Substring($isp + 1)
-    if ($li -ceq 'yes') { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) }
+    if ($li -ceq 'yes') { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]); [void]$NpmInstRows.Add("$($r[0])|$($r[1])") }
     else { [void]$LockProj.Add([IO.Path]::GetDirectoryName($r[0])); if ($li -ceq 'unread' -and -not $NmUnread.Contains($LiUnread)) { $NmUnread.Add($LiUnread) } }
   } else { $NpmInst = 1; [void]$NpmInstTags.Add($r[2]) }
 }
@@ -6784,7 +6786,9 @@ if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $NPM_UPD -eq 1) {
   } else { Pair "$cYel!$cRst" 'npm malware' 16 "${cYel}a bad version to update$cRst" }
   foreach ($r in $NpmRows) {
     if ($r[0].EndsWith($NpmCacheTag)) { $w = "downloaded into npm's cache" }
-    elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') { $w = 'listed in this lockfile' }
+    elseif ($r[0] -match '[/\\](package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock)$') {
+      $w = 'listed in this lockfile'; if ($NpmInstRows.Contains("$($r[0])|$($r[1])")) { $w = 'installed from this lockfile' }
+    }
     else { $w = 'installed' }
     Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), $w$cRst"
   }

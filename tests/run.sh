@@ -1279,6 +1279,15 @@ chmod 755 "$BI/unr/code/app/node_modules"
 has    "an install in bun's isolated store is found" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso.txt"
 has    "and a scoped package's build with other peer dependencies there" 'ACT NOW: SIGNS OF NPM MALWARE' "$BI/iso2.txt"
 has    "a node_modules that can't be read is named, never read as no install" '1 folder could not be read, so whether these versions were installed is not known: ~/code/app/node_modules ' "$BI/unr.txt"
+# A lockfile's row says whether its version was found installed, so an installed row and a lockfile-only
+# one read differently.
+LW=$WORK/lw; rm -rf "$LW"; mkdir -p "$LW/code/k" "$LW/code/w/node_modules/claud-code" "$LW/AppData/Roaming" "$LW/AppData/Local/Temp"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/@keyv/bigmap": {\n      "version": "6.0.0"\n    }\n  }\n}\n' > "$LW/code/k/package-lock.json"
+printf '{\n  "lockfileVersion": 3,\n  "packages": {\n    "node_modules/claud-code": {\n      "version": "1.0.3"\n    }\n  }\n}\n' > "$LW/code/w/package-lock.json"
+printf '{"name":"claud-code","version":"1.0.3"}\n' > "$LW/code/w/node_modules/claud-code/package.json"
+HOME="$LW" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/lw.txt"
+has    "a lockfile's version found installed says so" '~/code/w/package-lock\.json claud-code 1\.0\.3 \(SANDWORM_MODE worm, February 2026\), installed from this lockfile' "$WORK/lw.txt"
+has    "and one only listed there says only that"     '~/code/k/package-lock\.json @keyv/bigmap 6\.0\.0 \(keyv account takeover, August 2026\), listed in this lockfile' "$WORK/lw.txt"
 # Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
 # folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
 # version deep down is not a hit.

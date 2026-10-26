@@ -6785,7 +6785,8 @@ EOF
 }
 # NPM_INST_TAGS: the act-level incidents with a hit found installed, whose own fixes are worded as fact.
 # NM_UNREAD: the folders that kept the install check from telling whether a lockfile's hit was installed.
-NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "; NM_UNREAD=""
+# NPM_INST_ROWS: the lockfile rows found installed ("lockfile<TAB>name version"), which section 5 says.
+NPM_INST=0; NPM_LOCKPROJ=""; NPM_INST_TAGS=" "; NM_UNREAD=""; NPM_INST_ROWS=""
 while IFS="$TAB" read -r _f _p _t; do
   [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] || continue
   case "$_f" in
@@ -6799,7 +6800,8 @@ while IFS="$TAB" read -r _f _p _t; do
       done <<EOF
 $(lock_raw "$_f")
 EOF
-      if [ "$_li" -eq 0 ]; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "
+      if [ "$_li" -eq 0 ]; then NPM_INST=1; NPM_INST_TAGS="$NPM_INST_TAGS$_t "; NPM_INST_ROWS="$NPM_INST_ROWS$_f$TAB$_p
+"
       else NPM_LOCKPROJ="$NPM_LOCKPROJ${_f%/*}
 "; [ -n "$_lu" ] && NM_UNREAD="$NM_UNREAD$_lu
 "; fi ;;
@@ -7819,7 +7821,12 @@ if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; then
     emit "        $(short "$f")"
     case "$f" in
       *"(npm's download cache)") _w="downloaded into npm's cache" ;;
-      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock) _w="listed in this lockfile" ;;
+      */package-lock.json|*/npm-shrinkwrap.json|*/pnpm-lock.yaml|*/yarn.lock|*/bun.lock)
+        _w="listed in this lockfile"
+        case "
+$NPM_INST_ROWS" in *"
+$f$TAB$p
+"*) _w="installed from this lockfile" ;; esac ;;
       *) _w="installed" ;;
     esac
     emit "          ${p} ${DIM}($(npm_label "$t")), ${_w}${RST}"
