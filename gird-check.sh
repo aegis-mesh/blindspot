@@ -1751,8 +1751,15 @@ TAB=$(printf '\t')
 # A file that can't be opened reads as nothing, and silently: bash reports a failed < itself, with the
 # raw path, before a 2>/dev/null after it takes effect, so the redirect sits inside the braces. The
 # same goes for every read of a scanned path below.
+# VS Code's JSON scanner (base/common/json.ts) also ends a line at U+2028 and U+2029, and reads U+00A0,
+# U+1680, U+2000 to U+200B, U+202F, U+205F, U+3000 and U+FEFF as whitespace. As UTF-8 bytes, sed makes
+# the first two line breaks and the rest a space, in strings too, as a plain space there is, which the
+# matchers ignore: one sed pass is linear, where a regex split or gsub with many matches in awk is not.
+FLAT_SED="s/$(printf '\342\200[\250\251]')/\\
+/g
+$(printf 's/\302\240/ /g\ns/\341\232\200/ /g\ns/\342\200[\200\201\202\203\204\205\206\207\210\211\212\213\257]/ /g\ns/\342\201\237/ /g\ns/\343\200\200/ /g\ns/\357\273\277/ /g')"
 flat() {
-  { tr '\r\t' '\n ' < "$1"; } 2>/dev/null | awk '
+  { tr '\r\t' '\n ' < "$1"; } 2>/dev/null | sed "$FLAT_SED" | awk '
     # How many backslashes s ends with. A match anchored at the last other character starts once per
     # run of backslashes, where /\\+$/ restarts at every backslash of a long run.
     function trail(s) {
@@ -2057,11 +2064,16 @@ while IFS= read -r f; do
 done <<EOF
 $ALLOW_FILES
 EOF
+# VS Code reads a task's runOn without case (taskConfiguration.ts, RunOnOptions.fromString). folderOpen
+# runs it when the folder opens; worktreeCreated when VS Code creates a worktree of the project (its git
+# extension's createWorktree runs every such task, and its Agents window runs those marked inAgents).
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
-  _t=$(flat "$f")
-  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"folderOpen"' && auto_row "$f" "run a task when the folder opens in VS Code or Cursor" "$_t"
+  _t=$(flat "$f"); _w=""
+  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo][Ll][Dd][Ee][Rr][Oo][Pp][Ee][Nn]"' && _w="run a task when the folder opens in VS Code or Cursor"
+  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ww][Oo][Rr][Kk][Tt][Rr][Ee][Ee][Cc][Rr][Ee][Aa][Tt][Ee][Dd]"' && _w="${_w:+$_w, }run a task when VS Code creates a worktree of the project"
+  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
 done <<EOF
 $TASK_FILES
 EOF

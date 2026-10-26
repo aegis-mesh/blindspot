@@ -1271,10 +1271,15 @@ $RxBaseUrl = New-Object regex('"ANTHROPIC_BASE_URL"\s*:\s*"(?=[^"]*[^"\s])(?!([A
 # versions take it only from the person's own or managed settings (Claude Code's settings docs). It
 # reads defaultMode only inside permissions (Aa-Hit); this regex spares the files that never name it.
 $RxBypass = New-Object regex('"defaultMode"\s*:\s*"bypassPermissions"', $RxOpt, $RxTimeout)
-$RxFolderOpen = New-Object regex('"runOn"\s*:\s*"folderOpen"', $RxOpt, $RxTimeout)
+# VS Code reads a task's runOn without case (taskConfiguration.ts, RunOnOptions.fromString). folderOpen
+# runs it when the folder opens; worktreeCreated when VS Code creates a worktree of the project (its git
+# extension's createWorktree runs every such task, and its Agents window runs those marked inAgents).
+$RxFolderOpen = New-Object regex('"runOn"\s*:\s*"(?i:folderopen)"', $RxOpt, $RxTimeout)
+$RxWorktreeTask = New-Object regex('"runOn"\s*:\s*"(?i:worktreecreated)"', $RxOpt, $RxTimeout)
 # A string (kept, group 1), a // comment, or a /* */ comment (dropped; one left open runs to the end).
-# A \ escapes one character, so after \ and CRLF the LF still ends the string, as in VS Code.
-$RxJsonc = New-Object regex('("(?:[^"\\\r\n]|\\[\s\S])*(?:"|(?=[\r\n])|$))|//[^\r\n]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
+# A \ escapes one character, so after \ and CRLF the LF still ends the string, as in VS Code. U+2028
+# and U+2029 end a line as well, as VS Code's JSON scanner reads them.
+$RxJsonc = New-Object regex('("(?:[^"\\\r\n\u2028\u2029]|\\[\s\S])*(?:"|(?=[\r\n\u2028\u2029])|$))|//[^\r\n\u2028\u2029]*|/\*(?:[\s\S]*?\*/|[\s\S]*)', $RxOpt, $RxTimeout)
 # Inside strings, \uXXXX for a printable character other than " and \, and \/, are written as that
 # character, as JSON reads them: "\u0068ooks" is "hooks", and a setting can't hide behind its escapes.
 # Each \\ is taken whole, so escapes pair up as in JSON. Only a file with such an escape takes this path.
@@ -1292,7 +1297,9 @@ function Flat-Text([string]$f) {
   $t = Read-Text $f; if ($null -eq $t) { return $null }
   try {
     if ($t.Contains('\u') -or $t.Contains('\/')) { $o = $RxJsonc.Replace($t, $JsoncEsc) } else { $o = $RxJsonc.Replace($t, '$1') }
-    $o -replace '[\r\n\t]', ' '
+    # VS Code's JSON scanner also reads these as whitespace (U+2028 and U+2029 as line ends): each is a
+    # space here, in strings too, as gird-check.sh's flat makes them.
+    $o -replace '[\r\n\t\u00A0\u1680\u2000-\u200B\u2028\u2029\u202F\u205F\u3000\uFEFF]', ' '
   } catch { Mark-Slow $f; $null }
 }
 function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false } }
@@ -1346,7 +1353,7 @@ function Aa-Keys([string]$f, [string]$l, $keys) {
 # as Aa-Keys reads them, so the same key inside another setting's object is not it. The last one wins,
 # as in JSON.parse. The same as gird-check.sh's json_top.
 function Json-Top([string]$f, [string]$t, [string]$key) {
-  $l = $t -replace '\s', ''
+  $l = $t -replace '[ \t\n\v\f\r]', ''
   try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return '' }
   $dep = 0; $pend = $null; $v = ''
   foreach ($m in $ms) {
@@ -1434,7 +1441,7 @@ function Aa-Hit([string]$f, $pats) {
   $ml = ''
   foreach ($line in $lines) {
     # TOML's whitespace is a space or a tab: as gird-check.sh's tr, no other character is taken out.
-    if ($toml) { $l = $line -replace '[ \t\r\f\v]', '' } else { $l = $line -replace '\s', '' }
+    if ($toml) { $l = $line -replace '[ \t\r\f\v]', '' } else { $l = $line -replace '[ \t\n\v\f\r]', '' }
     if ($toml) { $s0 = $ml; $ml = Toml-Ml $l $ml; if ($s0) { continue } }
     # A quoted key ("approval_policy" or 'approval_policy') is the same key as the bare one, in TOML.
     if ($toml) { $l = $l -replace '^("([A-Za-z0-9_-]+)"|''([A-Za-z0-9_-]+)'')=', '$2$3=' }
@@ -1527,7 +1534,11 @@ foreach ($f in $AllowFiles) {
 foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/' -or (Too-Big $f)) { continue }
   $t = Flat-Text $f
-  if ($null -ne $t -and (Flat-Match $f $t $RxFolderOpen)) { Auto-Row $f 'run a task when the folder opens in VS Code or Cursor' $t }
+  if ($null -eq $t) { continue }
+  $w = New-Object System.Collections.Generic.List[string]
+  if (Flat-Match $f $t $RxFolderOpen) { $w.Add('run a task when the folder opens in VS Code or Cursor') }
+  if (Flat-Match $f $t $RxWorktreeTask) { $w.Add('run a task when VS Code creates a worktree of the project') }
+  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
 }
 # A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" or "autopilot"
 # starts new Copilot chats that run every tool call without asking, and the setting

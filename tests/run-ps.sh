@@ -1014,6 +1014,47 @@ has    "and a worm file in it is found" '~/p/cdir/\.claude/router_runtime\.js a 
 has    "a .vscode folder that is a link is read through" '~/p/vdir/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
 has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
 hasnot "a .claude link to nothing reads as nothing" 'p/gone/' "$WORK/hid.txt"
+# VS Code reads a task's runOn without case, and runs worktreeCreated tasks when it creates a worktree
+# of the project. Its JSON scanner ends a // comment at U+2028 and U+2029 too, and reads a no-break
+# space as whitespace: the scripts read tasks and settings the same way, and agree.
+for p in t1 t2 t3 t4 t5 t6 t7 t8 v1 v2 v3; do mkdir -p "$WORK/vsf/code/$p/.vscode"; done; mkdir -p "$WORK/vsf/AppData/Local/Temp"
+VT='{"version": "2.0.0", "tasks": [{"label": "build", "type": "shell", "command": "make", %b}]}\n'
+printf "$VT" '"runOptions": {"runOn": "FolderOpen"}' > "$WORK/vsf/code/t1/.vscode/tasks.json"
+printf "$VT" '"runOptions": {"runOn": "folderopen"}' > "$WORK/vsf/code/t2/.vscode/tasks.json"
+printf "$VT" '"runOptions": {"runOn":\302\240"folderOpen"}' > "$WORK/vsf/code/t3/.vscode/tasks.json"
+printf "$VT" '// note\342\200\250"runOptions": {"runOn": "folderOpen"}' > "$WORK/vsf/code/t4/.vscode/tasks.json"
+printf "$VT" '"runOptions": {"runOn": "worktreeCreated"}' > "$WORK/vsf/code/t5/.vscode/tasks.json"
+printf "$VT" '"inAgents": true, "runOptions": {"runOn": "WORKTREECREATED"}' > "$WORK/vsf/code/t6/.vscode/tasks.json"
+printf "$VT" '"runOptions": {"runOn": "default"}' > "$WORK/vsf/code/t7/.vscode/tasks.json"
+printf "$VT" '"detail": "runOn folderOpen", // "runOptions": {"runOn": "folderOpen"}\n"x": 1' > "$WORK/vsf/code/t8/.vscode/tasks.json"
+printf '{\n  // x\342\200\251"chat.permissions.default": "autopilot"\n}\n' > "$WORK/vsf/code/v1/.vscode/settings.json"
+printf '{"chat.permissions.default":\302\240"autopilot"}\n' > "$WORK/vsf/code/v2/.vscode/settings.json"
+printf '{\n  // x "chat.permissions.default": "autopilot"\n}\n' > "$WORK/vsf/code/v3/.vscode/settings.json"
+psrun "$WORK/vsf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/vsf.txt"
+has    "a runOn value in another case is read, as VS Code reads it" '~/code/t1/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/vsf.txt"
+has    "and in lower case"                            '~/code/t2/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/vsf.txt"
+has    "a no-break space before the value is whitespace, as in VS Code" '~/code/t3/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/vsf.txt"
+has    "a // comment ends at U+2028, as in VS Code"   '~/code/t4/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/vsf.txt"
+has    "a worktreeCreated task, which VS Code runs when it creates a worktree, is listed" '~/code/t5/\.vscode/tasks\.json Set to run a task when VS Code creates a worktree of the project\.' "$WORK/vsf.txt"
+has    "and in another case"                          '~/code/t6/\.vscode/tasks\.json Set to run a task when VS Code creates a worktree of the project\.' "$WORK/vsf.txt"
+hasnot "near miss: a default runOn is not listed"     'code/t7/' "$WORK/vsf.txt"
+hasnot "near miss: a commented-out runOn and a string that names it are not listed" 'code/t8/' "$WORK/vsf.txt"
+has    "a VS Code setting after a comment that U+2029 ends is read" '~/code/v1/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/vsf.txt"
+has    "and one after a no-break space"               '~/code/v2/\.vscode/settings\.json Set to run every Copilot tool call without asking' "$WORK/vsf.txt"
+hasnot "near miss: a setting inside a // comment is not read" 'code/v3/' "$WORK/vsf.txt"
+# A tasks.json of 100,000 tasks with U+2028 and no-break spaces between their tokens, the folderOpen task
+# last: read whole, in linear time.
+mkdir -p "$WORK/vsfbig/p/.vscode" "$WORK/vsfbig/AppData/Local/Temp"
+python3 - "$WORK/vsfbig/p/.vscode/tasks.json" <<'PY3'
+import sys
+tasks = ','.join('{"label":"t%d",\u00a0"command":\u2028"make"}' % i for i in range(100000))
+open(sys.argv[1], 'w', encoding='utf-8').write('{"tasks":[' + tasks + ',{"label":"last","runOptions":{"runOn":"folderOpen"},"command":"make"}]}')
+PY3
+# gird-check.ps1 bounds each pattern in time; the bound is raised here, as for the large settings file
+# below, so the test is about reading it whole.
+T0=$(date +%s); psrun "$WORK/vsfbig" GIRD_CHECK_REGEX_TIMEOUT_MS=60000 -- -Offline > "$WORK/vsfbig.txt" 2>&1; T=$(( $(date +%s) - T0 ))
+has    "a tasks.json full of U+2028 and no-break spaces is read whole" 'p/\.vscode/tasks\.json' "$WORK/vsfbig.txt"
+if [ "$T" -le 60 ]; then ok "and in linear time, with those characters" "${T}s"; else bad "and in linear time, with those characters" "took ${T}s"; fi
 # A settings, tasks or planted file bigger than 16 MB, here a link to a large file, is not read: it would
 # hold the scan for minutes. The settings and tasks files are named as not read, never read clean, and
 # what the large file holds at its end is not reported.
