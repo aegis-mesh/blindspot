@@ -15,9 +15,10 @@
 #     GHSA-8g63-53c9-65j2, names them as compromised with tensorlake 0.5.144. No malware entry names them,
 #     so each has a skip line below for tools/check-advisories.sh.
 #   TanStack wave, May 2026: every npm version in the affected-packages list of Wiz's post on it,
-#     each also named by a GitHub or OpenSSF malware advisory: the 42 @tanstack packages
-#     (GHSA-g7cv-rxg3-hmpx) and the packages the worm spread to (tanstack), the OpenSearch client
-#     (GHSA-298w-vvm4-ww55, opensearch), and the @mistralai builds (GHSA-3q49-cfcf-g5fm,
+#     each also named by a GitHub or OpenSSF malware advisory: the 42 @tanstack packages (a GitHub
+#     malware advisory for each, such as GHSA-5v49-5jh3-j7wg, naming the versions TanStack's own
+#     advisory, GHSA-g7cv-rxg3-hmpx, names) and the packages the worm spread to (tanstack), the
+#     OpenSearch client (GHSA-298w-vvm4-ww55, opensearch), and the @mistralai builds (GHSA-3q49-cfcf-g5fm,
 #     GHSA-2rm2-c4pc-xxr9, GHSA-rccm-wwph-vgxc) and the @uipath builds (malware advisories such as
 #     GHSA-cx9h-9vrc-7393), versions to update because their maintainers say the malware could not
 #     run: Mistral (mistral), and UiPath, whose trust center says a bug left it non-functional and the
@@ -45,7 +46,8 @@
 #     2026), 638 versions of 317 packages, less @antv/li-sam-assets 0.1.4, skipped below: 637, as SafeDep
 #     counts them. @antv's and others that account published, such as echarts-for-react, size-sensor and
 #     timeago.js, the 317 of SafeDep's list of the wave. GitHub's malware advisories name the same
-#     versions for 145 and have none for 120; for 50, OpenSSF's entry adds versions GitHub's leaves out,
+#     versions for 265 (for 120 of them, advisories GitHub imported from those OpenSSF entries on 26 and
+#     27 July 2026, such as GHSA-26gq-5v8w-2h84); for 50, OpenSSF's entry adds versions GitHub's leaves out,
 #     @antv/a8's spans every version and @antv/li-sam-assets's names only 0.1.4 (below). And the six packages of a
 #     second account, jiulingyun, published in the same wave (02:53 to 02:55 UTC on 19 May by npm's
 #     registry), each in Wiz's list of the wave, with a GitHub malware advisory of that day (such as
