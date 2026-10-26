@@ -274,6 +274,11 @@ $P_ASSIGN = '(?<![A-Z0-9_])(?=(?>[0-9_]*)[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASS
 $P_JSONSECRET = '"(?:(?=[A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD))(?>[A-Z0-9_]*)|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[^\S\n]*:[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_TOMLSECRET = $P_NAME + '[^\S\n]*=[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
+# Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
+# value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
+# under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
+# can start with one. The same as gird-check.sh's P_NOTSECRET.
+$P_NOTSECRET = '(?:_PATH|_FILE|_DIR)S?"?[^\S\n]*[:=]|[:=][^\S\n]*"?(?:~|\.\.?/|[A-Za-z]:[\\/]|/(?:Users|home|root|etc|opt|var|tmp|private|Volumes|mnt|usr|srv|run|media|workspace|workspaces)/)'
 # grep reads line by line, so ^ and $ are line ends here too.
 # Every pattern has a time limit. A file that hits it is listed as skipped, never
 # taken as clean. GIRD_CHECK_REGEX_TIMEOUT_MS is for tests.
@@ -284,6 +289,7 @@ $RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
 $RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET", $RxOpt, $RxTimeout)
 $RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
+$RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
 $SlowFiles = New-Object System.Collections.Generic.List[string]
 function Mark-Slow([string]$f) {
   if (-not $SlowFiles.Contains($f)) { $SlowFiles.Add($f); Progress "Skipped, took too long to check: $(Short $f)" }
@@ -311,11 +317,12 @@ function Has-Match([string]$f, [regex]$rx) {
   $t = Read-Text $f; if ($null -eq $t) { return $false }
   try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false }
 }
-# A match that is not a placeholder like your-key-here.
+# A match that is not a placeholder like your-key-here, nor a path ($RxNotSecret).
+function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) }
 function Has-RealMatch([string]$f, [regex]$rx) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
-  try { foreach ($m in $rx.Matches($t)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { return $true } } } catch { Mark-Slow $f }
+  try { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } catch { Mark-Slow $f }
   $false
 }
 # The provider of a matched key (generated above) and whether a key looks made up. Text, so the
@@ -1836,7 +1843,7 @@ foreach ($f in $allowAll) {
   # A key in its permission rules (Cc-Rules) is a saved command; one elsewhere, such as its env, is a key
   # in plain text (section 3) and nothing more.
   $rules = Cc-Rules $f; $real = $false
-  try { foreach ($m in $RxCommand.Matches($rules)) { if (-not $RxPlaceholder.IsMatch($m.Value)) { $real = $true; break } } } catch { Mark-Slow $f }
+  try { foreach ($m in $RxCommand.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } } } catch { Mark-Slow $f }
   if (-not $real) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"

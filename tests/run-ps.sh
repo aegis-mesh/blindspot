@@ -1021,6 +1021,21 @@ has    "a key in a deny rule is a saved command"      '✗ ~/code/c/\.claude/set
 hasnot "and is not counted again as a key in plain text" '✗ ~/code/c/\.claude/settings\.json Anthropic' "$WORK/eky.txt"
 has    "a key in a rule and in the env counts in both sections" '✗ ~/code/d/\.claude/settings\.json Anthropic .*✗ ~/code/d/\.claude/settings\.json A saved command contains a key' "$WORK/eky.txt"
 has    "the header counts the saved commands only"    ' 3 keys in allow lists' "$WORK/eky.txt"
+# A setting named like a secret that holds a path is not a token: a name ending in _PATH, _FILE or _DIR,
+# or a value in the home folder, on a Windows drive or under a common top folder. A real token beside
+# such a name, and a base64 secret that starts with a /, still are.
+mkdir -p "$WORK/kpv/.cursor" "$WORK/kpv/code/a/.claude" "$WORK/kpv/code/b/.claude" "$WORK/kpv/code/c" "$WORK/kpv/code/d" "$WORK/kpv/AppData/Local/Temp"
+printf '{"mcpServers":{"gh":{"command":"npx","args":["-y","gh-mcp"],"env":{"GITHUB_APP_PRIVATE_KEY_PATH":"/Users/me/keys/github-app.pem","SERVICE_KEY":"C:\\\\keys\\\\svc.json","API_KEY":"~/secrets/api.key"}}}}\n' > "$WORK/kpv/.cursor/mcp.json"
+printf '{"permissions":{"allow":["Bash(SOPS_AGE_KEY_FILE=/Users/me/.config/sops/age/keys.txt sops -d secrets.yaml)"]}}\n' > "$WORK/kpv/code/a/.claude/settings.local.json"
+printf '{"permissions":{"allow":["Bash(MY_TOKEN=q8w7e6r5t4y3u2i1 make)"]}}\n' > "$WORK/kpv/code/b/.claude/settings.local.json"
+printf '{"mcpServers":{"t":{"command":"node","args":["s.js"],"env":{"GITHUB_TOKEN":"q8w7e6r5t4y3u2i1o9p0"}}}}\n' > "$WORK/kpv/code/c/.mcp.json"
+printf '{"mcpServers":{"s":{"command":"node","args":["s.js"],"env":{"AWS_SECRET_KEY":"/aB3xY9zQ1wE5rT7uI8oP0"}}}}\n' > "$WORK/kpv/code/d/.mcp.json"
+psrun "$WORK/kpv" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/kpv.txt"
+has    "paths in settings named like secrets are not a token in an MCP config" 'Cursor ~/\.cursor/mcp\.json 1 server( [^,]|$)' "$WORK/kpv.txt"
+hasnot "nor a saved command with a key"               'code/a/\.claude/settings\.local\.json A saved command' "$WORK/kpv.txt"
+has    "a real token in a saved command still is"     '✗ ~/code/b/\.claude/settings\.local\.json A saved command contains a key' "$WORK/kpv.txt"
+has    "and a token in an MCP config"                 '~/code/c/\.mcp\.json 1 server, token in the file' "$WORK/kpv.txt"
+has    "and a base64 secret that starts with a /"     '~/code/d/\.mcp\.json 1 server, token in the file' "$WORK/kpv.txt"
 # Hooks that run nothing are not commands: an event with an empty list, and hooks in a file whose
 # disableAllHooks is true, unless the project's settings.local.json, which comes first, sets it back to
 # false. It turns off the status line too, not the credential helpers, and counts only at the top of the

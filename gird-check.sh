@@ -757,6 +757,11 @@ P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{
 P_JSONSECRET='"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|accessToken|access_token|authToken|token|secret)"[[:space:]]*:[[:space:]]*"[^"$<{][^"]{11,}"'
 P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"$<{][^"]{11,}"'
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
+# Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
+# value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
+# under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
+# can start with one.
+P_NOTSECRET='(_PATH|_FILE|_DIR)S?"?[[:space:]]*[:=]|[:=][[:space:]]*"?(~|\.\.?/|[A-Za-z]:[\\/]|/(Users|home|root|etc|opt|var|tmp|private|Volumes|mnt|usr|srv|run|media|workspace|workspaces)/)'
 
 providers_in() {
   grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk "$PROV_AWK"'
@@ -782,12 +787,12 @@ files_matching() { # pattern; list on stdin
   tr '\n' '\0' | xargs -0 grep -alE "$1" 2>/dev/null
 }
 inline_secret() {
-  grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
+  grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
 # A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
 # elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
 command_secret() {
-  cc_rules "$1" | grep -aoE "$TR_KEYS|$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -q .
+  cc_rules "$1" | grep -aoE "$TR_KEYS|$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
 
 # ---------------------------------------------------------------------------
