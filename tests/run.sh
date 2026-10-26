@@ -4120,13 +4120,15 @@ sed -n '/^fleet_rg() {/,/^}/p' "$SCRIPT" > "$FL/fleet_rg.txt"
 if grep -q 'Library/Application Support/Blindspot/rg' "$FL/fleet_rg.txt" && ! grep -qE 'homebrew|/usr/local|\.local/bin|\.cargo|abs_path|realpath|readlink' "$FL/fleet_rg.txt"; then ok "fleet: a Homebrew or /usr/local ripgrep is never looked at"; else bad "fleet: a Homebrew or /usr/local ripgrep is never looked at" "$(grep -nE 'homebrew|/usr/local|abs_path' "$FL/fleet_rg.txt")"; fi
 fl_run rgnone
 if grep -q '^asha\.session_engine=perl$' "$FL/rgnone.flat" && grep -q '^asha\.session_files_with_keys=3$' "$FL/rgnone.flat"; then ok "fleet: with no ripgrep that qualifies, perl checks the sessions"; else bad "fleet: with no ripgrep that qualifies, perl checks the sessions" "$(grep -E 'session' "$FL/rgnone.flat" | tr '\n' ' ')"; fi
-# A real ripgrep, where this Mac has one, finds what perl finds (a copy at a test admin path).
+# A real ripgrep, where this Mac has one, finds what perl finds (a copy at a test admin path), and
+# reads the sessions as fully as perl: the fixture's compressed Codex session leaves both partly checked.
 RRG=$(command -v rg 2>/dev/null)
 if [ -z "$RRG" ]; then skip "fleet: a real ripgrep finds the same session keys as perl" "ripgrep is not installed here"
 else
   mkdir -p "$FLP/rgreal/bin"; cp "$RRG" "$FLP/rgreal/bin/rg"; chmod 755 "$FLP/rgreal/bin/rg"
   FLL_RG_ADMIN="$FLP/rgreal/bin/rg" FLL_RG_ROOTUID=$U fl_run rgreal
-  if grep -q '^asha\.session_engine=rg$' "$FL/rgreal.flat" && [ "$(grep '^asha\.session_files_with_keys=' "$FL/rgreal.flat")" = "$(grep '^asha\.session_files_with_keys=' "$FL/rgnone.flat")" ] && grep -q '^asha\.sessions_partly_checked=false$' "$FL/rgreal.flat"; then ok "fleet: a real ripgrep finds the same session keys as perl"
+  if grep -q '^asha\.session_engine=rg$' "$FL/rgreal.flat" && [ "$(grep '^asha\.session_files_with_keys=' "$FL/rgreal.flat")" = "$(grep '^asha\.session_files_with_keys=' "$FL/rgnone.flat")" ] \
+    && grep -q '^asha\.sessions_partly_checked=' "$FL/rgnone.flat" && [ "$(grep '^asha\.sessions_partly_checked=' "$FL/rgreal.flat")" = "$(grep '^asha\.sessions_partly_checked=' "$FL/rgnone.flat")" ]; then ok "fleet: a real ripgrep finds the same session keys as perl"
   else bad "fleet: a real ripgrep finds the same session keys as perl" "$(grep -E 'session' "$FL/rgreal.flat" | tr '\n' ' ')"; fi
 fi
 # Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
