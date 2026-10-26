@@ -287,10 +287,15 @@ $P_TOMLSECRET = $P_NAME + '[^\S\n]*=[^\S\n]*"[^"$<{\n][^"\n]{11,}"'
 $P_PLACEHOLDER = 'your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 # A token in an HTTP header an MCP server is sent with (headers in JSON, http_headers in Codex's TOML, a
 # YAML map): Authorization, or a name ending in -Key, -Token or -Secret, in any case, as header names
-# are. A value with a $ in it names an environment variable, not a token. The same as gird-check.sh's
-# P_HEADERSECRET; a name starts after a quote, a space, { or , so each is read once.
+# are. The value has to be token-shaped ($P_HTOKEN): at most one word such as Bearer, then 12 or more
+# characters with no space, no $ (an environment variable), no < and no { (a placeholder, or a template
+# such as opencode's {env:NAME}). A YAML header starts a line or follows a { or a comma, as a map's key
+# does, and its value ends at a quote, a comma, a }, a comment or the line end, so a sentence about a
+# header is not one. The same as gird-check.sh's P_HEADERSECRET; a name starts after a quote, a space,
+# { or , so each is read once.
 $P_HNAME = '(?:[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[A-Za-z0-9-]*-(?:[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]))'
-$P_HEADERSECRET = '"' + $P_HNAME + '"[^\S\n]*[:=][^\S\n]*"[^"$<{\n][^"$\n]{11,}"|(?:^|(?<=[\s{,]))' + $P_HNAME + '[^\S\n]*=[^\S\n]*"[^"$<{\n][^"$\n]{11,}"|(?:^|(?<=[\s{,]))"?' + $P_HNAME + '"?:[^\S\n]+["'']?[^"''$<{\s][^"''$#\n]{11,}'
+$P_HTOKEN = '(?:[A-Za-z][A-Za-z-]*[^\S\n]+)?[^"''$<{}\s,]{12,}'
+$P_HEADERSECRET = '"' + $P_HNAME + '"[^\S\n]*[:=][^\S\n]*"' + $P_HTOKEN + '"|(?:^|(?<=[\s{,]))' + $P_HNAME + '[^\S\n]*=[^\S\n]*"' + $P_HTOKEN + '"|(?:^|(?<=[{,]))[^\S\n]*(?:-[^\S\n]+)?"?' + $P_HNAME + '"?:[^\S\n]+["'']?' + $P_HTOKEN + '(?:["'',}]|[^\S\n]*$|[^\S\n]+#)'
 # Not a secret either: a name that holds a path (GITHUB_APP_PRIVATE_KEY_PATH, SOPS_AGE_KEY_FILE), or a
 # value that is a path, in the home folder (~), the current folder (./ or ../), on a Windows drive or
 # under a common top folder (/Users, /home, /etc and the like). A bare / is not enough: a base64 secret
@@ -372,9 +377,21 @@ function Has-Match([string]$f, [regex]$rx) {
 }
 # A match that is not a placeholder like your-key-here, nor a path ($RxNotSecret).
 function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) }
-function Has-RealMatch([string]$f, [regex]$rx) {
+# Codex's env_http_headers name the environment variable each header's value comes from, so they hold
+# no token: a TOML file is read without them, in an inline table and in a [...env_http_headers] table,
+# which ends at the next table. The same as gird-check.sh's no_env_headers.
+function No-EnvHeaders([string]$t) {
+  $skip = $false
+  $keep = foreach ($line in $t.Split("`n")) {
+    if ($line -match '^[ \t]*\[') { $skip = $line.Contains('env_http_headers') }
+    if (-not $skip) { $line -creplace 'env_http_headers"?[ \t]*=[ \t]*\{[^}]*\}?', '' }
+  }
+  $keep -join "`n"
+}
+function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
+  if ($NoEnvHeaders) { $t = No-EnvHeaders $t }
   try { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } catch { Mark-Slow $f }
   $false
 }
@@ -1364,8 +1381,8 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
     $t = Read-Text $f
     if (-not ($null -ne $t -and $t -cmatch '(?m)^\s*(mcpServers|extensions):')) { $c = 0 }
   }
-  $tok = $false
-  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline)) { $tok = $true }
+  $tok = $false; $toml = $f.EndsWith('.toml')
+  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline -NoEnvHeaders:$toml)) { $tok = $true }
   if ($c -eq 0 -and $null -ne $c -and -not $tok) { return }
   if (-not ((Ids $MCP_CLIENT_IDS) -contains $cid)) { $cid = 'other' }
   $pl = Is-PluginPath $f
