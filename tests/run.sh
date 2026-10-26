@@ -1908,7 +1908,7 @@ has    "Cursor below the fixed version"               '! Cursor 2\.9\.1, update 
 has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can let the agent write files outside it' "$D"
 has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.260 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
-has    "and that no version fixes a later advisory that covers 0.1.16" 'update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p No version fixes this yet: a hostile server could open an internal address in your browser\. github\.com/advisories/GHSA-v65w-6crh-cp3h' "$D"
+has    "and that no version fixes a later advisory that covers 0.1.16" 'update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p No version fixes this yet: a hostile server could open an internal address in your browser\. github\.com/advisories/GHSA-v65w-6crh-cp3h No version fixes this yet: a weak hash, MD5, keeps the saved tokens of each server apart\. github\.com/advisories/GHSA-mvq8-g2rm-4rhm' "$D"
 has    "with the fix"                                 'Update the tools listed in section 1 that have a security fix\.' "$D"
 has    "a link to authorized_keys"                    'Files that link to your SSH logins ✗ ~/code/links/notes\.txt An agent that edits this file adds a login to this computer\. Delete the link\.' "$D"
 has    "with the fix to delete the link"              'Delete the links to ~/\.ssh/authorized_keys listed in section 2\.' "$D"
@@ -2190,16 +2190,24 @@ hasnot "near misses: a clean or longer version, a longer name" 'GlassWorm|oorzc'
 hasnot "the Marketplace build of oorzc.ssh-tools 0.5.1 in VS Code's own folder is not the bad build" 'oorzc\.ssh-tools 0\.5\.1' "$D"
 hasnot "Codex: a profile written as an inline table is not the top level" '! Codex ' "$D"
 hasnot "mcp-remote@0.1 in an MCP config is a range, not a version" 'mcp-remote 0\.1,|mcp-remote 0\.1 ' "$D"
-# A version only an advisory with no fix covers (mcp-remote 0.1.16 to 0.1.38, GHSA-v65w-6crh-cp3h) has no
-# row: there is no fix to install. mcp-remote named only in a plugin catalog's config is not a server this
-# person set up: section 2 counts it apart, and the version check reads the configs section 2 counts.
+# A version only advisories with no fixed version cover (mcp-remote 0.1.16 to 0.1.38) has a row of its own,
+# apart from the fixes to install, and a version past their range has none. mcp-remote named only in a plugin
+# catalog's config is not a server this person set up: section 2 counts it apart, and the version check
+# reads the configs section 2 counts.
 rm -rf "$WORK/mrx"; mkdir -p "$WORK/mrx/.npm-global/lib/node_modules/mcp-remote" "$WORK/mrx/.codex/.tmp/plugins/catalog/someplugin" "$WORK/mrx/AppData/Roaming" "$WORK/mrx/AppData/Local/Temp"
 printf '{"name":"mcp-remote","version":"0.1.20"}\n' > "$WORK/mrx/.npm-global/lib/node_modules/mcp-remote/package.json"
 printf '{"mcpServers":{"r":{"command":"npx","args":["-y","mcp-remote@0.1.10","https://example.com/sse"]}}}\n' > "$WORK/mrx/.codex/.tmp/plugins/catalog/someplugin/.mcp.json"
 env HOME="$WORK/mrx" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mrx.txt"
-hasnot "mcp-remote 0.1.20, which only an advisory with no fix covers, has no row" 'mcp-remote 0\.1\.20' "$WORK/mrx.txt"
+env HOME="$WORK/mrx" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mrx-c.txt"
+rm -rf "$WORK/mr39"; mkdir -p "$WORK/mr39/.npm-global/lib/node_modules/mcp-remote" "$WORK/mr39/AppData/Roaming" "$WORK/mr39/AppData/Local/Temp"
+printf '{"name":"mcp-remote","version":"0.1.39"}\n' > "$WORK/mr39/.npm-global/lib/node_modules/mcp-remote/package.json"
+env HOME="$WORK/mr39" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/mr39.txt"
+has    "mcp-remote 0.1.20, in a published range with no fixed version, has a row of its own" 'Tools with a published hole and no fixed version yet ! mcp-remote 0\.1\.20, no fixed version yet A hostile server could open an internal address in your browser\. github\.com/advisories/GHSA-v65w-6crh-cp3h A weak hash, MD5, keeps the saved tokens of each server apart\. github\.com/advisories/GHSA-mvq8-g2rm-4rhm' "$WORK/mrx.txt"
+hasnot "and it is not a fix to install" 'Tools with a security fix|that have a security fix|0\.1\.20, update' "$WORK/mrx.txt"
+hasnot "nor counted in row 01's fixes to install" 'security fix' "$WORK/mrx-c.txt"
+hasnot "a version past the advisories' range has no row" 'mcp-remote' "$WORK/mr39.txt"
 has    "an MCP config in a plugin catalog is not a configured server" 'No MCP servers configured\.' "$WORK/mrx.txt"
-hasnot "and mcp-remote named there is not a tool to update" 'mcp-remote 0\.1\.10|Tools with a security fix' "$WORK/mrx.txt"
+hasnot "and mcp-remote named there is not a tool to update" 'mcp-remote 0\.1\.10' "$WORK/mrx.txt"
 # Claude Code's npm "local" install, which its migrate-installer command puts in the local folder of its
 # config folder (~/.claude/local, or CLAUDE_CONFIG_DIR's, by Claude Code's own code): its version is read as
 # a global install's is.
@@ -3295,6 +3303,15 @@ has    "fleet: the gh-token-monitor wiper reaches the account's row" '^wip\.wipe
 # It came with more than one wave (TanStack's in May, keyv's in August): alone, it is the wiper, not an incident.
 if grep -q '^wip1\.wiper=true$' "$FL/rows.flat" && grep -q '^wip1\.incidents=$' "$FL/rows.flat" && grep -q '^wip1\.outcome=act$' "$FL/rows.flat"; then ok "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm"
 else bad "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm" "$(grep '^wip1\.' "$FL/rows.flat" | tr '\n' ' ')"; fi
+# A tool with a fix to install reaches the account's tools; one with a published hole and no fixed version
+# (mcp-remote 0.1.16 to 0.1.38) does not: the account's row lists fixes to install.
+for h in mrf mrn; do fl_home "$h"; mkdir -p "$FL/$h/.npm-global/lib/node_modules/mcp-remote"; done
+printf '{"name":"mcp-remote","version":"0.1.10"}\n' > "$FL/mrf/.npm-global/lib/node_modules/mcp-remote/package.json"
+printf '{"name":"mcp-remote","version":"0.1.20"}\n' > "$FL/mrn/.npm-global/lib/node_modules/mcp-remote/package.json"
+users "mrf:$U:$FL/mrf:/bin/zsh" "mrn:$U:$FL/mrn:/bin/zsh"
+fl_run tools --json
+has    "fleet: a tool with a fix to install reaches the account's tools" '^mrf\.tools_to_update=mcpremote$' "$FL/tools.flat"
+has    "fleet: one with a published hole and no fixed version does not" '^mrn\.tools_to_update=$' "$FL/tools.flat"
 users "wip:$U:$FL/wip:/bin/zsh"
 fl_run wipterm
 has    "fleet: with the wiper there, a platform's rotate waits for it too" '^    !  OpenCode found: got its breach email\? Rotate keys, once gh-token-monitor is stopped$' "$FL/wipterm.out"

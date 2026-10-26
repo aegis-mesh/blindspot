@@ -253,7 +253,9 @@ claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.0.68|2.1.260|a stored
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|npm|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h
-mcpremote|mcp-remote|all|mcparg|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h"
+mcpremote|mcp-remote|all|mcparg|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h
+mcpremote|mcp-remote|all|npm|mcp-remote|0.1.16|!0.1.38|a weak hash, MD5, keeps the saved tokens of each server apart|github.com/advisories/GHSA-mvq8-g2rm-4rhm
+mcpremote|mcp-remote|all|mcparg|mcp-remote|0.1.16|!0.1.38|a weak hash, MD5, keeps the saved tokens of each server apart|github.com/advisories/GHSA-mvq8-g2rm-4rhm"
 # <<< outdated
 # >>> platforms: generated from data/platforms.tsv by tools/gen.sh. Edit that file, then run it.
 PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/opencode/|installed|OpenCode emailed the Console users its breach hit, and says those it did not email were not affected. It told those users to revoke and replace their keys directly with each provider. Keys kept only in the CLI never reach OpenCode.|OpenCode found: got its breach email? Rotate keys

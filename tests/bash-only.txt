@@ -245,6 +245,8 @@ fleet: project settings that act when a folder opens reach the account's row	gir
 fleet: and a file named like the ones worms plant	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: so that account is to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a package version to update reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a tool with a fix to install reaches the account's tools	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: one with a published hole and no fixed version does not	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and that account is to review too	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: the gh-token-monitor wiper reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and stopping it comes before the incident's other advice	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
