@@ -1093,7 +1093,7 @@ cat > "$WORK/hdrn/.claude.json" <<'EOF'
 {"display":"In api.ts, Authorization: Bearer process.env.LINEAR_TOKEN"},
 {"display":"fetch(url, {headers: {Authorization: process.env.API_TOKEN}})"},
 {"display":"add the header 'Authorization: Bearer process.env.LINEAR_TOKEN' to the fetch call"},
-{"display":"curl -H 'Authorization: Bearer process.env.LINEAR_TOKEN' https://api.linear.app/graphql"},
+{"display":"send it with -H 'Authorization: Bearer process.env.LINEAR_TOKEN' to the graphql endpoint"},
 {"display":"the API wants 'X-Api-Key: SERVICE_API_KEY_FROM_ENV' on every call"}]}}}
 EOF
 cat > "$WORK/hdrn/.continue/config.yaml" <<'EOF'
