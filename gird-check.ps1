@@ -5763,6 +5763,12 @@ $OutTable = @(
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.16', '!0.1.38', 'a weak hash, MD5, keeps the saved tokens of each server apart', 'github.com/advisories/GHSA-mvq8-g2rm-4rhm')
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.16', '!0.1.38', 'a weak hash, MD5, keeps the saved tokens of each server apart', 'github.com/advisories/GHSA-mvq8-g2rm-4rhm')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it send requests to local and private network addresses', 'github.com/advisories/GHSA-8rrr-xx35-4q6h')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it send requests to local and private network addresses', 'github.com/advisories/GHSA-8rrr-xx35-4q6h')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it probe services on your network', 'github.com/advisories/GHSA-5wmf-76f4-cg47')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it probe services on your network', 'github.com/advisories/GHSA-5wmf-76f4-cg47')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.8.0', '!0.14.3', 'with --device-code, a server can make it send its client secret and tokens over plain HTTP', 'github.com/advisories/GHSA-jrvg-vw6c-rp59')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.8.0', '!0.14.3', 'with --device-code, a server can make it send its client secret and tokens over plain HTTP', 'github.com/advisories/GHSA-jrvg-vw6c-rp59')
 )
 # <<< outdated
 # --- 1. Coding agents: settings and versions -------------------------------------

@@ -2110,6 +2110,19 @@ has    "mcp-remote 0.1.20, in a published range with no fixed version, has a row
 hasnot "and it is not a fix to install" 'Tools with a security fix|that have a security fix|0\.1\.20, update' "$WORK/mrx.txt"
 hasnot "nor counted in row 01's fixes to install" 'security fix' "$WORK/mrx-c.txt"
 hasnot "a version past the advisories' range has no row" 'mcp-remote' "$WORK/mr39.txt"
+# The advisories that cover part of that range add their holes to its rows (GHSA-8rrr and GHSA-5wmf, 0.1.32
+# to 0.1.38), and GHSA-jrvg-vw6c-rp59 gives 0.8.0 to 0.14.3 a row of its own. GHSA-4gh6-j99c-x6g2, whose
+# write-up refutes it, has no line, and a version past a range has no row for that advisory.
+for _mv in 0.1.35 0.14.3 0.14.4; do
+  _md="$WORK/mrv-$_mv"; rm -rf "$_md"; mkdir -p "$_md/.npm-global/lib/node_modules/mcp-remote" "$_md/AppData/Roaming" "$_md/AppData/Local/Temp"
+  printf '{"name":"mcp-remote","version":"%s"}\n' "$_mv" > "$_md/.npm-global/lib/node_modules/mcp-remote/package.json"
+  psrun "$_md" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$_md.txt"
+done
+has    "0.1.32 to 0.1.38 add the holes their write-ups show" '! mcp-remote 0\.1\.35, no fixed version yet .*GHSA-mvq8-g2rm-4rhm A hostile server could make it send requests to local and private network addresses\. github\.com/advisories/GHSA-8rrr-xx35-4q6h A hostile server could make it probe services on your network\. github\.com/advisories/GHSA-5wmf-76f4-cg47' "$WORK/mrv-0.1.35.txt"
+hasnot "an advisory whose write-up refutes it has no line" 'GHSA-4gh6' "$WORK/mrv-0.1.35.txt"
+hasnot "and a version below 0.1.32 does not take those holes" 'GHSA-8rrr|GHSA-5wmf' "$WORK/mrx.txt"
+has    "the device-code advisory gives 0.8.0 to 0.14.3 a row of its own" '! mcp-remote 0\.14\.3, no fixed version yet With --device-code, a server can make it send its client secret and tokens over plain HTTP\. github\.com/advisories/GHSA-jrvg-vw6c-rp59' "$WORK/mrv-0.14.3.txt"
+hasnot "and 0.14.4, past its range, has no row" 'mcp-remote' "$WORK/mrv-0.14.4.txt"
 has    "an MCP config in a plugin catalog is not a configured server" 'No MCP servers configured\.' "$WORK/mrx.txt"
 hasnot "and mcp-remote named there is not a tool to update" 'mcp-remote 0\.1\.10' "$WORK/mrx.txt"
 # Claude Code's npm "local" install, which its migrate-installer command puts in the local folder of its
