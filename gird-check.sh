@@ -7916,7 +7916,8 @@ elif [ "$WIPER_HIT" -eq 0 ] && [ -n "$_np" ]; then
   lock_unread
 elif [ "$WIPER_HIT" -eq 0 ]; then
   pair "${GRN}✓${RST}" "npm malware" 16 "none of $(printf '%s\n' "$BAD_NPM" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_NPM" | awk '$2 == "*"' | grep -c .) bad packages"
-  emit "                          ${DIM}checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache${RST}"
+  # The home scan's own bounds keep its time short; a lockfile past them is not read, and the row says so.
+  wrap "checked $(plural "$N_LOCK" lockfile lockfiles), global installs and npm's cache. Lockfiles more than 6 folders deep, or in build, dist, target or vendor folders, are not read." 26 "                          " "                          " "$DIM"
 fi
 if [ -n "$_np" ] && { [ "$WIPER_HIT" -eq 1 ] || [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$NPM_UPD" -eq 1 ]; }; then
   wrap "$(printf '%s' "${_np:0:1}" | tr 'a-z' 'A-Z')${_np:1} could not be read, so this is not the full list." 8 "        " "        " "$YEL"

@@ -132,7 +132,7 @@ powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 
 ## Limits
 
-Blindspot shows what could reach your keys, not what your agents did with them. Finding nothing does not prove nothing leaked. It doesn't look at containers, servers or CI. Folders in your home it can't read, key, MCP config, settings and allow-list files it can't read, settings and tasks files over 16 MB, global install and npx folders it can't read, Python environments and editor extension folders it can't open, and (in `gird-check.sh`) folders with a line break in their name, are named as not checked, and the summary doesn't read clean over them.
+Blindspot shows what could reach your keys, not what your agents did with them. Finding nothing does not prove nothing leaked. It doesn't look at containers, servers or CI. The home scan goes 6 folders deep and skips dependency, build and cache folders (`node_modules`, `build`, `dist`, `target` and `vendor` among them), so a lockfile or project file deeper or in one of those is not read; the npm row says so. Folders in your home it can't read, key, MCP config, settings and allow-list files it can't read, settings and tasks files over 16 MB, global install and npx folders it can't read, Python environments and editor extension folders it can't open, and (in `gird-check.sh`) folders with a line break in their name, are named as not checked, and the summary doesn't read clean over them.
 
 [Argus](https://gird.ai/argus/download/) is GIRD's free Mac app. It watches what your agents actually do, tells you when one opens a key file or tries to send a key off your Mac, and can stop terminal agents from reading your keys.
 

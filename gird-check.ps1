@@ -6862,7 +6862,8 @@ if (-not $npFound -and $WIPER_HIT -eq 0 -and ($NpmSlow -gt 0 -or $npText)) {
   foreach ($f in $LockUnread) { Emit "        $(Short $f)" }
 } elseif (-not $npFound -and $WIPER_HIT -eq 0) {
   Pair "$cGrn$gOk$cRst" 'npm malware' 16 "none of $($NpmBad.Count) bad versions or $($NpmAny.Count) bad packages"
-  Emit "$ind26${cDim}checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache$cRst"
+  # The home scan's own bounds keep its time short; a lockfile past them is not read, and the row says so.
+  Wrap "checked $(Plural $N_LOCK 'lockfile' 'lockfiles'), global installs and npm's cache. Lockfiles more than 6 folders deep, or in build, dist, target or vendor folders, are not read." 26 $ind26 $ind26 $cDim
 }
 # With findings above, a part of the check that did not finish still has to be said.
 if (($NpmSlow -gt 0 -or $npText) -and ($WIPER_HIT -eq 1 -or $npFound)) {

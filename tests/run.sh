@@ -1332,6 +1332,13 @@ has    "and in bun's global folder under BUN_INSTALL"  'gp/x/bun/install/global/
 has    "and under BUN_INSTALL_GLOBAL_DIR"              'gp/x/bgd/node_modules/iruchache iruchache 1\.0\.0' "$GP/h4.txt"
 has    "and nvm's under XDG_CONFIG_HOME"               'gp/x/xcfg/nvm/versions/node/v20\.0\.0/lib/node_modules/opencraw opencraw 1\.0\.0' "$GP/h4.txt"
 has    "and bun's under XDG_CACHE_HOME"                'gp/x/xc/\.bun/install/global/node_modules/claud-code claud-code 1\.0\.0' "$GP/h5.txt"
+# The home scan stops 6 folders deep and skips build, dist, target and vendor folders, which keeps it short:
+# a lockfile past those bounds is not read, and the clean npm row says so.
+DL=$WORK/dl; rm -rf "$DL"; mkdir -p "$DL/code/a/b/c/d/e/f" "$DL/code/app/dist/pkg" "$DL/AppData/Roaming" "$DL/AppData/Local/Temp"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1"}}}' > "$DL/code/a/b/c/d/e/f/package-lock.json"
+cp "$DL/code/a/b/c/d/e/f/package-lock.json" "$DL/code/app/dist/pkg/package-lock.json"
+HOME="$DL" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dl.txt"
+has    "a lockfile past the scan's bounds is not read, and the npm row says so" "checked 0 lockfiles, global installs and npm's cache\. Lockfiles more than 6 folders deep, or in build, dist, target or vendor folders, are not read\." "$WORK/dl.txt"
 # Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
 # folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
 # version deep down is not a hit.
