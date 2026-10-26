@@ -5969,6 +5969,14 @@ $OutTable = @(
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.16', '!0.1.38', 'a weak hash, MD5, keeps the saved tokens of each server apart', 'github.com/advisories/GHSA-mvq8-g2rm-4rhm')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.16', '!0.1.38', 'a weak hash, MD5, keeps the saved tokens of each server apart', 'github.com/advisories/GHSA-mvq8-g2rm-4rhm')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it send requests to local and private network addresses', 'github.com/advisories/GHSA-8rrr-xx35-4q6h')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it send requests to local and private network addresses', 'github.com/advisories/GHSA-8rrr-xx35-4q6h')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it probe services on your network', 'github.com/advisories/GHSA-5wmf-76f4-cg47')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.1.32', '!0.1.38', 'a hostile server could make it probe services on your network', 'github.com/advisories/GHSA-5wmf-76f4-cg47')
+  ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.8.0', '!0.14.3', 'with --device-code, a server can make it send its client secret and tokens over plain HTTP', 'github.com/advisories/GHSA-jrvg-vw6c-rp59')
+  ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.8.0', '!0.14.3', 'with --device-code, a server can make it send its client secret and tokens over plain HTTP', 'github.com/advisories/GHSA-jrvg-vw6c-rp59')
 )
 # <<< outdated
 # --- 1. Coding agents: settings and versions -------------------------------------
@@ -6035,9 +6043,8 @@ function Pkg-Args([string]$nm, [string]$t) {
 $OldList = New-Object System.Collections.Generic.List[object]; $oldSeen = @{}
 foreach ($r in $OutTable) {
   if ($r[2] -ne 'all' -and $r[2] -ne $IndOs) { continue }
-  # A line whose advisory no version fixes (its fixed field !last) makes no row of its own: there is
-  # nothing to install. A row whose fix it covers says so (below).
-  if ($r[6].StartsWith('!')) { continue }
+  # A line whose advisory no version fixes (its fixed field !last) covers first to last.
+  $noFix = $r[6].StartsWith('!')
   $vs = @()
   switch ($r[3]) {
     'plist' { $t = Read-Text $r[4]; if ($null -ne $t) { $m = [regex]::Match($t, '<key>CFBundleShortVersionString</key>\s*<string>([^<]*)</string>'); if ($m.Success) { $vs = @($m.Groups[1].Value) } } }
@@ -6055,15 +6062,17 @@ foreach ($r in $OutTable) {
     # name@0.1 in an MCP config is a range npx resolves when it runs, not a version: not reported.
     if ($r[3] -eq 'mcparg' -and $v.Split('.').Count -lt 3) { continue }
     if ($r[5] -ne '-' -and (Ver-Cmp $v $r[5]) -lt 0) { continue }
-    if ((Ver-Cmp $v $r[6]) -ge 0) { continue }
+    if ($noFix) { if ((Ver-Cmp $v $r[6].Substring(1)) -gt 0) { continue } } elseif ((Ver-Cmp $v $r[6]) -ge 0) { continue }
     # A tool's lines can name several advisories: its row says to update to the highest fixed version
-    # among those its versions fall under, and shows each of their holes with its advisory.
+    # among those its versions fall under, and shows each of their holes with its advisory. A line with
+    # no fixed version adds its hole to Unfixed instead, and a tool with only such lines has no Fixed.
     if ($oldSeen.ContainsKey($r[0])) { $o = $oldSeen[$r[0]]; if (-not $o.Vers.Contains($v)) { $o.Vers.Add($v) } }
     else {
-      $o = @{ Id = $r[0]; Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $r[6]; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)); Unfixed = (New-Object System.Collections.Generic.List[object]) }
+      $o = @{ Id = $r[0]; Name = $r[1]; Vers = (New-Object System.Collections.Generic.List[string]); Fixed = $null; Holes = (New-Object System.Collections.Generic.List[object]); HoleKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)); Unfixed = (New-Object System.Collections.Generic.List[object]); UnfixedKeys = (New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)) }
       $o.Vers.Add($v); $oldSeen[$r[0]] = $o; $OldList.Add($o)
     }
-    if ((Ver-Cmp $r[6] $o.Fixed) -gt 0) { $o.Fixed = $r[6] }
+    if ($noFix) { if ($o.UnfixedKeys.Add("$($r[7])|$($r[8])")) { $o.Unfixed.Add(@($r[7], $r[8])) }; continue }
+    if ($null -eq $o.Fixed -or (Ver-Cmp $r[6] $o.Fixed) -gt 0) { $o.Fixed = $r[6] }
     if ($o.HoleKeys.Add("$($r[7])|$($r[8])")) { $o.Holes.Add(@($r[7], $r[8])) }
   }
 }
@@ -6071,6 +6080,7 @@ foreach ($r in $OutTable) {
 # takes that line's fix, until no line covers it: the version it names has no published fix of its own.
 # When a line whose advisory no version fixes covers it, the row shows that line's hole as not fixed yet.
 foreach ($o in $OldList) {
+  if ($null -eq $o.Fixed) { continue }
   do {
     $moved = $false
     foreach ($r in $OutTable) {
@@ -6078,14 +6088,17 @@ foreach ($o in $OldList) {
       if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6]) -lt 0) { $o.Fixed = $r[6]; $moved = $true }
     }
   } while ($moved)
-  $ufSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
   foreach ($r in $OutTable) {
     if ($r[0] -ne $o.Id -or ($r[2] -ne 'all' -and $r[2] -ne $IndOs) -or -not $r[6].StartsWith('!')) { continue }
-    if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6].Substring(1)) -le 0 -and $ufSeen.Add("$($r[7])|$($r[8])")) { $o.Unfixed.Add(@($r[7], $r[8])) }
+    if (($r[5] -eq '-' -or (Ver-Cmp $r[5] $o.Fixed) -le 0) -and (Ver-Cmp $o.Fixed $r[6].Substring(1)) -le 0 -and $o.UnfixedKeys.Add("$($r[7])|$($r[8])")) { $o.Unfixed.Add(@($r[7], $r[8])) }
   }
 }
-$N_OLD = $OldList.Count
-if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldList[0].Name)" }
+# $N_OLD counts the tools with a security fix to install (row 01 and the fix), and $N_OLD_NOFIX those
+# with a published hole and no fixed version.
+$OldFix = @($OldList | Where-Object { $null -ne $_.Fixed }); $OldNoFix = @($OldList | Where-Object { $null -eq $_.Fixed })
+$N_OLD = $OldFix.Count; $N_OLD_NOFIX = $OldNoFix.Count
+if ($N_OLD -gt 0) { Progress "A tool with a security fix to install: $($OldFix[0].Name)" }
+elseif ($N_OLD_NOFIX -gt 0) { Progress "A tool with a published hole and no fixed version: $($OldNoFix[0].Name)" }
 # npm's download cache keeps a package after it is uninstalled. A hit there means it was downloaded
 # on this machine, usually by an install; the report says which of the three places it came from.
 # A folder or file that can't be read leaves the cache not fully checked, never clean: a cache
@@ -6800,11 +6813,20 @@ if ($N_YOLO -gt 0) {
 if ($N_OLD -gt 0) {
   Blank
   Emit "     ${cBold}Tools with a security fix to install$cRst"
-  foreach ($r in $OldList) {
+  foreach ($r in $OldFix) {
     Pair "$cYel!$cRst" $r.Name 20 "$($r.Vers -join ', '), update to $($r.Fixed) or later"
     foreach ($h in $r.Holes) { Wrap "$($h[0].Substring(0, 1).ToUpperInvariant())$($h[0].Substring(1)). $($h[1])" 8 '        ' '        ' $cDim }
     # A later advisory that covers the version named, and that no version fixes.
     foreach ($h in $r.Unfixed) { Wrap "No version fixes this yet: $($h[0]). $($h[1])" 8 '        ' '        ' $cDim }
+  }
+}
+# A version only lines with no fixed version cover: its holes, and no version to name.
+if ($N_OLD_NOFIX -gt 0) {
+  Blank
+  Emit "     ${cBold}Tools with a published hole and no fixed version yet$cRst"
+  foreach ($r in $OldNoFix) {
+    Pair "$cYel!$cRst" $r.Name 20 "$($r.Vers -join ', '), no fixed version yet"
+    foreach ($h in $r.Unfixed) { Wrap "$($h[0].Substring(0, 1).ToUpperInvariant())$($h[0].Substring(1)). $($h[1])" 8 '        ' '        ' $cDim }
   }
 }
 $Sec1 = Take-Cap

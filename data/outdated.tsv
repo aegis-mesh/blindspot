@@ -11,8 +11,11 @@
 #   where     plist and folder: a path, with the path tokens of data/sessions.tsv or an absolute path.
 #             npm and mcparg: the package name
 #   affected  <fixed, or >=first <fixed, or >=first <=last for an advisory that names first to last and that no
-#             version fixes: such a line makes no row of its own, as there is nothing to install, and a row
-#             whose fix it covers shows its hole as not fixed yet
+#             version fixes. A version in that range gets a row of its own, under Tools with a published hole
+#             and no fixed version yet: the version, no fixed version yet, and each such hole with its
+#             advisory, naming no version to update to. It is kept apart from the fixes to install: row 01's
+#             count, the fix to update and fleet mode's tools leave it out. A row with a fix that such a
+#             line covers shows its hole as not fixed yet. A version past last has no row
 #   hole      what the hole allows, a few words from the advisory
 #   advisory  the advisory's https link
 # Lines of one tool agree on its name, and lines of one advisory on its range and hole. Each tool has a
@@ -38,19 +41,36 @@
 # on Windows or Linux, so the two Windows advisories, GHSA-4p2j-qj3c-6x84 (below 1.8089.0) and
 # GHSA-5p5x-5294-qhp3 (below 1.3834.0), have no line.
 # mcp-remote: GHSA-6xpm-ggf7-wc3p is its only advisory with a fixed version, 0.1.16. GitHub's database also
-# holds six unreviewed ones with no package field, which ?affects= does not find: GHSA-8rrr-xx35-4q6h,
-# GHSA-5wmf-76f4-cg47, GHSA-mvq8-g2rm-4rhm, GHSA-v65w-6crh-cp3h and GHSA-4gh6-j99c-x6g2, from one
-# researcher's review of 0.1.16 to 0.1.38, and GHSA-jrvg-vw6c-rp59, on 0.8.0 to 0.14.3. None names a fix,
-# OSV gives each only a last affected commit, and its repository (now punkpeye/mcp-remote) publishes no
-# advisory and no release note that names one. Two of them cover 0.1.16 itself. GHSA-v65w-6crh-cp3h
-# (CVE-2026-51997) says code execution, but the write-up it cites (playb0t/mcp-remote-oauth-security,
-# v1.0.1, F-08) shows a hostile authorization endpoint opening an internal address in the browser, which
-# its hole says; the code it names still opens that URL after only sanitizeUrl in 0.15.2, the newest on
-# npm (20 October 2026), so no version fixes it, and it has a line of that kind: the row of a version
-# below 0.1.16 says to update to 0.1.16 for the command injection and that no version fixes this yet.
-# GHSA-mvq8-g2rm-4rhm (CVE-2026-51996) has no line: its write-up (F-04) says MD5 names the token files
-# (still so in 0.15.2) but that no token takeover or real-token access was demonstrated, and claims no CVE.
-# The other four cover only versions above 0.1.16 and name no fix, so they have no line.
+# holds six unreviewed ones whose records carry no package or range field (their text gives the range), so
+# ?affects= does not find them, and none names a fix; OSV gives each only a last affected commit, and the
+# repository (now punkpeye/mcp-remote) publishes no advisory and no release note that names one. Five come
+# from one researcher's review of 0.1.16 to 0.1.38 (playb0t/mcp-remote-oauth-security, v1.0.1, whose
+# write-ups claim less than the advisories' text), and GHSA-jrvg-vw6c-rp59 covers 0.8.0 to 0.14.3. Each one
+# whose write-up shows a hole has a line with no fixed version for the range its text gives, and its hole
+# says what the write-up shows:
+#   GHSA-v65w-6crh-cp3h (CVE-2026-51997, high), 0.1.16 to 0.1.38: F-08, a hostile authorization endpoint
+#     opening an internal address in the browser (its text says code execution);
+#   GHSA-mvq8-g2rm-4rhm (CVE-2026-51996, critical), 0.1.16 to 0.1.38: F-04, MD5 keeping each server's token
+#     files apart, with no token takeover or real-token access demonstrated (its text says code execution);
+#   GHSA-8rrr-xx35-4q6h (CVE-2026-51994, critical), 0.1.32 to 0.1.38: F-01, the resource_metadata URL a
+#     hostile server sends fetched with no address policy, which a localhost canary showed reaching local
+#     services;
+#   GHSA-5wmf-76f4-cg47 (CVE-2026-51995, high), 0.1.32 to 0.1.38: F-02, the authorization server origin a
+#     hostile server names fetched unchecked, blind probing of internal services (its text says it leaks
+#     sensitive information; no response was read out);
+#   GHSA-jrvg-vw6c-rp59 (CVE-2026-108716, medium), 0.8.0 to 0.14.3: its write-up (HaiND's, on hackmd) shows
+#     --device-code sending the client secret and tokens to whatever endpoints the server's metadata names,
+#     with no HTTPS check.
+# GHSA-4gh6-j99c-x6g2 (CVE-2026-52001, high, 0.1.18 to 0.1.38) has no line: its write-up, F-11, says the
+# SDK's origin check and undici's redirect handling refute its token-forwarding claim, calls it defense in
+# depth and claims no CVE. The code each line names is the same in 0.15.2, the newest on npm (20 October
+# 2026): the browser URL is opened after only sanitizeUrl, which checks the protocol; MD5 still names the
+# token files; the resource_metadata URL and the first authorization server are fetched unchecked; and
+# device-authorization.ts is unchanged since 0.14.3 (0.14.4 changed only the OAuth error page). So no
+# version is named for them: a version in one of these ranges is a tool with a published hole and no fixed
+# version yet, and the row of a version below 0.1.16 says to update to 0.1.16 for the command injection
+# and that no version fixes the two that cover 0.1.16. A version past a range has no row for that
+# advisory: its text covers only that range.
 # Amazon Q: the version folder is the language server's (Language Servers for AWS), which the bulletin
 # fixes in 1.69.0 (aws/language-servers publishes the bulletin's two advisories, and no later bulletin
 # names it). The extension's own version is not read. Amazon Q keeps the server in
@@ -78,3 +98,11 @@ mcpremote	mcp-remote	all	npm	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server cou
 mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote	mcp-remote	all	npm	mcp-remote	>=0.1.16 <=0.1.38	a hostile server could open an internal address in your browser	https://github.com/advisories/GHSA-v65w-6crh-cp3h
 mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.1.16 <=0.1.38	a hostile server could open an internal address in your browser	https://github.com/advisories/GHSA-v65w-6crh-cp3h
+mcpremote	mcp-remote	all	npm	mcp-remote	>=0.1.16 <=0.1.38	a weak hash, MD5, keeps the saved tokens of each server apart	https://github.com/advisories/GHSA-mvq8-g2rm-4rhm
+mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.1.16 <=0.1.38	a weak hash, MD5, keeps the saved tokens of each server apart	https://github.com/advisories/GHSA-mvq8-g2rm-4rhm
+mcpremote	mcp-remote	all	npm	mcp-remote	>=0.1.32 <=0.1.38	a hostile server could make it send requests to local and private network addresses	https://github.com/advisories/GHSA-8rrr-xx35-4q6h
+mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.1.32 <=0.1.38	a hostile server could make it send requests to local and private network addresses	https://github.com/advisories/GHSA-8rrr-xx35-4q6h
+mcpremote	mcp-remote	all	npm	mcp-remote	>=0.1.32 <=0.1.38	a hostile server could make it probe services on your network	https://github.com/advisories/GHSA-5wmf-76f4-cg47
+mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.1.32 <=0.1.38	a hostile server could make it probe services on your network	https://github.com/advisories/GHSA-5wmf-76f4-cg47
+mcpremote	mcp-remote	all	npm	mcp-remote	>=0.8.0 <=0.14.3	with --device-code, a server can make it send its client secret and tokens over plain HTTP	https://github.com/advisories/GHSA-jrvg-vw6c-rp59
+mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.8.0 <=0.14.3	with --device-code, a server can make it send its client secret and tokens over plain HTTP	https://github.com/advisories/GHSA-jrvg-vw6c-rp59
