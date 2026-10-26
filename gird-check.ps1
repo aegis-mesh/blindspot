@@ -669,14 +669,44 @@ function Real-Dir([string]$d) {
 # and another case of the name counts where the volume ignores case (APFS, NTFS). A link into a repo's
 # own .ssh/authorized_keys fixture does not count, and a link to the file's place counts before the
 # file exists: an agent writing through it creates it.
-$AkDir = $null; $AkCaseless = $false
+# Where a chain of links ends, as a stat of the path meets it: each link's text is read from the folder
+# the link is in, as the system resolves that folder (Real-Dir), so .. after a linked folder goes where
+# the system takes it. The physical path of the file at the end; $null when the chain breaks or runs
+# past 40 links.
+function Link-End([string]$p) {
+  $t = $p
+  for ($i = 0; $i -lt 40; $i++) {
+    $d = Real-Dir ([IO.Path]::GetDirectoryName($t)); if (-not $d) { return $null }
+    $t = J $d ([IO.Path]::GetFileName($t))
+    try { $it = Get-Item -LiteralPath $t -Force -ErrorAction Stop } catch { return $null }
+    if (-not (Is-Link $it)) { return $t }
+    $lt = Link-Target $it; if (-not $lt) { return $null }
+    if ([IO.Path]::IsPathRooted($lt)) { $t = $lt } else { $t = J $d $lt }
+  }
+  $null
+}
+$AkDir = $null; $AkCaseless = $false; $AkEnd = $null
 if (Is-Dir (J $HomeDir '.ssh')) { $AkDir = Real-Dir (J $HomeDir '.ssh') }
 if ($AkDir) { $AkCaseless = (Is-File (J $AkDir 'authorized_keys')) -and (Is-File (J $AkDir 'AUTHORIZED_KEYS')) }
-function Is-AkLink([string]$dir, [string]$target) {
+# With the file there, where it ends: a link counts when its own chain ends at the same file, as bash's
+# -ef judges it.
+if ($AkDir -and (Is-File (J $AkDir 'authorized_keys'))) { $AkEnd = Link-End (J $AkDir 'authorized_keys') }
+function Is-AkLink([string]$dir, [string]$path, [string]$target) {
   if (-not $target -or -not $AkDir) { return $false }
   try {
     $t = $target -replace '\\', '/'; $cut = $t.LastIndexOf('/'); $base = $t.Substring($cut + 1)
-    if (-not $base.EndsWith('authorized_keys', [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    $named = $base.EndsWith('authorized_keys', [StringComparison]::OrdinalIgnoreCase)
+    # With the file there, every link that can lead there is followed to its end, as bash's scan prints
+    # them: one whose text names it, is relative or points inside the home folder. A link out of the
+    # home folder is not followed: it can end on a network share that never answers.
+    if ($AkEnd) {
+      $hp = ($HomeDir -replace '\\', '/').TrimEnd('/') + '/'
+      if (-not ($named -or -not [IO.Path]::IsPathRooted($target) -or $t.StartsWith($hp, $PathCmp))) { return $false }
+      $e = Link-End $path; if (-not $e) { return $false }
+      if ($AkCaseless) { return $e.Equals($AkEnd, [StringComparison]::OrdinalIgnoreCase) }
+      return $e.Equals($AkEnd, $PathCmp)
+    }
+    if (-not $named) { return $false }
     if ($cut -lt 0) { $parent = $dir } elseif ($cut -eq 0) { $parent = '/' } else { $parent = $t.Substring(0, $cut) }
     if (-not [IO.Path]::IsPathRooted($parent)) { $parent = J $dir $parent }
     $real = Real-Dir $parent
@@ -708,6 +738,9 @@ function Scan-LinkedDir([string]$dir, [string]$name) {
     elseif (Is-WormFile $name $n) { $l = $WormFiles }
     else { continue }
     if (Is-RegularFile $p) { $l.Add($p) }
+    # Such a file that is a link is checked for ~/.ssh/authorized_keys too, as bash checks the "S path"
+    # lines its scan prints for these files.
+    if ((Is-Link $e) -and (Is-AkLink $dir $p (Link-Target $e)) -and -not $p.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($p) }
   }
 }
 function Scan-Home([string]$dir, [int]$depth) {
@@ -735,7 +768,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       elseif (Is-WormFile $parent $name) { if (Is-RegularFile $path) { $WormFiles.Add($path) } }
       elseif ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or
         ($name -ceq 'mcp.json' -and ($parent -ceq '.cursor' -or $parent -ceq '.vscode'))) { if (Is-RegularFile $path) { $LinkFiles.Add($path) } }
-      if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
+      if ((Is-AkLink $dir $path (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
     if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or $isSettings -or

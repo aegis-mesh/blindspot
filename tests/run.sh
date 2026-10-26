@@ -2247,6 +2247,23 @@ has    "a link through a linked folder counts"        '✗ ~/code/repo/keys\.txt
 if [ -e "$WORK/ak/.SSH/AUTHORIZED_KEYS" ]; then has "a link in another case counts where the volume ignores case" '✗ ~/code/d/case\.txt' "$WORK/ak.txt"
 else skip "a link in another case counts where the volume ignores case" "this volume tells case apart, so the link does not reach the file"; fi
 hasnot "a link to another file named like it does not count" 'code/e/other\.txt' "$WORK/ak.txt"
+# A link to another link that ends there is listed too, however the chain runs: through a folder the
+# scan skips (vendor), through a link named for the file, or from inside a linked .claude folder. A link
+# to another file is not, nor one out of the home folder (known limit: it is not followed, as it can end
+# on a network share that never answers, and a cloned repo can't know the home folder's path).
+rm -rf "$WORK/akc" "$WORK/akc-out"; cp -R "$WORK/clean" "$WORK/akc"
+mkdir -p "$WORK/akc/.ssh" "$WORK/akc/code/repo/vendor" "$WORK/akc/code/p/hop" "$WORK/akc/code/q" "$WORK/akc/shared/claude" "$WORK/akc/code/x" "$WORK/akc/code/z" "$WORK/akc-out"
+: > "$WORK/akc/.ssh/authorized_keys"; printf 'x\n' > "$WORK/akc/code/x/b"
+ln -s ../../../.ssh/authorized_keys "$WORK/akc/code/repo/vendor/k"; ln -s vendor/k "$WORK/akc/code/repo/deploy_keys.txt"
+ln -s ../../../.ssh/authorized_keys "$WORK/akc/code/p/hop/authorized_keys"; ln -s hop/authorized_keys "$WORK/akc/code/p/notes"
+ln -s ../../.ssh/authorized_keys "$WORK/akc/shared/claude/settings.local.json"; ln -s ../../shared/claude "$WORK/akc/code/q/.claude"
+ln -s b "$WORK/akc/code/x/a"; ln -s "$WORK/akc/.ssh/authorized_keys" "$WORK/akc-out/k"; ln -s "$WORK/akc-out/k" "$WORK/akc/code/z/abs"
+dzrun "$WORK/akc" | tr -s ' \n' '  ' > "$WORK/akc.txt"
+has    "a link to a link to authorized_keys, through a folder the scan skips, counts" '✗ ~/code/repo/deploy_keys\.txt' "$WORK/akc.txt"
+has    "a link to a link named for the file counts"    '✗ ~/code/p/notes' "$WORK/akc.txt"
+has    "a link inside a linked .claude folder counts"  '✗ ~/code/q/\.claude/settings\.local\.json' "$WORK/akc.txt"
+hasnot "a relative link to another file does not count" 'code/x/a' "$WORK/akc.txt"
+hasnot "known limit: a link out of the home folder is not followed" 'code/z/abs' "$WORK/akc.txt"
 # A settings file is read as one line (flat), so a setting inside a /* */ block comment is not at a
 # boundary and is not read. Codex values in single quotes, TOML's literal strings, count as the same
 # values in double quotes, alone or next to them. Known limit (docs/designs/dossier-checks.md, Not

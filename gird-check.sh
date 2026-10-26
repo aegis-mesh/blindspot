@@ -970,9 +970,13 @@ EOF
   # Links are printed as "L path", candidates for the ~/.ssh/authorized_keys check that ak_link
   # settles in the shell with -ef. A find with -ilname (GNU, BSD) keeps only links whose text ends in
   # authorized_keys, in any case, so .ssh/./authorized_keys, .ssh//authorized_keys, a link through a
-  # linked folder and, on a volume that ignores case, .SSH/Authorized_Keys all reach -ef. BusyBox's
-  # find has no -ilname and rejects the whole expression over it, and its -exec ... + drops links, so
-  # there every link is printed, one -exec each.
+  # linked folder and, on a volume that ignores case, .SSH/Authorized_Keys all reach -ef. With the file
+  # there, -ef follows a chain of links to its end, so every link that can lead there is printed: one
+  # whose text names it, is relative or points inside the home folder (deploy_keys.txt -> vendor/k ->
+  # the file, with vendor a folder the scan skips). A link out of the home folder is not followed: it
+  # can end on a network share that never answers, and a cloned repo can't know the home folder's path.
+  # BusyBox's find has no -ilname and rejects the whole expression over it, and its -exec ... + drops
+  # links, so there every link is printed, one -exec each.
   # Linked settings, tasks and planted files are printed as "S path" the same way, and so are a project's
   # linked .env and MCP files.
   # A .claude or .vscode folder that is a link (not ~/.vscode, which the scan skips) is read through:
@@ -988,6 +992,7 @@ EOF
     for f in $n; do if [ -e "$d/$f" ] || [ -L "$d/$f" ]; then printf "S %s\n" "$d/$f"; fi; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
     _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
+    [ -e "$H/.ssh/authorized_keys" ] && _lk=(\( -ilname '*authorized_keys' -o ! -lname '/*' -o -lname "$H/*" \) -exec printf 'L %s\n' {} +)
   else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
