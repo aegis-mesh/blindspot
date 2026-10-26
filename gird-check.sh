@@ -826,11 +826,12 @@ files_matching() { # pattern; list on stdin
   while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$1" 2>/dev/null
 }
 # Codex's env_http_headers name the environment variable each header's value comes from, so they hold
-# no token: a TOML file is read without them, in an inline table and in a [...env_http_headers] table,
-# which ends at the next table.
+# no token: a TOML file is read without them, in an inline table, as dotted keys and in a
+# [...env_http_headers] table, which ends at the next table.
 no_env_headers() { # file
   case "$1" in
     *.toml) awk '/^[ \t]*\[/ { skip = (index($0, "env_http_headers") > 0) } skip { next }
+      /env_http_headers"?[ \t]*\./ { next }
       { gsub(/env_http_headers"?[ \t]*=[ \t]*\{[^}]*\}?/, ""); print }' "$1" 2>/dev/null ;;
     *) cat "$1" 2>/dev/null ;;
   esac

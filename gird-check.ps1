@@ -388,12 +388,13 @@ function Has-Match([string]$f, [regex]$rx) {
 # A match that is not a placeholder like your-key-here, nor a path ($RxNotSecret).
 function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) }
 # Codex's env_http_headers name the environment variable each header's value comes from, so they hold
-# no token: a TOML file is read without them, in an inline table and in a [...env_http_headers] table,
-# which ends at the next table. The same as gird-check.sh's no_env_headers.
+# no token: a TOML file is read without them, in an inline table, as dotted keys and in a
+# [...env_http_headers] table, which ends at the next table. The same as gird-check.sh's no_env_headers.
 function No-EnvHeaders([string]$t) {
   $skip = $false
   $keep = foreach ($line in $t.Split("`n")) {
     if ($line -match '^[ \t]*\[') { $skip = $line.Contains('env_http_headers') }
+    if ($line -cmatch 'env_http_headers"?[ \t]*\.') { continue }
     if (-not $skip) { $line -creplace 'env_http_headers"?[ \t]*=[ \t]*\{[^}]*\}?', '' }
   }
   $keep -join "`n"
