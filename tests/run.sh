@@ -3305,19 +3305,23 @@ has    "a site-packages folder that cannot be read is not counted as checked" '!
 has    "and the headline says the check was partial"  'NO FINDINGS IN THE PATHS CHECKED' "$WORK/pyu-c.txt"
 has    "and row 05 says Python was not fully checked" 'Recent leaks +Python not fully checked: folder unreadable' "$WORK/pyu-c.txt"
 has    "a row's detail longer than the line wraps under itself" '^ {26}(could )?not be read$' "$WORK/pyu-raw.txt"
-# The LiteLLM loader's lock counts only as this person's own file, held by a process: a link there,
-# which any account can make in /tmp, is not the malware's lock.
-rm -rf "$WORK/llk"; mkdir -p "$WORK/llk/h"; ln -s /dev/null "$WORK/llk/lock-link"; : > "$WORK/llk/lock-own"
-HOME="$WORK/llk/h" GIRD_CHECK_LOADER_LOCK="$WORK/llk/lock-link" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/llk-link.txt"
-hasnot "a link at the loader lock's name is not the malware's lock" 'A process holds the loader lock|SIGNS OF THE LITELLM' "$WORK/llk-link.txt"
+# The LiteLLM loader's lock counts only as this person's own file under its one name, held by a process:
+# a link there, which any account can make in /tmp, is not the malware's lock, nor is a second name of a
+# file (a hard link), even to a file of theirs a process holds.
+rm -rf "$WORK/llk"; mkdir -p "$WORK/llk/h"; : > "$WORK/llk/lock-own"; ln -s "$WORK/llk/lock-own" "$WORK/llk/lock-link"
 if command -v lsof >/dev/null 2>&1; then SKIPPING=""; else SKIPPING="needs lsof, which the lock check uses"; fi
 if [ -z "$SKIPPING" ]; then
   ( exec 3<"$WORK/llk/lock-own"; sleep 60 ) & _llp=$!
   sleep 1
   HOME="$WORK/llk/h" GIRD_CHECK_LOADER_LOCK="$WORK/llk/lock-own" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/llk-own.txt"
+  HOME="$WORK/llk/h" GIRD_CHECK_LOADER_LOCK="$WORK/llk/lock-link" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/llk-link.txt"
+  ln "$WORK/llk/lock-own" "$WORK/llk/lock-hard"
+  HOME="$WORK/llk/h" GIRD_CHECK_LOADER_LOCK="$WORK/llk/lock-hard" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/llk-hard.txt"
   kill "$_llp" 2>/dev/null; wait "$_llp" 2>/dev/null
 fi
 has    "and this person's own lock a process holds still counts" 'A process holds the loader lock' "$WORK/llk-own.txt"
+hasnot "a link at the loader lock's name is not the malware's lock" 'A process holds the loader lock|SIGNS OF THE LITELLM' "$WORK/llk-link.txt"
+hasnot "nor is a hard link there, a second name of a file a process holds" 'A process holds the loader lock|SIGNS OF THE LITELLM' "$WORK/llk-hard.txt"
 SKIPPING=""
 # A Python environment behind a folder the walks can't enter is not read clean, under each kind of root:
 # a folder in pyenv's versions and in pipenv's environments (roots it searches), a venv's own folder past

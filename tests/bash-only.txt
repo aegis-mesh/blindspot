@@ -307,6 +307,7 @@ on a Mac, a lockfile's version to update beside its malware keeps the lockfile n
 and one installed is named as that	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
 a link at the loader lock's name is not the malware's lock	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
 and this person's own lock a process holds still counts	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
+nor is a hard link there, a second name of a file a process holds	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
 fleet: a startup file root owns in /tmp is only a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and not the Mac's finding	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and no row says the malware ran as root	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
