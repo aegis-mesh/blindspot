@@ -54,7 +54,10 @@
 #     without showing those versions deliver malware, and Socket's campaign page lists them among its
 #     affected artifacts with no word on which are malware and which sleepers. Three of them, later made
 #     into extension packs that delivered it, are listed at those versions, and one more from Aikido's
-#     post, which shows it delivering malware (below).
+#     post, which shows it delivering malware (below). So is craz2team.vscode-todo-extension, at the 1.0.9
+#     and 1.0.10 the post shows pulling in the malware, though the 13 March list has it at every version:
+#     a line for a folder's exact version wins over its id's every-version line, so those carry this
+#     wave's advice to check every editor.
 #   25 April 2026: the six it confirms as malicious; its 67 sleepers are left out. The post shows
 #     boulderzitunnel.vscode-buddies loading its native installer only on win32 and darwin, so its
 #     os is mac,win.
@@ -65,7 +68,10 @@
 #     anywhere else, so its malware runs on Windows and macOS only: mac,win. Aikido says to treat a
 #     machine with either as compromised, and gives no version: every version.
 #   2 October 2026: the two malicious Marketplace themes (Cosmic Nebula is on Open VSX too; the other,
-#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe).
+#     microsoftvs.microsoftvs, hid a Windows downloader that ran a batch file through cmd.exe). The
+#     incident is dated December 2025, when they ran, as the others are: the post shows the cluster's
+#     themes committed on 6 December 2025 and promoted on 14 December, and Microsoft's list removes
+#     Cosmic Nebula on 4 February 2026.
 #   Aikido, March 2026 (glasswormuni, its post of 13 March on GlassWorm's invisible-code wave):
 #     quartz.quartz-markdown-editor 0.3.0, a VS Code extension the post names, which Microsoft's list removes
 #     (11 March 2026, as untrustworthy): any. Its loader is JavaScript: all. The two npm packages of that
@@ -189,6 +195,8 @@ daeumer-web.align-format-tool	1.4.6	glasswormvsix	openvsx	all
 baksmink.vscode-quokka-extension	1.0.756	glasswormvsix	openvsx	all
 bansheejust22.retro-vhs-theme	1.0.1	glasswormvsix	openvsx	all
 quickrunn.auto-run-command-quick	1.6.2	glasswormvsix	openvsx	all
+craz2team.vscode-todo-extension	1.0.9	glasswormvsix	openvsx	all
+craz2team.vscode-todo-extension	1.0.10	glasswormvsix	openvsx	all
 outsidestormcommand.monochromator-theme	*	glasswormapr	openvsx	all
 keyacrosslaud.auto-loop-for-antigravity	*	glasswormapr	openvsx	all
 krundoven.ironplc-fast-hub	*	glasswormapr	openvsx	all

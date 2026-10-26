@@ -843,6 +843,9 @@ has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool
 _es=$({ grep '^planted_sha()' "$SCRIPT"; echo 'planted_sha x/.claude/execution.js'; } | bash)
 if [ "$_es" = 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' ]; then ok "execution.js counts by the three SHA-256 values Wiz publishes for its payload"
 else bad "execution.js counts by the three SHA-256 values Wiz publishes for its payload" "got: $_es"; fi
+# setup.mjs counts by every loader's SHA-256 its sources publish, intercom-client's (StepSecurity) among them.
+_ss=$({ grep '^planted_sha()' "$SCRIPT"; echo 'planted_sha x/.vscode/setup.mjs'; } | bash)
+case " $_ss " in *" fe64699649591948d6f960705caac86fe99600bf76e3eae29b4517705a58f0e2 "*) ok "setup.mjs counts by intercom-client's loader SHA-256 too" ;; *) bad "setup.mjs counts by intercom-client's loader SHA-256 too" "got: $_ss" ;; esac
 # The AntV wave (SafeDep): the kitty-monitor backdoor's systemd unit and LaunchAgent, the cat.py they start, and
 # the payload copies that the hooks it adds to Claude Code and Codex settings run are signs of its malware. It also
 # commits .claude/index.js, a name projects use too: alone, and not the published payload, it is a file to read;
@@ -1673,7 +1676,7 @@ has    "Windows: telnyx's msbuild.exe in the Startup folder is its sign" 'telnyx
 mkdir -p "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-ext.txt"
 rm -rf "$WP/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
-has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/win-ext.txt"
+has    "Windows: an extension whose malware runs on Windows is malware here" 'Editor extensions signs of the malware found ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed' "$WORK/win-ext.txt"
 # The January wave's oorzc extensions go on only on macOS (Socket): on Windows, one is an extension to remove.
 mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
@@ -1902,7 +1905,7 @@ hasnot "a workspace set to false is not listed"       'p/calm/' "$D"
 has    "with the advice"                              'A prompt injection in anything the agent reads can then run commands on this computer\. Turn it off unless the agent runs in a sandbox\.' "$D"
 has    "and the fix"                                  'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox\.' "$D"
 has    "Cursor below the fixed version"               '! Cursor 2\.9\.1, update to 3\.1\.2 or later A malicious agent could escape the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw An agent could replace the Python of a virtual environment to run commands outside the sandbox\. github\.com/cursor/cursor/security/advisories/GHSA-p9g2-cr55-cw9c' "$D"
-has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can reach files outside it' "$D"
+has    "Amazon Q language server: the highest version folder, compared as numbers" '! Amazon Q language server 1\.68\.0, update to 1\.69\.0 or later A link in a workspace can let the agent write files outside it' "$D"
 has    "Claude Code installed with npm"               '! Claude Code 1\.0\.3, update to 2\.1\.260 or later A web page could reach the editor connection\. github\.com/advisories/GHSA-9f65-56v6-gxw7 A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$D"
 has    "mcp-remote installed and in an MCP config's args" '! mcp-remote 0\.0\.5, 0\.1\.10, update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p' "$D"
 has    "and that no version fixes a later advisory that covers 0.1.16" 'update to 0\.1\.16 or later A hostile MCP server could run commands\. github\.com/advisories/GHSA-6xpm-ggf7-wc3p No version fixes this yet: a hostile server could open an internal address in your browser\. github\.com/advisories/GHSA-v65w-6crh-cp3h' "$D"
@@ -1918,7 +1921,7 @@ hasnot "and never to delete every LaunchAgent not recognized" 'delete [^.]*Launc
 has    "the Injective fix: move the funds out of its wallets" 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21, into a new wallet\.' "$D"
 has    "the Injective fix comes before the update it has to come before" 'into a new wallet\. .*Update the npm packages listed in section 5' "$D"
 has    "the Injective SDK in a lockfile"              '@injectivelabs/sdk-ts 1\.20\.21 \(Injective SDK, July 2026\), listed in this lockfile' "$D"
-has    "with its sourced line"                        'Injective SDK, July 2026: sent out the seed phrases, and the private keys given as hex strings, that apps loaded into it\. github\.com' "$D"
+has    "with its sourced line"                        'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it\. github\.com' "$D"
 # Injective alone: moving the funds outranks every fix that is not act-now, and row 05 names the wallets.
 rm -rf "$WORK/dz-inj"; cp -R "$WORK/clean" "$WORK/dz-inj"; mkdir -p "$WORK/dz-inj/code/inj"
 printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"version":"1.20.21","resolved":"https://registry.npmjs.org/@injectivelabs/sdk-ts/-/sdk-ts-1.20.21.tgz"}}}\n' > "$WORK/dz-inj/code/inj/package-lock.json"
@@ -1989,8 +1992,8 @@ has    "a GlassWorm extension of Socket's 13 March list, at any version" '~/\.cu
 has    "a version the 18 March post shows delivering malware" '~/\.windsurf/extensions/spacetoow\.vsc-python-indent-1\.21\.4 spacetoow\.vsc-python-indent 1\.21\.4 \(GlassWorm sleeper extensions, March 2026\), installed' "$WORK/dz-waves.txt"
 has    "Devin Desktop's extension folder is read, as an Open VSX editor's" '~/\.devin/extensions/oorzc\.i18n-tools-plus-1\.6\.8 oorzc\.i18n-tools-plus 1\.6\.8 \(GlassWorm extensions, January 2026\), installed' "$WORK/dz-waves.txt"
 has    "one of the six the April post confirms"      '~/\.kiro/extensions/boulderzitunnel\.vscode-buddies-1\.35\.3 boulderzitunnel\.vscode-buddies 1\.35\.3 \(GlassWorm sleeper extensions, April 2026\), installed' "$WORK/dz-waves.txt"
-has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, October 2026\), installed' "$WORK/dz-waves.txt"
-has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, October 2026: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
+has    "a GlassWorm-linked Marketplace theme, in VS Code's own folder" '~/\.vscode/extensions/cosmic-themes\.theme-cosmic-nebula-1\.0\.0 cosmic-themes\.theme-cosmic-nebula 1\.0\.0 \(GlassWorm-linked themes, December 2025\), installed' "$WORK/dz-waves.txt"
+has    "each wave with its own sourced line"         'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf\. socket\.dev GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets\. socket\.dev GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders\. socket\.dev GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found\. socket\.dev' "$WORK/dz-waves.txt"
 if [ "$(grep -o 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-waves.txt" | grep -c .)" -eq 1 ]; then ok "the fix two waves share is said once"; else bad "the fix two waves share is said once"; fi
 hasnot "a version the 18 March post does not name is not flagged" 'spacetoow\.vsc-python-indent 1\.21\.0' "$WORK/dz-waves.txt"
 hasnot "an Open VSX extension's id in VS Code's own folder is not flagged" '~/\.vscode/extensions/aadarkcode' "$WORK/dz-waves.txt"
@@ -2102,6 +2105,12 @@ has    "and a Marketplace id of that wave in VS Code's own folder" '~/\.vscode/e
 hasnot "an Open VSX-only id of that wave in VS Code's own folder is not flagged" 'vitalik\.solidity' "$WORK/dz-dec.txt"
 has    "the vscode-icons clone at 12.15.1, which the post shows malicious" 'bphpburnsus\.iconesvscode 12\.15\.1 \(GlassWorm native extensions, November 2025\)' "$WORK/dz-dec.txt"
 hasnot "and not at 12.15.0, which it shows clean"     'iconesvscode-12\.15\.0|iconesvscode 12\.15\.0' "$WORK/dz-dec.txt"
+# craz2team.vscode-todo-extension is on the 13 March list at every version, and the 18 March post shows its
+# 1.0.9 and 1.0.10 pulling in the malware: a line for the exact version wins, so 1.0.10 carries that wave's advice.
+rm -rf "$WORK/dz-crz"; cp -R "$WORK/clean" "$WORK/dz-crz"; mkdir -p "$WORK/dz-crz/.cursor/extensions/craz2team.vscode-todo-extension-1.0.10"
+dzrun "$WORK/dz-crz" | tr -s ' \n' '  ' > "$WORK/dz-crz.txt"
+has    "an exact version's line wins over the every-version line of its id" 'craz2team\.vscode-todo-extension 1\.0\.10 \(GlassWorm sleeper extensions, March 2026\), installed' "$WORK/dz-crz.txt"
+has    "with the advice of the wave that shows it dropping malware" 'Also check every editor you use, VS Code included, for extensions you did not install yourself' "$WORK/dz-crz.txt"
 env HOME="$WORK/dz-dec" PATH="$WORK/linbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-dec-linux.txt"
 has    "on Linux, where that loader has no binary, they are extensions to remove" 'Editor extensions a malicious extension to remove .*Their malware runs on macOS and Windows only, so it did not run here' "$WORK/dz-dec-linux.txt"
 # A folder is split the way the editors split it: the id is the longest start that leaves a version of
@@ -2115,7 +2124,7 @@ hasnot "an id that runs on past a bad one, before its own version, is another ex
 rm -rf "$WORK/dz-os"; cp -R "$WORK/clean" "$WORK/dz-os"; mkdir -p "$WORK/dz-os/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os.txt"
 dzrun "$WORK/dz-os" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-os-sum.txt"
-has    "an extension whose malware runs on Windows only is one to remove elsewhere" 'Editor extensions a malicious extension to remove ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os.txt"
+has    "an extension whose malware runs on Windows only is one to remove elsewhere" 'Editor extensions a malicious extension to remove ~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os.txt"
 hasnot "and is not a compromised machine there"     'ACT NOW|Treat this machine as compromised|signs of the malware found' "$WORK/dz-os.txt"
 has    "with a fix to uninstall the extension"      'Uninstall the editor extensions listed in section 5\. Their malware could not run on this system\.' "$WORK/dz-os.txt"
 has    "row 05 says an editor extension to remove"  'Recent leaks +an editor extension to remove, see section 5' "$WORK/dz-os-sum.txt"
@@ -2152,7 +2161,7 @@ has    "below the newest fix's range the row still names it, not 2.1.179, which 
 hasnot "and it does not show the newest fix's hole, which that version does not have" 'A stored API key could start sessions' "$WORK/dz-cc2.0.67.txt"
 mkdir -p "$WORK/dz-os/.cursor/extensions/littensy-studio.magical-icons-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
-has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
+has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
 hasnot "and the fix to uninstall it alone is not given then" 'Their malware could not run on this system' "$WORK/dz-os2.txt"
 # The January wave's oorzc extensions go on only on macOS (Socket): on a Mac, one means a compromised machine.
 rm -rf "$WORK/dz-jan"; cp -R "$WORK/clean" "$WORK/dz-jan"; mkdir -p "$WORK/dz-jan/.cursor/extensions/oorzc.mind-map-1.0.61"

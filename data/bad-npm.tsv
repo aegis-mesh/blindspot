@@ -6,7 +6,10 @@
 #   incident  an id from data/incidents.tsv
 # What each campaign's lines cover:
 # The level: a GitHub or OpenSSF malware advisory decides it, unless the package's own maintainer says
-# its malware could not run. A third party's reading (Socket's, Wiz's) is noted, not followed.
+# its malware could not run. A third party's reading (Socket's, Wiz's) is noted, not followed. One
+# exception, Injective: its malware advisory, GHSA-5fc4-fm2x-6f4r, says to treat any seed phrase or
+# private key used with 1.20.21 as compromised and describes code that sends out only those, with no
+# install script, so its level is update, with the advice to move those wallets' funds.
 #   Axios, Bitwarden, OpenSearch, tensorlake and Injective: the versions their advisories name. And
 #     tensorlake's six native packages (tensorlake-native-*) at 0.5.144: Tensorlake's own GitHub advisory,
 #     GHSA-8g63-53c9-65j2, names them as compromised with tensorlake 0.5.144. No malware entry names them,
@@ -30,6 +33,10 @@
 #     which no advisory names). Its PyPI release, lightning 2.6.2 and 2.6.3, is in data/bad-pypi.tsv.
 #   Mastra, June 2026: the 89 @mastra packages, mastra and create-mastra that GitHub lists, and
 #     easy-day-js 1.11.22, which Socket says each of the 141 compromised @mastra packages pulled in.
+#     The other 52 of those 141 have no line: Socket says the only change in each was a dependency on
+#     easy-day-js ^1.11.21, whose 1.11.22 carried the install hook, so an install of one ran the malware
+#     only by pulling in easy-day-js 1.11.22, which its line finds wherever that install is: a
+#     lockfile, a global install or npm's cache.
 #     And mastraqqq at every version (GHSA-7vj9-63m9-3x7f), a typosquat of mastra that Socket's page on
 #     the campaign lists, with caspian-day-js 1.11.23 (OpenSSF's MAL-2026-5892), the dropper its
 #     caspian-day-js ^1.11.22 dependency resolves to.
