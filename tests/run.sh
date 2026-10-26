@@ -1920,6 +1920,22 @@ has    "Claude Code's settings in a folder that can't be entered are named in se
 has    "and row 04 does not read clean over them"      'Allow lists none found, but [0-9]+ files? could not be read' "$WORK/cl2-c.txt"
 has    "a key file in a folder that can be entered but not listed is read" '~/\.gemini/settings\.json Google' "$WORK/cl2.txt"
 hasnot "and a file missing from it is not named as not read" '~/\.gemini/\.env' "$WORK/cl2.txt"
+# A project's .env or .mcp.json that is a link is read when the link ends at a regular file, as a linked
+# settings file is. A link to a pipe, or to nothing, is not read and not named. The run gets 60 s and is
+# killed and failed after; the link to the pipe goes before the counts are checked below.
+rm -rf "$WORK/el"; mkdir -p "$WORK/el/code/svc" "$WORK/el/code/m" "$WORK/el/code/p" "$WORK/el/code/d" "$WORK/el/secrets"
+printf 'OPENAI_API_KEY=%s\n' "$(sed -n 2p "$WORK/keys.txt")" > "$WORK/el/secrets/svc.env"
+printf '{"mcpServers":{"gh":{"command":"npx","env":{"GITHUB_TOKEN":"%s"}}}}\n' "$(sed -n 3p "$WORK/keys.txt")" > "$WORK/el/secrets/mcp.json"
+mkfifo "$WORK/el/secrets/pipe"; ln -s ../../secrets/svc.env "$WORK/el/code/svc/.env"; ln -s ../../secrets/mcp.json "$WORK/el/code/m/.mcp.json"
+ln -s ../../secrets/pipe "$WORK/el/code/p/.env"; ln -s ../../nowhere "$WORK/el/code/d/.mcp.json"
+HOME="$WORK/el" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$WORK/el-raw.txt" 2>&1 &
+BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; pkill -9 -f "$WORK/el/" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/el-raw.txt"; fi
+wait "$BP" 2>/dev/null; rm -f "$WORK/el/code/p/.env"
+tr -s ' \n' '  ' < "$WORK/el-raw.txt" > "$WORK/el.txt"
+has    "a project's .env that is a link is read"       '~/code/svc/\.env OpenAI' "$WORK/el.txt"
+has    "and a project's .mcp.json that is a link"      'Project ~/code/m/\.mcp\.json 1 server, token in the file' "$WORK/el.txt"
+hasnot "a link to a pipe or to nothing is neither read nor named" 'code/p/\.env|code/d/\.mcp' "$WORK/el.txt"
 has    "cook.pth next to the pyc is an act-now hit" 'signs of the LiteLLM malware\. Act now' "$WORK/zb-pyc-strong.txt"
 
 echo "checks from the incident dossier"
@@ -2831,6 +2847,9 @@ PY
   has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
   HOME="$WORK/fcount" bash "$SCRIPT" --offline > "$WORK/fcount.txt" 2>&1
   has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
+  # A project's linked .env is scanned, so env_files counts it, but it is not a file the scan found.
+  report_of "$WORK/report-el.json" env HOME="$WORK/el" GIRD_CHECK_API="$API" bash "$SCRIPT"
+  has    "a linked .env counts in env_files, not in files_found" '"env_files":1,.*"files_found":0,' "$WORK/report-el.json"
   # files_found counts files: a site-packages folder the scan lists is not one.
   mkdir -p "$WORK/fcount/v/lib/python3.12/site-packages"; printf 'home = /usr\n' > "$WORK/fcount/v/pyvenv.cfg"
   report_of "$WORK/report-fsite.json" env HOME="$WORK/fcount" GIRD_CHECK_API="$API" bash "$SCRIPT"

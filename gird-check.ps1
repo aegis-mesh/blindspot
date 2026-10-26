@@ -569,6 +569,8 @@ $Found = New-Object System.Collections.Generic.List[string]
 # Kept apart from $Found, so files_found counts what it always has: the files of the npm and
 # project checks, and linked settings files, which are checked like the files but are not files.
 $LinkSettings = New-Object System.Collections.Generic.List[string]
+# A project's linked .env and MCP files, read as linked settings files are, when they end at a regular file.
+$LinkFiles = New-Object System.Collections.Generic.List[string]
 $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
@@ -724,13 +726,15 @@ function Scan-Home([string]$dir, [int]$depth) {
     }
     $parent = [IO.Path]::GetFileName($dir)
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
-    # A linked settings (.claude's or .vscode's), tasks or worm file is followed when it ends at a
-    # regular file; any other link is not.
+    # A linked settings (.claude's or .vscode's), tasks or worm file, or a project's linked .env or MCP
+    # file, is followed when it ends at a regular file; any other link is not.
     if ($link) {
       if ($isSettings) { if (Is-RegularFile $path) { $LinkSettings.Add($path) } }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { if (Is-RegularFile $path) { $TaskFiles.Add($path) } }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { if (Is-RegularFile $path) { $VscSettings.Add($path) } }
       elseif (Is-WormFile $parent $name) { if (Is-RegularFile $path) { $WormFiles.Add($path) } }
+      elseif ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or
+        ($name -ceq 'mcp.json' -and ($parent -ceq '.cursor' -or $parent -ceq '.vscode'))) { if (Is-RegularFile $path) { $LinkFiles.Add($path) } }
       if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
@@ -1124,9 +1128,9 @@ foreach ($f in $WormFiles) {
 $WormHit = New-Object System.Collections.Generic.List[string]; $WormLook = New-Object System.Collections.Generic.List[string]
 foreach ($f in $WormFiles) { if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains((Worm-Project $f))) { $WormHit.Add($f) } else { $WormLook.Add($f) } }
 $N_LOOK = $WormLook.Count
-$EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
+$EnvFiles = @(@($Found) + @($LinkFiles) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
 $AllowFiles = @(@($Found) + @($LinkSettings) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
-$ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
+$ProjectMcp = @(@($Found) + @($LinkFiles) | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 
 # --- 1. Coding agents --------------------------------------------------------

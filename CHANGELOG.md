@@ -37,6 +37,7 @@
 - Zeabur joins OpenCode and Railway in the check for this week's leaks: if the Zeabur CLI or its settings folder is on your Mac, it says to rotate the keys stored there. A leftover compiled `cook` file from the LiteLLM malware, which stays behind after `cook.py` is deleted, is reported as a possible leftover to check.
 - That line is the only one that mentions the first 1,000: until 1,000 AI builders have run it, the line of totals under the banner is left out.
 - Keys in plain text: a placeholder shaped like a key (a run of x's, AWS's documented example key id) is not counted, as in the sessions.
+- A project's `.env` or `.mcp.json` that is a link is read, as a linked settings file is, when the link ends at a regular file.
 - An agent folder that can't be entered (made 000, or left root's by a run with sudo) no longer hides the files in it: each key file, MCP config or settings file whose place is behind it is named as not read, so rows 02 to 04 don't read clean over it.
 - A pipe, socket or device where a key, MCP config or settings file should be (a fifo made at `~/.zsh_history`) is never read, so it can't hold up the check, and is named as not read. A history file linked to `/dev/null`, which keeps none, is not.
 - Codex used in the last 30 days reads as in use, not as an agent to remove: its sessions sit four folders down (`sessions/YYYY/MM/DD`), and every agent's folder is now read that deep.

@@ -973,7 +973,8 @@ EOF
   # linked folder and, on a volume that ignores case, .SSH/Authorized_Keys all reach -ef. BusyBox's
   # find has no -ilname and rejects the whole expression over it, and its -exec ... + drops links, so
   # there every link is printed, one -exec each.
-  # Linked settings, tasks and planted files are printed as "S path" the same way.
+  # Linked settings, tasks and planted files are printed as "S path" the same way, and so are a project's
+  # linked .env and MCP files.
   # A .claude or .vscode folder that is a link (not ~/.vscode, which the scan skips) is read through:
   # sh prints "S path" for each file in it the scan would read there, settings, tasks or planted, and
   # for one it can't enter, a line in find's own words, so it is named as a folder not read.
@@ -1019,7 +1020,8 @@ EOF
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
        -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
-       -o -path '*/.vscode/settings.json' "${_pf[@]}" \) "${_ls[@]}" \) -o \
+       -o -path '*/.vscode/settings.json' "${_pf[@]}" -o -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json \
+       -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' \) "${_ls[@]}" \) -o \
     \( -type l \( -name .claude -o -name .vscode \) ! -path "$H/.vscode" "${_lx[@]}" \) -o \
     \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
 }
@@ -1457,8 +1459,9 @@ UNREAD_DIRS=""
   sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
 N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
 HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST + SCAN_FAILED)) -gt 0 ] && HOME_PARTIAL=1
-# Linked settings, tasks and planted files, and those files in a linked .claude or .vscode folder,
-# come marked "S path" and are checked like the files, but files_found counts files, as it always has.
+# Linked settings, tasks and planted files, and those files in a linked .claude or .vscode folder, and a
+# project's linked .env and MCP files, come marked "S path" and are checked like the files, but
+# files_found counts files, as it always has.
 # A link counts only when it ends at a regular file: a repo can link a settings file to /dev/zero or
 # /dev/tty, which a reader would never get to the end of.
 LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p' | while IFS= read -r _f; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
@@ -1550,9 +1553,9 @@ FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
-ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
+ENV_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
-PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
+PROJECT_MCP=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
 SITES=$(printf '%s\n' "$FOUND" | grep -E '/site-packages$')
 VENVS=$(printf '%s\n' "$FOUND" | grep -E '/pyvenv\.cfg$' | sed 's#/pyvenv\.cfg$##')
 
