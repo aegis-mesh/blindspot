@@ -169,7 +169,11 @@ The install step has not yet been run end to end on a real Mac.
    ```
 
 Set `--deadline` below your MDM's own time limit for a script; the page for your MDM gives the
-number. Each account gets an equal share of the time left, so one stuck account cannot hold up the
+number. How long an account takes depends on its agent sessions: with a large session store,
+minutes with the system's perl, seconds when the account has its own ripgrep (at
+`/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` or `~/.cargo/bin`, changeable only by root
+or that account). The default deadline, 3000 seconds, covers both. Each row's `session_engine`
+says which ran. Each account gets an equal share of the time left, so one stuck account cannot hold up the
 rest. The run keeps a few seconds in reserve for its own steps, which sit outside the shares, so set
 the deadline a little below the limit, not at it. Run from standard input instead of a file,
 `gird-fleet.sh` stops with `run it from a file`: it copies `gird-check.sh` from its own folder for

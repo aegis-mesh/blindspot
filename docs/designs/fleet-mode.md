@@ -62,8 +62,8 @@ files. If `sudo` fails, the account is reported as not checked.
   each start. No account can change the code a later account runs.
 - An account run reads only regular files, and leaves out any over a size limit. A fifo, socket,
   device or oversized file is counted as not checked. Session files are the exception to the size
-  limit: the session check, which uses the system's perl, never ripgrep, reads them in 1 MB pieces
-  whatever their size.
+  limit: the session check reads them whatever their size, with the system's perl (in 1 MB pieces)
+  or with a ripgrep that only root or that account can change (see "As built").
 - An account run cannot speak for anyone else. It writes a fixed line format (`key=value`, known keys
   only, numbers, and names from the fixed lists) to a pipe root created. Root reads at most a set
   number of bytes, checks every line against the format, and builds the account's row itself. Any
@@ -327,6 +327,15 @@ real Mac.
   are found by path; and the ownership check refuses an ACL entry that lets anyone write. A
   normal run of `gird-check.sh` still counts a profile it can't read as no keys:
   https://github.com/aegis-mesh/blindspot/issues/24.
+- Session engine. With perl, a large session store (5.2 GB measured on one Mac) takes minutes per
+  account; ripgrep takes seconds. An account run runs as its account, so a ripgrep that only root or
+  that same account can change gives nobody a right they do not already have: no account's code
+  runs with another account's rights. It is used when found at `/opt/homebrew/bin/rg`,
+  `/usr/local/bin/rg`, `~/.local/bin/rg` or `~/.cargo/bin/rg`, as a regular file (a link is followed
+  to its real file, and the test applies there), with the file and every folder above it owned by
+  root or the account, writable by no one else by mode or by ACL. Otherwise perl checks the sessions
+  as before. Root never runs ripgrep. The account run reports `engine=rg|perl|none`, and the row
+  carries it as `session_engine`; the inventory value does not.
 - With none of the protected folders it tries (Safari, Mail, Messages) in a home, an account run
   counts its protected folders as checked: there is nothing protected to miss.
 - Two files. `gird-fleet.sh` holds all the root work: the fixed PATH, the ownership checks, the
