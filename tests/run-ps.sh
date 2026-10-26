@@ -1980,8 +1980,9 @@ has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no si
 rm -rf "$WORK/pyt" "$WORK/pyu"; mkdir -p "$WORK/pyt/AppData/Local/pypoetry/Cache/virtualenvs/app-Xy3kQ9-py3.12/Lib/site-packages/litellm-1.107.0.dist-info" \
   "$WORK/pyt/.local/share/virtualenvs/app-Xy3kQ9/lib/python3.12/site-packages/litellm-1.82.7.dist-info" \
   "$WORK/pyt/AppData/Local/hatch/env/virtual/app/Xy3kQ9/default/Lib/site-packages/lightning-2.6.2.dist-info" \
-  "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info" "$WORK/pyt/AppData/Roaming" "$WORK/pyt/AppData/Local/Temp" "$WORK/pyu/AppData/Roaming" "$WORK/pyu/AppData/Local/Temp"
-printf 'home = /usr\n' > "$WORK/pyu/code/py/.venv/pyvenv.cfg"
+  "$WORK/pyu/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info" "$WORK/pyu/code/ok/.venv/lib/python3.12/site-packages/requests-2.32.3.dist-info" "$WORK/pyt/AppData/Roaming" "$WORK/pyt/AppData/Local/Temp" "$WORK/pyu/AppData/Roaming" "$WORK/pyu/AppData/Local/Temp"
+# A venv beside it that can be read, so the row's detail names both and is long enough to wrap.
+printf 'home = /usr\n' > "$WORK/pyu/code/py/.venv/pyvenv.cfg"; printf 'home = /usr\n' > "$WORK/pyu/code/ok/.venv/pyvenv.cfg"
 psrun "$WORK/pyt" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/pyt.txt"
 has    "a Python environment in Poetry's folder is checked" 'pypoetry/[^ ]*site-packages: litellm 1\.107\.0' "$WORK/pyt.txt"
 has    "and in pipenv's"                              'share/virtualenvs/[^ ]*site-packages: litellm 1\.82\.7' "$WORK/pyt.txt"
