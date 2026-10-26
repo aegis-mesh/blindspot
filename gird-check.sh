@@ -6330,11 +6330,60 @@ npm_roots_in() { # folder holding one folder per version or package, where node_
   if [ ! -r "$1" ] || [ ! -x "$1" ]; then printf '?\t%s\n' "$1"; return; fi
   for _rv in "$1"/*/; do if [ -d "$_rv" ]; then npm_root "${_rv%/}/$2"; fi; done
 }
+# Where a setting moves npm's, nvm's, n's, Volta's or bun's global folder, as each tool documents it.
+npm_dir() { # a setting's value: printed when it is an absolute path, or ~/ for the home folder
+  case "$1" in \~/*|\~\\*) printf '%s\n' "$H/${1#??}" ;; *) py_dir "$1" ;; esac
+}
+npm_prefix() { # npm's prefix: npm_config_prefix, else prefix in your npmrc with ${VAR} replaced, as npm reads them
+  _nf=${npm_config_prefix:-${NPM_CONFIG_PREFIX:-}}
+  if [ -z "$_nf" ]; then
+    _uc=$(npm_dir "${npm_config_userconfig:-${NPM_CONFIG_USERCONFIG:-}}"); [ -n "$_uc" ] || _uc="$H/.npmrc"
+    if [ -f "$_uc" ] && fleet_ok "$_uc" && ! too_big "$_uc"; then
+      _nf=$(awk '{ l = $0; sub(/\r$/, "", l) }
+        l ~ /^[ \t]*[;#]/ { next }
+        match(l, /^[ \t]*prefix[ \t]*=/) {
+          v = substr(l, RLENGTH + 1); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+          if (v ~ /^".*"$/ || v ~ /^\047.*\047$/) v = substr(v, 2, length(v) - 2)
+          o = ""
+          while (match(v, /\$\{[A-Za-z_][A-Za-z0-9_]*\??\}/)) {
+            n = substr(v, RSTART + 2, RLENGTH - 3); q = 0; if (n ~ /\?$/) { q = 1; n = substr(n, 1, length(n) - 1) }
+            if (n in ENVIRON) r = ENVIRON[n]; else if (q) r = ""; else r = substr(v, RSTART, RLENGTH)
+            o = o substr(v, 1, RSTART - 1) r; v = substr(v, RSTART + RLENGTH)
+          }
+          p = o v
+        }
+        END { if (p != "") print p }' "$_uc" 2>/dev/null)
+    fi
+  fi
+  npm_dir "$_nf"
+}
 _npm_roots=$(
   for r in /opt/homebrew/lib/node_modules /usr/local/lib/node_modules /usr/lib/node_modules "$H/.npm-global/lib/node_modules" \
            "$H/.bun/install/global/node_modules"; do
     npm_root "$r"
   done
+  # npm's prefix where it is set: global installs go in its lib/node_modules, its node_modules on Windows
+  # (npm's folders docs).
+  _npx=$(npm_prefix); _npx=${_npx%/}
+  if [ -n "$_npx" ]; then if [ "$WIN" -eq 1 ]; then npm_root "$_npx/node_modules"; else npm_root "$_npx/lib/node_modules"; fi; fi
+  # nvm's NVM_DIR, else XDG_CONFIG_HOME/nvm (its install script); n's N_PREFIX, where it puts the Node in
+  # use, and ~/n, n-install's; Volta's VOLTA_HOME; bun's BUN_INSTALL_GLOBAL_DIR, else BUN_INSTALL's
+  # install/global, else XDG_CACHE_HOME/.bun/install/global (bun's global folder, its source).
+  _nvd=$(npm_dir "${NVM_DIR:-}")
+  [ -n "$_nvd" ] || case "${XDG_CONFIG_HOME:-}" in (/*) [ "$WIN" -eq 1 ] || _nvd="${XDG_CONFIG_HOME%/}/nvm" ;; esac
+  [ -n "$_nvd" ] && npm_roots_in "${_nvd%/}/versions/node" lib/node_modules
+  _npn=$(npm_dir "${N_PREFIX:-}"); [ -n "$_npn" ] && npm_root "${_npn%/}/lib/node_modules"
+  npm_root "$H/n/lib/node_modules"
+  _vh=$(npm_dir "${VOLTA_HOME:-}"); _vh=${_vh%/}
+  if [ -n "$_vh" ] && [ "$WIN" -eq 1 ]; then
+    npm_roots_in "$_vh/tools/image/node" node_modules; npm_roots_in "$_vh/tools/image/packages" node_modules; npm_roots_in "$_vh/tools/image/packages" lib/node_modules
+  elif [ -n "$_vh" ]; then
+    npm_roots_in "$_vh/tools/image/node" lib/node_modules; npm_roots_in "$_vh/tools/image/packages" lib/node_modules
+  fi
+  _bg=$(npm_dir "${BUN_INSTALL_GLOBAL_DIR:-}")
+  if [ -z "$_bg" ]; then _bi=$(npm_dir "${BUN_INSTALL:-}"); [ -n "$_bi" ] && _bg="${_bi%/}/install/global"; fi
+  [ -n "$_bg" ] || case "${XDG_CACHE_HOME:-}" in (/*) _bg="${XDG_CACHE_HOME%/}/.bun/install/global" ;; esac
+  [ -n "$_bg" ] && npm_root "${_bg%/}/node_modules"
   npm_roots_in "$H/.nvm/versions/node" lib/node_modules; npm_roots_in "$H/.volta/tools/image/node" lib/node_modules
   npm_roots_in "$H/.volta/tools/image/packages" lib/node_modules; npm_roots_in "$H/.local/share/fnm/node-versions" installation/lib/node_modules
   npm_roots_in "$H/Library/Application Support/fnm/node-versions" installation/lib/node_modules
@@ -6354,7 +6403,7 @@ _npm_roots=$(
   _ph=$(winpath "${PNPM_HOME:-}"); _ph=${_ph%/}
   if [ -n "$_ph" ]; then npm_roots_in "$_ph/global" node_modules; fi
 )
-NPM_ROOTS=$(printf '%s\n' "$_npm_roots" | grep -v "^?$TAB" | grep -v '^$')
+NPM_ROOTS=$(printf '%s\n' "$_npm_roots" | grep -v "^?$TAB" | grep -v '^$' | awk '!s[$0]++')
 # Each root is read as a node_modules folder: the package.json of every package in it, and of every
 # dependency in the node_modules folders nested in theirs, 16 levels deep, so a tool's dependency's own
 # dependency is read too. A store in a dot folder beside them (pnpm's .pnpm/<id>/node_modules, where a

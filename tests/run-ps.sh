@@ -1261,6 +1261,31 @@ has    "beside other findings it is named too"         '1 lockfile could not be 
 hasnot "but not beside a bun.lock, which bun reads first" 'code/both/bun\.lockb' "$WORK/lb.txt"
 has    "a deno.lock is read"                           '~/code/deno/deno\.lock axios 1\.14\.1 \(Axios takeover' "$WORK/lb.txt"
 has    "and its scoped packages"                       '~/code/deno/deno\.lock @keyv/redis 6\.0\.0 \(keyv account takeover' "$WORK/lb.txt"
+# Global installs under npm's prefix where your npmrc (its ${VAR} replaced, ~/ for the home folder) or
+# npm_config_prefix sets it, nvm's NVM_DIR (else XDG_CONFIG_HOME/nvm), n's N_PREFIX, Volta's VOLTA_HOME and
+# bun's global folder (BUN_INSTALL_GLOBAL_DIR, BUN_INSTALL's, else XDG_CACHE_HOME's), as each tool documents it.
+GP=$WORK/gp; rm -rf "$GP"; gp_pkg() { mkdir -p "$1/$2"; printf '{"name":"%s","version":"1.0.0"}\n' "$2" > "$1/$2/package.json"; }
+for d in h1 h2 h3 h4 h5; do mkdir -p "$GP/$d/AppData/Roaming" "$GP/$d/AppData/Local/Temp"; done
+printf '; npm settings\nprefix=${HOME}/.local\n' > "$GP/h1/.npmrc"; gp_pkg "$GP/h1/.local/lib/node_modules" claud-code
+printf 'prefix = "~/.npm-packages"\n' > "$GP/h2/.npmrc"; gp_pkg "$GP/h2/.npm-packages/lib/node_modules" cloude
+gp_pkg "$GP/x/npp/lib/node_modules" opencraw; gp_pkg "$GP/x/nvm/versions/node/v22.0.0/lib/node_modules" cloude-code
+gp_pkg "$GP/x/n/lib/node_modules" rimarf; gp_pkg "$GP/x/volta/tools/image/packages/tool/lib/node_modules" naniod
+gp_pkg "$GP/x/bun/install/global/node_modules" suport-color; gp_pkg "$GP/x/bgd/node_modules" iruchache
+gp_pkg "$GP/x/xc/.bun/install/global/node_modules" claud-code; gp_pkg "$GP/x/xcfg/nvm/versions/node/v20.0.0/lib/node_modules" opencraw
+for d in h1 h2; do psrun "$GP/$d" HOME="$GP/$d" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$GP/$d.txt"; done
+psrun "$GP/h3" npm_config_prefix="$GP/x/npp" NVM_DIR="$GP/x/nvm" N_PREFIX="$GP/x/n" VOLTA_HOME="$GP/x/volta" BUN_INSTALL="$GP/x/bun" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$GP/h3.txt"
+psrun "$GP/h4" BUN_INSTALL_GLOBAL_DIR="$GP/x/bgd" XDG_CONFIG_HOME="$GP/x/xcfg" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$GP/h4.txt"
+psrun "$GP/h5" XDG_CACHE_HOME="$GP/x/xc" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$GP/h5.txt"
+has    "a global install under the prefix your npmrc sets is found" '~/\.local/lib/node_modules/claud-code claud-code 1\.0\.0' "$GP/h1.txt"
+has    "and one given with ~/ there"                   '~/\.npm-packages/lib/node_modules/cloude cloude 1\.0\.0' "$GP/h2.txt"
+has    "and under npm_config_prefix"                   'gp/x/npp/lib/node_modules/opencraw opencraw 1\.0\.0' "$GP/h3.txt"
+has    "and under nvm's NVM_DIR"                       'gp/x/nvm/versions/node/v22\.0\.0/lib/node_modules/cloude-code cloude-code 1\.0\.0' "$GP/h3.txt"
+has    "and under n's N_PREFIX"                        'gp/x/n/lib/node_modules/rimarf rimarf 1\.0\.0' "$GP/h3.txt"
+has    "and under VOLTA_HOME"                          'gp/x/volta/tools/image/packages/tool/lib/node_modules/naniod naniod 1\.0\.0' "$GP/h3.txt"
+has    "and in bun's global folder under BUN_INSTALL"  'gp/x/bun/install/global/node_modules/suport-color suport-color 1\.0\.0' "$GP/h3.txt"
+has    "and under BUN_INSTALL_GLOBAL_DIR"              'gp/x/bgd/node_modules/iruchache iruchache 1\.0\.0' "$GP/h4.txt"
+has    "and nvm's under XDG_CONFIG_HOME"               'gp/x/xcfg/nvm/versions/node/v20\.0\.0/lib/node_modules/opencraw opencraw 1\.0\.0' "$GP/h4.txt"
+has    "and bun's under XDG_CACHE_HOME"                'gp/x/xc/\.bun/install/global/node_modules/claud-code claud-code 1\.0\.0' "$GP/h5.txt"
 # Global installs are read to the end of their nesting: a dependency's own dependency in an nvm or npx
 # folder, and pnpm's global store, where its top-level links lead (each package is listed once). A safe
 # version deep down is not a hit.

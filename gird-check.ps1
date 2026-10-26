@@ -5674,6 +5674,43 @@ function Add-NpmRoot([string]$r) {
 }
 foreach ($r in @((J $AppData 'npm/node_modules'), (J $HomeDir '.npm-global/lib/node_modules'), (J $HomeDir '.bun/install/global/node_modules'),
     '/opt/homebrew/lib/node_modules', '/usr/local/lib/node_modules', '/usr/lib/node_modules')) { Add-NpmRoot $r }
+# Where a setting moves npm's, nvm's, n's, Volta's or bun's global folder, as each tool documents it.
+function Npm-Dir([string]$v) { # a setting's value, when it is an absolute path, or ~/ for the home folder
+  if (-not $v) { return '' }
+  if ($v.StartsWith('~/') -or $v.StartsWith('~\')) { return J $HomeDir $v.Substring(2) }
+  if ([IO.Path]::IsPathRooted($v)) { return $v }
+  ''
+}
+function Npm-Prefix { # npm's prefix: npm_config_prefix, else prefix in your npmrc with ${VAR} replaced, as npm reads them
+  $pf = [Environment]::GetEnvironmentVariable('npm_config_prefix'); if (-not $pf) { $pf = [Environment]::GetEnvironmentVariable('NPM_CONFIG_PREFIX') }
+  if (-not $pf) {
+    $uc = Npm-Dir ([Environment]::GetEnvironmentVariable('npm_config_userconfig')); if (-not $uc) { $uc = Npm-Dir ([Environment]::GetEnvironmentVariable('NPM_CONFIG_USERCONFIG')) }
+    if (-not $uc) { $uc = J $HomeDir '.npmrc' }
+    $t = $null; if ((Is-File $uc) -and -not (Too-Big $uc)) { $t = Read-Text $uc }
+    if ($null -ne $t) {
+      foreach ($l in ($t -split "`n")) {
+        $l = $l.TrimEnd("`r"); if ($l -match '^[ \t]*[;#]') { continue }
+        $m = [regex]::Match($l, '^[ \t]*prefix[ \t]*=(.*)$'); if (-not $m.Success) { continue }
+        $v = $m.Groups[1].Value.Trim([char[]]" `t")
+        if ($v.Length -ge 2 -and (($v.StartsWith('"') -and $v.EndsWith('"')) -or ($v.StartsWith("'") -and $v.EndsWith("'")))) { $v = $v.Substring(1, $v.Length - 2) }
+        $pf = [regex]::Replace($v, '\$\{([A-Za-z_][A-Za-z0-9_]*)(\?)?\}', { param($mm) $ev = [Environment]::GetEnvironmentVariable($mm.Groups[1].Value); if ($null -ne $ev) { $ev } elseif ($mm.Groups[2].Success) { '' } else { $mm.Value } })
+      }
+    }
+  }
+  Npm-Dir $pf
+}
+# npm's prefix where it is set: global installs go in its lib/node_modules, its node_modules on Windows
+# (npm's folders docs). n's N_PREFIX, where it puts the Node in use, and ~/n, n-install's. bun's
+# BUN_INSTALL_GLOBAL_DIR, else BUN_INSTALL's install/global, else XDG_CACHE_HOME/.bun/install/global (bun's
+# global folder, its source).
+$npx = Npm-Prefix
+if ($npx) { if ($OnWindows) { Add-NpmRoot (J $npx 'node_modules') } else { Add-NpmRoot (J $npx 'lib/node_modules') } }
+$nN = Npm-Dir ([Environment]::GetEnvironmentVariable('N_PREFIX')); if ($nN) { Add-NpmRoot (J $nN 'lib/node_modules') }
+Add-NpmRoot (J $HomeDir 'n/lib/node_modules')
+$bg = Npm-Dir ([Environment]::GetEnvironmentVariable('BUN_INSTALL_GLOBAL_DIR'))
+if (-not $bg) { $bi = Npm-Dir ([Environment]::GetEnvironmentVariable('BUN_INSTALL')); if ($bi) { $bg = J $bi 'install/global' } }
+if (-not $bg) { $xcb = [Environment]::GetEnvironmentVariable('XDG_CACHE_HOME'); if ($xcb -and $xcb.StartsWith('/')) { $bg = J $xcb '.bun/install/global' } }
+if ($bg) { Add-NpmRoot (J $bg 'node_modules') }
 # Folders holding one folder per version or package, and where node_modules sits in each.
 $NpmGlobs = New-Object System.Collections.Generic.List[object]
 foreach ($g in @(@('.nvm/versions/node', 'lib/node_modules'), @('.volta/tools/image/node', 'lib/node_modules'), @('.volta/tools/image/packages', 'lib/node_modules'),
@@ -5687,6 +5724,13 @@ foreach ($g in @(@($nvmWin, 'node_modules'), @((J $fnmWin 'node-versions'), 'ins
     @((J $LocalAppData 'Volta/tools/image/packages'), 'lib/node_modules'), @((J $LocalAppData 'mise/installs/node'), 'node_modules'),
     @((J $LocalAppData 'pnpm/global'), 'node_modules'), @((J $LocalAppData 'npm-cache/_npx'), 'node_modules'))) { $NpmGlobs.Add($g) }
 if ($env:PNPM_HOME) { $NpmGlobs.Add(@((J $env:PNPM_HOME 'global'), 'node_modules')) }
+# nvm's NVM_DIR, else XDG_CONFIG_HOME/nvm (its install script), and Volta's VOLTA_HOME.
+$nvd = Npm-Dir ([Environment]::GetEnvironmentVariable('NVM_DIR'))
+if (-not $nvd -and -not $OnWindows) { $xcf = [Environment]::GetEnvironmentVariable('XDG_CONFIG_HOME'); if ($xcf -and $xcf.StartsWith('/')) { $nvd = J $xcf 'nvm' } }
+if ($nvd) { $NpmGlobs.Add(@((J $nvd 'versions/node'), 'lib/node_modules')) }
+$vh = Npm-Dir ([Environment]::GetEnvironmentVariable('VOLTA_HOME'))
+if ($vh -and $OnWindows) { foreach ($g in @(@('tools/image/node', 'node_modules'), @('tools/image/packages', 'node_modules'), @('tools/image/packages', 'lib/node_modules'))) { $NpmGlobs.Add(@((J $vh $g[0]), $g[1])) } }
+elseif ($vh) { foreach ($g in @(@('tools/image/node', 'lib/node_modules'), @('tools/image/packages', 'lib/node_modules'))) { $NpmGlobs.Add(@((J $vh $g[0]), $g[1])) } }
 foreach ($g in $NpmGlobs) {
   if (Is-Dir $g[0]) {
     try { $gk = @([IO.Directory]::GetDirectories($g[0]) | Sort-Object) } catch { [void]$NpmGUnread.Add($g[0]); continue }
