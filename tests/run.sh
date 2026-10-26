@@ -1595,6 +1595,7 @@ cat > "$WB/reg" <<'SH'
 case "$2|$4" in
   'HKLM\SOFTWARE\Microsoft\Cryptography|MachineGuid') v=$FAKE_GUID ;;
   'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion|CurrentBuildNumber') v=${FAKE_BUILD:-} ;;
+  'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders|Personal') v=${FAKE_DOCS:-} ;;
   *) exit 1 ;;
 esac
 [ -n "$v" ] || exit 1
@@ -1686,6 +1687,17 @@ has    "Windows: a bad package under mise"               'AppData/Local/mise/ins
 has    "Windows: a bad package in pnpm's global folder"  'AppData/Local/pnpm/global/5/node_modules/cloude ' "$WORK/win1.txt"
 has    "Windows: a bad package in npx's cache"           'AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache' "$WORK/win1.txt"
 if grep -aqF -f "$WORK/keys.txt" "$WORK/win.txt"; then bad "Windows: never prints a planted key"; else ok "Windows: never prints a planted key"; fi
+# PowerShell's profiles, which it runs at every start, hold keys set with $env:. gird-check.ps1 reads them
+# in Documents and in the folder Windows moved Documents to (OneDrive's backup does), which reg gives.
+WPR=$WORK/winprof; cp -R "$WR" "$WPR"; WPP=$WPR/Users/me
+mkdir -p "$WPP/Documents/PowerShell" "$WPP/Documents/WindowsPowerShell" "$WPP/OneDrive/Documents/WindowsPowerShell"
+printf '$env:OPENAI_API_KEY = "%s"\n' "$(sed -n 2p "$WORK/keys.txt")" > "$WPP/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
+printf '$env:GITHUB_TOKEN = "%s"\n' "$(sed -n 3p "$WORK/keys.txt")" > "$WPP/Documents/WindowsPowerShell/profile.ps1"
+printf '$env:GROQ_API_KEY = "%s"\n' "$K_GROQ" > "$WPP/OneDrive/Documents/WindowsPowerShell/Microsoft.VSCode_profile.ps1"
+WR=$WPR FAKE_DOCS='C:\Users\me\OneDrive\Documents' winrun --offline --full 2>&1 | tr -s ' \n' '  ' > "$WORK/winprof.txt"
+has    "Windows: keys in PowerShell's profiles are found" '~/Documents/PowerShell/Microsoft\.PowerShell_profile\.ps1 OpenAI .*~/Documents/WindowsPowerShell/profile\.ps1 GitHub' "$WORK/winprof.txt"
+has    "Windows: and in the profile where Windows moved Documents" '~/OneDrive/Documents/WindowsPowerShell/Microsoft\.VSCode_profile\.ps1 Groq' "$WORK/winprof.txt"
+if grep -aqF -f "$WORK/keys.txt" "$WORK/winprof.txt"; then bad "Windows: a profile's keys are never printed"; else ok "Windows: a profile's keys are never printed"; fi
 # Git Bash hands a native rg.exe Windows paths, and rg.exe prints them back (C:\Users\...): a session
 # hit is written the shell's way again and keeps its agent. A stand-in rg turns the real one's paths
 # into C:\ paths, keeping its exit code; the profile is a copy, so the tests above keep theirs.
@@ -2834,6 +2846,9 @@ sys.exit(0 if a == b and a else 1)' "$WORK/report-pl-base.json" "$WORK/report-pl
   has    "Windows: the agents found in Windows places are reported" '"agents":\["claude-code","claude-desktop","cursor",.*"goose"' "$WORK/report-win.json"
   has    "Windows: PowerShell history counts as shell history" '"history_keys":2,.*' "$WORK/report-win.json"
   has    "Windows: key_places puts PSReadLine history in shell_history" '"shell_history":2' "$WORK/report-win.json"
+  # PowerShell's profiles are shell profiles, as gird-check.ps1 counts them.
+  GIRD_CHECK_API="$API" WR="$WORK/winprof" FAKE_DOCS='C:\Users\me\OneDrive\Documents' report_of "$WORK/report-winprof.json" winrun
+  has    "Windows: key_places puts PowerShell's profiles in shell_rc" '"shell_rc":3' "$WORK/report-winprof.json"
   hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|msyshome|_netrc' "$WORK/report-win.json"
   if grep -q '"os":"Linux"' "$WORK/report-wsl.json" && [ -s "$WORK/wsl.txt" ] && grep -q 'files into a secrets manager' "$WORK/wsl.txt"; then
     ok "WSL reports os Linux while giving the WSL advice"

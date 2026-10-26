@@ -2023,6 +2023,22 @@ fi
 # --- 3. Keys in plain text ---------------------------------------------------
 KEY_ROWS=""; KEY_FILES=0; HIST_KEYS=0; PROV_IDS=""; KEY_FIRST=""
 PROJECT_FILES=$(printf '%s\n%s\n' "$ENV_FILES" "$PROJECT_MCP")
+# On Windows, PowerShell's profiles, which it runs at every start: a key set there with $env: sits in
+# plain text. The same files gird-check.ps1 reads, in Documents and in the folder Windows keeps
+# Documents in when it was moved (OneDrive's backup moves it), which reg reads from the user's shell
+# folders as GetFolderPath('MyDocuments') gives it to PowerShell.
+PS_PROFILES=""
+if [ "$WIN" -eq 1 ]; then
+  _md=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' /v Personal 2>/dev/null |
+    tr -d '\r' | sed -n 's/^[[:space:]]*Personal[[:space:]][[:space:]]*REG_[A-Z_]*[[:space:]][[:space:]]*//p' | head -n 1)
+  _md=$(winpath "$_md"); _md=${_md%/}
+  for _dd in "$H/Documents" ${_md:+"$_md"}; do
+    for _pe in PowerShell WindowsPowerShell; do
+      for _pn in Microsoft.PowerShell_profile.ps1 profile.ps1 Microsoft.VSCode_profile.ps1; do PS_PROFILES="$PS_PROFILES$_dd/$_pe/$_pn
+"; done
+    done
+  done
+fi
 CANDIDATES=$(
   {
     for f in .zshrc .zprofile .zshenv .zlogin .bashrc .bash_profile .profile .config/fish/config.fish .env .envrc \
@@ -2044,6 +2060,7 @@ CANDIDATES=$(
     case "${CLINE_PROVIDER_SETTINGS_PATH:-}" in (/*) printf '%s\n' "$CLINE_PROVIDER_SETTINGS_PATH" ;; esac
     if [ "$WIN" -eq 1 ]; then
       printf '%s\n' "$GOOSE_CFG/config.yaml"
+      printf '%s' "$PS_PROFILES"
       for f in "$PSRL"/*_history.txt; do [ -f "$f" ] && printf '%s\n' "$f"; done
       [ "$HH" != "$H" ] && for f in .bashrc .bash_profile .profile .bash_history; do printf '%s\n' "$HH/$f"; done
     fi
@@ -2068,6 +2085,7 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
     "$HH/.bashrc"|"$HH/.bash_profile"|"$HH/.profile") KP=shell_rc; return 0 ;;
     "$HH/.bash_history") KP=shell_history; return 0 ;;
   esac
+  case "$NL$PS_PROFILES" in *"$NL$1$NL"*) KP=shell_rc; return 0 ;; esac
   # PowerShell's history on Windows, where typed keys most often end up
   if [ -n "$PSRL" ]; then case "$1" in "$PSRL"/*_history.txt) KP=shell_history; return 0 ;; esac; fi
   case "${1##*/}" in .env|.env.*|.envrc) KP=env_file; return 0 ;; esac
