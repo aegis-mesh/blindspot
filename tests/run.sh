@@ -1331,37 +1331,40 @@ GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inv
 has    "fleet: and the last result while that run still has time" '^v1 ' "$FL/attempt-run.out"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --stale-days=31 > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "fleet: --stale-days is at most 30"; else bad "fleet: --stale-days is at most 30" "exit $RC"; fi
-# An account run uses only a ripgrep root alone can change (FLL_RG_ROOTUID stands in for root's uid); otherwise perl.
+# An account run uses ripgrep only from the admin path (FLL_RG_ADMIN in tests), as a regular file
+# whose folders are real folders, all root's (FLL_RG_ROOTUID stands in for root); otherwise perl.
 users "asha:$U:$FL/asha:/bin/zsh"
 mk_rg() { mkdir -p "$1"; printf '#!/bin/sh\ncase "$1" in --version) echo "ripgrep 14.1.0"; exit 0 ;; esac\n: > "$(dirname "$0")/ran"\nexit 1\n' > "$1/rg"; chmod 755 "$1/rg"; }
-for d in rgok rgmine rgw rgacl rglinkbad rgadmin; do mk_rg "$FL/$d/bin"; done
-chmod 775 "$FL/rgw/bin" "$FL/rglinkbad/bin"
-mkdir -p "$FL/rglink"; ln -s "$FL/rgok/bin/rg" "$FL/rglink/rg"; mkdir -p "$FL/rglink2"; ln -s "$FL/rglinkbad/bin/rg" "$FL/rglink2/rg"
-FLL_RG="$FL/rgmine/bin/rg" fl_run rgmine
-if grep -q '^asha\.session_engine=perl$' "$FL/rgmine.flat" && [ ! -e "$FL/rgmine/bin/ran" ]; then ok "fleet: a ripgrep the account owns is never run"; else bad "fleet: a ripgrep the account owns is never run" "$(grep session_engine "$FL/rgmine.flat")"; fi
-FLL_RG="$FL/rgok/bin/rg" FLL_RG_ROOTUID=$U fl_run rgok
-if grep -q '^asha\.session_engine=rg$' "$FL/rgok.flat" && [ -e "$FL/rgok/bin/ran" ]; then ok "fleet: a ripgrep root alone can change is used"; else bad "fleet: a ripgrep root alone can change is used" "$(grep session_engine "$FL/rgok.flat")"; fi
-FLL_RG="$FL/rglink/rg" FLL_RG_ROOTUID=$U fl_run rglink
-has    "fleet: a link to such a ripgrep is followed and used" '^asha\.session_engine=rg$' "$FL/rglink.flat"
-FLL_RG="$FL/rgw/bin/rg" FLL_RG_ROOTUID=$U fl_run rgw
+FLP=$(cd "$FL" && pwd -P)   # the test folder without links above it, as /Library is
+for d in rgok rgmine rgw rgacl rgfolder; do mk_rg "$FLP/$d/bin"; done
+chmod 775 "$FLP/rgw/bin"
+mkdir -p "$FLP/rglinkroot/bin"; ln -s /usr/bin/true "$FLP/rglinkroot/bin/rg"
+mkdir -p "$FLP/rgviafolder"; ln -s "$FLP/rgfolder/bin" "$FLP/rgviafolder/bin"
+FLL_RG_ADMIN="$FLP/rgmine/bin/rg" fl_run rgmine
+if grep -q '^asha\.session_engine=perl$' "$FL/rgmine.flat" && [ ! -e "$FLP/rgmine/bin/ran" ]; then ok "fleet: a ripgrep the account owns is never run"; else bad "fleet: a ripgrep the account owns is never run" "$(grep session_engine "$FL/rgmine.flat")"; fi
+FLL_RG_ADMIN="$FLP/rgok/bin/rg" FLL_RG_ROOTUID=$U fl_run rgok
+if grep -q '^asha\.session_engine=rg$' "$FL/rgok.flat" && [ -e "$FLP/rgok/bin/ran" ]; then ok "fleet: a ripgrep root alone can change is used"; else bad "fleet: a ripgrep root alone can change is used" "$(grep session_engine "$FL/rgok.flat")"; fi
+FLL_RG_ADMIN="$FLP/rglinkroot/bin/rg" FLL_RG_ROOTUID=$U fl_run rglinkroot
+has    "fleet: a link at the ripgrep path is never run, even to a root-owned program" '^asha\.session_engine=perl$' "$FL/rglinkroot.flat"
+FLL_RG_ADMIN="$FLP/rgviafolder/bin/rg" FLL_RG_ROOTUID=$U fl_run rgviafolder
+if grep -q '^asha\.session_engine=perl$' "$FL/rgviafolder.flat" && [ ! -e "$FLP/rgfolder/bin/ran" ]; then ok "fleet: a ripgrep reached through a linked folder is never run"; else bad "fleet: a ripgrep reached through a linked folder is never run" "$(grep session_engine "$FL/rgviafolder.flat")"; fi
+FLL_RG_ADMIN="$FLP/rgw/bin/rg" FLL_RG_ROOTUID=$U fl_run rgw
 has    "fleet: a ripgrep in a folder others can write to is not used" '^asha\.session_engine=perl$' "$FL/rgw.flat"
-FLL_RG="$FL/rglink2/rg" FLL_RG_ROOTUID=$U fl_run rglink2
-has    "fleet: a link to a ripgrep others can change is not used" '^asha\.session_engine=perl$' "$FL/rglink2.flat"
-if chmod +a "everyone allow write" "$FL/rgacl/bin/rg" 2>/dev/null; then
-  FLL_RG="$FL/rgacl/bin/rg" FLL_RG_ROOTUID=$U fl_run rgacl; chmod -N "$FL/rgacl/bin/rg"
+if chmod +a "everyone allow write" "$FLP/rgacl/bin/rg" 2>/dev/null; then
+  FLL_RG_ADMIN="$FLP/rgacl/bin/rg" FLL_RG_ROOTUID=$U fl_run rgacl; chmod -N "$FLP/rgacl/bin/rg"
   has  "fleet: a ripgrep whose ACL lets anyone write is not used" '^asha\.session_engine=perl$' "$FL/rgacl.flat"
 else skip "fleet: a ripgrep whose ACL lets anyone write is not used" "chmod +a is not available here"; fi
-FLL_RG=default FLL_RG_ADMIN="$FL/rgadmin/bin/rg" FLL_RG_ROOTUID=$U fl_run rgadmin
-if grep -q '^asha\.session_engine=rg$' "$FL/rgadmin.flat" && [ -e "$FL/rgadmin/bin/ran" ]; then ok "fleet: the admin-installed ripgrep is tried first"; else bad "fleet: the admin-installed ripgrep is tried first" "$(grep session_engine "$FL/rgadmin.flat")"; fi
+# Only the admin path is ever looked at: no Homebrew or /usr/local ripgrep, which an account may re-point.
+sed -n '/^fleet_rg() {/,/^}/p' "$SCRIPT" > "$FL/fleet_rg.txt"
+if grep -q 'Library/Application Support/Blindspot/rg' "$FL/fleet_rg.txt" && ! grep -qE 'homebrew|/usr/local|\.local/bin|\.cargo|abs_path|realpath|readlink' "$FL/fleet_rg.txt"; then ok "fleet: a Homebrew or /usr/local ripgrep is never looked at"; else bad "fleet: a Homebrew or /usr/local ripgrep is never looked at" "$(grep -nE 'homebrew|/usr/local|abs_path' "$FL/fleet_rg.txt")"; fi
 fl_run rgnone
 if grep -q '^asha\.session_engine=perl$' "$FL/rgnone.flat" && grep -q '^asha\.session_files_with_keys=3$' "$FL/rgnone.flat"; then ok "fleet: with no ripgrep that qualifies, perl checks the sessions"; else bad "fleet: with no ripgrep that qualifies, perl checks the sessions" "$(grep -E 'session' "$FL/rgnone.flat" | tr '\n' ' ')"; fi
-# A real ripgrep, where this Mac has one that the stand-in for root would allow, finds what perl finds.
+# A real ripgrep, where this Mac has one, finds what perl finds (a copy at a test admin path).
 RRG=$(command -v rg 2>/dev/null)
 if [ -z "$RRG" ]; then skip "fleet: a real ripgrep finds the same session keys as perl" "ripgrep is not installed here"
 else
-  # A copy, in a folder of the test's own, so where this Mac keeps its ripgrep does not matter.
-  mkdir -p "$FL/rgreal/bin"; cp "$RRG" "$FL/rgreal/bin/rg"; chmod 755 "$FL/rgreal/bin/rg"
-  FLL_RG="$FL/rgreal/bin/rg" FLL_RG_ROOTUID=$U fl_run rgreal
+  mkdir -p "$FLP/rgreal/bin"; cp "$RRG" "$FLP/rgreal/bin/rg"; chmod 755 "$FLP/rgreal/bin/rg"
+  FLL_RG_ADMIN="$FLP/rgreal/bin/rg" FLL_RG_ROOTUID=$U fl_run rgreal
   if grep -q '^asha\.session_engine=rg$' "$FL/rgreal.flat" && [ "$(grep '^asha\.session_files_with_keys=' "$FL/rgreal.flat")" = "$(grep '^asha\.session_files_with_keys=' "$FL/rgnone.flat")" ] && grep -q '^asha\.sessions_partly_checked=false$' "$FL/rgreal.flat"; then ok "fleet: a real ripgrep finds the same session keys as perl"
   else bad "fleet: a real ripgrep finds the same session keys as perl" "$(grep -E 'session' "$FL/rgreal.flat" | tr '\n' ' ')"; fi
 fi

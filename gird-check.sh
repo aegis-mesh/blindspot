@@ -1175,22 +1175,18 @@ owned_only() {
 }
 # <<< owned-walk
 # An account run inherits the Full Disk Access of the MDM agent that started root, so it runs
-# nothing an account could have written: a ripgrep is used only when its real file and every folder
-# above it are root's and writable by no one else (docs/designs/fleet-mode.md, Session engine).
-# Otherwise the system perl checks the sessions.
+# nothing an account could have written or re-pointed: ripgrep only from the path an admin installs
+# it to, as a regular file, not a link, with every folder above it a real folder, all root's and
+# writable by no one else (docs/designs/fleet-mode.md, Session engine). Otherwise perl.
 fleet_rg() {
   _ru=0
   case "${GIRD_CHECK_FLEET_RG_ROOTUID:-}" in ''|*[!0-9]*) ;; *) _ru=$GIRD_CHECK_FLEET_RG_ROOTUID ;; esac   # tests only: stands in for root
-  _rl=${GIRD_CHECK_FLEET_RG_PATHS-"${GIRD_CHECK_FLEET_RG_ADMIN:-/Library/Application Support/Blindspot/rg}:/opt/homebrew/bin/rg:/usr/local/bin/rg"}
-  while IFS= read -r _rc; do
-    [ -n "$_rc" ] && { [ -L "$_rc" ] || [ -e "$_rc" ]; } || continue
-    _rr=$(/usr/bin/perl -MCwd -e 'my $p = Cwd::abs_path($ARGV[0]); print $p if defined $p' -- "$_rc" 2>/dev/null)
-    [ -n "$_rr" ] && [ ! -L "$_rr" ] && [ -f "$_rr" ] || continue
-    owned_only "$_ru" "$_rr" && { printf '%s' "$_rr"; return 0; }
-  done <<EOF
-$(printf '%s\n' "$_rl" | tr ':' '\n')
-EOF
-  return 1
+  _rc=${GIRD_CHECK_FLEET_RG_ADMIN:-/Library/Application Support/Blindspot/rg}
+  case "$_rc" in /*) ;; *) return 1 ;; esac
+  [ ! -L "$_rc" ] && [ -f "$_rc" ] || return 1
+  _p=${_rc%/*}
+  while [ -n "$_p" ]; do [ -L "$_p" ] && return 1; _p=${_p%/*}; done
+  owned_only "$_ru" "$_rc" && printf '%s' "$_rc"
 }
 [ "$ACCTRUN" -eq 1 ] && RG_BIN=$(fleet_rg)
 if [ -n "$GIRD_CHECK_SESSIONS_ENGINE" ]; then SESS_ENGINE=$GIRD_CHECK_SESSIONS_ENGINE
