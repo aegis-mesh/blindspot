@@ -2159,8 +2159,12 @@ has    "an allow list that can't be read is named in section 4" '! No saved comm
 has    "and row 04 says files could not be read"       'Allow lists none found, but [0-9]+ files? could not be read' "$WORK/ni-s24-c.txt"
 hasnot "and neither section reads clean"               '✓ No saved commands with keys' "$WORK/ni-s24.txt"
 # A placeholder shaped like a key is not one, as in the sessions: a run of x's, or AWS's documented
-# example key id. A real key beside one in the same file still counts.
+# example key id, in a file of keys and in Claude Code's settings, the person's own or a project's. A
+# real key beside one in the same file still counts.
 rm -rf "$WORK/mu"; mkdir -p "$WORK/mu/code/app" "$WORK/mu/AppData/Roaming" "$WORK/mu/AppData/Local/Temp"
+mkdir -p "$WORK/mu/.claude" "$WORK/mu/code/app/.claude"
+printf '{"env":{"AWS_ACCESS_KEY_ID":"%s","ANTHROPIC_API_KEY":"s%s"}}\n' "AK""IAIOSFODNN7EXAMPLE" "k-ant-api03-$(printf 'x%.0s' $(seq 1 95))" > "$WORK/mu/.claude/settings.json"
+printf '{"env":{"AWS_ACCESS_KEY_ID":"%s","GROQ_API_KEY":"%s"}}\n' "AK""IAIOSFODNN7EXAMPLE" "$(sed -n 5p "$WORK/keys.txt")" > "$WORK/mu/code/app/.claude/settings.json"
 printf 'GITHUB_TOKEN=g%s\n' "hp_$(printf 'x%.0s' $(seq 1 36))" > "$WORK/mu/code/app/.env.example"
 printf 'export AWS_ACCESS_KEY_ID=%s\n' "AK""IAIOSFODNN7EXAMPLE" > "$WORK/mu/.zshrc"
 printf 'GROQ_API_KEY=%s\nOPENAI_API_KEY=s%s\n' "$(sed -n 5p "$WORK/keys.txt")" "k-$(printf 'x%.0s' $(seq 1 48))" > "$WORK/mu/code/app/.env"
@@ -2168,6 +2172,8 @@ psrun "$WORK/mu" -- -Offline > "$WORK/mu.txt" 2>&1
 hasnot "a placeholder of x's shaped like a key is not a key in plain text" 'env\.example' "$WORK/mu.txt"
 hasnot "nor is AWS's documented example key id"        '~/\.zshrc' "$WORK/mu.txt"
 has    "a real key beside a placeholder still counts, alone" '~/code/app/\.env +Groq$' "$WORK/mu.txt"
+hasnot "nor are they keys in Claude Code's settings" '~/\.claude/settings\.json +[A-Z]' "$WORK/mu.txt"
+has    "and a real key beside one in a project's settings still counts, alone" '~/code/app/\.claude/settings\.json +Groq$' "$WORK/mu.txt"
 # A pipe at a fixed path (a fifo made at ~/.zsh_history, at an MCP config, at Claude Code's own
 # settings) is never read, as a read of one waits for ever: the check ends and names each one as not
 # read, in the rows that read it. A history file linked to /dev/null, which keeps none, is not named.

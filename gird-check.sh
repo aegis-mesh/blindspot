@@ -805,15 +805,15 @@ providers_in() {
 # The providers of a Claude Code settings file's keys that are not in its permission rules (cc_rules),
 # which section 4 counts as saved commands. Each match in the rules takes one match of the same key out
 # of the file's, so a key that is also elsewhere in the file still counts. The file is read whole,
-# comments too, as providers_in reads a file, and the keys stay inside the pipe.
+# comments too, as providers_in reads a file, and the keys stay inside the pipe. The matches left go
+# through sess_filter as providers_in's do, so a key that looks made up is not one here either.
 cc_providers() { # file
-  { cc_rules "$1" | grep -aoE "$TR_KEYS" | sed 's/^/R /'; grep -aoE "$TR_KEYS" "$1" 2>/dev/null | sed 's/^/F /'; } | awk "$PROV_AWK"'
+  { cc_rules "$1" | grep -aoE "$TR_KEYS" | sed 's/^/R /'; grep -aoE "$TR_KEYS" "$1" 2>/dev/null | sed 's/^/F /'; } | awk '
     function norm(s) { sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s); return s }
     substr($0, 1, 2) == "R " { r[norm(substr($0, 3))]++; next }
-    { k = norm(substr($0, 3)); if (r[k] > 0) { r[k]--; next }
-      p = prov(k); if (p == "") next
-      if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
-    END { printf "%s", out }'
+    { m = substr($0, 3); k = norm(m); if (r[k] > 0) { r[k]--; next }
+      gsub(/[\001-\037\177]/, " ", m); print "K\t-\t" m }' | sess_filter |
+    awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
 # Print the files in a newline list that contain a match, in order, with one grep pass. Only regular
 # files are read, following links: a pipe, socket or device at a fixed path (a fifo made at
