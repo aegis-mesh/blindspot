@@ -1325,6 +1325,28 @@ GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inv
 has    "fleet: and the last result while that run still has time" '^v1 ' "$FL/attempt-run.out"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash "$FLEETSH" --inventory --stale-days=31 > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "fleet: --stale-days is at most 30"; else bad "fleet: --stale-days is at most 30" "exit $RC"; fi
+# An account run uses a ripgrep only root or that account can change; otherwise perl.
+users "asha:$U:$FL/asha:/bin/zsh"
+mk_rg() { mkdir -p "$1"; printf '#!/bin/sh\ncase "$1" in --version) echo "ripgrep 14.1.0"; exit 0 ;; esac\n: > "$(dirname "$0")/ran"\nexit 1\n' > "$1/rg"; chmod 755 "$1/rg"; }
+for d in rgok rguid rgw rgacl rglinkbad; do mk_rg "$FL/$d/bin"; done
+chmod 775 "$FL/rgw/bin" "$FL/rglinkbad/bin"
+mkdir -p "$FL/rglink"; ln -s "$FL/rgok/bin/rg" "$FL/rglink/rg"; mkdir -p "$FL/rglink2"; ln -s "$FL/rglinkbad/bin/rg" "$FL/rglink2/rg"
+FLL_RG="$FL/rgok/bin/rg" fl_run rgok
+if grep -q '^asha\.session_engine=rg$' "$FL/rgok.flat" && [ -e "$FL/rgok/bin/ran" ]; then ok "fleet: an account run uses a ripgrep only it or root can change"; else bad "fleet: an account run uses a ripgrep only it or root can change" "$(grep session_engine "$FL/rgok.flat")"; fi
+FLL_RG="$FL/rglink/rg" fl_run rglink
+has    "fleet: a link to such a ripgrep is followed and used" '^asha\.session_engine=rg$' "$FL/rglink.flat"
+FLL_RG="$FL/rguid/bin/rg" FLL_RG_UID=$((U + 1)) fl_run rguid
+has    "fleet: a ripgrep another account owns is not used" '^asha\.session_engine=perl$' "$FL/rguid.flat"
+FLL_RG="$FL/rgw/bin/rg" fl_run rgw
+has    "fleet: a ripgrep in a folder others can write to is not used" '^asha\.session_engine=perl$' "$FL/rgw.flat"
+FLL_RG="$FL/rglink2/rg" fl_run rglink2
+has    "fleet: a link to a ripgrep others can change is not used" '^asha\.session_engine=perl$' "$FL/rglink2.flat"
+if chmod +a "everyone allow write" "$FL/rgacl/bin/rg" 2>/dev/null; then
+  FLL_RG="$FL/rgacl/bin/rg" fl_run rgacl; chmod -N "$FL/rgacl/bin/rg"
+  has  "fleet: a ripgrep whose ACL lets anyone write is not used" '^asha\.session_engine=perl$' "$FL/rgacl.flat"
+else skip "fleet: a ripgrep whose ACL lets anyone write is not used" "chmod +a is not available here"; fi
+fl_run rgnone
+if grep -q '^asha\.session_engine=perl$' "$FL/rgnone.flat" && grep -q '^asha\.session_files_with_keys=3$' "$FL/rgnone.flat"; then ok "fleet: with no ripgrep that qualifies, perl checks the sessions"; else bad "fleet: with no ripgrep that qualifies, perl checks the sessions" "$(grep -E 'session' "$FL/rgnone.flat" | tr '\n' ' ')"; fi
 # Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 mkdir -p "$FL/inst700"; cp "$SCRIPT" "$FLEETSH" "$FL/inst700/"; chmod 755 "$FL/inst700/gird-check.sh"; chmod 700 "$FL/inst700/gird-fleet.sh"

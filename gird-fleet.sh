@@ -355,7 +355,7 @@ FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms not_read protected end"
+FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms not_read protected engine end"
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -395,6 +395,7 @@ fl_parse() {
       incidents) fl_incidents_ok "$_v" || return 1 ;;
       sessions_partial|possible) case "$_v" in 0|1) ;; *) return 1 ;; esac ;;
       protected) case "$_v" in ok|refused|unknown) ;; *) return 1 ;; esac ;;
+      engine) case "$_v" in rg|perl|none) ;; *) return 1 ;; esac ;;
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
     case "$_k" in
@@ -403,7 +404,7 @@ fl_parse() {
       history_keys) FA_history_keys=$_v ;; session_files) FA_session_files=$_v ;; sessions_partial) FA_sessions_partial=$_v ;;
       allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;;
       planted) FA_planted=$_v ;; possible) FA_possible=$_v ;; incidents) FA_incidents=$_v ;; platforms) FA_platforms=$_v ;;
-      not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;;
+      not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;; engine) FA_engine=$_v ;;
     esac
     shift
   done < "$_f"
@@ -624,7 +625,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$FA_possible,\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$FA_possible,\"platforms_used\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"

@@ -1155,7 +1155,38 @@ sess_filter() {
     }'
 }
 SESS_ENGINE=none; SESS_RC=""
-RG_BIN=$(type -P rg 2>/dev/null); [ "$ACCTRUN" -eq 1 ] && RG_BIN=""   # an account run uses the system perl
+RG_BIN=$(type -P rg 2>/dev/null)
+# An account run runs as its account, so a ripgrep that only root or that account can change gives
+# nobody new rights: it is used when found at a fixed path, as a regular file (a link is followed
+# to its real file), with that file and every folder above it owned by root or the account and
+# writable by no one else, by mode or by ACL. Otherwise the system perl checks the sessions.
+fleet_rg() {
+  _uid=$EUID
+  case "${GIRD_CHECK_FLEET_RG_UID:-}" in ''|*[!0-9]*) ;; *) _uid=$GIRD_CHECK_FLEET_RG_UID ;; esac   # tests only
+  _ifs=$IFS; IFS=:
+  # shellcheck disable=SC2086  # a colon-separated list, as PATH is
+  set -- ${GIRD_CHECK_FLEET_RG_PATHS-/opt/homebrew/bin/rg:/usr/local/bin/rg:$H/.local/bin/rg:$H/.cargo/bin/rg}
+  IFS=$_ifs
+  for _rc in "$@"; do
+    [ -n "$_rc" ] && { [ -L "$_rc" ] || [ -e "$_rc" ]; } || continue
+    _rr=$(/usr/bin/perl -MCwd -e 'my $p = Cwd::abs_path($ARGV[0]); print $p if defined $p' -- "$_rc" 2>/dev/null)
+    [ -n "$_rr" ] && [ ! -L "$_rr" ] && [ -f "$_rr" ] || continue
+    _ok=1; _p=$_rr
+    while :; do
+      _m=$(/usr/bin/stat -f '%u %03Lp' "$_p" 2>/dev/null)
+      case "$_m" in "0 "*|"$_uid "*) ;; *) _ok=0 ;; esac
+      case "${_m#* }" in [0-7][0-7][0-7]) ;; *) _ok=0 ;; esac
+      case "${_m#* }" in ?[2367]?|??[2367]) _ok=0 ;; esac
+      _acl=$(/bin/ls -lde "$_p" 2>/dev/null) || _ok=0
+      printf '%s\n' "$_acl" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && _ok=0
+      [ "$_ok" -eq 1 ] && [ "$_p" != / ] || break
+      _p=${_p%/*}; [ -n "$_p" ] || _p=/
+    done
+    [ "$_ok" -eq 1 ] && { printf '%s' "$_rr"; return 0; }
+  done
+  return 1
+}
+[ "$ACCTRUN" -eq 1 ] && RG_BIN=$(fleet_rg)
 if [ -n "$GIRD_CHECK_SESSIONS_ENGINE" ]; then SESS_ENGINE=$GIRD_CHECK_SESSIONS_ENGINE
 elif [ -n "$RG_BIN" ] && [ "$("$RG_BIN" --version 2>/dev/null | sed -n '1s/^ripgrep \([0-9]*\).*/\1/p')" -ge 13 ] 2>/dev/null; then SESS_ENGINE=rg
 elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
@@ -2354,6 +2385,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
     echo "platforms=$(printf '%s' "$PLAT_FOUND" | fleet_ids)"
     echo "not_read=$_nr"
     echo "protected=$FLEET_PROT"
+    echo "engine=$SESS_ENGINE"
     echo "end=1"
   } >&3
   exit 0
