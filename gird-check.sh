@@ -1160,6 +1160,24 @@ RG_BIN=$(type -P rg 2>/dev/null)
 # nobody new rights: it is used when found at a fixed path, as a regular file (a link is followed
 # to its real file), with that file and every folder above it owned by root or the account and
 # writable by no one else, by mode or by ACL. Otherwise the system perl checks the sessions.
+# >>> owned-walk: this function's home; tools/gen.sh copies it into gird-fleet.sh.
+# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
+# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
+# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
+owned_only() {
+  _oo_p=$2
+  while :; do
+    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
+    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
+    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
+    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
+    [ "$_oo_p" = / ] && return 0
+    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
+  done
+}
+# <<< owned-walk
 fleet_rg() {
   _uid=$EUID
   case "${GIRD_CHECK_FLEET_RG_UID:-}" in ''|*[!0-9]*) ;; *) _uid=$GIRD_CHECK_FLEET_RG_UID ;; esac   # tests only
@@ -1171,18 +1189,7 @@ fleet_rg() {
     [ -n "$_rc" ] && { [ -L "$_rc" ] || [ -e "$_rc" ]; } || continue
     _rr=$(/usr/bin/perl -MCwd -e 'my $p = Cwd::abs_path($ARGV[0]); print $p if defined $p' -- "$_rc" 2>/dev/null)
     [ -n "$_rr" ] && [ ! -L "$_rr" ] && [ -f "$_rr" ] || continue
-    _ok=1; _p=$_rr
-    while :; do
-      _m=$(/usr/bin/stat -f '%u %03Lp' "$_p" 2>/dev/null)
-      case "$_m" in "0 "*|"$_uid "*) ;; *) _ok=0 ;; esac
-      case "${_m#* }" in [0-7][0-7][0-7]) ;; *) _ok=0 ;; esac
-      case "${_m#* }" in ?[2367]?|??[2367]) _ok=0 ;; esac
-      _acl=$(/bin/ls -lde "$_p" 2>/dev/null) || _ok=0
-      printf '%s\n' "$_acl" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && _ok=0
-      [ "$_ok" -eq 1 ] && [ "$_p" != / ] || break
-      _p=${_p%/*}; [ -n "$_p" ] || _p=/
-    done
-    [ "$_ok" -eq 1 ] && { printf '%s' "$_rr"; return 0; }
+    owned_only "$_uid" "$_rr" && { printf '%s' "$_rr"; return 0; }
   done
   return 1
 }

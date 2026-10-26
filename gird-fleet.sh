@@ -46,6 +46,24 @@ FLEET_REAL=0
 # account's run starts with env -i, so as root no test setting is read or passed on.
 if [ "$EUID" -eq 0 ] || [ "${GIRD_CHECK_FLEET_REAL_ROOT:-}" = 1 ]; then FLEET_REAL=1; fi
 fleet_usage() { printf 'blindspot: %s\n' "$1" >&2; exit "${2:-2}"; }
+# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
+# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
+# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
+owned_only() {
+  _oo_p=$2
+  while :; do
+    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
+    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
+    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
+    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
+    [ "$_oo_p" = / ] && return 0
+    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
+  done
+}
+# <<< owned-walk
 case "$DEADLINE" in ''|[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;; *) fleet_usage "--deadline takes a number of seconds, up to 99999" ;; esac
 case "$STALE_DAYS" in ''|[1-9]|[12][0-9]|30) ;; *) fleet_usage "--stale-days takes a number of days, from 1 to 30" ;; esac
 case "$HASHKEY" in *[!A-Za-z0-9._~+/=-]*) fleet_usage "--hash-accounts takes letters, digits and . _ ~ + / = - only" ;; esac
@@ -84,8 +102,7 @@ fi
   fi
   # What root runs, and copies for every account, must be root's alone: gird-fleet.sh, gird-check.sh
   # next to it and every folder above them owned by root (the tests' stand-in owns them in a test
-  # run) and writable by nobody else. The mode is read with three digits, so 002 is not read as 2.
-  # Root then copies the path it checked.
+  # run) and writable by nobody else (owned_only). Root then copies the path it checked.
   if [ "$ALLUSERS" -eq 1 ]; then
     _own=0; [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && _own=$EUID
     _d=$(cd "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
@@ -93,20 +110,9 @@ fi
     if [ -z "$_bad" ]; then
       FL_SELF="${_d%/}/${FL_SELF##*/}"; FL_CHECK="${_d%/}/gird-check.sh"
       [ ! -L "$FL_CHECK" ] && [ -f "$FL_CHECK" ] || fleet_usage "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link" 13
-      set -- "$FL_SELF" "$FL_CHECK"; _p=$_d
-      while :; do set -- "$@" "$_p"; [ "$_p" = / ] && break; _p=${_p%/*}; [ -n "$_p" ] || _p=/; done
+      owned_only "$_own" "$FL_SELF" && owned_only "$_own" "$FL_CHECK" || _bad=1
       # tests only: a path whose mode a test run can't give the script or a folder it must reach
-      [ "$_own" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && set -- "$@" "$GIRD_CHECK_FLEET_CHECK_ALSO"
-      for _q in "$@"; do
-        _m=$(/usr/bin/stat -f '%u %03Lp' "$_q" 2>/dev/null)
-        case "$_m" in "0 "*|"$_own "*) ;; *) _bad=1 ;; esac
-        case "${_m#* }" in [0-7][0-7][0-7]) ;; *) _bad=1 ;; esac
-        case "${_m#* }" in ?[2367]?|??[2367]) _bad=1 ;; esac
-        # An ACL entry that lets anyone write, add or delete counts as writable by someone else.
-        # A path whose ACL can't be read is refused too.
-        _acl=$(/bin/ls -lde "$_q" 2>/dev/null) || _bad=1
-        printf '%s\n' "$_acl" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && _bad=1
-      done
+      [ "$_own" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && { owned_only "$_own" "$GIRD_CHECK_FLEET_CHECK_ALSO" || _bad=1; }
     fi
     [ -z "$_bad" ] || fleet_usage "gird-fleet.sh, gird-check.sh and every folder above them must be owned by root and writable by no one else: install them in such a folder and run them from there" 13
     [ -r "$FL_CHECK" ] || fleet_usage "gird-check.sh next to gird-fleet.sh could not be read" 13

@@ -204,3 +204,4 @@ fleet: a ripgrep in a folder others can write to is not used	gird-check.ps1 has 
 fleet: a link to a ripgrep others can change is not used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a ripgrep whose ACL lets anyone write is not used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: with no ripgrep that qualifies, perl checks the sessions	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
