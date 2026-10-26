@@ -40,7 +40,7 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | `ssh_keys`, `ssh_no_passphrase` | `2`, `1` | SSH private keys, and how many have no passphrase |
 | `python_envs`, `litellm_installed`, `litellm_found` | `6`, `2`, `0` | Python environments checked, LiteLLM installs, and whether 1.107.0 malware signs were found |
 | `opencode`, `railway` | `1`, `0` | Whether the OpenCode and Railway tools are installed |
-| `files_found`, `scan_seconds`, `all_folders` | `140`, `18`, `0` | Files the home scan found (`.env` files, MCP configs, Claude Code settings files and `pyvenv.cfg`; linked settings files are checked but not counted, and neither are the lockfiles, tasks files, planted files and VS Code settings the npm and project checks add), scan time, and whether `--all` was used |
+| `files_found`, `scan_seconds`, `all_folders` | `140`, `18`, `0` | Files the home scan found (`.env` files, MCP configs, Claude Code settings files and `pyvenv.cfg`; linked settings, `.env` and MCP files are checked but not counted, and neither are the lockfiles, tasks files, planted files and VS Code settings the npm and project checks add), scan time, and whether `--all` was used |
 | `game_played`, `game_best`, `results_wait_seconds` | `1`, `150`, `40` | Whether you played GIRD Runner, a rounded best score, and how long you kept playing after the results were ready |
 
 ## The actions event

@@ -27,7 +27,8 @@ printf ": 1729000000:0;curl -H 'Authorization: token %s' https://api.github.com/
 
 mkdir -p "$F/code/app/.claude" "$F/code/lib/.claude"
 printf 'AWS_ACCESS_KEY_ID=%s\nGROQ_API_KEY=%s\nOPENAI_API_KEY=your-key-here\n' "$AWSK" "$GROQ" > "$F/code/app/.env"
-printf 'OPENAI_API_KEY=%s-your-key\n' "$s" > "$F/code/app/.env.example"
+# A placeholder shaped like a key, as .env.example files hold one: sk- and 48 x's is not a key.
+printf 'OPENAI_API_KEY=%s%s%s\n' "$s" "$d" "$(printf 'x%.0s' $(seq 1 48))" > "$F/code/app/.env.example"
 printf '{"permissions":{"allow":["Bash(npm test)","Bash(OPENAI_API_KEY=%s npm run eval)"]}}\n' "$OPENAI" > "$F/code/app/.claude/settings.local.json"
 printf '{"name":"app","version":"1.0.0"}\n' > "$F/code/app/package.json"
 printf 'node_modules\n' > "$F/code/app/.gitignore"
@@ -36,8 +37,9 @@ printf '{"name":"lib","private":true}\n' > "$F/code/lib/package.json"
 
 printf '{"mcpServers":{"github":{"command":"npx"},"fs":{"command":"node"}},"projects":{"/x":{"mcpServers":{"linear":{},"github":{}}}}}\n' > "$F/.claude.json"
 mkdir -p "$F/.claude/projects/p1"; printf '{}\n' > "$F/.claude/projects/p1/s.jsonl"
-mkdir -p "$F/.codex/sessions/2026/08"; printf '{}\n' > "$F/.codex/sessions/2026/08/old.jsonl"
-touch -t 202608200000 "$F/.codex/sessions/2026/08/old.jsonl"
+# Codex writes each session to sessions/YYYY/MM/DD/rollout-<time>-<id>.jsonl (codex-rs/rollout/src/recorder.rs).
+mkdir -p "$F/.codex/sessions/2026/08/20"; printf '{}\n' > "$F/.codex/sessions/2026/08/20/rollout-2026-08-20T10-00-00-a.jsonl"
+touch -t 202608200000 "$F/.codex/sessions/2026/08/20/rollout-2026-08-20T10-00-00-a.jsonl"
 printf '[mcp_servers.fs]\ncommand = "x"\n[mcp_servers.fs.env]\nX = "1"\n[mcp_servers."web search"]\ncommand = "y"\n' > "$F/.codex/config.toml"
 mkdir -p "$F/.cursor"
 printf '{"mcpServers":{"github":{"command":"npx","env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"%s"}}}}\n' "$GH" > "$F/.cursor/mcp.json"
@@ -75,13 +77,14 @@ if [ "$MODE" = full ]; then
   # Agent sessions: a key right after an escaped newline, made-up ones (a run of one letter, a
   # documented example, a two-letter pattern, counting digits), and one per agent.
   printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s docs AKIAIOSFODNN7EXAMPLE and ghp_%s or gsk_1234567890%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" "$(printf 'ab%.0s' $(seq 1 18))" "$(rnd 42)" > "$F/.claude/projects/p1/k.jsonl"
-  mkdir -p "$F/.codex/sessions/2026/10"
+  mkdir -p "$F/.codex/sessions/2026/08/21" "$F/.codex/sessions/2026/08/10"
   # A real-looking AWS key with only 11 different characters still counts.
   AWS11="AK""IA2B2B3C3C4D4D5E5E"
-  printf '{"payload":{"output":"OPENAI_API_KEY=%s aws %s"}}\n' "$OPENAI" "$AWS11" > "$F/.codex/sessions/2026/10/rollout-k.jsonl"
+  printf '{"payload":{"output":"OPENAI_API_KEY=%s aws %s"}}\n' "$OPENAI" "$AWS11" > "$F/.codex/sessions/2026/08/21/rollout-2026-08-21T10-00-00-k.jsonl"
   printf '%s\n' "$AWS11" >> "$KEYS"
-  touch -t 202608200000 "$F/.codex/sessions/2026/10/rollout-k.jsonl"   # Codex stays idle
-  printf 'x' > "$F/.codex/sessions/2026/08/old.jsonl.zst"; touch -t 202608100000 "$F/.codex/sessions/2026/08/old.jsonl.zst"
+  touch -t 202608200000 "$F/.codex/sessions/2026/08/21/rollout-2026-08-21T10-00-00-k.jsonl"   # Codex stays idle
+  # Codex compresses a session older than a week to .jsonl.zst (codex-rs/rollout/src/compression.rs).
+  printf 'x' > "$F/.codex/sessions/2026/08/10/rollout-2026-08-10T10-00-00-z.jsonl.zst"; touch -t 202608100000 "$F/.codex/sessions/2026/08/10/rollout-2026-08-10T10-00-00-z.jsonl.zst"
   mkdir -p "$F/code/aid"; printf '#### run the eval\n> export GROQ_API_KEY=%s\n' "$GROQ" > "$F/code/aid/.aider.chat.history.md"
   mkdir -p "$F/.codeium/windsurf/cascade"; printf 'x' > "$F/.codeium/windsurf/cascade/a.pb"
   mkdir -p "$F/code/cloned/.claude" "$F/code/cloned/.vscode" "$F/code/proxy/.claude" "$F/code/web" "$F/code/berry"

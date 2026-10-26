@@ -306,7 +306,7 @@ $TextCache = (New-Object Collections.Hashtable ([StringComparer]::Ordinal))
 function Read-Text([string]$f) {
   if ($TextCache.ContainsKey($f)) { return $TextCache[$f] }
   $t = $null
-  try { if ([IO.File]::Exists($f)) { $t = [IO.File]::ReadAllText($f) } } catch { $t = $null }
+  try { if ([IO.File]::Exists($f) -and (Is-SafeToRead $f)) { $t = [IO.File]::ReadAllText($f) } } catch { $t = $null }
   $TextCache[$f] = $t
   $t
 }
@@ -315,7 +315,43 @@ function Read-Text([string]$f) {
 # then named as not read; a planted file is not hashed, so one that projects name too stays a file to read.
 $ReadMax = 16777216
 function Too-Big([string]$f) {
+  if (-not (Is-SafeToRead $f)) { return $false }
   try { $fs = [IO.File]::Open($f, 'Open', 'Read', 'ReadWrite'); try { $fs.Length -gt $ReadMax } finally { $fs.Dispose() } } catch { $false }
+}
+# Whether a file is one a read can't wait on for ever: a regular file, following links, never a pipe,
+# socket or device (a fifo made at ~/.zsh_history, a link to /dev/tty), which Read-Text and Too-Big
+# never open. Those are all empty, so only an empty file or a link is asked about (Is-PlainFile).
+function Is-SafeToRead([string]$f) {
+  try { $fi = [IO.FileInfo]$f; if ($fi.Length -gt 0 -and ($fi.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { return $true } } catch { }
+  Is-PlainFile $f
+}
+# A pipe, socket or device at a path, following links: a file is there, but it is not read, so it is
+# named as not read, as gird-check.sh's not_read names it. /dev/null, where people link a history file
+# to keep none, holds nothing. Never on Windows.
+function Is-Special([string]$p) {
+  if ($OnWindows -or -not (Is-File $p)) { return $false }
+  $t = $p
+  try { $r = [IO.File]::ResolveLinkTarget($p, $true); if ($r) { if (-not $r.Exists) { return $false }; $t = $r.FullName } } catch { }
+  if ($t -ceq '/dev/null') { return $false }
+  -not (Is-PlainFile $t)
+}
+# A path behind a folder on its way that is there but can't be entered (an agent folder made 000, or
+# left root's by a run with sudo): whether a file is there can't be told, as gird-check.sh's
+# behind_closed reads it. Its attributes then can't be read for want of access, where a path with
+# nothing there fails as not found.
+function Behind-Closed([string]$p) {
+  try { [void][IO.File]::GetAttributes($p); return $false } catch {
+    $xe = $_.Exception
+    while ($xe) { if ($xe -is [UnauthorizedAccessException]) { return $true }; $xe = $xe.InnerException }
+    return $false
+  }
+}
+# A file that is there but not read, as gird-check.sh's not_read: one that can't be read, a pipe,
+# socket or device, or one behind a folder that can't be entered. A link to nothing and a folder are
+# none of these.
+function Not-Read([string]$f) {
+  if (Is-File $f) { return ($null -eq (Read-Text $f)) -and ((Is-RegularFile $f) -or (Is-Special $f)) }
+  Behind-Closed $f
 }
 function Has-Match([string]$f, [regex]$rx) {
   if ($SlowFiles.Contains($f)) { return $false }
@@ -354,6 +390,8 @@ function Is-CliOwnKey([string]$f, [string]$k) {
 }
 '@
 . ([scriptblock]::Create($KeyFns))
+# The providers of the keys in a file, in order, each once. A key that looks made up (a run of x's, a
+# documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either, as in the sessions.
 function Providers-In([string]$f) {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
@@ -361,7 +399,7 @@ function Providers-In([string]$f) {
   try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
   foreach ($m in $all) {
     $p = Key-Provider $m.Value
-    if ($p -and -not $seen.Contains($p)) { $seen.Add($p) }
+    if ($p -and -not (Made-Up $m.Value) -and -not $seen.Contains($p)) { $seen.Add($p) }
   }
   $seen.ToArray()
 }
@@ -531,6 +569,8 @@ $Found = New-Object System.Collections.Generic.List[string]
 # Kept apart from $Found, so files_found counts what it always has: the files of the npm and
 # project checks, and linked settings files, which are checked like the files but are not files.
 $LinkSettings = New-Object System.Collections.Generic.List[string]
+# A project's linked .env and MCP files, read as linked settings files are, when they end at a regular file.
+$LinkFiles = New-Object System.Collections.Generic.List[string]
 $LockFiles = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
@@ -629,14 +669,44 @@ function Real-Dir([string]$d) {
 # and another case of the name counts where the volume ignores case (APFS, NTFS). A link into a repo's
 # own .ssh/authorized_keys fixture does not count, and a link to the file's place counts before the
 # file exists: an agent writing through it creates it.
-$AkDir = $null; $AkCaseless = $false
+# Where a chain of links ends, as a stat of the path meets it: each link's text is read from the folder
+# the link is in, as the system resolves that folder (Real-Dir), so .. after a linked folder goes where
+# the system takes it. The physical path of the file at the end; $null when the chain breaks or runs
+# past 40 links.
+function Link-End([string]$p) {
+  $t = $p
+  for ($i = 0; $i -lt 40; $i++) {
+    $d = Real-Dir ([IO.Path]::GetDirectoryName($t)); if (-not $d) { return $null }
+    $t = J $d ([IO.Path]::GetFileName($t))
+    try { $it = Get-Item -LiteralPath $t -Force -ErrorAction Stop } catch { return $null }
+    if (-not (Is-Link $it)) { return $t }
+    $lt = Link-Target $it; if (-not $lt) { return $null }
+    if ([IO.Path]::IsPathRooted($lt)) { $t = $lt } else { $t = J $d $lt }
+  }
+  $null
+}
+$AkDir = $null; $AkCaseless = $false; $AkEnd = $null
 if (Is-Dir (J $HomeDir '.ssh')) { $AkDir = Real-Dir (J $HomeDir '.ssh') }
 if ($AkDir) { $AkCaseless = (Is-File (J $AkDir 'authorized_keys')) -and (Is-File (J $AkDir 'AUTHORIZED_KEYS')) }
-function Is-AkLink([string]$dir, [string]$target) {
+# With the file there, where it ends: a link counts when its own chain ends at the same file, as bash's
+# -ef judges it.
+if ($AkDir -and (Is-File (J $AkDir 'authorized_keys'))) { $AkEnd = Link-End (J $AkDir 'authorized_keys') }
+function Is-AkLink([string]$dir, [string]$path, [string]$target) {
   if (-not $target -or -not $AkDir) { return $false }
   try {
     $t = $target -replace '\\', '/'; $cut = $t.LastIndexOf('/'); $base = $t.Substring($cut + 1)
-    if (-not $base.EndsWith('authorized_keys', [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    $named = $base.EndsWith('authorized_keys', [StringComparison]::OrdinalIgnoreCase)
+    # With the file there, every link that can lead there is followed to its end, as bash's scan prints
+    # them: one whose text names it, is relative or points inside the home folder. A link out of the
+    # home folder is not followed: it can end on a network share that never answers.
+    if ($AkEnd) {
+      $hp = ($HomeDir -replace '\\', '/').TrimEnd('/') + '/'
+      if (-not ($named -or -not [IO.Path]::IsPathRooted($target) -or $t.StartsWith($hp, $PathCmp))) { return $false }
+      $e = Link-End $path; if (-not $e) { return $false }
+      if ($AkCaseless) { return $e.Equals($AkEnd, [StringComparison]::OrdinalIgnoreCase) }
+      return $e.Equals($AkEnd, $PathCmp)
+    }
+    if (-not $named) { return $false }
     if ($cut -lt 0) { $parent = $dir } elseif ($cut -eq 0) { $parent = '/' } else { $parent = $t.Substring(0, $cut) }
     if (-not [IO.Path]::IsPathRooted($parent)) { $parent = J $dir $parent }
     $real = Real-Dir $parent
@@ -668,6 +738,9 @@ function Scan-LinkedDir([string]$dir, [string]$name) {
     elseif (Is-WormFile $name $n) { $l = $WormFiles }
     else { continue }
     if (Is-RegularFile $p) { $l.Add($p) }
+    # Such a file that is a link is checked for ~/.ssh/authorized_keys too, as bash checks the "S path"
+    # lines its scan prints for these files.
+    if ((Is-Link $e) -and (Is-AkLink $dir $p (Link-Target $e)) -and -not $p.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($p) }
   }
 }
 function Scan-Home([string]$dir, [int]$depth) {
@@ -686,14 +759,16 @@ function Scan-Home([string]$dir, [int]$depth) {
     }
     $parent = [IO.Path]::GetFileName($dir)
     $isSettings = $parent -ceq '.claude' -and ($name -ceq 'settings.json' -or $name -ceq 'settings.local.json')
-    # A linked settings (.claude's or .vscode's), tasks or worm file is followed when it ends at a
-    # regular file; any other link is not.
+    # A linked settings (.claude's or .vscode's), tasks or worm file, or a project's linked .env or MCP
+    # file, is followed when it ends at a regular file; any other link is not.
     if ($link) {
       if ($isSettings) { if (Is-RegularFile $path) { $LinkSettings.Add($path) } }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { if (Is-RegularFile $path) { $TaskFiles.Add($path) } }
       elseif ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { if (Is-RegularFile $path) { $VscSettings.Add($path) } }
       elseif (Is-WormFile $parent $name) { if (Is-RegularFile $path) { $WormFiles.Add($path) } }
-      if ((Is-AkLink $dir (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
+      elseif ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or
+        ($name -ceq 'mcp.json' -and ($parent -ceq '.cursor' -or $parent -ceq '.vscode'))) { if (Is-RegularFile $path) { $LinkFiles.Add($path) } }
+      if ((Is-AkLink $dir $path (Link-Target $e)) -and -not $path.StartsWith((J $HomeDir '.ssh') + $Sep, $PathCmp)) { $AkLinks.Add($path) }
       continue
     }
     if ($name -ceq '.env' -or $name.StartsWith('.env.') -or $name -ceq '.envrc' -or $name -ceq '.mcp.json' -or $name -ceq 'pyvenv.cfg' -or $isSettings -or
@@ -711,12 +786,13 @@ function Scan-Home([string]$dir, [int]$depth) {
     }
   }
 }
-# Whether a folder holds any file within three levels, and any changed in 30 days.
+# Whether a folder holds any file within four levels, and any changed in 30 days. Codex writes each
+# session to sessions/YYYY/MM/DD/rollout-*.jsonl (codex-rs/rollout/src/recorder.rs), four levels down.
 function Activity([string]$dir, [int]$depth, $since, $state) {
   foreach ($e in (Entries $dir)) {
     if ($state.Recent) { return }
     if (Is-Link $e) { continue }
-    if (Is-DirInfo $e) { if ($depth + 1 -lt 3) { Activity $e.FullName ($depth + 1) $since $state }; continue }
+    if (Is-DirInfo $e) { if ($depth + 1 -lt 4) { Activity $e.FullName ($depth + 1) $since $state }; continue }
     $state.Any = $true
     if ($e.LastWriteTimeUtc -gt $since) { $state.Recent = $true }
   }
@@ -991,7 +1067,8 @@ $SessWorker = {
     if ($st.Stop) { break }
     if ($null -ne $cut -and $n -ge $cut) { break }
     $n++
-    if ($f.Name.EndsWith('.zst')) { $st.Zst++; continue }
+    # Compressed (.zst, as Codex compresses a session older than a week, or .gz): not read, counted.
+    if ($f.Name.EndsWith('.zst') -or $f.Name.EndsWith('.gz')) { $st.Zst++; continue }
     # An empty file holds nothing: it counts as read once it opens, as perl's open does, and one that
     # can't be opened was not read. Never a link: Windows gives a link's own size, 0.
     if ($f.Length -eq 0 -and ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
@@ -1084,9 +1161,9 @@ foreach ($f in $WormFiles) {
 $WormHit = New-Object System.Collections.Generic.List[string]; $WormLook = New-Object System.Collections.Generic.List[string]
 foreach ($f in $WormFiles) { if (($PlantedAlone -ccontains (Planted-Rel $f)) -or $WormProj.Contains((Worm-Project $f))) { $WormHit.Add($f) } else { $WormLook.Add($f) } }
 $N_LOOK = $WormLook.Count
-$EnvFiles = @($Found | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
+$EnvFiles = @(@($Found) + @($LinkFiles) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^\.env(rc|\..*)?$' })
 $AllowFiles = @(@($Found) + @($LinkSettings) | Where-Object { [IO.Path]::GetFileName($_) -cmatch '^settings(\.local)?\.json$' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($_)) -ceq '.claude' })
-$ProjectMcp = @($Found | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
+$ProjectMcp = @(@($Found) + @($LinkFiles) | Where-Object { $n = [IO.Path]::GetFileName($_); $n -ceq '.mcp.json' -or $n -ceq 'mcp.json' })
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 
 # --- 1. Coding agents --------------------------------------------------------
@@ -1196,7 +1273,7 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
   }
   $McpRows.Add(@{ Who = $who; File = $f; Count = $c; Tok = $tok; Pl = $pl })
 }
-foreach ($m in $McpFiles) { if (Is-File $m[2]) { Mcp-Row $m[0] $m[2] $m[1] } }
+foreach ($m in $McpFiles) { if ((Is-File $m[2]) -and -not (Is-Special $m[2])) { Mcp-Row $m[0] $m[2] $m[1] } }
 foreach ($f in $ProjectMcp) {
   if (-not (Is-File $f)) { continue }
   $fs = $f -replace '\\', '/'
@@ -1520,13 +1597,13 @@ function Key-Place([string]$f) {
 $KeyRows = New-Object System.Collections.Generic.List[object]
 $KEY_FILES = 0; $HIST_KEYS = 0; $ProvIds = New-Object System.Collections.Generic.List[string]; $KeyFirst = $null
 $KeyPlaces = New-Object System.Collections.Generic.List[string]; $ProvTally = New-Object System.Collections.Generic.List[string]
-# A file that is there but can't be read (a root-owned .env a container wrote, a file made 000, one
-# another program holds open) was not checked: section 3 names it and the check is partial, never
-# "no keys". A link to nothing is not one, as in gird-check.sh.
+# A file that is there but not read (a root-owned .env a container wrote, a file made 000, one another
+# program holds open, a pipe made at ~/.zsh_history) was not checked: section 3 names it and the check
+# is partial, never "no keys". A link to nothing is not one, as in gird-check.sh.
 $KeyUnread = New-Object System.Collections.Generic.List[string]
 foreach ($f in $Candidates) {
   if (-not (Has-Match $f $RxKeys)) {
-    if ((Is-File $f) -and $null -eq (Read-Text $f) -and (Is-RegularFile $f)) { $KeyUnread.Add($f) }
+    if (Not-Read $f) { $KeyUnread.Add($f) }
     continue
   }
   $p = @(Providers-In $f)
@@ -1600,7 +1677,7 @@ if ($LoginsText) { Progress "Login files any agent you run can read: $LoginsText
 # With $big, a file too big to read counts too, checked before any read.
 function Unread-Files($files, [bool]$big = $false) {
   $out = New-Object System.Collections.Generic.List[string]
-  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (Is-File $f) -and (($big -and (Too-Big $f)) -or $null -eq (Read-Text $f)) -and (Is-RegularFile $f)) { $out.Add($f) } }
+  foreach ($f in $files) { if ($f -and -not $out.Contains($f) -and (($big -and (Is-File $f) -and (Is-RegularFile $f) -and (Too-Big $f)) -or (Not-Read $f))) { $out.Add($f) } }
   ,$out
 }
 $Sec2Unread = Unread-Files @($McpList)
@@ -5726,8 +5803,8 @@ foreach ($r in $AaTable) {
   # The home folder is not a project: its own file there is the user's, such as ~/.codex/config.toml.
   if ($r[2].StartsWith('{PROJECT}/')) { $rel = '/' + $r[2].Substring(10); $own = (J $HomeDir $r[2].Substring(10)) -replace '\\', '/'; $files = @($AaFiles | Where-Object { ($_ -replace '\\', '/').EndsWith($rel, [StringComparison]::Ordinal) -and ($_ -replace '\\', '/') -ne $own }) } else { $files = @(Aa-Glob $r[2]) }
   foreach ($f in $files) {
-    if (-not (Is-File $f) -or -not (Is-RegularFile $f)) { continue }
     if (-not $aaTried.Contains($f)) { $aaTried.Add($f) }
+    if (-not (Is-File $f) -or -not (Is-RegularFile $f)) { continue }
     if ((Too-Big $f) -or -not (Aa-Hit $f $r[4])) { continue }
     # One row per file and agent: VS Code's settings file can hold two agents'.
     $k = $f + [char]9 + $r[0]
@@ -6138,7 +6215,7 @@ $SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [i
 if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
   $cnt = @{ Skipped = 0; Stop = $false }
   $sessAll = Sess-List $SessRoots $cnt
-  $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.Name.EndsWith('.zst') }).Count; $SESS_UNREAD = [int]$cnt.Skipped
+  $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.Name.EndsWith('.zst') -or $_.Name.EndsWith('.gz') }).Count; $SESS_UNREAD = [int]$cnt.Skipped
   # rg.exe reports no progress per file: it finished (0 or 1), finished but could not read some
   # file or folder (2), or was stopped before the end.
   if ($SessEngine -eq 'none' -or $SessSt.Failed) { $SESS_NOTRUN = $SESS_TOTAL; $SESS_DONE = 0 }

@@ -152,6 +152,15 @@ has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2
 nokeys "never prints a planted key" "$WORK/keys.txt" "$OUT"
 if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 
+echo "agent activity"
+# Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
+# today means Codex is in use, not an agent to remove.
+mkdir -p "$WORK/cxday/.codex/sessions/2026/10/26" "$WORK/cxday/AppData/Roaming" "$WORK/cxday/AppData/Local/Temp"
+printf '{}\n' > "$WORK/cxday/.codex/sessions/2026/10/26/rollout-2026-10-26T10-00-00-a.jsonl"
+psrun "$WORK/cxday" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/cxday.txt"
+has    "Codex used today, its session four folders down, reads in use" 'Codex used in the last 30 days' "$WORK/cxday.txt"
+hasnot "and is not named as an agent to remove"  'Remove agents you no longer use: [^.]*Codex' "$WORK/cxday.txt"
+
 echo "keys in agent sessions"
 SE=$WORK/sess; mkdir -p "$SE/rgbin"
 RG=$(command -v rg 2>/dev/null); [ -n "$RG" ] && ln -s "$RG" "$SE/rgbin/rg"
@@ -402,6 +411,9 @@ for D in zst zst1 aq kiro aqk unr3 aidur; do mkdir -p "$SE/$D/AppData/Roaming" "
 mkdir -p "$SE/zst/.codex/sessions/2026/10" "$SE/zst1/.codex/sessions/2026/10"
 printf '{}\n' > "$SE/zst/.codex/sessions/2026/10/rollout-a.jsonl"; printf 'x' > "$SE/zst/.codex/sessions/2026/10/rollout-b.jsonl.zst"
 printf 'x' > "$SE/zst1/.codex/sessions/2026/10/rollout-b.jsonl.zst"
+# A gzip session file is compressed too: the key in it can't be read, so it is named as not checked.
+mkdir -p "$SE/gz/.claude/projects/p" "$SE/gz/AppData/Roaming" "$SE/gz/AppData/Local/Temp"; printf '{}\n' > "$SE/gz/.claude/projects/p/a.jsonl"
+printf '{"t":"OPENAI_API_KEY=%s"}\n' "s""k-proj-$(rnd 130)" | gzip -c > "$SE/gz/.claude/projects/p/b.jsonl.gz"
 # Amazon Q CLI keeps temporary AWS credentials for its own telemetry in its database, and so does
 # Kiro CLI: an ASIA key id there is not a key an agent read. A long-term key or another provider's
 # key in that database still counts. Real SQLite files, built by python3; keys from pieces.
@@ -428,6 +440,8 @@ for E in net rg; do
   has    "$E: and a compressed session makes the summary row partly checked" 'Keys in plain text none in files; agent sessions partly checked' "$SE/zst-sum-$E.txt"
   psrun "$SE/zst1" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/zst1-$E.txt"
   hasnot "$E: a home with only compressed sessions is never told no keys" 'No keys in' "$SE/zst1-$E.txt"
+  psrun "$SE/gz" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/gz-$E.txt"
+  has    "$E: a gzip session file is named as not checked, as a compressed one" 'No keys in 1 agent session file\. ! 1 compressed session file was not checked' "$SE/gz-$E.txt"
   psrun "$SE/aq" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/aq-$E.txt" 2>&1
   has    "$E: Amazon Q's own telemetry key in its database is not counted" 'No keys in 1 agent session file\.' "$SE/aq-$E.txt"
   psrun "$SE/kiro" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/kiro-$E.txt" 2>&1
@@ -1740,6 +1754,72 @@ has    "and row 02 says files could not be read"       'MCP servers .*but [0-9]+
 has    "an allow list that can't be read is named in section 4" '! No saved commands with keys in the files read, but [0-9]+ files? could not be read: .*~/\.claude/settings\.local\.json' "$WORK/ni-s24.txt"
 has    "and row 04 says files could not be read"       'Allow lists none found, but [0-9]+ files? could not be read' "$WORK/ni-s24-c.txt"
 hasnot "and neither section reads clean"               '✓ No saved commands with keys' "$WORK/ni-s24.txt"
+# A placeholder shaped like a key is not one, as in the sessions: a run of x's, or AWS's documented
+# example key id. A real key beside one in the same file still counts.
+rm -rf "$WORK/mu"; mkdir -p "$WORK/mu/code/app" "$WORK/mu/AppData/Roaming" "$WORK/mu/AppData/Local/Temp"
+printf 'GITHUB_TOKEN=g%s\n' "hp_$(printf 'x%.0s' $(seq 1 36))" > "$WORK/mu/code/app/.env.example"
+printf 'export AWS_ACCESS_KEY_ID=%s\n' "AK""IAIOSFODNN7EXAMPLE" > "$WORK/mu/.zshrc"
+printf 'GROQ_API_KEY=%s\nOPENAI_API_KEY=s%s\n' "$(sed -n 5p "$WORK/keys.txt")" "k-$(printf 'x%.0s' $(seq 1 48))" > "$WORK/mu/code/app/.env"
+psrun "$WORK/mu" -- -Offline > "$WORK/mu.txt" 2>&1
+hasnot "a placeholder of x's shaped like a key is not a key in plain text" 'env\.example' "$WORK/mu.txt"
+hasnot "nor is AWS's documented example key id"        '~/\.zshrc' "$WORK/mu.txt"
+has    "a real key beside a placeholder still counts, alone" '~/code/app/\.env +Groq$' "$WORK/mu.txt"
+# A pipe at a fixed path (a fifo made at ~/.zsh_history, at an MCP config, at Claude Code's own
+# settings) is never read, as a read of one waits for ever: the check ends and names each one as not
+# read, in the rows that read it. A history file linked to /dev/null, which keeps none, is not named.
+# The run gets 60 s and is killed and failed after.
+rm -rf "$WORK/ff"; mkdir -p "$WORK/ff/.claude" "$WORK/ff/.cursor" "$WORK/ff/AppData/Roaming" "$WORK/ff/AppData/Local/Temp"
+mkfifo "$WORK/ff/.zsh_history" "$WORK/ff/.cursor/mcp.json" "$WORK/ff/.claude/settings.json"; ln -s /dev/null "$WORK/ff/.bash_history"
+psrun "$WORK/ff" -- -Offline > "$WORK/ff-raw.txt" 2>&1 &
+BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/ff-raw.txt"; fi
+wait "$BP" 2>/dev/null
+tr -s ' \n' '  ' < "$WORK/ff-raw.txt" > "$WORK/ff.txt"
+has    "a pipe at a fixed path does not hold up the check" 'Your AI Exposure Check' "$WORK/ff.txt"
+has    "a pipe at a key file's place is named as not read" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: ~/\.zsh_history ' "$WORK/ff.txt"
+has    "and a pipe at an MCP config's place in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: ~/\.cursor/mcp\.json' "$WORK/ff.txt"
+has    "and one at Claude Code's settings in section 4" '! No saved commands with keys in the files read, but 1 file could not be read: ~/\.claude/settings\.json' "$WORK/ff.txt"
+hasnot "a history file linked to /dev/null is not named as not read" '~/\.bash_history' "$WORK/ff.txt"
+# An agent folder that can't be entered (made 000, or left root's by a run with sudo) hides what is in
+# it, and the home scan skips ~/.cursor and ~/.codeium: each key file, MCP config or settings file whose
+# place is behind such a folder, the nearest one on its way, is named as not read in the rows that read
+# it, so they don't read clean. A file in a folder that can be entered but not listed is read as usual,
+# and one missing from it is not named.
+rm -rf "$WORK/cl" "$WORK/cl2"; mkdir -p "$WORK/cl/.cursor" "$WORK/cl/.codeium/windsurf" "$WORK/cl2/.claude" "$WORK/cl2/.gemini" \
+  "$WORK/cl/AppData/Roaming" "$WORK/cl/AppData/Local/Temp" "$WORK/cl2/AppData/Roaming" "$WORK/cl2/AppData/Local/Temp"
+printf '{"mcpServers":{"github":{"command":"npx","env":{"GITHUB_PERSONAL_ACCESS_TOKEN":"%s"}}}}\n' "$(sed -n 3p "$WORK/keys.txt")" > "$WORK/cl/.cursor/mcp.json"
+printf '{"mcpServers":{}}\n' > "$WORK/cl/.codeium/windsurf/mcp_config.json"; printf '{"permissions":{"allow":[]}}\n' > "$WORK/cl2/.claude/settings.local.json"
+printf '{"apiKey":"%s"}\n' "AI""za$(rnd 35)" > "$WORK/cl2/.gemini/settings.json"
+chmod 000 "$WORK/cl/.cursor" "$WORK/cl/.codeium" "$WORK/cl2/.claude"; chmod 311 "$WORK/cl2/.gemini"
+for _c in cl cl2; do
+  psrun "$WORK/$_c" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_c.txt"
+  psrun "$WORK/$_c" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_c-c.txt"
+done
+chmod 755 "$WORK/cl/.cursor" "$WORK/cl/.codeium" "$WORK/cl2/.claude" "$WORK/cl2/.gemini"
+has    "an MCP config in an agent folder that can't be entered is named in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: [^!]*~/\.cursor/mcp\.json' "$WORK/cl.txt"
+has    "and row 02 does not read clean over it"        'MCP servers .*but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
+has    "a key file behind such a folder, deeper down, is named in section 3" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.codeium/windsurf/mcp_config\.json' "$WORK/cl.txt"
+has    "and row 03 does not read clean over it"        'Keys in plain text none found, but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
+has    "Claude Code's settings in a folder that can't be entered are named in section 4" '! No saved commands with keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.claude/settings\.local\.json' "$WORK/cl2.txt"
+has    "and row 04 does not read clean over them"      'Allow lists none found, but [0-9]+ files? could not be read' "$WORK/cl2-c.txt"
+has    "a key file in a folder that can be entered but not listed is read" '~/\.gemini/settings\.json Google' "$WORK/cl2.txt"
+hasnot "and a file missing from it is not named as not read" '~/\.gemini/\.env' "$WORK/cl2.txt"
+# A project's .env or .mcp.json that is a link is read when the link ends at a regular file, as a linked
+# settings file is. A link to a pipe, or to nothing, is not read and not named. The run gets 60 s and is
+# killed and failed after; the link to the pipe goes before the counts are checked below.
+rm -rf "$WORK/el"; mkdir -p "$WORK/el/code/svc" "$WORK/el/code/m" "$WORK/el/code/p" "$WORK/el/code/d" "$WORK/el/secrets" "$WORK/el/AppData/Roaming" "$WORK/el/AppData/Local/Temp"
+printf 'OPENAI_API_KEY=%s\n' "$(sed -n 2p "$WORK/keys.txt")" > "$WORK/el/secrets/svc.env"
+printf '{"mcpServers":{"gh":{"command":"npx","env":{"GITHUB_TOKEN":"%s"}}}}\n' "$(sed -n 3p "$WORK/keys.txt")" > "$WORK/el/secrets/mcp.json"
+mkfifo "$WORK/el/secrets/pipe"; ln -s ../../secrets/svc.env "$WORK/el/code/svc/.env"; ln -s ../../secrets/mcp.json "$WORK/el/code/m/.mcp.json"
+ln -s ../../secrets/pipe "$WORK/el/code/p/.env"; ln -s ../../nowhere "$WORK/el/code/d/.mcp.json"
+psrun "$WORK/el" -- -Offline > "$WORK/el-raw.txt" 2>&1 &
+BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; pkill -9 -f "$WORK/el/" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/el-raw.txt"; fi
+wait "$BP" 2>/dev/null; rm -f "$WORK/el/code/p/.env"
+tr -s ' \n' '  ' < "$WORK/el-raw.txt" > "$WORK/el.txt"
+has    "a project's .env that is a link is read"       '~/code/svc/\.env OpenAI' "$WORK/el.txt"
+has    "and a project's .mcp.json that is a link"      'Project ~/code/m/\.mcp\.json 1 server, token in the file' "$WORK/el.txt"
+hasnot "a link to a pipe or to nothing is neither read nor named" 'code/p/\.env|code/d/\.mcp' "$WORK/el.txt"
 # PowerShell's own partial check: a file that hit the time limit.
 rm -rf "$WORK/ni-slow"; mkdir -p "$WORK/ni-slow/code/s"
 python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/ni-slow/code/s/.env"
@@ -2075,6 +2155,23 @@ has    "a link through a linked folder counts"        '✗ ~/code/repo/keys\.txt
 if [ -e "$WORK/ak/.SSH/AUTHORIZED_KEYS" ]; then has "a link in another case counts where the volume ignores case" '✗ ~/code/d/case\.txt' "$WORK/ak.txt"
 else skip "a link in another case counts where the volume ignores case" "this volume tells case apart, so the link does not reach the file"; fi
 hasnot "a link to another file named like it does not count" 'code/e/other\.txt' "$WORK/ak.txt"
+# A link to another link that ends there is listed too, however the chain runs: through a folder the
+# scan skips (vendor), through a link named for the file, or from inside a linked .claude folder. A link
+# to another file is not, nor one out of the home folder (known limit: it is not followed, as it can end
+# on a network share that never answers, and a cloned repo can't know the home folder's path).
+rm -rf "$WORK/akc" "$WORK/akc-out"; cp -R "$WORK/clean" "$WORK/akc"
+mkdir -p "$WORK/akc/.ssh" "$WORK/akc/code/repo/vendor" "$WORK/akc/code/p/hop" "$WORK/akc/code/q" "$WORK/akc/shared/claude" "$WORK/akc/code/x" "$WORK/akc/code/z" "$WORK/akc-out"
+: > "$WORK/akc/.ssh/authorized_keys"; printf 'x\n' > "$WORK/akc/code/x/b"
+ln -s ../../../.ssh/authorized_keys "$WORK/akc/code/repo/vendor/k"; ln -s vendor/k "$WORK/akc/code/repo/deploy_keys.txt"
+ln -s ../../../.ssh/authorized_keys "$WORK/akc/code/p/hop/authorized_keys"; ln -s hop/authorized_keys "$WORK/akc/code/p/notes"
+ln -s ../../.ssh/authorized_keys "$WORK/akc/shared/claude/settings.local.json"; ln -s ../../shared/claude "$WORK/akc/code/q/.claude"
+ln -s b "$WORK/akc/code/x/a"; ln -s "$WORK/akc/.ssh/authorized_keys" "$WORK/akc-out/k"; ln -s "$WORK/akc-out/k" "$WORK/akc/code/z/abs"
+dzrun "$WORK/akc" | tr -s ' \n' '  ' > "$WORK/akc.txt"
+has    "a link to a link to authorized_keys, through a folder the scan skips, counts" '✗ ~/code/repo/deploy_keys\.txt' "$WORK/akc.txt"
+has    "a link to a link named for the file counts"    '✗ ~/code/p/notes' "$WORK/akc.txt"
+has    "a link inside a linked .claude folder counts"  '✗ ~/code/q/\.claude/settings\.local\.json' "$WORK/akc.txt"
+hasnot "a relative link to another file does not count" 'code/x/a' "$WORK/akc.txt"
+hasnot "known limit: a link out of the home folder is not followed" 'code/z/abs' "$WORK/akc.txt"
 # A settings file is read as one line (Flat-Text), so a setting inside a /* */ block comment is not
 # at a boundary and is not read. Codex values in single quotes, TOML's literal strings, count as the
 # same values in double quotes, alone or next to them. Known limit (docs/designs/dossier-checks.md,
@@ -2612,6 +2709,9 @@ report_of "$WORK/report-fcount.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" 
 has    "files_found counts files, not a linked settings file" '"files_found":2,' "$WORK/report-fcount.json"
 psrun "$WORK/fcount" -- -Offline > "$WORK/fcount.txt" 2>&1
 has    "and the linked settings file is still checked" 'q/\.claude/settings\.json' "$WORK/fcount.txt"
+# A project's linked .env is scanned, so env_files counts it, but it is not a file the scan found.
+report_of "$WORK/report-el.json" psrun "$WORK/el" GIRD_CHECK_API="$API" --
+has    "a linked .env counts in env_files, not in files_found" '"env_files":1,.*"files_found":0,' "$WORK/report-el.json"
 # files_found counts files: a site-packages folder the scan lists is not one.
 mkdir -p "$WORK/fcount/v/lib/python3.12/site-packages"; printf 'home = /usr\n' > "$WORK/fcount/v/pyvenv.cfg"
 report_of "$WORK/report-fsite.json" psrun "$WORK/fcount" GIRD_CHECK_API="$API" --
@@ -2721,6 +2821,16 @@ has    "Windows: a bad package in pnpm's global folder"  'AppData/Local/pnpm/glo
 has    "Windows: a bad package in npx's cache"           'AppData/Local/npm-cache/_npx/abc123/node_modules/iruchache' "$WORK/win1.txt"
 has    "Windows is pointed at Credential Manager"       'into Windows Credential Manager or a secrets manager' "$WORK/win1.txt"
 nokeys "Windows: never prints a planted key" "$WORK/keys.txt" "$WORK/win.txt"
+# PowerShell's profiles, which it runs at every start, hold keys set with $env:, read in Documents. (The
+# folder Windows moved Documents to comes from GetFolderPath, which can't be faked here: bash-only.txt.)
+WPR=$WORK/winprof; cp -R "$WP" "$WPR"
+mkdir -p "$WPR/Documents/PowerShell" "$WPR/Documents/WindowsPowerShell"
+printf '$env:OPENAI_API_KEY = "%s"\n' "$(sed -n 2p "$WORK/keys.txt")" > "$WPR/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
+printf '$env:GITHUB_TOKEN = "%s"\n' "$(sed -n 3p "$WORK/keys.txt")" > "$WPR/Documents/WindowsPowerShell/profile.ps1"
+winprof() { psrun "$WPR" OS=Windows_NT PROCESSOR_ARCHITECTURE=AMD64 WT_SESSION=1 GIRD_CHECK_TEST_MACHINEGUID="$WGUID" "$@"; }
+winprof -- -Offline -Full 2>&1 | tr -s ' \n' '  ' > "$WORK/winprof.txt"
+has    "Windows: keys in PowerShell's profiles are found" '~/Documents/PowerShell/Microsoft\.PowerShell_profile\.ps1 OpenAI .*~/Documents/WindowsPowerShell/profile\.ps1 GitHub' "$WORK/winprof.txt"
+nokeys "Windows: a profile's keys are never printed" "$WORK/keys.txt" "$WORK/winprof.txt"
 report_of "$WORK/report-win.json" winps GIRD_CHECK_API="$API" --
 WANT_ID=$(printf 'gird-check-v1:%s' "$WGUID" | shasum -a 256 | cut -c1-64)
 has    "Windows: device_id is sha256 of the salt and MachineGuid as stored" "\"device_id\":\"$WANT_ID\"" "$WORK/report-win.json"
@@ -2729,6 +2839,8 @@ has    "Windows: terminal is windows-terminal with WT_SESSION" '"terminal":"wind
 has    "Windows: the agents found in Windows places are reported" '"agents":\["claude-code","claude-desktop","cursor",.*"goose"' "$WORK/report-win.json"
 has    "Windows: PowerShell history counts as shell history" '"history_keys":1,' "$WORK/report-win.json"
 has    "Windows: key_places puts PSReadLine history in shell_history" '"shell_history":1' "$WORK/report-win.json"
+report_of "$WORK/report-winprof.json" winprof GIRD_CHECK_API="$API" --
+has    "Windows: key_places puts PowerShell's profiles in shell_rc" '"shell_rc":2' "$WORK/report-winprof.json"
 hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|winp|_netrc' "$WORK/report-win.json"
 
 # The Worker's own validation. It must keep the Windows values as sent, not turn

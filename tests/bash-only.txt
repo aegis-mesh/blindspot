@@ -70,6 +70,7 @@ another OS is pointed at a secrets manager	the OS is faked as FreeBSD with a una
 another OS is not told to use the Keychain	the OS is faked as FreeBSD with a uname stand-in, for gird-check.sh's branch for systems other than macOS, Linux and Windows; gird-check.ps1 has no such branch
 macOS is pointed at the Keychain	macOS advice: gird-check.sh is the script for macOS, and gird-check.ps1 never points at the Keychain
 Windows bash is pointed at Credential Manager	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
+Windows: and in the profile where Windows moved Documents	Git Bash reads the moved Documents folder with reg, which the test fakes; gird-check.ps1 asks Windows for it (GetFolderPath), which the test machine can't fake
 Windows: keys in the shell's own home too	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
 Windows: os is Windows 11 for build 22000 and up	Git Bash reads the Windows version from reg and uname, which the tests fake; gird-check.ps1 reads it from .NET's OSVersion, which a test can't set
 Windows: os is Windows 10 from uname's build when reg has none	Git Bash reads the Windows version from reg and uname, which the tests fake; gird-check.ps1 reads it from .NET's OSVersion, which a test can't set

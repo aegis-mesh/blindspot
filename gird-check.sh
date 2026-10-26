@@ -766,15 +766,19 @@ P_JSONSECRET='"([A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*|apiKey|api_key|a
 P_TOMLSECRET='[A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*[[:space:]]*=[[:space:]]*"[^"$<{][^"]{11,}"'
 P_PLACEHOLDER='your|xxxx|here|example|placeholder|changeme|dummy|<|[$][{]'
 
+# The providers of the keys in a file, in order, each once. The matches go through the session check's
+# filter (sess_filter), as an Aider history's do, so a key that looks made up (a run of x's, a
+# documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either. Control
+# characters become spaces first, so the match is one field.
 providers_in() {
-  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk "$PROV_AWK"'
-    { p = prov($0); if (p == "") next
-      if (!(p in seen)) { seen[p] = 1; out = out (out == "" ? "" : ", ") p } }
-    END { printf "%s", out }'
+  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
+    awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
-# Print the files in a newline list that contain a match, in order, with one grep pass.
+# Print the files in a newline list that contain a match, in order, with one grep pass. Only regular
+# files are read, following links: a pipe, socket or device at a fixed path (a fifo made at
+# ~/.zsh_history, a link to /dev/tty) would hold the read for ever.
 files_matching() { # pattern; list on stdin
-  tr '\n' '\0' | xargs -0 grep -alE "$1" 2>/dev/null
+  while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$1" 2>/dev/null
 }
 inline_secret() {
   grep -aoE "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET" "$1" 2>/dev/null | grep -viE "$P_PLACEHOLDER" | grep -q .
@@ -966,10 +970,15 @@ EOF
   # Links are printed as "L path", candidates for the ~/.ssh/authorized_keys check that ak_link
   # settles in the shell with -ef. A find with -ilname (GNU, BSD) keeps only links whose text ends in
   # authorized_keys, in any case, so .ssh/./authorized_keys, .ssh//authorized_keys, a link through a
-  # linked folder and, on a volume that ignores case, .SSH/Authorized_Keys all reach -ef. BusyBox's
-  # find has no -ilname and rejects the whole expression over it, and its -exec ... + drops links, so
-  # there every link is printed, one -exec each.
-  # Linked settings, tasks and planted files are printed as "S path" the same way.
+  # linked folder and, on a volume that ignores case, .SSH/Authorized_Keys all reach -ef. With the file
+  # there, -ef follows a chain of links to its end, so every link that can lead there is printed: one
+  # whose text names it, is relative or points inside the home folder (deploy_keys.txt -> vendor/k ->
+  # the file, with vendor a folder the scan skips). A link out of the home folder is not followed: it
+  # can end on a network share that never answers, and a cloned repo can't know the home folder's path.
+  # BusyBox's find has no -ilname and rejects the whole expression over it, and its -exec ... + drops
+  # links, so there every link is printed, one -exec each.
+  # Linked settings, tasks and planted files are printed as "S path" the same way, and so are a project's
+  # linked .env and MCP files.
   # A .claude or .vscode folder that is a link (not ~/.vscode, which the scan skips) is read through:
   # sh prints "S path" for each file in it the scan would read there, settings, tasks or planted, and
   # for one it can't enter, a line in find's own words, so it is named as a folder not read.
@@ -983,6 +992,7 @@ EOF
     for f in $n; do if [ -e "$d/$f" ] || [ -L "$d/$f" ]; then printf "S %s\n" "$d/$f"; fi; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
     _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
+    [ -e "$H/.ssh/authorized_keys" ] && _lk=(\( -ilname '*authorized_keys' -o ! -lname '/*' -o -lname "$H/*" \) -exec printf 'L %s\n' {} +)
   else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
@@ -1015,7 +1025,8 @@ EOF
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock \
        -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
-       -o -path '*/.vscode/settings.json' "${_pf[@]}" \) "${_ls[@]}" \) -o \
+       -o -path '*/.vscode/settings.json' "${_pf[@]}" -o -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json \
+       -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' \) "${_ls[@]}" \) -o \
     \( -type l \( -name .claude -o -name .vscode \) ! -path "$H/.vscode" "${_lx[@]}" \) -o \
     \( -type l "${_lk[@]}" \) 2>>"${SCAN_ERR:-/dev/null}"
 }
@@ -1262,7 +1273,8 @@ SESS_PRE=$KEY_STARTS
 # found inside a folder are not followed, as ripgrep does not follow them.
 # One perl parent lists the files newest first and forks workers, each with its own pipe back to
 # the parent, which is the only writer to its output, so lines never interleave. A worker prints K
-# (a match) and then D (done) for a file, Z for a compressed one or U for one it can't open; the
+# (a match) and then D (done) for a file, Z for a compressed one (.zst, as Codex compresses a session
+# older than a week, or .gz) or U for one it can't open; the
 # parent prints T (the total) first, and S (the folders it could not open, whose files are not in
 # the total) when there are any. Before printing, control characters become ? in a file name and a
 # space in a match, so neither a hostile folder name nor a newline or tab that happens to be the
@@ -1298,7 +1310,7 @@ for my $w (0 .. $n - 1) {
     FILE: for (my $i = $w; $i < @f; $i += $n) {
       exit 0 unless $alive->();
       my $file = $f[$i]; (my $fn = $file) =~ tr/\x00-\x1f\x7f/?/;
-      if ($file =~ /\.zst$/) { print "Z\t$fn\n"; next }
+      if ($file =~ /\.(zst|gz)$/) { print "Z\t$fn\n"; next }
       my $h; unless (open($h, "<", $file)) { print "U\t$fn\n"; next }
       binmode $h; local $/ = \1048576; my $buf = "";
       my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { (my $k = $&) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n" } } };
@@ -1452,8 +1464,9 @@ UNREAD_DIRS=""
   sed -E -e 's/^find: //' -e 's/: (Permission denied|Operation not permitted)$//' -e "s/^'(.*)'$/\\1/")
 N_NL_DIRS=$(count_lines "$NL_DIRS"); N_UNREAD_DIRS=$(count_lines "$UNREAD_DIRS")
 HOME_PARTIAL=0; [ $((N_NL_DIRS + N_UNREAD_DIRS + SCAN_LOST + SCAN_FAILED)) -gt 0 ] && HOME_PARTIAL=1
-# Linked settings, tasks and planted files, and those files in a linked .claude or .vscode folder,
-# come marked "S path" and are checked like the files, but files_found counts files, as it always has.
+# Linked settings, tasks and planted files, and those files in a linked .claude or .vscode folder, and a
+# project's linked .env and MCP files, come marked "S path" and are checked like the files, but
+# files_found counts files, as it always has.
 # A link counts only when it ends at a regular file: a repo can link a settings file to /dev/zero or
 # /dev/tty, which a reader would never get to the end of.
 LINKED=$(printf '%s\n' "$FOUND" | sed -n 's/^S //p' | while IFS= read -r _f; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
@@ -1545,9 +1558,9 @@ FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
-ENV_FILES=$(printf '%s\n' "$FOUND" | grep -E '/\.env(rc|\.[^/]*)?$')
+ENV_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
-PROJECT_MCP=$(printf '%s\n' "$FOUND" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
+PROJECT_MCP=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
 SITES=$(printf '%s\n' "$FOUND" | grep -E '/site-packages$')
 VENVS=$(printf '%s\n' "$FOUND" | grep -E '/pyvenv\.cfg$' | sed 's#/pyvenv\.cfg$##')
 
@@ -1587,10 +1600,12 @@ while IFS='|' read -r name bins paths acts aid; do
     state=installed
   else
     any=0; recent=0; IFS=';'
+    # Four levels down: Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl
+    # (codex-rs/rollout/src/recorder.rs); the other agents' files sit within three.
     for a in $acts; do
       [ -d "$a" ] || continue
-      [ -n "$(find "$a" -maxdepth 3 -type f -print -quit 2>/dev/null)" ] && any=1
-      [ -n "$(find "$a" -maxdepth 3 -type f -mtime -30 -print -quit 2>/dev/null)" ] && recent=1
+      [ -n "$(find "$a" -maxdepth 4 -type f -print -quit 2>/dev/null)" ] && any=1
+      [ -n "$(find "$a" -maxdepth 4 -type f -mtime -30 -print -quit 2>/dev/null)" ] && recent=1
     done
     IFS=$old_ifs
     if [ "$recent" -eq 1 ]; then state=active
@@ -2020,6 +2035,22 @@ fi
 # --- 3. Keys in plain text ---------------------------------------------------
 KEY_ROWS=""; KEY_FILES=0; HIST_KEYS=0; PROV_IDS=""; KEY_FIRST=""
 PROJECT_FILES=$(printf '%s\n%s\n' "$ENV_FILES" "$PROJECT_MCP")
+# On Windows, PowerShell's profiles, which it runs at every start: a key set there with $env: sits in
+# plain text. The same files gird-check.ps1 reads, in Documents and in the folder Windows keeps
+# Documents in when it was moved (OneDrive's backup moves it), which reg reads from the user's shell
+# folders as GetFolderPath('MyDocuments') gives it to PowerShell.
+PS_PROFILES=""
+if [ "$WIN" -eq 1 ]; then
+  _md=$(MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' /v Personal 2>/dev/null |
+    tr -d '\r' | sed -n 's/^[[:space:]]*Personal[[:space:]][[:space:]]*REG_[A-Z_]*[[:space:]][[:space:]]*//p' | head -n 1)
+  _md=$(winpath "$_md"); _md=${_md%/}
+  for _dd in "$H/Documents" ${_md:+"$_md"}; do
+    for _pe in PowerShell WindowsPowerShell; do
+      for _pn in Microsoft.PowerShell_profile.ps1 profile.ps1 Microsoft.VSCode_profile.ps1; do PS_PROFILES="$PS_PROFILES$_dd/$_pe/$_pn
+"; done
+    done
+  done
+fi
 CANDIDATES=$(
   {
     for f in .zshrc .zprofile .zshenv .zlogin .bashrc .bash_profile .profile .config/fish/config.fish .env .envrc \
@@ -2041,16 +2072,36 @@ CANDIDATES=$(
     case "${CLINE_PROVIDER_SETTINGS_PATH:-}" in (/*) printf '%s\n' "$CLINE_PROVIDER_SETTINGS_PATH" ;; esac
     if [ "$WIN" -eq 1 ]; then
       printf '%s\n' "$GOOSE_CFG/config.yaml"
+      printf '%s' "$PS_PROFILES"
       for f in "$PSRL"/*_history.txt; do [ -f "$f" ] && printf '%s\n' "$f"; done
       [ "$HH" != "$H" ] && for f in .bashrc .bash_profile .profile .bash_history; do printf '%s\n' "$HH/$f"; done
     fi
     printf '%s\n' "$PROJECT_FILES"
   } | awk 'NF && !seen[$0]++'
 )
-# A file that is there but can't be read (a root-owned .env a container wrote, a file made 000)
-# was not checked: section 3 names it and the check is partial, never "no keys". An account run
-# counts these through fleet_ok, as files not checked, so its not_read leaves them out.
-KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && [ -f "$f" ] && [ ! -r "$f" ] && printf '%s\n' "$f"; done)
+# A path behind a folder on its way that is there but can't be entered (an agent folder made 000, or
+# left root's by a run with sudo): whether a file is there can't be told. The nearest folder on its
+# way that is there is the one that counts, as a stat of the path meets it.
+behind_closed() { # path
+  _bc=$1
+  while :; do
+    case "$_bc" in */*) _bc=${_bc%/*} ;; *) return 1 ;; esac
+    [ -n "$_bc" ] || return 1
+    if [ -d "$_bc" ]; then [ ! -x "$_bc" ]; return; fi
+  done
+}
+# A file that is there but not read: one that can't be read (a root-owned .env a container wrote, a
+# file made 000), a pipe, socket or device (a fifo made at ~/.zsh_history), as only a regular file is
+# read, or one behind a folder that can't be entered. A link to nothing, a folder, and /dev/null
+# (where people link a history file to keep none, and which holds nothing) are none of these.
+not_read() { # path
+  if [ -f "$1" ]; then [ ! -r "$1" ]; return; fi
+  if [ -e "$1" ]; then [ ! -d "$1" ] && ! [ "$1" -ef /dev/null ]; return; fi
+  behind_closed "$1"
+}
+# Such a file was not checked: section 3 names it and the check is partial, never "no keys". An
+# account run counts these through fleet_ok, as files not checked, so its not_read leaves them out.
+KEY_UNREAD=$(printf '%s\n' "$CANDIDATES" | while IFS= read -r f; do [ -n "$f" ] && not_read "$f" && printf '%s\n' "$f"; done)
 N_KEY_UNREAD=$(count_lines "$KEY_UNREAD")
 MATCHED=$(printf '%s\n' "$CANDIDATES" | fleet_filter | files_matching "$TR_KEYS")
 # For the report: one place id per file, and one provider id per file and provider.
@@ -2065,6 +2116,7 @@ key_place() { # file: sets KP to its place, the first in KEY_PLACE_IDS that fits
     "$HH/.bashrc"|"$HH/.bash_profile"|"$HH/.profile") KP=shell_rc; return 0 ;;
     "$HH/.bash_history") KP=shell_history; return 0 ;;
   esac
+  case "$NL$PS_PROFILES" in *"$NL$1$NL"*) KP=shell_rc; return 0 ;; esac
   # PowerShell's history on Windows, where typed keys most often end up
   if [ -n "$PSRL" ]; then case "$1" in "$PSRL"/*_history.txt) KP=shell_history; return 0 ;; esac; fi
   case "${1##*/}" in .env|.env.*|.envrc) KP=env_file; return 0 ;; esac
@@ -2152,8 +2204,11 @@ N_LOGIN=0; for _x in $LOGIN_IDS; do N_LOGIN=$((N_LOGIN + 1)); done
 
 # --- 4. Keys saved in Claude Code allow lists -------------------------------
 ALLOW_ROWS=""; N_ALLOW=0; N_ALLOW_NPM=0; ALLOW_FIRST=""
-unread_files() { # files on stdin that are there but can't be read, each once; with "big", or too big to read
-  while IFS= read -r _uf; do [ -n "$_uf" ] && [ -f "$_uf" ] && { [ ! -r "$_uf" ] || { [ -n "${1:-}" ] && too_big "$_uf"; }; } && printf '%s\n' "$_uf"; done | awk '!s[$0]++'
+unread_files() { # files on stdin that are there but not read (not_read), each once; with "big", or too big to read
+  while IFS= read -r _uf; do
+    [ -n "$_uf" ] || continue
+    if not_read "$_uf" || { [ -n "${1:-}" ] && [ -f "$_uf" ] && too_big "$_uf"; }; then printf '%s\n' "$_uf"; fi
+  done | awk '!s[$0]++'
 }
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
@@ -2162,7 +2217,7 @@ N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
-  while IFS= read -r _f; do too_big "$_f" || printf '%s\n' "$_f"; done | files_matching "$TR_KEYS|$P_ASSIGN")
+  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || printf '%s\n' "$_f"; }; done | files_matching "$TR_KEYS|$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
@@ -6821,7 +6876,7 @@ EOF
     # Counted by the NUL after each name, so a newline in a file name counts once. -H follows a
     # location that is a link, as ripgrep does, and no link found inside a folder.
     SESS_TOTAL=$(find -H "${_rs[@]}" -type f -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
-    SESS_ZST=$(find -H "${_rs[@]}" -type f -name '*.zst' -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
+    SESS_ZST=$(find -H "${_rs[@]}" -type f \( -name '*.zst' -o -name '*.gz' \) -print0 2>/dev/null | tr -cd '\000' | wc -c | tr -d ' ')
     # ripgrep reports no progress per file: it finished (0 or 1), finished but could not read
     # some file or folder (2), or was stopped before the end.
     case "$SESS_RC" in 0|1) SESS_DONE=$((SESS_TOTAL - SESS_ZST)) ;; 2) SESS_DONE=$((SESS_TOTAL - SESS_ZST)); SESS_UNREAD=-1 ;; *) SESS_DONE=-1 ;; esac
