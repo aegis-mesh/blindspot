@@ -1,0 +1,20 @@
+# Hosted platforms that leaked the secrets people stored on them. Section 5 shows one row each.
+# One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id        an id from data/incidents.tsv; its name is what the shared fix names
+#   name      the row's name
+#   commands  commands on PATH that mean it is used, separated by spaces, or -
+#   paths     files or folders that mean it is used, separated by ; (a folder ends in /), or -.
+#             The same path tokens as data/sessions.tsv: ~ is the home folder, {AS}, {XDG_DATA}...
+#   found     the row's word when it is found: installed, or CLI found
+#   advice    the line shown under the row when it is found
+#   summary   the summary row when it is the only platform found
+# OpenCode: its post on X (data/incidents.tsv's source); its co-founder's reply that keys kept in the CLI
+# never come to OpenCode (x.com/thdxr/status/2111572618340188393); and TechCrunch's report of 19 October
+# (techcrunch.com/2026/10/19/hackers-hit-ai-coding-tool-opencode-running-up-charges-on-users-ai-accounts/)
+# that OpenCode told the users it emailed to revoke and replace their keys directly with each provider.
+# Railway and Zeabur: their disclosures, in Zeabur's words "Replace every password and key stored on
+# Zeabur" and "Revoke the old ones with the service provider first".
+# id	name	commands	paths	found	advice	summary
+opencode	OpenCode	opencode	~/.config/opencode/;~/.local/share/opencode/	installed	OpenCode emailed the Console users its breach hit, and says those it did not email were not affected. It told those users to revoke and replace their keys directly with each provider. Keys kept only in the CLI never reach OpenCode.	OpenCode found: got its breach email? Rotate keys
+railway	Railway	railway	~/.railway/config.json	CLI found	Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.	Railway CLI found: rotate secrets stored there
+zeabur	Zeabur	zeabur	~/.config/zeabur/	CLI found	Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.	Zeabur CLI found: rotate secrets stored there

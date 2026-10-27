@@ -1,0 +1,109 @@
+# Tests in tests/run-ps.sh that skip on some machines, one per line: the test's name as run-ps.sh
+# records it, a tab, and why gird-check.ps1's test can't run there. tests/parity.sh fails when
+# PowerShell skips a test that bash ran and the test is not listed here. "Not written yet" is
+# not a reason.
+rg: a key after an escaped newline in a Claude Code session	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key in a Codex session	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key in an Aider history	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a made-up key is not counted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a real key with few different characters counts	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a compressed session is named as not checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: says to rotate them	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: names encrypted sessions as not checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: never prints a key	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+.NET and ripgrep report the same	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: an unreadable session means partly checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a token across a piece boundary is not a key	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key after an escaped newline at a piece boundary is found	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a pipe where a session file should be is skipped	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a stuck ripgrep does not hold up the check	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: no ripgrep process is left running	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: HUP leaves no ripgrep process	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+Linux is told how to stop the wiper	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+Linux is not given the Mac command	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on Linux, transformers.pyz is the mistralai hit	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and the link flags it	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+transformers.pyz alone is listed once	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and said to be written by either package	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and guardrails-ai's row does not list it too	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+guardrails-ai with transformers.pyz: the file is listed with it	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+with guardrails-ai's own advice for the file	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and mistralai's row stays clean	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and nothing names mistralai as found	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+mistralai with transformers.pyz: the file is listed with it	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and guardrails-ai's row stays clean	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and nothing names guardrails-ai as found	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+and on Linux the systemd unit that starts it	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+durabletask 1.4.2 is an act-now row on Linux	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+durabletask 1.4.0, the version to pin, is not flagged	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on Linux, managed.pyz in the temp folder is durabletask's sign	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on Linux, where that loader has no binary, they are extensions to remove	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on a Mac, durabletask 1.4.2 is a version to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+on a Mac it is not looked for	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+mistralai 2.4.6 from PyPI is its own act-now row	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+with its fix	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+the link flags a Python incident, not LiteLLM	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on a Mac, mistralai 2.4.6 is a version to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+and says why	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+a Mac with it is not 'compromised'	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+with a fix to update it	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+the link does not flag a Python incident	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+row 05 says a Python package to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+Cursor below the fixed version	gird-check.ps1 reads Cursor's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
+Cursor between two fixes is told the newest	gird-check.ps1 reads Cursor's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
+and not the hole its version already has the fix for	gird-check.ps1 reads Cursor's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
+the Worker accepts the report and keeps every field	needs the site's report validation (worker/check-stats.js), named by GIRD_CHECK_WORKER, and node
+ripgrep is on PATH	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key of counting digits is made up	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: keys at a line start, mid-line and after an escaped newline are all found	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and each format among them	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session folder name with a tab keeps the key with its agent	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session folder name with a newline keeps the key with its agent	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key-shaped run of 2 MB is not a key and does not slow the check	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session folder that cannot be read is named	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the sessions are not called clean	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+when the check cannot start the sessions are named as not checked	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed
+and are not called clean	needs ripgrep on PATH: gird-check.ps1's .NET engine needs no temporary file, so only its ripgrep engine can fail to start, and that runs where ripgrep is installed
+guardrails-ai 0.10.1 is its own act-now row on Linux	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+with its fix, naming it	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
+on a Mac, guardrails-ai 0.10.1 is a version to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+and is not 'compromised' there	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+rg: the check line counts only the files read, not compressed ones	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and a compressed session makes the summary row partly checked	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a home with only compressed sessions is never told no keys	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: Amazon Q's own telemetry key in its database is not counted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: nor Kiro CLI's	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a long-term AWS key or another provider's in that database still counts	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a session location that is a link to a file is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and counted as read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a link to a pipe or a device, or a pipe in a session folder, is not read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: Antigravity's SQLite conversations and their -wal files are read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: nothing else in that folder is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: its .pb files are counted and named as encrypted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a folder of SQLite conversations alone is read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and never called encrypted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+on a Mac, a January GlassWorm extension is malware	needs pwsh on macOS: gird-check.ps1 knows macOS by /System/Library/CoreServices, and the January oorzc extensions are malware only there
+an extension whose malware runs on macOS and Windows is one to remove on Linux	needs pwsh on Linux: gird-check.ps1 reads the OS it runs on (macOS by /System/Library/CoreServices), and on macOS this extension's malware runs
+the same extension on a Mac is malware	needs pwsh on macOS: gird-check.ps1 knows macOS by /System/Library/CoreServices
+Claude Desktop in both its advisories' ranges: the newest fix and each hole	gird-check.ps1 reads Claude Desktop's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
+Claude Desktop at that fix is not listed	gird-check.ps1 reads Claude Desktop's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
+nor one older than both ranges	gird-check.ps1 reads Claude Desktop's version from its macOS app bundle, and only on macOS, which it takes from /System/Library/CoreServices: runs where pwsh is on macOS
+on Linux, Aikido's WakaTime impostor is one to remove	needs pwsh on Linux: gird-check.ps1 reads the OS it runs on (macOS by /System/Library/CoreServices), and on macOS this extension's malware runs
+rg: a link inside a session folder is neither read nor counted	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a key right after a carriage return is found	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the hit after it keeps its file and place	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and neither key is printed	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: a folder variable that ends in / keeps its hit with its agent	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and so does one that names the session folder itself	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: the first hit's place is the session folder	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the second's is the variable's folder	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: never a folder under them	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: an empty session file that cannot be opened is not counted as read	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+rg: and the sessions are not called clean over it	needs ripgrep on PATH: these tests drive gird-check.ps1's ripgrep engine, and run where ripgrep is installed
+two .env files whose folders differ only in case are read apart	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+and the other keeps its own key	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+two session files whose names differ only in case are two files	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+two lockfiles whose folders differ only in case are two rows	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+and the other lockfile's row is there too	needs a volume that tells case apart: on one that ignores case, two names that differ only in case are one file
+where its malware could not run, a bad version in uv's cache is one to update	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+another user's own file in the temp folder is not this person's hit	needs passwordless sudo, as CI runners have, to make a file another user owns

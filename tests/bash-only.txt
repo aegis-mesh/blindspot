@@ -1,0 +1,341 @@
+# Tests in tests/run.sh that have no twin in tests/run-ps.sh, one per line: the test's name as
+# tests/parity.sh reads it, a tab, and why it can't or need not run for gird-check.ps1. Each name
+# once, however often run.sh writes it. "Not written yet" is not a reason: write the twin.
+a Python incident that is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python name with a hyphen	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python version with another os	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a temp line with no note	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+temp lines of one incident that disagree	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a path with an unknown token	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an ENV token with no fallback	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an ENV token whose fallback is not a path	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a session path with an unknown token	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a line that is not ASCII	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a planted file in another folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a planted file listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform advice with a $	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform path that is only the home	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform whose incident is not a leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a leak that no platform names	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an npm package of a platform leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a startup file of a platform leak	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a row 05 summary on an act-level incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a row 05 summary longer than row 05 holds	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a platform with another found word	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a site file with a slash	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a startup line with no note	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a startup path with a glob	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a temp name of dots	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a wiper file that is not gh-token-monitor	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+advice on an incident with no package to show it	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve line with another os	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve line with no pattern	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve path with a glob	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve pattern with a quote	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an auto-approve project path that climbs	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension listed twice, in another case	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension registry that is not openvsx or any	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension version that is not a version	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension whose incident is only an update	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension os that is not all, mac, linux or win	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension line without its os	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident advice with a quote	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident source that is not https	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident with an empty advice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident with another level	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an incident with no month	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an npm package with an unknown incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated line of another kind	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated line that disagrees with its tool	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated line whose name disagrees with its tool	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an advice that starts with First on an update-level incident	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an advice that starts with First and says to rotate	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated plist that is not Info.plist	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an outdated range that does not parse	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+npm's -security placeholder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+npm's 0.0.1-security.0 placeholder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+both scripts match the data files	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+perl and ripgrep report the same	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
+kill -9 of the script stops the workers	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
+no engine process is left running	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
+HUP leaves no engine process	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
+no fifo is left behind	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
+the fifo keys pass through is the owner's only	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
+Linux is pointed at its keyring	gird-check.ps1 has no keyring or Keychain advice off Windows: its store there is "a secrets manager"
+Linux is not told to use the Keychain	gird-check.ps1 has no keyring or Keychain advice off Windows: its store there is "a secrets manager"
+another OS is pointed at a secrets manager	the OS is faked as FreeBSD with a uname stand-in, for gird-check.sh's branch for systems other than macOS, Linux and Windows; gird-check.ps1 has no such branch
+another OS is not told to use the Keychain	the OS is faked as FreeBSD with a uname stand-in, for gird-check.sh's branch for systems other than macOS, Linux and Windows; gird-check.ps1 has no such branch
+macOS is pointed at the Keychain	macOS advice: gird-check.sh is the script for macOS, and gird-check.ps1 never points at the Keychain
+Windows bash is pointed at Credential Manager	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
+Windows: and in the profile where Windows moved Documents	Git Bash reads the moved Documents folder with reg, which the test fakes; gird-check.ps1 asks Windows for it (GetFolderPath), which the test machine can't fake
+Windows: keys in the shell's own home too	Git Bash, MSYS and Cygwin on Windows: a fake uname, reg and cygpath, and a HOME apart from USERPROFILE
+Windows: os is Windows 11 for build 22000 and up	Git Bash reads the Windows version from reg and uname, which the tests fake; gird-check.ps1 reads it from .NET's OSVersion, which a test can't set
+Windows: os is Windows 10 from uname's build when reg has none	Git Bash reads the Windows version from reg and uname, which the tests fake; gird-check.ps1 reads it from .NET's OSVersion, which a test can't set
+WSL is pointed at a secrets manager	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
+WSL is not told to use a desktop keyring	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
+WSL says Windows-side files were not checked	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
+only WSL, not plain Linux, gets the WSL note and loses the keyring advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
+WSL reports os Linux while giving the WSL advice	WSL: gird-check.sh reads /proc to tell WSL from Linux and adds its note; gird-check.ps1 has no WSL handling
+a pyc-only run still says the scan is a snapshot	the Argus for Mac paragraph: gird-check.sh shows it on macOS only, chosen by uname, and gird-check.ps1 never shows it
+without jq, macOS's JavaScript finds the same MCP servers as jq	jq and macOS's JavaScript are gird-check.sh's JSON readers; gird-check.ps1 reads JSON with .NET's System.Text.Json on PowerShell 7 and JavaScriptSerializer on 5.1, never ConvertFrom-Json
+a find that rejects its options is reported, not read as a clean home folder	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
+a find that rejects its options is not called no findings	the home scan is one find command in gird-check.sh, faked here to reject its options; gird-check.ps1 walks the folder with .NET and has no find
+the text backstop fails on a single-quoted name	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a new helper that calls ok	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a variable name outside the helpers	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fills in each loop's own values	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a twin missing from the second loop	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a test that only fails	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a bash test with no twin	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a deleted twin	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a file that ends inside a quote	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop fails on a bash-only line listed twice	tests tests/parity-text.sh, the bash backstop that reads both suites, so it runs once
+the text backstop finds a twin for every test	tests/parity-text.sh is a bash backstop to tests/parity.sh, which the PowerShell job runs on both suites' names
+parity.sh passes two lists that agree	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a bash test with no twin	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a deleted twin	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a test reported twice	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on an empty list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a missing list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a bash-only line with no reason	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh counts a skipped test	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+a result reported in a subshell fails the suite	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a PowerShell skip with no reason	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh passes a PowerShell skip that ps-skips.txt explains	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh fails on a stale ps-skips line	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+parity.sh passes a test both suites skipped	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh and tests/lib.sh, the bash tools that compare the suites' recorded names, so they run once
+and so is the folder it is in	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
+a key id that is not lowercase	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key id listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+HUP leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
+INT leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
+HUP leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
+INT leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
+Windows: a session hit from a native rg.exe keeps its agent	Git Bash hands a native rg.exe Windows paths: a fake uname, cygpath and rg.exe stand in for Windows; gird-check.ps1 gives rg.exe Windows paths itself and reads them back as they are
+Goose's prompts under XDG_STATE_HOME are found	the XDG folders are Goose's rule on macOS and Linux, which gird-check.sh follows; gird-check.ps1 reads Goose's Windows folders
+on Linux, a VS Code extension's sessions under XDG_CONFIG_HOME are found	VS Code and Electron apps move their folders to XDG_CONFIG_HOME on Linux, which gird-check.sh follows; gird-check.ps1 reads the Windows folders
+an ENV token alone whose fallback is the home folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+both scripts carry the same version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+every banner shows that version and date	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+the newest CHANGELOG release is that version	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
+the repo's folder is listed when its worktree is found first	forces find's order with a stand-in find; gird-check.ps1 lists files through .NET, whose order a test can't set
+and the worktree is not	forces find's order with a stand-in find; gird-check.ps1 lists files through .NET, whose order a test can't set
+fleet: system accounts are left out	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and are not in the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: each account's row holds its own findings	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and only its own	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: each account is checked through sudo -n as itself, with a clean environment	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --json prints one JSON document and nothing else	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the JSON holds no path or file name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the JSON holds no planted key	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: act exits 10	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the result is saved for its owner only	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the saved file is the JSON printed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the JSON names where to learn more	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --exit-zero exits 0 on act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --summary-to-stdout prints the one summary line	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the readable report lists each account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and where the result was saved	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: no Argus note without a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the Argus note once, with a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the readable report has no path or file name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --list says who will be checked, and checks nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a missing home is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a home that is a link is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a home owned by another account is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a home shared with an account above is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an account with no login shell is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a system folder as a home is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the one good account is checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and only it is started	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: accounts not checked make the run not_checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: not_checked exits 12	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: no accounts is not_checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: other-row output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: other-row output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: machine output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: machine output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: oversize output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: oversize output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: malformed output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: malformed output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: nothing an account run sent reaches the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: sudo failing means not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a script copy an account could write stops the run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a stuck account run is stopped and the MDM's output closes	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: that account is partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a process that outlives the stop is reported	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the other account is still checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a run stopped by its deadline is not_checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: links to another home or a system file are read with the account's own rights	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the key behind them is never in the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a fifo, a link to a device and an oversized file are not read, and are counted	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: so the account is not_checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a refused protected folder is not checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: clear exits 0	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: review exits 11	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: not_checked comes before review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: act comes before not_checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a replaced jq, grep or sudo earlier in PATH is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: makes no network request	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: opens no browser and saves no report	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: runs with no HOME, a minimal PATH and / as its folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a saved-result folder that is a link is made again	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a saved-result folder anyone can read is made again	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a saved-result folder owned by someone else is never written to	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --inventory says none before the first run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --inventory prints the saved inventory value	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the inventory value fits and holds no path or file name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --inventory says stale when the last run is too old	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a long inventory value ends with +more	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and still fits	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --hash-accounts shows a keyed hash, never the name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: not root exits 13	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --all with --all-users is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: run as root, the test settings are ignored	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --json without --all-users is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: on Linux --all-users exits 13 with a message	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: no colours, even on a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the result is written to a new file and renamed into place	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: root reads a set number of bytes, then stops the run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an MDM item's options line works whatever arguments the MDM adds	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --result-tags puts the value between Jamf's result tags	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the copy each account runs leaves out the options line and its secret	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: runs by a relative path from the script's folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: from standard input it fails, and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: with no protected folder in the home, there is nothing protected to miss	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+--help shows the whole header, gird-fleet.sh included	gird-check.ps1 has no fleet mode, so its help has no --all-users line to check
+fleet: and removes nothing else	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a script in a folder others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a path with mode 002 is refused as writable by others	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a path with mode 020 is refused as writable by others	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: with the options line in the file, --inventory still only reads the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+gird-check.sh runs no sudo or dscl	gird-fleet.sh, the root side of fleet mode, is bash only; gird-check.ps1 has no fleet mode to keep apart
+gird-check.sh --all-users points to gird-fleet.sh	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a gird-check.sh others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: without gird-check.sh next to it, it stops and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an account name it can't read is shown as invalid-name, and the inventory still reads	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a file or folder the account can't read is not checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an agent in the account's own ~/.local/bin is found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker that must be its owner's never counts for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and counts for the account that owns it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a machine check that runs out of time leaves the Mac not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --inventory says failed when a later run did not finish by its deadline	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the last result while that run still has time	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --stale-days is at most 30	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a folder whose ACL lets anyone write is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: but a link there never counts	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: installed as the guide says, run with env -i, it runs	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a startup file named like GlassWorm's, with no GlassWorm extension, is a possible sign	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and its account is to review, not act now	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a malware marker in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and not for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a planted file that is neither alone nor not	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a planted SHA-256 that is not one	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a SHA-256 on a file that counts alone	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a folder with a line break in its name is named as not checked	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
+and the rows it feeds are not green	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
+and the headline does not call that scan clean	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
+on a Mac, the snapshot note does not say the malware took anything	gird-check.ps1 prints a one-line Argus note and has no Mac snapshot paragraph
+and on a Mac the closing note names both	gird-check.ps1 prints a one-line Argus note and has no Mac snapshot paragraph
+fleet: project settings that act when a folder opens reach the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and a file named like the ones worms plant	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: so that account is to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a package version to update reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a tool with a fix to install reaches the account's tools	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: one with a published hole and no fixed version does not	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and that account is to review too	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the gh-token-monitor wiper reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and stopping it comes before the incident's other advice	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: every test setting is read only behind the not-root guard	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and keeps the accounts that need attention	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a linked marker in the shared temp folder is not the Mac's finding	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the readable report names the Mac's finding under macOS's bash	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and prints no shell error	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a hard link to the script copy stops no account's check	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a bad npm version only in a lockfile is its own field	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: not one of the incidents	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and its line says to act if that project was installed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an update-level incident with a fix of its own shows that fix	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and --list only lists	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an extension whose malware runs only on another system is one to remove	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: so its account is to review, not act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a TMPDIR that can't be written to still names the folder	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
+with no temp folder, the scan says it could not tell	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
+and the rows it feeds are not green either	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
+fleet: a platform found reads as its own summary	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: never that the account uses it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the JSON names the platforms found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a home of / is not checked, and keeps its reason	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a temp folder find that runs out of time leaves the Mac not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the report says what was not looked through	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: 20,000 marker names an account made cost root no time each	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+an extension with an OS listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension with all three OSes, which is all	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a list of bad npm versions longer than awk gets	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+on Linux, VS Code's settings in XDG_CONFIG_HOME are read	gird-check.ps1 takes the editors' folders from APPDATA, as on Windows, on every system
+no ++ or -- on an awk field, which BusyBox refuses	gird-check.ps1 has no awk
+fleet: with the wiper there, a platform's rotate waits for it too	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+and its PowerShell does not end itself	only gird-check.sh's Git Bash stop starts a PowerShell whose own command line names gh-token-monitor; gird-check.ps1's is typed into the person's own session
+a not-set pattern in a .json file	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a not-set pattern that is not a key	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a line of not-set patterns only	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+fleet: a marker root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: not a finding of the Mac's	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker an account owns in /tmp is a possible sign on its row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: not a finding of that account's	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a lock another account's process holds is only a possible sign	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a link left to root's copy is left empty	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the next run reads it as a possible sign, never act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: SANDWORM_MODE's cleanup comes before any rotate	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and a platform's rotate waits for it and the wiper	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a profile that moves an agent's folders leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a session check that runs long is stopped in time, and the findings still count	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+and the summary says so too	gird-check.ps1 lists folders through .NET, with no find to reject the scan
+and its rows are not green	gird-check.ps1 lists folders through .NET, with no find to reject the scan
+fleet: a value cut short keeps an act account's wiper and incidents, and every account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and ends with +more, since details were cut	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a Python incident's startup file outside the home folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Python incident's startup file that must be its owner's	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+on a Mac, Gemini CLI's sandbox sessions under GEMINI_CLI_HOME are found	the line is macOS-only, for Gemini CLI's sandbox on a Mac, and gird-check.ps1 reads the Windows folders
+on a Mac, a lockfile's version to update beside its malware keeps the lockfile note	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
+and one installed is named as that	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
+a link at the loader lock's name is not the malware's lock	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
+and this person's own lock a process holds still counts	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
+nor is a hard link there, a second name of a file a process holds	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
+fleet: a startup file root owns in /tmp is only a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and not the Mac's finding	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and no row says the malware ran as root	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a link at that name in /tmp is nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a home whose path holds a character it does not read says so, not that it is a system folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a config behind a folder the account can't enter counts as not read	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: so that account is never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a history file linked to /dev/null is not counted as not read	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a profile that sets a tool's folder to its default moves nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: one that sets it elsewhere leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and so does one that moves pnpm's folder (PNPM_HOME)	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: so a bad package only there never reads clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a settings file read only in part leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and counts as a file not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+and on a Mac the closing note says whether it was installed can't be told	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
+fleet: nor a hard link there	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: gird-fleet.sh tests a path for a link before it stats it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a ripgrep in a folder others can write to is not used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a ripgrep whose ACL lets anyone write is not used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: with no ripgrep that qualifies, perl checks the sessions	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+fleet: a ripgrep the account owns is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a ripgrep root alone can change is used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a real ripgrep finds the same session keys as perl	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a link at the ripgrep path is never run, even to a root-owned program	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a ripgrep reached through a linked folder is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a Homebrew or /usr/local ripgrep is never looked at	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a link at the ripgrep path is never followed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker folder in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a settings read whose awk fails names the file as not read	gird-check.ps1 reads settings with .NET, not awk

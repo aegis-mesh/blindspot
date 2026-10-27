@@ -1,0 +1,234 @@
+# Checks from the incident dossier
+
+Status: built (gird-check.sh, gird-check.ps1, data/auto-approve.tsv, data/outdated.tsv, data/bad-extensions.tsv).
+Builds on `data/` (PR #17). The payload does not change. The score drops for a GlassWorm hit as for
+other act incidents, and the result link gains `ex` (malware in an editor extension, after `py`);
+the other checks change neither.
+
+## Why
+
+GIRD's incident dossier (gird.ai/incidents) lists incidents Blindspot does not look for yet. Five
+were proposed; each was checked against its primary source before this design, and one was
+dropped.
+
+| check | decision | why |
+|---|---|---|
+| Agents set to approve everything | build, for three agents | verified setting names for Claude Code, Codex and VS Code Copilot |
+| Agent versions with a published fix | build, five tools | each has a GitHub or vendor advisory with a fixed version |
+| Project files that link to `~/.ssh/authorized_keys` | build | Wiz GhostApproval: an agent edits a repo file that is a link, and writes the attacker's key into `authorized_keys` |
+| GlassWorm extensions, Injective SDK | build, as data lines | Socket's GlassWorm posts, GHSA-5fc4-fm2x-6f4r |
+| `.env` files a repo does not ignore | dropped | the dossier does not cite it; reproducing git's ignore rules from files is unreliable, and asking git runs a repo's `core.fsmonitor` program (measured with `git check-ignore` on git 2.50.1) |
+
+## 1. Agents set to approve everything
+
+A new data file, `data/auto-approve.tsv`: agent, os, path (the path tokens of
+`data/sessions.tsv`), one or more patterns that must all match, and the setting as shown. A `.json`
+file is read as one line through the scripts' `flat` (comments are its job), and a match starts at
+the text, a `{` or a `,` and ends at the text's end, a `,` `}` `#` or `/`. A `.toml` file is read
+line by line: a `#` line is skipped, a match is a whole line up to a `#` comment (so a setting
+inside an inline table, a profile written as one, does not count), a value in double quotes also
+matches the same value in single quotes (a TOML literal string, `approval_policy = 'never'`), and
+only the lines before the first `[table]` count. A `.toml` line can also carry `!key`, a key none of
+those lines may set.
+
+| agent | file | patterns | source |
+|---|---|---|---|
+| Claude Code | `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json` | `"permissions": {"defaultMode": "bypassPermissions"`, directly inside `permissions` | code.claude.com/docs/en/permission-modes and its settings reference |
+| Codex | `{ENV:CODEX_HOME:~/.codex}/config.toml` | `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`, in a file that sets no `default_permissions` (`!default_permissions`) | Codex config reference; its 0.164.0 code uses the profile when one file sets both, though its permissions page says `sandbox_mode` wins |
+| Codex | `{ENV:CODEX_HOME:~/.codex}/config.toml` | `approval_policy = "never"` and `default_permissions = ":danger-full-access"` | Codex's permissions page (beta) and its 0.164.0 source |
+| VS Code (Copilot) | user `settings.json` per OS | `"chat.tools.global.autoApprove": true` | VS Code Copilot settings reference and the 1.104 release notes |
+| Claude Code (its VS Code extension) | VS Code's and Cursor's user `settings.json` | `"claudeCode.initialPermissionMode": "bypassPermissions"` and `"claudeCode.allowDangerouslySkipPermissions": true` | code.claude.com/docs/en/vs-code and permission-modes (without the second it starts in Manual) |
+| VS Code (Copilot) | user `settings.json` per OS | `"chat.permissions.default": "autoApprove"` or `"autopilot"` | VS Code's AI settings reference and approvals page, `chat.shared.contribution.ts` |
+
+VS Code 1.104 renamed `chat.tools.autoApprove` to `chat.tools.global.autoApprove` without
+migration, so current VS Code ignores the old name, and the setting is registered with the scope
+`APPLICATION_MACHINE` (`chat.shared.contribution.ts`), so a project's `.vscode/settings.json` copy
+is ignored too. Neither is a setting in force, so neither is a line here. A project's
+`"chat.tools.autoApprove": true` is what the CVE-2025-53773 prompt injection made Copilot write, so
+section 2 lists it under "Project settings that act as soon as the folder is opened", worded as a
+sign of that attack (or of an old VS Code) that VS Code 1.104 and later ignore; it does not lower
+the score.
+
+VS Code added `chat.permissions.default`, the permission level new chats start with. Its values
+`autoApprove` ("Allow all" in the chat's permission picker, "Bypass Approvals" in the Settings editor, VS Code 1.143.1) and `autopilot` run every tool call without asking, so in the user
+settings they are an agent set to run without asking, like the global setting. The setting declares no
+scope, and VS Code reads its merged value (`chatInputPart.ts`), so a project's `.vscode/settings.json`
+sets it too: section 2 lists such a project's copy under "Project settings that act as soon as the
+folder is opened", as a setting a cloned project brings (it does not lower the score), and a project
+at the default level is not listed. `chat.defaultConfiguration`, an object whose `approvals` and
+`mode` would have to be read inside it, is not read either.
+
+Not built: Gemini CLI (its YOLO mode cannot be saved in settings), the Cursor editor (stored in
+SQLite), Cursor CLI (the docs do not say what `unrestricted` does), Kiro (YAML rules need a parser),
+Cline (the default already sets one of the two flags), Windsurf and Amazon Q (not documented).
+
+Report, section 01, a block after the agents:
+
+```
+     Agents set to run commands without asking
+     !  Claude Code   ~/.claude/settings.json      bypassPermissions
+        A prompt injection in anything the agent reads can then run commands on this
+        computer. Turn it off unless the agent runs in a sandbox.
+```
+
+Fix (section 01, yellow): "Turn off run-without-asking in the agents listed in section 1, unless
+they run in a sandbox."
+
+## 2. Agent versions with a published fix
+
+A new data file, `data/outdated.tsv`: id, name, how the version is read, where, the affected
+range, what the hole allows (a few words, from the advisory) and the advisory.
+
+| tool | read from | affected | advisory |
+|---|---|---|---|
+| Cursor | `Cursor.app/Contents/Info.plist` `CFBundleShortVersionString`, in `/Applications` and `~/Applications` (macOS only: the other platforms' version files were not verified) | `< 3.0`; `< 3.1.2` | GHSA-3p48-7v9f-v5cw, GHSA-3v8f-48vw-3mjx (sandbox escape); GHSA-p9g2-cr55-cw9c (sandbox escape through a virtual environment's Python, Cursor for macOS, its newest fix) |
+| Amazon Q language server | the highest version folder under `aws/toolkits/language-servers/AmazonQ/` in `~/Library/Caches`, `~/.cache` or `%LOCALAPPDATA%` | `< 1.69.0` | AWS-2026-047 (a link in a workspace reaches files outside it; before 1.65.0 a trusted workspace runs its commands) |
+| Claude Code | `@anthropic-ai/claude-code/package.json` in global npm installs | `>= 0.2.116 < 1.0.24`; `>= 2.1.38 < 2.1.163`; `< 2.1.179`; `>= 2.0.68 < 2.1.260` | GHSA-9f65-56v6-gxw7 (a web page can talk to the IDE connection); GHSA-7835-87q9-rgvv (sandbox escape); GHSA-pq7j-f95f-qfcv (a plugin's pinned hash is bypassed; its fix, 2.1.179, is the newest of the 29 advisories OSV lists); GHSA-gfvf-j8jh-jxxw (a stored API key skips an organization's managed settings; not in GitHub's global database, and in OSV only as CVE-2026-103012, outside its npm records; its fix, 2.1.260, is the newest of the 31 in anthropics/claude-code) |
+| Claude Desktop | `Claude.app/Contents/Info.plist` `CFBundleShortVersionString`, in `/Applications` and `~/Applications` (macOS only: no kind reads its Windows version, so its two Windows advisories have no line) | `>= 1.1.3918 < 1.15962.0`; `>= 1.2581.0 < 1.4304.0` | GHSA-v234-4jrq-mgg6 (a file an agent leaves in a Cowork folder runs commands when opened, macOS; its newest fix); GHSA-3rwf-2g6p-c2f9 (remote SSH sessions accept any host key) |
+| mcp-remote | `mcp-remote/package.json` in global installs and npx's cache, and `mcp-remote@<version>` in MCP config args | `>= 0.0.5 < 0.1.16` | GHSA-6xpm-ggf7-wc3p (a hostile MCP server runs commands). Six unreviewed advisories name later holes but no fix, so they have no line |
+
+Versions are compared numerically, part by part. A version that does not parse is not reported, and
+neither is one of fewer than three parts in an MCP config (`mcp-remote@0.1`): that is a range npx
+resolves when it runs, not a version. The Amazon Q row is named "Amazon Q language server": the
+version folder is the language server's (Language Servers for AWS), which the bulletin fixes in
+1.69.0; the extension's own version is not read. Kiro is not built: the vendor's fixed version
+(0.11) and the dossier's (0.11.130) differ, and its version file was not verified.
+
+Report, section 01, a block "Tools with a security fix to install": one `!` row per tool, the
+installed version, "update to <fixed> or later", what the hole allows and the advisory. A tool can
+have a line per advisory: each tool's newest fix has one, so the version the row says to update to
+has no published fix of its own. The row takes the highest fixed version among the lines its
+versions fall under, or a later fix when another line of the tool covers that one, and shows each
+of their holes with its advisory. Fix (yellow): "Update the
+tools listed in section 1 that have a security fix."
+
+## 3. Project files that link to `~/.ssh/authorized_keys`
+
+The home scan also prints symbolic links as candidates, and the shell keeps those that resolve to
+this user's own `~/.ssh/authorized_keys`, outside `~/.ssh` itself: `-ef` in bash (the files
+themselves, so a link into a repo's own `.ssh/authorized_keys` fixture does not count), and in
+PowerShell the target's folder resolved as `cd` and `pwd -P` would (another case of the name counts
+where the volume ignores case). A link to the file's place counts before the file exists, since an
+agent writing through it creates it. A find with `-ilname` (GNU, BSD) narrows the candidates to links
+whose text ends in `authorized_keys`, in any case, so `.ssh/./authorized_keys`, `.ssh//authorized_keys`,
+a link through a linked folder and, on a volume that ignores case, `.SSH/Authorized_Keys` all reach
+`-ef`; BusyBox's find has no `-ilname` and rejects the whole expression over it (so
+on Alpine the scan used to print nothing and every file check read as clean), and its `-exec ... +`
+drops links, so there every link is printed with one `-exec` each. If find still rejects the
+expression, the header says the home folder was not scanned instead of calling it clean. No source
+shows an agent reading a private key through a link, so only `authorized_keys` is checked.
+
+Report, section 02, a red block "Files that link to your SSH logins", one row per link. Advice: "An
+agent that edits this file adds a login to this computer. Delete the link." Fix (red, section 02):
+"Delete the links to ~/.ssh/authorized_keys listed in section 2."
+
+## 4. GlassWorm extensions and the Injective SDK
+
+- `data/bad-extensions.tsv`: the extension id, as its folder spells it (`publisher.name`, compared
+  without case), a version or `*`, the incident, and the registry: `openvsx` when the bad build was
+  only ever published to Open VSX, `any` otherwise. Looked for as `<id>-<version>` folders in
+  `~/.vscode/extensions` (VS Code, which installs from the Marketplace) and in `~/.cursor/extensions`,
+  `~/.windsurf/extensions`, `~/.devin/extensions`, `~/.vscode-oss/extensions`, `~/.kiro/extensions`,
+  `~/.antigravity-ide/extensions` and `~/.antigravity/extensions` (Cursor, Windsurf, VSCodium, Kiro
+  and Antigravity, which install from Open VSX; Windsurf became Devin Desktop on 2 June 2026, which
+  keeps extensions in `~/.devin/extensions` and only reads the old folder; Antigravity IDE's
+  product.json names the data folder `.antigravity-ide` and Open VSX's gallery, and the Antigravity
+  before it used `~/.antigravity`); an
+  `openvsx` line is not looked for in VS Code's own folder, where the same id is the Marketplace's
+  own extension. An id that Microsoft's list of extensions removed from the Marketplace names
+  (`RemovedPackages.md` in github.com/microsoft/vsmarketplace) was on the Marketplace too, so it is
+  `any`. A hit is its own section 5 row, "Editor extensions", with the incident
+  line, level `act`, its own headline and fix, never called npm malware. With nothing found the row
+  is green, and it is one of the checks section 5 counts; a folder that can't be read makes it
+  yellow, not fully checked.
+- GlassWorm, from Socket's posts, one incident per post: a version where the post gives one, and
+  every version where it names an extension without one (these are the attacker's own extensions,
+  which update themselves, so a version from before an extension was turned counts too).
+  - January 2026: the four `oorzc` extensions at the versions Socket names (a real developer's,
+    published with a stolen token: Open VSX removed every `oorzc.ssh-tools` version, but Socket names
+    0.5.1 as its only bad build, so the developer's earlier builds are not listed), and the
+    thirteen earlier extensions Socket names, at every version, all `openvsx`: Socket's findings
+    concern the Open VSX builds and do not suggest the publisher's Marketplace listings were
+    compromised (the Marketplace still offers them, `oorzc.ssh-tools` with a 0.5.1 of 30 March
+    2026), and the Marketplace does not offer the thirteen, nor does Microsoft's list name them.
+  - 13 March 2026: the 72 extensions listed since that report (59 besides those thirteen), every
+    version, `openvsx`, except four Microsoft's list removes from the Marketplace too, which are
+    `any`: `Lavender-Studio.theme-lavender-dreams` as malware, and the `dopbop-studio`,
+    `kwitch-studio` and `potstok` extensions as impersonation.
+  - 18 March 2026: the versions the post shows delivering malware, themselves or through an
+    extension pack (20 versions of 15 extensions), `openvsx`. The first versions of its sleepers,
+    which carried nothing yet, are left out.
+  - 25 April 2026: the six the post confirms as malicious, every version, `openvsx`. Its 67 sleepers
+    are left out, and so are the 17 extensions of its 29 April update, whose pack pointed to an
+    extension Open VSX had removed two days before.
+  - Aikido's post on GlassWorm's native dropper (8 April 2026, updated 21 April), its own incident:
+    `specstudio.code-wakatime-activity-tracker`, an Open VSX extension of the 18 March post's weekend
+    wave, every version, `openvsx`, `os` `mac,win` (it loads win.node on Windows and mac.node anywhere
+    else), and `floktokbok.autoimport`, the dropper its native code installs from GitHub into every
+    editor, every version, `any`.
+  - Koi's post on GlassWorm's November 2025 wave (GlassWorm Goes Native, republished on Palo Alto
+    Networks' blog), its own incident: its 15 Open VSX and 19 Marketplace extensions, every version but
+    `bphpburnsus.iconesvscode` (12.15.1 and 12.15.2), `any` for its Marketplace ids and the two Open VSX
+    ids Microsoft's list removes, `openvsx` for the other nine, `os` `mac,win` (darwin.node and os.node).
+  - 2 October 2026: the two malicious Marketplace themes, `microsoftvs.microsoftvs` and
+    `cosmic-themes.theme-cosmic-nebula`, every version, `any` (the second is on Open VSX too; the
+    first hid a Windows downloader, so its `os` is `win`: on a Mac or Linux it is a yellow "malicious
+    extension to remove", with its own fix and row 05, and leaves the headline, score and link alone).
+    Three more of the cluster's themes, on both registries, that Microsoft's list removes as malware
+    (Charcoal Mint, Aurora Borealis and Coca-Cola Christmas) are left out: Socket found no payload in
+    the versions it read, a removal from the Marketplace does not say what ran on a machine, and
+    Charcoal Mint's three Open VSX builds hold colors and, in 1.0.2, a welcome page.
+  The March and April loaders install a further extension from GitHub into every editor they find,
+  VS Code included; no post gives its id, so those incidents' fix says to check every editor for
+  extensions the person did not install, said once when both are found. Aikido's names the one its
+  dropper installs, which is listed, and its incident carries the same fix.
+- The January post's startup file, `~/Library/LaunchAgents/com.user.nodestart.plist`, is a `startup`
+  indicator. Socket gives the name as an example ("e.g."), and `com.user.` is how people name their
+  own LaunchAgents, so it counts only next to an extension that shipped malware: then it is listed with
+  the extensions, counts as the extension finding, and the fix names both. Alone it is a yellow
+  "startup file to check": section 5 says no extension was found and to check what the file starts,
+  row 05 and the fix say to check it, and the headline, the score and the link do not change. The
+  January incident's advice says to check `~/Library/LaunchAgents` for unfamiliar plists such as that
+  one, and to look for the staging files Socket names (`/tmp/ijewf`, `/tmp/out.zip`), as Socket says it.
+- Injective: `@injectivelabs/sdk-ts 1.20.21` in `data/bad-npm.tsv`. Only that package carries the
+  code (the advisory); the others at 1.20.21 depend on it, so a lockfile with them lists it too.
+  Level `update`: the machine is not compromised, but a wallet used with it is, and the incident
+  line says so. Its fix, moving the funds to a new wallet, comes right after the act-now fixes,
+  ahead of every other one, and row 05 names it (the incident's summary column); the result link
+  carries nothing for it. The `update` level's description changes from "nothing ran" to "the
+  machine itself is not compromised".
+
+## Not covered
+
+- Settings saved in SQLite or a format that needs a parser (above).
+- GlassWorm's sleepers (named by Socket's posts as not malicious yet), and the extension the March and
+  April loaders install from GitHub, whose id no post gives. Socket's GlassWorm campaign page lists
+  more versions than its posts (372 by October 2026), sleepers among them, without saying which ran
+  malware, so it is not used as a list.
+- An Open VSX build installed into VS Code by hand (a VSIX) sits in VS Code's folder, where an
+  `openvsx` line is not looked for.
+- Comments in a JSONC settings file are `flat`'s to remove; a setting the comment removal leaves in
+  place is read if it sits at a boundary (`/*, "key": true */`).
+- A `[profiles.x]` table made the default by `profile = "x"` is not read. Codex 0.134.0 and later
+  support neither: a profile is its own file, `~/.codex/<name>.config.toml`, used with `--profile`.
+- A link to a link whose own text does not end in `authorized_keys` (`keys -> notes.txt`, where
+  `notes.txt -> ../.ssh/authorized_keys`): `notes.txt` is listed, `keys` is not. On Windows,
+  PowerShell does not resolve a linked folder on the way. Before `authorized_keys` exists, a link that
+  spells `.ssh` in another case on a volume that ignores case is listed by PowerShell, not by bash.
+- An agent run with a flag on the command line (Claude Code's `--dangerously-skip-permissions`,
+  Gemini CLI's `--yolo`). Gemini CLI's leaves nothing on disk. Claude Code's does: the first
+  interactive session in bypass mode shows a warning, and accepting it writes
+  `skipDangerousModePermissionPrompt: true` to `~/.claude/settings.json` (its permission-modes
+  page), so later bypass sessions skip the warning. That records that bypass mode was accepted once,
+  not that it is in use, so it is not read yet.
+
+## Tests
+
+For each check, both scripts: a fixture that must be found, a near miss that must not (a commented
+setting; the old or a project-level VS Code setting; a Codex profile written as an inline table; a
+version equal to the fixed one; `mcp-remote@0.1`; an `authorized_keys` link inside `~/.ssh` and one
+into a repo's own fixture; a clean version of a GlassWorm extension, and the Marketplace build of
+0.5.1 in VS Code's folder), the report text, and the fix. The LaunchAgent is tested with and without
+its extension, a link to a missing `authorized_keys`, and a `find` that rejects its options (bash
+only). `tests/made-up.sh` adds a made-up row to each new data file. Each new test is reverted against
+its change and must fail.

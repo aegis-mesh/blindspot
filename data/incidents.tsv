@@ -1,0 +1,56 @@
+# Incidents Blindspot checks for. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id      what the other data files refer to
+#   name    as the report shows it
+#   when    month and year
+#   impact  what it did, at most about 14 words, every word supported by the source
+#   source  the primary source (vendor advisory, GitHub advisory, CISA or a named research post)
+#   level   act: treat the machine as compromised. update: update the version; the machine itself is not compromised.
+#           leak: a hosted platform leaked what people stored on it (data/platforms.tsv names the incident, and
+#           only a platform's incident is a leak): rotate what was stored there; never a compromised machine
+#   advice  optional: one more fix, shown in What to do when a package or extension of the incident
+#           is found (bad-npm, bad-pypi, bad-extensions; gen.sh refuses it on any other incident). An
+#           act-level incident's advice that starts with "First" is what the incident leaves behind that
+#           must go before any key is rotated (SANDWORM_MODE's git hooks and MCP servers): it comes right
+#           after gh-token-monitor's fix, which then leaves the rotating to the fixes after it, ahead of
+#           every fix that says to rotate, and never says to rotate or revoke itself. Other act-level
+#           advice comes right after the act-now fixes, and an update-level incident's advice after that
+#   summary optional, only for an update-level incident with advice: summary row 05 when the incident
+#           is the most urgent thing section 5 found, at most 49 characters (row 05's room at 80 columns)
+# id	name	when	impact	source	level	advice	summary
+axios	Axios takeover	March 2026	downloaded payloads, including a remote access trojan, onto machines that installed it	https://www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager	act
+tanstack	TanStack worm	May 2026	stole cloud, GitHub, npm and SSH credentials on install, then republished itself	https://github.com/advisories/GHSA-g7cv-rxg3-hmpx	act
+mistral	Mistral AI npm packages	May 2026	published with malware Mistral says could not run, as its setup script names a missing file	https://docs.mistral.ai/resources/security-advisories/MAI-2026-002	update
+uipath	UiPath npm packages	May 2026	published with malware UiPath says a bug made non-functional	https://trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0	update	UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.	UiPath builds: update them, UiPath says no risk
+mistralpy	mistralai 2.4.6	May 2026	started a credential stealer in the background when imported on Linux	https://docs.mistral.ai/resources/security-advisories/MAI-2026-002	act
+guardrails	guardrails-ai 0.10.1	May 2026	downloaded and ran a credential stealer, on Linux only	https://www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised	act
+opensearch	OpenSearch client	May 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-298w-vvm4-ww55	act
+bitwarden	Bitwarden CLI	April 2026	stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs	https://www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools	act
+minishai	Mini Shai-Hulud worm	April 2026	stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens	https://www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm	act
+lightning	lightning 2.6.2 and 2.6.3	April 2026	started a credential stealer when imported, then tried to spread itself	https://github.com/advisories/GHSA-g4wr-mm54-799x	act
+durabletask	durabletask 1.4.1 to 1.4.3	May 2026	fetched and ran a credential-stealing payload when imported on Linux	https://github.com/advisories/GHSA-3qf7-886j-9wrc	act
+telnyx	telnyx 4.87.1 and 4.87.2	March 2026	stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor	https://github.com/advisories/GHSA-955r-262c-33jc	act
+mastra	Mastra npm packages	June 2026	pulled in malware that started at login and sent browser history to the attackers	https://socket.dev/blog/mastra-npm-packages-compromised	act
+antv	AntV account takeover	May 2026	published from a hijacked maintainer account with an install hook that steals credentials	https://osv.dev/vulnerability/MAL-2026-3973	act
+nxconsole	Nx Console 18.95.0	May 2026	a malicious build fetched a payload that harvested credentials from disk and memory	https://github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w	act
+redhat	Red Hat Cloud Services packages	June 2026	published by the worm with an install hook that steals cloud, GitHub and npm credentials	https://osv.dev/vulnerability/MAL-2026-5111	act
+keyv	keyv worm	August 2026	stole cloud, GitHub and npm credentials, and planted hooks that run when repos open	https://socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain	act
+keyvscope	keyv account takeover	August 2026	GitHub malware advisories say to treat a computer that installed one as fully compromised	https://github.com/advisories/GHSA-q99r-cjmf-3xrf	act	Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.
+keyvspread	keyv worm spread	August 2026	republished by the worm with an install hook that steals GitHub, npm and cloud credentials	https://osv.dev/vulnerability/MAL-2026-11952	act
+sandworm	SANDWORM_MODE worm	February 2026	stole credentials and AI provider keys, and added an MCP server to AI assistants	https://socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning	act	First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.
+sandsleep	SANDWORM_MODE sleeper packages	February 2026	GitHub malware advisories say to treat a machine that installed one as compromised	https://github.com/advisories/GHSA-9w7p-hqx2-pjjx	act
+tensorlake	tensorlake package	October 2026	GitHub says any computer that installed it should be treated as fully compromised	https://github.com/advisories/GHSA-rqxj-g25x-4v9v	act
+litellm	LiteLLM 1.107.0	October 2026	stole credentials and loaded remote-code execution tools on machines that installed it	https://docs.litellm.ai/blog/security-incident-oct-21-2026	act
+litellmmar	LiteLLM 1.82.7 and 1.82.8	March 2026	harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out	https://docs.litellm.ai/blog/security-update-march-2026	act
+opencode	OpenCode Console	October 2026	a breach hit 1.4% of Console users, some of those who had linked external providers	https://x.com/opencode/status/2111519637049319818	leak
+railway	Railway	October 2026	an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some	https://blog.railway.com/p/security-disclosure-wednesday-october-21st	leak
+zeabur	Zeabur	October 2026	an attacker read environment variables and secrets stored on the platform	https://zeabur.com/blogs/october-2026-security-incident	leak
+glassworm	GlassWorm extensions	January 2026	malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets	https://socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise	act	On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.
+glasswormmar	GlassWorm extensions	March 2026	ran attacker code in memory that could reach local credentials, tokens and secrets	https://socket.dev/blog/open-vsx-transitive-glassworm-campaign	act
+glasswormvsix	GlassWorm sleeper extensions	March 2026	installed a malicious extension from GitHub into every editor it found	https://socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx	act	Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.
+glasswormapr	GlassWorm sleeper extensions	April 2026	updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf	https://socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm	act	Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.
+glasswormzig	GlassWorm extensions	April 2026	native code in an extension installed a GlassWorm dropper into every editor it found	https://www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine	act	Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.
+glasswormdec	GlassWorm native extensions	November 2025	Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows	https://www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/	act
+glasswormoct	GlassWorm-linked themes	December 2025	a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders	https://socket.dev/blog/glassworm-vscode-themes	act
+glasswormuni	GlassWorm invisible code	March 2026	hid code in characters that show as blank, which it then decodes and runs	https://www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode	act
+glasswasm	GlassWASM extensions	June 2026	clones of Marketplace extensions on Open VSX, built to download and run a second stage	https://socket.dev/blog/glasswasm-malware-open-vsx-extensions	act
+injective	Injective SDK	July 2026	sent out the seed phrases and hex private keys of wallets created or loaded with it	https://github.com/advisories/GHSA-5fc4-fm2x-6f4r	update	From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.	Injective SDK: move the funds out of its wallets

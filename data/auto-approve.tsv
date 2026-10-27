@@ -1,0 +1,128 @@
+# Agents set to run commands without asking. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   agent     as the report shows it
+#   os        all, mac, linux or win (win is Git Bash and gird-check.ps1)
+#   path      the settings file, with the path tokens data/sessions.tsv uses, or {PROJECT}/folder/file
+#             for that file in every project folder the home scan finds (the home folder is not one).
+#             One folder may be *, for that file in every folder there (VS Code keeps a settings file
+#             for each profile)
+#   setting   as the report shows it
+#   pattern   one or more, each in its own field, and every one must match. Spaces are ignored. A .json
+#             file is read as one line (the scripts' flat): a match starts at the text, a { or a , and
+#             ends at the text's end, a , } # or /, so a longer key or another value never counts. A
+#             pattern written "key": {... matches its rest that way, and only directly inside the object
+#             that top-level key holds; one written "key": {"sub": ["text" matches that string in the
+#             array sub holds there, anywhere in it. A .toml file is read line by line: a line starting
+#             with # is skipped, a match is a whole line (up to a # comment), so a setting inside an
+#             inline table does not count (a pattern that ends in { matches the start of a line instead,
+#             an inline table's first line), a value in double quotes also matches the same value in
+#             single quotes (a TOML literal string), a line inside a multi-line string is that string's
+#             text, and only the lines before the first [table] count (a setting under [profiles.x]
+#             applies only when that profile is used, and Codex 0.134.0 and later read no such table
+#             from config.toml). A pattern !key, in a .toml file only and beside another pattern,
+#             matches when none of those lines sets that key
+# Claude Code: code.claude.com/docs/en/permission-modes, and its settings reference, where defaultMode
+# is a key of permissions and of nothing else. Its permissions page: the rule Bash matches all Bash
+# commands, Bash(*) is equivalent, and to run all Bash commands without prompts you add Bash to your
+# allow list (permissions.allow; a rule such as Bash(npm *) matches only those commands). A project's
+# allow rules apply once you trust the folder: section 2 of the scripts lists them, not a line here.
+# Codex: its configuration reference, and its advanced configuration page for profiles (0.134.0). Its
+# permissions page (beta): the built-in profile :danger-full-access, chosen with default_permissions,
+# removes the sandbox, and replaces the older sandbox_mode. For a file that sets both, Codex's docs and
+# code disagree: the permissions page says sandbox_mode then wins and not to set both, while the code
+# (0.164.0, resolve_permission_config_syntax) uses the profile when one file sets both. The lines follow
+# the code: the sandbox_mode line counts only in a file that sets no default_permissions. Codex reads a
+# project's .codex/config.toml once that project is trusted, above the user's file (its basic
+# configuration page; 0.164.0's loader keeps it disabled while untrusted), and the keys a project may
+# not set (PROJECT_LOCAL_CONFIG_DENYLIST) do not include approval_policy, sandbox_mode or
+# default_permissions: a project's file has the same lines. With full access Codex also runs commands
+# without asking under its other approval policies (0.164.0): approval_policy unset is on-request
+# (config/mod.rs), except in a project marked untrusted (trust_level), where it asks before every
+# command; on-failure is an alias of on-request (protocol.rs); and exec_policy.rs allows on-request and
+# granular commands in an unrestricted sandbox, asking only before the ones it flags as dangerous (on a
+# Mac and Linux, rm with force). Its approvals page says the same: danger-full-access runs commands
+# without approval prompts. approval_policy = "untrusted" stops Codex from starting, so it has no line.
+# A granular policy is read from its inline table's first line; one written as dotted keys or a [table]
+# reads as unset, which also runs commands without asking. TOML's literal strings: toml.io. VS Code:
+# the Copilot settings reference and the 1.104 release notes. VS Code 1.104 renamed chat.tools.autoApprove
+# to chat.tools.global.autoApprove without migrating it, so the old name is ignored, and it reads the
+# new one from the user settings only (scope APPLICATION_MACHINE in its source), never from a
+# project's .vscode/settings.json. A project's chat.tools.autoApprove is the setting CVE-2025-53773
+# wrote; section 2 of the scripts lists it as a sign of that attack, not as a setting in force.
+# VS Code added chat.permissions.default, the permission level new chats start with: autoApprove
+# ("Allow all" in the chat's permission picker and "Bypass Approvals" in the Settings editor, at VS Code
+# 1.143.1) and autopilot run every tool call without asking (VS Code's AI settings reference and
+# approvals page; the values and labels from chat.shared.contribution.ts and
+# permissionPickerActionItem.ts). It declares no scope, and VS Code reads its merged value, so a
+# project's .vscode/settings.json sets it too: section 2 of the scripts lists such a project's copy,
+# as a setting a cloned project brings, not as a line here.
+# VS Code's agent sessions (such as Copilot's) start from chat.defaultConfiguration instead, an object
+# whose approvals set to allowAll "runs tool calls without asking" (1.143.1, chat.shared.contribution.ts);
+# its older value autoApprove means the same (getChatPermissionLevelFromDefaultConfiguration, and VS
+# Code migrates it to allowAll). Its mode autopilot keeps the approvals it is given. It declares no scope
+# either, and VS Code reads its workspace value too (agentHostConfigPolicy.ts), so section 2 lists a
+# project's copy. Its older name chat.agentSessions.defaultConfiguration, which VS Code 1.126 and later
+# move to it on start, is not read.
+# Claude Code's VS Code extension: its docs (the VS Code and permission-modes pages) say that
+# claudeCode.initialPermissionMode set to bypassPermissions in the user settings starts new conversations
+# in bypass mode only with claudeCode.allowDangerouslySkipPermissions on (without it they start in
+# Manual), and that it reads the first from the user settings only, so both must match there. The
+# extension installs in Cursor too, where the docs give it an install link; Cursor keeps its user
+# settings in Cursor/User as VS Code does in Code/User. A settings file that holds two agents' settings
+# makes a row for each.
+# VS Code profiles: VS Code's settings docs put a profile's user settings in
+# Code/User/profiles/<profile ID>/settings.json, in force while that profile is active. VS Code's source
+# (PROFILE_SCOPES in workbench/services/configuration) reads machine, window and resource settings from
+# a profile's file, never application ones. chat.permissions.default declares no scope (window), and
+# the Claude Code extension declares both its settings machine (its package.json, 2.1.310): each has a
+# profile line. chat.tools.global.autoApprove is APPLICATION_MACHINE, read from the default profile only,
+# so it has none. VS Code Insiders keeps its user data in a folder named after its product's nameShort
+# (src/mainImpl.ts), Code - Insiders in the Insiders build's product.json, with the same settings.
+# Cursor has VS Code's profiles (its docs on importing a VS Code profile), kept the same way.
+# agent	os	path	setting	pattern...
+Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	bypassPermissions	"permissions": {"defaultMode": "bypassPermissions"
+Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	permissions.allow: Bash	"permissions": {"allow": ["Bash"
+Claude Code	all	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	permissions.allow: Bash(*)	"permissions": {"allow": ["Bash(*)"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access	approval_policy = "never"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	never asks, full access profile	approval_policy = "never"	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	never asks, full access, when the project is trusted	approval_policy = "never"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	never asks, full access profile, when the project is trusted	approval_policy = "never"	default_permissions = ":danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, default approvals	sandbox_mode = "danger-full-access"	!approval_policy	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, on-request approvals	approval_policy = "on-request"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, on-failure approvals	approval_policy = "on-failure"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access, granular approvals	approval_policy = { granular = {	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, default approvals	default_permissions = ":danger-full-access"	!approval_policy
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, on-request approvals	approval_policy = "on-request"	default_permissions = ":danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, on-failure approvals	approval_policy = "on-failure"	default_permissions = ":danger-full-access"
+Codex	all	{ENV:CODEX_HOME:~/.codex}/config.toml	full access profile, granular approvals	approval_policy = { granular = {	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	full access, default approvals, when the project is trusted	sandbox_mode = "danger-full-access"	!approval_policy	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access, on-request approvals, when the project is trusted	approval_policy = "on-request"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access, on-failure approvals, when the project is trusted	approval_policy = "on-failure"	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access, granular approvals, when the project is trusted	approval_policy = { granular = {	sandbox_mode = "danger-full-access"	!default_permissions
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, default approvals, when the project is trusted	default_permissions = ":danger-full-access"	!approval_policy
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, on-request approvals, when the project is trusted	approval_policy = "on-request"	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, on-failure approvals, when the project is trusted	approval_policy = "on-failure"	default_permissions = ":danger-full-access"
+Codex	all	{PROJECT}/.codex/config.toml	full access profile, granular approvals, when the project is trusted	approval_policy = { granular = {	default_permissions = ":danger-full-access"
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.defaultConfiguration: allowAll	"chat.defaultConfiguration": {"approvals": "allowAll"
+VS Code Copilot	all	{AS}/Code/User/settings.json	chat.defaultConfiguration: autoApprove	"chat.defaultConfiguration": {"approvals": "autoApprove"
+Claude Code	all	{AS}/Code/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+Claude Code	all	{AS}/Cursor/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+VS Code Copilot	all	{AS}/Code/User/profiles/*/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code/User/profiles/*/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+VS Code Copilot	all	{AS}/Code/User/profiles/*/settings.json	chat.defaultConfiguration: allowAll	"chat.defaultConfiguration": {"approvals": "allowAll"
+VS Code Copilot	all	{AS}/Code/User/profiles/*/settings.json	chat.defaultConfiguration: autoApprove	"chat.defaultConfiguration": {"approvals": "autoApprove"
+Claude Code	all	{AS}/Code/User/profiles/*/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.tools.global.autoApprove	"chat.tools.global.autoApprove": true
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.defaultConfiguration: allowAll	"chat.defaultConfiguration": {"approvals": "allowAll"
+VS Code Copilot	all	{AS}/Code - Insiders/User/settings.json	chat.defaultConfiguration: autoApprove	"chat.defaultConfiguration": {"approvals": "autoApprove"
+Claude Code	all	{AS}/Code - Insiders/User/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+VS Code Copilot	all	{AS}/Code - Insiders/User/profiles/*/settings.json	chat.permissions.default: autoApprove	"chat.permissions.default": "autoApprove"
+VS Code Copilot	all	{AS}/Code - Insiders/User/profiles/*/settings.json	chat.permissions.default: autopilot	"chat.permissions.default": "autopilot"
+VS Code Copilot	all	{AS}/Code - Insiders/User/profiles/*/settings.json	chat.defaultConfiguration: allowAll	"chat.defaultConfiguration": {"approvals": "allowAll"
+VS Code Copilot	all	{AS}/Code - Insiders/User/profiles/*/settings.json	chat.defaultConfiguration: autoApprove	"chat.defaultConfiguration": {"approvals": "autoApprove"
+Claude Code	all	{AS}/Code - Insiders/User/profiles/*/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true
+Claude Code	all	{AS}/Cursor/User/profiles/*/settings.json	claudeCode.initialPermissionMode: bypassPermissions	"claudeCode.initialPermissionMode": "bypassPermissions"	"claudeCode.allowDangerouslySkipPermissions": true

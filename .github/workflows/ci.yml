@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: shellcheck -s bash -S warning gird-check.sh tests/*.sh
+      - run: shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh
 
   test:
     name: tests (${{ matrix.os }})
@@ -26,17 +26,47 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    # The suite runs about 23 minutes on an M-series Mac: the limits leave room for slower runners.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - run: bash tests/run.sh
 
+  powershell:
+    name: tests (pwsh, ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # With ripgrep installed, both suites test the ripgrep session engine too; the variable makes a
+    # missing ripgrep fail those tests instead of skipping them.
+    env:
+      GIRD_CHECK_TEST_REQUIRE_RG: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep && rg --version
+      # Both suites, each recording its test names, then tests/parity.sh on the two lists.
+      - run: bash tests/parity-run.sh
+
+  ripgrep-macos:
+    name: tests with ripgrep (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      GIRD_CHECK_TEST_REQUIRE_RG: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: brew install ripgrep && rg --version
+      - run: bash tests/run.sh
+
   interactive:
     name: game and menu (macOS)
     runs-on: macos-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

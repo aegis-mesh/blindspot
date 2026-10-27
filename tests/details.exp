@@ -1,0 +1,27 @@
+# Used by tests/interactive.sh: opens the details pages of sections 2, 3 and 4 from the menu, with
+# the whole session in LOGFILE for the caller to read. Each expect block spans several lines on
+# purpose (see tests/interactive.exp).
+set timeout 90
+log_user 0
+match_max 100000
+log_file -a -noappend $env(LOGFILE)
+spawn -noecho env HOME=$env(FAKEHOME) TERM=xterm-256color GIRD_CHECK_NO_OPEN=1 $env(BASHBIN) $env(SCRIPT) --offline
+stty rows 50 columns 90 < $spawn_out(slave,name)
+proc fail {msg} { puts "  FAIL  $msg"; exit 1 }
+expect {
+  "Your results are ready" { send "\r"; exp_continue }
+  "AI Exposure Check" {}
+  timeout { fail "the menu did not come up" }
+}
+foreach k {2 3 4} {
+  send $k
+  expect {
+    "AI Exposure Check" {}
+    timeout { fail "$k showed no details" }
+  }
+}
+send "q"
+expect {
+  eof {}
+  timeout { fail "did not quit" }
+}

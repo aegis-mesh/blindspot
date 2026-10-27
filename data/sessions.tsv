@@ -1,0 +1,84 @@
+# Where AI coding agents keep their session transcripts. One line each, tab separated.
+# After editing, run: bash tools/gen.sh
+#   os      all, mac, linux or win (win is Git Bash and gird-check.ps1)
+#   kind    read; db for a folder whose SQLite files (*.db and their *.db-wal) are read and nothing
+#           else in it; or sealed for a folder whose .pb files are stored encrypted, by third-party
+#           accounts (counted and named as not checked)
+#   path    a file or a folder. ~ is the home folder, {AS} the app data folder (Application Support
+#           on a Mac, %APPDATA% on Windows, and on Linux XDG_CONFIG_HOME when that is an absolute
+#           path, else ~/.config, where VS Code and other Electron apps keep their folders),
+#           {LOCALAPPDATA}, {XDG_DATA}
+#           (XDG_DATA_HOME or ~/.local/share), {GOOSE_DATA} and {GOOSE_STATE} (Goose's data and
+#           state folders: under GOOSE_PATH_ROOT when it is set, else the XDG folders, or
+#           %APPDATA%/Block/goose/data for both on Windows), and {ENV:NAME:fallback} an
+#           environment variable with a fallback
+#   source  how the location was established: measured, source code, docs or third party
+# os	kind	agent	path	source
+all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/projects	docs
+all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/history.jsonl	docs
+all	read	Claude Code	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/paste-cache	docs
+all	read	Claude Desktop	{AS}/Claude/local-agent-mode-sessions	docs
+win	read	Claude Desktop	{LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions	docs
+all	read	Claude Desktop	{AS}/Claude-3p/local-agent-mode-sessions	docs
+win	read	Claude Desktop	{LOCALAPPDATA}/Claude-3p/local-agent-mode-sessions	docs
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/sessions	source code
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/archived_sessions	source code
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/history.jsonl	source code
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/thread_history_1.sqlite	source code
+all	read	Codex	{ENV:CODEX_HOME:~/.codex}/thread_history_1.sqlite-wal	source code
+all	read	Codex	{ENV:CODEX_SQLITE_HOME:~/.codex}/thread_history_1.sqlite	source code
+all	read	Codex	{ENV:CODEX_SQLITE_HOME:~/.codex}/thread_history_1.sqlite-wal	source code
+all	read	Gemini CLI	{ENV:GEMINI_CLI_HOME:~}/.gemini/tmp	docs
+mac	read	Gemini CLI	{ENV:GEMINI_CLI_HOME:~}/.cache/.gemini/tmp	source code
+all	read	Qwen Code	{ENV:QWEN_HOME:~/.qwen}/projects	source code
+all	read	Qwen Code	{ENV:QWEN_HOME:~/.qwen}/tmp	source code
+all	read	Qwen Code	{ENV:QWEN_RUNTIME_DIR:~/.qwen}/projects	source code
+all	read	Qwen Code	{ENV:QWEN_RUNTIME_DIR:~/.qwen}/tmp	source code
+all	read	OpenCode	{XDG_DATA}/opencode/opencode.db	docs
+all	read	OpenCode	{XDG_DATA}/opencode/opencode.db-wal	source code
+all	read	OpenCode	{XDG_DATA}/opencode/storage	source code
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-state	docs
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/history-session-state	docs
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/command-history-state	docs
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-store.db	docs
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/session-store.db-wal	source code
+all	read	GitHub Copilot CLI	{ENV:COPILOT_HOME:~/.copilot}/command-history-state.json	source code
+all	read	Roo Code	{AS}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
+all	read	Roo Code	{AS}/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/tasks	source code
+all	read	Cline	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
+all	read	Cline	{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	source code
+all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/sessions	docs
+all	read	Cline	{ENV:CLINE_DATA_DIR:~/.cline/data}/tasks	docs
+all	read	Cline	{ENV:CLINE_DIR:~/.cline}/data/sessions	source code
+all	read	Cline	{ENV:CLINE_DIR:~/.cline}/data/tasks	source code
+all	read	Cline	{ENV:CLINE_SESSION_DATA_DIR:~/.cline/data/sessions}	source code
+all	read	Continue	{ENV:CONTINUE_GLOBAL_DIR:~/.continue}/sessions	source code
+all	read	Continue	{ENV:CONTINUE_GLOBAL_DIR:~/.continue}/dev_data/0.2.0/chatInteraction.jsonl	source code
+all	read	Goose	{GOOSE_DATA}/sessions	docs
+all	read	Goose	{GOOSE_STATE}/logs	source code
+all	read	Goose	{GOOSE_STATE}/history.txt	source code
+all	read	Kiro CLI	{ENV:KIRO_HOME:~/.kiro}/sessions	docs
+mac	read	Kiro CLI	{AS}/kiro-cli	third party
+linux	read	Kiro CLI	{XDG_DATA}/kiro-cli	third party
+win	read	Kiro CLI	{LOCALAPPDATA}/kiro-cli	third party
+mac	read	Amazon Q	{AS}/amazon-q	source code
+linux	read	Amazon Q	{XDG_DATA}/amazon-q	source code
+win	read	Amazon Q	{LOCALAPPDATA}/amazon-q	source code
+all	read	Amazon Q	~/.aws/amazonq/.cli_bash_history	source code
+all	read	Factory Droid	~/.factory/sessions	docs
+all	read	Factory Droid	~/.factory/projects	docs
+all	read	Factory Droid	~/.factory/state/history.json	source code
+all	read	Cursor	{AS}/Cursor/User/globalStorage/state.vscdb	third party
+all	read	Cursor	~/.cursor/projects	docs
+all	read	Cursor	~/.cursor/chats	third party
+all	read	Windsurf	~/.windsurf/transcripts	docs
+all	read	Antigravity	~/.gemini/antigravity/brain	docs
+all	read	Antigravity	~/.gemini/antigravity-cli/brain	docs
+all	read	Antigravity	~/.gemini/antigravity-ide/brain	docs
+all	db	Antigravity	~/.gemini/antigravity/conversations	third party
+all	db	Antigravity	~/.gemini/antigravity-cli/conversations	third party
+all	db	Antigravity	~/.gemini/antigravity-ide/conversations	third party
+all	sealed	Windsurf	~/.codeium/windsurf/cascade	third party
+all	sealed	Antigravity	~/.gemini/antigravity/conversations	third party
+all	sealed	Antigravity	~/.gemini/antigravity-cli/conversations	third party
+all	sealed	Antigravity	~/.gemini/antigravity-ide/conversations	third party
