@@ -15,6 +15,17 @@ SCRIPT=$PWD/gird-check.ps1
 BASH_SCRIPT=$PWD/gird-check.sh
 PWSH=${PWSH:-$(command -v pwsh)}
 if [ -z "$PWSH" ] || [ ! -x "$PWSH" ]; then echo "pwsh not found: set PWSH"; exit 1; fi
+# The fixture homes decide every place the scripts look: variables that move an agent's folders
+# elsewhere are cleared for the bash runs this suite compares with (GitHub's Ubuntu runners set
+# XDG_CONFIG_HOME, for one).
+unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
+  QWEN_HOME QWEN_RUNTIME_DIR COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME \
+  ASDF_DATA_DIR MISE_DATA_DIR MISE_INSTALLS_DIR MAMBA_ROOT_PREFIX PIPX_HOME PIPX_GLOBAL_HOME UV_TOOL_DIR UV_PYTHON_INSTALL_DIR UV_CACHE_DIR \
+  npm_config_prefix NPM_CONFIG_PREFIX npm_config_userconfig NPM_CONFIG_USERCONFIG NVM_DIR N_PREFIX VOLTA_HOME BUN_INSTALL BUN_INSTALL_GLOBAL_DIR PNPM_HOME
+# A pipe made with the usual umask 022 has permissions 644, and PowerShell writes the UnixMode of a
+# pipe or device with permissions 644 or 444 as a regular file's ("-rw-r--r--"): every pipe here gets
+# them, so the suite tests that case whatever the umask of the machine it runs on.
+mkfifo() { command mkfifo "$@" && chmod 644 "$@"; }
 WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && { kill "$MOCK_PID"; wait "$MOCK_PID"; } 2>/dev/null; rm -rf "$WORK"' EXIT

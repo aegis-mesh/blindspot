@@ -640,6 +640,22 @@ function Npm-WouldShip([string]$dir, [string]$file) {
 function Is-File([string]$p) { try { [IO.File]::Exists($p) } catch { $false } }
 function Is-Dir([string]$p) { try { [IO.Directory]::Exists($p) } catch { $false } }
 function Exists([string]$p) { (Is-File $p) -or (Is-Dir $p) }
+# A file's type, as the first letter of ls -l writes it (- a regular file, d a folder, l a link, p a
+# pipe, c or b a device, s a socket), read without following a link; '' where PowerShell gives none.
+# Off Windows it comes from UnixStat's ItemType (PowerShell 7.2 and up): UnixMode's own first letter is
+# wrong for a pipe or device whose permissions are 644 or 444, which PowerShell writes as a regular
+# file's ("-rw-r--r--"), and 644 is what the usual umask gives a pipe. Text, so the background session
+# check can load it too.
+$UnixKindFn = @'
+function Unix-Kind($item) {
+  $k = $null; try { $k = [string]$item.UnixStat.ItemType } catch { }
+  switch ($k) { 'File' { return '-' } 'Directory' { return 'd' } 'SymbolicLink' { return 'l' } 'NamedPipe' { return 'p' } 'CharacterDevice' { return 'c' } 'BlockDevice' { return 'b' } 'Socket' { return 's' } }
+  $m = ''; try { $m = [string]$item.UnixMode } catch { }
+  if ($m) { return $m.Substring(0, 1) }
+  ''
+}
+'@
+. ([scriptblock]::Create($UnixKindFn))
 function Env-Or([string]$name, [string]$fallback) { $v = [Environment]::GetEnvironmentVariable($name); if ($v) { $v } else { $fallback } }
 function Has-Command([string]$name) { $null -ne (Get-Command -Name $name -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1) }
 function Entries([string]$dir) {
@@ -772,16 +788,16 @@ $AaProject = @('.codex/config.toml')
 # <<< auto-approve
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
 # Whether a link ends at a regular file. Off Windows a repo can link a settings file to /dev/zero or
-# /dev/tty, which .NET would read for ever; UnixMode (PowerShell 7.1 and up) starts with - for a
-# regular file and l for a link, which is followed. Windows has no such files in a profile.
+# /dev/tty, which .NET would read for ever; Unix-Kind is - for a regular file and l for a link, which
+# is followed. Windows has no such files in a profile.
 function Is-RegularFile([string]$p) {
   if (-not (Is-File $p)) { return $false }
   if ($OnWindows) { return $true }
   $t = $p
   for ($i = 0; $i -lt 40; $i++) {
     try { $it = Get-Item -LiteralPath $t -Force -ErrorAction Stop } catch { return $false }
-    $m = [string]$it.UnixMode
-    if (-not $m.StartsWith('l')) { return $m.StartsWith('-') }
+    $k = Unix-Kind $it
+    if ($k -ne 'l') { return $k -eq '-' }
     $lt = [string](@($it.Target)[0]); if (-not $lt) { return $false }
     if (-not [IO.Path]::IsPathRooted($lt)) { $lt = J ([IO.Path]::GetDirectoryName($t)) $lt }
     $t = $lt
@@ -861,12 +877,12 @@ function Is-AkLink([string]$dir, [string]$path, [string]$target) {
   } catch { return $false }
 }
 # On macOS and Linux a fifo, socket or device can carry a name the scan wants, and reading one blocks
-# or never ends: like bash's find -type f, only a regular file is taken (UnixMode from Get-Item, as
-# Is-PlainFile reads it; where PowerShell gives none, the file is taken as before).
+# or never ends: like bash's find -type f, only a regular file is taken (Unix-Kind, as Is-PlainFile
+# reads it; where PowerShell gives none, the file is taken as before).
 function Add-Plain($list, $e) {
   if (-not $OnWindows) {
-    $m = ''; try { $m = [string](Get-Item -LiteralPath $e.FullName -Force -ErrorAction Stop).UnixMode } catch { }
-    if ($m -and -not $m.StartsWith('-')) { return }
+    $k = ''; try { $k = Unix-Kind (Get-Item -LiteralPath $e.FullName -Force -ErrorAction Stop) } catch { }
+    if ($k -and $k -ne '-') { return }
   }
   $list.Add($e.FullName)
 }
@@ -1109,15 +1125,15 @@ $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Objec
 # never end. Text, so the background session check can load it too; it returns the list as one object.
 $SessListFn = @'
 # A regular file, following a link: what bash's [ -f ] and perl's -f say. PowerShell 7.2 and up
-# say which a file is off Windows (the first letter of UnixMode, from Get-Item); Windows keeps no
-# pipes or devices among files, and an older PowerShell is taken at its word.
+# say which a file is off Windows (Unix-Kind, from Get-Item); Windows keeps no pipes or devices among
+# files, and an older PowerShell is taken at its word.
 function Is-PlainFile([string]$p) {
   if ($env:OS -eq 'Windows_NT') { return $true }
   try {
     $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
     if ($t) { if (-not $t.Exists) { return $false }; $p = $t.FullName }
-    $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode
-    return (-not $m) -or $m.StartsWith('-')
+    $k = Unix-Kind (Get-Item -LiteralPath $p -Force -ErrorAction Stop)
+    return (-not $k) -or $k -eq '-'
   } catch { return $true }
 }
 # An empty file that can't be opened, so was not read. It is opened only where it is known to be a
@@ -1125,8 +1141,8 @@ function Is-PlainFile([string]$p) {
 # PowerShell could not tell from a file never holds the check up; there it counts as read unopened.
 function Empty-Unreadable([string]$p) {
   if ($env:OS -ne 'Windows_NT') {
-    $m = ''; try { $m = [string](Get-Item -LiteralPath $p -Force -ErrorAction Stop).UnixMode } catch { }
-    if (-not $m.StartsWith('-')) { return $false }
+    $k = ''; try { $k = Unix-Kind (Get-Item -LiteralPath $p -Force -ErrorAction Stop) } catch { }
+    if ($k -ne '-') { return $false }
   }
   try { (New-Object IO.FileStream($p, 'Open', 'Read', 'ReadWrite')).Dispose(); $false } catch { $true }
 }
@@ -1277,7 +1293,7 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
   $SessHandle = $SessPs.BeginInvoke()
 }
 # Stops the check, or waits for it with -AllSessions.
