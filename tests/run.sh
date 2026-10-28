@@ -3251,6 +3251,13 @@ od_refuses "gen.sh: a backtick in an unquoted here-document of the owasp-derive 
   '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE`cat \/dev\/null`/' 'runs a bare command (cat)'
 od_refuses "gen.sh: an output redirection in the owasp-derive block is refused" \
   's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  printf "%s" "$_ov" > \/tmp\/ow; [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/' 'redirects output (>)'
+# gird-check.ps1 tags by its own Owasp-Set: a source with a risk and no arm there would never be tagged.
+rm -rf "$WORK/opa"; mkdir -p "$WORK/opa"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/opa/"
+grep -v "^    'ak_links' { return" gird-check.ps1 > "$WORK/opa/gird-check.ps1"
+(cd "$WORK/opa" && bash tools/gen.sh > "$WORK/opa.txt" 2>&1); RC=$?
+if cmp -s gird-check.ps1 "$WORK/opa/gird-check.ps1"; then bad "gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused" "the edit did not apply"
+elif [ "$RC" -eq 2 ] && grep -q 'Owasp-Set in gird-check.ps1 has no arm for the source ak_links' "$WORK/opa.txt"; then ok "gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused"
+else bad "gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused" "exit $RC $(head -n 3 "$WORK/opa.txt")"; fi
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

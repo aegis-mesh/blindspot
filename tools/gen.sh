@@ -150,7 +150,10 @@ OW_ARMS=" $(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive
   sed -n "$OW_SED_ARMS" | tr '|' '\n' | tr '\n' ' ')"
 [ "$OW_KEYS" != "  " ] || bad="${bad:+$bad
 }data/owasp.tsv: gird-fleet.sh has no FL_KEYS line to check it against"
-_ow=$(rows data/owasp.tsv | awk -F '\t' -v keys="$OW_KEYS" -v mf="$OW_MF" -v arms="$OW_ARMS" '
+# gird-check.ps1 tags by its own rule, Owasp-Set: a source with a risk needs its arm there too.
+OW_PSARMS=" $(awk '/^function Owasp-Set\(/ { on = 1; next } on && /^}/ { on = 0 } on' gird-check.ps1 |
+  sed -n "s/^    '\([a-z_:]*\)' {.*/\1/p" | tr '\n' ' ')"
+_ow=$(rows data/owasp.tsv | awk -F '\t' -v keys="$OW_KEYS" -v mf="$OW_MF" -v arms="$OW_ARMS" -v psarms="$OW_PSARMS" '
   function has(list, x) { return index(list, " " x " ") > 0 }
   { ok = NF == 7 && $1 ~ /^[a-z0-9_.]+$/ && !seen[$1]++ && $2 ~ /^(ASI0[1-9]|ASI10|-)$/
     if ($2 == "-") ok = ok && $3 == "-" && $4 == "-" && $5 == "-" && $7 != "-" && $7 != "" && $7 !~ /["`$|\\]/
@@ -160,6 +163,7 @@ _ow=$(rows data/owasp.tsv | awk -F '\t' -v keys="$OW_KEYS" -v mf="$OW_MF" -v arm
       ok = ok && (($6 ~ /^machine:/) ? $5 == "-" : $5 ~ /^0[1-5]$/)
       ok = ok && $6 !~ /^(v|end|sessions_partial|not_read|moved|protected|engine|report)$/
       if ($6 ~ /^machine:/) ok = ok && $6 == "machine:incidents"; else ok = ok && has(arms, $6)
+      if ($6 !~ /^machine:/ && !has(psarms, $6)) print "data/owasp.tsv: Owasp-Set in gird-check.ps1 has no arm for the source " $6 ": " $0
     }
     if ($6 ~ /^machine:/) ok = ok && has(mf, substr($6, 9)) && $1 == "machine." substr($6, 9)
     else ok = ok && ($6 == "report" || $6 == "incidents:act" || $6 == "incidents:update" || ($6 != "incidents" && has(keys, $6)))

@@ -359,6 +359,7 @@ gen.sh: the same command by its full path is written into gird-fleet.sh	tools/ge
 gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 gen.sh: an output redirection in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 fleet: the account run prints exactly FL_KEYS, in order	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: an account's findings map to their risks in its row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a clear account has an empty owasp list and adds to no risk	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

@@ -148,8 +148,8 @@ possible_signs	-	-	-	-	possible	A lead to check, not a sign.
 `gen.sh` also refuses: a completeness or protocol key (`v`, `end`, `sessions_partial`, `not_read`,
 `moved`, `protected`, `engine`) with a risk; a `report` line with a risk (root could not see it, so the
 two reports would disagree); a `machine:` line with a risk other than `machine:incidents`, the one Mac
-field root tags; and a source with a risk that `owasp_set` (below) has no arm for, which would never be
-tagged. It requires every key in `FL_KEYS` to have exactly one line, except `incidents`, which has
+field root tags; and a source with a risk that `owasp_set` (below), or `Owasp-Set` in `gird-check.ps1`,
+has no arm for, which would never be tagged. It requires every key in `FL_KEYS` to have exactly one line, except `incidents`, which has
 exactly two (`incidents:act` and `incidents:update`), so a new account-run field cannot ship without a
 decision on its risk.
 
@@ -494,6 +494,7 @@ Person's report:
 | gen.sh: a bare command in the owasp-derive block is refused | bash-only: `tools/gen.sh` |
 | gen.sh: a command substitution, or a backtick, in an unquoted here-document of the owasp-derive block is refused (two tests) | bash-only: `tools/gen.sh` |
 | gen.sh: an output redirection in the owasp-derive block is refused | bash-only: `tools/gen.sh` |
+| gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused | bash-only: `tools/gen.sh` |
 
 Fleet (`tests/run.sh`'s "fleet mode (--all-users)" part, with the stand-ins it already uses):
 
