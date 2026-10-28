@@ -1,6 +1,7 @@
 # OWASP Agentic Top 10 tags
 
-Status: design, not built. Nothing in the scripts, tests or docs has changed yet.
+Status: built. The plan review's findings are folded in below ("Decisions on the open questions" and
+"Changes from the plan review").
 
 ## Why
 
@@ -83,8 +84,13 @@ fleet JSON, so an admin can find it in `last.json`.
 | `lockfile_only_incidents` | `lock_only` | ASI04 | npm malware in a lockfile | 05 |
 | `versions_to_update` | `updates` | ASI04 | Python versions to update | 05 |
 | `extensions_to_remove` | `remove` | ASI04 | extensions to remove | 05 |
-| `platforms_found` | `platforms` | ASI04 | platforms that leaked secrets | 05 |
+| `platforms_found` | `platforms` | ASI04 | platforms with a leak | 05 |
 | `machine.incidents` | `machine:incidents` | ASI04 | malware signs | (fleet only) |
+
+`incidents:update` is an incident whose level is not `act`, as `gird-fleet.sh` splits an account's
+incidents into act and the rest (`_ia` and `_iu` in `fleet_main`). The Mac's own incidents are all
+act level: they come from `data/indicators.tsv`, whose lines `gen.sh` refuses for an incident that is
+not act level, and from a running LiteLLM loader. So `machine.incidents` is always malware signs.
 
 No risk, each with its reason:
 
@@ -96,14 +102,14 @@ No risk, each with its reason:
 | `shared_tmp_wiper_logs` | `tmp_wiper` | A lead, as above. |
 | `machine.possible_signs` | `machine:possible_signs` | A lead, as above. |
 | `machine.shared_tmp_wiper_logs` | `machine:shared_tmp_wiper_logs` | A lead, as above. |
-| `agents`, `machine.agents` | `agents` | What is installed, not a finding. |
+| `agents`, `machine.agents` | `agents`, `machine:agents` | What is installed, not a finding. |
 | `mcp_servers` | `mcp_servers` | A count of servers, not a finding. |
 | `key_providers` | `key_providers` | Detail of `key_files`, which is tagged. |
 | `sessions_partly_checked`, `files_not_checked`, `agent_folders_moved`, `protected_folders`, `session_engine` | `sessions_partial`, `not_read`, `moved`, `protected`, `engine` | Completeness. Rule 4. |
 | (protocol) | `v`, `end` | Protocol lines. |
-| idle agents (row 01, fix "Remove agents you no longer use") | `report` | Housekeeping. An idle agent is not itself a finding of any risk, and root does not receive it. |
-| login files any agent can read (section 03) | `report` | Shown for information, not counted as a finding (no fix, not in `ISSUES`, not sent to root). Nearly every developer machine has some. |
-| tools with a published hole and no fixed version yet (section 01) | `report` | Not counted as a finding today (row 01 and the fix list count only tools with a fix), and root does not receive it. See Open questions, 3. |
+| `idle_agents`: idle agents (row 01, fix "Remove agents you no longer use") | `report` | Housekeeping. An idle agent is not itself a finding of any risk, and root does not receive it. |
+| `login_files`: login files any agent can read (section 03) | `report` | Shown for information, not counted as a finding (no fix, not in `ISSUES`, not sent to root). Nearly every developer machine has some. |
+| `tools_with_no_fix`: tools with a published hole and no fixed version yet (section 01) | `report` | Not counted as a finding today (row 01 and the fix list count only tools with a fix), and root does not receive it. See Open questions, 3. |
 
 Two corrections to the draft mapping, from the code:
 
@@ -129,22 +135,29 @@ possible_signs	-	-	-	-	possible	A lead to check, not a sign.
 |---|---|
 | `kind` | `^[a-z0-9_.]+$`, unique. The fleet JSON field name. |
 | `risk` | `ASI01` to `ASI10`, or `-` for no risk. |
-| `name` | The risk's name; every line of one risk must give the same name (as `data/outdated.tsv` does for a tool's name). `-` when `risk` is `-`. No `' " \` $ | \` or `&`. |
-| `label` | At most 32 characters, lowercase start, none of the characters above. `-` when `risk` is `-`. |
+| `name` | The risk's name; every line of one risk must give the same name (as `data/outdated.tsv` does for a tool's name). `-` when `risk` is `-`. Letters, digits, spaces and `-` only. |
+| `label` | At most 32 characters: letters, digits, spaces and `, . _ -`. It may start with a capital ("SSH keys without a passphrase"). `-` when `risk` is `-`. |
 | `section` | `01` to `05` for a kind the person's report shows; `-` for a machine kind or no risk. |
-| `source` | A key in `FL_KEYS` (read from `gird-fleet.sh`), `incidents:act` or `incidents:update`, `machine:<field>` for the Mac's own fields, or `report` for what only the person's report shows. |
+| `source` | A key in `FL_KEYS` (read from `gird-fleet.sh`), `incidents:act` or `incidents:update` (never a bare `incidents`), `machine:<field>`, or `report` for what only the person's report shows. |
 | `why` | Required, and the only place it is allowed, when `risk` is `-`. |
 
+`machine:<field>` names a field of the `machine` object root writes: the keys of the `MACHINE=` JSON in
+`gird-fleet.sh`, read by `gen.sh`, except `complete`, `outcome` and `owasp`. Its kind must be
+`machine.<field>`. Every such field has exactly one line.
+
 `gen.sh` also refuses: a completeness or protocol key (`v`, `end`, `sessions_partial`, `not_read`,
-`moved`, `protected`, `engine`) with a risk, and a `report` line with a risk (root could not see it,
-so the two reports would disagree). It requires every key in `FL_KEYS` to have exactly one line, so a
-new account-run field cannot ship without a decision on its risk.
+`moved`, `protected`, `engine`) with a risk; a `report` line with a risk (root could not see it, so the
+two reports would disagree); a `machine:` line with a risk other than `machine:incidents`, the one Mac
+field root tags; and a source with a risk that `owasp_set` (below) has no arm for, which would never be
+tagged. It requires every key in `FL_KEYS` to have exactly one line, except `incidents`, which has
+exactly two (`incidents:act` and `incidents:update`), so a new account-run field cannot ship without a
+decision on its risk.
 
 ### What `gen.sh` writes
 
 A new block `owasp` in all three scripts, from the lines with a risk only:
 
-- `gird-check.sh` and `gird-fleet.sh` (the same text):
+- `gird-check.sh` and `gird-fleet.sh` (the same text, kinds with a risk only, in the data file's order):
 
   ```bash
   # >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it.
@@ -166,34 +179,49 @@ A new block `owasp` in all three scripts, from the lines with a risk only:
 
 `gird-fleet.sh` already receives generated blocks: the `for f in gird-check.sh gird-check.ps1
 gird-fleet.sh` loop at the end of `tools/gen.sh` splices `owned-walk keys auto-approve agents
-incidents indicators outdated platforms` into it. `owasp` is added to both block lists, and to the
-two lists of data files in `gen.sh`'s header comment and in CONTRIBUTING.md's "Lists live in
-`data/`".
+incidents indicators outdated platforms` into it. `owasp` is added to both block lists, and
+`owasp-derive` to `gird-fleet.sh`'s, and `data/owasp.tsv` to the lists of data files in `gen.sh`'s
+header comment and in CONTRIBUTING.md's "Lists live in `data/`". `gen.sh` writes no README or
+docs/fleet.md table (decision 6).
 
 ### One derivation, copied to root
 
-The rule that turns field values into kinds is one function, `owasp_kinds`, whose home is
-`gird-check.sh` in a block `owasp-derive`. `gen.sh` copies it into `gird-fleet.sh` the way it copies
-`owned-walk`. Given a variable prefix, it walks `OWASP_TABLE` and prints each kind whose source
-field is set: a number above 0, a non-empty list, or for `incidents:act` / `incidents:update` an id
-of that level (`incident_level`, already in both scripts).
+The rule that turns field values into kinds has one home, a block `owasp-derive` in `gird-check.sh`,
+which `gen.sh` copies into `gird-fleet.sh` the way it copies `owned-walk`. It holds two functions:
 
-- In `gird-check.sh`, the values the account run computes (`_yolo`, `_inc`, `_lock`, `_planted` and
-  the rest, now inside the `ACCTRUN` block) move into a function that sets `F_<key>` for each finding
-  field. The account run prints from those variables, so its output is byte for byte what it is
-  today, and the person's report tags from the same values. The `moved` profile walk stays inside
-  the account run: it is completeness only.
-- In `gird-fleet.sh`, `fl_parse` already sets `FA_<key>`, except `tools`, which it stores as
-  `FA_update`. That variable is renamed `FA_tools`. Root calls `owasp_kinds FA_` per checked
-  account.
-- `gird-check.ps1` has no account run. It gets `Owasp-Kinds`, which builds the same field values from
-  its own variables (the same names as bash's for most: `$KEY_FILES`, `$HIST_KEYS`, `$N_SESS`,
-  `$N_MCP_TOKEN`, `$N_ALLOW`, `$N_SSH_OPEN`, `$N_AK`, `$N_YOLO`, `$N_OLD`, `$N_AUTO`; the planted,
-  platform and extension values under its own names) and walks `$OwaspTable`. The twin tests prove
-  the two scripts tag the same.
+- `owasp_set SOURCE` reads fixed variable names, `FA_<key>` (`FA_yolo`, `FA_key_files` and the rest),
+  one `case` arm per source: no prefix argument, no `eval`, no `${!name}`. A source is set when its
+  value is a number above 0 or a list that is not empty; `incidents:act` when `FA_incidents` holds an
+  act-level incident (`incident_level`, generated in both scripts), `incidents:update` when it holds
+  one of any other level.
+- `owasp_kinds` walks `OWASP_TABLE` and prints `risk|kind|section|name|label` for each kind whose
+  source is set, skipping `machine:` and `report` lines.
+
+Root runs this copy, so the block calls only builtins, the generated functions and tools by their
+full path, as `owned-walk` does. `gen.sh` refuses a bare external command in it: it reads each command
+word of the block (after `;`, `&&`, `||`, `|`, `(`, `{`, `$(` and the shell keywords, with
+single-quoted text and here-documents skipped) and allows only a list of builtins and keywords,
+`incident_level`, `owasp_set`, `owasp_kinds`, or a word starting with `/`.
+
+- In `gird-check.sh`, the values the account run computed inside the `ACCTRUN` block (`_yolo`, `_inc`,
+  `_lock`, `_planted` and the rest) move into a function, `finding_fields`, that sets `FA_<key>` for
+  each finding field, the names `fl_parse` gives them in `gird-fleet.sh`. It runs for every report;
+  the account run prints from those variables, so its output is byte for byte what it was, and the
+  person's report tags from the same values. The `moved` profile walk stays inside the account run: it
+  is completeness only.
+- In `gird-fleet.sh`, `fl_parse` already sets `FA_<key>`, except `tools`, which it stored as
+  `FA_update`. That variable is renamed `FA_tools`. Root calls `owasp_kinds` per checked account.
+  It reads only values `fl_parse` has already checked.
+- `gird-check.ps1` has no account run. It gets `Owasp-Set`, which builds the same field values from its
+  own variables (`$KEY_FILES`, `$HIST_KEYS`, `$N_SESS`, `$N_MCP_TOKEN`, `$N_ALLOW`, `$N_SSH_OPEN`, `$N_AK`,
+  `$N_YOLO`, `$N_OLD`, `$N_AUTO`, the planted, platform, Python and extension lists, and a new
+  `$IndHits` for gird-check.sh's `IND_HITS`), and walks `$OwaspTable`. This is a second implementation
+  of the rule, so the tests hold it to bash's in full: one fixture carries every finding kind the two
+  can share, and both suites assert the complete set of tagged section lines and the summary line on it
+  (see Tests). The two reports' tags are derived by the same rule from each run's values.
 
 Account-run protocol: unchanged. Root derives every tag from fields it already receives and checks.
-`FL_KEYS`, the account run's output and `fl_parse` stay as they are.
+`FL_KEYS`, the account run's output and `fl_parse` stay as they are, but for the `FA_tools` name.
 
 ## The person's report (`gird-check.sh`, `gird-check.ps1`)
 
@@ -208,8 +236,9 @@ After row 05 and before "First fix", one blank line, then:
    OWASP Agentic Top 10: ASI02, ASI03, ASI05
 ```
 
-Codes only, in code order. It is written with `wrap` (`Wrap` in PowerShell) at indent 3, so a narrow
-terminal folds it. The longest possible line, with all four risks, is 51 characters.
+Codes only, in code order. The longest possible line, with all four risks, is 51 characters, and the
+report is never drawn narrower than 60 columns (`W` and `$Width` are held to 60 at least), so it is
+written as one line, with no wrap.
 
 In `--full` and piped output there are no summary rows (`HEAD_FULL` and the sections are printed
 instead). The same line goes at the end of the full header, after the stats line and before the
@@ -229,8 +258,8 @@ section, in code order:
 ```
 
 The section heading's right-hand text does not change, so the heading never gets wider. The longest
-line is "     OWASP ASI04 Agentic Supply Chain Vulnerabilities" (52 characters), written with `wrap` at
-indent 5. These lines are part of `SEC1` to `SEC5`, so they are on the details pages (keys 1 to 5),
+line is "     OWASP ASI04 Agentic Supply Chain Vulnerabilities" (52 characters), one line for the same
+reason. These lines are part of `SEC1` to `SEC5`, so they are on the details pages (keys 1 to 5),
 in `--full`, in piped output and in a saved report.
 
 ### How it looks
@@ -267,10 +296,24 @@ partly checked home with findings: the tags of what was found, and the partial w
 
 ## Fleet mode (`gird-fleet.sh`)
 
-Root tags each checked account with `owasp_kinds FA_`, and the Mac with its own fields
-(`FM_INC` set means `machine.incidents`). An account that was not checked gets no tags, and is not
-counted in any risk. An account partly checked (`complete: false`) is tagged with what was found;
-its tags are a lower bound, as its outcome already says.
+Root tags each checked account with `owasp_kinds`, and the Mac with its own fields (`FM_INC` set means
+`machine.incidents`, whether the Mac's check was complete or not). Tags are gathered per account by
+its row number in the run, never by its name, so two accounts shown under one name (a hashed name, or
+`invalid-name`) still count as two.
+
+Three numbers frame every count:
+
+- **accounts counted**: accounts whose check ran and was read (`N_ACC - N_NC_RUN`).
+- **accounts not checked**: accounts whose check never ran or was refused (`N_NC_RUN` in
+  `fleet_main`): no home, no login shell, sudo refused, bad output, out of time, the deadline. They get
+  no tags and are not in any count. This is not the summary line's `not_checked=`, which also counts
+  accounts whose check ran but was partial.
+- **accounts partly checked**: counted accounts whose row says `complete: false`. They are tagged with
+  what was found, and that can be less than is there.
+
+A risk count never reads as the other accounts being free of that risk: every surface that shows a
+count also shows how many accounts were not checked and how many were partly checked, when either is
+above 0.
 
 ### Terminal report
 
@@ -278,15 +321,19 @@ After the "This Mac" block and before "Saved:", when at least one risk is tagged
 
 ```
   OWASP Agentic Top 10
-    ASI03 Identity and Privilege Abuse  2 of 3 accounts (keys in plain text, SSH keys without a passphrase)
-    ASI04 Agentic Supply Chain Vulnerabilities  1 of 3 accounts and this Mac (malware signs)
+    ASI03 Identity and Privilege Abuse  2 of 3 checked accounts (keys in plain text, SSH keys without a passphrase)
+    ASI04 Agentic Supply Chain Vulnerabilities  1 of 3 checked accounts and this Mac (malware signs)
+    Not counted: 1 account not checked
+    1 account partly checked: its tags may be incomplete
 ```
 
-- The count is of accounts whose check ran ("of 3 accounts"). When some were not checked, one more
-  line follows: `    Not counted: 1 account not checked`.
+- The count is of accounts counted ("of 3 checked accounts").
+- "Not counted" follows when some accounts were not checked, and the partly checked line when some
+  were partly checked.
 - "and this Mac" is added when the Mac's own fields map to that risk; a risk only the Mac has reads
   `this Mac (malware signs)`.
-- The labels are every label of that risk found in any account, once each, in the data file's order.
+- The labels are every label of that risk found in any account or the Mac, once each, in the data
+  file's order.
 - Lines can be over 80 characters, as other lines of this report already are (the gh-token-monitor
   line); the report is read in an MDM's log as much as in a terminal.
 - With nothing tagged, the block is left out, whatever the outcome. It never says "none".
@@ -298,7 +345,8 @@ A top-level `owasp` object after `machine`, always present in a finished run:
 ```json
 "owasp": {
   "accounts_counted": 3,
-  "accounts_not_checked": 0,
+  "accounts_not_checked": 1,
+  "accounts_partly_checked": 1,
   "risks": [
     {"id": "ASI03", "name": "Identity and Privilege Abuse", "accounts": 2, "machine": false,
      "findings": ["key_files", "ssh_keys_no_passphrase"]},
@@ -308,28 +356,30 @@ A top-level `owasp` object after `machine`, always present in a finished run:
 }
 ```
 
-An object, not a bare list, so an empty `risks` always sits next to `accounts_not_checked`: a reader
-cannot take an empty list as a clean Mac without seeing how many accounts were not counted.
+An object, not a bare list, so an empty `risks` always sits next to `accounts_not_checked` and
+`accounts_partly_checked`: a reader cannot take an empty list as a clean Mac without seeing how many
+accounts were not counted or not fully read.
 
 Each checked account's row gets `"owasp": ["ASI03", "ASI04"]` (empty list when nothing maps). A
 not-checked row has no `owasp` field, so it never shows an empty list. The `machine` object gets
 `"owasp": [...]` the same way.
 
-`tests/fleet-flat.py` learns the object: `owasp.accounts_counted=3`, `owasp.ASI03.accounts=2`,
-`owasp.ASI03.machine=false`, `owasp.ASI03.findings=key_files ssh_keys_no_passphrase`, and
-`<account>.owasp=ASI03 ASI04` through its existing list handling.
+`tests/fleet-flat.py` learns the object: `owasp.accounts_counted=3`, `owasp.risks=ASI03 ASI04`,
+`owasp.ASI03.accounts=2`, `owasp.ASI03.machine=false`, `owasp.ASI03.findings=key_files
+ssh_keys_no_passphrase`, and `<account>.owasp=ASI03 ASI04` through its existing list handling.
 
 ### Summary line
 
-With at least one risk, ` owasp=` is appended, risks in code order, each `<code>:<accounts>`, and
-`+mac` when the Mac counts:
+With at least one risk, ` owasp=` is appended: risks in code order, each `<code>:<accounts>`, with
+`+mac` when the Mac counts, then `;counted:<n>`, and `;not_counted:<n>` and `;partial:<n>` when either
+is above 0:
 
 ```
-blindspot act accounts=3 act=1 review=1 not_checked=0 v=1.3.0 at=2026-10-25T09:12:00Z owasp=ASI03:2,ASI04:1+mac
+blindspot act accounts=4 act=1 review=1 not_checked=2 v=1.3.0 at=2026-10-25T09:12:00Z owasp=ASI03:2,ASI04:1+mac;counted:3;not_counted:1;partial:1
 ```
 
-A risk only the Mac has reads `ASI04:0+mac`. With nothing tagged there is no `owasp=` part. The
-`failed` rewrite of `SUMMARY` (when the save fails) keeps the part.
+A risk only the Mac has reads `ASI04:0+mac`. With nothing tagged there is no `owasp=` part, so it
+never reads as 0. When the save fails, `SUMMARY` is rewritten with `failed` and keeps the part.
 
 ### Inventory value
 
@@ -337,25 +387,26 @@ A risk only the Mac has reads `ASI04:0+mac`. With nothing tagged there is no `ow
 detail in the value is written "word value" ("keys 2", "incidents tanstack"). So the token is:
 
 ```
- | owasp ASI03:2,ASI04:1+mac
+ | owasp ASI03:2,ASI04:1+mac; counted 3; not-counted 1; partial 1
 ```
 
-appended last. Every character is in the class, so `fl_inventory` needs no change. It cannot be
-mistaken for an account: an account part is always `<name>: <outcome>`, with a colon right after
-the name, and an account named `owasp` reads `owasp: clear`.
+appended last, `not-counted` and `partial` only when above 0. Every character is in the class, so
+`fl_inventory` needs no change. It cannot be mistaken for an account: an account part is always
+`<name>: <outcome>`, with a colon right after the name, and an account named `owasp` reads
+`owasp: clear`.
 
-It is the first thing cut. The existing rule: the value is at most 250 characters; when longer, the
-awk in `fleet_main` rebuilds it within 243 characters and adds ` +more` (6), so at most 249. The
-new order:
+It is the first thing cut. The value is built by a new function, `fl_inv_fit HEAD PARTS TOKEN`, which
+holds the truncation `fleet_main` did inline. The value is at most 250 characters; the truncation awk
+rebuilds it within 243 characters and adds ` +more` (6), so at most 249. The order:
 
-1. Build the value as today, without the token (`base`).
-2. No token: unchanged from today.
+1. Build the value as before, without the token (`base`).
+2. No token: unchanged from before.
 3. `base` plus the token is 250 or less: use it.
 4. Otherwise the token is dropped, which counts as a cut:
    - `base` is 244 or less: `base +more`.
-   - `base` is longer: run the existing awk, with a new `-v cut0=1` that makes it end with ` +more`
-     even if it cut nothing else. This also covers a `base` of 245 to 250 characters, which today
-     skips the awk.
+   - `base` is longer: run the truncation awk, with a new `-v cut0=1` that makes it end with ` +more`
+     even if it cut nothing else. This also covers a `base` of 245 to 250 characters, which before
+     skipped the awk.
 
 So an account's outcome, wiper and incidents are never cut to make room for the token, and a value
 that lost the token always says `+more`. The full tags are in `last.json`.
@@ -377,86 +428,92 @@ in it.
 
 ## Docs
 
-- README.md, "What it checks": after the five numbered checks, a short paragraph and a table of risk,
-  name and what Blindspot tags it with (the labels). It says Blindspot tags ASI02 to ASI05 only, from
-  what it reads on disk, and that the mapping is Blindspot's, not OWASP's. The table is written by
-  `gen.sh` between `<!-- >>> owasp -->` and `<!-- <<< owasp -->` markers, so README and the scripts
-  share one source and `gen.sh --check` catches drift. `splice` already works on any file with the
-  markers; the README's are HTML comments, so the marker match takes a comment prefix.
+- README.md, "What it checks": each of the five numbered checks gets a hand-written line naming the
+  risks its findings are tagged with, and one sentence links OWASP's own page and says Blindspot tags
+  ASI02 to ASI05 only, from what it reads on disk, and that the mapping is Blindspot's, not OWASP's.
+  A test checks that every risk code, name and label in `data/owasp.tsv` appears in README.md and
+  docs/fleet.md, so a new label cannot ship without its doc line (decision 6).
 - README.md screenshots: remake `docs/report.png` and `docs/report-full.png` with
-  `bash tools/screenshots.sh`. Its fixture (keys, MCP tokens, keys in sessions, a cloned project's
-  `SessionStart` hook) shows ASI03 and ASI05, and ASI02 if the fixture's run-without-asking setting
-  survives the trimming it does. Check the images show the OWASP line and a section line.
-- docs/fleet.md, "4. Read the results": the summary line and inventory examples gain the token; a
-  paragraph on the `owasp` JSON object, the per-row field, that `owasp` is cut first from the
-  inventory value, and that no `owasp` part means nothing was tagged, never that the Mac is clear
-  (read the outcome for that). "What it checks for each account" gets the same table, generated as in
-  README.
-- docs/mdm/jamf.md and docs/mdm/intune.md: the inventory example line (line 81 in each) gains
-  ` | owasp ASI03:1,ASI04:1`. docs/mdm/iru.md: the summary example (line 59) gains
-  ` owasp=ASI03:1,ASI04:1`. The smart group advice ("values that start with `v1 act`") stays; add
-  "contains `ASI03`" as an example filter only where the page lists filters.
+  `bash tools/screenshots.sh`. Check the images show the OWASP line and a section line.
+- docs/fleet.md, "4. Read the results": the summary line and inventory examples gain the part; a
+  paragraph on the `owasp` JSON object and its three counts, the per-row field, that `owasp` is cut
+  first from the inventory value, and that no `owasp` part means nothing was tagged, never that the Mac
+  is clear (read the outcome for that). "What it checks for each account" gets the same hand-written
+  mapping as README.
+- docs/mdm/jamf.md and docs/mdm/intune.md: the inventory example line gains
+  ` | owasp ASI03:1,ASI04:1; counted 1`. docs/mdm/iru.md: the summary example gains
+  ` owasp=ASI03:1,ASI04:1;counted:1`. The smart group advice ("values that start with `v1 act`") stays;
+  an example filter, where the page lists filters, matches `owasp ASI03`, never a bare `ASI03`.
 - docs/designs/fleet-mode.md, "The result": the `owasp` fields, the summary line's new part and the
   inventory token, pointing here for the mapping. "Tests": the fleet tests below.
-- CHANGELOG.md: there is no "Unreleased" heading today; add one above 1.2.0 with one entry for the
-  person's report and one for fleet mode.
-- CONTRIBUTING.md: `data/owasp.tsv` in "Lists live in `data/`", and a line in each "Add ..." recipe
-  that adds a new account-run field: give it a line in `data/owasp.tsv`.
+- CHANGELOG.md: there is no "Unreleased" heading; add one above 1.2.0 with one entry for the person's
+  report and one for fleet mode, which says the summary line can now end with the `owasp=` part.
+- CONTRIBUTING.md: `data/owasp.tsv` in "Lists live in `data/`", and a line in the recipes that add a new
+  account-run field: give it a line in `data/owasp.tsv`.
 
 ## Tests
 
 Bash in `tests/run.sh`, each with a twin of the same name in `tests/run-ps.sh` unless marked
 bash-only. Fleet tests are bash-only with the reason the existing fleet lines in
-`tests/bash-only.txt` give ("gird-check.ps1 has no fleet mode ..."). Each is reverted against the
-change before review, as the review rules ask.
+`tests/bash-only.txt` give. Each is reverted against the change before review, as the review rules ask.
+
+`tests/make-fixture.sh` gets a third mode, `owasp`: the full home with one more finding of each kind
+the full home lacks (Codex set to never ask with full access, Claude Code 2.1.100 installed globally,
+a link to `authorized_keys`, Mistral's npm build in a lockfile, telnyx 4.87.1 in a Python environment,
+an extension whose malware runs on Windows only). It carries every kind both scripts can show at once;
+`lockfile_only_incidents` cannot sit beside installed malware, so its own home tests it.
 
 Person's report:
 
 | Test | Twin |
 |---|---|
+| owasp: a home with every finding kind gets exactly the section lines of its risks | yes |
+| owasp: two risks in one section print in code order | yes |
+| owasp: the summary lists every risk found, in code order, after row 05 | yes |
+| owasp: summary rows 01 to 05 stay together, the OWASP line after them | yes |
+| owasp: --full and piped output carry the line at the end of the header | yes |
+| owasp: every OWASP line fits the narrowest report, 60 columns | yes |
 | owasp: a key in plain text tags section 03 with ASI03 | yes |
 | owasp: run without asking tags section 01 with ASI02 | yes |
 | owasp: project settings that act on opening tag section 02 with ASI05 | yes |
-| owasp: malware signs tag section 05 with ASI04 | yes |
-| owasp: an update-level incident tags ASI04 as a version to update, not malware signs | yes |
-| owasp: the summary lists the risks found, in code order, after row 05 | yes |
-| owasp: summary rows 01 to 05 are unchanged by the tags | yes |
+| owasp: npm malware in a lockfile alone tags section 05 with ASI04 | yes |
+| owasp: an update-level incident alone tags section 05 with ASI04 | yes |
 | owasp: a home with no findings has no OWASP line | yes |
 | owasp: a partly checked home with no findings has no OWASP line and never says none | yes |
+| owasp: a partly checked home with findings keeps its tags | yes |
 | owasp: a file named like a worm's, alone, carries no tag | yes |
 | owasp: login files alone carry no tag | yes |
-| owasp: --full and piped output carry the line in the header and each section's line | yes |
-| owasp: with NO_COLOR the OWASP lines have no escape codes | yes |
-| owasp: at 80 columns and at 50 no OWASP line is wider than the terminal | yes |
 | owasp: the shared counts carry no OWASP field | yes |
-| owasp: the account run's output is unchanged | bash-only: the account run is `gird-check.sh`'s |
+| owasp: every risk and label in data/owasp.tsv is in README.md and docs/fleet.md | bash-only: it reads the docs, which neither script prints |
+| gen.sh refusals (`gen_refuses`): a risk outside ASI01 to ASI10, two names for one risk, a no-risk line with no reason, a label over 32 characters, a bare `incidents` source, an account-run key with no line, a completeness key with a risk, a report-only line with a risk, a Mac field other than incidents with a risk, a risk on a source `owasp_set` has no arm for, an indicator of an incident that is not act level | bash-only: `tools/gen.sh` |
 | gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check | bash-only: `tools/gen.sh` |
-| gen.sh: refuses a risk outside ASI01 to ASI10, two names for one risk, a no-risk line with no reason | bash-only: `tools/gen.sh` |
-| gen.sh: every account-run key has exactly one line in data/owasp.tsv | bash-only: `tools/gen.sh` |
-| gen.sh: a completeness key or a report-only line with a risk is refused | bash-only: `tools/gen.sh` |
 | gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check | bash-only: `tools/gen.sh` |
-| gen.sh: the README table matches data/owasp.tsv | bash-only: `tools/gen.sh` |
+| gen.sh: a bare command in the owasp-derive block is refused | bash-only: `tools/gen.sh` |
 
-Fleet (`tests/run.sh`'s "fleet mode (--all-users)" part, with the stand-ins it already uses:
-`GIRD_CHECK_FLEET_USERS`, `GIRD_CHECK_FLEET_LAUNCH` with `tests/fleet-launch.sh`, and
-`tests/fleet-flat.py` on `last.json`):
+Fleet (`tests/run.sh`'s "fleet mode (--all-users)" part, with the stand-ins it already uses):
 
-- fleet: an account's findings map to their risks in its row (`asha.owasp=ASI03 ASI04`)
-- fleet: a clear account has an empty owasp list and adds to no risk (needs a clear account in the
-  fixture: `itadmin` has an SSH key without a passphrase, so it is ASI03)
-- fleet: a not-checked account has no owasp field and is not counted (`accounts_not_checked`)
-- fleet: the terminal block counts accounts checked and names what was found
+- fleet: the account run prints exactly FL_KEYS, in order
+- fleet: an account's findings map to their risks in its row
+- fleet: a clear account has an empty owasp list and adds to no risk
+- fleet: a not-checked account has no owasp field and is not counted
+- fleet: the JSON counts accounts not checked and partly checked apart
+- fleet: the terminal block counts checked accounts and names what was found
 - fleet: the terminal block says how many accounts were not counted
-- fleet: a run with every account not checked has no owasp block, no `owasp=` and no inventory token
-- fleet: the Mac's incidents count as +mac; its possible signs carry no tag
-- fleet: the summary line ends with the owasp part; a run with nothing tagged has none. The existing
-  "--summary-to-stdout prints the one summary line" regex ends at `at=...Z$` and its fixture has
-  findings, so it gains the optional part.
-- fleet: the inventory value ends with the owasp token when it fits
-- fleet: a long inventory value drops the owasp token first and ends with +more
-- fleet: a value that fits only without the token (245 to 250 characters) still ends with +more
-- fleet: --inventory reads back a value with the owasp token
-- fleet: the account-run keys are unchanged (FL_KEYS equals the keys the account run prints)
+- fleet: the terminal block says how many accounts were partly checked
+- fleet: the summary line ends with the owasp part, its counts included
+- fleet: a failed save keeps the owasp part in the summary line (a state folder that cannot be made)
+- fleet: an update-level incident is labelled versions to update, not malware signs
+- fleet: a partly checked Mac still counts its incidents as +mac
+- fleet: the Mac's possible signs carry no tag
+- fleet: a run with no accounts has no owasp part, no token and an empty owasp object
+- fleet: --json and --hash-accounts carry the owasp object and each row's tags
+- fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back
+- fleet: a long inventory value drops the owasp token first and ends with +more (the existing run of
+  15 accounts)
+- fleet: an inventory value of 244 characters drops the token and ends with +more
+- fleet: an inventory value of 250 characters drops the token, is cut and ends with +more
+  (`fl_inv_fit`, cut out of `gird-fleet.sh` and called with a value of that length)
+- the existing "--summary-to-stdout prints the one summary line" regex allows the optional part
 
 Screenshots are not tests; remaking them is a step in the pull request.
 
@@ -464,19 +521,17 @@ Screenshots are not tests; remaking them is a step in the pull request.
 
 - `data/owasp.tsv` (new)
 - `tools/gen.sh`: validation, the `owasp` block for bash and PowerShell, the `owasp-derive` copy into
-  `gird-fleet.sh`, `owasp` in both block lists, the README and docs/fleet.md tables, the header comment
-- `gird-check.sh`: the generated `owasp` block; the `owasp-derive` block (`owasp_kinds`); the
-  account-run field values moved into a function before the `ACCTRUN` block; the OWASP line after
-  `cline 05`; the line at the end of `HEAD_FULL` (before `HEAD_FULL="$HEAD_SHORT$CAP"`); a line after
-  each `section 01` to `section 05` rule
-- `gird-check.ps1`: the generated `owasp` block; `Owasp-Kinds`; the line after `CLine '05'`; the line
-  in `$HeadFull`; a line in each `Section '01'` to `'05'`
-- `gird-fleet.sh`: the two generated blocks; `FA_update` renamed `FA_tools` in `fl_parse` and its
-  readers; per-account tags in `fleet_main`; the Mac's tags after `fl_machine`; the `owasp` JSON
-  object, row and machine fields; the terminal block; `SUMMARY` (both assignments); the inventory
-  token and the `cut0` change to the truncation awk
-- `tests/run.sh`, `tests/run-ps.sh`, `tests/bash-only.txt`, `tests/fleet-flat.py`, and
-  `tests/make-fixture.sh` if a clear account or a narrow-width case needs fixture data
+  `gird-fleet.sh` and its bare-command check, `owasp` in both block lists, the act-level rule for
+  `data/indicators.tsv`, the header comment
+- `gird-check.sh`: the generated `owasp` block; the `owasp-derive` block (`owasp_set`, `owasp_kinds`);
+  `finding_fields`, before the `ACCTRUN` block; the OWASP line after `cline 05`; the line at the end of
+  `HEAD_FULL`; `owasp_sec` after each `section 01` to `section 05`
+- `gird-check.ps1`: the generated `owasp` block; `$IndHits`; `Owasp-Set`, `$OwFound`, `$OwCodes`,
+  `Owasp-Sec`; the line after `CLine '05'`; the line in `$HeadFull`; `Owasp-Sec` after each `Section`
+- `gird-fleet.sh`: the two generated blocks; `FA_update` renamed `FA_tools`; `fl_codes`, `fl_owasp`,
+  `fl_inv_fit`; per-account tags and `N_PART` in `fleet_main`; the Mac's tags; the `owasp` JSON
+  object, row and machine fields; the terminal block; `SUMMARY` (both assignments); the inventory token
+- `tests/run.sh`, `tests/run-ps.sh`, `tests/bash-only.txt`, `tests/fleet-flat.py`, `tests/make-fixture.sh`
 - `README.md`, `docs/report.png`, `docs/report-full.png` (via `tools/screenshots.sh`)
 - `docs/fleet.md`, `docs/mdm/jamf.md`, `docs/mdm/intune.md`, `docs/mdm/iru.md`
 - `docs/designs/fleet-mode.md`, `CHANGELOG.md`, `CONTRIBUTING.md`
@@ -494,16 +549,19 @@ Screenshots are not tests; remaking them is a step in the pull request.
   the source.
 - **A platform found is not a confirmed leak.** `platforms_found` means the platform's CLI or files
   are on the machine. The tag sits beside that row's own words ("found"); it does not upgrade it.
-- **The two reports drift.** The person's report and fleet mode derive from the same field rule
-  (one function, copied), and `gen.sh` refuses report-only kinds with a risk, so one account's tags
-  are the same in both. The PowerShell report is held to bash's by the twin tests.
+- **The two reports drift.** The person's report and fleet mode derive tags by the same rule from each
+  run's values (one function, copied), and `gen.sh` refuses report-only kinds with a risk. The
+  PowerShell report is a second implementation of the rule, held to bash's by twin tests on a home
+  that carries every finding kind.
+- **Read as clean for an account that was partly read.** A risk count says how many checked accounts
+  have it; the accounts not checked and partly checked are counted beside it on every surface.
 - **Inventory budget.** On a busy Mac the value is often over 250 characters already, so the token
   is often dropped. That is by design (the outcome and accounts matter more), and `+more` says so.
 - **Summary line parsers.** An MDM script that matches the summary line to its end (as the test
   does) needs the new part allowed. It is appended last so a parser reading from the start is not
   affected; the CHANGELOG says so.
-- **bash 3.2.** No associative arrays: the per-risk counts are built by one `awk` over a list of
-  account-risk-kind lines, as `fleet_main` already does for the inventory.
+- **bash 3.2.** No associative arrays: the per-risk counts are built by one `awk` (`fl_owasp`) over a
+  list of row-risk-kind lines, as `fleet_main` already does for the inventory.
 
 ## Open questions
 
@@ -529,3 +587,22 @@ Screenshots are not tests; remaking them is a step in the pull request.
 4. Files a worm plants carry ASI04 only: one risk per finding kind.
 5. The fleet count is "N of M checked accounts", with not-checked accounts on a separate line.
 6. The README and docs/fleet.md keep hand-written tags in this change. A generated page of every check, made by `tools/gen.sh` from `data/`, is a separate change and will include the mapping table.
+
+## Changes from the plan review
+
+- Accounts not checked are those whose check never ran (`N_NC_RUN`); accounts partly checked are
+  counted apart (`accounts_partly_checked`, a terminal line, `partial:` and `partial` in the summary
+  and inventory), and the summary and inventory carry `counted` (and `not_counted` when above 0), so
+  no count reads as other accounts being free of a risk.
+- The README and docs/fleet.md tags are hand-written, with a test that every code, name and label of
+  `data/owasp.tsv` is in both (decision 6). `gen.sh` writes no doc table.
+- `gird-check.ps1`'s derivation is tested in full: one fixture with every finding kind, the full set of
+  section lines and the summary line asserted in both suites, and the order of two risks in one
+  section.
+- Root reads fixed `FA_<key>` names (no prefix argument, `eval` or `${!name}`), and `gen.sh` refuses a
+  bare external command in the `owasp-derive` block.
+- The failed-save rewrite of `SUMMARY` keeps the OWASP part, with a test.
+- `incidents:update` is defined as "level is not act"; the Mac's incidents are act level by a `gen.sh`
+  rule on `data/indicators.tsv`; `machine:<field>` is checked against the `machine` object's fields;
+  "platforms with a leak" replaces "platforms that leaked secrets"; filter examples use `owasp ASI03`;
+  tags are gathered by account row number.
