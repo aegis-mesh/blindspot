@@ -90,6 +90,12 @@ sed 's/^    case "\${_oo_m#\* }" in ?\[2367\]?|??\[2367\]) return 1 ;; esac$/   
 if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
 else bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "$(cat "$WORK/ow.txt")"; fi
+# docs/checks.md lists what the data files hold: a hand edit to its generated block is drift.
+mkdir -p "$WORK/ck"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data docs "$WORK/ck/"
+awk '/^- `axios` / { print "- `axios` 0.0.0"; next } { print }' docs/checks.md > "$WORK/ck/docs/checks.md"
+if cmp -s docs/checks.md "$WORK/ck/docs/checks.md"; then bad "a hand edit to the lists in docs/checks.md fails gen.sh --check" "the edit did not apply"
+elif ! (cd "$WORK/ck" && bash tools/gen.sh --check > "$WORK/ck.txt" 2>&1) && grep -q 'docs/checks.md is out of date' "$WORK/ck.txt"; then ok "a hand edit to the lists in docs/checks.md fails gen.sh --check"
+else bad "a hand edit to the lists in docs/checks.md fails gen.sh --check" "$(cat "$WORK/ck.txt")"; fi
 
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
