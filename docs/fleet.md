@@ -244,14 +244,14 @@ is not a regular file or is over 16 MB, or agent sessions not all checked.
 The summary line:
 
 ```
-blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:12:00Z
+blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:12:00Z owasp=ASI03:1,ASI04:1;counted:1;not_counted:1
 ```
 
 The inventory value is one line with each account's outcome and what was found, never a path, file
 name or key:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear | owasp ASI03:1,ASI04:1; counted 2
 ```
 
 If it would be too long, it keeps the accounts that need attention first (`act`, then `not_checked`,
@@ -266,6 +266,31 @@ as not checked. An account whose name Blindspot does not read shows as `invalid-
 
 To find the Macs to deal with first, filter the inventory field for values starting `v1 act`, then
 `v1 not_checked`, `failed` and `stale`.
+
+### OWASP Agentic Top 10 tags
+
+Each finding is tagged with the risk of the
+[OWASP Top 10 for Agentic Applications (2026)](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/)
+it falls under. The mapping is Blindspot's own, not OWASP's, and covers ASI02 to ASI05 only, the
+risks files on disk can show; "What it checks for each account" below lists it. The tags count
+accounts:
+
+- **Accounts counted** are those whose check ran. An account not checked (its check never ran, or was
+  refused) has no tags and is in no count. An account partly checked is tagged with what was found,
+  which can be less than is there.
+- The summary line ends with `owasp=`, each risk with how many counted accounts have it and `+mac`
+  when the Mac's own check found it, then `counted:`, and `not_counted:` and `partial:` when either
+  is above 0. The inventory value ends with the same, as `owasp ...; counted 2`.
+- `last.json` has an `owasp` object: `accounts_counted`, `accounts_not_checked`,
+  `accounts_partly_checked`, and `risks`, each with its `id`, `name`, `accounts`, `machine` and the
+  `findings` (the JSON fields) that carry it. Each checked account's row, and the `machine` object,
+  has an `owasp` list of its risks.
+- In the inventory value the `owasp` part is the first thing cut, so a long value often has none; it
+  then ends with `+more`, and the tags are in `last.json`.
+- No `owasp` part means nothing was tagged, never that the Mac is clear: read the outcome for that.
+
+To find the Macs with a risk, filter the inventory field for values containing `owasp ASI03`, never
+a bare `ASI03`.
 
 ## 5. Act on a finding
 
@@ -353,5 +378,19 @@ does not answer in time, the Mac reads partly checked. Those are the only runnin
 name for any startup file `data/indicators.tsv` lists outside a home folder; for macOS there are none
 today. Nothing in these places is read or run.
 
+Each kind of finding and its OWASP tag, written out here by hand from `data/owasp.tsv` (a test holds
+the two together):
+
+| Risk | Tagged on |
+|---|---|
+| ASI02 Tool Misuse and Exploitation | run without asking |
+| ASI03 Identity and Privilege Abuse | tokens in MCP configs, links to authorized_keys, keys in plain text, keys in shell history, keys in agent sessions, SSH keys without a passphrase, keys in allow lists |
+| ASI04 Agentic Supply Chain Vulnerabilities | tools with a security fix, malware signs (an account's, or the Mac's own), versions to update, gh-token-monitor, files a worm plants, npm malware in a lockfile, Python versions to update, extensions to remove, platforms with a leak |
+| ASI05 Unexpected Code Execution | settings that act on opening |
+
+Possible signs, files named like a worm's to read, markers in the shared `/tmp`, the agents found,
+and anything partly checked or not read carry no tag.
+
 The design, with what it does not cover, is in
-[docs/designs/fleet-mode.md](designs/fleet-mode.md).
+[docs/designs/fleet-mode.md](designs/fleet-mode.md); the OWASP tags in
+[docs/designs/owasp.md](designs/owasp.md).

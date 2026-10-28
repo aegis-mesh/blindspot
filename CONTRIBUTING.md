@@ -35,7 +35,7 @@ Every change has to keep these true. Reviews check them first.
 
 ## Lists live in `data/`
 
-The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project, the hosted platforms that leaked stored secrets, the agent settings that run commands without asking, the agent versions with a published security fix and the editor extensions that shipped malware each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts; edit the data file, never the generated block between `# >>> name` and `# <<< name`. `tests/run.sh` fails if a script and its data file disagree.
+The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project, the hosted platforms that leaked stored secrets, the agent settings that run commands without asking, the agent versions with a published security fix, the editor extensions that shipped malware and the OWASP Agentic Top 10 risk of each kind of finding (`data/owasp.tsv`) each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts; edit the data file, never the generated block between `# >>> name` and `# <<< name`. `tests/run.sh` fails if a script and its data file disagree.
 
 ## Add an agent
 
@@ -65,7 +65,7 @@ A new incident of a kind Blindspot already checks is data lines only: add its li
 - **An agent version with a published security fix**: one line per place the version is read in `data/outdated.tsv`: how it is read (an Info.plist, a version folder, an npm package or an MCP config's `name@version`), the affected range, what the hole allows and the advisory. A tool can have a line per advisory, and needs one for its newest fix: its row says to update to the highest fixed version among the lines the installed version falls under, or to a later fix when another line of the tool covers that one, and shows each of their holes. Read the advisories the vendor's repository publishes as well as GitHub's database and OSV: a repository can publish one the other two don't list.
 - **A hosted platform that leaked stored secrets**: one line in `data/platforms.tsv`: the incident id, whose level must be `leak`, the row's name, its commands and paths, its row word and advice, and its summary row. The shared fix names it from `data/incidents.tsv`. A leak has no packages, extensions or files to look for: `gen.sh` refuses them.
 
-A new kind of check (a new file format, a running process, a registry value) is code: add it to section 5 of both scripts, a fixture to the tests, and a line to "What to do".
+A new kind of check (a new file format, a running process, a registry value) is code: add it to section 5 of both scripts, a fixture to the tests, and a line to "What to do". A new kind of finding also needs its line in `data/owasp.tsv`, with its OWASP risk or the reason it has none: a new field the account run sends to `gird-fleet.sh` (`FL_KEYS`) is refused by `gen.sh` until it has one, and a risk needs the field's arm in `owasp_set` in `gird-check.sh` and its value in `Owasp-Set` in `gird-check.ps1`. The tags in README.md and docs/fleet.md are written by hand; a test checks they name every risk and label in the file.
 
 ## Review checklist
 

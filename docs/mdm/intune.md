@@ -78,7 +78,7 @@ In **Custom attributes** > `Blindspot` > **Device status**, the **Result** colum
 Mac, such as:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear | owasp ASI03:1,ASI04:1; counted 2
 ```
 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see

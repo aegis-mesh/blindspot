@@ -78,14 +78,15 @@ After a Mac has run the policy and then submitted inventory, the `Blindspot` ext
 shows one line, such as:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear | owasp ASI03:1,ASI04:1; counted 2
 ```
 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
 `none` means the check has not run yet, `failed` means the last run stopped part-way, and
 `unreadable` means the saved result could not be trusted. Treat each of those, and an empty value, as not checked. The extension attribute can be used
-as smart group criteria, for example values that start with `v1 act`.
+as smart group criteria, for example values that start with `v1 act`, or that contain `owasp ASI03`
+for the Macs with a finding tagged with that OWASP risk ([docs/fleet.md](../fleet.md#owasp-agentic-top-10-tags)).
 
 ## Jamf's limits
 

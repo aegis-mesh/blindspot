@@ -135,7 +135,8 @@ today, and no file paths, file names or key values:
       "incidents": [{"id": "tanstack", "level": "act"}]
     }
   ],
-  "machine": { "complete": true, "agents": [], "incidents": [] }
+  "machine": { "complete": true, "agents": [], "incidents": [] },
+  "owasp": { "accounts_counted": 1, "accounts_not_checked": 0, "accounts_partly_checked": 0, "risks": [] }
 }
 ```
 
@@ -144,13 +145,18 @@ today, and no file paths, file names or key values:
 - `outcome` is the worst of `failed`, `act`, `not_checked`, `review`, `clear`, in that order, so a
   finding to act on is never hidden by a partial check, and a partial check never reads as clear.
 - The summary line is `blindspot <outcome> accounts=<n> act=<n> review=<n> not_checked=<n>
-  v=<script version> at=<UTC time>`.
+  v=<script version> at=<UTC time>`, then, when a finding is tagged with an OWASP Agentic Top 10
+  risk, ` owasp=<risk>:<accounts>[+mac],...;counted:<n>` with `;not_counted:<n>` and `;partial:<n>`
+  when above 0. Each checked account's row and the `machine` object carry an `owasp` list, and the
+  top-level `owasp` object counts accounts counted, not checked and partly checked beside the risks.
+  The mapping and every surface are in [owasp.md](owasp.md).
 - The inventory value is a compact form of the whole result, one line, short enough for an MDM's
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
   `v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; run-without-asking claude-code; keys 2
   anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. If it would not fit, it keeps the
   outcome, then the accounts that need attention first (act, not_checked, review), then as many
-  clear ones as fit, and ends with `+more`; the full result is in the saved file.
+  clear ones as fit, and ends with `+more`; the full result is in the saved file. The OWASP token
+  (` | owasp ASI03:1; counted 1`) goes last and is the first thing cut (`fl_inv_fit`).
 - The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
   `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
   stopped running never shows an old `clear`.
@@ -280,6 +286,9 @@ real Mac.
 - Each outcome and exit code from a fixture that produces it, the order between them, and a run
   stopped part-way.
 - An MDM-like environment: no HOME, minimal PATH, working folder `/`, no terminal.
+- The OWASP tags: each row's and the Mac's, the counts of accounts not checked and partly checked,
+  the terminal block, the summary part (kept when the save fails), the inventory token and its cut at
+  244 and 250 characters, and a run with no accounts ([owasp.md](owasp.md), Tests).
 
 ## As built
 
