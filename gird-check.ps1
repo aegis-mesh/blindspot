@@ -6774,8 +6774,13 @@ foreach ($r in $IndOn) {
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if ($OnWindows) {
   try {
-    $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
-    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')) }; $rk.Close() }
+    $nvmp = $null
+    if ($env:GIRD_CHECK_TEST_RUNKEY) { $nvmp = $env:GIRD_CHECK_TEST_RUNKEY }   # tests only: no registry to fake off Windows
+    else {
+      $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
+      if ($rk) { $nvmp = $rk.GetValue('NvmProtocal'); $rk.Close() }
+    }
+    if ($null -ne $nvmp) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')); $IndHits.Add('mastra') }
   } catch { }
 }
 foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }

@@ -1380,6 +1380,14 @@ psrun "$WORK/wlad" OS=Windows_NT -- -Offline -Full > "$WORK/wlad.txt" 2>&1
 tr -s ' \n' '  ' < "$WORK/wlad.txt" > "$WORK/wlad1.txt"
 has    "Windows: gh-token-monitor's folder in LOCALAPPDATA is a waiting wiper" 'a wiper is waiting ~/AppData/Local/gh-token-monitor Don' "$WORK/wlad1.txt"
 has    "Windows: the stop deletes its scheduled task first" 'one command at a time: schtasks /Delete /TN gh-token-monitor /F Get-CimInstance' "$WORK/wlad1.txt"
+# The Mastra malware's Run key, on a Windows home with nothing else: a sign of the Mastra incident, ASI04.
+# There is no registry off Windows, so GIRD_CHECK_TEST_RUNKEY stands in for the value.
+mkdir -p "$WORK/wmk/AppData/Local/Temp"
+psrun "$WORK/wmk" OS=Windows_NT -- -Offline -Full > "$WORK/wmk0.txt" 2>&1
+psrun "$WORK/wmk" OS=Windows_NT 'GIRD_CHECK_TEST_RUNKEY=C:\Users\me\AppData\Local\nvm\protocal.cjs' -- -Offline -Full > "$WORK/wmk1.txt" 2>&1
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$WORK/wmk1.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && grep -aq 'NvmProtocal in your startup programs' "$WORK/wmk1.txt" && ! grep -aq 'OWASP\|NvmProtocal' "$WORK/wmk0.txt"
+then ok "owasp: the Mastra Run key on Windows tags section 05 with ASI04"; else bad "owasp: the Mastra Run key on Windows tags section 05 with ASI04" "$OW_ONE"; fi
 _u=$(unwaited "$WORK/wlad.txt")
 if grep -q 'ACT NOW: REMOVE GH-TOKEN-MONITOR' "$WORK/wlad.txt" && grep -q 'rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm.s cache with npm cache clean --force\. Only once gh-token-monitor' "$WORK/wlad1.txt" && [ -z "$_u" ]; then
   ok "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait"

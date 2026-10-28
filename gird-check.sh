@@ -7594,8 +7594,8 @@ $IND_TABLE
 EOF
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if [ "$WIN" -eq 1 ]; then
-  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra malware at login
-"
+  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && { PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra malware at login
+"; IND_HITS="$IND_HITS mastra"; }
 fi
 [ -n "$WORM_HIT" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_HIT" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
 "
