@@ -372,6 +372,7 @@ fleet: a failed save keeps the owasp part in the summary line	gird-check.ps1 has
 fleet: --json and --hash-accounts carry the owasp object and each row's tags	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: an update-level incident is labelled versions to update, not malware signs	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: each risk in the inventory value carries its own owasp. prefix	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a run with no accounts has no owasp part, no token and an empty owasp object	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a partly checked Mac still counts its incidents as +mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: the Mac's possible signs carry no tag	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

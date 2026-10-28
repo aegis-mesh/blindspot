@@ -4440,6 +4440,11 @@ fl_run owinv
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FLEETSH" --inventory > "$FL/owinv-read.out" 2>&1
 if grep -qE '^inventory=v1 review 20[0-9-]{8}T[0-9:]{5}Z \| itadmin: review ssh-open 1 \| owasp\.ASI03:1; counted 1$' "$FL/owinv.flat" && [ "$(cat "$FL/owinv-read.out")" = "$(sed -n 's/^inventory=//p' "$FL/owinv.flat")" ]
 then ok "fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back"; else bad "fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back" "$(cat "$FL/owinv-read.out")"; fi
+# Two risks: each carries its own prefix, so a filter for owasp.ASI04 finds the one listed second.
+users "itadmin:$U:$FL/itadmin:/bin/zsh" "mis:$U:$FL/mis:/bin/zsh"
+fl_run owinv2
+if grep -qE '^inventory=v1 review .* \| owasp\.ASI03:1 owasp\.ASI04:1; counted 2$' "$FL/owinv2.flat" && grep -qE '^summary=.* owasp=ASI03:1,ASI04:1;counted:2$' "$FL/owinv2.flat"
+then ok "fleet: each risk in the inventory value carries its own owasp. prefix"; else bad "fleet: each risk in the inventory value carries its own owasp. prefix" "$(grep -E '^(inventory|summary)=' "$FL/owinv2.flat" | tr '\n' ' ')"; fi
 # No accounts at all: nothing tagged, so no part, no token, and the object says so.
 : > "$FL/users.tsv"
 fl_run owno --json
