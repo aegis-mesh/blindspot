@@ -634,7 +634,8 @@ EOF
 # fl_inv_fit HEAD PARTS TOKEN: the inventory value, at most 250 characters. PARTS (" | name: outcome
 # details" each) as they fit, then the OWASP token, which is the first thing cut. Too long, it keeps the
 # accounts that need attention first, cuts details before accounts (an act account keeps
-# gh-token-monitor and its incidents), and ends with +more when anything was cut, the token included.
+# gh-token-monitor and its incidents), and ends with +more when anything was cut, the token included:
+# without it, HEAD and PARTS of 245 to 250 characters are rebuilt within 243, which cuts a part too.
 fl_inv_fit() {
   _fb="$1$2"; _ft=${3:+ | $3}
   if [ $(( ${#_fb} + ${#_ft} )) -le 250 ]; then printf '%s' "$_fb$_ft"; return; fi
@@ -642,7 +643,7 @@ fl_inv_fit() {
   # The accounts that need attention come first, act, then not_checked, then review, then as many
   # clear ones as fit. An account whose details don't fit keeps its outcome, and an act account its
   # wiper and incidents too.
-  printf '%s' "$2" | /usr/bin/awk -v head="$1" -v cut0="${_ft:+1}" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
+  printf '%s' "$2" | /usr/bin/awk -v head="$1" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
     { n = 0
       for (i = 2; i <= NF; i++) {
         split($i, p, " "); n++; full[n] = $i; base[n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5
@@ -650,7 +651,7 @@ fl_inv_fit() {
         if (p[2] == "act") { m = split(substr($i, length(base[n]) + 2), d, "; ")
           for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key[n] = key[n] (key[n] == base[n] ? " " : "; ") d[x] }
       }
-      out = head; cut = cut0 == 1; stop = 0
+      out = head; cut = 0; stop = 0
       for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) {
         if (length(out " | " full[j]) <= 243) { out = out " | " full[j]; continue }
         cut = 1

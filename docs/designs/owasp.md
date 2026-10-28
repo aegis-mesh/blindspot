@@ -404,9 +404,9 @@ rebuilds it within 243 characters and adds ` +more` (6), so at most 249. The ord
 3. `base` plus the token is 250 or less: use it.
 4. Otherwise the token is dropped, which counts as a cut:
    - `base` is 244 or less: `base +more`.
-   - `base` is longer: run the truncation awk, with a new `-v cut0=1` that makes it end with ` +more`
-     even if it cut nothing else. This also covers a `base` of 245 to 250 characters, which before
-     skipped the awk.
+   - `base` is longer: run the truncation awk. This also covers a `base` of 245 to 250 characters,
+     which before skipped the awk: rebuilt within 243 characters, it always loses at least part of a
+     detail or an account, so the awk's own cut ends it with ` +more`.
 
 So an account's outcome, wiper and incidents are never cut to make room for the token, and a value
 that lost the token always says `+more`. The full tags are in `last.json`.
