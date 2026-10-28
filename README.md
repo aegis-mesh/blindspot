@@ -20,7 +20,7 @@ Blindspot shows you:
 
 You get a one-screen summary and the first thing to fix.
 
-**Safe to run.** It only reads. It never prints a key, never uses sudo, and never starts an agent, an MCP server or Python. It takes under a minute. With `--offline` it shares nothing.
+**Safe to run.** It only reads your files. It never prints a key, never uses sudo, and never starts an agent, an MCP server or Python. It takes under a minute. With `--offline` it shares nothing.
 
 ## Run it
 

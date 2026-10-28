@@ -10,7 +10,8 @@ and signs of recent malware. Your MDM runs it daily and shows one line per Mac. 
 - It reads files and changes nothing in any home folder.
 - It sends nothing anywhere. It makes no network request.
 - It keeps one result on the Mac, `/var/db/blindspot/last.json`, readable by root only. The result
-  holds counts and names from fixed lists, never a path, a file name or a key.
+  holds counts and names from fixed lists, never a path, a file name or a key. A few other files can
+  remain: [what can be left behind](fleet-reference.md#files-that-can-be-left-behind).
 
 The install step and the [MDM pages](mdm/) have not yet been run end to end on a real Mac.
 
@@ -35,6 +36,7 @@ The first word after `v1` is the Mac's outcome, the worst of its accounts:
 The field can also read `stale` (no run in 3 days), `none` (no run yet), `failed` (the last run stopped
 part-way or could not save) or `unreadable`. Treat each of those as not checked.
 
+The [full definitions](fleet-reference.md#outcomes-in-full) list everything each outcome covers.
 Start with the Macs whose value starts `v1 act`, then `v1 not_checked`, `failed` and `stale`.
 [What to do about each finding](fleet-reference.md#act-on-a-finding).
 
@@ -42,13 +44,15 @@ Start with the Macs whose value starts `v1 act`, then `v1 not_checked`, `failed`
 
 You need a tagged release of `gird-check.sh` and `gird-fleet.sh`, with the SHA-256 checked against
 the [release notes](https://github.com/aegis-mesh/blindspot/releases). Your MDM's agent needs Full
-Disk Access, or each account reads `not_checked`: the [page for your MDM](mdm/) says how.
+Disk Access, or each account reads `not_checked`: the [page for your MDM](mdm/) says how. Grant it to
+the MDM's agent, never to a shell such as `/bin/bash`
+([why](fleet-reference.md#full-disk-access)).
 
 ### 1. Install it once
 
 In the folder with both files, run this. It adds the daily options to a copy of `gird-fleet.sh`, then
 writes `blindspot-install.sh`, which installs both files in `/Library/Application Support/Blindspot`.
-Set `--deadline` to the number your MDM's page gives.
+If your MDM's page gives a different deadline, change `--deadline=3000` in the first line.
 
 ```sh
 opts='case " $* " in *" --inventory "*|*" --list "*|*" --help "*|*" -h "*) ;; *) set -- --all-users --exit-zero --summary-to-stdout --deadline=3000 ;; esac'
@@ -78,11 +82,13 @@ EOF
 } > blindspot-install.sh
 ```
 
-Have your MDM run `blindspot-install.sh` once, as root.
+Read `blindspot-install.sh` before you upload it: it is both files, unchanged, inside a few install
+lines. Have your MDM run it once, as root.
 
 ### 2. Run it daily
 
-The MDM's daily script is this one line:
+The MDM's daily script is this one line. `env -i` starts bash with an empty environment, so nothing
+the MDM's environment names, such as `BASH_ENV`, runs first:
 
 ```sh
 exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
