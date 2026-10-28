@@ -13,7 +13,7 @@ unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME CLAUDE_CONFIG_DIR CODEX_HOME 
   QWEN_HOME COPILOT_HOME CLINE_DIR CLINE_DATA_DIR CLINE_SESSION_DATA_DIR CONTINUE_GLOBAL_DIR GOOSE_PATH_ROOT KIRO_HOME
 CHROME=${CHROME:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
 WORK=$(mktemp -d); MOCK=""
-trap '[ -n "$MOCK" ] && { kill "$MOCK"; wait "$MOCK"; } 2>/dev/null; rm -rf "$WORK"' EXIT
+trap '[ -n "$MOCK" ] && { kill "$MOCK"; wait "$MOCK"; } 2>/dev/null || :; rm -rf "$WORK"' EXIT
 
 bash tests/make-fixture.sh "$WORK/home" "$WORK/keys.txt" >/dev/null
 # A typical machine, not the worst case: keys, MCP tokens and keys in agent sessions, no malware.
@@ -104,6 +104,9 @@ def render(raw):
                 if dim: style += 'opacity:.62;'
                 buf += '<span style="%s">%s</span>' % (style, html.escape(part)) if style else html.escape(part)
         out.append(buf)
+    # A progress line redraws itself by moving the cursor up, which this drops, so every spinner frame
+    # would stay as its own line: drop any line that starts with one.
+    out = [l for l in out if not re.match(r'\s*[\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f]', re.sub('<[^>]+>', '', l))]
     out = [l for l in out if not re.search(r'Checking your agents, configs and keys|Comparing with other AI builders', l)]
     out = [re.sub(r'(q quit</span>|q quit)\s*q+\s*$', r'\1', l) for l in out]
     out = [l for i, l in enumerate(out) if not (i and not re.sub('<[^>]+>', '', l).strip() and not re.sub('<[^>]+>', '', out[i - 1]).strip())]
