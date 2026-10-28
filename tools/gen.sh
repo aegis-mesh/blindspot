@@ -6,8 +6,9 @@
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
-# versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check.
+# versions with a published fix (data/outdated.tsv), extensions that shipped malware
+# (data/bad-extensions.tsv) and the OWASP Agentic Top 10 risk of each kind of finding
+# (data/owasp.tsv). The scripts stay single files people can download and check.
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -78,7 +79,9 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if ($3 == "startup" && index(py, " " $1 " ") > 0) ok = ok && $4 == "no" && $5 ~ /^~\//
           if ($3 == "site") ok = ok && $5 ~ /^[A-Za-z0-9._-]+$/
           if ($3 == "temp") ok = ok && $5 ~ /^[A-Za-z0-9._-]+\*?$/
-          if ($3 ~ /^(site|temp)$/) ok = ok && $5 !~ /^\.+\*?$/ && index(acts, " " $1 " ") > 0
+          if ($3 ~ /^(site|temp)$/) ok = ok && $5 !~ /^\.+\*?$/
+          # Every file here is a sign of malware, act level: fleet mode tags those of the Mac as malware signs.
+          ok = ok && index(acts, " " $1 " ") > 0
           if ($3 ~ /^(startup|temp)$/) ok = ok && $6 != "-" && $6 != "" && $6 !~ /["`$|\\]/; else ok = ok && $6 == "-"
           if ($3 == "temp") { if (($1 in tn) && tn[$1] != $6) ok = 0; tn[$1] = $6 }
           if (!ok) print "data/indicators.tsv: " $0 }'
@@ -131,6 +134,68 @@ bad="$bad${bad:+${_na:+
 _nn=$(rows data/bad-npm.tsv | grep -c .)
 [ "$_nn" -le 4000 ] || bad="${bad:+$bad
 }data/bad-npm.tsv: $_nn lines, more than the 4,000 gird-check.sh hands to awk (BAD_NPM_P1 to BAD_NPM_P4)"
+# data/owasp.tsv: every kind of finding and its risk. Every key the account run sends (FL_KEYS in
+# gird-fleet.sh) has one line, incidents two (incidents:act and incidents:update, split by level), and
+# every field of the Mac's own (MACHINE in gird-fleet.sh, but for complete, outcome and owasp) one, so a
+# new field cannot ship without a decision on its risk. A completeness or protocol key, a report-only
+# line (root never sees it, so the two reports would disagree) and any Mac field but incidents (the one
+# root tags) never carry a risk. A source with a risk needs an arm in owasp_set (gird-check.sh's
+# owasp-derive block), or it would never be tagged.
+OW_SED_KEYS='s/^FL_KEYS="\([a-z_ ]*\)"$/\1/p'
+OW_SED_MF='s/^  MACHINE="{\(.*\)}"$/\1/p'
+OW_SED_ARMS='s/^    \([a-z_:|]*\))\( .*\)\{0,1\}$/\1/p'
+OW_KEYS=" $(sed -n "$OW_SED_KEYS" gird-fleet.sh 2>/dev/null) "
+OW_MF=" $(sed -n "$OW_SED_MF" gird-fleet.sh 2>/dev/null | grep -oE '\\"[a-z_]+\\":' | tr -d '\\":' | grep -vxE 'complete|outcome|owasp' | tr '\n' ' ')"
+OW_ARMS=" $(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive$/ { on = 0 } on && /^owasp_set/ { in_set = 1 } in_set && /^}/ { in_set = 0 } in_set' gird-check.sh |
+  sed -n "$OW_SED_ARMS" | tr '|' '\n' | tr '\n' ' ')"
+[ "$OW_KEYS" != "  " ] || bad="${bad:+$bad
+}data/owasp.tsv: gird-fleet.sh has no FL_KEYS line to check it against"
+_ow=$(rows data/owasp.tsv | awk -F '\t' -v keys="$OW_KEYS" -v mf="$OW_MF" -v arms="$OW_ARMS" '
+  function has(list, x) { return index(list, " " x " ") > 0 }
+  { ok = NF == 7 && $1 ~ /^[a-z0-9_.]+$/ && !seen[$1]++ && $2 ~ /^(ASI0[1-9]|ASI10|-)$/
+    if ($2 == "-") ok = ok && $3 == "-" && $4 == "-" && $5 == "-" && $7 != "-" && $7 != "" && $7 !~ /["`$|\\]/
+    else {
+      ok = ok && $3 ~ /^[A-Za-z0-9][A-Za-z0-9 -]*[A-Za-z0-9]$/ && $4 ~ /^[A-Za-z0-9][A-Za-z0-9 ,._-]*[A-Za-z0-9]$/ && length($4) <= 32 && $7 == "-"
+      if (($2 in nm) && nm[$2] != $3) ok = 0; nm[$2] = $3
+      ok = ok && (($6 ~ /^machine:/) ? $5 == "-" : $5 ~ /^0[1-5]$/)
+      ok = ok && $6 !~ /^(v|end|sessions_partial|not_read|moved|protected|engine|report)$/
+      if ($6 ~ /^machine:/) ok = ok && $6 == "machine:incidents"; else ok = ok && has(arms, $6)
+    }
+    if ($6 ~ /^machine:/) ok = ok && has(mf, substr($6, 9)) && $1 == "machine." substr($6, 9)
+    else ok = ok && ($6 == "report" || $6 == "incidents:act" || $6 == "incidents:update" || ($6 != "incidents" && has(keys, $6)))
+    if (!ok) print "data/owasp.tsv: " $0
+    src[$6]++ }
+  END {
+    n = split(keys, k, " "); for (i = 1; i <= n; i++) if (k[i] == "incidents") { if (src["incidents:act"] != 1 || src["incidents:update"] != 1) print "data/owasp.tsv: incidents needs one incidents:act line and one incidents:update line" }
+      else if (src[k[i]] != 1) print "data/owasp.tsv: the account-run key " k[i] " needs exactly one line"
+    n = split(mf, k, " "); for (i = 1; i <= n; i++) if (src["machine:" k[i]] != 1) print "data/owasp.tsv: the Mac field " k[i] " needs exactly one line"
+  }')
+bad="$bad${bad:+${_ow:+
+}}$_ow"
+# owasp_kinds runs as root in gird-fleet.sh's copy, so its block calls only builtins, functions the
+# generated blocks define, and tools by their full path, as root's own code does: a bare name would
+# run whatever the MDM's PATH holds. Single-quoted text and here-documents are skipped; each command
+# word after ; & | ( { $( and the shell keywords is checked; a ) only closes what is before it.
+# bash 3.2 miscounts the parentheses of a program inside $( ), so the program is set apart first.
+OD_AWK='
+  BEGIN { split("case esac for in do done while until if then else elif fi return printf read continue break [ test : true false local shift unset incident_level owasp_set owasp_kinds", a, " "); for (i in a) okw[a[i]] = 1 }
+  hd != "" { if ($0 == hd) hd = ""; next }
+  /^[[:space:]]*#/ { next }
+  { l = $0
+    if (match(l, /<<-?[A-Z]+[[:space:]]*$/)) { hd = substr(l, RSTART + 2); sub(/^-/, "", hd); sub(/[[:space:]]+$/, "", hd); l = substr(l, 1, RSTART - 1) }
+    gsub(/\047[^\047]*\047/, "Q", l); gsub(/"/, " ", l)
+    sub(/^[[:space:]]*[^[:space:]()]*\)/, ";", l)
+    gsub(/\)/, " ", l); gsub(/\$\(|&&|\|\||;;|[;|&{}(`]/, ";", l)
+    m = split(l, seg, ";")
+    for (j = 1; j <= m; j++) {
+      w = split(seg[j], wd, " "); x = 1
+      while (x <= w && (wd[x] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || wd[x] ~ /^(!|then|do|else|elif|if|while|until)$/)) x++
+      if (x > w) continue
+      if (!(wd[x] in okw) && wd[x] !~ /^\//) print "gird-check.sh, owasp-derive block, runs a bare command (" wd[x] "): root runs this block, so call a builtin or a full path: " $0
+    } }'
+_od=$(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive$/ { on = 0 } on' gird-check.sh | awk "$OD_AWK")
+bad="$bad${bad:+${_od:+
+}}$_od"
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
 
 # Path tokens (see data/sessions.tsv) as bash and as PowerShell. A trailing / is kept in bash.
@@ -397,6 +462,17 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   { print $1 " " $2 " " $3 " " $4 " " $5 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
+# --- the OWASP Agentic Top 10 risk of each kind of finding ------------------------------
+# Rows are kind|risk|name|label|section|source, the kinds with a risk only, in the data file's order.
+rows data/owasp.tsv | awk -F '\t' '
+  BEGIN { print "# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it."; printf "OWASP_TABLE=\"" }
+  $2 != "-" { printf "%s%s|%s|%s|%s|%s|%s", (n++ ? "\n" : ""), $1, $2, $3, $4, $5, $6 }
+  END { print "\""; print "# <<< owasp" }' > "$WORK/owasp.sh"
+rows data/owasp.tsv | awk -F '\t' '
+  BEGIN { print "# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it."; print "$OwaspTable = @(" }
+  $2 != "-" { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", $1, $2, $3, $4, $5, $6 }
+  END { print ")"; print "# <<< owasp" }' > "$WORK/owasp.ps1"
+
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
   awk -v name="$2" -v gen="$3" '
@@ -405,7 +481,7 @@ splice() { # file block-name generated-file
     !skip { print }
     END { if (!found) { print "no \"# >>> " name "\" marker" > "/dev/stderr"; exit 3 } }' "$1"
 }
-# --- the agents table and the ownership walk, for gird-fleet.sh ---------------------
+# --- the agents table, the ownership walk and the OWASP tagging, for gird-fleet.sh ----------
 # Their home is gird-check.sh; root in gird-fleet.sh runs the same copies.
 awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< agents$/ { exit }' gird-check.sh > "$WORK/agents.sh"
@@ -413,11 +489,14 @@ grep -q '^# <<< agents$' "$WORK/agents.sh" || { echo "gird-check.sh has no agent
 awk '/^# >>> owned-walk[: ]/ { on = 1; print "# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< owned-walk$/ { exit }' gird-check.sh > "$WORK/owned-walk.sh"
 grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has no owned-walk block"; exit 1; }
+awk '/^# >>> owasp-derive[: ]/ { on = 1; print "# >>> owasp-derive: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< owasp-derive$/ { exit }' gird-check.sh > "$WORK/owasp-derive.sh"
+grep -q '^# <<< owasp-derive$' "$WORK/owasp-derive.sh" || { echo "gird-check.sh has no owasp-derive block"; exit 1; }
 
 RC=0
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
-  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
-  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
+  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms owasp owasp-derive"
+  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms owasp"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }
