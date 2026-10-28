@@ -3213,6 +3213,9 @@ hasnot "the percentile line carries no count"  'of 1,234 AI builders' "$OUT"
 if python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1]) if l.strip()]' "$WORK/received.log" 2>/dev/null; then ok "the report is valid JSON"; else bad "the report is valid JSON"; fi
 has    "the device ID is a 64-character hash or empty" '"device_id":"([0-9a-f]{64})?"' "$WORK/report-ps.json"
 if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
+# The run shows its OWASP tags, and the shared counts carry none of them, nor does the result link.
+if grep -aq '^   OWASP Agentic Top 10: ' "$OUT" && ! grep -aqiE 'owasp|ASI[0-9]' "$WORK/received.log" && ! grep -aE 'blindspot/card/' "$OUT" | grep -aqiE 'owasp|ASI[0-9]'
+then ok "owasp: the shared counts carry no OWASP field"; else bad "owasp: the shared counts carry no OWASP field"; fi
 RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/report-ps.json" | cut -d'"' -f4)
 has    "the result link carries the percentile" 'blindspot/card/#v=2&s=[0-9]+&g=[ABCDF]&.*&pc=72&pn=1234' "$OUT"
 has    "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=2&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]&lo=[01]&fi=[a-z0-9.-]*\$" "$OUT"
@@ -3375,6 +3378,72 @@ hasnot "no report holds a server label as written"     '@modelcontextprotocol|MC
 hasnot "no report holds a file name" '\.zshrc|zsh_history|python_history|bash_profile|\.env|\.mcp|mcp\.json|config\.(toml|yaml)|cline_mcp|claude_desktop|settings(\.local)?\.json|\.aider|PSReadLine|ConsoleHost' "$WORK/received.log"
 hasnot "no report holds a path"                        '/(Users|home|private|tmp|var)/|~/|AppData' "$WORK/received.log"
 nokeys "no report holds the extra planted keys" "$WORK/keys-places.txt" "$WORK/received.log"
+
+echo "OWASP Agentic Top 10 tags"
+# The twins of tests/run.sh's: gird-check.ps1 derives its tags from its own values, a second
+# implementation of owasp_set, so the home with every finding kind must give the same lines.
+OW=$WORK/ow; mkdir -p "$OW"
+bash tests/make-fixture.sh "$OW/all" "$OW/keys-all.txt" owasp > /dev/null; winify "$OW/all" "$OW/keys-all.txt"
+psrun "$OW/all" -- -Offline > "$OW/all.txt" 2>&1
+psrun "$OW/all" GIRD_CHECK_COMPACT=1 -- -Offline > "$OW/all-compact.txt" 2>&1
+psrun "$OW/all" GIRD_CHECK_COMPACT=1 -- -Offline -Full > "$OW/all-full.txt" 2>&1
+OW_WANT='01|     OWASP ASI02 Tool Misuse and Exploitation
+01|     OWASP ASI04 Agentic Supply Chain Vulnerabilities
+02|     OWASP ASI03 Identity and Privilege Abuse
+02|     OWASP ASI05 Unexpected Code Execution
+03|     OWASP ASI03 Identity and Privilege Abuse
+04|     OWASP ASI03 Identity and Privilege Abuse
+05|     OWASP ASI04 Agentic Supply Chain Vulnerabilities'
+OW_GOT=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s "|" $0 }' "$OW/all.txt")
+if [ "$OW_GOT" = "$OW_WANT" ]; then ok "owasp: a home with every finding kind gets exactly the section lines of its risks"
+else bad "owasp: a home with every finding kind gets exactly the section lines of its risks" "$(printf '%s' "$OW_GOT" | tr '\n' ';')"; fi
+if awk '/^  01  CODING AGENTS/ { s = 1 } /^  02  MCP SERVERS/ { s = 2 } /^  03  / { s = 3 }
+  s == 1 && /OWASP ASI02/ { a = NR } s == 1 && /OWASP ASI04/ { b = NR } s == 2 && /OWASP ASI03/ { c = NR } s == 2 && /OWASP ASI05/ { d = NR }
+  END { exit !(a && b && c && d && a < b && c < d) }' "$OW/all.txt"; then ok "owasp: two risks in one section print in code order"
+else bad "owasp: two risks in one section print in code order"; fi
+if awk '/^   05  / { r = NR } /^   OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR } /^   First fix: / { f = NR } END { exit !(r && o && f && r < o && o < f) }' "$OW/all-compact.txt"
+then ok "owasp: the summary lists every risk found, in code order, after row 05"; else bad "owasp: the summary lists every risk found, in code order, after row 05" "$(grep -a 'OWASP' "$OW/all-compact.txt")"; fi
+if awk '/^   0[1-5]  / { n[++k] = NR } /^   OWASP Agentic Top 10:/ { o = NR } END { exit !(k == 5 && n[5] - n[1] == 4 && o == n[5] + 2) }' "$OW/all-compact.txt"
+then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; else bad "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; fi
+if awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all.txt" \
+  && awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all-full.txt"
+then ok "owasp: --full and piped output carry the line at the end of the header"; else bad "owasp: --full and piped output carry the line at the end of the header"; fi
+if awk '/OWASP/ { n++; if (length($0) > 60) w = 1 } END { exit !(n >= 8 && !w) }' "$OW/all.txt"; then ok "owasp: every OWASP line fits the narrowest report, 60 columns"
+else bad "owasp: every OWASP line fits the narrowest report, 60 columns" "$(awk '/OWASP/ && length($0) > 60' "$OW/all.txt")"; fi
+# One kind each, as in tests/run.sh. Keys come from the fixture's random ones.
+mkdir -p "$OW/key"; printf 'export OPENAI_API_KEY=%s\n' "$(sed -n 2p "$WORK/keys.txt")" > "$OW/key/.zshrc"
+mkdir -p "$OW/yolo/.codex"; printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$OW/yolo/.codex/config.toml"
+mkdir -p "$OW/open/code/x/.claude"; printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"make setup"}]}]}}\n' > "$OW/open/code/x/.claude/settings.json"
+mkdir -p "$OW/lock/code/l"; printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$OW/lock/code/l/package-lock.json"
+mkdir -p "$OW/upd/code/m"; printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.2","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.2.tgz"}}}\n' > "$OW/upd/code/m/package-lock.json"
+mkdir -p "$OW/none"
+mkdir -p "$OW/part/code/locked"
+cp -R "$OW/key" "$OW/partf"; mkdir -p "$OW/partf/code/locked"
+mkdir -p "$OW/worm/code/p/.claude"; printf 'console.log("my own setup")\n' > "$OW/worm/code/p/.claude/setup.mjs"
+mkdir -p "$OW/login/.aws"; printf '[default]\nregion = eu-west-1\n' > "$OW/login/.aws/credentials"
+for h in key yolo open lock upd none part partf worm login; do mkdir -p "$OW/$h/AppData/Roaming" "$OW/$h/AppData/Local/Temp"; done
+chmod 000 "$OW/part/code/locked" "$OW/partf/code/locked"
+for h in key yolo open lock upd none part partf worm login; do psrun "$OW/$h" -- -Offline > "$OW/$h.txt" 2>&1; done
+chmod 755 "$OW/part/code/locked" "$OW/partf/code/locked"
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/key.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI03;03 ASI03;" ]; then ok "owasp: a key in plain text tags section 03 with ASI03"; else bad "owasp: a key in plain text tags section 03 with ASI03" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/yolo.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: run without asking tags section 01 with ASI02"; else bad "owasp: run without asking tags section 01 with ASI02" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/open.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: project settings that act on opening tag section 02 with ASI05"; else bad "owasp: project settings that act on opening tag section 02 with ASI05" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/lock.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && grep -aq 'LOCKFILE LISTS NPM MALWARE' "$OW/lock.txt"; then ok "owasp: npm malware in a lockfile alone tags section 05 with ASI04"; else bad "owasp: npm malware in a lockfile alone tags section 05 with ASI04" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/upd.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && ! grep -aq 'ACT NOW' "$OW/upd.txt"; then ok "owasp: an update-level incident alone tags section 05 with ASI04"; else bad "owasp: an update-level incident alone tags section 05 with ASI04" "$OW_ONE"; fi
+hasnot "owasp: a home with no findings has no OWASP line" 'OWASP' "$OW/none.txt"
+if grep -aq 'in your home could not be read' "$OW/part.txt" && ! grep -aq 'OWASP' "$OW/part.txt"; then ok "owasp: a partly checked home with no findings has no OWASP line and never says none"
+else bad "owasp: a partly checked home with no findings has no OWASP line and never says none" "$(grep -a 'OWASP\|could not be read' "$OW/part.txt" | head -n 3)"; fi
+if grep -aq 'in your home could not be read' "$OW/partf.txt" && grep -aq '^   OWASP Agentic Top 10: ASI03$' "$OW/partf.txt" && grep -aq '^     OWASP ASI03 Identity and Privilege Abuse$' "$OW/partf.txt"
+then ok "owasp: a partly checked home with findings keeps its tags"; else bad "owasp: a partly checked home with findings keeps its tags"; fi
+if grep -aq 'code/p/\.claude/setup\.mjs' "$OW/worm.txt" && ! grep -aq 'OWASP' "$OW/worm.txt"; then ok "owasp: a file named like a worm's, alone, carries no tag"
+else bad "owasp: a file named like a worm's, alone, carries no tag" "$(grep -a 'setup\.mjs\|OWASP' "$OW/worm.txt" | head -n 3)"; fi
+if grep -aq 'AWS keys' "$OW/login.txt" && ! grep -aq 'OWASP' "$OW/login.txt"; then ok "owasp: login files alone carry no tag"
+else bad "owasp: login files alone carry no tag" "$(grep -a 'AWS keys\|OWASP' "$OW/login.txt" | head -n 3)"; fi
 
 echo "a Windows profile"
 # The profile tests/run.sh builds for Git Bash, with OS=Windows_NT so gird-check.ps1 takes the

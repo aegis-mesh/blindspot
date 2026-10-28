@@ -339,3 +339,42 @@ fleet: a link at the ripgrep path is never followed	gird-check.ps1 has no fleet 
 fleet: a marker folder in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 a settings read whose awk fails names the file as not read	gird-check.ps1 reads settings with .NET, not awk
+owasp: every risk and label in data/owasp.tsv is in README.md and docs/fleet.md	it reads the docs, which neither script prints: one check of the data file against them is enough
+an OWASP risk outside ASI01 to ASI10	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+two names for one OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP line with no risk and no reason	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP label longer than 32 characters	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP line on a bare incidents source	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an account-run key with no OWASP line	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an account-run key with two OWASP lines	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a completeness key with an OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a report-only line with an OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Mac field other than incidents with an OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP risk on a source owasp_set has no arm for	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an indicator of an incident that is not act level	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a bare command in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: the same command by its full path is written into gird-fleet.sh	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+fleet: the account run prints exactly FL_KEYS, in order	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an account's findings map to their risks in its row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a clear account has an empty owasp list and adds to no risk	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a not-checked account has no owasp field and is not counted	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the JSON counts accounts not checked and partly checked apart	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the JSON lists each risk with its accounts and the kinds found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the terminal block counts checked accounts and names what was found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the terminal block says how many accounts were not counted	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the terminal block says how many accounts were partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the terminal block comes before where the result was saved	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the summary line ends with the owasp part, its counts included	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a long inventory value drops the owasp token first and ends with +more	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a failed save keeps the owasp part in the summary line	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: --json and --hash-accounts carry the owasp object and each row's tags	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an update-level incident is labelled versions to update, not malware signs	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a run with no accounts has no owasp part, no token and an empty owasp object	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a partly checked Mac still counts its incidents as +mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the Mac's possible signs carry no tag	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an inventory value of 244 characters drops the token and ends with +more	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an inventory value of 250 characters drops the token, is cut and ends with +more	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: an inventory value of 250 characters with no token is kept whole	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
