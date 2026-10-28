@@ -61,7 +61,8 @@ blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:1
 
 The word after `blindspot` is the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)); the `owasp=` part at the end names the OWASP
-risks found ([docs/fleet.md](../fleet.md#owasp-agentic-top-10-tags)). The status reads **Pass** whenever the check
+risks found ([docs/fleet.md](../fleet.md#owasp-agentic-top-10-tags)); to find the Macs with one,
+search the output for `ASI03:`. The status reads **Pass** whenever the check
 finished. **Error** means it could not run safely (`failed`); a missing summary line also means
 not checked.
 

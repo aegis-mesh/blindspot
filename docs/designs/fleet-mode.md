@@ -132,11 +132,22 @@ today, and no file paths, file names or key values:
       "history_keys": 1,
       "session_files_with_keys": 0,
       "ssh_keys_no_passphrase": 1,
-      "incidents": [{"id": "tanstack", "level": "act"}]
+      "incidents": [{"id": "tanstack", "level": "act"}],
+      "owasp": ["ASI02", "ASI03", "ASI04"]
     }
   ],
-  "machine": { "complete": true, "agents": [], "incidents": [] },
-  "owasp": { "accounts_counted": 1, "accounts_not_checked": 0, "accounts_partly_checked": 0, "risks": [] }
+  "machine": { "complete": true, "agents": [], "incidents": [], "owasp": [] },
+  "owasp": {
+    "accounts_counted": 1, "accounts_not_checked": 0, "accounts_partly_checked": 0,
+    "risks": [
+      {"id": "ASI02", "name": "Tool Misuse and Exploitation", "accounts": 1, "machine": false,
+       "findings": ["agents_run_without_asking"]},
+      {"id": "ASI03", "name": "Identity and Privilege Abuse", "accounts": 1, "machine": false,
+       "findings": ["mcp_token_files", "key_files", "history_keys", "ssh_keys_no_passphrase"]},
+      {"id": "ASI04", "name": "Agentic Supply Chain Vulnerabilities", "accounts": 1, "machine": false,
+       "findings": ["tools_to_update", "incidents"]}
+    ]
+  }
 }
 ```
 
@@ -155,8 +166,9 @@ today, and no file paths, file names or key values:
   `v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; run-without-asking claude-code; keys 2
   anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. If it would not fit, it keeps the
   outcome, then the accounts that need attention first (act, not_checked, review), then as many
-  clear ones as fit, and ends with `+more`; the full result is in the saved file. The OWASP token
-  (` | owasp ASI03:1; counted 1`) goes last and is the first thing cut (`fl_inv_fit`).
+  clear ones as fit, and ends with `+more`; the full result is in the saved file. The OWASP part
+  (` | owasp.ASI03:1; counted 1`) goes last, only when it fits with every account's part whole, so it
+  never cuts an account's content (`fl_inv_fit`).
 - The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
   `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
   stopped running never shows an old `clear`.
@@ -287,8 +299,8 @@ real Mac.
   stopped part-way.
 - An MDM-like environment: no HOME, minimal PATH, working folder `/`, no terminal.
 - The OWASP tags: each row's and the Mac's, the counts of accounts not checked and partly checked,
-  the terminal block, the summary part (kept when the save fails), the inventory token and its cut at
-  244 and 250 characters, and a run with no accounts ([owasp.md](owasp.md), Tests).
+  the terminal block, the summary part (kept when the save fails), the inventory token, left out with
+  no cut when a value of 244 to 250 characters has no room for it, and a run with no accounts ([owasp.md](owasp.md), Tests).
 
 ## As built
 

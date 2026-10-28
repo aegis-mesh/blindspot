@@ -251,7 +251,7 @@ The inventory value is one line with each account's outcome and what was found, 
 name or key:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear | owasp ASI03:1,ASI04:1; counted 2
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear | owasp.ASI03:1 owasp.ASI04:1; counted 2
 ```
 
 If it would be too long, it keeps the accounts that need attention first (`act`, then `not_checked`,
@@ -280,17 +280,23 @@ accounts:
   which can be less than is there.
 - The summary line ends with `owasp=`, each risk with how many counted accounts have it and `+mac`
   when the Mac's own check found it, then `counted:`, and `not_counted:` and `partial:` when either
-  is above 0. The inventory value ends with the same, as `owasp ...; counted 2`.
+  is above 0. A risk only the Mac has reads `ASI04:0+mac`: no counted account had it, the Mac's own
+  check did. The inventory value ends with the same, each risk written `owasp.<risk>:<accounts>`, as
+  `owasp.ASI03:1 owasp.ASI04:1; counted 2`, with `not-counted` and `partial` when above 0.
 - `last.json` has an `owasp` object: `accounts_counted`, `accounts_not_checked`,
   `accounts_partly_checked`, and `risks`, each with its `id`, `name`, `accounts`, `machine` and the
   `findings` (the JSON fields) that carry it. Each checked account's row, and the `machine` object,
   has an `owasp` list of its risks.
-- In the inventory value the `owasp` part is the first thing cut, so a long value often has none; it
-  then ends with `+more`, and the tags are in `last.json`.
-- No `owasp` part means nothing was tagged, never that the Mac is clear: read the outcome for that.
+- The inventory value gets the `owasp` part only when it fits in the value's 250 characters with
+  every account's part whole: it never costs an account any of its content. So a long value often
+  has none, and a value that was cut (it ends with `+more`) never has it. The summary line and
+  `last.json` always carry the tags.
+- No `owasp` part in the summary line means nothing was tagged, never that the Mac is clear: read the
+  outcome for that. No `owasp` part in the inventory value can also mean there was no room for it.
 
-To find the Macs with a risk, filter the inventory field for values containing `owasp ASI03`, never
-a bare `ASI03`.
+To find the Macs with a risk, filter the inventory field for values containing `owasp.ASI03`, or the
+summary line for `ASI03:`, never a bare `ASI03`. A Mac whose inventory value had no room for the
+part does not match the inventory filter, so use the summary line or `last.json` for a complete list.
 
 ## 5. Act on a finding
 
@@ -388,8 +394,9 @@ the two together):
 | ASI04 Agentic Supply Chain Vulnerabilities | tools with a security fix, malware signs (an account's, or the Mac's own), versions to update, gh-token-monitor, files a worm plants, npm malware in a lockfile, Python versions to update, extensions to remove, platforms with a leak |
 | ASI05 Unexpected Code Execution | settings that act on opening |
 
-Possible signs, files named like a worm's to read, markers in the shared `/tmp`, the agents found,
-and anything partly checked or not read carry no tag.
+Possible signs, files named like a worm's to read, markers in the shared `/tmp` and the agents found
+carry no tag. Completeness carries no tag itself (sessions partly checked, files not read), while the
+findings in a partly checked account keep their tags.
 
 The design, with what it does not cover, is in
 [docs/designs/fleet-mode.md](designs/fleet-mode.md); the OWASP tags in

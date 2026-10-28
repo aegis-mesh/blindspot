@@ -631,15 +631,17 @@ EOF
         for (i = 1; i <= n; i++) if ((r SUBSEP kd[i]) in hk) { ks = ks (ks == "" ? "" : " ") kd[i]; if (!(lb[i] in got)) { got[lb[i]] = 1; ls = ls (ls == "" ? "" : ", ") lb[i] } }
         print r "|" nm[r] "|" (cnt[r] + 0) "|" ((r in mac) ? 1 : 0) "|" ls "|" ks } }'
 }
-# fl_inv_fit HEAD PARTS TOKEN: the inventory value, at most 250 characters. PARTS (" | name: outcome
-# details" each) as they fit, then the OWASP token, which is the first thing cut. Too long, it keeps the
-# accounts that need attention first, cuts details before accounts (an act account keeps
-# gh-token-monitor and its incidents), and ends with +more when anything was cut, the token included:
-# without it, HEAD and PARTS of 245 to 250 characters are rebuilt within 243, which cuts a part too.
+# fl_inv_fit HEAD PARTS TOKEN: the inventory value, at most 250 characters. HEAD and PARTS (" | name:
+# outcome details" each) are kept whole when they fit; the OWASP token is added only when it fits too,
+# so it never costs an account any of its content. Too long, the value keeps the accounts that need
+# attention first, cuts details before accounts (an act account keeps gh-token-monitor and its
+# incidents), has no token and ends with +more.
 fl_inv_fit() {
   _fb="$1$2"; _ft=${3:+ | $3}
-  if [ $(( ${#_fb} + ${#_ft} )) -le 250 ]; then printf '%s' "$_fb$_ft"; return; fi
-  if [ -n "$_ft" ] && [ "${#_fb}" -le 244 ]; then printf '%s +more' "$_fb"; return; fi
+  if [ "${#_fb}" -le 250 ]; then
+    if [ $(( ${#_fb} + ${#_ft} )) -le 250 ]; then printf '%s' "$_fb$_ft"; else printf '%s' "$_fb"; fi
+    return
+  fi
   # The accounts that need attention come first, act, then not_checked, then review, then as many
   # clear ones as fit. An account whose details don't fit keeps its outcome, and an act account its
   # wiper and incidents too.
@@ -982,12 +984,13 @@ EOF
   while IFS='|' read -r _or _on _oa _om _ol _ok; do
     [ -n "$_or" ] || continue
     _owsum="${_owsum:+$_owsum,}$_or:$_oa$( [ "$_om" = 1 ] && printf '+mac')"
+    _owinv="${_owinv:+$_owinv }owasp.$_or:$_oa$( [ "$_om" = 1 ] && printf '+mac')"
     _owrj="${_owrj:+$_owrj,}{\"id\":\"$_or\",\"name\":\"$_on\",\"accounts\":$_oa,\"machine\":$( [ "$_om" = 1 ] && echo true || echo false),\"findings\":$(fl_json_list "$_ok")}"
   done <<EOF
 $OW_RISKS
 EOF
   if [ -n "$_owsum" ]; then
-    _owinv="owasp $_owsum; counted $N_COUNTED"; _owsum=" owasp=$_owsum;counted:$N_COUNTED"
+    _owinv="$_owinv; counted $N_COUNTED"; _owsum=" owasp=$_owsum;counted:$N_COUNTED"
     [ "$N_NC_RUN" -gt 0 ] && { _owsum="$_owsum;not_counted:$N_NC_RUN"; _owinv="$_owinv; not-counted $N_NC_RUN"; }
     [ "$N_PART" -gt 0 ] && { _owsum="$_owsum;partial:$N_PART"; _owinv="$_owinv; partial $N_PART"; }
   fi

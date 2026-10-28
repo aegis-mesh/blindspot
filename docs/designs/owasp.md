@@ -54,7 +54,7 @@ and OWASP's Q3 2026 exploit round-up
 3. **A lead is not a finding.** Possible signs, files named like a worm's with nothing else of it,
    and markers in the shared `/tmp` are things to check. They carry no tag (Open questions, 2).
 4. **Completeness is never a risk.** Partly checked, unreadable, not checked and the like carry no
-   tag. A partly checked report or account with no tags never reads as having no risks: every
+   tag themselves; the findings in a partly checked home or account keep their tags. A partly checked report or account with no tags never reads as having no risks: every
    surface leaves the OWASP part out when nothing is tagged. It does not say "no risks found".
 5. **Nothing new leaves the machine.** No surface sends a tag anywhere (see What is sent to gird.ai).
 
@@ -384,32 +384,31 @@ never reads as 0. When the save fails, `SUMMARY` is rewritten with `failed` and 
 ### Inventory value
 
 `=` is not in the character class `fl_inventory` reads back (`[A-Za-z0-9 ._:;,|+-]`), and every other
-detail in the value is written "word value" ("keys 2", "incidents tanstack"). So the token is:
+detail in the value is written "word value" ("keys 2", "incidents tanstack"). Each risk carries its
+own `owasp.` prefix, so a filter for `owasp.ASI03` cannot miss a risk listed second, and cannot match an
+account's name or details:
 
 ```
- | owasp ASI03:2,ASI04:1+mac; counted 3; not-counted 1; partial 1
+ | owasp.ASI03:2 owasp.ASI04:1+mac; counted 3; not-counted 1; partial 1
 ```
 
 appended last, `not-counted` and `partial` only when above 0. Every character is in the class, so
 `fl_inventory` needs no change. It cannot be mistaken for an account: an account part is always
-`<name>: <outcome>`, with a colon right after the name, and an account named `owasp` reads
-`owasp: clear`.
+`<name>: <outcome>`, with a colon and a space right after the name, and an account named `owasp` reads
+`owasp: clear`. A risk only the Mac has reads `owasp.ASI04:0+mac`.
 
-It is the first thing cut. The value is built by a new function, `fl_inv_fit HEAD PARTS TOKEN`, which
-holds the truncation `fleet_main` did inline. The value is at most 250 characters; the truncation awk
-rebuilds it within 243 characters and adds ` +more` (6), so at most 249. The order:
+It never costs an account any content. The value is built by `fl_inv_fit HEAD PARTS TOKEN`, which
+holds the truncation `fleet_main` did inline. The value is at most 250 characters:
 
 1. Build the value as before, without the token (`base`).
-2. No token: unchanged from before.
-3. `base` plus the token is 250 or less: use it.
-4. Otherwise the token is dropped, which counts as a cut:
-   - `base` is 244 or less: `base +more`.
-   - `base` is longer: run the truncation awk. This also covers a `base` of 245 to 250 characters,
-     which before skipped the awk: rebuilt within 243 characters, it always loses at least part of a
-     detail or an account, so the awk's own cut ends it with ` +more`.
+2. `base` is 250 characters or less: it is kept whole, and the token is added only when `base` plus
+   the token is 250 or less. Otherwise the value is `base` as it was before this change, with no
+   `+more`: nothing of an account was cut.
+3. `base` is longer: the truncation awk rebuilds it within 243 characters and adds ` +more`, as before.
+   It has no token.
 
-So an account's outcome, wiper and incidents are never cut to make room for the token, and a value
-that lost the token always says `+more`. The full tags are in `last.json`.
+So a missing OWASP part in the inventory value means nothing was tagged or there was no room for it.
+The summary line and `last.json` always carry the tags, and the docs send a complete search there.
 
 ## What is sent to gird.ai
 
@@ -436,14 +435,15 @@ in it.
 - README.md screenshots: remake `docs/report.png` and `docs/report-full.png` with
   `bash tools/screenshots.sh`. Check the images show the OWASP line and a section line.
 - docs/fleet.md, "4. Read the results": the summary line and inventory examples gain the part; a
-  paragraph on the `owasp` JSON object and its three counts, the per-row field, that `owasp` is cut
-  first from the inventory value, and that no `owasp` part means nothing was tagged, never that the Mac
-  is clear (read the outcome for that). "What it checks for each account" gets the same hand-written
+  paragraph on the `owasp` JSON object and its three counts, the per-row field, that the inventory
+  value carries the `owasp` part only when it has room, and that no `owasp` part means nothing was
+  tagged (or, in the inventory value, no room), never that the Mac is clear (read the outcome for that). "What it checks for each account" gets the same hand-written
   mapping as README.
 - docs/mdm/jamf.md and docs/mdm/intune.md: the inventory example line gains
-  ` | owasp ASI03:1,ASI04:1; counted 1`. docs/mdm/iru.md: the summary example gains
+  ` | owasp.ASI03:1 owasp.ASI04:1; counted 2`. docs/mdm/iru.md: the summary example gains
   ` owasp=ASI03:1,ASI04:1;counted:1`. The smart group advice ("values that start with `v1 act`") stays;
-  an example filter, where the page lists filters, matches `owasp ASI03`, never a bare `ASI03`.
+  an inventory filter matches `owasp.ASI03`, a summary-line filter `ASI03:`, never a bare `ASI03`, and
+  each page says a Mac with no room for the part does not match the inventory filter.
 - docs/designs/fleet-mode.md, "The result": the `owasp` fields, the summary line's new part and the
   inventory token, pointing here for the mapping. "Tests": the fleet tests below.
 - CHANGELOG.md: there is no "Unreleased" heading; add one above 1.2.0 with one entry for the person's
@@ -508,11 +508,10 @@ Fleet (`tests/run.sh`'s "fleet mode (--all-users)" part, with the stand-ins it a
 - fleet: a run with no accounts has no owasp part, no token and an empty owasp object
 - fleet: --json and --hash-accounts carry the owasp object and each row's tags
 - fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back
-- fleet: a long inventory value drops the owasp token first and ends with +more (the existing run of
-  15 accounts)
-- fleet: an inventory value of 244 characters drops the token and ends with +more
-- fleet: an inventory value of 250 characters drops the token, is cut and ends with +more
-  (`fl_inv_fit`, cut out of `gird-fleet.sh` and called with a value of that length)
+- fleet: a long inventory value has no owasp token and ends with +more
+- fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp
+  token (`fl_inv_fit`, cut out of `gird-fleet.sh` and called with a value of each length)
+- fleet: an inventory value with room for the owasp token gets it, at 250 characters
 - the existing "--summary-to-stdout prints the one summary line" regex allows the optional part
 
 Screenshots are not tests; remaking them is a step in the pull request.
@@ -555,8 +554,9 @@ Screenshots are not tests; remaking them is a step in the pull request.
   that carries every finding kind.
 - **Read as clean for an account that was partly read.** A risk count says how many checked accounts
   have it; the accounts not checked and partly checked are counted beside it on every surface.
-- **Inventory budget.** On a busy Mac the value is often over 250 characters already, so the token
-  is often dropped. That is by design (the outcome and accounts matter more), and `+more` says so.
+- **Inventory budget.** On a busy Mac the value is often near or over 250 characters already, so the
+  token is often left out. That is by design (the outcome and accounts matter more), so an inventory
+  filter can miss a Mac; the docs say so and point to the summary line and `last.json`.
 - **Summary line parsers.** An MDM script that matches the summary line to its end (as the test
   does) needs the new part allowed. It is appended last so a parser reading from the start is not
   affected; the CHANGELOG says so.
@@ -604,5 +604,5 @@ Screenshots are not tests; remaking them is a step in the pull request.
 - The failed-save rewrite of `SUMMARY` keeps the OWASP part, with a test.
 - `incidents:update` is defined as "level is not act"; the Mac's incidents are act level by a `gen.sh`
   rule on `data/indicators.tsv`; `machine:<field>` is checked against the `machine` object's fields;
-  "platforms with a leak" replaces "platforms that leaked secrets"; filter examples use `owasp ASI03`;
+  "platforms with a leak" replaces "platforms that leaked secrets"; filter examples use `owasp.ASI03` (inventory) and `ASI03:` (summary line);
   tags are gathered by account row number.

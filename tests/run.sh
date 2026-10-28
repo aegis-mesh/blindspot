@@ -4414,9 +4414,9 @@ has    "fleet: the terminal block says how many accounts were not counted" '^   
 has    "fleet: the terminal block says how many accounts were partly checked" '^    1 account partly checked: its tags may be incomplete$' "$FL/owt.out"
 if awk '/^  OWASP Agentic Top 10$/ { o = NR } /^  Saved: / { s = NR } END { exit !(o && s && o < s) }' "$FL/owt.out"; then ok "fleet: the terminal block comes before where the result was saved"; else bad "fleet: the terminal block comes before where the result was saved"; fi
 has    "fleet: the summary line ends with the owasp part, its counts included" ' owasp=ASI03:2,ASI04:1,ASI05:1;counted:3;not_counted:1;partial:1$' "$FL/ows.out"
-# A long value drops the token first: asha's details alone take more than the value holds.
-if grep -q '^owasp\.risks=ASI03 ASI04 ASI05$' "$FL/ow.flat" && grep -qE '^inventory=.* \+more$' "$FL/ow.flat" && ! grep -q '^inventory=.*owasp' "$FL/ow.flat"; then ok "fleet: a long inventory value drops the owasp token first and ends with +more"
-else bad "fleet: a long inventory value drops the owasp token first and ends with +more" "$(grep '^inventory=' "$FL/ow.flat")"; fi
+# A long value is cut, and has no token: asha's details alone take more than the value holds.
+if grep -q '^owasp\.risks=ASI03 ASI04 ASI05$' "$FL/ow.flat" && grep -qE '^inventory=.* \+more$' "$FL/ow.flat" && ! grep -q '^inventory=.*owasp' "$FL/ow.flat"; then ok "fleet: a long inventory value has no owasp token and ends with +more"
+else bad "fleet: a long inventory value has no owasp token and ends with +more" "$(grep '^inventory=' "$FL/ow.flat")"; fi
 # The save fails when the saved-result folder can't be made: the summary says failed and keeps its part.
 mkdir -p "$FL/ro"; chmod 500 "$FL/ro"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/ro/state" \
@@ -4438,7 +4438,7 @@ then ok "fleet: an update-level incident is labelled versions to update, not mal
 users "itadmin:$U:$FL/itadmin:/bin/zsh"
 fl_run owinv
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FLEETSH" --inventory > "$FL/owinv-read.out" 2>&1
-if grep -qE '^inventory=v1 review 20[0-9-]{8}T[0-9:]{5}Z \| itadmin: review ssh-open 1 \| owasp ASI03:1; counted 1$' "$FL/owinv.flat" && [ "$(cat "$FL/owinv-read.out")" = "$(sed -n 's/^inventory=//p' "$FL/owinv.flat")" ]
+if grep -qE '^inventory=v1 review 20[0-9-]{8}T[0-9:]{5}Z \| itadmin: review ssh-open 1 \| owasp\.ASI03:1; counted 1$' "$FL/owinv.flat" && [ "$(cat "$FL/owinv-read.out")" = "$(sed -n 's/^inventory=//p' "$FL/owinv.flat")" ]
 then ok "fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back"; else bad "fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back" "$(cat "$FL/owinv-read.out")"; fi
 # No accounts at all: nothing tagged, so no part, no token, and the object says so.
 : > "$FL/users.tsv"
@@ -4456,18 +4456,24 @@ if grep -q '^machine\.complete=false$' "$FL/owmac.flat" && grep -q '^machine\.ow
 then ok "fleet: a partly checked Mac still counts its incidents as +mac"; else bad "fleet: a partly checked Mac still counts its incidents as +mac" "$(grep -E '^(machine\.(complete|owasp|incidents)|owasp|summary)' "$FL/owmac.flat" | tr '\n' ' ')"; fi
 if grep -q '^machine\.possible_signs=litellm$' "$FL/owposs.flat" && grep -q '^machine\.owasp=$' "$FL/owposs.flat" && grep -q '^owasp\.risks=$' "$FL/owposs.flat"
 then ok "fleet: the Mac's possible signs carry no tag"; else bad "fleet: the Mac's possible signs carry no tag" "$(grep -E '^(machine\.(possible_signs|owasp)|owasp\.risks)' "$FL/owposs.flat" | tr '\n' ' ')"; fi
-# fl_inv_fit, cut out of gird-fleet.sh: a value of 244 characters without the token has room for +more
-# only; one of 250 is rebuilt within 243 by the cut, which then says +more.
+# fl_inv_fit, cut out of gird-fleet.sh: a value of 244 to 250 characters without the token is kept
+# whole, with no token and no +more, since the token never costs an account its content; a short one
+# gets the token.
 sed -n '/^fl_inv_fit() {/,/^}/p' "$FLEETSH" > "$FL/invfit.sh"
-IV_HEAD="v1 review 2026-10-25T09:12Z"; IV_P=" | person: review "
-IV_244="$IV_P$(printf 'x%.0s' $(seq 1 $((244 - ${#IV_HEAD} - ${#IV_P}))))"
+IV_HEAD="v1 review 2026-10-25T09:12Z"; IV_P=" | person: review "; IV_TOK="owasp.ASI03:1; counted 1"
+IV_BAD=""
+for IV_N in 244 245 246 247 248 249 250; do
+  IV_B="$IV_P$(printf 'x%.0s' $(seq 1 $((IV_N - ${#IV_HEAD} - ${#IV_P}))))"
+  IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_B" "$IV_TOK")
+  { [ $(( ${#IV_HEAD} + ${#IV_B} )) -eq "$IV_N" ] && [ "$IV_OUT" = "$IV_HEAD$IV_B" ]; } || IV_BAD="$IV_BAD $IV_N:$IV_OUT"
+done
+if [ -z "$IV_BAD" ]; then ok "fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp token"
+else bad "fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp token" "$IV_BAD"; fi
+IV_S="$IV_P$(printf 'x%.0s' $(seq 1 $((250 - ${#IV_HEAD} - ${#IV_P} - ${#IV_TOK} - 3))))"
+IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_S" "$IV_TOK")
+if [ "$IV_OUT" = "$IV_HEAD$IV_S | $IV_TOK" ] && [ "${#IV_OUT}" -eq 250 ]; then ok "fleet: an inventory value with room for the owasp token gets it, at 250 characters"
+else bad "fleet: an inventory value with room for the owasp token gets it, at 250 characters" "${#IV_OUT} $IV_OUT"; fi
 IV_250="$IV_P$(printf 'x%.0s' $(seq 1 $((250 - ${#IV_HEAD} - ${#IV_P}))))"
-IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_244" "owasp ASI03:1; counted 1")
-if [ $(( ${#IV_HEAD} + ${#IV_244} )) -eq 244 ] && [ "$IV_OUT" = "$IV_HEAD$IV_244 +more" ]; then ok "fleet: an inventory value of 244 characters drops the token and ends with +more"
-else bad "fleet: an inventory value of 244 characters drops the token and ends with +more" "$IV_OUT"; fi
-IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_250" "owasp ASI03:1; counted 1")
-if [ $(( ${#IV_HEAD} + ${#IV_250} )) -eq 250 ] && [ "$IV_OUT" = "$IV_HEAD | person: review +more" ]; then ok "fleet: an inventory value of 250 characters drops the token, is cut and ends with +more"
-else bad "fleet: an inventory value of 250 characters drops the token, is cut and ends with +more" "$IV_OUT"; fi
 IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_250" "")
 if [ "$IV_OUT" = "$IV_HEAD$IV_250" ]; then ok "fleet: an inventory value of 250 characters with no token is kept whole"
 else bad "fleet: an inventory value of 250 characters with no token is kept whole" "$IV_OUT"; fi
