@@ -3228,6 +3228,21 @@ sed 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  _ov=$(printf "%s" "$_ov" | \
 (cd "$WORK/owb" && bash tools/gen.sh > "$WORK/owb.txt" 2>&1); RC=$?
 if [ "$RC" -eq 0 ] && grep -qF '_ov=$(printf "%s" "$_ov" | /usr/bin/tr -d " ")' "$WORK/owb/gird-fleet.sh"; then ok "gen.sh: the same command by its full path is written into gird-fleet.sh"
 else bad "gen.sh: the same command by its full path is written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/owb.txt")"; fi
+# An unquoted here-document's body is expanded, so a command in it runs; a redirection writes a file.
+od_refuses() { # name sed-program message: the edit to gird-check.sh's owasp-derive block is refused with message
+  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+  sed "$2" gird-check.sh > "$WORK/odr/gird-check.sh"
+  (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); _rc=$?
+  if cmp -s gird-check.sh "$WORK/odr/gird-check.sh"; then bad "$1" "the edit did not apply"
+  elif [ "$_rc" -eq 2 ] && grep -qF "$3" "$WORK/odr.txt"; then ok "$1"
+  else bad "$1" "exit $_rc $(head -n 3 "$WORK/odr.txt")"; fi
+}
+od_refuses "gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused" \
+  '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE$(cat \/dev\/null)/' 'runs a bare command (cat)'
+od_refuses "gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused" \
+  '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE`cat \/dev\/null`/' 'runs a bare command (cat)'
+od_refuses "gen.sh: an output redirection in the owasp-derive block is refused" \
+  's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  printf "%s" "$_ov" > \/tmp\/ow; [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/' 'redirects output (>)'
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

@@ -174,15 +174,14 @@ bad="$bad${bad:+${_ow:+
 }}$_ow"
 # owasp_kinds runs as root in gird-fleet.sh's copy, so its block calls only builtins, functions the
 # generated blocks define, and tools by their full path, as root's own code does: a bare name would
-# run whatever the MDM's PATH holds. Single-quoted text and here-documents are skipped; each command
-# word after ; & | ( { $( and the shell keywords is checked; a ) only closes what is before it.
+# run whatever the MDM's PATH holds. Single-quoted text and the body of a quoted here-document (<<'X',
+# <<"X", <<\X) are skipped; an unquoted body is expanded by the shell, so the command after each $( or `
+# in it is checked. Each command word after ; & | ( { $( ` and the shell keywords is checked; a ) only
+# closes what is before it. The block writes no file, so a > outside single quotes is refused.
 # bash 3.2 miscounts the parentheses of a program inside $( ), so the program is set apart first.
 OD_AWK='
   BEGIN { split("case esac for in do done while until if then else elif fi return printf read continue break [ test : true false local shift unset incident_level owasp_set owasp_kinds", a, " "); for (i in a) okw[a[i]] = 1 }
-  hd != "" { if ($0 == hd) hd = ""; next }
-  /^[[:space:]]*#/ { next }
-  { l = $0
-    if (match(l, /<<-?[A-Z]+[[:space:]]*$/)) { hd = substr(l, RSTART + 2); sub(/^-/, "", hd); sub(/[[:space:]]+$/, "", hd); l = substr(l, 1, RSTART - 1) }
+  function words(l, src,   m, j, w, x, seg, wd) {
     gsub(/\047[^\047]*\047/, "Q", l); gsub(/"/, " ", l)
     sub(/^[[:space:]]*[^[:space:]()]*\)/, ";", l)
     gsub(/\)/, " ", l); gsub(/\$\(|&&|\|\||;;|[;|&{}(`]/, ";", l)
@@ -191,8 +190,21 @@ OD_AWK='
       w = split(seg[j], wd, " "); x = 1
       while (x <= w && (wd[x] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || wd[x] ~ /^(!|then|do|else|elif|if|while|until)$/)) x++
       if (x > w) continue
-      if (!(wd[x] in okw) && wd[x] !~ /^\//) print "gird-check.sh, owasp-derive block, runs a bare command (" wd[x] "): root runs this block, so call a builtin or a full path: " $0
-    } }'
+      if (!(wd[x] in okw) && wd[x] !~ /^\//) print "gird-check.sh, owasp-derive block, runs a bare command (" wd[x] "): root runs this block, so call a builtin or a full path: " src
+    } }
+  hd != "" { if ($0 == hd) { hd = ""; next }
+    if (hq) next
+    l = $0; gsub(/\$\(|`/, "\001", l); m = split(l, seg, "\001")
+    for (j = 2; j <= m; j++) words(seg[j], $0)
+    next }
+  /^[[:space:]]*#/ { next }
+  { l = $0
+    if (match(l, /<<-?[[:space:]]*(\047[A-Za-z_][A-Za-z0-9_]*\047|"[A-Za-z_][A-Za-z0-9_]*"|\\[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*)[[:space:]]*$/)) {
+      hd = substr(l, RSTART + 2); sub(/^-/, "", hd); gsub(/[[:space:]]/, "", hd)
+      hq = hd ~ /^[\047"\\]/; gsub(/[\047"\\]/, "", hd); l = substr(l, 1, RSTART - 1) }
+    t = l; gsub(/\047[^\047]*\047/, "Q", t)
+    if (t ~ />/) print "gird-check.sh, owasp-derive block, redirects output (>): root runs this block, so it writes no file: " $0
+    words(l, $0) }'
 _od=$(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive$/ { on = 0 } on' gird-check.sh | awk "$OD_AWK")
 bad="$bad${bad:+${_od:+
 }}$_od"

@@ -199,9 +199,12 @@ which `gen.sh` copies into `gird-fleet.sh` the way it copies `owned-walk`. It ho
 
 Root runs this copy, so the block calls only builtins, the generated functions and tools by their
 full path, as `owned-walk` does. `gen.sh` refuses a bare external command in it: it reads each command
-word of the block (after `;`, `&&`, `||`, `|`, `(`, `{`, `$(` and the shell keywords, with
-single-quoted text and here-documents skipped) and allows only a list of builtins and keywords,
-`incident_level`, `owasp_set`, `owasp_kinds`, or a word starting with `/`.
+word of the block (after `;`, `&&`, `||`, `|`, `(`, `{`, `$(`, a backtick and the shell keywords,
+with single-quoted text and the body of a quoted here-document (`<<'X'`, `<<"X"`, `<<\X`) skipped)
+and allows only a list of builtins and keywords, `incident_level`, `owasp_set`, `owasp_kinds`, or a
+word starting with `/`. The body of an unquoted here-document is expanded by the shell, so the command
+after each `$(` or backtick in it is checked the same way. The block writes no file: `gen.sh` refuses
+any `>` outside single quotes.
 
 - In `gird-check.sh`, the values the account run computed inside the `ACCTRUN` block (`_yolo`, `_inc`,
   `_lock`, `_planted` and the rest) move into a function, `finding_fields`, that sets `FA_<key>` for
@@ -489,6 +492,8 @@ Person's report:
 | gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check | bash-only: `tools/gen.sh` |
 | gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check | bash-only: `tools/gen.sh` |
 | gen.sh: a bare command in the owasp-derive block is refused | bash-only: `tools/gen.sh` |
+| gen.sh: a command substitution, or a backtick, in an unquoted here-document of the owasp-derive block is refused (two tests) | bash-only: `tools/gen.sh` |
+| gen.sh: an output redirection in the owasp-derive block is refused | bash-only: `tools/gen.sh` |
 
 Fleet (`tests/run.sh`'s "fleet mode (--all-users)" part, with the stand-ins it already uses):
 
