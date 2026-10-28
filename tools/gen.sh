@@ -7,7 +7,8 @@
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
 # versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check.
+# (data/bad-extensions.tsv). The scripts stay single files people can download and check. It also
+# writes the lists in docs/checks.md, between "<!-- >>> checks" and "<!-- <<< checks -->".
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -397,6 +398,145 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   { print $1 " " $2 " " $3 " " $4 " " $5 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
+# --- docs/checks.md: the lists, for people to read ------------------------------
+# One block of docs/checks.md, written from the same data files (and gird-check.sh's agents table),
+# so the page never lists less or more than the scripts look for.
+awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
+  on { sub(/^AGENTS="/, ""); sub(/"$/, ""); split($0, a, "|"); print a[1] "\t" a[2] }' gird-check.sh > "$WORK/agent-names.tsv"
+{ for f in incidents keys sessions auto-approve outdated planted bad-pypi indicators platforms bad-extensions bad-npm; do
+    rows "data/$f.tsv" | awk -v f="$f" '{ print f "\t" $0 }'
+  done; awk '{ print "agents\t" $0 }' "$WORK/agent-names.tsv"; } | awk -F '\t' '
+  function esc(s) { gsub(/\\/, "\\\\", s); gsub(/[*_<>|`\[\]]/, "\\\\&", s); return s }
+  function code(s) { return "`" s "`" }
+  function oss(s) { if (s == "all") return ""; if (s == "none") return "none"; gsub(/mac/, "macOS", s); gsub(/linux/, "Linux", s); gsub(/win/, "Windows", s); sub(/,/, " and ", s); return s }
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  function plural(n, w) { return n " " w (n == 1 ? "" : "s") }
+  function range(s,   n, r) { n = split(s, r, " ")
+    if (n == 1) return "below " substr(r[1], 2)
+    if (r[2] ~ /^<=/) return substr(r[1], 3) " to " substr(r[2], 3) ", no fixed version yet"
+    return substr(r[1], 3) " to below " substr(r[2], 2) }
+  function add(list, item) { return list == "" ? item : list ", " item }
+  $1 == "incidents" { ni++; iid[ni] = $2; inm[$2] = $3; iwh[$2] = $4; iim[$2] = $5; isrc[$2] = $6; ilv[$2] = $7; next }
+  $1 == "agents" { na++; an[na] = $2; ac[na] = $3; next }
+  $1 == "keys" { nk++; kn[nk] = $3; ks[nk] = $4; next }
+  $1 == "sessions" { if (!($4 in sa)) { sa[$4] = 1; so[++ns] = $4 }
+    p = code($5); if ($3 == "db") p = p " (SQLite files)"; if ($3 == "sealed") p = p " (encrypted: counted and named as not checked)"
+    if ($2 != "all") p = p " (" oss($2) " only)"; sp[$4] = add(sp[$4], p); next }
+  $1 == "auto-approve" { k = $2 "\t" $5; if (!(k in aa)) { aa[k] = 1; ao[++nao] = k }; af[k] = add(af[k], code($4)); next }
+  $1 == "outdated" { k = $2 "\t" $7 "\t" $8; if (!(k in oo)) { oo[k] = 1; ok[++no] = k; onm[k] = $3; orng[k] = range($7); ohole[k] = $8; oadv[k] = $9 }
+    w = $5 == "plist" ? "the app" : $5 == "folder" ? "its version folder" : $5 == "npm" ? "npm installs" : "MCP configs"
+    if (index(", " owh[k] ", ", ", " w ", ") == 0) owh[k] = add(owh[k], w)
+    s = $4 == "all" ? "all" : oss($4); if (index(", " oos[k] ", ", ", " s ", ") == 0) oos[k] = add(oos[k], s); next }
+  $1 == "planted" { npl++; pp[npl] = $2 "/" $3; pin[npl] = $4; pnt[npl] = $5; pal[npl] = $6; psh[npl] = $7; cnt[$4, "files"]++; next }
+  $1 == "bad-pypi" { npy++; yn[npy] = $2; yv[npy] = $3; yi[npy] = $4; yo[npy] = $5; cnt[$4, "py"]++; next }
+  $1 == "indicators" { k = $2 "\t" $4 "\t" $6; if (k in xx) { j = xx[k]; if (xo[j] != "all") xo[j] = $3 == "all" ? "all" : xo[j] "," $3; next }
+    nind++; xx[k] = nind; xi[nind] = $2; xo[nind] = $3; xk[nind] = $4; xw[nind] = $5; xp[nind] = $6; xn[nind] = $7; if ($4 != "wiper") cnt[$2, "files"]++; next }
+  $1 == "platforms" { npf++; fi[npf] = $2; fnm[npf] = $3; fc[npf] = $4; fpth[npf] = $5; fadv[npf] = $7; cnt[$2, "plat"]++; next }
+  $1 == "bad-extensions" { k = $4; if (!(k in eg)) { eg[k] = 1 }; ev = $3 == "*" ? "every version" : $3
+    e = code($2) " " ev " (" ($5 == "openvsx" ? "Open VSX editors only" : "every editor") (oss($6) == "" ? "" : "; its malware runs on " oss($6)) ")"
+    el[k] = el[k] "- " e "\n"; cnt[k, "ext"]++; next }
+  $1 == "bad-npm" { k = $4; v = $3 == "*" ? "every version" : $3
+    if (!((k, $2) in nv)) { nq[k] = nq[k] (nq[k] == "" ? "" : "\t") $2; cnt[k, "pkg"]++ }
+    nv[k, $2] = add(nv[k, $2], v); cnt[k, "npm"]++; next }
+  END {
+    print "<!-- >>> checks: generated from data/*.tsv and the agents table in gird-check.sh by tools/gen.sh. Edit those, then run it. -->"
+    print "_This part of the page is written by `tools/gen.sh` from the files in [`data/`](../data) and the agents table in `gird-check.sh`, the same sources the scripts are built from. Edit those, not this page._"
+    print ""
+    print "Paths: `~` is your home folder, `{AS}` the app data folder (Application Support on a Mac, `%APPDATA%` on Windows, `XDG_CONFIG_HOME` or `~/.config` on Linux), `{LOCALAPPDATA}` `%LOCALAPPDATA%` on Windows, `{XDG_DATA}` `XDG_DATA_HOME` or `~/.local/share`, `{GOOSE_DATA}` and `{GOOSE_STATE}` Goose'"'"'s data and state folders, `{PROGRAMDATA}` `%ProgramData%` on Windows, `{PROJECT}` each project folder the home scan finds, and `{ENV:NAME:fallback}` the folder the variable `NAME` names, or the fallback. A path marked for one system is looked for there only."
+    print ""
+    print "## 1. Coding agents"
+    print ""
+    print "### Agents it looks for"
+    print ""
+    for (i = 1; i <= na; i++) { c = an[i]; if (ac[i] != "") { m = ac[i]; gsub(/;/, "`, `", m); c = c " (`" m "`)" }; print "- " c }
+    print ""
+    print "### Settings that run commands without asking"
+    print ""
+    for (i = 1; i <= nao; i++) { split(ao[i], pa, "\t"); print "- " pa[1] ", " esc(pa[2]) ": " af[ao[i]] }
+    print ""
+    print "### Versions with a published security fix"
+    print ""
+    print "| Tool | Versions | What the hole allows | Read from | Advisory |"
+    print "|---|---|---|---|---|"
+    for (i = 1; i <= no; i++) { k = ok[i]; s = oos[k] == "all" ? "" : " (" oos[k] ")"; a = oadv[k]; t = a; sub(/\/$/, "", t); sub(/.*\//, "", t)
+      print "| " esc(onm[k]) s " | " esc(orng[k]) " | " esc(ohole[k]) " | " owh[k] " | [" t "](" a ") |" }
+    print ""
+    print "## 2. MCP servers and project settings"
+    print ""
+    print "### Files worms plant in a project"
+    print ""
+    for (i = 1; i <= npl; i++) {
+      w = pal[i] == "yes" ? "Counts wherever it is found." : "Counts beside a file only a worm uses" (psh[i] == "-" ? "" : ", or when its SHA-256 matches one its sources publish") "; otherwise listed as a file to read."
+      print "- " code(pp[i]) ": " esc(pnt[i]) " (" esc(inm[pin[i]]) "). " w }
+    print ""
+    print "## 3. Keys in plain text"
+    print ""
+    print "### Key types"
+    print ""
+    print "| Provider | Starts with (as a pattern) |"
+    print "|---|---|"
+    for (i = 1; i <= nk; i++) { s = ks[i]; gsub(/\|/, "`, `", s); print "| " esc(kn[i]) " | `" s "` |" }
+    print ""
+    print "### Agent session transcripts"
+    print ""
+    for (i = 1; i <= ns; i++) print "- **" esc(so[i]) "**: " sp[so[i]]
+    print ""
+    print "## 5. Recent key leaks"
+    print ""
+    print "### Incidents"
+    print ""
+    print "Level: **act** means treat the machine as compromised, **update** means update the version (the machine is not compromised), **leak** means rotate what was stored on that platform."
+    print ""
+    print "| Incident | When | What it did | Level | Looked for | Source |"
+    print "|---|---|---|---|---|---|"
+    for (i = 1; i <= ni; i++) { d = iid[i]; l = ""
+      if (cnt[d, "npm"]) l = add(l, "npm: " plural(cnt[d, "npm"], "version") " of " plural(cnt[d, "pkg"], "package"))
+      if (cnt[d, "py"]) l = add(l, "Python: " plural(cnt[d, "py"], "version"))
+      if (cnt[d, "ext"]) l = add(l, plural(cnt[d, "ext"], "extension"))
+      if (cnt[d, "files"]) l = add(l, plural(cnt[d, "files"], "file"))
+      if (cnt[d, "plat"]) l = add(l, "its CLI or app")
+      print "| " esc(inm[d]) " | " iwh[d] " | " esc(iim[d]) " | " ilv[d] " | " l " | [" host(isrc[d]) "](" isrc[d] ") |" }
+    print ""
+    print "### Python packages"
+    print ""
+    print "| Package | Version | Incident | Its malware runs on |"
+    print "|---|---|---|---|"
+    for (i = 1; i <= npy; i++) { o = oss(yo[i]); if (o == "") o = "any system"; if (o == "none") o = "none: a version to update"
+      print "| " code(yn[i]) " | " yv[i] " | " esc(inm[yi[i]]) " | " o " |" }
+    print ""
+    print "### Files malware leaves on disk"
+    print ""
+    print "gh-token-monitor, the wiper: stop it before you revoke any GitHub token."
+    print ""
+    for (i = 1; i <= nind; i++) if (xk[i] == "wiper") print "- " code(xp[i]) (xo[i] == "all" ? "" : " (" oss(xo[i]) " only)") (xw[i] == "yes" ? " (counts only when it is yours)" : "")
+    for (j = 1; j <= ni; j++) { d = iid[j]; h = 0; tn = ""
+      for (i = 1; i <= nind; i++) { if (xi[i] != d || xk[i] == "wiper") continue
+        if (!h++) { print ""; print esc(inm[d]) ", " iwh[d] ":"; print "" }
+        w = xk[i] == "startup" ? esc(xn[i]) : xk[i] == "site" ? "in a Python environment'"'"'s site-packages" : "in the temp folder"
+        if (xk[i] == "temp") tn = xn[i]
+        print "- " code(xp[i]) ": " w (xo[i] == "all" ? "" : " (" oss(xo[i]) " only)") (xw[i] == "yes" ? " (counts only when it is yours)" : "") }
+      if (tn != "") { print ""; print "If found: " esc(tn) } }
+    print ""
+    print "### Hosted platforms that leaked stored secrets"
+    print ""
+    for (i = 1; i <= npf; i++) { w = ""
+      if (fc[i] != "-") { m = fc[i]; gsub(/ /, "`, `", m); w = "the `" m "` command" }
+      if (fpth[i] != "-") { m = fpth[i]; gsub(/;/, "`, `", m); w = w == "" ? "`" m "`" : w " or `" m "`" }
+      print "- **" esc(fnm[i]) "**, found by " w ": " esc(fadv[i]) }
+    print ""
+    print "### Editor extensions that shipped malware"
+    print ""
+    for (j = 1; j <= ni; j++) { d = iid[j]; if (!cnt[d, "ext"]) continue
+      print "<details><summary>" esc(inm[d]) ", " iwh[d] ": " plural(cnt[d, "ext"], "extension") "</summary>"; print ""; printf "%s", el[d]; print ""; print "</details>"; print "" }
+    print "### npm packages"
+    print ""
+    for (j = 1; j <= ni; j++) { d = iid[j]; if (!cnt[d, "npm"]) continue
+      print "<details><summary>" esc(inm[d]) ", " iwh[d] ": " plural(cnt[d, "npm"], "version") " of " plural(cnt[d, "pkg"], "package") "</summary>"; print ""
+      n = split(nq[d], q, "\t"); for (i = 1; i <= n; i++) print "- " code(q[i]) " " nv[d, q[i]]
+      print ""; print "</details>"; print "" }
+    print "<!-- <<< checks -->"
+  }' > "$WORK/checks.md"
+
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
   awk -v name="$2" -v gen="$3" '
@@ -426,4 +566,18 @@ for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
     if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh, with gird-check.sh): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
 done
+# docs/checks.md: a copy of the scripts without docs/ (as the tests make) has no page to write.
+if [ -d docs ]; then
+  f=docs/checks.md
+  if [ ! -f "$f" ]; then echo "$f is missing: it needs the lines <!-- >>> checks --> and <!-- <<< checks -->"; RC=1
+  elif awk -v gen="$WORK/checks.md" '
+      /^<!-- >>> checks[: ]/ { while ((getline l < gen) > 0) print l; skip = 1; found = 1; next }
+      skip && /^<!-- <<< checks -->$/ { skip = 0; next }
+      !skip { print }
+      END { if (!found || skip) exit 3 }' "$f" > "$WORK/b"; then
+    if [ "$CHECK" -eq 1 ]; then
+      if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/: run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
+    elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
+  else echo "$f has no <!-- >>> checks --> ... <!-- <<< checks --> block"; RC=1; fi
+fi
 exit "$RC"

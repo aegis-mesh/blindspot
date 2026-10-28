@@ -1,7 +1,7 @@
 # Fleet mode: running Blindspot from an MDM
 
-Status: built for macOS (phase 1), as `gird-fleet.sh --all-users`, with the admin guide in
-`docs/fleet.md` and the MDM pages in `docs/mdm/` (each marked untested until run end to end on a real
+Status: built for macOS (phase 1), as `gird-fleet.sh --all-users`, with the admin quick start in
+`docs/fleet.md`, the rest in `docs/fleet-reference.md`, and the MDM pages in `docs/mdm/` (each marked untested until run end to end on a real
 Mac). Linux is phase 2: until then `--all-users` on Linux exits 13 with a message. `gird-check.ps1`
 has no fleet mode; Windows needs a design of its own (see Not covered). What the build adds to this
 design, or settles where it was open, is under "As built" at the end.
@@ -28,7 +28,8 @@ Nothing new leaves the machine.
    failure. The outcome is then in the summary and the file.
 5. `--list`: with `--all-users`, prints which accounts would be checked and why any are skipped,
    and checks nothing, so an admin can see what a run will do before rolling it out.
-6. A guide for admins, `docs/fleet.md`, and one page per MDM in `docs/mdm/`.
+6. A guide for admins, `docs/fleet.md` (a quick start) with `docs/fleet-reference.md`, and one page
+   per MDM in `docs/mdm/`.
 
 `--all-users` turns off everything a run with nobody watching must not do: the game, the menu, the
 browser, colours, saving a report, and every network request (as `--offline`). It refuses `--all`,
@@ -200,15 +201,17 @@ saved JSON has one `learn_more` field with the link.
 
 ## The admin guide
 
-`docs/fleet.md` is steps in order, each short:
+`docs/fleet.md` is a one-screen quick start:
 
-1. Try it on your own Mac: download, check the SHA-256, run it with `sudo`, read the report.
-2. Grant Full Disk Access to your MDM's agent (the page for your MDM has the profile settings).
-3. Add it to your MDM: the script, a schedule (daily suggested), and the inventory field.
-4. Read the results: what `act`, `review`, `not_checked`, `stale` and `clear` mean, and how to list
-   the Macs to deal with first.
-5. Act on a finding: what to ask the person to do, finding by finding.
-6. Update or remove it.
+1. What it does and the security facts an admin needs before deploying (runs as root, reads, sends
+   nothing, the result readable by root only).
+2. What you get: an example inventory line, one line per outcome, and the Macs to deal with first.
+3. The steps: install once, run daily, show the result in the inventory field.
+
+`docs/fleet-reference.md` has the rest: the agent review prompt, trying it on your own Mac, Full Disk
+Access, how the install works, ripgrep, the deadline, the options, the full outcome definitions, what
+to ask the person to do finding by finding, what each account's check reads, files that can be left
+behind, and how to update or remove it.
 
 Each MDM page ends with a short "Seeing all your Macs, all the time" section about Argus.
 
@@ -373,7 +376,7 @@ real Mac.
   summary's `v=` are `gird-check.sh`'s release version, from its header, so both files report one
   version.
 - An account run stopped at its time limit can leave its temp files in `/tmp`: root does not know
-  their names. Moved-aside saved-result folders stay until removed (`docs/fleet.md`, step 6).
+  their names. Moved-aside saved-result folders stay until removed (`docs/fleet-reference.md`, "Update or remove it").
 - A saved-result folder that is a link, not a folder, or not root's with mode 0700 is moved aside to
   `/var/db/blindspot.replaced-<time>-<pid>` and made again, so root never deletes a tree it did not
   make.
