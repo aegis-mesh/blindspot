@@ -18,10 +18,11 @@ custom script that runs the check.
 
 Endpoint Central grants its own agent Full Disk Access on the Macs it manages
 ([macOS Agent Permissions via MDM](https://www.manageengine.com/products/desktop-central/help/device-onboarding/permissions-for-endpoint-central-agent-via-mdm.html)):
-the agent service, `dcagentservice`, gets `SystemPolicyAllFiles`. If you enrolled the Macs through
+the agent service, `dcagentservice`, gets System Policy All Files. If you enrolled the Macs through
 another MDM, that page lists the profile to deploy. Never grant it to `/bin/bash`.
 
-Check the result: each account's `protected_folders` is `checked` once access works.
+Whether a script the agent starts keeps that access is not documented. Check the result: each
+account's `protected_folders` is `checked` once access works.
 
 ## Install it once
 
@@ -40,7 +41,7 @@ Check the result: each account's `protected_folders` is `checked` once access wo
 3. Click **Configurations** > **Script Repository** > **Add Script**, and add
    `blindspot-install.sh`
    ([Custom Scripts](https://www.manageengine.com/products/desktop-central/help/configuring_desktop_central/managing_custom_scripts.html)).
-   A configuration can only run a script that is in the repository.
+   A script must be in the repository before a configuration can deploy it.
 4. Click **Configurations**, then under **Add Configurations** click **Configurations**, open the
    **Mac** tab, and choose **Custom Scripts** > **Computer**
    ([Custom Scripts for Mac computers](https://www.manageengine.com/uk/desktop-management-msp/help/mac_configurations/executing_custom_scripts_for_computer.html)).
@@ -74,28 +75,33 @@ prints the saved result and exits with its outcome's code.
    exec /usr/bin/env -i /bin/bash "$f"
    ```
 
-   A result that reads `none`, `stale`, `failed` or `unreadable` starts a full check. While a check
-   is running, the saved result is the one before it, so a refresh cycle never starts a second
-   check.
+   A result that reads `none`, `stale`, `failed` or `unreadable` starts a full check, so after a
+   failed run every refresh cycle tries again. A full check aims to finish within 50 minutes
+   (`--deadline=3000`), before the next refresh cycle. One that runs longer is not stopped by the
+   next cycle, which starts another check alongside it.
 2. Add it to the Script Repository as in step 3 above.
 3. Add a second Mac computer custom script the same way, named `Blindspot check`, with
    `blindspot-check.sh`.
-4. Set the exit code to `0`. Only a Mac whose outcome is `clear` then reads as successful.
-5. In its execution settings, choose to apply it at every refresh cycle.
+4. Set the exit code to `0`, so only a Mac whose outcome is `clear` reads as successful.
+5. Set the frequency to run during every system startup, then in its execution settings choose
+   **Apply the configuration during every Refresh Cycle**. ManageEngine's documentation does not
+   say how the two settings combine.
 6. If the configuration offers **Enable logging for troubleshooting**, turn it on.
 7. Choose the same target Macs, and deploy it.
 
 ## What you should see
 
 Under **Configurations** > **All Configurations** > `Blindspot check` > **Execution Status**, a Mac
-whose outcome is `clear` reads as successful. Any other outcome reads as failed, with exit code 10
-for `act`, 11 for `review`, 12 for `not_checked` and 13 for `failed` (see
-[docs/fleet.md](../fleet.md#4-read-the-results)). Treat a Mac with no status as not checked.
+whose outcome is `clear` should read as successful, and any other outcome as failed. The exit code
+is 10 for `act`, 11 for `review`, 12 for `not_checked` and 13 for `failed` (see
+[docs/fleet.md](../fleet.md#4-read-the-results)); ManageEngine's documentation does not say whether
+Execution Status shows it. Treat a Mac with no status as not checked.
 
-With logging on, the **Remarks** column shows the script's output. For a full check that is one line:
+If logging is available for the configuration, the **Remarks** column shows the script's output.
+For a full check that is one line:
 
 ```
-blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:12:00Z
+blindspot act accounts=2 act=1 review=0 not_checked=0 v=1.2.0 at=2026-10-25T09:12:00Z
 ```
 
 Between full checks it is the saved result:

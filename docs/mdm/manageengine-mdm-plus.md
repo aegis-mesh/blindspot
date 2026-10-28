@@ -12,8 +12,7 @@ agent on each Mac
 So with Mobile Device Manager Plus alone, you can:
 
 - **Use Endpoint Central for the check.** If your organization has Endpoint Central, or adds it, follow
-  [the Endpoint Central page](manageengine-endpoint-central.md). ManageEngine describes Endpoint Central as
-  including mobile device management.
+  [the Endpoint Central page](manageengine-endpoint-central.md).
 - **Have each person run Blindspot on their own Mac.** Send them the steps in the
   [README](../../README.md#run-it). Each person sees their own result, with the files each finding is
   about; nothing reaches you unless they share it.
