@@ -8269,7 +8269,7 @@ if [ "$N_NL_DIRS" -gt 0 ]; then
   else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$NL_DIRS"), the line break shown as ?." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
-[ -n "$OW_CODES" ] && emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"
+if [ -n "$OW_CODES" ]; then blank; emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"; fi
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"

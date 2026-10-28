@@ -3237,20 +3237,20 @@ sed 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  _ov=$(printf "%s" "$_ov" | \
 if [ "$RC" -eq 0 ] && grep -qF '_ov=$(printf "%s" "$_ov" | /usr/bin/tr -d " ")' "$WORK/owb/gird-fleet.sh"; then ok "gen.sh: the same command by its full path is written into gird-fleet.sh"
 else bad "gen.sh: the same command by its full path is written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/owb.txt")"; fi
 # An unquoted here-document's body is expanded, so a command in it runs; a redirection writes a file.
-od_refuses() { # name sed-program message: the edit to gird-check.sh's owasp-derive block is refused with message
+od_edit() { # sed-program: gen.sh on a copy whose gird-check.sh has the edit; sets RC, and OD_SAME when the edit did not apply
   rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
-  sed "$2" gird-check.sh > "$WORK/odr/gird-check.sh"
-  (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); _rc=$?
-  if cmp -s gird-check.sh "$WORK/odr/gird-check.sh"; then bad "$1" "the edit did not apply"
-  elif [ "$_rc" -eq 2 ] && grep -qF "$3" "$WORK/odr.txt"; then ok "$1"
-  else bad "$1" "exit $_rc $(head -n 3 "$WORK/odr.txt")"; fi
+  sed "$1" gird-check.sh > "$WORK/odr/gird-check.sh"; OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
+  (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
 }
-od_refuses "gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused" \
-  '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE$(cat \/dev\/null)/' 'runs a bare command (cat)'
-od_refuses "gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused" \
-  '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE`cat \/dev\/null`/' 'runs a bare command (cat)'
-od_refuses "gen.sh: an output redirection in the owasp-derive block is refused" \
-  's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  printf "%s" "$_ov" > \/tmp\/ow; [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/' 'redirects output (>)'
+od_edit '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE$(cat \/dev\/null)/'
+if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 2 ] && grep -qF 'runs a bare command (cat)' "$WORK/odr.txt"; then ok "gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused"
+else bad "gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
+od_edit '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE\`cat \/dev\/null\`/'
+if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 2 ] && grep -qF 'runs a bare command (cat)' "$WORK/odr.txt"; then ok "gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused"
+else bad "gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
+od_edit 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  printf "%s" "$_ov" > \/tmp\/ow; [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/'
+if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 2 ] && grep -qF 'redirects output (>)' "$WORK/odr.txt"; then ok "gen.sh: an output redirection in the owasp-derive block is refused"
+else bad "gen.sh: an output redirection in the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
 # gird-check.ps1 tags by its own Owasp-Set: a source with a risk and no arm there would never be tagged.
 rm -rf "$WORK/opa"; mkdir -p "$WORK/opa"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/opa/"
 grep -v "^    'ak_links' { return" gird-check.ps1 > "$WORK/opa/gird-check.ps1"
@@ -3757,6 +3757,10 @@ then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them";
 if awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all.txt" \
   && awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all-full.txt"
 then ok "owasp: --full and piped output carry the line at the end of the header"; else bad "owasp: --full and piped output carry the line at the end of the header"; fi
+for _f in "$OW/all.txt" "$OW/all-full.txt"; do
+  if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$_f"
+  then ok "owasp: --full and piped output set the line apart from the stats lines by a blank line"; else bad "owasp: --full and piped output set the line apart from the stats lines by a blank line" "$_f"; fi
+done
 if awk '/OWASP/ { n++; if (length($0) > 60) w = 1 } END { exit !(n >= 8 && !w) }' "$OW/all.txt"; then ok "owasp: every OWASP line fits the narrowest report, 60 columns"
 else bad "owasp: every OWASP line fits the narrowest report, 60 columns" "$(awk '/OWASP/ && length($0) > 60' "$OW/all.txt")"; fi
 # One kind each. Keys come from the fixture's random ones; nothing key-shaped is written here.
@@ -3793,6 +3797,30 @@ if grep -aq 'code/p/\.claude/setup\.mjs' "$OW/worm.txt" && ! grep -aq 'OWASP' "$
 else bad "owasp: a file named like a worm's, alone, carries no tag" "$(grep -a 'setup\.mjs\|OWASP' "$OW/worm.txt" | head -n 3)"; fi
 if grep -aq 'AWS keys' "$OW/login.txt" && ! grep -aq 'OWASP' "$OW/login.txt"; then ok "owasp: login files alone carry no tag"
 else bad "owasp: login files alone carry no tag" "$(grep -a 'AWS keys\|OWASP' "$OW/login.txt" | head -n 3)"; fi
+# One kind of finding per home, for the kinds the home above does not hold alone (tests/owasp-kind.sh),
+# so a wrong arm for one kind in either script fails its own test. A key in shell history is always a
+# key in a file too, so it has no home of its own.
+ow_kind() { # kind: builds its home (tests/owasp-kind.sh), runs the script on it, sets OW_ONE
+  bash tests/owasp-kind.sh "$OW/k-$1" "$1" "$WORK/keys.txt"
+  HOME="$OW/k-$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$OW/k-$1.txt" 2>&1
+  OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/k-$1.txt" | tr '\n' ';')
+}
+ow_kind tools
+if [ "$OW_ONE" = "top ASI04;01 ASI04;" ]; then ok "owasp: a tool with a security fix alone tags section 01 with ASI04"; else bad "owasp: a tool with a security fix alone tags section 01 with ASI04" "$OW_ONE"; fi
+ow_kind ak_links
+if [ "$OW_ONE" = "top ASI03;02 ASI03;" ]; then ok "owasp: a link to authorized_keys alone tags section 02 with ASI03"; else bad "owasp: a link to authorized_keys alone tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind mcp_token
+if [ "$OW_ONE" = "top ASI03;02 ASI03;03 ASI03;" ]; then ok "owasp: a token in an MCP config tags section 02 with ASI03"; else bad "owasp: a token in an MCP config tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind sessions
+if [ "$OW_ONE" = "top ASI03;03 ASI03;" ]; then ok "owasp: a key in an agent session alone tags section 03 with ASI03"; else bad "owasp: a key in an agent session alone tags section 03 with ASI03" "$OW_ONE"; fi
+ow_kind wiper
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: gh-token-monitor alone tags section 05 with ASI04"; else bad "owasp: gh-token-monitor alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind planted
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a file a worm plants alone tags section 05 with ASI04"; else bad "owasp: a file a worm plants alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind remove
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an extension to remove alone tags section 05 with ASI04"; else bad "owasp: an extension to remove alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind platforms
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a platform with a leak alone tags section 05 with ASI04"; else bad "owasp: a platform with a leak alone tags section 05 with ASI04" "$OW_ONE"; fi
 # The tags in the docs are written by hand: every risk, name and label in the data file is in both.
 OW_MISS=""
 while IFS="$(printf '\t')" read -r _k _r _n _l _rest; do

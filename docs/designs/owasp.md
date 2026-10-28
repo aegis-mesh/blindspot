@@ -42,6 +42,8 @@ and OWASP's Q3 2026 exploit round-up
   prints "and": the scripts are ASCII, and "&" is a special character in PowerShell and in shell code.
 - ASI02 is "Tool Misuse" in the December 2025 announcement and "Tool Misuse and Exploitation" in
   the Q3 2026 round-up. This design uses the longer name (see Open questions).
+- ASI05 is "Unexpected Code Execution" on both pages (checked again on 28 October 2026). Neither page
+  writes "(RCE)" after it; the downloadable document, which was not read, may.
 - Blindspot reads files on disk. It does not watch what an agent does, so it never tags ASI01 or
   ASI06 to ASI10. The README says so, so that a missing tag is not read as "not affected".
 
@@ -219,9 +221,12 @@ any `>` outside single quotes.
   own variables (`$KEY_FILES`, `$HIST_KEYS`, `$N_SESS`, `$N_MCP_TOKEN`, `$N_ALLOW`, `$N_SSH_OPEN`, `$N_AK`,
   `$N_YOLO`, `$N_OLD`, `$N_AUTO`, the planted, platform, Python and extension lists, and a new
   `$IndHits` for gird-check.sh's `IND_HITS`), and walks `$OwaspTable`. This is a second implementation
-  of the rule, so the tests hold it to bash's in full: one fixture carries every finding kind the two
-  can share, and both suites assert the complete set of tagged section lines and the summary line on it
-  (see Tests). The two reports' tags are derived by the same rule from each run's values.
+  of the rule, so the tests hold it to bash's: one fixture carries every finding kind the two can share,
+  and both suites assert the complete set of tagged section lines and the summary line on it; and each
+  kind has a home of its own (`tests/owasp-kind.sh`, or one of the small homes in Tests), so a wrong arm
+  for one kind fails its own test in either suite. A key in shell history is the one exception: a
+  history file with a key is always a key in a file too (`key_files`, also ASI03 in section 03), so no
+  home holds it alone, and a wrong `history_keys` arm on its own would not fail a test. The two reports' tags are derived by the same rule from each run's values.
 
 Account-run protocol: unchanged. Root derives every tag from fields it already receives and checks.
 `FL_KEYS`, the account run's output and `fl_parse` stay as they are, but for the `FA_tools` name.
@@ -244,8 +249,8 @@ report is never drawn narrower than 60 columns (`W` and `$Width` are held to 60 
 written as one line, with no wrap.
 
 In `--full` and piped output there are no summary rows (`HEAD_FULL` and the sections are printed
-instead). The same line goes at the end of the full header, after the stats line and before the
-section 01 heading, so a saved or piped report has it too. `HEAD_SHORT`, which the summary and
+instead). The same line goes at the end of the full header, after the stats line and a blank line,
+and before the section 01 heading, so a saved or piped report has it too. `HEAD_SHORT`, which the summary and
 the details pages share, does not change.
 
 ### 2. One line per risk at the top of a section's details
@@ -290,6 +295,7 @@ otherwise.
 ```
   ▌ 6 coding agents, 1 not used in 30 days, 4 MCP servers, 3 files with keys in
   ▌ plain text, 0 keys in allow lists
+
    OWASP Agentic Top 10: ASI02, ASI03, ASI05
 ```
 
@@ -486,6 +492,9 @@ Person's report:
 | owasp: a partly checked home with findings keeps its tags | yes |
 | owasp: a file named like a worm's, alone, carries no tag | yes |
 | owasp: login files alone carry no tag | yes |
+| owasp: --full and piped output set the line apart from the stats lines by a blank line | yes |
+| owasp: one home per kind (`tests/owasp-kind.sh`): a tool with a security fix, a link to authorized_keys, a token in an MCP config, a key in an agent session, gh-token-monitor, a file a worm plants, an extension to remove, a platform with a leak, each tagging its section and risk alone | yes |
+| owasp: the Mastra Run key on Windows tags section 05 with ASI04 | yes (PowerShell reads `GIRD_CHECK_TEST_RUNKEY` in place of the registry) |
 | owasp: the shared counts carry no OWASP field | yes |
 | owasp: every risk and label in data/owasp.tsv is in README.md and docs/fleet.md | bash-only: it reads the docs, which neither script prints |
 | gen.sh refusals (`gen_refuses`): a risk outside ASI01 to ASI10, two names for one risk, a no-risk line with no reason, a label over 32 characters, a bare `incidents` source, an account-run key with no line, a completeness key with a risk, a report-only line with a risk, a Mac field other than incidents with a risk, a risk on a source `owasp_set` has no arm for, an indicator of an incident that is not act level | bash-only: `tools/gen.sh` |
@@ -536,7 +545,7 @@ Screenshots are not tests; remaking them is a step in the pull request.
 - `gird-fleet.sh`: the two generated blocks; `FA_update` renamed `FA_tools`; `fl_codes`, `fl_owasp`,
   `fl_inv_fit`; per-account tags and `N_PART` in `fleet_main`; the Mac's tags; the `owasp` JSON
   object, row and machine fields; the terminal block; `SUMMARY` (both assignments); the inventory token
-- `tests/run.sh`, `tests/run-ps.sh`, `tests/bash-only.txt`, `tests/fleet-flat.py`, `tests/make-fixture.sh`
+- `tests/run.sh`, `tests/run-ps.sh`, `tests/bash-only.txt`, `tests/fleet-flat.py`, `tests/make-fixture.sh`, `tests/owasp-kind.sh`
 - `README.md`, `docs/report.png`, `docs/report-full.png` (via `tools/screenshots.sh`)
 - `docs/fleet.md`, `docs/mdm/jamf.md`, `docs/mdm/intune.md`, `docs/mdm/iru.md`
 - `docs/designs/fleet-mode.md`, `CHANGELOG.md`, `CONTRIBUTING.md`
@@ -557,7 +566,7 @@ Screenshots are not tests; remaking them is a step in the pull request.
 - **The two reports drift.** The person's report and fleet mode derive tags by the same rule from each
   run's values (one function, copied), and `gen.sh` refuses report-only kinds with a risk. The
   PowerShell report is a second implementation of the rule, held to bash's by twin tests on a home
-  that carries every finding kind.
+  that carries every finding kind and on a home of each kind alone (but a key in shell history, above).
 - **Read as clean for an account that was partly read.** A risk count says how many checked accounts
   have it; the accounts not checked and partly checked are counted beside it on every surface.
 - **Inventory budget.** On a busy Mac the value is often near or over 250 characters already, so the
@@ -602,9 +611,9 @@ Screenshots are not tests; remaking them is a step in the pull request.
   no count reads as other accounts being free of a risk.
 - The README and docs/fleet.md tags are hand-written, with a test that every code, name and label of
   `data/owasp.tsv` is in both (decision 6). `gen.sh` writes no doc table.
-- `gird-check.ps1`'s derivation is tested in full: one fixture with every finding kind, the full set of
-  section lines and the summary line asserted in both suites, and the order of two risks in one
-  section.
+- `gird-check.ps1`'s derivation is tested: one fixture with every finding kind, the full set of
+  section lines and the summary line asserted in both suites, the order of two risks in one section,
+  and a home of each kind alone but a key in shell history (see "One derivation, copied to root")
 - Root reads fixed `FA_<key>` names (no prefix argument, `eval` or `${!name}`), and `gen.sh` refuses a
   bare external command in the `owasp-derive` block.
 - The failed-save rewrite of `SUMMARY` keeps the OWASP part, with a test.

@@ -3416,6 +3416,10 @@ then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them";
 if awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all.txt" \
   && awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all-full.txt"
 then ok "owasp: --full and piped output carry the line at the end of the header"; else bad "owasp: --full and piped output carry the line at the end of the header"; fi
+for _f in "$OW/all.txt" "$OW/all-full.txt"; do
+  if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$_f"
+  then ok "owasp: --full and piped output set the line apart from the stats lines by a blank line"; else bad "owasp: --full and piped output set the line apart from the stats lines by a blank line" "$_f"; fi
+done
 if awk '/OWASP/ { n++; if (length($0) > 60) w = 1 } END { exit !(n >= 8 && !w) }' "$OW/all.txt"; then ok "owasp: every OWASP line fits the narrowest report, 60 columns"
 else bad "owasp: every OWASP line fits the narrowest report, 60 columns" "$(awk '/OWASP/ && length($0) > 60' "$OW/all.txt")"; fi
 # One kind each, as in tests/run.sh. Keys come from the fixture's random ones.
@@ -3452,6 +3456,30 @@ if grep -aq 'code/p/\.claude/setup\.mjs' "$OW/worm.txt" && ! grep -aq 'OWASP' "$
 else bad "owasp: a file named like a worm's, alone, carries no tag" "$(grep -a 'setup\.mjs\|OWASP' "$OW/worm.txt" | head -n 3)"; fi
 if grep -aq 'AWS keys' "$OW/login.txt" && ! grep -aq 'OWASP' "$OW/login.txt"; then ok "owasp: login files alone carry no tag"
 else bad "owasp: login files alone carry no tag" "$(grep -a 'AWS keys\|OWASP' "$OW/login.txt" | head -n 3)"; fi
+# One kind of finding per home, for the kinds the home above does not hold alone (tests/owasp-kind.sh),
+# so a wrong arm for one kind in either script fails its own test. A key in shell history is always a
+# key in a file too, so it has no home of its own.
+ow_kind() { # kind: builds its home (tests/owasp-kind.sh), runs the script on it, sets OW_ONE
+  bash tests/owasp-kind.sh "$OW/k-$1" "$1" "$WORK/keys.txt"
+  psrun "$OW/k-$1" -- -Offline > "$OW/k-$1.txt" 2>&1
+  OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/k-$1.txt" | tr '\n' ';')
+}
+ow_kind tools
+if [ "$OW_ONE" = "top ASI04;01 ASI04;" ]; then ok "owasp: a tool with a security fix alone tags section 01 with ASI04"; else bad "owasp: a tool with a security fix alone tags section 01 with ASI04" "$OW_ONE"; fi
+ow_kind ak_links
+if [ "$OW_ONE" = "top ASI03;02 ASI03;" ]; then ok "owasp: a link to authorized_keys alone tags section 02 with ASI03"; else bad "owasp: a link to authorized_keys alone tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind mcp_token
+if [ "$OW_ONE" = "top ASI03;02 ASI03;03 ASI03;" ]; then ok "owasp: a token in an MCP config tags section 02 with ASI03"; else bad "owasp: a token in an MCP config tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind sessions
+if [ "$OW_ONE" = "top ASI03;03 ASI03;" ]; then ok "owasp: a key in an agent session alone tags section 03 with ASI03"; else bad "owasp: a key in an agent session alone tags section 03 with ASI03" "$OW_ONE"; fi
+ow_kind wiper
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: gh-token-monitor alone tags section 05 with ASI04"; else bad "owasp: gh-token-monitor alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind planted
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a file a worm plants alone tags section 05 with ASI04"; else bad "owasp: a file a worm plants alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind remove
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an extension to remove alone tags section 05 with ASI04"; else bad "owasp: an extension to remove alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind platforms
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a platform with a leak alone tags section 05 with ASI04"; else bad "owasp: a platform with a leak alone tags section 05 with ASI04" "$OW_ONE"; fi
 
 echo "a Windows profile"
 # The profile tests/run.sh builds for Git Bash, with OS=Windows_NT so gird-check.ps1 takes the

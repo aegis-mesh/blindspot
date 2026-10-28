@@ -7241,7 +7241,7 @@ if ($UnreadDirs.Count -gt 0) {
   else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 2 to 5 did not check the files in them" }
   Wrap "$($udText): $(Dir-List $UnreadDirs)." 4 "  $cYel$gBar$cRst " "  $cYel$gBar$cRst " $cYel
 }
-if ($OwCodes) { Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
+if ($OwCodes) { Blank; Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
 $HeadFull = $HeadShort + (Take-Cap)
 
 Section '01' 'CODING AGENTS' "$N_AG found, $N_IDLE idle"
