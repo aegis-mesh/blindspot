@@ -35,7 +35,7 @@ Every change has to keep these true. Reviews check them first.
 
 ## Lists live in `data/`
 
-The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project, the hosted platforms that leaked stored secrets, the agent settings that run commands without asking, the agent versions with a published security fix and the editor extensions that shipped malware each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts; edit the data file, never the generated block between `# >>> name` and `# <<< name`. `tests/run.sh` fails if a script and its data file disagree.
+The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project, the hosted platforms that leaked stored secrets, the agent settings that run commands without asking, the agent versions with a published security fix and the editor extensions that shipped malware each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts and into the lists in [docs/checks.md](docs/checks.md); edit the data file, never the generated block between `# >>> name` and `# <<< name` (or `<!-- >>> checks -->` and `<!-- <<< checks -->` in the page). `tests/run.sh` fails if a script or the page and its data file disagree.
 
 ## Add an agent
 
