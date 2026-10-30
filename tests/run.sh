@@ -1668,7 +1668,8 @@ has    "it is a version to update instead"           'npm malware a bad version 
 has    "with the vendor's own explanation"           'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file\. docs\.mistral\.ai' "$WORK/mis.txt"
 has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
-hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
+hasnot "it does not outrank moving keys out of plain text" 'most urgent first 1\. Update the npm packages' "$WORK/mis-c.txt"
+has    "moving keys out of plain text comes first" 'most urgent first 1\. Move keys out of shell profiles' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0&lo=0&fi=( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" '[Mm]ove the funds' "$WORK/mis.txt"
 # The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
@@ -1738,7 +1739,7 @@ HOME="$WORK/sw" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '
 HOME="$WORK/sw" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sw-sum.txt"
 has    "SANDWORM_MODE's fix: remove its git hooks and MCP servers first" ' 1\. First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init\.templateDir names and in the \.git/hooks and \.husky folders of your repositories, and MCP servers you did not add to your AI assistants\. Its pre-push hook sends npm tokens out on every push\. 2\. Treat this machine as compromised\.' "$WORK/sw.txt"
 has    "ahead of an incident's own advice to rotate"  'Its pre-push hook sends npm tokens out on every push\. .*Rotate the secrets this machine held from another computer' "$WORK/sw.txt"
-has    "and the summary's first fix is to remove them" 'First fix: First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
+has    "and the summary's first fix is to remove them" 'most urgent first 1\. First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
 has    "and the result link names it, so the page removes them first too" '&nm=1&.*&lo=0&fi=sandworm( |$)' "$WORK/sw.txt"
 # wot-api 0.8.5, published an hour after 0.8.4, is malware by OpenSSF's entry, which Wiz's list leaves out.
 rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/w" "$WORK/npw/AppData/Roaming" "$WORK/npw/AppData/Local/Temp"
@@ -2443,7 +2444,7 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"
 env HOME="$WORK/dz-inj" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj.txt"
 env HOME="$WORK/dz-inj" PATH="$WORK/dzbin:/usr/bin:/bin" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj-sum.txt"
 has    "Injective's wallet fix comes first, ahead of moving keys out of plain text" ' 1\. From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21, into a new wallet\. 2\. Move keys out of shell profiles' "$WORK/dz-inj.txt"
-has    "and it is the summary's first fix"             'First fix: From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21' "$WORK/dz-inj-sum.txt"
+has    "and it is the summary's first fix"             'most urgent first 1\. From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21' "$WORK/dz-inj-sum.txt"
 has    "row 05 names the wallets"                      'Recent leaks +Injective SDK: move the funds out of its wallets' "$WORK/dz-inj-sum.txt"
 dzrun() { _h=$1; shift; env HOME="$_h" PATH="$WORK/dzbin:/usr/bin:/bin" "$@" bash "$SCRIPT" --offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
@@ -3237,12 +3238,15 @@ for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' 'R
   has "one summary line for $label" "^   0[1-5] .*$label" "$OUT"
 done
 has    "the keys line names the first file"    'Keys in plain text +4 files, like ~/\.zshrc \(Anthropic, OpenAI\)' "$OUT"
-has    "the summary leads with the first fix"  'First fix: Don.t revoke any GitHub token yet' "$OUT"
+has    "the summary leads with the first fix"  '^ +1\.  Don.t revoke any GitHub token yet' "$OUT"
 hasnot "the summary leaves out the other key files" '~/\.zsh_history +GitHub' "$OUT"
 hasnot "the summary has no section tables"     'KEYS IN PLAIN TEXT' "$OUT"
 hasnot "the summary shows no letter grade"     'GRADE [ABCDF]|[Gg]rade [ABCDF]\b' "$OUT"
 if grep -aqF -f "$WORK/keys.txt" "$OUT"; then bad "the summary never prints a planted key"; else ok "the summary never prints a planted key"; fi
 HOME="$WORK/home" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline --full > "$WORK/full.txt" 2>&1
+LAST=$(grep -aE '^ +[0-9]+\.  ' "$OUT" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr -d ' ')
+FLAST=$(grep -aE '^ +[0-9]+\.  ' "$WORK/full.txt" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr -d ' ')
+if [ -n "$LAST" ] && [ "${LAST:-0}" -gt 1 ] && [ "$LAST" = "$FLAST" ]; then ok "the summary lists every fix, numbered" "$LAST"; else bad "the summary lists every fix, numbered" "summary ends at $LAST, full report at $FLAST"; fi
 has    "--full prints every section in full"   'KEYS IN PLAIN TEXT' "$WORK/full.txt"
 has    "--full lists every key file"           '~/\.zsh_history +GitHub' "$WORK/full.txt"
 

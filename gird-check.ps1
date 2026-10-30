@@ -7509,10 +7509,14 @@ foreach ($p in $Platforms) {
   }
 }
 $Sec5 = Take-Cap
+# Every fix, numbered: the full report's list and the summary's.
+function Todo-List {
+  $i = 0
+  foreach ($t in $Todo) { $i++; Wrap $t 10 "     $cTeal$($i.ToString().PadLeft(2)).$cRst  " '          ' }
+}
 Heading 'WHAT TO DO' 'most urgent first'
-$i = 0
-foreach ($t in $Todo) { $i++; Wrap $t 10 "     $cTeal$($i.ToString().PadLeft(2)).$cRst  " '          ' }
-if ($i -gt 0) { Blank }
+Todo-List
+if ($Todo.Count -gt 0) { Blank }
 Wrap 'Also: set a monthly spend limit on every AI provider key, at the provider.' 5 '     ' '     '
 $SecTodo = Take-Cap
 # Argus is a Mac app, so on Windows it is one line, as gird-check.sh says off a Mac.
@@ -7611,7 +7615,7 @@ CLine '03' $G3 'Keys in plain text' $D3
 CLine '04' $G4 'Allow lists' $D4
 CLine '05' $G5 'Recent leaks' $D5
 if ($SlowFiles.Count -gt 0) { Blank; Wrap "$SlowText, like $(Short $SlowFiles[0])" 5 "   $cYel!$cRst " '     ' }
-if ($ISSUES -gt 0) { Blank; Wrap $Todo[0] 14 "   ${cBold}First fix:$cRst " (' ' * 14) }
+if ($ISSUES -gt 0) { Blank; Emit "   ${cBold}What to do, most urgent first$cRst"; Todo-List }
 Blank
 Wrap $ArgusLine 2 '  ' '  ' $cDim
 if ($ISSUES -eq 0) {
