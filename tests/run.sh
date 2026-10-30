@@ -1669,6 +1669,7 @@ has    "with the vendor's own explanation"           'Mistral AI npm packages, M
 has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
 hasnot "it does not outrank moving keys out of plain text" 'most urgent first 1\. Update the npm packages' "$WORK/mis-c.txt"
+has    "moving keys out of plain text comes first" 'most urgent first 1\. Move keys out of shell profiles' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0&lo=0&fi=( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" '[Mm]ove the funds' "$WORK/mis.txt"
 # The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
