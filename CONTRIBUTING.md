@@ -71,7 +71,7 @@ A new kind of check (a new file format, a running process, a registry value) is 
 
 A reviewer starts from the person who acts on the report, not from the diff:
 
-- **Advice that makes things worse.** Follow every finding to every place it shows: its section, the summary row, "First fix", the fix list and the result page the link opens. Nothing may tell someone to revoke or rotate a token while `gh-token-monitor` is present.
+- **Advice that makes things worse.** Follow every finding to every place it shows: its section, the summary row, the summary's fix list, the full fix list and the result page the link opens. Nothing may tell someone to revoke or rotate a token while `gh-token-monitor` is present.
 - **False comfort.** A green line or "no keys" over something that wasn't fully read is a bug. Partial, skipped and unreadable must say so.
 - **False alarms.** A red "treat this machine as compromised" over something harmless costs trust. Test the near misses: a version one digit off, a name that contains another, a rule or guard that names a malware file without running it.
 - **Real inputs.** Try the shapes people actually have: pretty-printed JSON, committed `settings.local.json`, worktrees, symlinks, every lockfile format, paths with spaces or `|`, Windows paths.
