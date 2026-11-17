@@ -254,13 +254,23 @@ check covers the signed-in account, and an account that is not signed in is not 
 A PC with one person, the usual case for a work laptop, is covered in full. On a shared PC each
 account gets its own result the first time its check runs after sign-in.
 
+So a result on Windows speaks for one account, not for the PC. `clear` means that account was
+checked in full and nothing was found. The result says how many other people have a profile on the
+PC, so an admin can see what one run left out.
+
 ### Two files, as on a Mac
 
 - `gird-check.ps1`, the script each person runs, gains `-AccountRun`. It prints the same fixed
   lines as `gird-check.sh --account-run`: the same keys in the same order, with numbers and names
-  from the fixed lists only. Two values differ on Windows: `engine` can be `dotnet`, the engine
-  that reads agent sessions when ripgrep is not installed, and `protected` is always `ok`, because
-  Windows has no folders that need a grant like Full Disk Access.
+  from the fixed lists only. Four values differ on Windows:
+  - `engine` is `rg`, `dotnet` or `none`. `dotnet` reads agent sessions when the person has no
+    ripgrep. The person's own ripgrep is used, as in a run by hand, because the check has only the
+    person's rights.
+  - `protected` is always `ok`. Windows has no folders that need a grant like Full Disk Access.
+  - `moved` is always `0`. The run keeps the person's environment, so a variable that moves an
+    agent's folders is followed.
+  - `tmp_marks` lists malware markers the person owns in `%ProgramData%`, the shared folder any
+    account can write to. They are possible signs, as markers in `/tmp` are on a Mac.
 - `gird-fleet.ps1` is new. It starts the account run, checks every line it sends back, and builds
   the result. It holds every fleet option. `gird-check.ps1` holds none.
 
@@ -276,17 +286,28 @@ can create a folder there first and keep control of it.
 The install stops if `%ProgramFiles%\Blindspot` already exists and is owned by anyone but
 Administrators, SYSTEM or TrustedInstaller, or if any other account may write to it.
 
-Before it starts a check, `gird-fleet.ps1` looks at itself, at `gird-check.ps1` next to it and at
-their folder. If an account that is not an administrator may write to any of them, the run is
-`failed`. One account on a shared PC therefore cannot change the code another account's check runs.
+Before it starts a check, `gird-fleet.ps1` looks at itself, at `gird-check.ps1` next to it, at
+their folder and at every folder above it. If any of them is a link to another folder, or may be
+written by an account that is not an administrator, the run is `failed`. A standard account on a
+shared PC therefore cannot change the code another account's check runs. An account with
+administrator rights can, as it can change anything else on the PC.
 
 ### How a run goes
 
-The MDM's scheduled item runs in the signed-in person's session and holds one line:
+The MDM runs the check once a day, as the signed-in person, in 64-bit PowerShell. The MDM's own
+script holds one line:
 
 ```powershell
-& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$env:ProgramFiles\Blindspot\gird-fleet.ps1"
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$env:ProgramW6432\Blindspot\gird-fleet.ps1"
 ```
+
+Many MDMs start scripts in 32-bit PowerShell unless told otherwise. A 32-bit process is shown a
+different `Program Files` and a different set of installed tools, so its check would miss things.
+`gird-fleet.ps1` therefore checks that it runs as a 64-bit process, and if not, the outcome is
+`failed` with `reason=host_32bit`.
+
+A company policy can stop PowerShell from running the script at all. Then nothing is printed. As
+on a Mac, a missing summary, or an exit code the MDM does not expect, means not checked.
 
 `gird-fleet.ps1` then:
 
@@ -295,50 +316,73 @@ The MDM's scheduled item runs in the signed-in person's session and holds one li
 2. Starts `gird-check.ps1 -AccountRun` as a separate PowerShell process, by full path, with
    `-NoProfile`, so the person's PowerShell profile does not run. The process keeps the person's
    own environment, so a variable that moves an agent's folders is followed, as in a run by hand.
+   The test-only `GIRD_CHECK_*` settings are removed first, as on a Mac.
 3. Reads at most 4096 bytes of what the account run prints and checks each line against the fixed
    format. A line that does not fit makes the account `not_checked`. Nothing the account run
-   printed is copied into the result.
-4. Stops the account run and everything it started at the time limit (`-Deadline`, in seconds).
-   What was found by then still counts, and the account is partly checked.
-5. Checks the PC's shared places with the person's own rights: agents installed under
-   `%ProgramFiles%`, by name, and the malware markers `data/indicators.tsv` lists for
-   `%ProgramData%`. A marker there counts only when Administrators or SYSTEM own it. One that
-   another account owns is a possible sign, since any account can create a file there.
-6. Saves the result and prints the summary line.
+   printed, on its output or its error stream, is copied into the result or reaches the MDM.
+4. Stops the account run at the time limit, with every process it started. `-Deadline` sets the
+   limit in seconds. It is 1500 when not given, to finish inside the 30 minutes Intune allows a
+   script. What was found by then still counts, and the account is partly checked. A process
+   that is still running after the stop is reported. Windows PowerShell can only follow a process
+   to the ones it started, so a process that cut itself loose is not seen.
+5. Looks for agents installed under `%ProgramFiles%`, by name.
+6. Looks in `%ProgramData%` for the malware markers `data/indicators.tsv` lists there. A marker
+   that Administrators or SYSTEM own is a finding for the PC. One the person owns goes on the
+   person's row as a possible sign. One another account owns is a possible sign for the PC. Any
+   account can create a file there, so the owner decides.
+7. Saves the result and prints the summary line.
 
 ### The result
 
 The JSON, the summary line, the inventory value, the five outcomes and the exit codes are the
 ones in "The result" above. The differences:
 
-- `os` reads `Windows 10` or `Windows 11`.
+- `os` reads `Windows 10` or `Windows 11`, told apart by build number: 22000 and up is 11.
 - `accounts` holds one row, for the signed-in account.
 - `other_profiles` is new: how many other people have a profile on the PC. Their accounts were not
   checked in this run. The summary line carries it as `other_profiles=<n>`.
 - The saved result is `%LOCALAPPDATA%\Blindspot\last.json`, in the person's own profile.
   `-Inventory` reads it in the person's session and reports `stale`, `failed` and `none` as on a
   Mac. Nothing running as SYSTEM ever opens it.
+- A `failed` summary line ends with `reason=<why>`, from a fixed list.
 - `-HashAccounts` is not offered. On a Mac the secret stays in a file only root can read. Here the
   script runs as the person, who could read the secret.
 
 ### What a person can change
 
 The check runs with the person's own rights, so a person who sets out to can change what their own
-check reports. They cannot change another account's result or the scripts. Fleet mode shows an IT
-team where keys and agents sit across honest machines. It is not a control against the person at
-the keyboard.
+check reports. So can any program that runs as that person, malware included: the saved result
+sits in the person's own profile. A standard account cannot change another account's result or
+the scripts. Fleet mode shows an IT team where keys and agents sit across honest machines. It is
+not a control against the person at the keyboard, and a `clear` from a PC that malware already
+runs on proves nothing.
+
+### Microsoft Intune
+
+Intune limits a script it runs to 200 KB, and `gird-check.ps1` is larger. So the two files are
+packaged as a Windows app that Intune installs once, as SYSTEM, into `%ProgramFiles%\Blindspot`.
+
+The daily check is an Intune Remediation: a script Intune runs on a schedule and whose output it
+shows for each PC. It is set to run with the signed-in person's credentials, in 64-bit PowerShell,
+once a day. Its script runs the check, then prints the inventory value with `-Inventory`, and
+exits 1 unless the outcome is `clear`, which Intune lists as a PC with issues. Intune keeps at
+most 2,048 characters of output. The inventory value is cut to fit, as on a Mac. Remediations
+need a Windows Enterprise or Education licence. `docs/mdm/` gets a page with the steps.
 
 ### PCs that restrict PowerShell
 
 Some companies let PowerShell run only a reduced language, called Constrained Language Mode, or
 only signed scripts. `gird-check.ps1` calls .NET directly and cannot run in the reduced language.
-`gird-fleet.ps1` checks the language mode first, with a statement the reduced language allows. If
-the check cannot run, the outcome is `failed` and the summary line ends with `reason=language_mode`,
-so a PC that could not be checked never reads `clear`.
+`gird-fleet.ps1` checks the language mode first, with a statement the reduced language allows.
+Its own mode does not settle the account run's, which is a separate process. So an account run
+that stops before its first line is `failed` too. Either way the summary line ends with
+`reason=language_mode`, and a PC that could not be checked never reads `clear`.
 
 ### Tests
 
-Each has a twin in `tests/run.sh` where the Mac check has the same rule.
+Each has a twin in `tests/run.sh` where the Mac check has the same rule. Tests of Windows
+permissions, the language mode and stopping a process need Windows. They run on a Windows PC and
+report as skipped elsewhere.
 
 - `-AccountRun` prints the same keys, in the same order, as `--account-run` for the same fixture.
 - Output for another account, a forged machine section, oversized output or a malformed line:
@@ -352,6 +396,10 @@ Each has a twin in `tests/run.sh` where the Mac check has the same rule.
 - A marker in `%ProgramData%` owned by an ordinary account is a possible sign, not a finding.
 - A session in Constrained Language Mode: `failed`, with `reason=language_mode`.
 - A profile that would print or change something does not run.
+- A 32-bit PowerShell: `failed`, with `reason=host_32bit`.
+- A test-only `GIRD_CHECK_*` setting in the person's environment changes nothing.
+- A folder above the scripts that is a link: the run is `failed`.
+- A process still running after the stop is reported.
 
 ## Not covered
 
