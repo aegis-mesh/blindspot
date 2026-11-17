@@ -121,7 +121,7 @@ if ($Fancy) {
   $gOk = '+'; $gX = 'x'; $gDot = '*'; $gRing = 'o'; $gBul = '-'; $gMid = '.'; $gBar = '|'; $gStar = '*'; $gRuleCh = [char]'-'
 }
 $OldOutEnc = $null
-if ($OnWindows) { try { $OldOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { $OldOutEnc = $null } }
+if ($OnWindows -and -not $OptAcctRun) { try { $OldOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { $OldOutEnc = $null } }
 $Width = 80
 if ($IsConsole) {
   try { $Width = [Console]::WindowWidth } catch { $Width = 80 }
@@ -1371,6 +1371,7 @@ $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' 
 # name | commands (separated by ;) | install paths | folders that change when it is used | id
 # Windsurf became Devin Desktop on 2 June 2026: the devin-desktop command, and editor data under Devin,
 # not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
+# >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.ps1.
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
@@ -1387,6 +1388,7 @@ $Agents = @(
     @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
   @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
 )
+# <<< agents
 $AgRows = New-Object System.Collections.Generic.List[object]
 $AgentIds = New-Object System.Collections.Generic.List[string]; $AgNames = New-Object System.Collections.Generic.List[string]
 $IdleNames = New-Object System.Collections.Generic.List[string]; $IdleIds = New-Object System.Collections.Generic.List[string]
