@@ -397,6 +397,29 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   { print $1 " " $2 " " $3 " " $4 " " $5 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
+# --- the ids gird-fleet.ps1 checks an account run's lines against ---------------------
+# Every incident with its level, the key providers, the agents of data/auto-approve.tsv, the tools of
+# data/outdated.tsv and the platforms, as Windows sees them, and the markers data/indicators.tsv puts in
+# %ProgramData%, which the PC's own check looks at by name.
+{ rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $6 }'; rows data/keys.tsv | awk -F '\t' '{ print "K\t" $1 }'
+  rows data/auto-approve.tsv | awk -F '\t' '$2 == "all" || $2 == "win" { print "A\t" $1 }'
+  rows data/outdated.tsv | awk -F '\t' '$3 == "all" || $3 == "win" { print "O\t" $1 }'; rows data/platforms.tsv | awk -F '\t' '{ print "P\t" $1 }'
+  rows data/indicators.tsv | awk -F '\t' '($2 == "all" || $2 == "win") && $5 ~ /^\{PROGRAMDATA\}\// { print "D\t" $1 "\t" substr($5, 15) }'; } | awk -F '\t' '
+  function add(k, v) { if (!((k, v) in seen)) { seen[k, v] = 1; L[k] = L[k] (L[k] == "" ? "" : (k == "I" ? "; " : ", ")) v } }
+  $1 == "I" { add("I", "\047" $2 "\047 = \047" $3 "\047") } $1 == "K" { k = k (k == "" ? "" : " ") $2 }
+  $1 == "A" { add("A", "\047" $2 "\047") } $1 == "O" { add("O", "\047" $2 "\047") } $1 == "P" { add("P", "\047" $2 "\047") }
+  $1 == "D" { d = d "  ,@(\047" $2 "\047, \047" $3 "\047)\n" }
+  END {
+    print "# >>> fleet-tables: generated from data/ by tools/gen.sh. Edit those files, then run it."
+    print "$FlIncidents = @{ " L["I"] " }"
+    print "$FlProviders = \047" k "\047"
+    print "$FlYoloNames = @(" L["A"] ")"
+    print "$FlTools = @(" L["O"] ")"
+    print "$FlPlatforms = @(" L["P"] ")"
+    printf "$FlProgramData = @(\n%s)\n", d
+    print "# <<< fleet-tables"
+  }' > "$WORK/fleet-tables.ps1"
+
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
   awk -v name="$2" -v gen="$3" '
@@ -413,17 +436,41 @@ grep -q '^# <<< agents$' "$WORK/agents.sh" || { echo "gird-check.sh has no agent
 awk '/^# >>> owned-walk[: ]/ { on = 1; print "# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< owned-walk$/ { exit }' gird-check.sh > "$WORK/owned-walk.sh"
 grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has no owned-walk block"; exit 1; }
+# gird-check.ps1's agents table, for gird-fleet.ps1: the ids an account run may send, and the install
+# folders whose machine-wide twins under %ProgramFiles% the PC's own check looks at.
+awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.ps1 by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< agents$/ { exit }' gird-check.ps1 > "$WORK/agents.ps1"
+grep -q '^# <<< agents$' "$WORK/agents.ps1" || { echo "gird-check.ps1 has no agents block"; exit 1; }
 
 RC=0
-for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
+for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
+  elif [ "$f" = gird-fleet.ps1 ]; then blocks="agents fleet-tables"
   else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }
   done
   if [ "$CHECK" -eq 1 ]; then
-    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh, with gird-check.sh): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
+    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh and gird-fleet.ps1, with gird-check.sh and gird-check.ps1): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
 done
+
+# --- blindspot-fleet.ps1, the one file an MDM runs ------------------------------
+# gird-fleet.ps1 with gird-check.ps1 packed inside it, gzip-compressed and base64-encoded, and its
+# SHA-256. Built from the files as they are here and never checked in: tools/gen.sh builds it for each
+# release. Intune takes a script of under 200 KB, so --check builds it and fails at 200 KB or more,
+# or when the check it unpacks is not gird-check.ps1 byte for byte.
+if command -v sha256sum > /dev/null 2>&1; then sha() { sha256sum | cut -c1-64; }; else sha() { shasum -a 256 | cut -c1-64; }; fi
+gzip -9 -n -c < gird-check.ps1 | base64 | tr -d '\n\r' > "$WORK/packed.b64"
+_sha=$(sha < gird-check.ps1)
+{ printf '# >>> packed-check: gird-check.ps1, written into blindspot-fleet.ps1 by tools/gen.sh.\n'
+  printf '$PackedCheck = \047%s\047\n' "$(cat "$WORK/packed.b64")"
+  printf '$PackedSha = \047%s\047\n# <<< packed-check\n' "$_sha"; } > "$WORK/packed-check.ps1"
+splice gird-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/blindspot-fleet.ps1" || exit 1
+_sz=$(wc -c < "$WORK/blindspot-fleet.ps1" | tr -d ' ')
+if [ "$_sz" -ge 204800 ]; then echo "blindspot-fleet.ps1 is $_sz bytes: Intune takes a script of under 200 KB (204,800 bytes)"; RC=1; fi
+_back=$(base64 -d < "$WORK/packed.b64" 2>/dev/null | gzip -dc | sha)
+if [ "$_back" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1"; RC=1; fi
+if [ "$CHECK" -eq 0 ] && [ "$RC" -eq 0 ] && ! cmp -s "$WORK/blindspot-fleet.ps1" blindspot-fleet.ps1; then cat "$WORK/blindspot-fleet.ps1" > blindspot-fleet.ps1; echo "built blindspot-fleet.ps1 ($_sz bytes)"; fi
 exit "$RC"
