@@ -20,6 +20,7 @@ the source of truth for every other check.
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Save      saves the full report as a text file
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -AllSessions  waits until every agent session is checked
   -NoColor (or NO_COLOR=1)                                            plain text, no colors
+  For IT teams: blindspot-fleet.ps1 checks the signed-in person's account from an MDM (docs/fleet.md)
 
 Runs on Windows PowerShell 5.1 and PowerShell 7. This file is plain ASCII on purpose:
 Windows PowerShell 5.1 reads a script without a byte order mark as the ANSI code page,
@@ -27,24 +28,43 @@ so every non-ASCII character below is built from its code point.
 #>
 param(
   [switch]$All, [switch]$Full, [switch]$Offline, [switch]$Save, [switch]$NoColor, [switch]$Help, [switch]$AllSessions,
+  [switch]$AccountRun,
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
 
+$AccountSeconds = ''
 $OptAllSess = [bool]$AllSessions; $OptAll = [bool]$All; $OptFull = [bool]$Full; $OptOffline = [bool]$Offline; $OptSave = [bool]$Save; $OptNoColor = [bool]$NoColor
 foreach ($arg in $Rest) {
   switch ($arg) {
     '--all' { $OptAll = $true } '--full' { $OptFull = $true } '--save' { $OptSave = $true }
     '--offline' { $OptOffline = $true } '--no-color' { $OptNoColor = $true } '--no-game' { } '--all-sessions' { $OptAllSess = $true }
+    '--account-run' { $AccountRun = $true }
+    { $_ -like '--account-seconds=*' } { $AccountSeconds = $_.Substring(18) }
     { $_ -eq '--help' -or $_ -eq '-h' } { $Help = $true }
     default { [Console]::Out.WriteLine("Unknown option: $arg (try -Help)"); exit 2 }
   }
 }
 if ($Help) {
-  $lines = (Get-Content -LiteralPath $PSCommandPath -TotalCount 22) | Select-Object -Skip 1
+  $lines = (Get-Content -LiteralPath $PSCommandPath -TotalCount 23) | Select-Object -Skip 1
   foreach ($l in $lines) { if ($l -notmatch '^#>') { [Console]::Out.WriteLine($l) } }
   exit 0
 }
 if ($env:DO_NOT_TRACK -eq '1') { $OptOffline = $true }
+# An account run: started by gird-fleet.ps1 as the signed-in person. Its only output is the fixed
+# lines gird-fleet.ps1 reads, the same as gird-check.sh --account-run prints, written where the
+# checks end; everything else goes nowhere.
+$OptAcctRun = [bool]$AccountRun; $AcctOut = $null; $AcctEnd = $null
+if ($OptAcctRun) {
+  if ($env:OS -eq 'Windows_NT') {
+    try { if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -eq 'S-1-5-18') { exit 13 } } catch { exit 13 }
+  }
+  $OptOffline = $true; $OptSave = $false; $OptNoColor = $true; $OptFull = $true; $OptAll = $false; $OptAllSess = $true
+  # The session check stops at three quarters of the time gird-fleet.ps1 gives the run, so what was
+  # found still reaches it, with the sessions partly checked.
+  if ($AccountSeconds -match '^[0-9]{1,5}$') { $AcctEnd = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds * 3 / 4) }
+  $AcctOut = [Console]::Out
+  [Console]::SetOut([IO.TextWriter]::Null); [Console]::SetError([IO.TextWriter]::Null)
+}
 
 $ScriptVersion = '1'
 $Web = 'https://gird.ai'; if ($env:GIRD_CHECK_WEB) { $Web = $env:GIRD_CHECK_WEB }   # the overrides here are for testing
@@ -78,6 +98,7 @@ if ($TempDirs.Count -eq 0) { $TempDirs.Add([IO.Path]::GetTempPath().TrimEnd('\',
 # ---------------------------------------------------------------------------
 $IsConsole = $false; $InConsole = $false
 try { $IsConsole = -not [Console]::IsOutputRedirected; $InConsole = -not [Console]::IsInputRedirected } catch { }
+if ($OptAcctRun) { $IsConsole = $false; $InConsole = $false }
 $Compact = $IsConsole
 if ($env:GIRD_CHECK_COMPACT -eq '1') { $Compact = $true }
 if ($OptFull) { $Compact = $false }
@@ -664,9 +685,13 @@ function Entries([string]$dir) {
 }
 function Is-Link($info) { ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }
 function Is-DirInfo($info) { ($info.Attributes -band [IO.FileAttributes]::Directory) -ne 0 }
-# Whether this person owns a file, read off Windows (PowerShell 7 adds User to a file's info). A link
-# is judged by what it points at, as bash's -O does, where .NET can resolve it (PowerShell 7.2 and up).
+# Whether this person owns a file: on Windows its owner's SID, off Windows the User PowerShell 7 adds to
+# a file's info. Off Windows a link is judged by what it points at, as bash's -O does, where .NET can
+# resolve it (PowerShell 7.2 and up).
 function Owns-File([string]$p) {
+  if ($OnWindows) {
+    try { return [bool]((Get-Acl -LiteralPath $p -ErrorAction Stop).GetOwner([Security.Principal.SecurityIdentifier]).Value -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) } catch { return $false }
+  }
   try {
     $it = Get-Item -LiteralPath $p -Force -ErrorAction Stop
     $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
@@ -6727,6 +6752,10 @@ $Persist = New-Object System.Collections.Generic.List[object]
 # file to check ($ExtCheck), not a compromised machine.
 $ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
 $ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
+# $IndHits: the incidents of the startup files in $Persist, which an account run sends. $FleetTmpMark:
+# in an account run, the incidents of markers this person owns in %ProgramData%, which any account can
+# write to: possible signs, never findings, as markers in /tmp are on a Mac.
+$IndHits = New-Object System.Collections.Generic.List[string]; $FleetTmpMark = New-Object System.Collections.Generic.List[string]
 $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
@@ -6755,6 +6784,10 @@ foreach ($r in $IndOn) {
   # A Python incident's startup file is shown in its row ($PyStart).
   if ($r[2] -eq 'startup' -and $PyIncidents -contains $r[0]) { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
+  if ($OptAcctRun -and $env:ProgramData -and $m.StartsWith($env:ProgramData.TrimEnd('\', '/') + $Sep, $PathCmp)) {
+    if (-not (Multi-Name $m) -and (Owns-File $m) -and -not $FleetTmpMark.Contains($r[0])) { $FleetTmpMark.Add($r[0]) }
+    continue
+  }
   if ($r[3] -eq 'yes') {
     if ($OnWindows) { continue }
     # Only under its one name, outside the home folder: a link, symbolic or hard, could put another
@@ -6767,13 +6800,13 @@ foreach ($r in $IndOn) {
     if ($ExtFound -ccontains $r[0]) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
     else { $ExtCheck.Add(@($m, $r[5])); if (-not $ExtCheckTags.Contains($r[0])) { $ExtCheckTags.Add($r[0]) } }
   }
-  else { $Persist.Add(@($m, $r[5])) }
+  else { $Persist.Add(@($m, $r[5])); if (-not $IndHits.Contains($r[0])) { $IndHits.Add($r[0]) } }
 }
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if ($OnWindows) {
   try {
     $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
-    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')) }; $rk.Close() }
+    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')); if (-not $IndHits.Contains('mastra')) { $IndHits.Add('mastra') } }; $rk.Close() }
   } catch { }
 }
 foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }
@@ -6819,7 +6852,10 @@ $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
-Sess-Stop $OptAllSess
+if ($null -ne $AcctEnd -and $null -ne $SessPs) {
+  $sessMs = [int][Math]::Max(0, [Math]::Min(2147483647, ($AcctEnd - [DateTime]::UtcNow).TotalMilliseconds))
+  Sess-Stop ([bool]$SessHandle.AsyncWaitHandle.WaitOne($sessMs))
+} else { Sess-Stop $OptAllSess }
 # SESS_DONE counts the files read to the end; SESS_UNREAD the folders that could not be read (-1:
 # some, rg.exe gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
 # looked at, because there is none or the check could not start.
@@ -7035,6 +7071,66 @@ if ($SCORE -ge 90) { $GRADE = 'A' } elseif ($SCORE -ge 78) { $GRADE = 'B' } else
 $SCAN_SECS = [int][Math]::Floor(([DateTime]::UtcNow - $ScanT0).TotalSeconds)
 Progress-Clear
 
+# An account run's lines: only numbers and ids from the fixed lists, in gird-check.sh --account-run's
+# order. gird-fleet.ps1 checks every line again and builds the row itself. On Windows protected is
+# always ok (no folder needs a grant like Full Disk Access), moved 0 (the run keeps the person's own
+# environment), tmp_wiper 0 (Windows has no shared /tmp) and engine dotnet where gird-check.sh has perl.
+if ($OptAcctRun) {
+  function Fleet-Ids($ids) {
+    $o = New-Object System.Collections.Generic.List[string]
+    foreach ($x in @($ids)) { foreach ($y in ([string]$x -split ' ')) { if ($y -cmatch '^[a-z0-9-]+$' -and -not $o.Contains($y)) { $o.Add($y) } } }
+    $o -join ' '
+  }
+  function Fleet-AgentId([string]$n) {
+    foreach ($a in $Agents) { if ($a[0] -ceq $n) { return $a[4] } }
+    ($n.ToLowerInvariant() -replace ' ', '-') -replace '[^a-z0-9-]', ''
+  }
+  $fNpm = @($NpmTags); $fLock = @()
+  if ($MAL_LOCKONLY -eq 1) {
+    $fLock = @($NpmTags | Where-Object { (Incident-Level $_) -eq 'act' })
+    $fNpm = @($NpmTags | Where-Object { (Incident-Level $_) -ne 'act' })
+  }
+  $fPoss = @(); if ($LitePyc.Count -gt 0 -and $LITELLM_HIT -eq 0) { $fPoss = @('litellm') }
+  $fNr = $KeyUnread.Count + $Sec2Unread.Count + $AllowUnread.Count + $NpmUnread + $LockUnread.Count + $NpmSlow + $SlowFiles.Count + $ExtUnread + $PyUnread + $UnreadDirs.Count + $NmUnread.Count
+  $fEngine = $SessEngine; if ($fEngine -eq 'net') { $fEngine = 'dotnet' }
+  $fSp = 0; if ($SESS_PARTIAL) { $fSp = 1 }
+  $fl = @(
+    'v=1'
+    "agents=$(Fleet-Ids $AgentIds)"
+    "yolo=$(Fleet-Ids @($AaList | ForEach-Object { Fleet-AgentId $_.Agent }))"
+    "tools=$(Fleet-Ids @($OldList | Where-Object { $null -ne $_.Fixed } | ForEach-Object { $_.Id }))"
+    "mcp_servers=$N_MCP"
+    "mcp_token_files=$N_MCP_TOKEN"
+    "key_files=$KEY_FILES"
+    "key_providers=$(Fleet-Ids $ProvIds)"
+    "history_keys=$HIST_KEYS"
+    "session_files=$N_SESS"
+    "sessions_partial=$fSp"
+    "allow_list_keys=$N_ALLOW"
+    "ssh_open=$N_SSH_OPEN"
+    "ak_links=$N_AK"
+    "planted=$($WormHit.Count + $WormRefs.Count)"
+    "possible=$(Fleet-Ids (@($fPoss) + @($ExtCheckTags)))"
+    "incidents=$(Fleet-Ids (@($fNpm) + @($ExtTags) + @($PyHits) + @($IndHits)))"
+    "platforms=$(Fleet-Ids $PlatFound)"
+    "on_open=$N_AUTO"
+    "to_read=$N_LOOK"
+    "updates=$(Fleet-Ids @($PyUpd | ForEach-Object { $_[0] }))"
+    "wiper=$WIPER_HIT"
+    "lock_only=$(Fleet-Ids $fLock)"
+    "remove=$(Fleet-Ids $ExtUpdTags)"
+    "not_read=$fNr"
+    'moved=0'
+    "tmp_marks=$(Fleet-Ids $FleetTmpMark)"
+    'tmp_wiper=0'
+    'protected=ok'
+    "engine=$fEngine"
+    'end=1'
+  )
+  $AcctOut.Write((($fl -join "`n") + "`n"))
+  $AcctOut.Flush()
+  exit 0
+}
 # ---------------------------------------------------------------------------
 # Counts for GIRD's research, sent once when the scan is done unless -Offline or
 # DO_NOT_TRACK=1, with the same fields as gird-check.sh. Never a path, a file name,
