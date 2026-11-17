@@ -2,9 +2,9 @@
 
 Status: built for macOS (phase 1), as `gird-fleet.sh --all-users`, with the admin guide in
 `docs/fleet.md` and the MDM pages in `docs/mdm/` (each marked untested until run end to end on a real
-Mac). Linux is phase 2: until then `--all-users` on Linux exits 13 with a message. `gird-check.ps1`
-has no fleet mode; Windows needs a design of its own (see Not covered). What the build adds to this
-design, or settles where it was open, is under "As built" at the end.
+Mac). Linux is phase 2: until then `--all-users` on Linux exits 13 with a message. Windows is
+designed under "Windows" below and not built yet. What the build adds to this design, or settles
+where it was open, is under "As built" at the end.
 
 ## Why
 
@@ -234,13 +234,128 @@ Each page states that MDM's own limits (output size, timeout, frequency) from th
 documentation, with the date checked, and is marked untested until it has been run end to end on a
 real Mac.
 
+## Windows
+
+For IT teams that manage Windows PCs, and for engineers changing `gird-check.ps1`.
+
+On Windows the check runs as the person who is signed in, started by the MDM in that person's own
+session. It reads only what that person can already read, and nothing in the check runs as SYSTEM,
+the Windows account that runs services. The result has the same shape, outcomes and exit codes as
+on a Mac, so one admin guide and one way of reading results cover both.
+
+### Why not every account at once
+
+A Mac's root can start a check as any account. SYSTEM cannot start a process as another account
+unless that person is signed in. Reading every home folder as SYSTEM instead would read people's
+files with more rights than they have: a link swapped between checking a path and opening it is
+then read with SYSTEM's rights, and a file a person holds open can block the read. So the Windows
+check covers the signed-in account, and an account that is not signed in is not checked.
+
+A PC with one person, the usual case for a work laptop, is covered in full. On a shared PC each
+account gets its own result the first time its check runs after sign-in.
+
+### Two files, as on a Mac
+
+- `gird-check.ps1`, the script each person runs, gains `-AccountRun`. It prints the same fixed
+  lines as `gird-check.sh --account-run`: the same keys in the same order, with numbers and names
+  from the fixed lists only. Two values differ on Windows: `engine` can be `dotnet`, the engine
+  that reads agent sessions when ripgrep is not installed, and `protected` is always `ok`, because
+  Windows has no folders that need a grant like Full Disk Access.
+- `gird-fleet.ps1` is new. It starts the account run, checks every line it sends back, and builds
+  the result. It holds every fleet option. `gird-check.ps1` holds none.
+
+`tools/gen.sh` writes the same tables from `data/` into `gird-fleet.ps1` as into `gird-fleet.sh`,
+and `--check` covers it.
+
+### Where the files live
+
+The MDM installs both files once, as SYSTEM, in `%ProgramFiles%\Blindspot`. Only administrators
+can create or change files under `%ProgramFiles%`. `%ProgramData%` is not used, because any account
+can create a folder there first and keep control of it.
+
+The install stops if `%ProgramFiles%\Blindspot` already exists and is owned by anyone but
+Administrators, SYSTEM or TrustedInstaller, or if any other account may write to it.
+
+Before it starts a check, `gird-fleet.ps1` looks at itself, at `gird-check.ps1` next to it and at
+their folder. If an account that is not an administrator may write to any of them, the run is
+`failed`. One account on a shared PC therefore cannot change the code another account's check runs.
+
+### How a run goes
+
+The MDM's scheduled item runs in the signed-in person's session and holds one line:
+
+```powershell
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$env:ProgramFiles\Blindspot\gird-fleet.ps1"
+```
+
+`gird-fleet.ps1` then:
+
+1. Turns off everything a run with nobody watching must not do: the menu, the browser, colours,
+   saving a report and every network request. It refuses `-All`, for the same reason as on a Mac.
+2. Starts `gird-check.ps1 -AccountRun` as a separate PowerShell process, by full path, with
+   `-NoProfile`, so the person's PowerShell profile does not run. The process keeps the person's
+   own environment, so a variable that moves an agent's folders is followed, as in a run by hand.
+3. Reads at most 4096 bytes of what the account run prints and checks each line against the fixed
+   format. A line that does not fit makes the account `not_checked`. Nothing the account run
+   printed is copied into the result.
+4. Stops the account run and everything it started at the time limit (`-Deadline`, in seconds).
+   What was found by then still counts, and the account is partly checked.
+5. Checks the PC's shared places with the person's own rights: agents installed under
+   `%ProgramFiles%`, by name, and the malware markers `data/indicators.tsv` lists for
+   `%ProgramData%`. A marker there counts only when Administrators or SYSTEM own it. One that
+   another account owns is a possible sign, since any account can create a file there.
+6. Saves the result and prints the summary line.
+
+### The result
+
+The JSON, the summary line, the inventory value, the five outcomes and the exit codes are the
+ones in "The result" above. The differences:
+
+- `os` reads `Windows 10` or `Windows 11`.
+- `accounts` holds one row, for the signed-in account.
+- `other_profiles` is new: how many other people have a profile on the PC. Their accounts were not
+  checked in this run. The summary line carries it as `other_profiles=<n>`.
+- The saved result is `%LOCALAPPDATA%\Blindspot\last.json`, in the person's own profile.
+  `-Inventory` reads it in the person's session and reports `stale`, `failed` and `none` as on a
+  Mac. Nothing running as SYSTEM ever opens it.
+- `-HashAccounts` is not offered. On a Mac the secret stays in a file only root can read. Here the
+  script runs as the person, who could read the secret.
+
+### What a person can change
+
+The check runs with the person's own rights, so a person who sets out to can change what their own
+check reports. They cannot change another account's result or the scripts. Fleet mode shows an IT
+team where keys and agents sit across honest machines. It is not a control against the person at
+the keyboard.
+
+### PCs that restrict PowerShell
+
+Some companies let PowerShell run only a reduced language, called Constrained Language Mode, or
+only signed scripts. `gird-check.ps1` calls .NET directly and cannot run in the reduced language.
+`gird-fleet.ps1` checks the language mode first, with a statement the reduced language allows. If
+the check cannot run, the outcome is `failed` and the summary line ends with `reason=language_mode`,
+so a PC that could not be checked never reads `clear`.
+
+### Tests
+
+Each has a twin in `tests/run.sh` where the Mac check has the same rule.
+
+- `-AccountRun` prints the same keys, in the same order, as `--account-run` for the same fixture.
+- Output for another account, a forged machine section, oversized output or a malformed line:
+  the account is `not_checked`.
+- A script or folder an ordinary account may write: the run is `failed`.
+- An account run that outlives its time limit is stopped, with everything it started, and the
+  account is partly checked.
+- No network request, no browser, no saved report.
+- The JSON and the summary hold no path, file name or planted key.
+- Each outcome and exit code, from a fixture that produces it.
+- A marker in `%ProgramData%` owned by an ordinary account is a possible sign, not a finding.
+- A session in Constrained Language Mode: `failed`, with `reason=language_mode`.
+- A profile that would print or change something does not run.
+
 ## Not covered
 
-- **Windows.** SYSTEM cannot start a process as another account without that person's sign-in, so
-  each account could not be checked as itself. Checking all accounts as SYSTEM instead needs its own
-  answers: a file a person locks can block a read indefinitely in one process; a link swapped between
-  checking a path and opening it is read with SYSTEM's rights; and a folder under ProgramData can be
-  created by any user first. Windows gets its own design.
+- **Windows accounts that are not signed in.** See "Why not every account at once" under Windows.
 - **Linux** uses this design with `setpriv` (no shell start-up files, no login session) to drop to
   the account, the local `/etc/passwd` only (no directory lookups), and `UID_MIN` from
   `/etc/login.defs`. It is phase 2.
