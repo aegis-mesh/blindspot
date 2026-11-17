@@ -382,6 +382,32 @@ one that does not fit the inventory value's format. Those are listed as not chec
 An admin who prefers the Intune admin center can add `blindspot-fleet.ps1` by hand as a
 Remediation's detection script with the same settings. `docs/mdm/` gets a page with the steps.
 
+How `gird-intune.ps1` keeps to its own Remediation and reads results:
+
+- It finds its Remediation by a mark it writes when it creates it: publisher `Blindspot` and a
+  description ending in `(blindspot-intune-id: <32 hex characters>)`. A built-in Microsoft script
+  never counts. A Remediation with the same name but no mark is never changed or deleted, and
+  `-Deploy` stops rather than add a second one beside it. With two marked, it changes neither.
+- `-Deploy` refuses a script of 200 KB or more before it signs in, and a group name that matches
+  no group or more than one. Each `-Deploy` sets the Remediation's groups to the one it names.
+- `-Remove` shows the Remediation, then asks before deleting it (`-Force` skips the question).
+  `-WhatIf` on `-Deploy` and `-Remove` reads but writes nothing.
+- It asks for the fewest Graph permissions each command needs: `-Deploy`
+  DeviceManagementScripts.ReadWrite.All and Group.ReadBasic.All, `-Remove`
+  DeviceManagementScripts.ReadWrite.All, `-Report` DeviceManagementScripts.Read.All and
+  DeviceManagementManagedDevices.Read.All (for each PC's name). It follows a next-page link only
+  to `https://graph.microsoft.com/`, and stops at any other.
+- `-Report` reads the inventory value as `gird-fleet.sh` writes it, plus two Windows fields right
+  after the time: `other_profiles=<n>`, and `reason=<why>` on a `failed` result only. It also reads
+  the `none`, `unreadable`, `stale: last run <time>` and `failed: ...` lines. Anything else, a
+  second line, a finding word it does not know, an account outcome worse than the header, or a
+  `clear` that Intune says did not succeed, is not checked. So is a result dated more than an hour
+  ahead. A result older than `-StaleDays` (3 by default) is stale, whatever it says.
+- A PC that never ran the check has no row in Intune's results, so the report cannot list it.
+- The report is an HTML file and a CSV file in the folder it runs in. Every value a PC sent is
+  escaped in the HTML, and a CSV cell that starts with `=`, `+`, `-`, `@` or a tab gets a `'` first,
+  so a spreadsheet does not run it.
+
 ### PCs that restrict PowerShell
 
 Some companies let PowerShell run only a reduced language, called Constrained Language Mode, or
