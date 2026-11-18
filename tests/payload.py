@@ -4,6 +4,8 @@
 #
 #   python3 tests/payload.py SCRIPT home|places|empty|nojq REPORT [REPORT]
 import json, re, sys
+import os
+KEY_IDS = sorted({l.split('\t')[0] for l in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'keys.tsv')) if l.strip() and not l.startswith('#')})
 script, mode, files = sys.argv[1], sys.argv[2], sys.argv[3:]
 src = open(script, encoding='utf-8', errors='replace').read()
 PS = script.endswith('.ps1')
@@ -42,7 +44,7 @@ def common(r, tag):
     check(tag + 'provider_files has the providers in key_providers', sorted(obj(r, 'provider_files')) == sorted(r.get('key_providers') or []), show(r, 'provider_files', 'key_providers'))
 r = load(files[0])
 if mode == 'home':
-    check('the fixed lists are in the script', [len(CLIENTS), len(PLACES), len(PROVIDERS)] == [12, 7, 12] and len(KNOWN) >= 49,
+    check('the fixed lists are in the script', [len(CLIENTS), len(PLACES)] == [12, 7] and sorted(PROVIDERS) == KEY_IDS and len(KNOWN) >= 49,
           'clients %d, known %d, places %d, providers %d' % tuple(map(len, (CLIENTS, KNOWN, PLACES, PROVIDERS))))
     check('the report has every case-study field', all(k in r for k in FIELDS), 'missing: ' + ' '.join(k for k in FIELDS if k not in r))
     common(r, '')
