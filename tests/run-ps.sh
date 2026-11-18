@@ -163,6 +163,29 @@ has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2
 nokeys "never prints a planted key" "$WORK/keys.txt" "$OUT"
 if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 
+echo "key patterns"
+# gird-check.ps1 matches every key type with one compiled .NET regex: compiled, it must find just
+# what the plain one finds, over the fixture home and a corpus of every key type in many contexts.
+KP=$WORK/kp; mkdir -p "$KP"
+python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
+grep -E '^\$ALL_KEYS = |^\$TR_KEYS = ' "$SCRIPT" > "$KP/keys.ps1"
+find "$KP/corpus" "$WORK/home" -type f | sort > "$KP/files.txt"
+cat > "$KP/cmp.ps1" <<'PSEOF'
+. $args[0]; $o = [Text.RegularExpressions.RegexOptions]::Multiline
+$plain = New-Object regex($TR_KEYS, $o); $comp = New-Object regex($TR_KEYS, ($o -bor [Text.RegularExpressions.RegexOptions]::Compiled))
+$latin = [Text.Encoding]::GetEncoding(28591); $n = 0; $m = 0; $diff = 0
+foreach ($f in [IO.File]::ReadAllLines($args[1])) {
+  $t = [IO.File]::ReadAllText($f, $latin); $n++
+  $a = @($plain.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" }); $b = @($comp.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" })
+  $m += $a.Count; if (($a -join "`n") -cne ($b -join "`n")) { $diff++ }
+}
+"$n $m $diff"
+PSEOF
+"$PWSH" -NoProfile -NonInteractive -File "$KP/cmp.ps1" "$KP/keys.ps1" "$KP/files.txt" > "$KP/net.txt" 2>&1
+read -r _n _m _d < "$KP/net.txt"
+if [ "${_n:-0}" -gt 400 ] && [ "${_m:-0}" -gt 0 ] && [ "${_d:-x}" = 0 ]; then ok "net: the session engine finds what one plain alternation of the key patterns finds" "$_n files, $_m matches"
+else bad "net: the session engine finds what one plain alternation of the key patterns finds" "$(head -c 300 "$KP/net.txt")"; fi
+
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
 # today means Codex is in use, not an agent to remove.

@@ -750,6 +750,31 @@ trap 'cleanup; exit 129' HUP
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
 ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+KEY_ALTS='sk-ant-[A-Za-z0-9_-]{90,}
+sk-or-v1-[a-f0-9]{64}
+sk-proj-[A-Za-z0-9_-]{120,}
+sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-None-[A-Za-z0-9_-]{120,}
+sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-svcacct-[A-Za-z0-9_-]{60,}
+sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-admin-[A-Za-z0-9_-]{120,}
+(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
+(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}
+(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}
+gsk_[A-Za-z0-9]{52}
+xai-[A-Za-z0-9]{64,}
+(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)
+pplx-[A-Za-z0-9]{40,52}
+(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}
+(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)
+ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}
+bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}
+gh[pour]_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}
+github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
+npm_[A-Za-z0-9]{36}'
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
 KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
 PROV_AWK='
@@ -768,12 +793,21 @@ function prov(s) {
   if (s ~ /^(gh[pousr]_|github_pat_)/) return "GitHub"
   if (s ~ /^(npm_)/) return "npm"
   return ""
-}'
+}
+function pmax(p) { if (p == "GitHub") return 1024; return 300 }'
 prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
 # <<< keys
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
 TR_KEYS=$(printf '%s' "$ALL_KEYS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+TR_ALTS=$(printf '%s\n' "$KEY_ALTS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+# grep gets the key patterns as one -e each (KEY_E): the grep macOS ships reads one long alternation
+# of them many times slower than all of its parts one by one, and grep -o finds the same matches
+# either way (the leftmost, then the longest).
+KEY_E=()
+while IFS= read -r _ka; do [ -n "$_ka" ] && KEY_E+=(-e "$_ka"); done <<EOF
+$TR_ALTS
+EOF
 
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{12,}'
@@ -806,7 +840,7 @@ P_NOTSECRET='(_PATH|_FILE|_DIR)S?"?[[:space:]]*[:=]|[:=][[:space:]]*"?(~|\.\.?/|
 # documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either. Control
 # characters become spaces first, so the match is one field.
 providers_in() {
-  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
+  grep -aoE "${KEY_E[@]}" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
     awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
 # The providers of a Claude Code settings file's keys that are not in its permission rules (cc_rules),
@@ -815,7 +849,7 @@ providers_in() {
 # comments too, as providers_in reads a file, and the keys stay inside the pipe. The matches left go
 # through sess_filter as providers_in's do, so a key that looks made up is not one here either.
 cc_providers() { # file
-  { cc_rules "$1" | grep -aoE "$TR_KEYS" | sed 's/^/R /'; grep -aoE "$TR_KEYS" "$1" 2>/dev/null | sed 's/^/F /'; } | awk '
+  { cc_rules "$1" | grep -aoE "${KEY_E[@]}" | sed 's/^/R /'; grep -aoE "${KEY_E[@]}" "$1" 2>/dev/null | sed 's/^/F /'; } | awk '
     function norm(s) { sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s); return s }
     substr($0, 1, 2) == "R " { r[norm(substr($0, 3))]++; next }
     { m = substr($0, 3); k = norm(m); if (r[k] > 0) { r[k]--; next }
@@ -825,8 +859,8 @@ cc_providers() { # file
 # Print the files in a newline list that contain a match, in order, with one grep pass. Only regular
 # files are read, following links: a pipe, socket or device at a fixed path (a fifo made at
 # ~/.zsh_history, a link to /dev/tty) would hold the read for ever.
-files_matching() { # pattern; list on stdin
-  while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$1" 2>/dev/null
+files_matching() { # -e pattern...; list on stdin
+  while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$@" 2>/dev/null
 }
 # Codex's env_http_headers name the environment variable each header's value comes from, so they hold
 # no token: a TOML file is read without them, in an inline table, as dotted keys and in a
@@ -853,16 +887,16 @@ yaml_headers() { # file
     t ~ /(:|^-) +[|>][-+0-9]* *(#.*)?$/ { insc = 1; scind = ind }' "$1" 2>/dev/null
 }
 inline_secret() {
-  _ip="$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET"
-  case "$1" in *.toml|*.yaml|*.yml) _ip="$_ip|$P_HEADERSQ" ;; esac
-  { no_env_headers "$1" | grep -aoE "$_ip"
+  _ipe=("${KEY_E[@]}" -e "$P_JSONSECRET" -e "$P_TOMLSECRET" -e "$P_HEADERSECRET")
+  case "$1" in *.toml|*.yaml|*.yml) _ipe+=(-e "$P_HEADERSQ") ;; esac
+  { no_env_headers "$1" | grep -aoE "${_ipe[@]}"
     case "$1" in *.yaml|*.yml) yaml_headers "$1" | grep -aoE "$P_HEADERYAML" ;; esac
   } | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
 # A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
 # elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
 command_secret() {
-  cc_rules "$1" | grep -aoE "$TR_KEYS|$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
+  cc_rules "$1" | grep -aoE "${KEY_E[@]}" -e "$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
 }
 
 # ---------------------------------------------------------------------------
@@ -1465,7 +1499,7 @@ SESS_PRE=$KEY_STARTS
 # script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
-my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
+my @re = map { qr/$_/ } split /\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
 $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
 my @f = grep { !-d $_ && -f $_ } @ARGV; my $unread = 0;
 {
@@ -1492,7 +1526,21 @@ for my $w (0 .. $n - 1) {
       if ($file =~ /\.(zst|gz)$/) { print "Z\t$fn\n"; next }
       my $h; unless (open($h, "<", $file)) { print "U\t$fn\n"; next }
       binmode $h; local $/ = \1048576; my $buf = "";
-      my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { (my $k = $&) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n" } } };
+      # One regex a pattern (SESS_KEYS), each run from where the last match ended: the leftmost
+      # match wins, and of two at one place the pattern listed first, as in one alternation.
+      my $scan = sub {
+        my $t = shift; return unless $t =~ $pre;
+        my $at = 0; my @nx;
+        my $find = sub { my $i = shift; pos($t) = $at; $nx[$i] = $t =~ /$re[$i]/g ? [$-[0], $+[0]] : undef };
+        $find->($_) for 0 .. $#re;
+        while (1) {
+          my $b; for my $i (0 .. $#re) { $b = $i if $nx[$i] && (!defined $b || $nx[$i][0] < $nx[$b][0]) }
+          last unless defined $b;
+          my ($s, $e) = @{$nx[$b]}; (my $k = substr($t, $s, $e - $s)) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n";
+          $at = $e > $s ? $e : $s + 1;
+          for my $i (0 .. $#re) { $find->($i) if $nx[$i] && $nx[$i][0] < $at }
+        }
+      };
       while (defined(my $c = <$h>)) {
         exit 0 unless $alive->();
         select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
@@ -1522,10 +1570,9 @@ while ($sel->count) {
 # With rg, the input is ripgrep's own: the file, the NUL that --null puts after it (the one byte
 # a path can't hold) turned into a tab by tr, which turns every real tab into ?, then the match.
 # So a line without a tab is a piece of a file name that holds a newline, and the match may hold
-# any byte but a newline. No key is longer than 300 characters (GitHub's 93-character tokens are
-# the longest fixed format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens,
-# about 520 with two dots: a longer run of key characters is data, not a key, and would make madeup()
-# slow. Always called in a subshell (a pipe or a
+# any byte but a newline. A match longer than its provider's max in data/keys.tsv (pmax, 300 unless
+# the line says more, as for GitHub's stateless ghs_ tokens of about 520) is a run of data, not a
+# key, and so is any match over 1024: madeup() would be slow on it. Always called in a subshell (a pipe or a
 # background job): exec makes awk that job's own process, the one sess_stop signals.
 sess_filter() { # [rg]
   exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK"'
@@ -1555,8 +1602,8 @@ sess_filter() { # [rg]
         if (i == 0) { part = part $0 "?"; next }
         f = part substr($0, 1, i - 1); k = substr($0, i + 1); part = ""
       } else if ($1 == "K") { f = $2; k = $3 } else next
-      if (length(k) > 1024 || (length(k) > 300 && k !~ /ghs_[A-Za-z0-9_-]+\./)) next
-      p = prov(k); if (p == "") next
+      if (length(k) > 1024) next
+      p = prov(k); if (p == "" || length(k) > pmax(p)) next
       sub(/^[^A-Za-z]*\\[ntr"]/, "", k); sub(/^[^A-Za-z]+/, "", k); sub(/[^A-Za-z0-9_.-]+$/, "", k)
       if (madeup(k) || cli_own(f, k) || ((f "|" p) in done)) next
       done[f "|" p] = 1; print "H\t" f "\t" p; fflush()
@@ -1634,7 +1681,7 @@ EOF
     _nw=$( (sysctl -n hw.ncpu || nproc || getconf _NPROCESSORS_ONLN) 2>/dev/null | head -n 1)
     case "$_nw" in ''|*[!0-9]*) _nw=4 ;; esac
     [ "$_nw" -gt 8 ] && _nw=8; [ "$_nw" -lt 1 ] && _nw=1
-    SESS_KEYS=$TR_KEYS SESS_PRE=$SESS_PRE SESS_WORKERS=$_nw perl -e "$SESS_PERL" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+    SESS_KEYS=$TR_ALTS SESS_PRE=$SESS_PRE SESS_WORKERS=$_nw perl -e "$SESS_PERL" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
     SESS_PID=$!
   fi
 }
@@ -1866,7 +1913,7 @@ is_plugin_path() {
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
-MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET|$P_HEADERSQ" | tr '\n' '|')"
+MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "${KEY_E[@]}" -e "$P_JSONSECRET" -e "$P_TOMLSECRET" -e "$P_HEADERSECRET" -e "$P_HEADERSQ" | tr '\n' '|')"
 mcp_row() { # who file client-id
   _f=$2; _c=""; _nm=""
   case "$_f" in
@@ -2541,7 +2588,7 @@ CC_PROJECT=$(printf '%s\n' "$ALLOW_FILES" | while IFS= read -r _f; do
   case "$_f" in (""|"$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
   own_cc "$_f" || too_big "$_f" || printf '%s\n' "$_f"
 done)
-MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching "$TR_KEYS")
+MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching "${KEY_E[@]}")
 # For the report: one place id per file, and one provider id per file and provider.
 KEY_PLACES=""; PROV_TALLY=""
 MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n%s\n' "$PROJECT_FILES" "$CC_PROJECT" | tr '\n' '|')"
@@ -2656,7 +2703,7 @@ N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
-  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; }; done | files_matching "$TR_KEYS|$P_ASSIGN")
+  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; }; done | files_matching "${KEY_E[@]}" -e "$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
@@ -7649,7 +7696,7 @@ while IFS= read -r f; do
   SESS_TOTAL=$((SESS_TOTAL + 1))
   if [ ! -r "$f" ]; then SESS_UNREAD_FILES=$((SESS_UNREAD_FILES + 1)); continue; fi
   [ "$SESS_DONE" -ge 0 ] && SESS_DONE=$((SESS_DONE + 1))
-  _h=$(grep -aoE "$TR_KEYS" "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
+  _h=$(grep -aoE "${KEY_E[@]}" "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
   [ -n "$_h" ] && SESS_HITS="$SESS_HITS
 $_h"
 done <<EOF

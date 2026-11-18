@@ -268,6 +268,7 @@ function Key-Provider([string]$s) {
   if ($s -cmatch '^(npm_)') { return 'npm' }
   $null
 }
+function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } default { 300 } } }
 function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } default { $null } } }
 '@
 # <<< keys
@@ -311,11 +312,14 @@ $P_NOTSECRET = '(?:_PATH|_FILE|_DIR)S?"?[^\S\n]*[:=]|[:=][^\S\n]*"?(?:~|\.\.?/|[
 $RxOpt = [Text.RegularExpressions.RegexOptions]::Multiline
 $RxTimeout = [TimeSpan]::FromSeconds(2)
 if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS -gt 0) { $RxTimeout = [TimeSpan]::FromMilliseconds([int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS) }
-$RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
-$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxOpt, $RxTimeout)
+# The patterns that hold every key type are compiled: .NET reads their long alternation about four
+# times faster compiled, and each is built once.
+$RxKeyOpt = $RxOpt -bor [Text.RegularExpressions.RegexOptions]::Compiled
+$RxKeys = New-Object regex($TR_KEYS, $RxKeyOpt, $RxTimeout)
+$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxKeyOpt, $RxTimeout)
 $RxHeaderYaml = New-Object regex($P_HEADERYAML, $RxOpt, $RxTimeout)
 $RxHeaderSq = New-Object regex($P_HEADERSQ, $RxOpt, $RxTimeout)
-$RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
+$RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxKeyOpt, $RxTimeout)
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
 $RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
 $SlowFiles = New-Object System.Collections.Generic.List[string]
@@ -433,10 +437,9 @@ function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders, [switch]$Y
 # background session check can load the same functions.
 $KeyFns = $KeyProviderFn + @'
 function Made-Up([string]$k) {
-  # No key is longer than 300 characters (GitHub's 93-character tokens are the longest fixed
-  # format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens, about 520 with
-  # two dots: a longer run of key characters is data.
-  if ($k.Length -gt 1024 -or ($k.Length -gt 300 -and $k -cnotmatch 'ghs_[A-Za-z0-9_-]+\.')) { return $true }
+  # A match longer than its provider's max in data/keys.tsv (Key-Max, 300 unless the line says more,
+  # as for GitHub's stateless ghs_ tokens of about 520) is a run of data, not a key.
+  if ($k.Length -gt 1024 -or $k.Length -gt (Key-Max (Key-Provider $k))) { return $true }
   $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' -replace '[^A-Za-z0-9_.-]+$', ''
   if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
   $set = New-Object 'System.Collections.Generic.HashSet[char]'
@@ -1190,7 +1193,7 @@ $SessWorker = {
   param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold)
   . ([scriptblock]::Create($fns))
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
-  $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
+  $rx = New-Object regex($keys, ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Compiled), $to)
   $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
   $rxSep = New-Object regex('[^A-Za-z0-9_.+/=\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
@@ -6847,7 +6850,7 @@ foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
 # in each project, found by the home scan, and they are checked here. One counts as read once the
 # pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
-$rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
+$rxTr = $RxKeys
 # A session file whose pattern ran out of time in the check above is one of them too. It is counted,
 # not listed: a session file's path can spell out a project folder (see Sess-Where below).
 $SESS_SLOW = [int]$SessSt.Slow

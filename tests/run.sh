@@ -91,6 +91,60 @@ if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
 else bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "$(cat "$WORK/ow.txt")"; fi
 
+echo "key patterns"
+# fleet_ids in gird-check.sh keeps only ids of lowercase letters, digits and -, and the result link
+# and gird-fleet.sh carry the same ids: one it would drop is lost without a word.
+KP=$WORK/kp; mkdir -p "$KP"
+grep '^fleet_ids() ' gird-check.sh > "$KP/fids.sh"; . "$KP/fids.sh"
+_ids=$(sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' gird-check.sh)
+if [ -n "$_ids" ] && [ "$(printf '%s' "$_ids" | fleet_ids)" = "$_ids" ]; then ok "every key id passes the fleet id filter"
+else bad "every key id passes the fleet id filter" "$_ids"; fi
+# grep and perl get the key patterns one at a time (KEY_E, SESS_KEYS), and must find just what the
+# one alternation of them all finds (perl given it as its one pattern): grep -o the same matches in every file, and perl
+# the same matches. Over the fixture homes and a corpus of every key type in many contexts.
+python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
+{ awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< keys/ { on = 0 }' gird-check.sh
+  awk '/^TR_KEYS=/ { on = 1 } on { print } on && /^EOF$/ { exit }' gird-check.sh
+  awk '/^SESS_PERL=/ { on = 1 } on { print } on && /^1 while wait/ { exit }' gird-check.sh; } > "$KP/keys.sh"
+. "$KP/keys.sh"
+_n=0; _diff=""
+while IFS= read -r _f; do
+  _n=$((_n + 1))
+  if ! cmp -s <(grep -aoE "$TR_KEYS" "$_f" 2>/dev/null) <(grep -aoE "${KEY_E[@]}" "$_f" 2>/dev/null); then _diff="$_diff ${_f#"$WORK"/}"; fi
+done <<EOF
+$(find "$KP/corpus" "$WORK/home" -type f | sort)
+EOF
+if [ "$_n" -gt 400 ] && [ -z "$_diff" ]; then ok "grep finds with the split key patterns what one alternation finds" "$_n files"
+else bad "grep finds with the split key patterns what one alternation finds" "$_n files, differ:$_diff"; fi
+SESS_KEYS=$TR_ALTS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/split.txt"
+SESS_KEYS=$TR_KEYS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/one.txt"
+if [ -s "$KP/one.txt" ] && cmp -s "$KP/one.txt" "$KP/split.txt"; then ok "perl: the session engine finds what one plain alternation of the key patterns finds" "$(grep -c . < "$KP/one.txt") matches"
+else bad "perl: the session engine finds what one plain alternation of the key patterns finds" "$(diff "$KP/one.txt" "$KP/split.txt" | head -n 4 | tr '\n' '|')"; fi
+# What the split saves is the work of one long alternation: count it. Every pattern grep is given
+# holds at most one key pattern, and perl compiles one regex for each, whatever the run reads.
+mkdir -p "$KP/shim" "$KP/log"
+_rg=$(command -v grep); _rp=$(command -v perl)
+printf '#!/bin/bash\n_l=$(mktemp "%s/g.XXXXXX"); printf "%%s\\0" "$@" > "$_l"; exec %s "$@"\n' "$KP/log" "$_rg" > "$KP/shim/grep"
+printf '#!/bin/bash\n[ -n "${SESS_KEYS:-}" ] && printf "%%s" "$SESS_KEYS" > "$(mktemp "%s/p.XXXXXX")"\nexec %s "$@"\n' "$KP/log" "$_rp" > "$KP/shim/perl"
+chmod +x "$KP/shim/grep" "$KP/shim/perl"
+HOME="$WORK/home" PATH="$KP/shim:$PATH" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$KP/shim.txt" 2>&1
+printf '%s\n' "$TR_ALTS" > "$KP/alts.txt"
+_cnt=$(python3 -I -c 'import glob, sys
+alts = [a for a in open(sys.argv[1]).read().split("\n") if a]
+most, calls, perls, plines = 0, 0, 0, -1
+for f in glob.glob(sys.argv[2] + "/g.*"):
+    args = open(f, "rb").read().decode("latin-1").split("\0")
+    n = max([sum(1 for a in alts if a in x) for x in args] or [0])
+    calls += n > 0; most = max(most, n)
+for f in glob.glob(sys.argv[2] + "/p.*"):
+    ls = open(f).read().split("\n"); perls += 1
+    plines = len(ls) if all(l in alts for l in ls) and len(set(ls)) == len(alts) else -1
+print(most, calls, perls, plines, len(alts))' "$KP/alts.txt" "$KP/log")
+set -- $_cnt
+if [ "${1:-x}" = 1 ] && [ "${2:-0}" -gt 0 ] && [ "${3:-0}" = 1 ] && [ "${4:-x}" = "${5:-y}" ]; then ok "grep and perl get each key pattern on its own" "$2 grep calls, $5 patterns"
+else bad "grep and perl get each key pattern on its own" "most key patterns in one grep pattern: ${1:-?} (want 1), perl runs: ${3:-?}, perl patterns: ${4:-?} of ${5:-?}"; fi
+set --
+
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
 # today means Codex is in use, not an agent to remove.
@@ -3187,8 +3241,17 @@ gen_refuses "an extension registry that is not openvsx or any" bad-extensions.ts
 gen_refuses "an extension os that is not all, mac, linux or win" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any${T}windows"
 gen_refuses "an extension line without its os"         bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any"
 gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
-gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}"
-gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}"
+gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
+gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
+# fleet_ids in gird-check.sh keeps only ids of lowercase letters, digits and -: an id with _ would
+# be dropped from gird-fleet.sh's output and the result link without a word.
+gen_refuses "a key id with _, which the fleet output would drop" keys.tsv "new_key${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
+gen_refuses "a key line without at and max"            keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}"
+gen_refuses "a key at other than start or in"          keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}middle${T}-"
+gen_refuses "a key max over 1024"                       keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}2000"
+gen_refuses "a key pattern that counts past 255"       keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20,300}${T}start${T}-"
+gen_refuses "a key pattern with a POSIX class"         keys.tsv "newkey${T}New${T}nk-${T}nk-[[:alnum:]]{20}${T}start${T}-"
+gen_refuses "a key start that is not fixed text"       keys.tsv "newkey${T}New${T}[A-Z]*nk-${T}nk-[a-z]{20}${T}in${T}-"
 # gird-check.sh hands the bad npm versions to awk in four environment strings of 1,000 lines.
 gen_refuses "a list of bad npm versions longer than awk gets" bad-npm.tsv 'edit:{ print } !/^#/ && $3 == "keyvspread" { print $1, $2 "-x", $3 }'
 
