@@ -2062,7 +2062,11 @@ function Login($paths, [string]$label, [string]$id, [string]$marker = '') {
 }
 Login (J $HomeDir '.aws/credentials') 'AWS keys' 'aws'
 Login @((J $AppData 'gcloud/application_default_credentials.json'), (J $HomeDir '.config/gcloud/application_default_credentials.json')) 'Google Cloud login' 'gcloud'
-Login (J $HomeDir '.azure/msal_token_cache.json') 'Azure login' 'azure'
+# The Azure CLI keeps its logins and a service principal's secret in AZURE_CONFIG_DIR or ~/.azure,
+# encrypted (.bin) on Windows unless it is told not to; the plain-text .json files are listed
+# (learn.microsoft.com, MSAL-based Azure CLI). One signed in with a certificate has no client_secret.
+Login (J (Env-Or 'AZURE_CONFIG_DIR' (J $HomeDir '.azure')) 'msal_token_cache.json') 'Azure login' 'azure'
+Login (J (Env-Or 'AZURE_CONFIG_DIR' (J $HomeDir '.azure')) 'service_principal_entries.json') 'Azure service principal secrets' 'azure-sp' '"client_secret"'
 Login (J $HomeDir '.kube/config') 'Kubernetes logins' 'kube'
 Login (J $HomeDir '.docker/config.json') 'Docker registry logins' 'docker' '"auth"\s*:\s*"[A-Za-z0-9+/=]{8,}'
 Login (J $HomeDir '.npmrc') 'npm token' 'npm' '_authToken'
@@ -2076,6 +2080,16 @@ Login (J $HomeDir '.claude/.credentials.json') 'Claude Code login' 'claude-code'
 Login (J $HomeDir '.gemini/oauth_creds.json') 'Gemini CLI login' 'gemini'
 Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'opencode'
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
+# Data platforms' own files, found as gird-check.sh finds them: Databricks configuration profiles, dbt's
+# profiles.yml (a value taken from env_var is not in the file), and Snowflake's connections.toml and
+# config.toml in the folder Snowflake CLI picks.
+Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret)[ \t]*='
+Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*"?[A-Za-z0-9_+/=.~-]'
+$sf = $null
+if ($env:SNOWFLAKE_HOME) { if (Is-Dir $env:SNOWFLAKE_HOME) { $sf = $env:SNOWFLAKE_HOME } }
+elseif (Is-Dir (J $HomeDir '.snowflake')) { $sf = J $HomeDir '.snowflake' }
+if (-not $sf) { $sf = J $LocalAppData 'snowflake' }
+Login @((J $sf 'connections.toml'), (J $sf 'config.toml')) 'Snowflake logins' 'snowflake' '(?m)^[ \t]*(password|private_key_passphrase)[ \t]*='
 $N_SSH = 0; $N_SSH_OPEN = 0
 $SshDir = J $HomeDir '.ssh'
 if (Is-Dir $SshDir) {

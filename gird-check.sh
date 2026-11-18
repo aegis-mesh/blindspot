@@ -2732,7 +2732,11 @@ login() { # file label id [marker regex]
 }
 login "$H/.aws/credentials" "AWS keys" aws
 login "$H/.config/gcloud/application_default_credentials.json" "Google Cloud login" gcloud
-login "$H/.azure/msal_token_cache.json" "Azure login" azure
+# The Azure CLI keeps its logins, and a service principal's secret, in AZURE_CONFIG_DIR or ~/.azure:
+# plain text on macOS and Linux, encrypted (.bin) on Windows (learn.microsoft.com, MSAL-based Azure
+# CLI). A service principal signed in with a certificate has no client_secret there.
+login "${AZURE_CONFIG_DIR:-$H/.azure}/msal_token_cache.json" "Azure login" azure
+login "${AZURE_CONFIG_DIR:-$H/.azure}/service_principal_entries.json" "Azure service principal secrets" azure-sp '"client_secret"'
 login "$H/.kube/config" "Kubernetes logins" kube
 login "$H/.docker/config.json" "Docker registry logins" docker '"auth"[[:space:]]*:[[:space:]]*"[A-Za-z0-9+/=]{8,}'
 login "$H/.npmrc" "npm token" npm '_authToken'
@@ -2745,6 +2749,22 @@ login "$H/.claude/.credentials.json" "Claude Code login" claude-code
 login "$H/.gemini/oauth_creds.json" "Gemini CLI login" gemini
 login "$H/.local/share/opencode/auth.json" "OpenCode provider keys" opencode
 login "$H/.railway/config.json" "Railway login" railway
+# Data platforms' own files: Databricks configuration profiles (docs.databricks.com), dbt's
+# profiles.yml, found as dbt finds it (docs.getdbt.com; a value taken from env_var is not in the file),
+# and Snowflake's connections.toml and config.toml, in the folder Snowflake CLI picks
+# (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
+# else the system's own folder.
+login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret)[[:space:]]*='
+login "${DBT_ENGINE_PROFILES_DIR:-${DBT_PROFILES_DIR:-$H/.dbt}}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*"?[A-Za-z0-9_+/=.~-]'
+_sf=""
+if [ -n "${SNOWFLAKE_HOME:-}" ]; then [ -d "$SNOWFLAKE_HOME" ] && _sf=$SNOWFLAKE_HOME
+elif [ -d "$H/.snowflake" ]; then _sf=$H/.snowflake; fi
+if [ -z "$_sf" ]; then
+  case "$_os" in win) _sf=$WLAPP/snowflake ;; mac) _sf="$H/Library/Application Support/snowflake" ;; *) _sf=${XDG_CONFIG_HOME:-$H/.config}/snowflake ;; esac
+fi
+for _sfc in connections.toml config.toml; do
+  case " $LOGIN_IDS " in *" snowflake "*) ;; *) login "$_sf/$_sfc" "Snowflake logins" snowflake '^[[:space:]]*(password|private_key_passphrase)[[:space:]]*=' ;; esac
+done
 if [ "$WIN" -eq 1 ]; then # where these tools keep the same logins on Windows
   case " $LOGIN_IDS " in *" gcloud "*) ;; *) login "$WAPP/gcloud/application_default_credentials.json" "Google Cloud login" gcloud ;; esac
   case " $LOGIN_IDS " in *" netrc "*) ;; *) login "$H/_netrc" "saved passwords in _netrc" netrc ;; esac

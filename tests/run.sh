@@ -3291,6 +3291,32 @@ for E in perl rg; do
 done
 SKIPPING=""
 
+echo "data platform login files"
+# Login files are listed by name when they hold a secret, never shown. Built from pieces at run time.
+LG=$WORK/lg; _sec=$(rnd 32)
+mkdir -p "$LG"; for _h in has none env sys; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/has/.azure" "$LG/has/.dbt" "$LG/has/.snowflake" "$LG/none/.azure" "$LG/none/.dbt" "$LG/none/.snowflake" \
+  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf" "$LG/sys/Library/Application Support/snowflake" "$LG/sys/.config/snowflake"
+printf '[{"client_id": "%s", "tenant": "t", "client_secret": "%s"}]\n' "$(rnd 8)" "$_sec" > "$LG/has/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\ntoken = %s\n' "$_sec" > "$LG/has/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n' "$_sec" > "$LG/has/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nuser = "u"\npassword = "%s"\n' "$_sec" > "$LG/has/.snowflake/connections.toml"
+printf '[{"client_id": "%s", "tenant": "t", "certificate": "/home/me/sp.pem"}]\n' "$(rnd 8)" > "$LG/none/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nauth_type = databricks-cli\n' > "$LG/none/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\n' > "$LG/none/.snowflake/connections.toml"
+cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/Library/Application Support/snowflake/config.toml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/.config/snowflake/config.toml"
+for _h in has none sys; do HOME="$LG/$_h" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+HOME="$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
+_want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
+has    "lists the Azure, Databricks, dbt and Snowflake login files that hold a secret" "$_want" "$LG/has.txt"
+hasnot "but not one with only a certificate, a host, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
+has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
+has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
+if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
+
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
 mkdir -p "$WORK/mcp-pl/.codex/.tmp/plugins/plugins/a" "$WORK/mcp-pl/.claude/plugins/synced/b"
