@@ -1,0 +1,12 @@
+# Tools' own scripts that a shell profile sources from where the tool's installer puts them, outside the
+# folders of data/folder-vars.tsv. An account run in fleet mode reads the files a profile sources
+# (data/folder-vars.tsv says why) but not these: each is the tool's own code, which sets its
+# tool's variable its own way or loads the tool's own plugins, and moves nothing. Matched by name: a sourced path, as the profile writes it, that is the path below or
+# ends with / and the path below. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   path   the end of the path: plain characters, parts separated by /
+#   what   the tool, and the install that puts the script there
+# path	what
+opt/nvm/nvm.sh	nvm installed with Homebrew: its caveat sources $(brew --prefix)/opt/nvm/nvm.sh
+opt/nvm/etc/bash_completion.d/nvm	nvm installed with Homebrew: its completion, from the same caveat
+libexec/asdf.sh	asdf before 0.16 installed with Homebrew: . $(brew --prefix asdf)/libexec/asdf.sh
+oh-my-zsh.sh	Oh My Zsh: source $ZSH/oh-my-zsh.sh, the loader of its own plugins and themes

@@ -7083,11 +7083,12 @@ if ($SCORE -ge 90) { $GRADE = 'A' } elseif ($SCORE -ge 78) { $GRADE = 'B' } else
 $SCAN_SECS = [int][Math]::Floor(([DateTime]::UtcNow - $ScanT0).TotalSeconds)
 Progress-Clear
 
-# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it.
+# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it.
 $FolderVarsAgent = @('CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'CODEX_SQLITE_HOME', 'GEMINI_CLI_HOME', 'QWEN_HOME', 'COPILOT_HOME', 'CLINE_DIR', 'CLINE_DATA_DIR', 'CLINE_SESSION_DATA_DIR', 'CONTINUE_GLOBAL_DIR', 'GOOSE_PATH_ROOT', 'KIRO_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME')
 $FolderVarsTool = @('NVM_DIR', 'VOLTA_HOME', 'BUN_INSTALL', 'BUN_INSTALL_GLOBAL_DIR', 'N_PREFIX', 'ASDF_DATA_DIR', 'MISE_DATA_DIR', 'MISE_INSTALLS_DIR', 'MAMBA_ROOT_PREFIX', 'PIPX_HOME', 'PIPX_GLOBAL_HOME', 'WORKON_HOME', 'UV_CACHE_DIR', 'UV_TOOL_DIR', 'UV_PYTHON_INSTALL_DIR', 'POETRY_CACHE_DIR', 'POETRY_VIRTUALENVS_PATH', 'HATCH_DATA_DIR', 'XDG_CACHE_HOME', 'npm_config_prefix', 'NPM_CONFIG_PREFIX', 'npm_config_userconfig', 'NPM_CONFIG_USERCONFIG', 'CLINE_PROVIDER_SETTINGS_PATH', 'QWEN_RUNTIME_DIR', 'PNPM_HOME')
 $FolderVarsDefault = @{ 'XDG_CONFIG_HOME' = @((J $HomeDir '.config')); 'XDG_DATA_HOME' = @((J $HomeDir '.local/share')); 'NVM_DIR' = @((J $HomeDir '.nvm')); 'VOLTA_HOME' = @((J $LocalAppData 'Volta'), (J $HomeDir '.volta')); 'BUN_INSTALL' = @((J $HomeDir '.bun')); 'N_PREFIX' = @((J $HomeDir 'n')); 'ASDF_DATA_DIR' = @((J $HomeDir '.asdf')); 'MISE_DATA_DIR' = @((J $LocalAppData 'mise')); 'MAMBA_ROOT_PREFIX' = @((J $HomeDir 'micromamba')); 'PIPX_HOME' = @((J $HomeDir '.local/pipx'), (J $HomeDir 'pipx'), (J $LocalAppData 'pipx')); 'WORKON_HOME' = @((J $HomeDir '.virtualenvs'), (J $HomeDir 'Envs')); 'UV_CACHE_DIR' = @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv')); 'POETRY_CACHE_DIR' = @((J $LocalAppData 'pypoetry/Cache')); 'POETRY_VIRTUALENVS_PATH' = @((J $LocalAppData 'pypoetry/Cache/virtualenvs')); 'HATCH_DATA_DIR' = @((J $LocalAppData 'hatch')); 'npm_config_prefix' = @((J $AppData 'npm'), (J $HomeDir '.npm-global')); 'PNPM_HOME' = @((J $LocalAppData 'pnpm')) }
 $FolderVarsScripts = @{ 'NVM_DIR' = @('nvm.sh', 'bash_completion'); 'BUN_INSTALL' = @('_bun'); 'ASDF_DATA_DIR' = @('asdf.sh', 'asdf.fish', 'completions/asdf.bash') }
+$FolderVarsOwn = @('opt/nvm/nvm.sh', 'opt/nvm/etc/bash_completion.d/nvm', 'libexec/asdf.sh', 'oh-my-zsh.sh')
 # <<< folder-vars
 # An account run's lines: only numbers and ids from the fixed lists, in gird-check.sh --account-run's
 # order. gird-fleet.ps1 checks every line again and builds the row itself. On Windows protected is
@@ -7124,10 +7125,12 @@ if ($OptAcctRun) {
   # read. A file that exists but can't be followed or read, or a cap reached, counts only when some
   # file read names a variable of the list: an ordinary setup sources completion scripts and plugin
   # files by the dozen, and one that names none of the variables gives no reason to think the rest moves
-  # one. A tool's own script sourced from its own folder (FolderVarsScripts, such as nvm.sh) is not
-  # read: it sets the tool's variable to the folder it is in, the one the check reads. What a command
-  # prints (`eval "$(...)"`, `source <(...)`, `... | Invoke-Expression`) and a module imported by name
-  # are not followed.
+  # one. A path built from a loop's or a function's own variable, or from an argument, does not count:
+  # it names whatever the loop or function is given. A tool's own script sourced from its own folder
+  # (FolderVarsScripts, such as nvm.sh), or by name from where its installer puts it (FolderVarsOwn,
+  # such as Homebrew's opt/nvm/nvm.sh), is not read: it sets the tool's variable its own way, or loads
+  # the tool's own plugins. What a command prints (`eval "$(...)"`, `source <(...)`,
+  # `... | Invoke-Expression`) and a module imported by name are not followed.
   $fMvFiles = New-Object System.Collections.Generic.List[string]
   foreach ($f in $ShellRc) { $fMvFiles.Add($f) }
   foreach ($d in $DocsRoots) { $fMvFiles.Add((J $d 'WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1')) }
@@ -7167,12 +7170,17 @@ if ($OptAcctRun) {
   $fMvAlt = (@(@($FolderVarsAgent) + @($FolderVarsTool) | ForEach-Object { [regex]::Escape($_) }) -join '|')
   $fMvName = New-Object regex (('(?<![A-Za-z0-9_])(?:' + $fMvAlt + ')(?![A-Za-z0-9_])'), 'IgnoreCase')
   $fMvRead = New-Object regex (('(?:(?<e>\$\{?env:)|(?<b>\$\{#?)|\$|%|GetEnvironmentVariable\(\s*[''"]|Test-Path\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?)$'), 'IgnoreCase')
-  $fMvArg = '(?<p>"[^"]*"|''[^'']*''|[^\s;&|)}]+)'
-  $fMvSrcRx = New-Object regex (('(?:^|[;&|{(]|\b(?:then|else|do))\s*\\?(?:\.|source)\s+' + $fMvArg), 'IgnoreCase')
+  $fMvArg = '(?<p>"[^"]*"|''[^'']*''|(?:\$\{[^}]*\}|\$\([^)]*\)|[^\s;&|)}])+)'
+  $fMvSrcRx = New-Object regex (('(?:^|[;&|{(]|\b(?:then|else|do)|\bfor\s+[A-Za-z_][A-Za-z0-9_]*\s*\((?:[^()]|\([^()]*\))*\))\s*\\?(?:\.|source)\s+' + $fMvArg), 'IgnoreCase')
   $fMvAmpRx = New-Object regex ('(?:^|[;|{(=])\s*&\s*' + $fMvArg)
   $fMvImpRx = New-Object regex (('\b(?:Import-Module|ipmo)(?:\s+-(?:Force|Global|DisableNameChecking|PassThru|Name|Scope\s+\w+))*\s+' + $fMvArg), 'IgnoreCase')
   $fMvRootRx = New-Object regex ('^\s*(?:RootModule|ModuleToProcess)\s*=\s*(?:''(?<p>[^'']+)''|"(?<p>[^"]+)")', 'IgnoreCase')
-  $fMvForRx = New-Object regex ('\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<g>[^;]*?)\s*(?:;|$)|\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<g>[^)]*)\)')
+  $fMvForRx = New-Object regex ('\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<g>[^;]*?)\s*(?:;|$)|\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<g>(?:[^()]|\([^()]*\))*)\)')
+  # A function's own variables: shell locals and those set from its arguments, PowerShell's param()
+  # and foreach variables. A sourced path built from one names whatever the function or loop is given.
+  $fMvLocalRx = New-Object regex ('^\s*local\s+(?<n>.*)$')
+  $fMvArgAsgRx = New-Object regex ('^\s*(?:export\s+|readonly\s+)?(?<n>[A-Za-z_][A-Za-z0-9_]*)=["'']?\$\{?[0-9@*]')
+  $fMvPsFnRx = New-Object regex ('\b(?:param\s*\((?<l>[^)]*)\)|foreach\s*\(\s*\$(?<n>\w+)\s+in\b)', 'IgnoreCase')
   $fMvGciRx = New-Object regex ('(?:\bforeach\s*\(\s*\$(?<v>\w+)\s+in\s+\(?\s*)?(?<![\w-])(?:Get-ChildItem|gci|dir|ls)(?:\s+-(?:Path|LiteralPath|File|Recurse|Force))*\s+(?<g>"[^"]*"|''[^'']*''|[^\s;|)}-][^\s;|)}]*)', 'IgnoreCase')
   $fMvSAsgRx = New-Object regex ('^\s*(?:export\s+|local\s+|readonly\s+)?(?<n>[A-Za-z_][A-Za-z0-9_]*)=(?<v>"[^"]*"|''[^'']*''|[^\s;''"]*)\s*(?:;|$)')
   $fMvPAsgRx = New-Object regex ('^\s*\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<v>"[^"]*"|''[^'']*''|[^\s;''"]+)\s*;?\s*$', 'IgnoreCase')
@@ -7281,10 +7289,18 @@ if ($OptAcctRun) {
     try { $fs = @([IO.Directory]::GetFiles($dir, $pat) | Sort-Object) } catch { $fMvSt.Lost = $true; return }
     foreach ($x in $fs) { Fleet-MvAdd $x }
   }
+  # Whether a path is built from a loop's or a function's own variable, or an argument.
+  function Fleet-MvBound([string]$raw, $loops) {
+    if ($raw -match '\$\{?(?:[0-9@*#]|args\b|_\b|PSItem\b)') { return $true }
+    foreach ($m in [regex]::Matches($raw, '\$\{?(?:env:)?([A-Za-z_][A-Za-z0-9_]*)')) { $n = $m.Groups[1].Value; if ($loops.ContainsKey($n) -or $loops.ContainsKey("fn:$n")) { return $true } }
+    $false
+  }
   # What a source line names. KIND is dot for . and source, amp for &, imp for Import-Module: those two
   # run a command or a module by name unless they name a PowerShell file.
   function Fleet-MvFollow([string]$raw, [string]$from, [bool]$ps, [string]$kind, $loops) {
     if ($raw.StartsWith('<') -or $raw -eq '-' -or $raw.StartsWith('{')) { return }
+    $bare = ($raw -replace '["'']', '') -replace '\\', '/'
+    foreach ($o in $FolderVarsOwn) { if ($fMvCmp.Equals($bare, $o) -or $bare.EndsWith('/' + $o, $PathCmp)) { return } }
     $lv = [regex]::Match($raw, '^"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?(?:\.(?:FullName|PSPath|Path))?"?$')
     if ($lv.Success -and $loops.ContainsKey($lv.Groups[1].Value)) {
       foreach ($g in $loops[$lv.Groups[1].Value]) { $x = Fleet-MvExpand $g $from $ps; if ($null -eq $x) { $fMvSt.Lost = $true } else { Fleet-MvGlob $x } }
@@ -7292,7 +7308,7 @@ if ($OptAcctRun) {
     }
     $p = Fleet-MvExpand $raw $from $ps
     if ($kind -ne 'dot' -and ($null -eq $p -or $p -notmatch '[\\/]') -and $raw -notmatch '[\\/]|\.ps[dm]?1\b') { return }
-    if ($null -eq $p) { $fMvSt.Lost = $true; return }
+    if ($null -eq $p) { if (-not (Fleet-MvBound $raw $loops)) { $fMvSt.Lost = $true }; return }
     if ($p -match '\.(?:exe|dll|com|bat|cmd)$' -or ($kind -ne 'dot' -and $p -notmatch '\.ps[dm]?1$')) { return }
     if ($p -match '[*?]') { Fleet-MvGlob $p } else { Fleet-MvAdd $p }
   }
@@ -7303,12 +7319,21 @@ if ($OptAcctRun) {
       if ($m.Success) { $k = 'ps:'; if ($m.Groups['e'].Success) { $k = 'env:' }; $fMvVars[$k + $m.Groups['n'].Value] = Fleet-MvExpand $m.Groups['v'].Value $from $true }
       $m = $fMvHereRx.Match($l)
       if ($m.Success) { $fMvVars['ps:' + $m.Groups['n'].Value] = [IO.Path]::GetDirectoryName($from) }
+      foreach ($m in $fMvPsFnRx.Matches($l)) {
+        if ($m.Groups['n'].Success) { $loops['fn:' + $m.Groups['n'].Value] = $true }
+        foreach ($x in [regex]::Matches($m.Groups['l'].Value, '\$(\w+)')) { $loops['fn:' + $x.Groups[1].Value] = $true }
+      }
       $m = $fMvGciRx.Match($l)
       if ($m.Success) { $v = '_'; if ($m.Groups['v'].Success) { $v = $m.Groups['v'].Value }; $loops[$v] = @($m.Groups['g'].Value) }
     } else {
       $m = $fMvSAsgRx.Match($l)
       if ($m.Success) { $fMvVars['env:' + $m.Groups['n'].Value] = Fleet-MvExpand $m.Groups['v'].Value $from $false }
-      foreach ($m in $fMvForRx.Matches($l)) { $loops[$m.Groups['v'].Value] = @($m.Groups['g'].Value -split '\s+' | Where-Object { $_ }) }
+      $m = $fMvLocalRx.Match($l)
+      if ($m.Success) { foreach ($x in (($m.Groups['n'].Value -replace '"[^"]*"|''[^'']*''', '') -split '[\s;]+')) { $x = $x -replace '=.*', ''; if ($x -match '^[A-Za-z_][A-Za-z0-9_]*$') { $loops["fn:$x"] = $true } } }
+      $m = $fMvArgAsgRx.Match($l)
+      if ($m.Success) { $loops['fn:' + $m.Groups['n'].Value] = $true }
+      # zsh's glob qualifiers, such as (N) in *.zsh(N), come off a loop's globs.
+      foreach ($m in $fMvForRx.Matches($l)) { $loops[$m.Groups['v'].Value] = @($m.Groups['g'].Value -split '\s+' | Where-Object { $_ } | ForEach-Object { if ($_ -match '[*?][^()]*\([^()]*\)$') { $_ -replace '\([^()]*\)$', '' } else { $_ } }) }
     }
   }
   function Fleet-MvScan([string]$f, [string]$t) {

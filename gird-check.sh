@@ -7956,32 +7956,46 @@ if [ "$ACCTRUN" -eq 1 ]; then
       return x
     }
     function norm(p) { gsub(/\/+/, "/", p); if (length(p) > 1) sub(/\/$/, "", p); return p }
+    function bound(raw,   x, v) {
+      x = raw; if (x ~ /\$\{?[0-9@*#]/) return 1
+      while (match(x, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { v = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH); gsub(/[${]/, "", v); if ((v in LOOPS) || (v in FNV)) return 1 }
+      return 0
+    }
     function follow(raw,   v, n, g, i, x, p) {
       if (raw ~ /^</ || raw == "-" || raw ~ /^\{/) return
+      x = raw; gsub(/["\047]/, "", x)
+      for (i = 1; i <= NOWN; i++) if (x == OWN[i] || substr(x, length(x) - length(OWN[i])) == "/" OWN[i]) return
       if (raw ~ /^"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?$/) {
         v = raw; gsub(/["${}]/, "", v)
         if (v in LOOPS) { n = split(LOOPS[v], g, " "); for (i = 1; i <= n; i++) { x = expand(g[i]); if (x == NUL) print "L"; else print "G\t" x }; return }
       }
       p = expand(raw)
-      if (p == NUL) { print "L"; return }
+      if (p == NUL) { if (!bound(raw)) print "L"; return }
       print ((p ~ /[*?]/) ? "G\t" : "A\t") p
     }
-    function track(l,   r, n, v, w, pre) {
+    function track(l,   r, n, v, w, pre, a, i, k) {
       r = l; sub(/^[ \t]+/, "", r); sub(/^(export|local|readonly)[ \t]+/, "", r)
       if (match(r, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
         n = substr(r, 1, RLENGTH - 1); r = substr(r, RLENGTH + 1)
         if (match(r, /^("[^"]*"|\047[^\047]*\047|[^ \t;\047"]*)/)) {
           v = substr(r, 1, RLENGTH)
           if (substr(r, RLENGTH + 1) ~ /^[ \t]*(;|$)/) { VARS[n] = expand(v); print "V\t" n "\t" VARS[n] }
+          if (v ~ /\$\{?[0-9@*]/) FNV[n] = 1
         }
       }
+      if (match(l, /^[ \t]*local[ \t]/)) {
+        r = substr(l, RLENGTH + 1); gsub(/"[^"]*"|\047[^\047]*\047/, "", r); n = split(r, a, /[ \t;]+/)
+        for (i = 1; i <= n; i++) { sub(/=.*/, "", a[i]); if (a[i] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) FNV[a[i]] = 1 }
+      }
       r = l
-      while (match(r, /for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+[^;]*|for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\([^)]*\)/)) {
+      while (match(r, /for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+[^;]*|for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)/)) {
         pre = substr(r, 1, RSTART - 1); w = substr(r, RSTART, RLENGTH); r = substr(r, RSTART + RLENGTH)
         if (pre ~ /[A-Za-z0-9_]$/) continue
         sub(/^for[ \t]+/, "", w); match(w, /^[A-Za-z_][A-Za-z0-9_]*/); n = substr(w, 1, RLENGTH); w = substr(w, RLENGTH + 1)
         if (w ~ /^[ \t]*\(/) { sub(/^[ \t]*\(/, "", w); sub(/\)$/, "", w) } else sub(/^[ \t]+in[ \t]+/, "", w)
-        gsub(/[ \t]+/, " ", w); sub(/^ /, "", w); sub(/ $/, "", w); LOOPS[n] = w
+        gsub(/[ \t]+/, " ", w); sub(/^ /, "", w); sub(/ $/, "", w)
+        k = split(w, a, " "); w = ""; for (i = 1; i <= k; i++) { if (a[i] ~ /[*?][^()]*\([^()]*\)$/) sub(/\([^()]*\)$/, "", a[i]); w = w (i > 1 ? " " : "") a[i] }
+        LOOPS[n] = w
       }
     }
     function sources(l,   i, n, pre, rest, c) {
@@ -7990,16 +8004,17 @@ if [ "$ACCTRUN" -eq 1 ]; then
         rest = substr(l, i)
         if (!match(rest, /^\\?(\.|source)[ \t]+/)) continue
         pre = substr(l, 1, i - 1); sub(/[ \t]+$/, "", pre)
-        if (!(pre == "" || pre ~ /[;&|{(]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|else|do)$/ || pre ~ /(^|[^A-Za-z0-9_])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\([^)]*\)$/)) continue
+        if (!(pre == "" || pre ~ /[;&|{(]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|else|do)$/ || pre ~ /(^|[^A-Za-z0-9_])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)$/)) continue
         if (i > 1 && substr(l, i - 1, 1) !~ /[ \t;&|{()]/) continue
         rest = substr(rest, RLENGTH + 1)
-        if (match(rest, /^("[^"]*"|\047[^\047]*\047|[^ \t;&|)}]+)/)) follow(substr(rest, 1, RLENGTH))
+        if (match(rest, /^("[^"]*"|\047[^\047]*\047|(\$\{[^}]*\}|\$\([^)]*\)|[^ \t;&|)}])+)/)) follow(substr(rest, 1, RLENGTH))
       }
     }
     BEGIN {
       SQ = "\047"; DQ = "\""; NUL = "\001"; H = ENVIRON["MV_H"]
       n = split(ENVIRON["MV_NAMES"], a, "|"); for (i = 1; i <= n; i++) LISTED[a[i]] = 1
       n = split(ENVIRON["MV_DFLT"], a, "\n"); for (i = 1; i <= n; i++) if ((k = index(a[i], "\t")) > 0) { v = substr(a[i], 1, k - 1); if (!(v in DF)) DF[v] = substr(a[i], k + 1); DS[v] = DS[v] "\n" substr(a[i], k + 1) "\n" }
+      NOWN = split(ENVIRON["MV_OWN"], OWN, "\n")
       n = split(ENVIRON["MV_VARS"], a, "\n"); for (i = 1; i <= n; i++) if ((k = index(a[i], "\t")) > 0) VARS[substr(a[i], 1, k - 1)] = substr(a[i], k + 1)
     }
     {
@@ -8024,9 +8039,13 @@ if [ "$ACCTRUN" -eq 1 ]; then
       if (v == NUL || index(ENVIRON[n] != "" ? "\n" norm(ENVIRON[n]) "\n" : DS[n], "\n" norm(v) "\n") == 0) { print "M"; exit }
     }
     END { if (named) print "N" }'
-# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it.
+# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it.
   _mv_agent='CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME'
   _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR|PNPM_HOME'
+  _mv_own='opt/nvm/nvm.sh
+opt/nvm/etc/bash_completion.d/nvm
+libexec/asdf.sh
+oh-my-zsh.sh'
   fleet_dflt() { # variable: the folders the run reads when it is not set
     case "$1" in
       XDG_CONFIG_HOME) printf '%s\n' "$H/.config" ;;
@@ -8064,10 +8083,13 @@ if [ "$ACCTRUN" -eq 1 ]; then
   # on a local disk is read: never a link, a device or pipe, a file under /Volumes or /Network, or one
   # over FLEET_MAX bytes. At most 64 files and 16 MiB in all are read. A sourced file that exists but
   # can't be followed or read, or a cap reached, counts only when some file read names a listed
-  # variable: ordinary setups source completion scripts and plugins by the dozen. A tool's own script
-  # sourced from its own folder (fleet_scripts, such as nvm.sh) is not read: it sets the tool's
-  # variable to the folder it is in, the one the check reads. What a command prints (eval "$(...)",
-  # source <(...)) is not followed. gird-check.ps1 -AccountRun reads them the same way.
+  # variable: ordinary setups source completion scripts and plugins by the dozen. A path built from a
+  # loop's or a function's own variable, or from an argument, does not count: it names whatever the
+  # loop or function is given (a plugin loader's). A tool's own script sourced from its own folder
+  # (fleet_scripts, such as nvm.sh), or by name from where its installer puts it (_mv_own, such as
+  # Homebrew's opt/nvm/nvm.sh and Oh My Zsh's oh-my-zsh.sh), is not read: it sets the tool's variable
+  # its own way, or loads the tool's own plugins. What a command prints (eval "$(...)", source <(...))
+  # is not followed. gird-check.ps1 -AccountRun reads them the same way.
   _mv_names="$_mv_agent|$_mv_tool"; _mv_dflt=""; _mv_scr=""
   for _mvn in $(printf '%s' "$_mv_names" | tr '|' ' '); do
     _mv_dflt="$_mv_dflt$(fleet_dflt "$_mvn" | sed "s/^/$_mvn$TAB/")$NL"
@@ -8126,7 +8148,7 @@ EOF
     [ "$_mvz" -le "$FLEET_MAX" ] || { _mv_lost=1; continue; }
     if [ "$_mv_files" -ge 64 ] || [ $((_mv_bytes + _mvz)) -gt 16777216 ]; then _mv_lost=1; break; fi
     _mv_files=$((_mv_files + 1)); _mv_bytes=$((_mv_bytes + _mvz))
-    _mvo=$(MV_NAMES="$_mv_names" MV_H="$H" MV_DFLT="$_mv_dflt" MV_VARS="$_mv_vars" awk "$FLEET_MV_AWK" "$_pf" 2>/dev/null) || _mv_lost=1
+    _mvo=$(MV_NAMES="$_mv_names" MV_H="$H" MV_DFLT="$_mv_dflt" MV_VARS="$_mv_vars" MV_OWN="$_mv_own" awk "$FLEET_MV_AWK" "$_pf" 2>/dev/null) || _mv_lost=1
     while IFS="$TAB" read -r _mvk _mvx _mvy; do
       case "$_mvk" in
         M) _moved=1 ;;

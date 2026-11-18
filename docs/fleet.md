@@ -402,10 +402,13 @@ count for the account that owns them under one name, never through a link, symbo
 only as a possible sign: another account can hard-link one of this account's files there, once the
 original is renamed away. The clean environment drops any variable that moves an agent's or a tool's
 folders (`data/folder-vars.tsv`), such as `CLAUDE_CONFIG_DIR`. So the shell profiles (zsh's, bash's
-and fish's) and every file they load with `.` or `source`, to any depth, are read as text, never run,
-as on Windows: a line that sets one of those variables to a folder the check does not read, or in a
-form it does not know, leaves the account partly checked. What a command prints for the shell to run
-(`eval "$(...)"`, `source <(...)`) is not followed. Each run is
+and fish's) are read as text, never run, as on Windows, and so is each file they load with `.` or
+`source` whose path can be told from the text, to any depth, including the files of a loop over a
+folder. A line that sets one of those variables to a folder the check does not read, or in a form it
+does not know, leaves the account partly checked, and so does a loaded file it can't follow where a
+file read names one of the variables. Not followed: what a command prints for the shell to run
+(`eval "$(...)"`, `source <(...)`), a path built from a loop's or a function's own variable, and the
+tools' own scripts of `data/tool-scripts.tsv`, such as Homebrew's nvm and Oh My Zsh with its plugins. Each run is
 told its time, so its session check stops in time and what it found still counts, with the sessions
 partly checked. `sudo` writes one line to the system log for each account.
 

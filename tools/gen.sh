@@ -8,7 +8,7 @@
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
 # versions with a published fix (data/outdated.tsv), extensions that shipped malware
 # (data/bad-extensions.tsv), variables that move an agent's or a tool's folders
-# (data/folder-vars.tsv), coding agents (data/agents.tsv), the fixed lists the report sends
+# (data/folder-vars.tsv) and tools' own scripts a profile sources (data/tool-scripts.tsv), coding agents (data/agents.tsv), the fixed lists the report sends
 # (data/mcp-clients.tsv, data/mcp-servers.tsv, data/key-places.tsv), MCP configs (data/mcp-files.tsv)
 # and the lines an account run prints (data/account-run.tsv, written into the fleet scripts, and
 # checked against what gird-check.sh and gird-check.ps1 print). The scripts stay single files people
@@ -140,6 +140,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           return 1 }
         function scripts_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (a[i] !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/) return 0; return 1 }
         NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }'
+      rows data/tool-scripts.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/ || $2 == "" || seen[$1]++ { print "data/tool-scripts.tsv: " $0 }'
       # A path is a token or ~, then folders and files made of plain characters; - is none.
       rows data/agents.tsv | awk -F '\t' '
         function paths_ok(s, toks,   n, a, i, t) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) {
@@ -444,29 +445,31 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
 # --- variables that move an agent's or a tool's folders, for an account run ---------------
-# gird-check.sh gets the list of each kind, fleet_dflt, the folders of the sh column, and fleet_scripts,
-# the tools' own scripts; gird-check.ps1 the lists, the folders of the windows column and the tools' own
-# scripts. Windows reads a variable's name in any case, so a PowerShell table keeps a name's first line
+# gird-check.sh gets the list of each kind, fleet_dflt, the folders of the sh column, fleet_scripts,
+# the tools' own scripts, and _mv_own, those of data/tool-scripts.tsv; gird-check.ps1 the lists, the
+# folders of the windows column and the tools' own scripts of both files. Windows reads a variable's name in any case, so a PowerShell table keeps a name's first line
 # (npm_config_prefix's).
-rows data/folder-vars.tsv | awk -F '\t' '
+OWN_SH=$(rows data/tool-scripts.tsv | cut -f1)
+OWN_PS=$(rows data/tool-scripts.tsv | cut -f1 | sed "s/.*/'&'/" | paste -sd, - | sed 's/,/, /g')
+rows data/folder-vars.tsv | OWN="$OWN_SH" awk -F '\t' '
   { L[$2] = L[$2] (L[$2] == "" ? "" : "|") $1
     if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" }
     if ($5 != "-") { n = split($5, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " " a[i]; S = S "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }
-  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
-        print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it."
+        print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"; print "  _mv_own=\047" ENVIRON["OWN"] "\047"
         print "  fleet_dflt() { # variable: the folders the run reads when it is not set"; print "    case \"$1\" in"; printf "%s", D; print "    esac"; print "  }"
         print "  fleet_scripts() { # variable: its tool\047s own scripts in its folder, which set it to that folder"; print "    case \"$1\" in"; printf "%s", S; print "    esac"; print "  }"
         print "# <<< folder-vars" }' > "$WORK/folder-vars.sh"
-rows data/folder-vars.tsv | awk -F '\t' '
+rows data/folder-vars.tsv | awk -F '\t' -v own="$OWN_PS" '
   function ps(p) { if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"; if (p ~ /^\{LOCALAPPDATA\}/) return "(J $LocalAppData \047" substr(p, 16) "\047)"; return "(J $AppData \047" substr(p, 11) "\047)" }
   function list(s, f,   n, a, i, o) { n = split(s, a, ";"); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") (f ? ps(a[i]) : "\047" a[i] "\047"); return "@(" o ")" }
   { L[$2] = L[$2] (L[$2] == "" ? "" : ", ") "\047" $1 "\047"
     if ($4 != "-" && !(tolower($1) in w)) W = W (W == "" ? "" : "; ") "\047" $1 "\047 = " list($4, 1)
     w[tolower($1)] = 1
     if ($5 != "-") S = S (S == "" ? "" : "; ") "\047" $1 "\047 = " list($5, 0) }
-  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it."
         print "$FolderVarsAgent = @(" L["agent"] ")"; print "$FolderVarsTool = @(" L["tool"] ")"
-        print "$FolderVarsDefault = @{ " W " }"; print "$FolderVarsScripts = @{ " S " }"; print "# <<< folder-vars" }' > "$WORK/folder-vars.ps1"
+        print "$FolderVarsDefault = @{ " W " }"; print "$FolderVarsScripts = @{ " S " }"; print "$FolderVarsOwn = @(" own ")"; print "# <<< folder-vars" }' > "$WORK/folder-vars.ps1"
 
 # --- coding agents -------------------------------------------------------------
 # Rows are name|commands|install paths|folders that change when it is used|id, paths separated by ;.
