@@ -405,10 +405,13 @@ The rules for each result are the same whatever the file:
   value over 250 characters, and a value of 2,048 characters or more that does not end in `+more`
   are not checked, never clear. So is a Mac's summary line (`blindspot act accounts=...`), which
   names no findings: Iru keeps that line, so an Iru export needs the inventory value instead.
-- A name, with the device id where the file has one, that appears more than once in the files read
-  is not checked, with where each came from, and none of its results is counted. A file lists each
-  computer once, so the same name in two files is one computer: it stands for as many computers as
-  the file that lists it most often. A row with no name is its own computer.
+- Each row is one computer, and two rows are never joined. Different computers can share a name or
+  a device id (a placeholder serial number such as `To be filled by O.E.M.`, small ids from two
+  MDMs), and joining them would drop one computer's findings. So the same computer in two files, or
+  twice in one file, is counted twice. The limits then say how many computer names and device ids
+  (an MDM device id, serial number or Entra device id column) appear on more than one row, and no
+  outcome or count changes because of it. An export with one row per computer gives the right
+  totals: `gird-intune.ps1 -Export` writes each PC's latest result once.
 - Every value from a file is escaped in the HTML. A CSV cell that starts with `=`, `+`, `-`, `@` or
   a tab, after any spaces, gets a `'` first, so a spreadsheet does not run it.
 - The OS shown comes from an `OS` column, or `-OsColumn`, when the file has one and its value names

@@ -296,8 +296,13 @@ one. When it cannot tell which column to read, it shows each column with a value
 line to run next. A computer with no result, an old result or one it cannot read is listed as not
 checked, never as clear.
 
-For Microsoft Intune on Windows, `gird-intune.ps1 -Export intune.csv` writes that file for you. It
-is optional: an export from the Intune admin center works too.
+Each row is counted as its own computer, even when two rows share a name or a device id, because
+different computers can share one. So give it an export with one row per computer, and give each
+computer in one file only: a computer listed twice is counted twice. When a name or device id
+repeats, the report's limits say how many.
+
+For Microsoft Intune on Windows, `gird-intune.ps1 -Export intune.csv` writes that file for you, with
+each PC's latest result on one row. It is optional: an export from the Intune admin center works too.
 
 ## 5. Act on a finding
 

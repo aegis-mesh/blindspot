@@ -73,7 +73,7 @@ settings as well as ones that came in a cloned project.
   plain text are in the same account (with the providers the value names), the PCs with a key in an
   agent's session files, and the PCs with a token in an MCP config. Each counts what was found, never
   what happened. For each statement every computer in the report is exactly one of found, none
-  found or not known, and the page shows all three counts, so they add up to the computers read.
+  found or not known, and the page shows all three counts, so they add up to the computers in the report.
   None found speaks for the accounts the result read, and only when each of them was read in full:
 
   | The computer's result | Each statement |
@@ -90,10 +90,12 @@ settings as well as ones that came in a cloned project.
   accounts that were not read. That number is per statement, because a computer can be none found
   for one statement and found for another.
 
-  Two rows are one computer only when they share a device id (an MDM device id, serial number or
-  Entra device id column, matched exactly; a placeholder such as the all-zero id is ignored). The
-  newer result stands, and on the same date the one that needs more attention. Rows that share only
-  a name are counted as separate computers, and the limits say how many names repeat.
+  The computers in the report are the rows read: each row is counted as its own computer, and two
+  rows are never joined, even when they share a name or a device id (an MDM device id, serial number
+  or Entra device id column). Different computers can share one, such as a placeholder serial number
+  like `To be filled by O.E.M.` or small ids from two MDMs, and joining them would drop one
+  computer's findings. When a name or an id appears on more than one row, the limits say how many,
+  and no outcome or count changes. An export with one row per computer gives the right totals.
 
   `Get-PathState` in `gird-report.ps1` is the table's one home. It is tested row by row in
   `tests/intune.py` (`PATHS`), with values the two writers write.

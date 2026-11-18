@@ -448,7 +448,7 @@ function New-Row([string]$Pc, [string]$User, [string]$Raw, [string]$Source, [str
     PC = $Pc; User = $User; Ids = @(); Status = ''; Why = ''; CheckedAt = ''; Details = ''; Kinds = @(); Output = $Raw
     Known = $false; Win = $false; More = $false; Accts = @(); OtherProfiles = 0; Refs = @()
     AgentKey = 'unknown'; AgentKeyProviders = @(); Sessions = 'unknown'; McpTokens = 'unknown'
-    Source = $Source; OS = $Os; LastSeen = ''; LastReport = ''; Unnamed = $false; Dated = ''
+    Source = $Source; OS = $Os; LastSeen = ''; LastReport = ''; Unnamed = $false
   }
 }
 
@@ -476,8 +476,8 @@ function Set-Result($Row, [string]$Det, [bool]$HasDet, [DateTime]$Now) {
   switch ($p.Special) {
     'none' { $row.Status = 'no_result'; $row.Why = 'the check has not finished a run on this computer'; return $row }
     'unreadable' { $row.Status = 'not_checked'; $row.Why = 'the saved result could not be read'; return $row }
-    'stale' { $row.Status = 'stale'; $row.Why = 'the last finished run is old'; $row.CheckedAt = $p.Time; $row.Dated = $p.Time; return $row }
-    'failed' { $row.Status = 'failed'; $row.Why = 'a run did not finish or could not save its result'; $row.CheckedAt = $p.Time; $row.Dated = $p.Time; return $row }
+    'stale' { $row.Status = 'stale'; $row.Why = 'the last finished run is old'; $row.CheckedAt = $p.Time; return $row }
+    'failed' { $row.Status = 'failed'; $row.Why = 'a run did not finish or could not save its result'; $row.CheckedAt = $p.Time; return $row }
     'cut' {
       $row.Status = 'not_checked'
       if ($HasDet) { $row.Why = 'its result fills all the room Intune keeps and does not end in +more, so Intune may have cut it short' }
@@ -490,7 +490,6 @@ function Set-Result($Row, [string]$Det, [bool]$HasDet, [DateTime]$Now) {
   $at = Get-UtcTime $p.Time
   $age = ($Now - $at).TotalSeconds
   if ($age -lt -3600) { $row.Status = 'not_checked'; $row.Why = 'its result is dated in the future'; return $row }
-  $row.Dated = $p.Time
   if ($age -gt $StaleDays * 86400) {
     $row.Status = 'stale'; $row.Why = "its result is older than $StaleDays days (it read " + $StatusText[$p.Outcome].ToLower() + ')'; return $row
   }
@@ -541,8 +540,6 @@ $IdHeaders = [ordered]@{
   serial = @('Serial Number', 'SerialNumber', 'Serial')
   entra = @('Microsoft Entra Device ID', 'Entra Device ID', 'Azure AD Device ID', 'AzureADDeviceId', 'AAD Device ID')
 }
-# A placeholder an MDM writes for a device with no such id, such as the all-zero Entra id, names no computer.
-$NoId = '^([^1-9A-Za-z]*|n/?a|none|null|unknown|not available)$'
 $ResultShape = '^(v[0-9]{1,3} [a-z_]{1,20} [0-9]{4}-|stale: last run |failed: the run started |none$|unreadable$|blindspot (failed|act|not_checked|review|clear) accounts=)'
 
 function Stop-Plain([string]$Message) { throw ('Stopped: ' + $Message) }
@@ -765,7 +762,7 @@ function Read-ExportFile($F, [DateTime]$Now) {
       $row.LastSeen = & $cell $idx.Seen
       if ($ours) { $row.LastReport = $row.LastSeen }
       $ids = @()
-      foreach ($kind in $idCols.Keys) { $v = (& $cell $idCols[$kind]).Trim(); if ($v -notmatch $NoId) { $ids += $kind + ':' + $v } }
+      foreach ($kind in $idCols.Keys) { $v = (& $cell $idCols[$kind]).Trim(); if ($v) { $ids += $kind + ':' + $v.ToLowerInvariant() } }
       $row.Ids = $ids
       $row.Unnamed = $unnamed
       [void]$out.Add((New-Object PSObject -Property (Set-Result $row (& $cell $idx.Det) $ours $Now)))
@@ -774,32 +771,22 @@ function Read-ExportFile($F, [DateTime]$Now) {
   return @{ Rows = $out.ToArray(); Notes = $notes.ToArray() }
 }
 
-# Two rows are one computer only when they share a device id: the newer result stands, and on the same
-# date the one that needs more attention. Rows that share only a name stay apart, as a name can be
-# given to more than one computer; the page says how many names repeat.
-function Test-Before($A, $B) {
-  if ($A.Dated -cne $B.Dated) { return [string]::CompareOrdinal($A.Dated, $B.Dated) -gt 0 }
-  return $StatusOrder[$A.Status] -lt $StatusOrder[$B.Status]
-}
-function Get-Deduplicated($Rows) {
-  $groupOf = New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)
-  $kept = New-Object System.Collections.ArrayList
-  $size = New-Object System.Collections.ArrayList
+# Rows are never joined into one computer: different computers can share a name or an id (a
+# placeholder serial such as "To be filled by O.E.M.", small ids from two MDMs), and a join would
+# drop one computer's findings. The page only says how many names and ids repeat.
+function Get-RepeatCount($Rows) {
+  $seen = New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)
   foreach ($r in $Rows) {
-    $g = -1
-    foreach ($id in @($r.Ids)) { if ($groupOf.ContainsKey($id)) { $g = $groupOf[$id]; break } }
-    if ($g -lt 0) { $g = $kept.Count; [void]$kept.Add($r); [void]$size.Add(1) }
-    else { $size[$g] = $size[$g] + 1; if (Test-Before $r $kept[$g]) { $kept[$g] = $r } }
-    foreach ($id in @($r.Ids)) { if (-not $groupOf.ContainsKey($id)) { $groupOf[$id] = $g } }
+    $keys = @($r.Ids)
+    if (-not $r.Unnamed) { $keys += 'name:' + $r.PC.ToLowerInvariant() }
+    foreach ($k in $keys) { $seen[$k] = 1 + [int]$seen[$k] }
   }
-  $names = @{}
-  foreach ($r in $kept) { if (-not $r.Unnamed) { $k = $r.PC.ToLowerInvariant(); $names[$k] = 1 + [int]$names[$k] } }
-  return @{ Rows = $kept.ToArray(); Merged = @($size | Where-Object { $_ -gt 1 }).Count; Names = @($names.Values | Where-Object { $_ -gt 1 }).Count }
+  return @($seen.Values | Where-Object { $_ -gt 1 }).Count
 }
 
 # --- Working out what the report says ----------------------------------------------------------
 
-function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now, $Dup) {
+function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now, [int]$Repeats) {
   $count = @{}
   foreach ($k in $StatusText.Keys) { $count[$k] = @($Rows | Where-Object { $_.Status -eq $k }).Count }
   $known = @($Rows | Where-Object { $_.Known })
@@ -917,11 +904,9 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now, $Dup) {
   if ($partly -gt 0) { $d.Limits += (Get-PcCount $partly) + ' failed or were partly checked but sent a result: what it names is in the counts above, and what the run did not reach is not known.' }
   $cut = @($known | Where-Object { $_.More }).Count
   if ($cut -gt 0) { $d.Limits += (Get-PcCount $cut) + ' sent a result cut to fit what the MDM keeps. Findings past the cut are not in the counts above.' }
-  if ($Dup.Merged -gt 0) {
-    $d.Limits += (Get-PcCount $Dup.Merged) + $(if ($Dup.Merged -eq 1) { ' is' } else { ' are' }) + ' listed more than once with the same device identifier. Each is counted once, from its newest result, or on the same date the one that needs more attention.'
-  }
-  if ($Dup.Names -gt 0) {
-    $d.Limits += "$($Dup.Names) computer name" + $(if ($Dup.Names -eq 1) { ' appears' } else { 's appear' }) + ' more than once across the files. Each was counted separately; some may be the same computer.'
+  if ($Repeats -gt 0) {
+    $d.Limits += "$Repeats computer name" + $(if ($Repeats -eq 1) { ' (or device identifier) appears' } else { 's (or device identifiers) appear' }) +
+      ' more than once across the rows. Each row was counted as its own computer, so some computers may be counted more than once.'
   }
   return $d
 }
@@ -1121,9 +1106,8 @@ function Invoke-Report {
     foreach ($r in $got.Rows) { [void]$rows.Add($r) }
     foreach ($n in $got.Notes) { if (-not $notes.Contains($n)) { [void]$notes.Add($n) } }
   }
-  $dd = Get-Deduplicated $rows
-  $sorted = @($dd.Rows | Sort-Object @{ Expression = { $StatusOrder[$_.Status] } }, @{ Expression = { $_.PC } })
-  $data = Get-ReportData $sorted $notes.ToArray() $sources $now $dd
+  $sorted = @($rows | Sort-Object @{ Expression = { $StatusOrder[$_.Status] } }, @{ Expression = { $_.PC } })
+  $data = Get-ReportData $sorted $notes.ToArray() $sources $now (Get-RepeatCount $rows)
   $base = Save-Report $dir ($now.ToString('yyyyMMdd-HHmm', [Globalization.CultureInfo]::InvariantCulture)) (Get-ReportCsv $sorted) (Get-ReportPage $data)
   foreach ($n in $notes) { Write-Host ('Note: ' + $n) }
   $c = $data.Counts

@@ -402,8 +402,9 @@ report_file twocolsnamed -- "$IW/files/twocols.csv" -ResultColumn result
 if [ "$RC" -eq 0 ]; then ok "intune: -ResultColumn settles which column holds the result"; else bad "intune: -ResultColumn settles which column holds the result" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
 report_file paths -- "$IW/files/paths.csv"
 if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads the file of every way a result can be whole or not"; else bad "intune: gird-report.ps1 reads the file of every way a result can be whole or not" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
-report_file dup -- "$IW/files/dupa.csv" "$IW/files/dupb.csv"
-report_file dupnoid -- "$IW/files/dupc.csv" "$IW/files/dupd.csv"
+report_file oem -- "$IW/files/oem.csv"
+report_file mdmid -- "$IW/files/mdma.csv" "$IW/files/mdmb.csv"
+report_file dupname -- "$IW/files/dupc.csv" "$IW/files/dupd.csv"
 report_file winfleet -- "$IW/files/winfleet.csv"
 report_file clearonly -- "$IW/files/clearonly.csv"
 report_file noname -- "$IW/files/noname.csv"

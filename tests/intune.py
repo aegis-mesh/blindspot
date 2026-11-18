@@ -283,17 +283,16 @@ WINFLEET = [('W-%02d' % i, _ps(' | anna: clear', 'clear', 1 if i <= 7 else 0)) f
     ('W-10', 'none'),
     ('W-11', _ps(' | anna: act keys 1; partial', 'act')),
 ]
-TOLD = at(hours=-5)
 def csv_cell(v): return '"' + v.replace('"', '""') + '"'
 CLR = 'v1 clear %s | asha: clear' % T0
 ACT = 'v1 act %s | asha: act keys 1' % T0
+OEM = 'To be filled by O.E.M.'
 DUPS = {
-    'dupa.csv': 'Computer Name,Serial Number,Blindspot\n' + ''.join('%s,%s,%s\n' % r for r in (
-        ('MAC-SAME', 'C1', CLR), ('MAC-NEW', 'C2', CLR.replace(T0, TOLD)), ('MAC-TIE', 'C3', CLR), ('', 'C9', ACT), ('', '', ACT), ('MAC-Z1', '00000000', CLR))),
-    'dupb.csv': 'Computer Name,Serial Number,Blindspot\n' + ''.join('%s,%s,%s\n' % r for r in (
-        ('mac-same', 'C1', ACT.replace(T0, TOLD)), ('MAC-NEW', 'C2', ACT), ('MAC-TIE', 'C3', ACT), ('', 'C9', CLR.replace(T0, TOLD)), ('', '', CLR), ('MAC-Z2', '00000000', CLR))),
-    'dupc.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\n' % CLR,
-    'dupd.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\n' % ACT,
+    'oem.csv': 'Computer Name,Serial Number,Blindspot\nPC-OEM1,%s,%s\nPC-OEM2,%s,%s\n' % (OEM, ACT, OEM, CLR),
+    'mdma.csv': 'Device name,Device id,Result\nPC-MDMA,5,%s\n' % CLR,
+    'mdmb.csv': 'Computer Name,UDID,Blindspot\nMAC-MDMB,5,%s\n' % ACT,
+    'dupc.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\niMac,%s\nMAC-ONLY-C,%s\n' % (CLR, CLR, CLR),
+    'dupd.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\nimac,%s\n' % (ACT, CLR),
 }
 def write_files(d):
     os.makedirs(d, exist_ok=True)
@@ -911,7 +910,7 @@ def main():
         check('the time the MDM last heard from it is kept', by['MAC-ACT']['last_seen'] == '2026-11-18 09:00:00' and by['MAC-ACT']['intune_last_report'] == '', by['MAC-ACT'])
         check('a Mac summary line says it names no findings', 'summary line' in by['MAC-SUMMARY']['why'], by['MAC-SUMMARY'])
         check('a name given twice with two serial numbers is two computers, each read', by['MAC-DUP']['status'] == 'clear' and by['mac-dup']['status'] == 'act'
-              and '1 computer name appears more than once across the files. Each was counted separately; some may be the same computer.' in html, (by['MAC-DUP'], by['mac-dup']))
+              and '<li>1 computer name (or device identifier) appears more than once across the rows. Each row was counted as its own computer, so some computers may be counted more than once.</li>' in html, (by['MAC-DUP'], by['mac-dup']))
         check('a Mac wiper is an indicator of data destruction and is not said to be a launch agent', tech_row(html, 'T1543.001') is None and tech_row(html, 'T1485') == (1, 0, 1), (tech_row(html, 'T1543.001'), tech_row(html, 'T1485')))
         check('a Mac agent set to run without asking relates to ATLAS only', tech_row(html, 'AML.T0053') == (2, 2, 0) and tech_row(html, 'T1698') is None, tech_row(html, 'AML.T0053'))
         tc = tactics(html)
@@ -936,6 +935,7 @@ def main():
               and 'Each Windows result covers one account' in got[3] and 'Each Mac result covers every local account' in got[3], out[-300:])
         got, out = load_out(w, 'clearonly')
         check('a report with no finding lists no tactic as found', got is not None and '<li>' not in tactics(got[3]) and 'No finding in this report relates to a MITRE tactic.' in got[3], out[-300:])
+        check('a report with no repeated name or device id has no line about repeats', got is not None and 'more than once across the rows' not in got[3] and 'Read 1 computer ' in out, out[-300:])
         got, out = load_out(w, 'paths')
         check('the paths file is read', got is not None, out[-300:])
         if got:
@@ -951,24 +951,20 @@ def main():
             check('an act result with an account not checked says so', why('P-ACT-NC-WORD') == '1 account not checked', why('P-ACT-NC-WORD'))
             check('two rows of one name and no device id are two computers', len(by.get('P-TWICE', [])) == 2, by.get('P-TWICE'))
             check('the paths file adds up too', adds_up(got[3])[0], adds_up(got[3])[1])
-        got, out = load_out(w, 'dup')
-        check('the files with device ids are read', got is not None, out[-300:])
-        if got:
-            rows_, html = got[1], got[3]
-            st = lambda n: sorted((r['status'], r['source']) for r in rows_ if unquote_cell(r['pc']).lower() == n.lower())
-            check('one serial number in two files is one computer', len(rows_) == 8 and '<b>8</b>Computers' in html and 'Read 8 computers' in out, [(r['pc'], r['status'], r['source']) for r in rows_])
-            check('one computer in two files keeps the newer result, even when the older one has a finding', st('MAC-SAME') == [('clear', 'dupa.csv')], st('MAC-SAME'))
-            check('one computer in two files keeps the newer result', st('MAC-NEW') == [('act', 'dupb.csv')], st('MAC-NEW'))
-            check('one computer in two files with results of the same date keeps the one that needs more attention', st('MAC-TIE') == [('act', 'dupb.csv')], st('MAC-TIE'))
-            unnamed = sorted((r['source'], r['status']) for r in rows_ if r['pc'].startswith('(name not given)'))
-            check('two rows with no name and one serial number are one computer; with none, each is its own', unnamed == [('dupa.csv', 'act'), ('dupa.csv', 'act'), ('dupb.csv', 'clear')], unnamed)
-            check('a placeholder serial number of zeros joins no computers', st('MAC-Z1') == [('clear', 'dupa.csv')] and st('MAC-Z2') == [('clear', 'dupb.csv')], (st('MAC-Z1'), st('MAC-Z2')))
-            check('the limits say how many computers were listed more than once with one device id',
-                  '4 computers are listed more than once with the same device identifier. Each is counted once, from its newest result' in html and 'computer name appears' not in html, re.findall(r'<li>[^<]*(?:identifier|name)[^<]*</li>', html))
-        got, out = load_out(w, 'dupnoid')
-        check('one name in two files with no device id is two computers, and the finding shows', got is not None and sorted(r['status'] for r in got[1]) == ['act', 'clear']
-              and '<td>Keys in plain text</td><td>1</td>' in got[3] and '<b>2</b>Computers' in got[3]
-              and '<li>1 computer name appears more than once across the files. Each was counted separately; some may be the same computer.</li>' in got[3], out[-300:])
+        rep = lambda n: '<li>%d computer name%s more than once across the rows. Each row was counted as its own computer, so some computers may be counted more than once.</li>' % (n, ' (or device identifier) appears' if n == 1 else 's (or device identifiers) appear')
+        reps = lambda html: re.findall(r'<li>[^<]*more than once across the rows[^<]*</li>', html)
+        got, out = load_out(w, 'oem')
+        check('two PCs sharing the serial number To be filled by O.E.M. are both counted, and the act is shown', got is not None
+              and sorted((unquote_cell(r['pc']), r['status']) for r in got[1]) == [('PC-OEM1', 'act'), ('PC-OEM2', 'clear')]
+              and '<b>2</b>Computers' in got[3] and '<td>Keys in plain text</td><td>1</td>' in got[3] and reps(got[3]) == [rep(1)], (out[-300:], got and reps(got[3])))
+        got, out = load_out(w, 'mdmid')
+        check('two MDM device ids of 5 from two files are both counted, and the finding is shown', got is not None
+              and sorted((unquote_cell(r['pc']), r['status'], r['source']) for r in got[1]) == [('MAC-MDMB', 'act', 'mdmb.csv'), ('PC-MDMA', 'clear', 'mdma.csv')]
+              and '<b>2</b>Computers' in got[3] and '<td>Keys in plain text</td><td>1</td>' in got[3] and reps(got[3]) == [rep(1)], (out[-300:], got and reps(got[3])))
+        got, out = load_out(w, 'dupname')
+        check('the same names in two files are each counted, and the limits say how many names repeat', got is not None
+              and sorted((unquote_cell(r['pc']).lower(), r['status']) for r in got[1]) == [('imac', 'clear'), ('imac', 'clear'), ('mac-only-c', 'clear'), ('macbook-pro', 'act'), ('macbook-pro', 'clear')]
+              and '<b>5</b>Computers' in got[3] and '<td>Keys in plain text</td><td>1</td>' in got[3] and reps(got[3]) == [rep(2)], (out[-300:], got and reps(got[3])))
         got, out = load_out(w, 'winfleet')
         check('a Windows fleet with second profiles is read', got is not None, out[-300:])
         if got:
