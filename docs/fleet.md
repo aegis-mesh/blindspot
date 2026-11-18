@@ -308,10 +308,12 @@ name or key:
 v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
 ```
 
-If it would be too long, it keeps the accounts that need attention first (`act`, then `not_checked`,
-then `review`), then as many clear ones as fit, and cuts details before accounts: an account whose
-details don't fit keeps its outcome, and an `act` one its `wiper` and `incidents` too. It ends with
-`+more` whenever anything was cut. The full result is
+If it would be too long, it keeps `old-install` and `no accounts`, then the rows that need attention
+first (`act`, then `not_checked`, then `review`, the Mac's own `machine:` row before an account at the
+same level), then as many clear ones as fit, and cuts details before rows: an account whose details
+don't fit keeps its outcome, and an `act` one its `wiper` and `incidents` too. The accounts come
+first, then `machine:`, `old-install` and `no accounts`, as in a whole value. It ends with `+more`
+whenever anything was cut. The full result is
 in `/var/db/blindspot/last.json`. The inventory field shows `stale: last run <time>` when the last run
 is older than `--stale-days`, `failed: the run started <time> did not finish or could not save its
 result` when a later run stopped part-way (your MDM's time limit, a restart) or could not save,

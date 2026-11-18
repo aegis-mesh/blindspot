@@ -4044,30 +4044,75 @@ has    "fleet: and keeps the accounts that need attention" '^inventory=.*person1
 _inv=$(sed -n 's/^inventory=//p' "$FL/inv.flat")
 if [ "${#_inv}" -le 250 ] && printf '%s' "$_inv" | grep -qE 'asha: act wiper; incidents [a-z0-9,-]+( |;)' && printf '%s' "$_inv" | grep -q 'itadmin: '; then ok "fleet: a value cut short keeps an act account's wiper and incidents, and every account"; else bad "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "$_inv"; fi
 if printf '%s' "$_inv" | grep -qE ' \+more$'; then ok "fleet: and ends with +more, since details were cut"; else bad "fleet: and ends with +more, since details were cut" "$_inv"; fi
-# Every length around the limit, for a Mac with no accounts (its value closes with "| no accounts")
-# and for one with accounts: at most 250 characters, whole when it fits, else ending with +more, and
-# never without its no accounts part.
+# Every value fl_value makes, at every length from 200 to 300, of each shape (no accounts, many
+# accounts, the Mac's row act, review and not_checked) goes to the report's own reader, the
+# Read-Inventory of gird-report.ps1, read from that file: each must be at most 250 characters, whole
+# when it fits, else end with +more, keep no accounts, and read as the writer meant (the outcome, and
+# each row the reader returns with the outcome the writer gave it). GIRD_REPORT names the file when it
+# is not next to the scripts.
 sed -n '/^fl_value() {/,/^}$/p' "$FLEETSH" > "$FL/value.sh"; . "$FL/value.sh"
-_vh="v1 review 2026-10-25T09:12Z"; _vbad=""
-vcheck() { # length accounts parts: the value fl_value makes of head and parts, checked; problems go in _vbad
-  _vw="$_vh$3"; [ "$2" -eq 0 ] && _vw="$_vw | no accounts"
-  _vg=$(fl_value "$_vh" "$3" "$2")
-  [ "${#_vw}" -eq "$1" ] || _vbad="$_vbad $1/$2: built ${#_vw}"
+_vt="2026-10-25T09:12Z"; _vbad=""; : > "$FL/values.txt"; : > "$FL/values.want"
+vids() { # n: a comma list of ids, exactly n characters
+  _vo=""; _vr=$1; _vi=0
+  while [ "$_vr" -gt 61 ]; do _vi=$((_vi + 1)); _vo="$_vo$(printf 'p%02d%057d' "$_vi" 0 | tr 0 a),"; _vr=$((_vr - 61)); done
+  printf '%s%s' "$_vo" "$(printf 'q%0*d' "$((_vr - 1))" 0 | tr 0 b | cut -c1-"$_vr")"
+}
+vaccts() { # n: clear account rows, " | name: clear" each, exactly n characters (n >= 11)
+  _vo=""; _vr=$1; _vi=0
+  while [ "$_vr" -gt 80 ]; do _vi=$((_vi + 1)); _vo="$_vo | $(printf 'c%02d%057d' "$_vi" 0 | tr 0 a): clear"; _vr=$((_vr - 70)); done
+  if [ "$_vr" -gt 74 ]; then _vo="$_vo | $(printf 'd%039d' 0 | tr 0 a): clear"; _vr=$((_vr - 50)); fi
+  printf '%s | %s: clear' "$_vo" "$(printf 'e%0*d' "$((_vr - 11))" 0 | tr 0 b | cut -c1-"$((_vr - 10))")"
+}
+vworst() { printf '%s\n' "$@" | awk 'BEGIN { r["clear"] = 1; r["review"] = 2; r["not_checked"] = 3; r["act"] = 4 } r[$1] > r[w] { w = $1 } END { print w }'; }
+vcase() { # length accounts outcome parts
+  _vh="v1 $3 $_vt"; _vw="$_vh$4"; [ "$2" -eq 0 ] && _vw="$_vw | no accounts"
+  [ "${#_vw}" -eq "$1" ] || { _vbad="$_vbad $1/$2/$3: built ${#_vw}"; return; }
+  _vg=$(fl_value "$_vh" "$4" "$2")
   [ "${#_vg}" -le 250 ] || _vbad="$_vbad $1/$2: ${#_vg} long"
   if [ "$1" -le 250 ]; then [ "$_vg" = "$_vw" ] || _vbad="$_vbad $1/$2: cut"
   else case "$_vg" in *" +more") ;; *) _vbad="$_vbad $1/$2: no +more" ;; esac; fi
-  if [ "$2" -eq 0 ]; then case "$_vg" in *" | no accounts"*) ;; *) _vbad="$_vbad $1/0: no accounts dropped" ;; esac; fi
+  if [ "$2" -eq 0 ]; then case "$_vg" in *" | no accounts"|*" | no accounts +more") ;; *) _vbad="$_vbad $1/0: no accounts dropped" ;; esac; fi
+  case "$_vg" in *"; +more"|*";") _vbad="$_vbad $1/$2: a ; before the end" ;; esac
+  printf '%s\n' "$_vg" >> "$FL/values.txt"
+  # What the writer meant: the outcome, and each row's outcome as the parts give it.
+  printf '%s %s\n' "$3" "$(printf '%s' "$4" | awk -F ' [|] ' '{ for (i = 2; i <= NF; i++) { split($i, p, "[ ;]"); n = p[1]; sub(/:$/, "", n); printf "%s=%s,", n, p[2] } }')$( [ "$2" -eq 0 ] && printf '(no accounts)=not_checked,')" >> "$FL/values.want"
 }
-L=230
-while [ "$L" -le 270 ]; do
-  _vm=" | machine: review; possible "; _va=" | asha: review ssh-open 1 | itadmin: clear | "
-  _vz=""; while [ "${#_vz}" -lt $((L - ${#_vh} - ${#_vm} - 14)) ]; do _vz="${_vz}a"; done
-  _vy=""; while [ "${#_vy}" -lt $((L - ${#_vh} - ${#_va} - 7)) ]; do _vy="${_vy}b"; done
-  vcheck "$L" 0 "$_vm$_vz"; vcheck "$L" 3 "$_va$_vy: clear"
+_vA=" | asha: act wiper; incidents litellm; keys 3 openai | bob: review ssh-open 1 | carol: not_checked sudo"
+vh() { echo $((21 + ${#1})); }   # the length of "v1 <outcome> <time>"
+L=200
+while [ "$L" -le 300 ]; do
+  for _vm in act review not_checked; do
+    case "$_vm" in act) _vx=" | machine: act incidents litellm,"; _vy="; possible mastra" ;; review) _vx=" | machine: review; possible "; _vy="; tmp-wiper" ;; *) _vx=" | machine: not_checked incidents "; _vy="; possible litellm" ;; esac
+    _vo=$(vworst not_checked "$_vm"); vcase "$L" 0 "$_vo" "$_vx$(vids $((L - $(vh "$_vo") - ${#_vx} - ${#_vy} - 14)))$_vy"
+    _vo=$(vworst act "$_vm"); vcase "$L" 4 "$_vo" "$_vA$(vaccts $((L - $(vh "$_vo") - ${#_vA} - ${#_vx} - ${#_vy} - 5)))$_vx$(vids 5)$_vy"
+  done
+  vcase "$L" 7 act "$_vA$(vaccts $((L - 24 - ${#_vA})))"
+  vcase "$L" 2 act " | asha: act incidents $(vids $((L - 24 - 23 - 11 - 30)))$(vaccts 11) | machine: review; possible z"
   L=$((L + 1))
 done
-if [ -z "$_vbad" ]; then ok "fleet: an inventory value of every length from 230 to 270 is at most 250, and one cut ends with +more and keeps no accounts"
-else bad "fleet: an inventory value of every length from 230 to 270 is at most 250, and one cut ends with +more and keeps no accounts" "$_vbad"; fi
+_vps=${PWSH:-$(command -v pwsh 2>/dev/null)}; _vrep=${GIRD_REPORT:-$PWD/gird-report.ps1}
+if [ -z "$_vps" ] || [ ! -f "$_vrep" ]; then skip "fleet: every inventory value from 200 to 300 characters, of every shape, is one the report reads as the writer meant" "needs pwsh and gird-report.ps1 (or GIRD_REPORT)"
+else
+  { sed -n '/^\$Outcomes = @{/,/^function Get-UtcTime/p' "$_vrep" | sed '$d'
+    printf '%s\n' 'foreach ($v in [IO.File]::ReadAllLines($args[0])) {' \
+      '  $r = Read-Inventory $v' \
+      '  if (-not $r.Ok -or $r.Special) { "unread"; continue }' \
+      '  $r.Outcome + " " + ((@($r.Accounts) | ForEach-Object { $_.Name + "=" + $_.Outcome + "," }) -join "") }'; } > "$FL/read-inv.ps1"
+  "$_vps" -NoProfile -NonInteractive -File "$FL/read-inv.ps1" "$FL/values.txt" > "$FL/values.got" 2>&1
+  # A row the reader returns must be a row the writer wrote, with its outcome; every value read.
+  _vrd=$(paste -d '\t' "$FL/values.want" "$FL/values.got" "$FL/values.txt" | awk -F '\t' '
+    { split($1, w, " "); split($2, g, " "); bad = 0
+      if ($2 == "unread" || g[1] != w[1]) bad = 1
+      n = split(w[2], a, ","); for (i = 1; i < n; i++) { split(a[i], kv, "="); want[kv[1]] = kv[2] }
+      m = split(g[2], b, ","); for (i = 1; i < m; i++) { split(b[i], kv, "="); if (!(kv[1] in want) || want[kv[1]] != kv[2]) bad = 1 }
+      delete want
+      if (bad) { nb++; if (nb <= 3) printf "%s => %s; ", $3, $2 } }
+    END { printf "%d of %d not read as meant", nb, NR }')
+  if [ "$(wc -l < "$FL/values.txt" | tr -d ' ')" -eq 808 ] && [ "${_vrd#0 of }" != "$_vrd" ]; then ok "fleet: every inventory value from 200 to 300 characters, of every shape, is one the report reads as the writer meant" "$_vrd"
+  else bad "fleet: every inventory value from 200 to 300 characters, of every shape, is one the report reads as the writer meant" "$_vrd"; fi
+fi
+if [ -z "$_vbad" ]; then ok "fleet: an inventory value of every length from 200 to 300 is at most 250, and one cut ends with +more, keeps no accounts and no ; before it"
+else bad "fleet: an inventory value of every length from 200 to 300 is at most 250, and one cut ends with +more, keeps no accounts and no ; before it" "$_vbad"; fi
 
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"

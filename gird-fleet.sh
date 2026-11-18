@@ -823,34 +823,38 @@ fl_inventory() {
 }
 
 # The inventory value: one line for an MDM's inventory field, no path, file name or key, at most 250
-# characters. Too long, it keeps "no accounts" and the parts that need attention first, cuts details
-# before accounts (an act account keeps gh-token-monitor and its incidents), and ends with +more
-# whenever anything was cut; the saved file has the rest.
+# characters, in the order the report reads it: the accounts, the Mac's own row, old-install, then no
+# accounts. Too long, it keeps old-install and no accounts, and chooses the rest by need: act, then
+# not_checked, then review, then as many clear ones as fit, the Mac's row before an account at the same
+# level. Details go before rows: an act account keeps gh-token-monitor and its incidents, the Mac's row
+# drops its last parts first. It ends with +more whenever anything was cut; the saved file has the rest.
 fl_value() { # head parts accounts: parts each start with " | "; accounts 0 adds " | no accounts"
   _vp=$2; [ "$3" -eq 0 ] && _vp="$_vp | no accounts"
   _vv="$1$_vp"
   if [ "${#_vv}" -le 250 ]; then printf '%s' "$_vv"; return; fi
-  # "no accounts" comes first, then the accounts that need attention, act, then not_checked, then
-  # review, then as many clear ones as fit. An account whose details don't fit
-  # keeps its outcome, and an act account its wiper and incidents too.
   printf '%s' "$_vp" | /usr/bin/awk -v head="$1" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
-      { n = 0
+      { n = 0; tail = ""
         for (i = 2; i <= NF; i++) {
-          split($i, p, " "); n++; full[n] = $i; base[n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5
-          if ($i == "no accounts") k[n] = 6
-          key[n] = base[n]
-          if (p[2] == "act") { m = split(substr($i, length(base[n]) + 2), d, "; ")
-            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key[n] = key[n] (key[n] == base[n] ? " " : "; ") d[x] }
+          if ($i == "old-install" || $i == "no accounts") { tail = tail " | " $i; continue }
+          split($i, p, "[ ;]"); n++; mach[n] = (p[1] == "machine:"); k[n] = (p[2] in r) ? r[p[2]] : 5
+          base = p[1] " " p[2]; c = 0; cand[n, ++c] = $i
+          if (mach[n]) { m = split($i, d, "; "); for (x = m - 1; x >= 1; x--) { s = d[1]; for (y = 2; y <= x; y++) s = s "; " d[y]; cand[n, ++c] = s } }
+          else if (p[2] == "act") { key = base; m = split(substr($i, length(base) + 2), d, "; ")
+            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key = key (key == base ? " " : "; ") d[x]
+            if (key != base && key != $i) cand[n, ++c] = key }
+          if (cand[n, c] != base) cand[n, ++c] = base
+          nc[n] = c
         }
-        out = head; cut = 0; stop = 0
-        for (lv = 6; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) {
-          if (length(out " | " full[j]) <= 243) { out = out " | " full[j]; continue }
-          cut = 1
-          if (key[j] != base[j] && length(out " | " key[j]) <= 243) out = out " | " key[j]
-          else if (length(out " | " base[j]) <= 243) out = out " | " base[j]
-          else stop = 1
+        room = 243 - length(head) - length(tail); cut = 0; stop = 0; acc = ""; mrow = ""
+        for (lv = 5; lv >= 0 && !stop; lv--) for (pass = 1; pass >= 0 && !stop; pass--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv && mach[j] == pass) {
+          got = 0
+          for (c = 1; c <= nc[j]; c++) if (length(cand[j, c]) + 3 <= room) { got = c; break }
+          if (got == 0) { cut = 1; stop = 1; continue }
+          if (got > 1) cut = 1
+          room -= length(cand[j, got]) + 3
+          if (mach[j]) mrow = " | " cand[j, got]; else acc = acc " | " cand[j, got]
         }
-        print out (cut ? " +more" : "") }'
+        print head acc mrow tail (cut ? " +more" : "") }'
 }
 
 fleet_main() {

@@ -150,9 +150,27 @@ today, and no file paths, file names or key values:
 - The inventory value is a compact form of the whole result, one line, short enough for an MDM's
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
   `v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; run-without-asking claude-code; keys 2
-  anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. If it would not fit, it keeps the
-  outcome, then the accounts that need attention first (act, not_checked, review), then as many
-  clear ones as fit, and ends with `+more`; the full result is in the saved file.
+  anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. Its parts, as both writers produce
+  them, in this order:
+  - `v1 <outcome> <YYYY-MM-DDTHH:MMZ>`, and on Windows ` other_profiles=<n>`, then for `failed`
+    ` reason=<why>`.
+  - The account rows, ` | <name>: <outcome>` and the account's findings, or the word that says why
+    it was not checked. A Mac lists every account, a PC the signed-in one.
+  - The machine's own row when its outcome is not `clear`: ` | machine: <act|review|not_checked>`,
+    then ` incidents <ids>`, `; possible <ids>` and, on a Mac, `; tmp-wiper`, each when it has one.
+    The PC writes `machine: not_checked` when a marker's owner can't be read and no finding makes it
+    `act`, and the Mac when a check of its own did not answer in time or a lock holder's account
+    can't be read.
+  - On a Mac, ` | old-install` while the two-file install is still there.
+  - On a Mac, ` | no accounts` when it has no account to check, always last.
+  - ` +more` when anything was cut.
+
+  If it would not fit, it keeps the outcome, `old-install` and `no accounts`, then chooses the rows
+  by need (act, not_checked, review, then as many clear ones as fit, the machine's row before an
+  account at the same level), and writes them in the order above. Details go before rows: an account
+  whose details don't fit keeps its outcome, an `act` one its `wiper` and `incidents` too, and the
+  machine's row drops its last parts first, never leaving a `;` at its end. It ends with `+more`;
+  the full result is in the saved file.
 - The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
   `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
   stopped running never shows an old `clear`.
