@@ -5,7 +5,7 @@
 #
 #   PWSH=/path/to/pwsh bash tests/intune.sh
 #
-# The values -Report reads are the ones gird-fleet.sh and gird-fleet.ps1 write: tests/intune.py
+# The values gird-report.ps1 reads are the ones gird-fleet.sh and gird-fleet.ps1 write: tests/intune.py
 # lists every form, and the writers are run here too, each with a stand-in for the account run, so
 # the reader and the writers cannot drift apart unseen. gird-fleet.ps1 runs when it is next to
 # gird-intune.ps1, or at INTUNE_FLEET_PS1.
@@ -301,7 +301,11 @@ else
   wps not_checked "an account run that sends markers in a shared folder" "$P0 \| [^ ]+: not_checked bad_output$" tmpmarks
   wps failed "an account run that does not start" "^v1 failed $T other_profiles=0 reason=start \| [^ ]+: not_checked start$" clear GIRD_CHECK_FLEET_LAUNCH="$IW/no-such-launcher"
   wps not_checked "the deadline first" "$P0 \| [^ ]+: not_checked deadline$" clear -- -Deadline 3
-  wps not_checked "out of time" "$P0 \| [^ ]+: not_checked time_limit$" sleep -- -Deadline 10
+  # gird-fleet.ps1 keeps a tenth of the deadline back, and 10 seconds more for stopping the account run, so
+  # the account run gets -Deadline 20 less 12 seconds and is stopped at its time limit; -Deadline 12 leaves
+  # it less than a second, and the run is not started.
+  wps not_checked "out of time" "$P0 \| [^ ]+: not_checked time_limit$" sleep -- -Deadline 20
+  wps not_checked "a deadline that leaves no time once the stop is held back" "$P0 \| [^ ]+: not_checked deadline$" sleep -- -Deadline 12
   : > "$IW/notafolder"
   wps failed "nowhere to save" "^v1 failed $T other_profiles=0 reason=save \| [^ ]+: not_checked save$" clear LOCALAPPDATA="$IW/notafolder"
   rm -rf "$WP"; mkdir -p "$WP/run" "$WP/local"; cp "$FLEETPS" "$WP/run/gird-fleet.ps1"
@@ -376,7 +380,7 @@ if [ -f "$IW/exp/intune.csv" ]; then
   report_file mixed -- "$IW/exp/intune.csv" "$IW/files/jamf.csv"
   if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads an Intune export and a Jamf Pro export into one report"; else bad "intune: gird-report.ps1 reads an Intune export and a Jamf Pro export into one report" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
 else skip "intune: gird-report.ps1 reads an Intune export and a Jamf Pro export into one report" "the mock Microsoft Graph did not start, so there is no Intune export"; fi
-for _enc in semicolon-utf16 tab-utf16-nobom semicolon-utf8bom; do
+for _enc in semicolon-utf16 tab-utf16-nobom tab-utf16be-nobom semicolon-utf8bom; do
   report_file "$_enc" -- "$IW/files/$_enc.csv"
   if [ "$RC" -eq 0 ] && grep -q '^Read 2 computers' "$IW/o.txt" && grep -q '^Need attention now: 1\.' "$IW/o.txt"; then ok "intune: gird-report.ps1 finds the delimiter and the encoding: $_enc"
   else bad "intune: gird-report.ps1 finds the delimiter and the encoding: $_enc" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
@@ -388,8 +392,16 @@ report_file twocols -- "$IW/files/twocols.csv"
 plain_fail "intune: gird-report.ps1 says plainly which columns look like the result, with a value from each, and the command to run next" 'Run it again naming the one to read:'
 if grep -q '^  Previous result: v1 act ' "$IW/o.txt" && grep -qF "  gird-report.ps1 \"$IW/files/twocols.csv\" -ResultColumn \"Result\"" "$IW/o.txt"; then ok "intune: the command it suggests names the file and the column"
 else bad "intune: the command it suggests names the file and the column" "$(cat "$IW/o.txt")"; fi
+report_file twocolsnone -- "$IW/files/twocolsnone.csv"
+plain_fail "intune: a second column that only reads none is not passed over quietly: it stops and names both" 'has 2 columns that look like the Blindspot result, so it does not pick one.'
+if grep -qF 'The ones that look like the result: "Result", "Old result".' "$IW/o.txt" && grep -qF -- '-ResultColumn "Result"' "$IW/o.txt"; then ok "intune: it names both columns and suggests the one with a real result"
+else bad "intune: it names both columns and suggests the one with a real result" "$(cat "$IW/o.txt")"; fi
 report_file twocolsnamed -- "$IW/files/twocols.csv" -ResultColumn result
 if [ "$RC" -eq 0 ]; then ok "intune: -ResultColumn settles which column holds the result"; else bad "intune: -ResultColumn settles which column holds the result" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+report_file paths -- "$IW/files/paths.csv"
+if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads the file of every way a result can be whole or not"; else bad "intune: gird-report.ps1 reads the file of every way a result can be whole or not" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+report_file dup -- "$IW/files/dupa.csv" "$IW/files/dupb.csv"
+report_file clearonly -- "$IW/files/clearonly.csv"
 report_file noname -- "$IW/files/noname.csv"
 plain_fail "intune: gird-report.ps1 says plainly when no column holds the computer's name" "holds the computer's name. Its columns, with a value from each:"
 report_file noresult -- "$IW/files/noresult.csv"
@@ -408,6 +420,31 @@ report_file workbook -- "$IW/files/workbook.csv"
 plain_fail "intune: gird-report.ps1 says plainly when the file is an Excel workbook" 'is an Excel workbook, not a CSV file'
 report_file binary -- "$IW/files/binary.csv"
 plain_fail "intune: gird-report.ps1 says plainly when the file is not text" 'is not a text file'
+# A file another program holds open with no sharing, as Excel does on Windows. PowerShell 7 on macOS
+# refuses the second open too, so this runs off Windows.
+cat > "$IW/hold.ps1" <<'PS'
+param($File, $Report, $Pw, $Out)
+$fs = New-Object IO.FileStream -ArgumentList $File, ([IO.FileMode]::Open), ([IO.FileAccess]::ReadWrite), ([IO.FileShare]::None)
+try { & $Pw -NoProfile -NonInteractive -File $Report $File -OutDir $Out; exit $LASTEXITCODE } finally { $fs.Dispose() }
+PS
+rm -rf "$IW/out"; mkdir -p "$IW/out"
+env -i PATH=/usr/bin:/bin HOME="$IW/home" PSModulePath="$IW/mods" "$PWSH" -NoProfile -NonInteractive -File "$IW/hold.ps1" "$IW/files/locked.csv" "$REPORT" "$PWSH" "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
+plain_fail "intune: a file another program holds open says so in plain words" 'locked.csv is open in another program, such as Excel'
+# Windows PowerShell before 5.1 cannot be run here, so the version check is taken from the file and
+# run with the version it reads set to 4: it must be the script's first statement, and say it plainly.
+cat > "$IW/oldps.ps1" <<'PS'
+param($Report)
+$ast = [Management.Automation.Language.Parser]::ParseFile($Report, [ref]$null, [ref]$null)
+$first = $ast.EndBlock.Statements[0].Extent.Text
+if (-not $first.StartsWith('if ($PSVersionTable.PSVersion.Major -lt 5)')) { 'the version check is not the first statement'; exit 9 }
+$v = 4
+. ([scriptblock]::Create($first.Replace('$PSVersionTable.PSVersion.Major', '$v')))
+'went on past the version check'
+PS
+env -i PATH=/usr/bin:/bin HOME="$IW/home" "$PWSH" -NoProfile -NonInteractive -File "$IW/oldps.ps1" "$REPORT" > "$IW/o.txt" 2>&1; RC=$?
+if [ "$RC" -eq 2 ] && [ "$(cat "$IW/o.txt")" = 'This report needs Windows PowerShell 5.1 or PowerShell 7. This PowerShell is version 4.' ]; then
+  ok "intune: an older PowerShell is told plainly which version it needs, before anything else runs"
+else bad "intune: an older PowerShell is told plainly which version it needs, before anything else runs" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
 report_file badopt -- "$IW/files/jamf.csv" -Colour red
 plain_fail "intune: gird-report.ps1 says plainly when an option does not exist" 'There is no option -Colour'
 report_file baddays -- "$IW/files/jamf.csv" -StaleDays many
@@ -462,9 +499,12 @@ else bad "intune: gen.sh --check fails when a finding word has no ATT&CK line" "
 gen_copy; awk -F '\t' '!($1 == "update-tools" && $4 == "atlas")' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
 if [ "$RC" -eq 2 ] && grep -q 'no atlas line for the finding word update-tools' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when a finding word has no ATLAS decision, not even none"
 else bad "intune: gen.sh --check fails when a finding word has no ATLAS decision, not even none" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
-gen_copy; sed "s/'tmp-marks', 'partial')\$/'tmp-marks', 'partial', 'exfil')/" gird-report.ps1 > "$IW/gen/gird-report.ps1"; gen_check; RC=$?
+gen_copy; awk '{ print } /^  @\{ Word = .partial.;/ { print "  @{ Word = \047exfil\047; Arg = \047count\047; Level = \047review\047; Label = \047Data sent out\047 }" }' gird-report.ps1 > "$IW/gen/gird-report.ps1"; gen_check; RC=$?
 if [ "$RC" -eq 2 ] && grep -q 'no attack line for the finding word exfil' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for"
 else bad "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; sed "s/@{ Word = 'history'; Arg = 'count'/@{ Word = 'history'; Arg = 'number'/" gird-report.ps1 > "$IW/gen/gird-report.ps1"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q "an \$Items line it cannot read, or a word twice:   @{ Word = 'history'" "$IW/gen.txt"; then ok "intune: gen.sh --check fails on a finding word whose form the report does not know"
+else bad "intune: gen.sh --check fails on a finding word whose form the report does not know" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
 gen_copy; printf 'exfil\tall\tall\tattack\t-\t-\t-\tnone\t-\tA word no result carries.\n' >> "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
 if [ "$RC" -eq 2 ] && grep -q '^data/mitre.tsv: exfil' "$IW/gen.txt"; then ok "intune: gen.sh --check fails on a line for a finding word the tool does not know"
 else bad "intune: gen.sh --check fails on a line for a finding word the tool does not know" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi

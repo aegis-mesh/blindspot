@@ -329,10 +329,10 @@ function Get-SilentPcs([string]$ScriptId, $States) {
       [void]$notes.Add("Could not list the PCs with no result for the people in group $gid ($people): Microsoft Graph does not say which of a person's PCs Intune runs the check on. PCs with no result there are not in the export, which does not mean they are clear.")
     }
     if ($hidden -gt 0 -and $excluding) {
-      [void]$notes.Add("Could not read $hidden PC" + $(if ($hidden -eq 1) { '' } else { 's' }) + " in exclusion group $gid. Allow Device.Read.All for this tool and run -Report again. Until then a PC listed as no result yet may in fact be excluded from the check.")
+      [void]$notes.Add("Could not read $hidden PC" + $(if ($hidden -eq 1) { '' } else { 's' }) + " in exclusion group $gid. Allow Device.Read.All for gird-intune.ps1 and run gird-intune.ps1 -Export again. Until then a PC listed as no result yet may in fact be excluded from the check.")
     }
     elseif ($hidden -gt 0) {
-      [void]$notes.Add("Could not read $hidden PC" + $(if ($hidden -eq 1) { '' } else { 's' }) + " in group $gid. Allow Device.Read.All for this tool and run -Report again. PCs with no result there are not in the export, which does not mean they are clear.")
+      [void]$notes.Add("Could not read $hidden PC" + $(if ($hidden -eq 1) { '' } else { 's' }) + " in group $gid. Allow Device.Read.All for gird-intune.ps1 and run gird-intune.ps1 -Export again. PCs with no result there are not in the export, which does not mean they are clear.")
     }
   }
   if ($include.Count -eq 0 -and -not $everyPc) { return @{ Rows = @(); Notes = $notes.ToArray(); Unassigned = $false } }

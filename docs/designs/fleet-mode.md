@@ -379,10 +379,11 @@ What an admin does, on any MDM:
 It finds the rest itself:
 
 - The delimiter: comma, semicolon or tab, from the header row.
-- The encoding: UTF-8 with or without a byte order mark, and UTF-16 with or without one.
+- The encoding: UTF-8 with or without a byte order mark, and UTF-16, little or big endian, with or
+  without one.
 - The column with the result: the one whose values have the inventory value's shape (`v1 ...`,
   `stale: ...`, `failed: ...`, `none`, `unreadable`). Jamf Pro's `<result>` tags are taken off.
-  When two columns look like one, it prefers one with a real result over one with only `none`.
+  When more than one column looks like one, it does not pick: it stops and names them.
 - The column with the computer's name, from its header (`Computer Name`, `Device name`, `Name`,
   `Hostname` and the like), and an `OS` column if there is one.
 - The file `gird-intune.ps1 -Export` writes, by its exact header.
@@ -390,7 +391,7 @@ It finds the rest itself:
 When it cannot tell, it stops and says so in plain words: each column with a value from it, what
 it needs, and the command to run next with `-ResultColumn` or `-NameColumn`. A missing file, a
 folder, an empty file, a header with no rows, an Excel workbook, a file that is not text, a file
-another program holds open, a file with no result in any column, an option that does not exist and
+another program holds open (any other read error is named as it is), a file with no result in any column, an option that does not exist and
 a folder it may not write to each get a sentence, never a PowerShell error. With nothing after it,
 it prints a short usage with the line to run.
 
@@ -404,12 +405,16 @@ The rules for each result are the same whatever the file:
   value over 250 characters, and a value of 2,048 characters or more that does not end in `+more`
   are not checked, never clear. So is a Mac's summary line (`blindspot act accounts=...`), which
   names no findings: Iru keeps that line, so an Iru export needs the inventory value instead.
-- A name that appears more than once in the files read is listed each time, as not checked, with
-  where each came from. None of its results is counted.
+- A name, with the device id where the file has one, that appears more than once in the files read
+  is not checked, with where each came from, and none of its results is counted. A file lists each
+  computer once, so the same name in two files is one computer: it stands for as many computers as
+  the file that lists it most often. A row with no name is its own computer.
 - Every value from a file is escaped in the HTML. A CSV cell that starts with `=`, `+`, `-`, `@` or
   a tab, after any spaces, gets a `'` first, so a spreadsheet does not run it.
-- The OS comes from the value: a Windows value carries `other_profiles=`. An `OS` column, or
-  `-OsColumn`, names it for a row whose value has no shape.
+- The OS shown comes from an `OS` column, or `-OsColumn`, when the file has one and its value names
+  macOS, Windows or Linux. Otherwise it comes from the value: a Windows value carries
+  `other_profiles=`, and any other value read is macOS. Which MITRE references apply always follows
+  the value, never the column.
 - The report says which file each computer's result came from.
 
 The report is an HTML file and a CSV file, made new in the folder it runs from, or in `-OutDir`.

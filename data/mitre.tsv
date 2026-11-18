@@ -1,9 +1,11 @@
 # MITRE ATT&CK and ATLAS references for each kind of finding the fleet result names, shown by
-# gird-intune.ps1 -Report. One line each, tab separated. After editing, run: bash tools/gen.sh
+# gird-report.ps1. One line each, tab separated. After editing, run: bash tools/gen.sh
 # The mapping is Blindspot's own, not MITRE's. Blindspot reads files: it never detects a technique in use.
-#   word       a finding word of the fleet inventory value, as gird-intune.ps1's $ItemOrder lists it. Every
+# A line goes in only when the result line itself carries enough to know the technique applies to that
+# finding on that system. Where it does not, the word gets a none line saying why.
+#   word       a finding word of the fleet inventory value, as gird-report.ps1's $Items lists it. Every
 #              word has at least one attack line and one atlas line, mapped or none (gen.sh refuses a word
-#              without one, and a word gird-intune.ps1 does not know)
+#              without one, and a word gird-report.ps1 does not know)
 #   os         all, mac or win: the line applies only to results from that system (a Windows result
 #              carries other_profiles=)
 #   scope      all, or the incident ids (data/incidents.tsv) the line applies to, comma separated: only
@@ -15,7 +17,6 @@
 #   tactics    the tactics MITRE lists for the technique, comma separated, or -
 #   relation   exposure: Blindspot found something the technique could exploit
 #              indicator: a trace that a published incident links to the technique
-#              armed: installed, and carries the technique out when triggered
 #              none: no technique fits; the note says why
 #   url        the technique's page: https://attack.mitre.org/techniques/T1552/001/ or
 #              https://atlas.mitre.org/techniques/AML.T0055, or - on a none line
@@ -27,17 +28,31 @@
 # site renders (https://atlas.mitre.org/atlas-data/dist/v6/ATLAS-2026.10.yaml, listed in
 # https://atlas.mitre.org/atlas-data/dist/manifest.yaml). Terms and attribution: NOTICE.
 # Left out on purpose:
-#   wiper: T1543.002 Systemd Service (Linux only, and the fleet result comes from macOS and Windows) and
-#   T1053.005 Scheduled Task (what Blindspot finds on Windows is a folder, not a scheduled task).
+#   wiper: T1543.001 Launch Agent. A Mac's wiper finding is any one of the wiper's files (data/indicators.tsv:
+#   its launch agent, its systemd service, its shell script or its config folder), and the result does not
+#   say which, so it does not show a launch agent was found. Also T1543.002 Systemd Service (Linux only,
+#   and the fleet result comes from macOS and Windows) and T1053.005 Scheduled Task (what Blindspot finds
+#   on Windows is a folder, not a scheduled task).
+#   wiper: T1485 is an indicator, not a sign the wiper is set to run: for the same reason, the file found
+#   may be a script or a folder that nothing starts.
 #   incidents: T1543.001 and T1543.002 for an incident's startup file (the result does not say which file
 #   was found).
 #   planted: AML.T0010.001, which fits only lightning's payload; the result gives a count, not the incident.
+#   sessions: AML.T0085.002 Data from AI Services: Conversation Context and Memory, which is about getting
+#   an AI service to reveal what it holds. What Blindspot finds is a key in a file on disk: AML.T0055.
+#   on-open: T1195.001 (its text names IDE task files and coding agent configuration files) is about
+#   such a file reaching a person in a compromised project or tool. The count also takes in a person's own
+#   settings, and Blindspot cannot tell one that came in a cloned project from one the person wrote.
+#   on-open: AML.T0081 Modify AI Agent Configuration. The count also takes in editor tasks that run when
+#   a folder opens (gird-check.sh, folderOpen tasks), which are editor settings, not an agent's, and the
+#   result gives only a count.
+#   ssh-links on Windows: T1098.004 lists ESXi, IaaS, Linux, network devices and macOS as its platforms.
 # T1698 Indirect Prompt Injection lists SaaS and Windows as its platforms, so it is for Windows results only.
+# AML.T0055 lists Credential Access as its only tactic in ATLAS 2026.10.
 # AML.T0010.001 names T1195.002 as its ATT&CK counterpart; ATT&CK itself places npm and Python packages
 # under T1195.001, which these lines follow.
 # word	os	scope	framework	id	name	tactics	relation	url	note
-wiper	mac	all	attack	T1543.001	Create or Modify System Process: Launch Agent	Persistence,Privilege Escalation	indicator	https://attack.mitre.org/techniques/T1543/001/	-
-wiper	all	all	attack	T1485	Data Destruction	Impact	armed	https://attack.mitre.org/techniques/T1485/	-
+wiper	all	all	attack	T1485	Data Destruction	Impact	indicator	https://attack.mitre.org/techniques/T1485/	-
 wiper	all	all	atlas	-	-	-	none	-	No ATLAS technique fits: the wiper does not act through an AI system.
 incidents	all	all	attack	T1195.001	Supply Chain Compromise: Compromise Software Dependencies and Development Tools	Initial Access	indicator	https://attack.mitre.org/techniques/T1195/001/	-
 incidents	all	axios,tanstack,mistralpy,guardrails,opensearch,bitwarden,minishai,lightning,durabletask,telnyx,mastra,antv,redhat,keyv,keyvscope,keyvspread,sandworm,sandsleep,tensorlake,litellm,litellmmar,glasswormuni	attack	T1204.005	User Execution: Malicious Library	Execution	indicator	https://attack.mitre.org/techniques/T1204/005/	-
@@ -55,12 +70,12 @@ keys	all	all	atlas	AML.T0055	Unsecured Credentials	Credential Access	exposure	ht
 history	all	all	attack	T1552.003	Unsecured Credentials: Shell History	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/003/	-
 history	all	all	atlas	AML.T0055	Unsecured Credentials	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0055	-
 sessions	all	all	attack	T1552.001	Unsecured Credentials: Credentials In Files	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/001/	-
-sessions	all	all	atlas	AML.T0085.002	Data from AI Services: Conversation Context and Memory	Collection	exposure	https://atlas.mitre.org/techniques/AML.T0085.002	-
+sessions	all	all	atlas	AML.T0055	Unsecured Credentials	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0055	-
 mcp-tokens	all	all	attack	T1552.001	Unsecured Credentials: Credentials In Files	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/001/	-
 mcp-tokens	all	all	atlas	AML.T0083	Credentials from AI Agent Configuration	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0083	-
 allow-lists	all	all	attack	T1552.001	Unsecured Credentials: Credentials In Files	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/001/	-
 allow-lists	all	all	atlas	AML.T0083	Credentials from AI Agent Configuration	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0083	-
-ssh-links	all	all	attack	T1098.004	Account Manipulation: SSH Authorized Keys	Persistence,Privilege Escalation	exposure	https://attack.mitre.org/techniques/T1098/004/	-
+ssh-links	mac	all	attack	T1098.004	Account Manipulation: SSH Authorized Keys	Persistence,Privilege Escalation	exposure	https://attack.mitre.org/techniques/T1098/004/	-
 ssh-links	all	all	atlas	-	-	-	none	-	No ATLAS technique fits a link to the file of allowed SSH login keys.
 ssh-open	all	all	attack	T1552.004	Unsecured Credentials: Private Keys	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/004/	-
 ssh-open	all	all	atlas	AML.T0055	Unsecured Credentials	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0055	-
@@ -73,8 +88,8 @@ remove	all	all	attack	T1195.001	Supply Chain Compromise: Compromise Software Dep
 remove	all	all	atlas	-	-	-	none	-	These extensions target code editors in general, not AI systems.
 platforms	all	all	attack	-	-	-	none	-	The leak happened at the hosted platform. Blindspot finds only that the platform is used here.
 platforms	all	all	atlas	-	-	-	none	-	The leak happened at the hosted platform. Blindspot finds only that the platform is used here.
-on-open	all	all	attack	T1195.001	Supply Chain Compromise: Compromise Software Dependencies and Development Tools	Initial Access	exposure	https://attack.mitre.org/techniques/T1195/001/	-
-on-open	all	all	atlas	AML.T0081	Modify AI Agent Configuration	Persistence,Defense Evasion	exposure	https://atlas.mitre.org/techniques/AML.T0081	-
+on-open	all	all	attack	-	-	-	none	-	Such settings can come in a cloned project, but Blindspot cannot tell those from settings a person wrote, and the result gives only a count.
+on-open	all	all	atlas	-	-	-	none	-	The count takes in editor tasks that run when a folder opens, which are not AI agent settings, and the result does not say which was found.
 to-read	all	all	attack	-	-	-	none	-	Files to read by hand: a lead, not a finding.
 to-read	all	all	atlas	-	-	-	none	-	Files to read by hand: a lead, not a finding.
 possible	all	all	attack	-	-	-	none	-	A lead to check by hand, not a finding.

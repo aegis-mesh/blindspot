@@ -30,8 +30,10 @@ PY_IDS=" $( { rows data/bad-pypi.tsv | cut -f3; rows data/indicators.tsv | awk -
 # What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
-# The finding words gird-report.ps1 reads: every one needs an attack line and an atlas line in data/mitre.tsv.
-MITRE_WORDS=" $(awk '/^\$ItemOrder = @\(/ { on = 1 } on { print } on && /\)$/ { exit }' gird-report.ps1 | grep -o "'[a-z][a-z-]*'" | tr -d "'" | tr '\n' ' ')"
+# The finding words gird-report.ps1 reads, from its $Items table, their one home: every one needs an attack
+# line and an atlas line in data/mitre.tsv.
+ITEM_LINES=$(awk '/^\$Items = @\($/ { on = 1; next } on && /^\)$/ { exit } on { print }' gird-report.ps1)
+MITRE_WORDS=" $(printf '%s\n' "$ITEM_LINES" | sed -n "s/^  @{ Word = '\([a-z][a-z-]*\)'.*/\1/p" | tr '\n' ' ')"
 # A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
 # first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {GOOSE_STATE}, {PROGRAMDATA}, or
 # {ENV:NAME:fallback} whose fallback is ~ or a path), at least one folder or file after it (an ENV
@@ -128,7 +130,13 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
         !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }'
       # A none line stands alone for its word and framework; a technique keeps one name and one set of
       # tactics, and its url is the page its id names.
-      [ "$MITRE_WORDS" != " " ] || echo "gird-report.ps1: no \$ItemOrder list, so data/mitre.tsv cannot be checked"
+      [ "$MITRE_WORDS" != " " ] || echo "gird-report.ps1: no \$Items table, so data/mitre.tsv cannot be checked"
+      # Each $Items line has exactly this form, so a word with a mistyped argument form or level is refused
+      # here rather than read by nothing.
+      printf '%s\n' "$ITEM_LINES" | awk '
+        { ok = $0 ~ /^  @\{ Word = \047[a-z][a-z-]*\047; Arg = \047(none|count|list|keys)\047; Level = \047(act|review|partial)\047; Label = \047[A-Za-z][A-Za-z0-9 ,_-]*\047 \}$/
+          w = $0; sub(/^  @\{ Word = \047/, "", w); sub(/\047.*/, "", w)
+          if (!ok || seen[w]++) print "gird-report.ps1: an $Items line it cannot read, or a word twice: " $0 }'
       for _v in attack atlas; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done
       rows data/mitre.tsv | awk -F '\t' -v ids="$IDS" -v words="$MITRE_WORDS" '
         function safe(s) { return s != "" && s !~ /[\047"`$|\\<>&]/ }
@@ -136,7 +144,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if ($3 != "all") { ok = ok && $1 ~ /^(incidents|lockfile|update|remove)$/; n = split($3, a, ","); for (i = 1; i <= n; i++) if (index(ids, " " a[i] " ") == 0) ok = 0 }
           if ($8 == "none") ok = ok && $2 == "all" && $3 == "all" && $5 == "-" && $6 == "-" && $7 == "-" && $9 == "-" && $10 != "-" && safe($10)
           else {
-            ok = ok && $8 ~ /^(exposure|indicator|armed)$/ && $10 == "-" && safe($6) && $7 ~ /^[A-Z][A-Za-z ]*(,[A-Z][A-Za-z ]*)*$/
+            ok = ok && $8 ~ /^(exposure|indicator)$/ && $10 == "-" && safe($6) && $7 ~ /^[A-Z][A-Za-z ]*(,[A-Z][A-Za-z ]*)*$/
             if ($4 == "attack") { u = $5; sub(/^T/, "", u); gsub(/\./, "/", u); ok = ok && $5 ~ /^T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://attack.mitre.org/techniques/T" u "/" }
             else ok = ok && $5 ~ /^AML\.T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://atlas.mitre.org/techniques/" $5
             k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7

@@ -107,48 +107,51 @@ if (-not [int]::TryParse($Opt.StaleDays, [ref]$StaleDays) -or $StaleDays -lt 1 -
 # gird-fleet.ps1 on Windows, which adds other_profiles= and reason= to the header. Anything a writer
 # does not write does not fit.
 $Outcomes = @{ clear = 1; review = 2; not_checked = 3; act = 4; failed = 5 }
-$ItemOrder = @('wiper', 'incidents', 'lockfile', 'planted', 'run-without-asking', 'keys', 'history', 'sessions', 'mcp-tokens',
-  'allow-lists', 'ssh-links', 'ssh-open', 'update-tools', 'platforms', 'on-open', 'to-read', 'remove', 'update', 'possible',
-  'tmp-wiper', 'tmp-marks', 'partial')
-$ActItems = @('wiper', 'incidents', 'lockfile', 'planted', 'keys', 'history', 'sessions', 'mcp-tokens', 'allow-lists', 'ssh-links')
-$NoArg = @('wiper', 'tmp-wiper', 'partial')
-$NumArg = @('planted', 'history', 'sessions', 'mcp-tokens', 'allow-lists', 'ssh-links', 'ssh-open', 'on-open', 'to-read')
-$ListArg = @('incidents', 'lockfile', 'run-without-asking', 'update-tools', 'platforms', 'remove', 'update', 'possible', 'tmp-marks')
+# Every finding word, in the order a result lists them, and the one home of each word's form, level and
+# label. tools/gen.sh reads this table and refuses a line it cannot read.
+#   Arg: none, count (a number), list (incident or tool ids) or keys (a number, then provider ids)
+#   Level: act, review or partial
+$Items = @(
+  @{ Word = 'wiper'; Arg = 'none'; Level = 'act'; Label = 'gh-token-monitor wiper installed' }
+  @{ Word = 'incidents'; Arg = 'list'; Level = 'act'; Label = 'Malware incident found' }
+  @{ Word = 'lockfile'; Arg = 'list'; Level = 'act'; Label = 'Malware versions in a lockfile' }
+  @{ Word = 'planted'; Arg = 'count'; Level = 'act'; Label = 'Files a worm plants in a project' }
+  @{ Word = 'run-without-asking'; Arg = 'list'; Level = 'review'; Label = 'Agent set to run commands without asking' }
+  @{ Word = 'keys'; Arg = 'keys'; Level = 'act'; Label = 'Keys in plain text' }
+  @{ Word = 'history'; Arg = 'count'; Level = 'act'; Label = 'Keys in shell history' }
+  @{ Word = 'sessions'; Arg = 'count'; Level = 'act'; Label = 'Keys in agent sessions' }
+  @{ Word = 'mcp-tokens'; Arg = 'count'; Level = 'act'; Label = 'Tokens in MCP configs' }
+  @{ Word = 'allow-lists'; Arg = 'count'; Level = 'act'; Label = 'Keys in Claude Code allow lists' }
+  @{ Word = 'ssh-links'; Arg = 'count'; Level = 'act'; Label = 'Links to authorized_keys' }
+  @{ Word = 'ssh-open'; Arg = 'count'; Level = 'review'; Label = 'SSH keys without a passphrase' }
+  @{ Word = 'update-tools'; Arg = 'list'; Level = 'review'; Label = 'Tools with a security fix to install' }
+  @{ Word = 'platforms'; Arg = 'list'; Level = 'review'; Label = 'Hosted platform that leaked secrets' }
+  @{ Word = 'on-open'; Arg = 'count'; Level = 'review'; Label = 'Project settings that act when a folder opens' }
+  @{ Word = 'to-read'; Arg = 'count'; Level = 'review'; Label = 'Files named like worm files, to read' }
+  @{ Word = 'remove'; Arg = 'list'; Level = 'review'; Label = 'Extensions to remove' }
+  @{ Word = 'update'; Arg = 'list'; Level = 'review'; Label = 'Package versions to update' }
+  @{ Word = 'possible'; Arg = 'list'; Level = 'review'; Label = 'Possible signs of malware' }
+  @{ Word = 'tmp-wiper'; Arg = 'none'; Level = 'review'; Label = 'Wiper logs in a shared folder' }
+  @{ Word = 'tmp-marks'; Arg = 'list'; Level = 'review'; Label = 'Malware markers in a shared folder' }
+  @{ Word = 'partial'; Arg = 'none'; Level = 'partial'; Label = 'Partly checked' }
+)
+$ItemOrder = @($Items | ForEach-Object { $_.Word })
+$ActItems = @($Items | Where-Object { $_.Level -ceq 'act' } | ForEach-Object { $_.Word })
+$NoArg = @($Items | Where-Object { $_.Arg -ceq 'none' } | ForEach-Object { $_.Word })
+$NumArg = @($Items | Where-Object { $_.Arg -ceq 'count' } | ForEach-Object { $_.Word })
+$ListArg = @($Items | Where-Object { $_.Arg -ceq 'list' } | ForEach-Object { $_.Word })
+$Kinds = [ordered]@{}
+foreach ($lv in @('act', 'review', 'partial')) { foreach ($it in $Items) { if ($it.Level -ceq $lv) { $Kinds[$it.Word] = $it.Label } } }
 $FailReasons = @('host_32bit', 'system_account', 'language_mode', 'unpack', 'save', 'start', 'no_output')
 $WinWords = @('deadline', 'time_limit', 'bad_output')
 $MacWords = @('name', 'no_login_shell', 'home_missing', 'home_link', 'home_owner', 'home_shared', 'home_system', 'home_name',
   'home_no_answer', 'sudo', 'bad_output', 'time_limit', 'deadline', 'copy_changed')
 $AnyWord = @($FailReasons + $WinWords + $MacWords)
-$Kinds = [ordered]@{
-  'wiper' = 'gh-token-monitor wiper installed'
-  'incidents' = 'Malware incident found'
-  'lockfile' = 'Malware versions in a lockfile'
-  'planted' = 'Files a worm plants in a project'
-  'keys' = 'Keys in plain text'
-  'history' = 'Keys in shell history'
-  'sessions' = 'Keys in agent sessions'
-  'mcp-tokens' = 'Tokens in MCP configs'
-  'allow-lists' = 'Keys in Claude Code allow lists'
-  'ssh-links' = 'Links to authorized_keys'
-  'run-without-asking' = 'Agent set to run commands without asking'
-  'ssh-open' = 'SSH keys without a passphrase'
-  'update-tools' = 'Tools with a security fix to install'
-  'update' = 'Package versions to update'
-  'remove' = 'Extensions to remove'
-  'platforms' = 'Hosted platform that leaked secrets'
-  'on-open' = 'Project settings that act when a folder opens'
-  'to-read' = 'Files named like worm files, to read'
-  'possible' = 'Possible signs of malware'
-  'tmp-wiper' = 'Wiper logs in a shared folder'
-  'tmp-marks' = 'Malware markers in a shared folder'
-  'partial' = 'Partly checked'
-}
 # >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it.
 $MitreAttackVersion = 'v20.1'
 $MitreAtlasVersion = '2026.10'
 $MitreRows = @(
-  @{ Word = 'wiper'; Os = 'mac'; Scope = @(); Fw = 'attack'; Id = 'T1543.001'; Name = 'Create or Modify System Process: Launch Agent'; Tactics = @('Persistence', 'Privilege Escalation'); Rel = 'indicator'; Url = 'https://attack.mitre.org/techniques/T1543/001/'; Note = '' }
-  @{ Word = 'wiper'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1485'; Name = 'Data Destruction'; Tactics = @('Impact'); Rel = 'armed'; Url = 'https://attack.mitre.org/techniques/T1485/'; Note = '' }
+  @{ Word = 'wiper'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1485'; Name = 'Data Destruction'; Tactics = @('Impact'); Rel = 'indicator'; Url = 'https://attack.mitre.org/techniques/T1485/'; Note = '' }
   @{ Word = 'wiper'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'No ATLAS technique fits: the wiper does not act through an AI system.' }
   @{ Word = 'incidents'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1195.001'; Name = 'Supply Chain Compromise: Compromise Software Dependencies and Development Tools'; Tactics = @('Initial Access'); Rel = 'indicator'; Url = 'https://attack.mitre.org/techniques/T1195/001/'; Note = '' }
   @{ Word = 'incidents'; Os = 'all'; Scope = @('axios', 'tanstack', 'mistralpy', 'guardrails', 'opensearch', 'bitwarden', 'minishai', 'lightning', 'durabletask', 'telnyx', 'mastra', 'antv', 'redhat', 'keyv', 'keyvscope', 'keyvspread', 'sandworm', 'sandsleep', 'tensorlake', 'litellm', 'litellmmar', 'glasswormuni'); Fw = 'attack'; Id = 'T1204.005'; Name = 'User Execution: Malicious Library'; Tactics = @('Execution'); Rel = 'indicator'; Url = 'https://attack.mitre.org/techniques/T1204/005/'; Note = '' }
@@ -166,12 +169,12 @@ $MitreRows = @(
   @{ Word = 'history'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.003'; Name = 'Unsecured Credentials: Shell History'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/003/'; Note = '' }
   @{ Word = 'history'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0055'; Name = 'Unsecured Credentials'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0055'; Note = '' }
   @{ Word = 'sessions'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.001'; Name = 'Unsecured Credentials: Credentials In Files'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/001/'; Note = '' }
-  @{ Word = 'sessions'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0085.002'; Name = 'Data from AI Services: Conversation Context and Memory'; Tactics = @('Collection'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0085.002'; Note = '' }
+  @{ Word = 'sessions'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0055'; Name = 'Unsecured Credentials'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0055'; Note = '' }
   @{ Word = 'mcp-tokens'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.001'; Name = 'Unsecured Credentials: Credentials In Files'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/001/'; Note = '' }
   @{ Word = 'mcp-tokens'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0083'; Name = 'Credentials from AI Agent Configuration'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0083'; Note = '' }
   @{ Word = 'allow-lists'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.001'; Name = 'Unsecured Credentials: Credentials In Files'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/001/'; Note = '' }
   @{ Word = 'allow-lists'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0083'; Name = 'Credentials from AI Agent Configuration'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0083'; Note = '' }
-  @{ Word = 'ssh-links'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1098.004'; Name = 'Account Manipulation: SSH Authorized Keys'; Tactics = @('Persistence', 'Privilege Escalation'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1098/004/'; Note = '' }
+  @{ Word = 'ssh-links'; Os = 'mac'; Scope = @(); Fw = 'attack'; Id = 'T1098.004'; Name = 'Account Manipulation: SSH Authorized Keys'; Tactics = @('Persistence', 'Privilege Escalation'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1098/004/'; Note = '' }
   @{ Word = 'ssh-links'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'No ATLAS technique fits a link to the file of allowed SSH login keys.' }
   @{ Word = 'ssh-open'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.004'; Name = 'Unsecured Credentials: Private Keys'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/004/'; Note = '' }
   @{ Word = 'ssh-open'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0055'; Name = 'Unsecured Credentials'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0055'; Note = '' }
@@ -184,8 +187,8 @@ $MitreRows = @(
   @{ Word = 'remove'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'These extensions target code editors in general, not AI systems.' }
   @{ Word = 'platforms'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'The leak happened at the hosted platform. Blindspot finds only that the platform is used here.' }
   @{ Word = 'platforms'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'The leak happened at the hosted platform. Blindspot finds only that the platform is used here.' }
-  @{ Word = 'on-open'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1195.001'; Name = 'Supply Chain Compromise: Compromise Software Dependencies and Development Tools'; Tactics = @('Initial Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1195/001/'; Note = '' }
-  @{ Word = 'on-open'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0081'; Name = 'Modify AI Agent Configuration'; Tactics = @('Persistence', 'Defense Evasion'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0081'; Note = '' }
+  @{ Word = 'on-open'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Such settings can come in a cloned project, but Blindspot cannot tell those from settings a person wrote, and the result gives only a count.' }
+  @{ Word = 'on-open'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'The count takes in editor tasks that run when a folder opens, which are not AI agent settings, and the result does not say which was found.' }
   @{ Word = 'to-read'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Files to read by hand: a lead, not a finding.' }
   @{ Word = 'to-read'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Files to read by hand: a lead, not a finding.' }
   @{ Word = 'possible'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'A lead to check by hand, not a finding.' }
@@ -370,15 +373,16 @@ $StatusText = [ordered]@{
 }
 
 
-$MitreMeaning = 'MITRE ATT&CK and ATLAS references show which attack technique each finding relates to. Blindspot reads files on each computer. It does not watch for attacks and does not detect any technique in use. "Exposure" means Blindspot found something a technique could exploit. "Indicator" means it found a trace that a published incident links to the technique. "Armed" means it found something installed that carries out the technique when it is triggered. The mapping is Blindspot''s own, not MITRE''s.'
+$MitreMeaning = 'MITRE ATT&CK and ATLAS references show which attack technique each finding relates to. Blindspot reads files on each computer. It does not watch for attacks and does not detect any technique in use. "Exposure" means Blindspot found something a technique could exploit. "Indicator" means it found a trace that a published incident links to the technique. The mapping is Blindspot''s own, not MITRE''s.'
 $MitreSource = 'References: MITRE ATT&CK Enterprise ' + $MitreAttackVersion + ' and MITRE ATLAS ' + $MitreAtlasVersion + '. ' +
   [char]0xA9 + ' 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation. ' +
   'The MITRE Corporation (MITRE) hereby grants you a non-exclusive, royalty-free license to use ATT&CK' + [char]0xAE +
   ' for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE''s copyright designation and this license in any such copy. ' +
-  'MITRE ATT&CK and ATT&CK are registered trademarks of The MITRE Corporation. MITRE ATLAS data: Copyright 2021-2026 MITRE, licensed under the Apache License, Version 2.0. ' +
+  'MITRE ATT&CK and ATT&CK are registered trademarks of The MITRE Corporation. MITRE ATLAS data: Copyright 2021-2026 MITRE, licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). Blindspot shows only the ids, names and tactics of the ATLAS techniques it maps. ' +
   'The mapping of findings to techniques is Blindspot''s own, not MITRE''s.'
 $FwName = @{ attack = 'ATT&CK'; atlas = 'ATLAS' }
-$RelText = @{ exposure = 'Exposure for'; indicator = 'Indicator of'; armed = 'Armed for' }
+$NotCheckedWhy = 'no result, a stale or failed run, a partly checked one, or a result this tool could not read'
+$RelText = [ordered]@{ exposure = 'Exposure for'; indicator = 'Indicator of' }
 
 function Get-WordIds($Row) {
   $ids = @{}
@@ -408,10 +412,14 @@ function Get-MitreRefs($Row) {
   }
 }
 
+# "no" needs every account on the computer read in full: a run that failed, a result cut to fit or
+# other accounts on the PC leave it not known, and so does any account not checked or partly checked.
+# The Mac's own row carries none of the items these statements need.
 function Get-PathState($Row, [scriptblock]$Found) {
   $r = @{ State = 'unknown'; Providers = @() }
   if (-not $Row.Known) { return $r }
-  $yes = $false; $open = $Row.More; $any = $false; $prov = @()
+  $yes = $false; $any = $false; $prov = @()
+  $open = $Row.More -or $Row.OtherProfiles -gt 0 -or $Row.Status -ceq 'failed'
   foreach ($a in @($Row.Accts)) {
     if ($a.Machine) { continue }
     $any = $true
@@ -428,11 +436,7 @@ function Get-PathState($Row, [scriptblock]$Found) {
   return $r
 }
 
-function Get-RefText($M) {
-  $t = $RelText[$M.Rel] + ' ' + $M.Id + ' ' + $M.Name
-  if ($M.Rel -ceq 'armed') { $t += ': installed, runs when triggered' }
-  return $t
-}
+function Get-RefText($M) { return $RelText[$M.Rel] + ' ' + $M.Id + ' ' + $M.Name }
 
 function Get-PcCount([int]$N) { if ($N -eq 1) { return '1 computer' }; return "$N computers" }
 
@@ -442,7 +446,7 @@ function New-Row([string]$Pc, [string]$User, [string]$Raw, [string]$Source, [str
     PC = $Pc; User = $User; Id = ''; Status = ''; Why = ''; CheckedAt = ''; Details = ''; Kinds = @(); Output = $Raw
     Known = $false; Win = $false; More = $false; Accts = @(); OtherProfiles = 0; Refs = @()
     AgentKey = 'unknown'; AgentKeyProviders = @(); Sessions = 'unknown'; McpTokens = 'unknown'
-    Source = $Source; OS = $Os; LastSeen = ''; LastReport = ''
+    Source = $Source; OS = $Os; LastSeen = ''; LastReport = ''; Unnamed = $false; Dropped = $false
   }
 }
 
@@ -533,6 +537,9 @@ function Stop-Plain([string]$Message) { throw ('Stopped: ' + $Message) }
 function Get-Inner($E) { $x = $E; while ($x.InnerException) { $x = $x.InnerException }; return $x }
 # .NET on macOS and Linux reports a refused open as an IOException with errno 13, not UnauthorizedAccessException.
 function Test-NoAccess($X) { return ($X -is [UnauthorizedAccessException] -or $X.HResult -eq 13 -or $X.HResult -eq -2147024891) }
+# Windows says ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION; .NET on macOS and Linux gives the errno of the
+# refused lock, EWOULDBLOCK, which is 35 on macOS and 11 on Linux.
+function Test-InUse($X) { return ($X -is [IO.IOException] -and @(-2147024864, -2147024863, 11, 35) -contains $X.HResult) }
 
 function Get-InputFiles {
   $seen = @{}
@@ -553,7 +560,8 @@ function Open-Export([string]$Path, [string]$Label) {
   catch {
     $e = Get-Inner $_.Exception
     if (Test-NoAccess $e) { Stop-Plain "No permission to read $Label. Copy it somewhere you can read it, or ask for access, and run it again." }
-    if ($e -is [IO.IOException]) { Stop-Plain "$Label is open in another program, such as Excel, which keeps others from reading it. Close it there and run it again." }
+    if (Test-InUse $e) { Stop-Plain "$Label is open in another program, such as Excel, which keeps others from reading it. Close it there and run it again." }
+    if ($e -is [IO.IOException]) { Stop-Plain "Could not read $($Label): $(Get-Plain $e.Message)" }
     throw
   }
   $head = New-Object byte[] 4096
@@ -683,14 +691,14 @@ function Read-ExportFile($F, [DateTime]$Now) {
       $cand += $c
       if (@($vals | Where-Object { $_ -cnotmatch '^(none|unreadable)$' }).Count -gt 0) { $strong += $c }
     }
-    if ($cand.Count -gt 1) { $cand = $strong }
     if ($cand.Count -eq 0) {
       Stop-Plain ("$Label holds no Blindspot result. It looked in every column for a value that starts with v1, or reads none, stale, failed or unreadable. Its columns, with a value from each:`n" +
         (Get-ColumnList $head $sample) + "`nExport the column that holds the Blindspot result too (in Jamf Pro the extension attribute, in Intune the custom attribute's Result), and run it again.")
     }
     if ($cand.Count -gt 1) {
-      Stop-Plain ("Could not tell which column of $Label holds the Blindspot result: " + (@($cand | ForEach-Object { '"' + $head[$_] + '"' }) -join ' and ') + " both look like one. Its columns, with a value from each:`n" +
-        (Get-ColumnList $head $sample) + "`nRun it again naming the one to read:`n" + (Get-Next $F.Given 'ResultColumn' $head[$cand[0]]))
+      $pick = $cand[0]; if ($strong.Count -gt 0) { $pick = $strong[0] }
+      Stop-Plain ("$Label has $($cand.Count) columns that look like the Blindspot result, so it does not pick one. Its columns, with a value from each:`n" +
+        (Get-ColumnList $head $sample) + "`nThe ones that look like the result: " + (@($cand | ForEach-Object { '"' + (Get-Plain $head[$_]) + '"' }) -join ', ') + ".`nRun it again naming the one to read:`n" + (Get-Next $F.Given 'ResultColumn' $head[$pick]))
     }
     $idx.Result = $cand[0]
   }
@@ -723,7 +731,8 @@ function Read-ExportFile($F, [DateTime]$Now) {
       $note = & $cell $idx.Note
       if ($note.Trim()) { [void]$notes.Add((Get-Plain $note)); continue }
       $pc = Get-Unguarded (& $cell $idx.Name)
-      if (-not $pc.Trim()) { $pc = "(name not given) row $n" }
+      $unnamed = -not $pc.Trim()
+      if ($unnamed) { $pc = "(name not given) row $n" }
       $ot = & $cell $idx.Os
       $os = ''
       if ($ot -match 'mac|darwin') { $os = 'macOS' } elseif ($ot -match 'win') { $os = 'Windows' } elseif ($ot -match 'linux') { $os = 'Linux' }
@@ -731,25 +740,42 @@ function Read-ExportFile($F, [DateTime]$Now) {
       $row.LastSeen = & $cell $idx.Seen
       if ($ours) { $row.LastReport = $row.LastSeen }
       $row.Id = & $cell $idx.Id
+      $row.Unnamed = $unnamed
       [void]$out.Add((New-Object PSObject -Property (Set-Result $row (& $cell $idx.Det) $ours $Now)))
     }
   } finally { $rd.Dispose() }
   return @{ Rows = $out.ToArray(); Notes = $notes.ToArray() }
 }
 
-function Set-Duplicates($Rows) {
-  $by = @{}
-  foreach ($r in $Rows) { $k = $r.PC.ToLowerInvariant() + '|' + $r.Id; if (-not $by.ContainsKey($k)) { $by[$k] = New-Object System.Collections.ArrayList }; [void]$by[$k].Add($r) }
-  foreach ($k in @($by.Keys)) {
+# A name (with the device id, where the file has one) seen more than once is not read as any of its
+# results. Each file lists a computer once, so the same name in two files is taken as one computer:
+# the name stands for as many computers as the file that lists it most often. A row with no name is
+# its own computer.
+function Get-Deduplicated($Rows) {
+  $by = [ordered]@{}
+  foreach ($r in $Rows) {
+    if ($r.Unnamed) { continue }
+    $k = $r.PC.ToLowerInvariant() + '|' + $r.Id
+    if (-not $by.Contains($k)) { $by[$k] = New-Object System.Collections.ArrayList }
+    [void]$by[$k].Add($r)
+  }
+  foreach ($k in @($by.PSBase.Keys)) {
     $g = @($by[$k])
     if ($g.Count -lt 2) { continue }
+    $per = @{}
+    foreach ($r in $g) { $per[$r.Source] = 1 + [int]$per[$r.Source] }
+    $keep = ($per.Values | Measure-Object -Maximum).Maximum
     $from = (@($g | ForEach-Object { $_.Source }) | Select-Object -Unique) -join ', '
-    foreach ($r in $g) {
+    for ($i = 0; $i -lt $g.Count; $i++) {
+      $r = $g[$i]
+      if ($i -ge $keep) { $r.Dropped = $true; continue }
       $r.Status = 'not_checked'; $r.Known = $false; $r.Kinds = @(); $r.Refs = @(); $r.Details = ''
       $r.AgentKey = 'unknown'; $r.AgentKeyProviders = @(); $r.Sessions = 'unknown'; $r.McpTokens = 'unknown'
+      $r.Source = $from
       $r.Why = "this name appears $($g.Count) times in the results read ($from), so it is not known which result is this computer's"
     }
   }
+  foreach ($r in $Rows) { if (-not $r.Dropped) { $r } }
 }
 
 # --- Working out what the report says ----------------------------------------------------------
@@ -762,7 +788,7 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
     Now = $Now.ToString('yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture) + ' UTC'; StaleDays = $StaleDays
     Sources = (@($Sources.PSBase.Keys | ForEach-Object { $_ + ' (' + $Sources[$_] + ')' }) -join ', ')
     Notes = @($Notes); Counts = $count; Total = $Rows.Count; ShowTiles = ($Rows.Count -gt 0 -or $Notes.Count -eq 0)
-    NotChecked = $count.not_checked + $count.stale + $count.no_result
+    NotChecked = $count.not_checked + $count.failed + $count.stale + $count.no_result
     Meaning = $MitreMeaning; Credit = $MitreSource
     Kinds = @(); Paths = @(); Techniques = @(); Sections = @(); Tactics = [ordered]@{}; Limits = @()
   }
@@ -789,7 +815,7 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
           $only += 'the incidents ' + ((@($hit | ForEach-Object { $nm = $MitreIncidentNames[$_]; if ($nm) { $nm } else { $_ } }) | Select-Object -Unique) -join ', ')
         }
         $q = ''; if ($only.Count -gt 0) { $q = 'only for ' + ($only -join ', on ') + ': ' + (Get-PcCount $on.Count) }
-        $refs += @{ Fw = $FwName[$fw]; Lead = $RelText[$m.Rel]; Id = $m.Id; Url = $m.Url; Name = $m.Name; Armed = ($m.Rel -ceq 'armed'); Only = $q }
+        $refs += @{ Fw = $FwName[$fw]; Lead = $RelText[$m.Rel]; Id = $m.Id; Url = $m.Url; Name = $m.Name; Only = $q }
       }
       if ($shown -eq 0 -and $mine.Count -gt 0) { $nothing += $FwName[$fw] + ': none applies to what these computers sent.' }
     }
@@ -818,8 +844,8 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
     $m = $techs[$key]
     $on = @($known | Where-Object { @($_.Refs | Where-Object { $_.Fw -ceq $m.Fw -and $_.Id -ceq $m.Id }).Count -gt 0 })
     if ($on.Count -eq 0) { continue }
-    $t = @{ Name = $m.Name; Id = $m.Id; Url = $m.Url; Fw = $FwName[$m.Fw]; FwKey = $m.Fw; N = $on.Count }
-    foreach ($rel in @('exposure', 'indicator', 'armed')) { $t[$rel] = @($on | Where-Object { @($_.Refs | Where-Object { $_.Fw -ceq $m.Fw -and $_.Id -ceq $m.Id -and $_.Rel -ceq $rel }).Count -gt 0 }).Count }
+    $t = @{ Name = $m.Name; Id = $m.Id; Url = $m.Url; Fw = $FwName[$m.Fw]; FwKey = $m.Fw; N = $on.Count; Tactics = @($m.Tactics) }
+    foreach ($rel in $RelText.Keys) { $t[$rel] = @($on | Where-Object { @($_.Refs | Where-Object { $_.Fw -ceq $m.Fw -and $_.Id -ceq $m.Id -and $_.Rel -ceq $rel }).Count -gt 0 }).Count }
     $tl += New-Object PSObject -Property $t
   }
   $d.Techniques = @($tl | Sort-Object @{ Expression = { $_.FwKey } }, @{ Expression = { $_.N }; Descending = $true })
@@ -838,15 +864,14 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
   }
   foreach ($fw in @('attack', 'atlas')) {
     $byTactic = [ordered]@{}
-    foreach ($m in $MitreRows) {
-      if ($m.Fw -cne $fw -or $m.Rel -ceq 'none') { continue }
+    foreach ($m in @($d.Techniques | Where-Object { $_.FwKey -ceq $fw })) {
       foreach ($tc in @($m.Tactics)) {
         if (-not $byTactic.Contains($tc)) { $byTactic[$tc] = @() }
         $nm = $m.Name + ' (' + $m.Id + ')'
         if ($byTactic[$tc] -cnotcontains $nm) { $byTactic[$tc] += $nm }
       }
     }
-    $d.Tactics[$FwName[$fw]] = @($byTactic.PSBase.Keys | ForEach-Object { $_ + ': ' + ($byTactic[$_] -join '; ') })
+    if ($byTactic.Count -gt 0) { $d.Tactics[$FwName[$fw]] = @($byTactic.PSBase.Keys | ForEach-Object { $_ + ': ' + ($byTactic[$_] -join '; ') }) }
   }
   $d.NotLooked = @(
     'The network: no traffic, DNS or proxies. It cannot say whether a key left a computer.',
@@ -864,8 +889,11 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
   if (@($Rows | Where-Object { $_.OS -ceq 'macOS' }).Count -gt 0) {
     $d.Limits += 'Each Mac result covers every local account with a user ID of 500 or above. One it could not check is listed as not checked, and a result cut to fit may leave accounts out.'
   }
-  $d.Limits += "$($count.no_result) with no result, $($count.stale) with a stale result, $($count.failed) failed, and " +
+  $failedBare = @($Rows | Where-Object { $_.Status -eq 'failed' -and -not $_.Known }).Count
+  $d.Limits += "$($count.no_result) with no result, $($count.stale) with a stale result, $failedBare failed with no result, and " +
     "$(@($Rows | Where-Object { $_.Status -eq 'not_checked' -and -not $_.Known }).Count) with a result this tool could not read. Nothing they may hold is in the counts above."
+  $partly = @($Rows | Where-Object { $_.Known -and ($_.Status -eq 'failed' -or $_.Status -eq 'not_checked') }).Count
+  if ($partly -gt 0) { $d.Limits += (Get-PcCount $partly) + ' failed or were partly checked but sent a result: what it names is in the counts above, and what the run did not reach is not known.' }
   $cut = @($known | Where-Object { $_.More }).Count
   if ($cut -gt 0) { $d.Limits += (Get-PcCount $cut) + ' sent a result cut to fit what the MDM keeps. Findings past the cut are not in the counts above.' }
   return $d
@@ -915,7 +943,7 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
     [void]$h.Append('</div>')
   }
   if ($D.NotChecked -gt 0) {
-    [void]$h.Append('<p>' + $D.NotChecked + ' computer' + $(if ($D.NotChecked -eq 1) { ' was' } else { 's were' }) + ' not checked: no result, a stale result, or a result that does not fit. None of them counts as clear.</p>')
+    [void]$h.Append('<p>' + $D.NotChecked + ' computer' + $(if ($D.NotChecked -eq 1) { ' was' } else { 's were' }) + ' not checked: ' + $NotCheckedWhy + '. None of them counts as clear.</p>')
   }
   if ($D.Notes.Count -gt 0) {
     [void]$h.Append('<h2>Could not list every PC</h2><ul>')
@@ -927,12 +955,11 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
   if ($D.Kinds.Count -eq 0) { [void]$h.Append('<p class="muted">No finding in the results that were read.</p>') }
   else {
     [void]$h.Append('<p class="muted">' + (& $e $D.Meaning) + '</p>'); $said = $true
-    [void]$h.Append('<div class="wrap"><table><tr><th>Finding</th><th>Computers</th><th>MITRE technique (exposure or indicator)</th></tr>')
+    [void]$h.Append('<div class="wrap"><table><tr><th>Finding</th><th>Computers</th><th>MITRE technique (' + (& $e (@($RelText.Keys) -join ' or ')) + ')</th></tr>')
     foreach ($k in $D.Kinds) {
       $lines = @()
       foreach ($r in $k.Refs) {
         $t = (& $e $r.Fw) + ': ' + (& $e $r.Lead) + ' ' + (Get-Link $r.Url $r.Id) + ' ' + (& $e $r.Name)
-        if ($r.Armed) { $t += ': installed, runs when triggered' }
         if ($r.Only) { $t += ' (' + (& $e $r.Only) + ')' }
         $lines += $t
       }
@@ -947,16 +974,19 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
     if ($p.Providers.Count -gt 0) { $t += ' Providers of those keys: ' + (& $e ($p.Providers -join ', ')) + '.' }
     [void]$h.Append('<li>' + $t + ' Not known for ' + $p.Unknown + '.</li>')
   }
-  [void]$h.Append('</ul><p class="muted">Not known: the computer sent no result, a stale or failed one, one cut to fit, one this tool could not read, or one where an account was partly checked or not checked.</p>')
+  [void]$h.Append('</ul><p class="muted">Not known: the computer sent no result, a stale or failed one, one cut to fit, one this tool could not read, one where an account was partly checked or not checked, or one from a PC with other accounts that were not checked. A computer counts as no only when every account on it was read in full.</p>')
   [void]$h.Append('<h2>Techniques the findings relate to</h2>')
   if ($D.Techniques.Count -eq 0) { [void]$h.Append('<p class="muted">No finding relates to a MITRE technique.</p>') }
   else {
     if (-not $said) { [void]$h.Append('<p class="muted">' + (& $e $D.Meaning) + '</p>'); $said = $true }
     [void]$h.Append('<p class="muted">A computer is counted once for each technique, and once in each column that applies to it.</p>')
-    [void]$h.Append('<div class="wrap"><table><tr><th>Technique</th><th>MITRE</th><th>Computers</th><th>Exposure</th><th>Indicator</th><th>Armed</th></tr>')
+    [void]$h.Append('<div class="wrap"><table><tr><th>Technique</th><th>MITRE</th><th>Computers</th>')
+    foreach ($rel in $RelText.Keys) { [void]$h.Append('<th>' + (& $e ($rel.Substring(0, 1).ToUpper() + $rel.Substring(1))) + '</th>') }
+    [void]$h.Append('</tr>')
     foreach ($t in $D.Techniques) {
-      [void]$h.Append('<tr><td>' + (& $e $t.Name) + ' <span class="muted">' + (Get-Link $t.Url $t.Id) + '</span></td><td>' + (& $e $t.Fw) + '</td><td>' + $t.N +
-        '</td><td>' + $t.exposure + '</td><td>' + $t.indicator + '</td><td>' + $t.armed + '</td></tr>')
+      [void]$h.Append('<tr><td>' + (& $e $t.Name) + ' <span class="muted">' + (Get-Link $t.Url $t.Id) + '</span></td><td>' + (& $e $t.Fw) + '</td><td>' + $t.N + '</td>')
+      foreach ($rel in $RelText.Keys) { [void]$h.Append('<td>' + $t.$rel + '</td>') }
+      [void]$h.Append('</tr>')
     }
     [void]$h.Append('</table></div>')
   }
@@ -974,12 +1004,16 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
   [void]$h.Append('<h2>What this report covers and does not cover</h2>')
   if (-not $said) { [void]$h.Append('<p class="muted">' + (& $e $D.Meaning) + '</p>') }
   [void]$h.Append('<p>Blindspot reads files on each computer. It finds things an attack could use, such as keys in plain text and AI agents set to run commands without asking, and traces of the malware incidents on its list. It does not watch for attacks and does not detect any technique in use.</p>')
-  foreach ($fw in $D.Tactics.PSBase.Keys) {
-    [void]$h.Append('<p><b>' + (& $e $fw) + ' tactics the findings relate to:</b></p><ul>')
-    foreach ($x in $D.Tactics[$fw]) { [void]$h.Append('<li>' + (& $e $x) + '</li>') }
-    [void]$h.Append('</ul>')
+  if ($D.Tactics.Count -eq 0) { [void]$h.Append('<p>No finding in this report relates to a MITRE tactic.</p>') }
+  else {
+    foreach ($fw in $D.Tactics.PSBase.Keys) {
+      [void]$h.Append('<p><b>' + (& $e $fw) + ' tactics the findings in this report relate to:</b></p><ul>')
+      foreach ($x in $D.Tactics[$fw]) { [void]$h.Append('<li>' + (& $e $x) + '</li>') }
+      [void]$h.Append('</ul>')
+    }
+    [void]$h.Append('<p class="muted">A tactic is listed because a technique a finding in this report relates to belongs to it. Blindspot checks for none of these techniques in use.</p>')
   }
-  [void]$h.Append('<p class="muted">A tactic is listed because a technique a finding relates to belongs to it. Blindspot checks for none of these techniques in use.</p><p><b>What Blindspot does not look at:</b></p><ul>')
+  [void]$h.Append('<p><b>What Blindspot does not look at:</b></p><ul>')
   foreach ($x in $D.NotLooked) { [void]$h.Append('<li>' + (& $e $x) + '</li>') }
   [void]$h.Append('</ul><p><b>Limits of the results in this report:</b></p><ul>')
   foreach ($x in $D.Limits) { [void]$h.Append('<li>' + (& $e $x) + '</li>') }
@@ -1054,7 +1088,7 @@ function Invoke-Report {
     foreach ($r in $got.Rows) { [void]$rows.Add($r) }
     foreach ($n in $got.Notes) { if (-not $notes.Contains($n)) { [void]$notes.Add($n) } }
   }
-  Set-Duplicates $rows
+  $rows = @(Get-Deduplicated $rows)
   $order = @{ act = 0; not_checked = 1; failed = 2; stale = 3; no_result = 4; review = 5; clear = 6 }
   $sorted = @($rows | Sort-Object @{ Expression = { $order[$_.Status] } }, @{ Expression = { $_.PC } })
   $data = Get-ReportData $sorted $notes.ToArray() $sources $now
@@ -1063,7 +1097,7 @@ function Invoke-Report {
   $c = $data.Counts
   Write-Host ("Read $($sorted.Count) computer" + $(if ($sorted.Count -eq 1) { '' } else { 's' }) + ' from ' + (@($sources.PSBase.Keys) -join ', ') + '.')
   Write-Host ("Need attention now: $($c.act). To review: $($c.review). Nothing found: $($c.clear).")
-  Write-Host ("Not checked: $($data.NotChecked + $c.failed) (no result, a stale or failed run, or a result that could not be read). None of these counts as clear.")
+  Write-Host ("Not checked: $($data.NotChecked) ($NotCheckedWhy). None of these counts as clear.")
   Write-Host ('Report: ' + $base + '.html (and the same rows in ' + [IO.Path]::GetFileName($base) + '.csv beside it)')
   if ($Opt.Open) { Invoke-Item -LiteralPath ($base + '.html') }
 }

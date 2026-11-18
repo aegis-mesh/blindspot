@@ -212,7 +212,7 @@ MITRE_PCS = [
     ('M-NOPROV', 'fail', _ps(' | anna: act run-without-asking claude-code; keys 1', 'act')),
 ]
 
-# Exports an MDM gives for Macs, for -Report -FromFile. Jamf Pro stores the text between <result> and </result>;
+# Exports an MDM gives for Macs, for gird-report.ps1. Jamf Pro stores the text between <result> and </result>;
 # the tags are kept here too, as a script's raw output would have them. (name, value, expected status)
 MAC = 'v1 act %s | asha: act wiper; keys 1 openai; sessions 1 | bo: review run-without-asking codex; tmp-marks mastra' % T0
 JAMF = [
@@ -229,6 +229,45 @@ JAMF = [
     ('mac-dup', 'v1 act %s | asha: act keys 1' % T0, 'not_checked'),
     ('=cmd|calc', '=HYPERLINK("http://x","y")', 'not_checked'),
     (HOSTILE_NAME, 'v1 review %s | asha: review "quoted" <b>' % T0, 'not_checked'),
+]
+# The statements of what could get out, for every way a result can be whole or not: (name, value, the
+# agent with a key in the same account, a key in agent sessions, a token in an MCP config). "no" needs
+# every account on the computer read in full; a "yes" found stands whatever else is missing.
+U = 'unknown'
+PATHS = [
+    ('P-MAC-CLEAR', 'v1 clear %s | asha: clear | bo: clear' % T0, 'no', 'no', 'no'),
+    ('P-WIN-CLEAR', _ps(' | anna: clear', 'clear'), 'no', 'no', 'no'),
+    ('P-MAC-ALL', 'v1 act %s | asha: act run-without-asking claude-code; keys 1 aws; sessions 1; mcp-tokens 1' % T0, 'yes', 'yes', 'yes'),
+    ('P-SPLIT', 'v1 act %s | asha: act keys 1 openai | bo: review run-without-asking codex' % T0, 'no', 'no', 'no'),
+    ('P-AGENT-ONLY', 'v1 review %s | asha: review run-without-asking codex' % T0, 'no', 'no', 'no'),
+    ('P-MACHINE-NC', 'v1 not_checked %s | asha: clear | machine: not_checked' % T0, 'no', 'no', 'no'),
+    ('P-OTHERS', _ps(' | eve: clear', 'clear', 3), U, U, U),
+    ('P-OTHERS-YES', _ps(' | anna: act run-without-asking claude-code; keys 1 aws; sessions 1', 'act', 2), 'yes', 'yes', U),
+    ('P-FAILED-SAVE', _ps(' reason=save | anna: act keys 1', 'failed'), U, U, U),
+    ('P-FAILED-SAVE-YES', _ps(' reason=save | anna: act sessions 1', 'failed'), U, 'yes', U),
+    ('P-FAILED-REASON', _ps(' reason=host_32bit | anna: not_checked host_32bit', 'failed'), U, U, U),
+    ('P-FAILED-MAC', 'v1 failed %s | asha: clear | bo: not_checked copy_changed' % T0, U, U, U),
+    ('P-FAILED-MAC-YES', 'v1 failed %s | asha: act mcp-tokens 1 | bo: not_checked copy_changed' % T0, U, U, 'yes'),
+    ('P-PARTIAL', 'v1 not_checked %s | cy: not_checked ssh-open 1; partial | dee: clear' % T0, U, U, U),
+    ('P-PARTIAL-YES', 'v1 not_checked %s | cy: not_checked sessions 1; partial | dee: clear' % T0, U, U, U),
+    ('P-NC-WORD', 'v1 not_checked %s | asha: clear | bo: not_checked home_missing' % T0, U, U, U),
+    ('P-NC-WIN', _ps(' | anna: not_checked deadline'), U, U, U),
+    ('P-NOACC', 'v1 not_checked %s | no accounts' % T0, U, U, U),
+    ('P-MORE', _ps(' | anna: act wiper; incidents tanstack +more', 'act'), U, U, U),
+    ('P-MORE-YES', 'v1 act %s | asha: act sessions 1 | bo: review +more' % T0, U, 'yes', U),
+    ('P-STALE', 'stale: last run %s' % at(days=-5), U, U, U),
+    ('P-OLD', 'v1 act %s | asha: act run-without-asking claude-code; keys 1 aws; sessions 1; mcp-tokens 1' % at(days=-5), U, U, U),
+    ('P-FAILEDLINE', 'failed: the run started %s did not finish or could not save its result' % T0, U, U, U),
+    ('P-NONE', 'none', U, U, U),
+    ('P-EMPTY', '', U, U, U),
+    ('P-UNREADABLE', 'unreadable', U, U, U),
+    ('P-FUTURE', 'v1 clear %s | asha: clear' % at(days=1), U, U, U),
+    ('P-NOFIT', 'v1 clear %s | asha: clear keys 1' % T0, U, U, U),
+    ('P-V2', 'v2 clear %s | asha: clear' % T0, U, U, U),
+    ('P-NEWWORD', 'v1 act %s | asha: act keys 1; exfil 3' % T0, U, U, U),
+    ('P-CUT', (_ps(' | anna: act sessions 1; ', 'act') + 'possible ' + ','.join(['tanstack'] * 400))[:2048], U, U, U),
+    ('P-TWICE', 'v1 clear %s | asha: clear' % T0, U, U, U),
+    ('P-TWICE', 'v1 act %s | asha: act sessions 1' % T0, U, U, U),
 ]
 def csv_cell(v): return '"' + v.replace('"', '""') + '"'
 def write_files(d):
@@ -250,6 +289,20 @@ def write_files(d):
         f.write('Computer Name;Blindspot\r\n' + ''.join('%s;"%s"\r\n' % r for r in two))
     with open(os.path.join(d, 'tab-utf16-nobom.csv'), 'wb') as f:
         f.write(('Device name\tResult\n' + ''.join('%s\t%s\n' % r for r in two)).encode('utf-16-le'))
+    with open(os.path.join(d, 'tab-utf16be-nobom.csv'), 'wb') as f:
+        f.write(('Device name\tResult\n' + ''.join('%s\t%s\n' % r for r in two)).encode('utf-16-be'))
+    with open(os.path.join(d, 'twocolsnone.csv'), 'w', newline='') as f:
+        f.write('Device name,Result,Old result\nMAC-A,%s,none\nMAC-B,none,none\n' % MAC)
+    with open(os.path.join(d, 'paths.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\r\n' + ''.join('%s,%s\r\n' % (csv_cell(n), csv_cell(v)) for n, v, _, _, _ in PATHS))
+    with open(os.path.join(d, 'dupa.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\nMAC-SAME,v1 clear %s | asha: clear\n,v1 act %s | asha: act keys 1\n' % (T0, T0))
+    with open(os.path.join(d, 'dupb.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\nmac-same,v1 clear %s | asha: clear\n,v1 clear %s | bo: clear\n' % (T0, T0))
+    with open(os.path.join(d, 'clearonly.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
+    with open(os.path.join(d, 'locked.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
     with open(os.path.join(d, 'semicolon-utf8bom.csv'), 'w', encoding='utf-8-sig', newline='') as f:
         f.write('Hostname;Serial;Blindspot\n' + ''.join('%s;C02X,1;"<result>%s</result>"\n' % r for r in two))
     with open(os.path.join(d, 'noresult.csv'), 'w', newline='') as f:
@@ -625,12 +678,15 @@ def first_ref(html):
 def found_cell(html, label):
     m = re.search(r'<tr><td>%s</td><td>([0-9]+)</td><td class="ref">(.*?)</td></tr>' % re.escape(label), html)
     return (int(m.group(1)), m.group(2)) if m else (None, '')
-def tech_row(html, tid):
-    m = re.search(r'<tr><td>[^<]*<span class="muted"><a href="[^"]*"[^>]*>%s</a></span></td><td>([^<]*)</td><td>([0-9]+)</td><td>([0-9]+)</td><td>([0-9]+)</td><td>([0-9]+)</td></tr>' % re.escape(tid), html)
+def tech_row(html, tid): # (computers, exposure, indicator)
+    m = re.search(r'<tr><td>[^<]*<span class="muted"><a href="[^"]*"[^>]*>%s</a></span></td><td>([^<]*)</td><td>([0-9]+)</td><td>([0-9]+)</td><td>([0-9]+)</td></tr>' % re.escape(tid), html)
     return tuple(int(x) for x in m.groups()[1:]) if m else None
 def path_line(html, text):
     m = re.search(r'<li>%s: ([0-9]+) computers?\.(.*?) Not known for ([0-9]+) computers?\.</li>' % re.escape(text), html)
     return (int(m.group(1)), m.group(2).strip(), int(m.group(3))) if m else None
+def tactics(html):
+    i = html.find('<h2>What this report covers')
+    return html[i:html.find('<b>What Blindspot does not look at', i)] if i >= 0 else ''
 def load_out(w, t):
     csvs = glob.glob(os.path.join(w, 'out-' + t, '*.csv')); htmls = glob.glob(os.path.join(w, 'out-' + t, '*.html'))
     out = open(os.path.join(w, 'o-%s.txt' % t)).read()
@@ -710,20 +766,20 @@ def main():
               left == ['other-1', 'look-1', 'copy-1', 'global-2', 'global-1'], left)
         check('-Remove signs in with the scripts write scope only', stub[0] == 'connect DeviceManagementScripts.ReadWrite.All', stub[0])
     elif mode == 'report':
-        check('-Report makes no request the stand-in refuses', not refused(reqs), refused(reqs))
-        check('-Report signs in with read scopes only', stub[0] == 'connect DeviceManagementScripts.Read.All,DeviceManagementManagedDevices.Read.All,GroupMember.ReadBasic.All,Device.Read.All', stub[0])
+        check('-Export makes no request the stand-in refuses', not refused(reqs), refused(reqs))
+        check('-Export signs in with read scopes only', stub[0] == 'connect DeviceManagementScripts.Read.All,DeviceManagementManagedDevices.Read.All,GroupMember.ReadBasic.All,Device.Read.All', stub[0])
         pages = [r for r in reqs if r['method'] == 'GET' and r['path'].startswith('%s/ours-1/deviceRunStates' % BASE)]
-        check('-Report follows every next-page link', len(pages) == (len(PCS) + 1) // 2, len(pages))
+        check('-Export follows every next-page link', len(pages) == (len(PCS) + 1) // 2, len(pages))
         got, out = load_out(w, 'report')
-        check('-Report saves one HTML file and one CSV file', got is not None)
+        check('the report saves one HTML file and one CSV file', got is not None)
         if got is None: print('\n'.join(R)); return
         raw, rows, by, html = got
         check('the CSV has a row for every PC', len(rows) == len(PCS), len(rows))
         for name, _, _, status, label in PCS:
             st = by.get(name, {}).get('status')
-            check('-Report: ' + label, st == status, '%s: wanted %s, got %s' % (name, status, st))
+            check('the report: ' + label, st == status, '%s: wanted %s, got %s' % (name, status, st))
         clear = sorted(n for n, r in by.items() if r['status'] == 'clear')
-        check('-Report calls only the fully read clear results clear', clear == ['PC-CLEAR', 'PC-CRLF', 'PC-OTHER'], clear)
+        check('the report calls only the fully read clear results clear', clear == ['PC-CLEAR', 'PC-CRLF', 'PC-OTHER'], clear)
         check('the other profiles a result names are shown', 'other accounts on this PC not checked' in by.get('PC-OTHER', {}).get('why', ''), by.get('PC-OTHER'))
         check('a result Intune may have cut says so', 'may have cut it short' in by.get('PC-CUT', {}).get('why', ''), by.get('PC-CUT'))
         check('a result Intune may have cut says so, also at 2,048 characters', 'may have cut it short' in by.get('PC-CUT2048', {}).get('why', ''), by.get('PC-CUT2048'))
@@ -757,36 +813,44 @@ def main():
         check('the PCs to deal with first are act, then not checked, failed, stale', all(x > 0 for x in order) and order == sorted(order), order)
     elif mode == 'mitre':
         got, out = load_out(w, 'mitre')
-        check('-Report with the MITRE fleet saves its files', got is not None, out[-300:])
+        check('the report on the MITRE fleet saves its files', got is not None, out[-300:])
         if got is None: print('\n'.join(R)); return
         raw, rows, by, html = got
         check('the HTML links only to MITRE technique pages, in the MITRE fleet too', bad_links(html) == [] and 'attack.mitre.org' in html and 'atlas.mitre.org' in html, bad_links(html))
         check('the MITRE sentence comes before the first MITRE reference, in the MITRE fleet too', 0 <= html.find(MEANING) < first_ref(html), (html.find(MEANING), first_ref(html)))
-        check('a PC with three findings under one technique is counted once for it', tech_row(html, 'T1552.001') == (3, 3, 0, 0), tech_row(html, 'T1552.001'))
-        check('a technique that is an exposure on one PC and an indicator on others counts each PC once', tech_row(html, 'T1195.001') == (4, 1, 3, 0), tech_row(html, 'T1195.001'))
-        check('the wiper counts as armed for data destruction, and as a launch agent on a Mac only', tech_row(html, 'T1485') == (2, 0, 0, 2) and tech_row(html, 'T1543.001') == (1, 0, 1, 0),
-              (tech_row(html, 'T1485'), tech_row(html, 'T1543.001')))
-        check('a Windows-only technique counts Windows PCs only', tech_row(html, 'T1698') == (3, 3, 0, 0) and tech_row(html, 'AML.T0053') == (4, 4, 0, 0),
+        check('a PC with three findings under one technique is counted once for it, as an exposure', tech_row(html, 'T1552.001') == (3, 3, 0), tech_row(html, 'T1552.001'))
+        check('project settings that act when a folder opens relate to no technique: the supply chain technique counts the incidents only',
+              tech_row(html, 'T1195.001') == (3, 0, 3) and tech_row(html, 'AML.T0081') is None, (tech_row(html, 'T1195.001'), tech_row(html, 'AML.T0081')))
+        n, cell = found_cell(html, 'Project settings that act when a folder opens')
+        check('project settings that act when a folder opens say why there is no reference', n == 1 and 'href' not in cell and 'cannot tell those from settings a person wrote' in cell
+              and 'not AI agent settings' in cell, cell)
+        check('the wiper is an indicator of data destruction on every system, and never a launch agent', tech_row(html, 'T1485') == (2, 0, 2) and tech_row(html, 'T1543.001') is None
+              and 'T1543' not in html and 'Armed' not in html and 'armed' not in html, (tech_row(html, 'T1485'), tech_row(html, 'T1543.001')))
+        check('a Windows-only technique counts Windows PCs only', tech_row(html, 'T1698') == (3, 3, 0) and tech_row(html, 'AML.T0053') == (4, 4, 0),
               (tech_row(html, 'T1698'), tech_row(html, 'AML.T0053')))
+        check('a key in agent sessions relates to ATLAS Unsecured Credentials, not to data from an AI service',
+              'AML.T0085' not in html and 'AML.T0055' in found_cell(html, 'Keys in agent sessions')[1] and tech_row(html, 'AML.T0055') == (4, 4, 0), tech_row(html, 'AML.T0055'))
+        check('the table of findings names the relations it uses', '<th>MITRE technique (exposure or indicator)</th>' in html and '<th>Exposure</th><th>Indicator</th></tr>' in html)
         n, cell = found_cell(html, 'Malware incident found')
         check('an ATLAS reference that fits only some incidents is shown for those, with their count, not for the whole kind',
               n == 3 and 'AML.T0010.001</a> Supply Chain Compromise: Software (only for the incidents LiteLLM 1.107.0: 1 computer)' in cell, cell)
         check('the plain label leads and the reference follows it', n == 3 and cell.startswith('ATT&amp;CK: Indicator of <a href="https://attack.mitre.org/techniques/T1195/001/"'), cell[:200])
         n, cell = found_cell(html, 'Tools with a security fix to install')
         check('a kind mapped to no technique shows no reference, and says why', n == 1 and cell.startswith('No MITRE reference: ') and 'href' not in cell and 'T1' not in cell, cell)
-        check('a CSV row with no reference has none', by['M-REVIEW']['mitre'].count('T1') == 2 and 'amazonq' not in by['M-REVIEW']['mitre'] and by['M-CLEAR']['mitre'] == '', (by['M-REVIEW']['mitre'], by['M-CLEAR']['mitre']))
+        check('a CSV row with no reference has none', 'T1698' in by['M-REVIEW']['mitre'] and 'AML.T0053' in by['M-REVIEW']['mitre'] and 'T1195' not in by['M-REVIEW']['mitre']
+              and 'AML.T0081' not in by['M-REVIEW']['mitre'] and 'amazonq' not in by['M-REVIEW']['mitre'] and by['M-CLEAR']['mitre'] == '', (by['M-REVIEW']['mitre'], by['M-CLEAR']['mitre']))
         check('the agent with a key statement counts what the fleet holds, providers too',
               path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account')
-              == (2, 'Providers of those keys: anthropic (1 computer), aws (1 computer), not named in the result (1 computer).', 5),
+              == (2, 'Providers of those keys: anthropic (1 computer), aws (1 computer), not named in the result (1 computer).', 6),
               path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account'))
         check('the agent and the key must be in the same account', by['M-MAC']['run_without_asking_and_key'] == 'no', by['M-MAC'])
-        check('the key in a session statement counts what the fleet holds', path_line(html, 'A key in an AI agent&#39;s saved session files') == (1, '', 5),
+        check('the key in a session statement counts what the fleet holds', path_line(html, 'A key in an AI agent&#39;s saved session files') == (1, '', 6),
               path_line(html, 'A key in an AI agent&#39;s saved session files'))
-        check('the token in an MCP config statement counts what the fleet holds', path_line(html, 'A token written in an MCP server&#39;s config') == (1, '', 5),
+        check('the token in an MCP config statement counts what the fleet holds', path_line(html, 'A token written in an MCP server&#39;s config') == (1, '', 6),
               path_line(html, 'A token written in an MCP server&#39;s config'))
         unk = sorted(n for n, r in by.items() if r['key_in_agent_sessions'] == 'unknown')
-        check('a partly checked, cut, stale, cut-to-fit or silent PC is not known, never no', unk == ['M-CUT', 'M-EMPTY', 'M-MORE', 'M-PARTIAL', 'M-STALE'], unk)
-        check('a fully read PC with nothing is no', all(by[n]['key_in_agent_sessions'] == 'no' and by[n]['token_in_mcp_config'] == 'no' for n in ('M-CLEAR', 'M-MAC', 'M-REVIEW', 'M-WIPER', 'M-NOPROV')))
+        check('a partly checked, cut, stale, cut-to-fit, silent or other-profiles PC is not known, never no', unk == ['M-CLEAR', 'M-CUT', 'M-EMPTY', 'M-MORE', 'M-PARTIAL', 'M-STALE'], unk)
+        check('a fully read PC with nothing is no', all(by[n]['key_in_agent_sessions'] == 'no' and by[n]['token_in_mcp_config'] == 'no' for n in ('M-MAC', 'M-REVIEW', 'M-WIPER', 'M-NOPROV')))
         check('the CSV keeps its first columns and adds the new ones after them', raw.splitlines()[0].lstrip('\ufeff') ==
               '"pc","user","status","why","checked_at","details","intune_last_report","output","mitre","mitre_note","mitre_source","run_without_asking_and_key","run_without_asking_key_providers","key_in_agent_sessions","token_in_mcp_config","os","source","last_seen"',
               raw.splitlines()[0])
@@ -798,7 +862,10 @@ def main():
               and 'Copyright 2021-2026 MITRE, licensed under the Apache License, Version 2.0' in html and 'is Blindspot&#39;s own, not MITRE&#39;s' in html)
         check('the report says what it does not look at', all(x in html for x in ('The network:', 'The identity provider:', 'The cloud control plane:', 'lakehouse', 'What AI agents do while they run')))
         check('the report says one account per Windows PC and counts the PCs with others', '1 computer had other accounts that were not checked.' in html)
-        check('the report lists the tactics the findings relate to', '<li>Credential Access: Unsecured Credentials: Credentials In Files (T1552.001)' in html and '<li>Collection: Data from AI Services: Conversation Context and Memory (AML.T0085.002)</li>' in html)
+        tc = tactics(html)
+        check('the report lists the tactics of the techniques its findings relate to, and only those',
+              '<li>Credential Access: Unsecured Credentials: Credentials In Files (T1552.001)' in tc and '<li>Credential Access: Unsecured Credentials (AML.T0055); Credentials from AI Agent Configuration (AML.T0083)</li>' in tc
+              and 'tactics the findings in this report relate to:' in tc and 'Persistence' not in tc and 'Collection' not in tc and 'Defense Evasion' not in tc, tc[:600])
     elif mode == 'files':
         got, out = load_out(w, 'jamf')
         check('gird-report.ps1 reads a Jamf Pro export and saves its files', got is not None, out[-300:])
@@ -811,8 +878,11 @@ def main():
         check('the time the MDM last heard from it is kept', by['MAC-ACT']['last_seen'] == '2026-11-18 09:00:00' and by['MAC-ACT']['intune_last_report'] == '', by['MAC-ACT'])
         check('a Mac summary line says it names no findings', 'summary line' in by['MAC-SUMMARY']['why'], by['MAC-SUMMARY'])
         check('a name given twice is listed twice, as not checked, and says so', all('appears 2 times' in by[n]['why'] for n in ('MAC-DUP', 'mac-dup')), (by['MAC-DUP'], by['mac-dup']))
-        check('a Mac wiper relates to a launch agent and to data destruction', tech_row(html, 'T1543.001') == (1, 0, 1, 0) and tech_row(html, 'T1485') == (1, 0, 0, 1), (tech_row(html, 'T1543.001'), tech_row(html, 'T1485')))
-        check('a Mac agent set to run without asking relates to ATLAS only', tech_row(html, 'AML.T0053') == (2, 2, 0, 0) and tech_row(html, 'T1698') is None, tech_row(html, 'AML.T0053'))
+        check('a Mac wiper is an indicator of data destruction and is not said to be a launch agent', tech_row(html, 'T1543.001') is None and tech_row(html, 'T1485') == (1, 0, 1), (tech_row(html, 'T1543.001'), tech_row(html, 'T1485')))
+        check('a Mac agent set to run without asking relates to ATLAS only', tech_row(html, 'AML.T0053') == (2, 2, 0) and tech_row(html, 'T1698') is None, tech_row(html, 'AML.T0053'))
+        tc = tactics(html)
+        check('the tactics listed are those of the techniques found, not every one the tool can name',
+              'Credential Access' in tc and 'Impact' in tc and 'Initial Access' not in tc and 'Persistence' not in tc and 'Collection' not in tc, tc[:600])
         n, cell = found_cell(html, 'Malware markers in a shared folder')
         check('a Mac-only finding word shows its decision', n == 1 and cell.startswith('No MITRE reference: '), cell)
         check('the path statements read Mac rows', path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account')
@@ -830,12 +900,33 @@ def main():
               and got[2].get('PC-ACT', {}).get('source') == 'intune.csv' and got[2].get('PC-ACT', {}).get('os') == 'Windows'
               and got[2].get('MAC-ACT', {}).get('source') == 'jamf.csv' and 'intune.csv (' in got[3] and 'jamf.csv (13)' in got[3]
               and 'Each Windows result covers one account' in got[3] and 'Each Mac result covers every local account' in got[3], out[-300:])
+        got, out = load_out(w, 'clearonly')
+        check('a report with no finding lists no tactic as found', got is not None and '<li>' not in tactics(got[3]) and 'No finding in this report relates to a MITRE tactic.' in got[3], out[-300:])
+        got, out = load_out(w, 'paths')
+        check('the paths file is read', got is not None, out[-300:])
+        if got:
+            by = {}
+            for r in got[1]: by.setdefault(unquote_cell(r['pc']), []).append(r)
+            for n, v, ak, se, mc in PATHS:
+                rs = by.get(n, [])
+                got_ = sorted(set((r['run_without_asking_and_key'], r['key_in_agent_sessions'], r['token_in_mcp_config']) for r in rs))
+                check('what could get out, %s: %s, %s, %s' % (n, ak, se, mc), got_ == [(ak, se, mc)], (got_, v[:120]))
+        got, out = load_out(w, 'dup')
+        if got:
+            rows_ = got[1]
+            same = [r for r in rows_ if unquote_cell(r['pc']).lower() == 'mac-same']
+            check('one computer in two files is one computer: listed once, not checked, naming both files', len(rows_) == 3 and len(same) == 1
+                  and same[0]['status'] == 'not_checked' and 'appears 2 times' in same[0]['why'] and 'dupa.csv, dupb.csv' in same[0]['why']
+                  and '<b>3</b>Computers' in got[3] and 'Read 3 computers' in out, [(r['pc'], r['status'], r['source']) for r in rows_])
+            unnamed = sorted((r['source'], r['status']) for r in rows_ if r['pc'].startswith('(name not given)'))
+            check('two rows with no name and the same row number in two files are two computers, each read', unnamed == [('dupa.csv', 'act'), ('dupb.csv', 'clear')], unnamed)
+        else: check('one computer in two files is one computer: listed once, not checked, naming both files', False, out[-300:])
         got, out = load_out(w, 'big')
         check('a file of 20,000 computers is read in full', got is not None and len(got[1]) == 20000 and sum(1 for r in got[1] if r['status'] == 'act') == 13333, out[-300:])
     elif mode == 'forms':
         rows = form_rows(os.path.join(w, 'forms.tsv'))
         got, out = load_out(w, 'forms')
-        check('-Report reads every writer form without a refused request', got is not None and not refused(requests(w, 'requests-forms.log')), out[-300:])
+        check('the report reads every writer form, and -Export makes no refused request', got is not None and not refused(requests(w, 'requests-forms.log')), out[-300:])
         if got:
             by = got[2]
             for i, (st, label, value) in enumerate(rows):
@@ -843,7 +934,7 @@ def main():
                 check('writer form: %s' % label, r.get('status') == st, 'wanted %s, got %s (%s) for %s' % (st, r.get('status'), r.get('why'), value[:160]))
     elif mode == 'silent':
         got, out = load_out(w, 'silent')
-        check('-Report with a silent group saves its files', got is not None, out[-300:])
+        check('the report with a silent group saves its files', got is not None, out[-300:])
         if got:
             raw, rows, by, html = got
             names = [unquote_cell(r['pc']) for r in rows]
@@ -862,12 +953,12 @@ def main():
             check('no CSV cell of a silent PC starts with a formula character', not [c for r in csv.reader(raw.splitlines(True)) for c in r if formula(c)])
             check('a group with every PC listed has no could-not-list note', 'Could not list' not in html and 'Note:' not in out)
         sreqs = requests(w, 'requests-silent.log')
-        check('-Report follows every next-page link of the device list', len([r for r in sreqs if '/managedDevices' in r['path']]) == (len(SILENT_MANAGED) + 1) // 2)
-        check('-Report follows every next-page link of the group members', len([r for r in sreqs if 'transitiveMembers' in r['path']]) == (len(SILENT_MEMBERS) + 1) // 2)
+        check('-Export follows every next-page link of the device list', len([r for r in sreqs if '/managedDevices' in r['path']]) == (len(SILENT_MANAGED) + 1) // 2)
+        check('-Export follows every next-page link of the group members', len([r for r in sreqs if 'transitiveMembers' in r['path']]) == (len(SILENT_MEMBERS) + 1) // 2)
         allreqs = [r for t in SILENT_TENANTS for r in requests(w, 'requests-%s.log' % t)]
-        check('-Report with any assignment changes nothing in Intune', not [r for r in allreqs if r['method'] != 'GET'])
+        check('-Export with any assignment changes nothing in Intune', not [r for r in allreqs if r['method'] != 'GET'])
         bad = [(t, refused(requests(w, 'requests-%s.log' % t))) for t in SILENT_TENANTS if t not in ('membererror', 'exclerror')]
-        check('-Report makes no request the stand-in refuses, whatever the assignment', not [b for b in bad if b[1]], bad)
+        check('-Export makes no request the stand-in refuses, whatever the assignment', not [b for b in bad if b[1]], bad)
         def names_of(t):
             g, _ = load_out(w, t); return sorted(g[2]) if g else None
         got, out = load_out(w, 'usergroup')
@@ -894,8 +985,9 @@ def main():
               and 'Could not read the members of exclusion group g-excl' in got[3] and 'may in fact be excluded' in got[3]
               and 'PC-SILENT-2' in got[2], out)
         got, out = load_out(w, 'nodeviceid')
-        check('PCs sent without their device id are counted and Device.Read.All is named', got is not None
-              and 'Could not read 6 PCs in group g-eng. Allow Device.Read.All' in got[3] and sorted(got[2]) == ['PC-HASROW'], out)
+        check('PCs sent without their device id are counted, and the note names the tool and the command to run again', got is not None
+              and 'Could not read 6 PCs in group g-eng. Allow Device.Read.All for gird-intune.ps1 and run gird-intune.ps1 -Export again.' in got[3]
+              and '-Report' not in got[3] and sorted(got[2]) == ['PC-HASROW'], out)
         got, out = load_out(w, 'exclhidden')
         check('an exclusion group PC sent without its device id says a PC listed may in fact be excluded', got is not None
               and 'Could not read 1 PC in exclusion group g-excl' in got[3] and 'may in fact be excluded' in got[3], out)

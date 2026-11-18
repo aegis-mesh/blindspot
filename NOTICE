@@ -12,4 +12,10 @@ The MITRE Corporation (MITRE) hereby grants you a non-exclusive, royalty-free li
 MITRE ATT&CK and ATT&CK are registered trademarks of The MITRE Corporation.
 
 MITRE ATLAS release 2026.10 (https://atlas.mitre.org):
-Copyright 2021-2026 MITRE. Licensed under the Apache License, Version 2.0.
+Copyright 2021-2026 MITRE. Licensed under the Apache License, Version 2.0; the text of that licence is
+in LICENSE (http://www.apache.org/licenses/LICENSE-2.0).
+Changed by Blindspot: data/mitre.tsv, and the table tools/gen.sh writes from it into gird-report.ps1,
+hold only the technique ids, names and tactics of the ATLAS techniques Blindspot maps, one line per
+kind of finding, with Blindspot's own mapping added. Nothing else from ATLAS is included.
+ATLAS's terms of use (https://atlas.mitre.org/terms) add: This project makes use of MITRE ATT&CK®.
+ATT&CK® Terms of Use - https://attack.mitre.org/resources/terms-of-use/
