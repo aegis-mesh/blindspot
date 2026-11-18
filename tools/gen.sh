@@ -10,8 +10,12 @@
 # (data/bad-extensions.tsv) and variables that move an agent's or a tool's folders
 # (data/folder-vars.tsv). The scripts stay single files people can download and check.
 #
-#   bash tools/gen.sh           rewrite the blocks
-#   bash tools/gen.sh --check   exit 1 if a block differs from the data files
+#   bash tools/gen.sh           rewrite the blocks, and build blindspot-fleet.ps1
+#   bash tools/gen.sh --check   exit 1 if a block differs from the data files, or blindspot-fleet.ps1
+#                               would not be under 200 KB or is not what gen.sh builds
+#
+# Building blindspot-fleet.ps1 needs PowerShell: pwsh on PATH, or PWSH=/path/to/pwsh. Without it the
+# blocks are still written or checked, and the exit code is 3 when they are right.
 set -eu
 cd "$(dirname "$0")/.."
 CHECK=0; [ "${1:-}" = --check ] && CHECK=1
@@ -469,21 +473,39 @@ for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1; do
 done
 
 # --- blindspot-fleet.ps1, the one file an MDM runs ------------------------------
-# gird-fleet.ps1 with gird-check.ps1 packed inside it, gzip-compressed and base64-encoded, and its
-# SHA-256. Built from the files as they are here and never checked in: tools/gen.sh builds it for each
-# release. Intune takes a script of under 200 KB, so --check builds it and fails at 200 KB or more,
-# or when the check it unpacks is not gird-check.ps1 byte for byte.
+# gird-fleet.ps1 with gird-check.ps1 packed inside it, without its comments (tools/strip-comments.ps1,
+# which needs PowerShell), gzip-compressed and base64-encoded, and the SHA-256 of that copy. Built from
+# the files as they are here and never checked in: tools/gen.sh builds it for each release. Intune
+# takes a script of under 200 KB, so --check builds it and fails at 200 KB or more, or when the check
+# it unpacks is not gird-check.ps1 without its comments byte for byte. A blindspot-fleet.ps1 already
+# here must be that build too, apart from how gzip compressed it.
+PWSH=${PWSH:-$(command -v pwsh 2> /dev/null || true)}
+if [ -z "$PWSH" ] || [ ! -x "$PWSH" ]; then
+  echo "blindspot-fleet.ps1 not built: removing gird-check.ps1's comments needs PowerShell. Put pwsh on PATH or set PWSH=/path/to/pwsh." >&2
+  [ "$RC" -eq 0 ] && RC=3
+  exit "$RC"
+fi
 if command -v sha256sum > /dev/null 2>&1; then sha() { sha256sum | cut -c1-64; }; else sha() { shasum -a 256 | cut -c1-64; }; fi
-gzip -9 -n -c < gird-check.ps1 | base64 | tr -d '\n\r' > "$WORK/packed.b64"
-_sha=$(sha < gird-check.ps1)
-{ printf '# >>> packed-check: gird-check.ps1, written into blindspot-fleet.ps1 by tools/gen.sh.\n'
+if ! "$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 gird-check.ps1 "$WORK/stripped.ps1" > /dev/null; then
+  echo "blindspot-fleet.ps1 not built: tools/strip-comments.ps1 could not remove gird-check.ps1's comments"; exit 1
+fi
+gzip -9 -n -c < "$WORK/stripped.ps1" | base64 | tr -d '\n\r' > "$WORK/packed.b64"
+_sha=$(sha < "$WORK/stripped.ps1")
+{ printf '# >>> packed-check: gird-check.ps1 without its comments, written into blindspot-fleet.ps1 by tools/gen.sh.\n'
   printf '$PackedCheck = \047%s\047\n' "$(cat "$WORK/packed.b64")"
   printf '$PackedSha = \047%s\047\n# <<< packed-check\n' "$_sha"; } > "$WORK/packed-check.ps1"
 splice gird-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/blindspot-fleet.ps1" || exit 1
 _sz=$(wc -c < "$WORK/blindspot-fleet.ps1" | tr -d ' ')
 if [ "$_sz" -ge 204800 ]; then echo "blindspot-fleet.ps1 is $_sz bytes: Intune takes a script of under 200 KB (204,800 bytes)"; RC=1; fi
 if [ "$_sz" -lt 204800 ] && [ "$_sz" -ge 184320 ]; then echo "warning: blindspot-fleet.ps1 is $_sz bytes, past 90% of the 204,800 Intune takes"; fi
-_back=$(base64 -d < "$WORK/packed.b64" 2>/dev/null | gzip -dc | sha)
-if [ "$_back" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1"; RC=1; fi
+unpacked() { sed -n "s|^\\\$PackedCheck = '\\([A-Za-z0-9+/=]*\\)'\$|\\1|p" "$1" | base64 -d 2> /dev/null | gzip -dc 2> /dev/null | sha; }
+if [ "$(unpacked "$WORK/blindspot-fleet.ps1")" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1 without its comments"; RC=1; fi
+if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.ps1 ]; then
+  splice blindspot-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/here.ps1" 2> /dev/null || : > "$WORK/here.ps1"
+  if ! cmp -s "$WORK/here.ps1" "$WORK/blindspot-fleet.ps1" || [ "$(unpacked blindspot-fleet.ps1)" != "$_sha" ] ||
+     ! grep -qx "\\\$PackedSha = '$_sha'" blindspot-fleet.ps1; then
+    echo "blindspot-fleet.ps1 is out of date with gird-fleet.ps1 and gird-check.ps1, or was edited: run bash tools/gen.sh"; RC=1
+  fi
+fi
 if [ "$CHECK" -eq 0 ] && [ "$RC" -eq 0 ] && ! cmp -s "$WORK/blindspot-fleet.ps1" blindspot-fleet.ps1; then cat "$WORK/blindspot-fleet.ps1" > blindspot-fleet.ps1; echo "built blindspot-fleet.ps1 ($_sz bytes)"; fi
 exit "$RC"

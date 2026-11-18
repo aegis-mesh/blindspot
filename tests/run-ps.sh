@@ -3957,20 +3957,95 @@ has    "fleet: a Git Bash profile that moves an agent's folders counts too" "^$F
 
 # blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
 mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf/"
-if (cd "$FW/bf" && bash tools/gen.sh > /dev/null 2>&1) && [ -f "$FW/bf/blindspot-fleet.ps1" ] && [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 204800 ]; then ok "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ') bytes"
+if (cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh > /dev/null 2>&1) && [ -f "$FW/bf/blindspot-fleet.ps1" ] && [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 204800 ]; then ok "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ') bytes"
 else bad "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" 2>/dev/null)"; fi
 fw_home bfh; mkdir -p "$FW/bfrun"; cp "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/"
 FW_SCRIPT="$FW/bfrun/blindspot-fleet.ps1" fw_run bfrun "$FW/bfh"
 _v=$(sed -n 's/^script=//p' "$FW/bfrun.flat")
-if [ -n "$_v" ] && cmp -s "$FW/bfh/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && grep -q '^outcome=clear$' "$FW/bfrun.flat"; then ok "fleet: and the check it unpacks and runs is gird-check.ps1, byte for byte"; else bad "fleet: and the check it unpacks and runs is gird-check.ps1, byte for byte" "$(head -n 3 "$FW/bfrun.flat")"; fi
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SCRIPT" "$FW/bf/stripped.ps1" > /dev/null 2>&1
+if [ -n "$_v" ] && [ -s "$FW/bf/stripped.ps1" ] && cmp -s "$FW/bfh/AppData/Local/Blindspot/$_v/gird-check.ps1" "$FW/bf/stripped.ps1" && grep -q '^outcome=clear$' "$FW/bfrun.flat"; then ok "fleet: and the check it unpacks and runs is gird-check.ps1 without its comments, byte for byte"
+else bad "fleet: and the check it unpacks and runs is gird-check.ps1 without its comments, byte for byte" "$(head -n 3 "$FW/bfrun.flat")"; fi
 sed "s/^\\\$PackedSha = '[0-9a-f]*'\$/\$PackedSha = '$(printf '0%.0s' $(seq 64))'/" "$FW/bf/blindspot-fleet.ps1" > "$FW/bfrun/blindspot-bad.ps1"
 fw_home bfbad; : > "$FW/argv.log"
 FW_SCRIPT="$FW/bfrun/blindspot-bad.ps1" fw_run bfbad "$FW/bfbad"
 if ! cmp -s "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/blindspot-bad.ps1" && grep -qE ' reason=unpack \| ' "$FW/bfbad.out" && [ ! -s "$FW/argv.log" ]; then ok "fleet: a packed check whose SHA-256 differs is never started, reason=unpack"
 else bad "fleet: a packed check whose SHA-256 differs is never started, reason=unpack" "$(cat "$FW/bfbad.out" "$FW/argv.log")"; fi
-(cd "$FW/bf" && bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1)
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1)
 if [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -ge 184320 ] && grep -q 'past 90% of the 204,800' "$FW/bf-check.log" || { [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 184320 ] && ! grep -q 'past 90%' "$FW/bf-check.log"; }
 then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB"; else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "$(cat "$FW/bf-check.log")"; fi
+# blindspot-fleet.ps1 packs gird-check.ps1 without its comments (tools/strip-comments.ps1): it must
+# parse and run as gird-check.ps1 does, and nothing but comments may go.
+SC=$WORK/strip; mkdir -p "$SC"
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SCRIPT" "$SC/check.ps1" > "$SC/sha.txt" 2> "$SC/err.txt"; _rc=$?
+"$PWSH" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$SC/check.ps1', [ref]\$null, [ref]\$e); \$e.Count" > "$SC/parse.txt" 2>&1
+if [ "$_rc" -eq 0 ] && [ -s "$SC/check.ps1" ] && [ "$(cat "$SC/parse.txt")" = 0 ] && [ "$(wc -c < "$SC/check.ps1")" -lt "$(wc -c < "$SCRIPT")" ]; then ok "strip-comments: gird-check.ps1 without its comments parses" "$(wc -c < "$SC/check.ps1" | tr -d ' ') bytes"
+else bad "strip-comments: gird-check.ps1 without its comments parses" "exit $_rc, $(cat "$SC/err.txt" "$SC/parse.txt" | head -n 3)"; fi
+psrun "$WORK/home" -- -AccountRun > "$SC/ar-orig.txt" 2> /dev/null
+SCRIPT="$SC/check.ps1" psrun "$WORK/home" -- -AccountRun > "$SC/ar-strip.txt" 2> /dev/null
+if grep -qE '^key_files=[1-9]' "$SC/ar-orig.txt" && cmp -s "$SC/ar-orig.txt" "$SC/ar-strip.txt"; then ok "strip-comments: without its comments, -AccountRun prints the same lines"
+else bad "strip-comments: without its comments, -AccountRun prints the same lines" "$(diff "$SC/ar-orig.txt" "$SC/ar-strip.txt" | head -n 4)"; fi
+for _fx in home clean; do
+  psrun "$WORK/$_fx" -- -Offline -Full -NoColor > "$SC/full-orig-$_fx.txt" 2>&1
+  SCRIPT="$SC/check.ps1" psrun "$WORK/$_fx" -- -Offline -Full -NoColor > "$SC/full-strip-$_fx.txt" 2>&1
+done
+if [ -s "$SC/full-orig-home.txt" ] && cmp -s "$SC/full-orig-home.txt" "$SC/full-strip-home.txt" && cmp -s "$SC/full-orig-clean.txt" "$SC/full-strip-clean.txt"; then ok "strip-comments: without its comments, the -Offline -Full report is the same"
+else bad "strip-comments: without its comments, the -Offline -Full report is the same" "$(diff "$SC/full-orig-home.txt" "$SC/full-strip-home.txt" | head -n 4; diff "$SC/full-orig-clean.txt" "$SC/full-strip-clean.txt" | head -n 4)"; fi
+# gird-check.ps1's strings, here-strings and tables, token for token: every token but comments and blank lines.
+"$PWSH" -NoProfile -NonInteractive -Command "foreach (\$p in @(@('$SCRIPT', '$SC/orig.tokens'), @('$SC/check.ps1', '$SC/strip.tokens'))) { \$t = \$null; [void][Management.Automation.Language.Parser]::ParseFile(\$p[0], [ref]\$t, [ref]\$null)
+  [IO.File]::WriteAllLines(\$p[1], [string[]]@(\$t | Where-Object { \$_.Kind -ne 'Comment' -and \$_.Kind -ne 'NewLine' } | ForEach-Object { \"\$(\$_.Kind) \$(\$_.Text)\" })) }" > /dev/null 2>&1
+if [ -s "$SC/orig.tokens" ] && cmp -s "$SC/orig.tokens" "$SC/strip.tokens" && grep -q '^HereString' "$SC/orig.tokens"; then ok "strip-comments: gird-check.ps1's strings, here-strings and tables are unchanged token for token" "$(grep -c '' "$SC/orig.tokens") lines"
+else bad "strip-comments: gird-check.ps1's strings, here-strings and tables are unchanged token for token" "$(diff "$SC/orig.tokens" "$SC/strip.tokens" 2>&1 | head -n 4)"; fi
+# A small script: a # in a string, a here-string and a regex, comments of every kind, a <# inside a
+# word (an argument, not a comment), #requires, and a line continued with a backtick before a comment line.
+cat > "$SC/t.ps1" <<'PS'
+<#
+The header stays.
+#>
+$a = 'single # quoted'   # end of line
+$b = "double # $a"
+# a whole line
+$c = @'
+# in a here-string
+'@
+$d = @"
+# in an expandable here-string: $b
+"@
+<# a block
+   of two lines #>
+#requires -Version 5.1
+$e = 'x#1' -match '^x#\d$'
+$f = [regex]::Replace('a#b', '#', '-')
+Write-Output $a $b $c $d $e $f<#in a word#>'next'
+Write-Output 'x'<#gone#>'y' <#gone too#> 'z'
+Write-Output one `
+  two
+Write-Output three `
+# after a continuation
+'four'
+PS
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SC/t.ps1" "$SC/t-strip.ps1" > /dev/null 2> "$SC/t-err.txt"; _rc=$?
+"$PWSH" -NoProfile -NonInteractive -File "$SC/t.ps1" > "$SC/t-orig.out" 2>&1
+"$PWSH" -NoProfile -NonInteractive -File "$SC/t-strip.ps1" > "$SC/t-strip.out" 2>&1
+if [ "$_rc" -eq 0 ] && grep -qF -- "'single # quoted'" "$SC/t-strip.ps1" && grep -qxF -- '# in a here-string' "$SC/t-strip.ps1" && grep -qxF -- '# in an expandable here-string: $b' "$SC/t-strip.ps1" \
+  && grep -qF -- "'^x#\\d\$'" "$SC/t-strip.ps1" && grep -qF -- "'a#b', '#'" "$SC/t-strip.ps1" && grep -qF 'The header stays.' "$SC/t-strip.ps1" \
+  && grep -qF "\$f<#in a word#>'next'" "$SC/t-strip.ps1" \
+  && ! grep -qE 'end of line|a whole line|a block|of two lines|gone|after a continuation' "$SC/t-strip.ps1" && [ -s "$SC/t-orig.out" ] && cmp -s "$SC/t-orig.out" "$SC/t-strip.out"
+then ok "strip-comments: a # in a string, a here-string or a regex stays, and the script runs the same"
+else bad "strip-comments: a # in a string, a here-string or a regex stays, and the script runs the same" "exit $_rc $(cat "$SC/t-err.txt"; diff "$SC/t-orig.out" "$SC/t-strip.out" | head -n 4)"; fi
+if grep -qx '#requires -Version 5.1' "$SC/t-strip.ps1"; then ok "strip-comments: #requires is kept"; else bad "strip-comments: #requires is kept" "$(head -n 20 "$SC/t-strip.ps1")"; fi
+# The SHA-256 blindspot-fleet.ps1 checks before every start is that copy's, as the tool prints it.
+_ps=$(sed -n "s/^\\\$PackedSha = '\\([0-9a-f]*\\)'\$/\\1/p" "$FW/bf/blindspot-fleet.ps1")
+if [ -n "$_ps" ] && [ "$_ps" = "$(cat "$SC/sha.txt")" ] && [ "$_ps" = "$( (shasum -a 256 "$SC/check.ps1" 2> /dev/null || sha256sum "$SC/check.ps1") | cut -c1-64)" ]; then ok "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments"
+else bad "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments" "packed '$_ps', tool '$(cat "$SC/sha.txt")'"; fi
+# A packed copy edited by hand, its SHA-256 left as built, fails --check.
+{ cat "$SC/check.ps1"; printf 'Write-Output edited\n'; } | gzip -9 -n -c | base64 | tr -d '\n\r' > "$SC/edited.b64"
+cp "$FW/bf/blindspot-fleet.ps1" "$SC/built.ps1"
+sed "s|^\\\$PackedCheck = '[A-Za-z0-9+/=]*'\$|\$PackedCheck = '$(sed 's/[|&]/\\&/g' "$SC/edited.b64")'|" "$SC/built.ps1" > "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/edited-check.log" 2>&1); _rc=$?
+cp "$SC/built.ps1" "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/built-check.log" 2>&1); _rc2=$?
+if [ "$_rc" -ne 0 ] && grep -q 'blindspot-fleet.ps1 is out of date .* or was edited' "$SC/edited-check.log" && [ "$_rc2" -eq 0 ]; then ok "fleet: a hand-edited packed copy fails tools/gen.sh --check"
+else bad "fleet: a hand-edited packed copy fails tools/gen.sh --check" "edited: exit $_rc $(head -n 2 "$SC/edited-check.log"); as built: exit $_rc2 $(head -n 2 "$SC/built-check.log")"; fi
 
 # Refusals, and the rules a reader checks in the file itself.
 fw_run all "$FW/clean" -- --all

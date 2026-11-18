@@ -284,9 +284,10 @@ PC, so an admin can see what one run left out.
 - `gird-fleet.ps1` is new. It starts the account run, checks every line it sends back, and builds
   the result. It holds every fleet option. `gird-check.ps1` holds none.
 - `blindspot-fleet.ps1` is the one file an MDM runs. `tools/gen.sh` builds it for each release:
-  `gird-fleet.ps1` with `gird-check.ps1` packed inside it, compressed, and the SHA-256 of
-  `gird-check.ps1` written next to it. It is under 200 KB, the largest script Intune accepts, and
-  `tools/gen.sh --check` fails if it grows past that.
+  `gird-fleet.ps1` with `gird-check.ps1` packed inside it, without its comments and compressed,
+  and the SHA-256 of that copy written next to it. It is under 200 KB, the largest script Intune
+  accepts. `tools/gen.sh --check` fails if it grows past that and warns past 90%. See "The check a
+  PC runs" below.
 - `gird-intune.ps1` is the admin's tool for Microsoft Intune. It runs on the admin's own PC, never
   on the fleet.
 
@@ -305,6 +306,44 @@ Only that person, administrators and SYSTEM can write in the profile, so a stand
 shared PC cannot change the code another account's check runs.
 
 `%ProgramData%` is not used: any account can create a folder there first and keep control of it.
+
+### The check a PC runs
+
+The check a PC runs is `gird-check.ps1` without its comments. `blindspot-fleet.ps1` must stay under
+Intune's 200 KB, and `gird-check.ps1` grows with every check. Without its comments the packed copy is
+about a quarter smaller, which keeps the whole file well under that. Nothing else changes: the
+header at the top of the file is kept, because `-Help` prints it and `gird-fleet.ps1` reads the
+version from it, and so is any `#requires` line.
+
+`tools/strip-comments.ps1` makes the copy. It finds comments with PowerShell's own parser, so a `#`
+inside a string, a here-string or a regex is never touched. A comment at the end of a line goes,
+with the spaces before it. One between two pieces of code on a line becomes a space, so the two
+never join. A line left empty is dropped, unless the line before it ends with a backtick that
+carries it on to the next. The copy is then parsed again, and is written only if it has no errors,
+the same code word for word apart from comments and blank lines, the same structure, and the same
+`#requires`. A script that is signed, or has help comments outside its header, is refused.
+
+Anyone can check that the SHA-256 `blindspot-fleet.ps1` carries (`$PackedSha`) comes from the
+published `gird-check.ps1`. With both files from the same release, this prints that SHA-256:
+
+```
+pwsh -NoProfile -File tools/strip-comments.ps1 gird-check.ps1
+```
+
+On Windows PowerShell 5.1: `powershell -NoProfile -ExecutionPolicy Bypass -File
+tools\strip-comments.ps1 gird-check.ps1`. Adding a second path also writes the copy there.
+
+The SHA-256 is the same on every machine that builds it. The packed text in `$PackedCheck` may not
+be: gzip programs compress the same file differently. That is why `--check` compares what it
+unpacks to, not the packed text.
+
+Building `blindspot-fleet.ps1` needs PowerShell: `tools/gen.sh` uses `pwsh` on the PATH, or
+`PWSH=/path/to/pwsh`. Without it, `tools/gen.sh` still writes and checks the generated blocks,
+says that `blindspot-fleet.ps1` was not built, and exits with code 3.
+
+`gird-fleet.ps1`, the rest of `blindspot-fleet.ps1`, keeps its comments. It is the part an admin
+reads in Intune before deploying it, and without them it would be about 5.8 KB smaller, 3% of the
+limit.
 
 ### How a run goes
 
@@ -446,7 +485,13 @@ Graph, never a real tenant.
 - Output for another account, a forged machine section, oversized output or a malformed line:
   the account is `not_checked`.
 - An unpacked check whose SHA-256 differs is written again before it runs.
-- `blindspot-fleet.ps1` is under 200 KB, and the check it unpacks is `gird-check.ps1`, byte for byte.
+- `blindspot-fleet.ps1` is under 200 KB, the check it unpacks is `gird-check.ps1` without its
+  comments, byte for byte, and the SHA-256 it carries is that copy's. A packed copy edited by hand
+  fails `tools/gen.sh --check`.
+- `gird-check.ps1` without its comments parses, prints the same `-AccountRun` lines and the same
+  `-Offline -Full` report for the suites' fixtures, and has the same strings, here-strings and
+  tables, token for token. In a small script, a `#` in a string, a here-string and a regex stays,
+  `#requires` stays, and the script prints the same.
 - An account run that outlives its time limit is stopped, with everything it started, and the
   account is partly checked. A process still running after the stop is reported.
 - No network request, no browser, no saved report.

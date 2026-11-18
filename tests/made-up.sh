@@ -37,7 +37,8 @@ printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >
 printf 'Made Agent\tall\t~/.madeagent/profiles/*/config.json\tmadeMode profile\t"made": "profile"\n' >> "$R/data/auto-approve.tsv"
 printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\nmadetool\tMade Tool\tall\tnpm\tmade-tool\t<3.0.0\ta second made-up hole\thttps://example.com/madetool2\n' >> "$R/data/outdated.tsv"
 printf 'made.ext\t1.0.0\tmadeext\tany\tall\nmade.winext\t2.0.0\tmadeext\tany\twin\n' >> "$R/data/bad-extensions.tsv"
-bash "$R/tools/gen.sh" > /dev/null
+# Exit code 3: the blocks were written, and blindspot-fleet.ps1 was not built for want of PowerShell.
+bash "$R/tools/gen.sh" > /dev/null 2> "$R/gen-err.txt" || { _r=$?; [ "$_r" -eq 3 ] || { cat "$R/gen-err.txt" >&2; exit 1; }; }
 # Outside the generated blocks, both scripts are unchanged.
 for s in gird-check.sh gird-check.ps1; do
   if ! cmp -s <(awk '/^# >>> /{skip=1} !skip{print} /^# <<< /{skip=0}' "$s") <(awk '/^# >>> /{skip=1} !skip{print} /^# <<< /{skip=0}' "$R/$s"); then

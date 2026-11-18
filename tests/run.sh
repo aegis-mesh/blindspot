@@ -79,7 +79,9 @@ done
 PFX=""
 
 echo "data files"
-if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
+# Exit code 3: the blocks match, and blindspot-fleet.ps1 was not built for want of PowerShell; tests/run-ps.sh checks it.
+bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; _rc=$?
+if [ "$_rc" -eq 0 ] || [ "$_rc" -eq 3 ]; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
 # BusyBox awk (Alpine) refuses ++ or -- on a field, and an awk that fails prints nothing: a row list
 # rewritten through it would come back empty.
 if grep -nE '\$([0-9]+|NF)(\+\+|--)' gird-check.sh gird-fleet.sh > "$WORK/inc.txt"; then bad "no ++ or -- on an awk field, which BusyBox refuses" "$(head -n 3 "$WORK/inc.txt" | tr '\n' '|')"
