@@ -114,6 +114,7 @@ FORMS += [
     ('review', 'gird-fleet.ps1 every review item', _ps(' | ' + REVIEW_PS, 'review')),
     ('not_checked', 'gird-fleet.ps1 partly checked', _ps(' | anna: not_checked ssh-open 1; partial')),
     ('not_checked', 'gird-fleet.ps1 partly checked, nothing else', _ps(' | anna: not_checked partial')),
+    ('act', 'gird-fleet.ps1 act and partly checked', _ps(' | anna: act keys 1; partial', 'act')),
     ('act', 'gird-fleet.ps1 machine incident', _ps(' | anna: clear | machine: act incidents mastra', 'act')),
     ('review', 'gird-fleet.ps1 machine possible sign', _ps(' | anna: clear | machine: review; possible mastra', 'review')),
     ('act', 'gird-fleet.ps1 machine incident and possible sign', _ps(' | anna: review ssh-open 1 | machine: act incidents mastra; possible mastra', 'act')),
@@ -131,6 +132,7 @@ for r in ('name', 'no_login_shell', 'home_missing', 'home_link', 'home_owner', '
     who = 'invalid-name' if r == 'name' else 'bo'
     FORMS.append(('not_checked', 'gird-fleet.sh account %s' % r, 'v1 not_checked %s | asha: clear | %s: not_checked %s' % (T0, who, r)))
 FORMS += [
+    ('act', 'gird-fleet.sh act and partly checked', 'v1 act %s | asha: act sessions 1; partial | bo: clear' % T0),
     ('failed', 'gird-fleet.sh copy changed', 'v1 failed %s | asha: act keys 1 | bo: not_checked copy_changed' % T0),
     ('not_checked', 'gird-fleet.sh no accounts', 'v1 not_checked %s | no accounts' % T0),
     ('not_checked', 'gird-fleet.sh machine and no accounts', 'v1 not_checked %s | machine: review; possible litellm; tmp-wiper | no accounts' % T0),
@@ -225,14 +227,15 @@ JAMF = [
     ('MAC-LONG', 'v1 act %s | asha: act incidents %s' % (T0, ','.join(['tanstack'] * 40)), 'not_checked'),
     ('MAC-NEWLINE', 'v1 clear %s | asha: clear\nv1 act %s | asha: act keys 1' % (T0, T0), 'not_checked'),
     ('MAC-SUMMARY', 'blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:12:00Z', 'not_checked'),
-    ('MAC-DUP', 'v1 clear %s | asha: clear' % T0, 'not_checked'),
-    ('mac-dup', 'v1 act %s | asha: act keys 1' % T0, 'not_checked'),
+    ('MAC-DUP', 'v1 clear %s | asha: clear' % T0, 'clear'),
+    ('mac-dup', 'v1 act %s | asha: act keys 1' % T0, 'act'),
     ('=cmd|calc', '=HYPERLINK("http://x","y")', 'not_checked'),
     (HOSTILE_NAME, 'v1 review %s | asha: review "quoted" <b>' % T0, 'not_checked'),
 ]
-# The statements of what could get out, for every way a result can be whole or not: (name, value, the
-# agent with a key in the same account, a key in agent sessions, a token in an MCP config). "no" needs
-# every account on the computer read in full; a "yes" found stands whatever else is missing.
+# The statements of what could get out, for every way a result can be whole or not, each a value a writer
+# writes: (name, value, the agent with a key in the same account, a key in agent sessions, a token in an
+# MCP config). "no" needs every account the result read to be read in full; a "yes" found stands whatever
+# else is missing. Other profiles on a PC are not in the result and leave "no" as it is.
 U = 'unknown'
 PATHS = [
     ('P-MAC-CLEAR', 'v1 clear %s | asha: clear | bo: clear' % T0, 'no', 'no', 'no'),
@@ -241,15 +244,20 @@ PATHS = [
     ('P-SPLIT', 'v1 act %s | asha: act keys 1 openai | bo: review run-without-asking codex' % T0, 'no', 'no', 'no'),
     ('P-AGENT-ONLY', 'v1 review %s | asha: review run-without-asking codex' % T0, 'no', 'no', 'no'),
     ('P-MACHINE-NC', 'v1 not_checked %s | asha: clear | machine: not_checked' % T0, 'no', 'no', 'no'),
-    ('P-OTHERS', _ps(' | eve: clear', 'clear', 3), U, U, U),
-    ('P-OTHERS-YES', _ps(' | anna: act run-without-asking claude-code; keys 1 aws; sessions 1', 'act', 2), 'yes', 'yes', U),
+    ('P-OTHERS', _ps(' | eve: clear', 'clear', 3), 'no', 'no', 'no'),
+    ('P-OTHERS-YES', _ps(' | anna: act run-without-asking claude-code; keys 1 aws; sessions 1', 'act', 2), 'yes', 'yes', 'no'),
     ('P-FAILED-SAVE', _ps(' reason=save | anna: act keys 1', 'failed'), U, U, U),
     ('P-FAILED-SAVE-YES', _ps(' reason=save | anna: act sessions 1', 'failed'), U, 'yes', U),
     ('P-FAILED-REASON', _ps(' reason=host_32bit | anna: not_checked host_32bit', 'failed'), U, U, U),
     ('P-FAILED-MAC', 'v1 failed %s | asha: clear | bo: not_checked copy_changed' % T0, U, U, U),
     ('P-FAILED-MAC-YES', 'v1 failed %s | asha: act mcp-tokens 1 | bo: not_checked copy_changed' % T0, U, U, 'yes'),
     ('P-PARTIAL', 'v1 not_checked %s | cy: not_checked ssh-open 1; partial | dee: clear' % T0, U, U, U),
-    ('P-PARTIAL-YES', 'v1 not_checked %s | cy: not_checked sessions 1; partial | dee: clear' % T0, U, U, U),
+    ('P-ACT-PARTIAL', 'v1 act %s | a: act keys 1; partial' % T0, U, U, U),
+    ('P-ACT-PARTIAL-AK', _ps(' | anna: act run-without-asking claude-code; keys 1 aws; partial', 'act'), 'yes', U, U),
+    ('P-ACT-PARTIAL-SE', 'v1 act %s | asha: act sessions 1; partial | bo: clear' % T0, U, 'yes', U),
+    ('P-ACT-PARTIAL-MCP', _ps(' | anna: act mcp-tokens 1; partial', 'act', 1), U, U, 'yes'),
+    ('P-ACT-OTHER-PARTIAL', 'v1 act %s | asha: act sessions 1 | bo: not_checked ssh-open 1; partial' % T0, U, 'yes', U),
+    ('P-ACT-NC-WORD', 'v1 act %s | asha: act keys 1 | bo: not_checked home_missing' % T0, U, U, U),
     ('P-NC-WORD', 'v1 not_checked %s | asha: clear | bo: not_checked home_missing' % T0, U, U, U),
     ('P-NC-WIN', _ps(' | anna: not_checked deadline'), U, U, U),
     ('P-NOACC', 'v1 not_checked %s | no accounts' % T0, U, U, U),
@@ -266,10 +274,27 @@ PATHS = [
     ('P-V2', 'v2 clear %s | asha: clear' % T0, U, U, U),
     ('P-NEWWORD', 'v1 act %s | asha: act keys 1; exfil 3' % T0, U, U, U),
     ('P-CUT', (_ps(' | anna: act sessions 1; ', 'act') + 'possible ' + ','.join(['tanstack'] * 400))[:2048], U, U, U),
-    ('P-TWICE', 'v1 clear %s | asha: clear' % T0, U, U, U),
-    ('P-TWICE', 'v1 act %s | asha: act sessions 1' % T0, U, U, U),
+    ('P-TWICE', 'v1 clear %s | asha: clear' % T0, 'no', 'no', 'no'),
+    ('P-TWICE', 'v1 act %s | asha: act sessions 1' % T0, 'no', 'yes', 'no'),
 ]
+# A fleet of Windows PCs where most have a second profile: (name, value)
+WINFLEET = [('W-%02d' % i, _ps(' | anna: clear', 'clear', 1 if i <= 7 else 0)) for i in range(1, 9)] + [
+    ('W-09', _ps(' | anna: act run-without-asking claude-code; keys 1 aws; sessions 1; mcp-tokens 1', 'act', 1)),
+    ('W-10', 'none'),
+    ('W-11', _ps(' | anna: act keys 1; partial', 'act')),
+]
+TOLD = at(hours=-5)
 def csv_cell(v): return '"' + v.replace('"', '""') + '"'
+CLR = 'v1 clear %s | asha: clear' % T0
+ACT = 'v1 act %s | asha: act keys 1' % T0
+DUPS = {
+    'dupa.csv': 'Computer Name,Serial Number,Blindspot\n' + ''.join('%s,%s,%s\n' % r for r in (
+        ('MAC-SAME', 'C1', CLR), ('MAC-NEW', 'C2', CLR.replace(T0, TOLD)), ('MAC-TIE', 'C3', CLR), ('', 'C9', ACT), ('', '', ACT), ('MAC-Z1', '00000000', CLR))),
+    'dupb.csv': 'Computer Name,Serial Number,Blindspot\n' + ''.join('%s,%s,%s\n' % r for r in (
+        ('mac-same', 'C1', ACT.replace(T0, TOLD)), ('MAC-NEW', 'C2', ACT), ('MAC-TIE', 'C3', ACT), ('', 'C9', CLR.replace(T0, TOLD)), ('', '', CLR), ('MAC-Z2', '00000000', CLR))),
+    'dupc.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\n' % CLR,
+    'dupd.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\n' % ACT,
+}
 def write_files(d):
     os.makedirs(d, exist_ok=True)
     rows = [['Computer Name', 'Serial Number', 'Blindspot', 'Last Inventory Update']]
@@ -295,16 +320,16 @@ def write_files(d):
         f.write('Device name,Result,Old result\nMAC-A,%s,none\nMAC-B,none,none\n' % MAC)
     with open(os.path.join(d, 'paths.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\r\n' + ''.join('%s,%s\r\n' % (csv_cell(n), csv_cell(v)) for n, v, _, _, _ in PATHS))
-    with open(os.path.join(d, 'dupa.csv'), 'w', newline='') as f:
-        f.write('Computer Name,Blindspot\nMAC-SAME,v1 clear %s | asha: clear\n,v1 act %s | asha: act keys 1\n' % (T0, T0))
-    with open(os.path.join(d, 'dupb.csv'), 'w', newline='') as f:
-        f.write('Computer Name,Blindspot\nmac-same,v1 clear %s | asha: clear\n,v1 clear %s | bo: clear\n' % (T0, T0))
+    for n, rows in DUPS.items():
+        with open(os.path.join(d, n), 'w', newline='') as f: f.write(rows)
+    with open(os.path.join(d, 'winfleet.csv'), 'w', newline='') as f:
+        f.write('Device name,Result\n' + ''.join('%s,%s\n' % (n, csv_cell(v)) for n, v in WINFLEET))
     with open(os.path.join(d, 'clearonly.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
     with open(os.path.join(d, 'locked.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
     with open(os.path.join(d, 'semicolon-utf8bom.csv'), 'w', encoding='utf-8-sig', newline='') as f:
-        f.write('Hostname;Serial;Blindspot\n' + ''.join('%s;C02X,1;"<result>%s</result>"\n' % r for r in two))
+        f.write('Hostname;Serial;Blindspot\n' + ''.join('%s;C02X,%d;"<result>%s</result>"\n' % (r[0], i, r[1]) for i, r in enumerate(two)))
     with open(os.path.join(d, 'noresult.csv'), 'w', newline='') as f:
         f.write('Computer Name,Serial Number,FileVault\nMAC-1,C02X1,On\nMAC-2,C02X2,none of it\n')
     open(os.path.join(d, 'empty.csv'), 'w').close()
@@ -646,6 +671,8 @@ def account(kind, flavour):
         a.update(possible='mastra', tmp_marks='mastra')
     elif kind == 'partial':
         a.update(sessions_partial='1', ssh_open='1', not_read='2')
+    elif kind == 'actpartial':
+        a.update(key_files='1', not_read='1')
     elif kind == 'huge':
         ids = [i for i, _ in incidents()][:40]; acts = [i for i, lv in incidents() if lv == 'act'][:40]
         a.update(wiper='1', incidents=' '.join(acts), lock_only=' '.join(ids), possible=' '.join(ids), remove=' '.join(ids),
@@ -681,9 +708,16 @@ def found_cell(html, label):
 def tech_row(html, tid): # (computers, exposure, indicator)
     m = re.search(r'<tr><td>[^<]*<span class="muted"><a href="[^"]*"[^>]*>%s</a></span></td><td>([^<]*)</td><td>([0-9]+)</td><td>([0-9]+)</td><td>([0-9]+)</td></tr>' % re.escape(tid), html)
     return tuple(int(x) for x in m.groups()[1:]) if m else None
-def path_line(html, text):
-    m = re.search(r'<li>%s: ([0-9]+) computers?\.(.*?) Not known for ([0-9]+) computers?\.</li>' % re.escape(text), html)
-    return (int(m.group(1)), m.group(2).strip(), int(m.group(3))) if m else None
+AK = 'An AI agent set to run commands without asking, with a key in plain text in the same account'
+SE = 'A key in an AI agent&#39;s saved session files'
+MC = 'A token written in an MCP server&#39;s config'
+def path_line(html, text): # (found, none found, not known, the rest of the line)
+    m = re.search(r'<li>%s: found on ([0-9]+) computers?, none found on ([0-9]+) computers?, not known for ([0-9]+) computers?\.(.*?)</li>' % re.escape(text), html)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4).strip()) if m else None
+def adds_up(html):
+    m = re.search(r'<b>([0-9]+)</b>Computers', html); n = int(m.group(1)) if m else -1
+    got = [path_line(html, t) for t in (AK, SE, MC)]
+    return n > 0 and all(g is not None and g[0] + g[1] + g[2] == n for g in got) and ('every one of the %d computers in this report once' % n) in html, (n, got)
 def tactics(html):
     i = html.find('<h2>What this report covers')
     return html[i:html.find('<b>What Blindspot does not look at', i)] if i >= 0 else ''
@@ -839,18 +873,17 @@ def main():
         check('a kind mapped to no technique shows no reference, and says why', n == 1 and cell.startswith('No MITRE reference: ') and 'href' not in cell and 'T1' not in cell, cell)
         check('a CSV row with no reference has none', 'T1698' in by['M-REVIEW']['mitre'] and 'AML.T0053' in by['M-REVIEW']['mitre'] and 'T1195' not in by['M-REVIEW']['mitre']
               and 'AML.T0081' not in by['M-REVIEW']['mitre'] and 'amazonq' not in by['M-REVIEW']['mitre'] and by['M-CLEAR']['mitre'] == '', (by['M-REVIEW']['mitre'], by['M-CLEAR']['mitre']))
-        check('the agent with a key statement counts what the fleet holds, providers too',
-              path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account')
-              == (2, 'Providers of those keys: anthropic (1 computer), aws (1 computer), not named in the result (1 computer).', 6),
-              path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account'))
+        others = '1 of the %d computers with none found also has other accounts that were not read.'
+        check('the agent with a key statement counts found, none found and not known, providers too',
+              path_line(html, AK) == (2, 4, 5, 'Providers of those keys: anthropic (1 computer), aws (1 computer), not named in the result (1 computer). ' + others % 4), path_line(html, AK))
         check('the agent and the key must be in the same account', by['M-MAC']['run_without_asking_and_key'] == 'no', by['M-MAC'])
-        check('the key in a session statement counts what the fleet holds', path_line(html, 'A key in an AI agent&#39;s saved session files') == (1, '', 6),
-              path_line(html, 'A key in an AI agent&#39;s saved session files'))
-        check('the token in an MCP config statement counts what the fleet holds', path_line(html, 'A token written in an MCP server&#39;s config') == (1, '', 6),
-              path_line(html, 'A token written in an MCP server&#39;s config'))
+        check('the key in a session statement counts found, none found and not known', path_line(html, SE) == (1, 5, 5, others % 5), path_line(html, SE))
+        check('the token in an MCP config statement counts found, none found and not known', path_line(html, MC) == (1, 5, 5, others % 5), path_line(html, MC))
+        check('each statement adds up to the computers in the report', adds_up(html)[0], adds_up(html)[1])
         unk = sorted(n for n, r in by.items() if r['key_in_agent_sessions'] == 'unknown')
-        check('a partly checked, cut, stale, cut-to-fit, silent or other-profiles PC is not known, never no', unk == ['M-CLEAR', 'M-CUT', 'M-EMPTY', 'M-MORE', 'M-PARTIAL', 'M-STALE'], unk)
-        check('a fully read PC with nothing is no', all(by[n]['key_in_agent_sessions'] == 'no' and by[n]['token_in_mcp_config'] == 'no' for n in ('M-MAC', 'M-REVIEW', 'M-WIPER', 'M-NOPROV')))
+        check('a partly checked, cut, stale, cut-to-fit or silent PC is not known, never no', unk == ['M-CUT', 'M-EMPTY', 'M-MORE', 'M-PARTIAL', 'M-STALE'], unk)
+        check('a fully read PC with nothing is no, other profiles on it or not', all(by[n]['key_in_agent_sessions'] == 'no' and by[n]['token_in_mcp_config'] == 'no' for n in ('M-MAC', 'M-REVIEW', 'M-WIPER', 'M-NOPROV', 'M-CLEAR')))
+        check('the wiper is labelled by what the result supports: its files or folders, not an install', 'Files or folders of the gh-token-monitor wiper' in html and 'installed' not in html)
         check('the CSV keeps its first columns and adds the new ones after them', raw.splitlines()[0].lstrip('\ufeff') ==
               '"pc","user","status","why","checked_at","details","intune_last_report","output","mitre","mitre_note","mitre_source","run_without_asking_and_key","run_without_asking_key_providers","key_in_agent_sessions","token_in_mcp_config","os","source","last_seen"',
               raw.splitlines()[0])
@@ -877,7 +910,8 @@ def main():
         check('a Mac result is shown as macOS, from its file', by['MAC-ACT']['os'] == 'macOS' and by['MAC-ACT']['source'] == 'jamf.csv' and 'jamf.csv (13)' in html, by['MAC-ACT'])
         check('the time the MDM last heard from it is kept', by['MAC-ACT']['last_seen'] == '2026-11-18 09:00:00' and by['MAC-ACT']['intune_last_report'] == '', by['MAC-ACT'])
         check('a Mac summary line says it names no findings', 'summary line' in by['MAC-SUMMARY']['why'], by['MAC-SUMMARY'])
-        check('a name given twice is listed twice, as not checked, and says so', all('appears 2 times' in by[n]['why'] for n in ('MAC-DUP', 'mac-dup')), (by['MAC-DUP'], by['mac-dup']))
+        check('a name given twice with two serial numbers is two computers, each read', by['MAC-DUP']['status'] == 'clear' and by['mac-dup']['status'] == 'act'
+              and '1 computer name appears more than once across the files. Each was counted separately; some may be the same computer.' in html, (by['MAC-DUP'], by['mac-dup']))
         check('a Mac wiper is an indicator of data destruction and is not said to be a launch agent', tech_row(html, 'T1543.001') is None and tech_row(html, 'T1485') == (1, 0, 1), (tech_row(html, 'T1543.001'), tech_row(html, 'T1485')))
         check('a Mac agent set to run without asking relates to ATLAS only', tech_row(html, 'AML.T0053') == (2, 2, 0) and tech_row(html, 'T1698') is None, tech_row(html, 'AML.T0053'))
         tc = tactics(html)
@@ -885,8 +919,8 @@ def main():
               'Credential Access' in tc and 'Impact' in tc and 'Initial Access' not in tc and 'Persistence' not in tc and 'Collection' not in tc, tc[:600])
         n, cell = found_cell(html, 'Malware markers in a shared folder')
         check('a Mac-only finding word shows its decision', n == 1 and cell.startswith('No MITRE reference: '), cell)
-        check('the path statements read Mac rows', path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account')
-              == (1, 'Providers of those keys: anthropic (1 computer), github (1 computer).', 10), path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account'))
+        check('the path statements read Mac rows', path_line(html, AK) == (1, 4, 8, 'Providers of those keys: anthropic (1 computer), github (1 computer).'), path_line(html, AK))
+        check('each statement adds up to the computers in the report, from a file too', adds_up(html)[0], adds_up(html)[1])
         check('the Windows one-account sentence is left out when no result is from Windows, and the Mac one is there',
               'Each Windows result covers one account' not in html and 'Each Mac result covers every local account' in html)
         check('hostile cells from the file are escaped in the HTML', '<script>alert' not in html and '"quoted" <b>' not in html and '&quot;quoted&quot; &lt;b&gt;' in html and '&lt;script&gt;alert(1)&lt;/script&gt;' in html)
@@ -907,20 +941,45 @@ def main():
         if got:
             by = {}
             for r in got[1]: by.setdefault(unquote_cell(r['pc']), []).append(r)
-            for n, v, ak, se, mc in PATHS:
-                rs = by.get(n, [])
-                got_ = sorted(set((r['run_without_asking_and_key'], r['key_in_agent_sessions'], r['token_in_mcp_config']) for r in rs))
-                check('what could get out, %s: %s, %s, %s' % (n, ak, se, mc), got_ == [(ak, se, mc)], (got_, v[:120]))
+            for n in sorted(set(x[0] for x in PATHS)):
+                want = sorted(set((ak, se, mc) for n_, v, ak, se, mc in PATHS if n_ == n))
+                got_ = sorted(set((r['run_without_asking_and_key'], r['key_in_agent_sessions'], r['token_in_mcp_config']) for r in by.get(n, [])))
+                check('what could get out, %s: %s' % (n, '; '.join(', '.join(w) for w in want)), got_ == want, (got_, [x[1][:120] for x in PATHS if x[0] == n]))
+            why = lambda n: by.get(n, [{}])[0].get('why', '')
+            check('an act result with an account partly checked says so', all('partly checked' in why(n) for n in ('P-ACT-PARTIAL', 'P-ACT-OTHER-PARTIAL', 'P-ACT-PARTIAL-SE')),
+                  [why(n) for n in ('P-ACT-PARTIAL', 'P-ACT-OTHER-PARTIAL', 'P-ACT-PARTIAL-SE')])
+            check('an act result with an account not checked says so', why('P-ACT-NC-WORD') == '1 account not checked', why('P-ACT-NC-WORD'))
+            check('two rows of one name and no device id are two computers', len(by.get('P-TWICE', [])) == 2, by.get('P-TWICE'))
+            check('the paths file adds up too', adds_up(got[3])[0], adds_up(got[3])[1])
         got, out = load_out(w, 'dup')
+        check('the files with device ids are read', got is not None, out[-300:])
         if got:
-            rows_ = got[1]
-            same = [r for r in rows_ if unquote_cell(r['pc']).lower() == 'mac-same']
-            check('one computer in two files is one computer: listed once, not checked, naming both files', len(rows_) == 3 and len(same) == 1
-                  and same[0]['status'] == 'not_checked' and 'appears 2 times' in same[0]['why'] and 'dupa.csv, dupb.csv' in same[0]['why']
-                  and '<b>3</b>Computers' in got[3] and 'Read 3 computers' in out, [(r['pc'], r['status'], r['source']) for r in rows_])
+            rows_, html = got[1], got[3]
+            st = lambda n: sorted((r['status'], r['source']) for r in rows_ if unquote_cell(r['pc']).lower() == n.lower())
+            check('one serial number in two files is one computer', len(rows_) == 8 and '<b>8</b>Computers' in html and 'Read 8 computers' in out, [(r['pc'], r['status'], r['source']) for r in rows_])
+            check('one computer in two files keeps the newer result, even when the older one has a finding', st('MAC-SAME') == [('clear', 'dupa.csv')], st('MAC-SAME'))
+            check('one computer in two files keeps the newer result', st('MAC-NEW') == [('act', 'dupb.csv')], st('MAC-NEW'))
+            check('one computer in two files with results of the same date keeps the one that needs more attention', st('MAC-TIE') == [('act', 'dupb.csv')], st('MAC-TIE'))
             unnamed = sorted((r['source'], r['status']) for r in rows_ if r['pc'].startswith('(name not given)'))
-            check('two rows with no name and the same row number in two files are two computers, each read', unnamed == [('dupa.csv', 'act'), ('dupb.csv', 'clear')], unnamed)
-        else: check('one computer in two files is one computer: listed once, not checked, naming both files', False, out[-300:])
+            check('two rows with no name and one serial number are one computer; with none, each is its own', unnamed == [('dupa.csv', 'act'), ('dupa.csv', 'act'), ('dupb.csv', 'clear')], unnamed)
+            check('a placeholder serial number of zeros joins no computers', st('MAC-Z1') == [('clear', 'dupa.csv')] and st('MAC-Z2') == [('clear', 'dupb.csv')], (st('MAC-Z1'), st('MAC-Z2')))
+            check('the limits say how many computers were listed more than once with one device id',
+                  '4 computers are listed more than once with the same device identifier. Each is counted once, from its newest result' in html and 'computer name appears' not in html, re.findall(r'<li>[^<]*(?:identifier|name)[^<]*</li>', html))
+        got, out = load_out(w, 'dupnoid')
+        check('one name in two files with no device id is two computers, and the finding shows', got is not None and sorted(r['status'] for r in got[1]) == ['act', 'clear']
+              and '<td>Keys in plain text</td><td>1</td>' in got[3] and '<b>2</b>Computers' in got[3]
+              and '<li>1 computer name appears more than once across the files. Each was counted separately; some may be the same computer.</li>' in got[3], out[-300:])
+        got, out = load_out(w, 'winfleet')
+        check('a Windows fleet with second profiles is read', got is not None, out[-300:])
+        if got:
+            html = got[3]
+            o = ' 7 of the 8 computers with none found also have other accounts that were not read.'
+            check('a Windows fleet where most PCs have a second profile reads none found for the accounts read, and says how many have others',
+                  path_line(html, AK) == (1, 8, 2, 'Providers of those keys: aws (1 computer).' + o) and path_line(html, SE) == (1, 8, 2, o.strip()) and path_line(html, MC) == (1, 8, 2, o.strip()),
+                  [path_line(html, t) for t in (AK, SE, MC)])
+            check('a Windows fleet adds up', adds_up(html)[0], adds_up(html)[1])
+            check('a PC whose one account is act and partly checked is counted as partly checked in the limits, and says why',
+                  '<li>1 computer failed or were partly checked but sent a result' in html and 'partly checked' in got[2].get('W-11', {}).get('why', ''), (got[2].get('W-11'), re.findall(r'<li>[^<]*partly[^<]*</li>', html)))
         got, out = load_out(w, 'big')
         check('a file of 20,000 computers is read in full', got is not None and len(got[1]) == 20000 and sum(1 for r in got[1] if r['status'] == 'act') == 13333, out[-300:])
     elif mode == 'forms':

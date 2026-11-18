@@ -72,19 +72,31 @@ settings as well as ones that came in a cloned project.
 - What could get out: the PCs where an AI agent set to run commands without asking and a key in
   plain text are in the same account (with the providers the value names), the PCs with a key in an
   agent's session files, and the PCs with a token in an MCP config. Each counts what was found, never
-  what happened. A PC is no only when every account on it was read in full. Yes stands once it is
-  found; otherwise these are not known, never no:
+  what happened. For each statement every computer in the report is exactly one of found, none
+  found or not known, and the page shows all three counts, so they add up to the computers read.
+  None found speaks for the accounts the result read, and only when each of them was read in full:
 
-  | The PC's result | Each statement |
+  | The computer's result | Each statement |
   |---|---|
-  | none, empty, `stale: ...`, `failed: ...`, `unreadable`, older than `-StaleDays`, dated ahead, a value that does not fit, a newer version or finding word, cut at 2,048 characters, a name seen twice | not known |
-  | outcome `failed` (a Windows `reason=`, or a Mac account whose script copy changed) | yes if found, else not known |
-  | `other_profiles=` above 0 | yes if found, else not known |
-  | ends in `+more` | yes if found, else not known |
-  | an account `not_checked`, partly checked or not, or `no accounts` | yes if found, else not known |
-  | every account read in full (the Mac's own row does not count: it carries none of these items) | yes or no |
+  | none, empty, `stale: ...`, `failed: ...`, `unreadable`, older than `-StaleDays`, dated ahead, a value that does not fit, a newer version or finding word, cut at 2,048 characters | not known |
+  | outcome `failed` (a Windows `reason=`, or a Mac account whose script copy changed) | found if an account shows it, else not known |
+  | ends in `+more` | found if an account shows it, else not known |
+  | an account `not_checked`, or `no accounts` | found if an account shows it, else not known |
+  | an account carrying `partial`, whatever its outcome (`act ...; partial` too) | found if an account shows it, else not known |
+  | every account read in full (the Mac's own row does not count: it carries none of these items) | found or none found |
 
-  The table is tested row by row in `tests/intune.py` (`PATHS`).
+  `other_profiles=` above 0 does not change a computer's state: those profiles are not in the
+  result. Under each statement the page says how many of the computers with none found have other
+  accounts that were not read. That number is per statement, because a computer can be none found
+  for one statement and found for another.
+
+  Two rows are one computer only when they share a device id (an MDM device id, serial number or
+  Entra device id column, matched exactly; a placeholder such as the all-zero id is ignored). The
+  newer result stands, and on the same date the one that needs more attention. Rows that share only
+  a name are counted as separate computers, and the limits say how many names repeat.
+
+  `Get-PathState` in `gird-report.ps1` is the table's one home. It is tested row by row in
+  `tests/intune.py` (`PATHS`), with values the two writers write.
 - What the report covers and does not cover: the ATT&CK and ATLAS tactics of the techniques the
   findings in this report relate to (none when nothing relates to one), what Blindspot does not look
   at (the network, the identity provider, the cloud control plane, data platforms, what agents do

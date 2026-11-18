@@ -112,7 +112,7 @@ $Outcomes = @{ clear = 1; review = 2; not_checked = 3; act = 4; failed = 5 }
 #   Arg: none, count (a number), list (incident or tool ids) or keys (a number, then provider ids)
 #   Level: act, review or partial
 $Items = @(
-  @{ Word = 'wiper'; Arg = 'none'; Level = 'act'; Label = 'gh-token-monitor wiper installed' }
+  @{ Word = 'wiper'; Arg = 'none'; Level = 'act'; Label = 'Files or folders of the gh-token-monitor wiper' }
   @{ Word = 'incidents'; Arg = 'list'; Level = 'act'; Label = 'Malware incident found' }
   @{ Word = 'lockfile'; Arg = 'list'; Level = 'act'; Label = 'Malware versions in a lockfile' }
   @{ Word = 'planted'; Arg = 'count'; Level = 'act'; Label = 'Files a worm plants in a project' }
@@ -362,6 +362,7 @@ function Get-UtcTime([string]$T) {
     [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
 }
 
+$StatusOrder = @{ act = 0; not_checked = 1; failed = 2; stale = 3; no_result = 4; review = 5; clear = 6 }
 $StatusText = [ordered]@{
   act = 'Act now'
   not_checked = 'Not checked'
@@ -381,7 +382,7 @@ $MitreSource = 'References: MITRE ATT&CK Enterprise ' + $MitreAttackVersion + ' 
   'MITRE ATT&CK and ATT&CK are registered trademarks of The MITRE Corporation. MITRE ATLAS data: Copyright 2021-2026 MITRE, licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0). Blindspot shows only the ids, names and tactics of the ATLAS techniques it maps. ' +
   'The mapping of findings to techniques is Blindspot''s own, not MITRE''s.'
 $FwName = @{ attack = 'ATT&CK'; atlas = 'ATLAS' }
-$NotCheckedWhy = 'no result, a stale or failed run, a partly checked one, or a result this tool could not read'
+$NotCheckedWhy = 'no result, a stale or failed run, one with an account partly checked or not checked, or a result this tool could not read'
 $RelText = [ordered]@{ exposure = 'Exposure for'; indicator = 'Indicator of' }
 
 function Get-WordIds($Row) {
@@ -412,24 +413,25 @@ function Get-MitreRefs($Row) {
   }
 }
 
-# "no" needs every account on the computer read in full: a run that failed, a result cut to fit or
-# other accounts on the PC leave it not known, and so does any account not checked or partly checked.
-# The Mac's own row carries none of the items these statements need.
+# The one home of the truth table in docs/designs/mitre.md, "What could get out". "no" (none found)
+# speaks for the accounts the result read: every one of them read in full, in a fresh, whole result
+# from a run that did not fail. Other profiles on a PC are not in the result and do not change the
+# state; the page counts them on their own line. The Mac's own row carries none of these items.
 function Get-PathState($Row, [scriptblock]$Found) {
   $r = @{ State = 'unknown'; Providers = @() }
   if (-not $Row.Known) { return $r }
   $yes = $false; $any = $false; $prov = @()
-  $open = $Row.More -or $Row.OtherProfiles -gt 0 -or $Row.Status -ceq 'failed'
+  $open = $Row.More -or $Row.Status -ceq 'failed'
   foreach ($a in @($Row.Accts)) {
     if ($a.Machine) { continue }
     $any = $true
+    if ($a.Outcome -ceq 'not_checked' -or $a.Items.ContainsKey('partial')) { $open = $true }
     if (& $Found $a.Items) {
       $yes = $true
       $kv = [string]$a.Items['keys']; $sp = $kv.IndexOf(' ')
       if ($sp -ge 0) { foreach ($x in $kv.Substring($sp + 1).Split(',')) { if ($prov -cnotcontains $x) { $prov += $x } } }
       elseif ($kv -and $prov -cnotcontains '') { $prov += '' }
     }
-    elseif ($a.Outcome -ceq 'not_checked') { $open = $true }
   }
   if ($yes) { $r.State = 'yes'; $r.Providers = $prov }
   elseif (-not $open -and $any) { $r.State = 'no' }
@@ -443,10 +445,10 @@ function Get-PcCount([int]$N) { if ($N -eq 1) { return '1 computer' }; return "$
 
 function New-Row([string]$Pc, [string]$User, [string]$Raw, [string]$Source, [string]$Os) {
   return [ordered]@{
-    PC = $Pc; User = $User; Id = ''; Status = ''; Why = ''; CheckedAt = ''; Details = ''; Kinds = @(); Output = $Raw
+    PC = $Pc; User = $User; Ids = @(); Status = ''; Why = ''; CheckedAt = ''; Details = ''; Kinds = @(); Output = $Raw
     Known = $false; Win = $false; More = $false; Accts = @(); OtherProfiles = 0; Refs = @()
     AgentKey = 'unknown'; AgentKeyProviders = @(); Sessions = 'unknown'; McpTokens = 'unknown'
-    Source = $Source; OS = $Os; LastSeen = ''; LastReport = ''; Unnamed = $false; Dropped = $false
+    Source = $Source; OS = $Os; LastSeen = ''; LastReport = ''; Unnamed = $false; Dated = ''
   }
 }
 
@@ -474,8 +476,8 @@ function Set-Result($Row, [string]$Det, [bool]$HasDet, [DateTime]$Now) {
   switch ($p.Special) {
     'none' { $row.Status = 'no_result'; $row.Why = 'the check has not finished a run on this computer'; return $row }
     'unreadable' { $row.Status = 'not_checked'; $row.Why = 'the saved result could not be read'; return $row }
-    'stale' { $row.Status = 'stale'; $row.Why = 'the last finished run is old'; $row.CheckedAt = $p.Time; return $row }
-    'failed' { $row.Status = 'failed'; $row.Why = 'a run did not finish or could not save its result'; $row.CheckedAt = $p.Time; return $row }
+    'stale' { $row.Status = 'stale'; $row.Why = 'the last finished run is old'; $row.CheckedAt = $p.Time; $row.Dated = $p.Time; return $row }
+    'failed' { $row.Status = 'failed'; $row.Why = 'a run did not finish or could not save its result'; $row.CheckedAt = $p.Time; $row.Dated = $p.Time; return $row }
     'cut' {
       $row.Status = 'not_checked'
       if ($HasDet) { $row.Why = 'its result fills all the room Intune keeps and does not end in +more, so Intune may have cut it short' }
@@ -488,6 +490,7 @@ function Set-Result($Row, [string]$Det, [bool]$HasDet, [DateTime]$Now) {
   $at = Get-UtcTime $p.Time
   $age = ($Now - $at).TotalSeconds
   if ($age -lt -3600) { $row.Status = 'not_checked'; $row.Why = 'its result is dated in the future'; return $row }
+  $row.Dated = $p.Time
   if ($age -gt $StaleDays * 86400) {
     $row.Status = 'stale'; $row.Why = "its result is older than $StaleDays days (it read " + $StatusText[$p.Outcome].ToLower() + ')'; return $row
   }
@@ -510,10 +513,13 @@ function Set-Result($Row, [string]$Det, [bool]$HasDet, [DateTime]$Now) {
   }
   $row.Details = $parts -join ' | '
   $why = @()
-  switch ($p.Outcome) {
-    'failed' { $w = 'the check could not run'; if ($p.Reason) { $w += ' (' + $p.Reason.Replace('_', ' ') + ')' }; $why += $w }
-    'not_checked' { $why += 'partly checked' }
-  }
+  if ($p.Outcome -ceq 'failed') { $w = 'the check could not run'; if ($p.Reason) { $w += ' (' + $p.Reason.Replace('_', ' ') + ')' }; $why += $w }
+  $part = @($p.Accounts | Where-Object { $_.Items.ContainsKey('partial') -or ($_.Machine -and $_.Outcome -ceq 'not_checked') }).Count
+  $none = @($p.Accounts | Where-Object { $_.Detail -ceq 'no accounts' }).Count
+  $skip = @($p.Accounts | Where-Object { -not $_.Machine -and $_.Outcome -ceq 'not_checked' -and -not $_.Items.ContainsKey('partial') -and $_.Detail -cne 'no accounts' -and -not ($p.Reason -and $_.Detail -ceq $p.Reason) }).Count
+  if ($part -gt 0) { $why += 'partly checked' }
+  if ($skip -gt 0) { $why += "$skip account" + $(if ($skip -eq 1) { '' } else { 's' }) + ' not checked' }
+  if ($none -gt 0) { $why += 'no accounts to check' }
   if ($p.More) { $why += 'more on the computer than its result keeps' }
   if ($p.OtherProfiles -gt 0) { $why += "$($p.OtherProfiles) other account" + $(if ($p.OtherProfiles -eq 1) { '' } else { 's' }) + ' on this PC not checked' }
   $row.Why = $why -join '; '
@@ -530,6 +536,13 @@ function ConvertTo-HtmlText([string]$S) {
 $MaxCell = 1024 * 1024
 $NameHeaders = @('Computer Name', 'Computer', 'Device name', 'Device', 'Name', 'Hostname', 'Host name', 'deviceName', 'Display Name')
 $OsHeaders = @('OS', 'Operating System', 'Platform')
+$IdHeaders = [ordered]@{
+  mdm = @('Device id', 'DeviceId', 'Managed Device ID', 'Intune Device ID', 'UDID')
+  serial = @('Serial Number', 'SerialNumber', 'Serial')
+  entra = @('Microsoft Entra Device ID', 'Entra Device ID', 'Azure AD Device ID', 'AzureADDeviceId', 'AAD Device ID')
+}
+# A placeholder an MDM writes for a device with no such id, such as the all-zero Entra id, names no computer.
+$NoId = '^([^1-9A-Za-z]*|n/?a|none|null|unknown|not available)$'
 $ResultShape = '^(v[0-9]{1,3} [a-z_]{1,20} [0-9]{4}-|stale: last run |failed: the run started |none$|unreadable$|blindspot (failed|act|not_checked|review|clear) accounts=)'
 
 function Stop-Plain([string]$Message) { throw ('Stopped: ' + $Message) }
@@ -537,9 +550,16 @@ function Stop-Plain([string]$Message) { throw ('Stopped: ' + $Message) }
 function Get-Inner($E) { $x = $E; while ($x.InnerException) { $x = $x.InnerException }; return $x }
 # .NET on macOS and Linux reports a refused open as an IOException with errno 13, not UnauthorizedAccessException.
 function Test-NoAccess($X) { return ($X -is [UnauthorizedAccessException] -or $X.HResult -eq 13 -or $X.HResult -eq -2147024891) }
-# Windows says ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION; .NET on macOS and Linux gives the errno of the
-# refused lock, EWOULDBLOCK, which is 35 on macOS and 11 on Linux.
-function Test-InUse($X) { return ($X -is [IO.IOException] -and @(-2147024864, -2147024863, 11, 35) -contains $X.HResult) }
+# Windows says ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION. .NET on macOS and Linux gives the errno of the
+# refused lock, EWOULDBLOCK: 35 on macOS and 11 on Linux, and each number is another error on the other system.
+function Get-InUseCodes([string]$Platform, [string]$Os) {
+  if ($Platform -ceq 'Win32NT') { return @(-2147024864, -2147024863) }
+  if ($Os.StartsWith('Darwin', [StringComparison]::Ordinal)) { return @(35) }
+  if ($Os.StartsWith('Linux', [StringComparison]::Ordinal)) { return @(11) }
+  return @()
+}
+$InUseCodes = @(Get-InUseCodes ([string][Environment]::OSVersion.Platform) ([string]$PSVersionTable['OS']))
+function Test-InUse($X) { return ($X -is [IO.IOException] -and $InUseCodes -contains $X.HResult) }
 
 function Get-InputFiles {
   $seen = @{}
@@ -675,11 +695,11 @@ function Read-ExportFile($F, [DateTime]$Now) {
     while ($sample.Count -lt 1000) { $rec = Read-CsvRecord $rd $delim; if ($null -eq $rec) { break }; if (@($rec | Where-Object { $_.Trim() }).Count -gt 0) { $sample.Add($rec) } }
   } finally { $rd.Dispose() }
   if ($sample.Count -eq 0) { Stop-Plain "$Label lists no computers: it has a header row and nothing under it. Export the computers from your MDM again and run it on that file." }
-  $idx = @{ Name = -1; Result = -1; Seen = -1; Os = -1; User = -1; Id = -1; Det = -1; Note = -1 }
+  $idx = @{ Name = -1; Result = -1; Seen = -1; Os = -1; User = -1; Det = -1; Note = -1 }
   $ours = @($ExportColumns | Where-Object { $head -ccontains $_ }).Count -eq $ExportColumns.Count
   if ($ours) {
     $idx.Name = [Array]::IndexOf($head, 'Device name'); $idx.Result = [Array]::IndexOf($head, 'Result'); $idx.Seen = [Array]::IndexOf($head, 'Last reported')
-    $idx.Os = [Array]::IndexOf($head, 'OS'); $idx.User = [Array]::IndexOf($head, 'User'); $idx.Id = [Array]::IndexOf($head, 'Device id')
+    $idx.Os = [Array]::IndexOf($head, 'OS'); $idx.User = [Array]::IndexOf($head, 'User')
     $idx.Det = [Array]::IndexOf($head, 'Detection state'); $idx.Note = [Array]::IndexOf($head, 'Note')
   }
   if ($Opt.ResultColumn) { $idx.Result = Find-Column $head $Opt.ResultColumn $Label 'ResultColumn' $sample $F.Given }
@@ -715,6 +735,11 @@ function Read-ExportFile($F, [DateTime]$Now) {
   if ($Opt.SeenColumn) { $idx.Seen = Find-Column $head $Opt.SeenColumn $Label 'SeenColumn' $sample $F.Given }
   if ($Opt.OsColumn) { $idx.Os = Find-Column $head $Opt.OsColumn $Label 'OsColumn' $sample $F.Given }
   elseif (-not $ours) { $o = @(for ($c = 0; $c -lt $head.Count; $c++) { if ($OsHeaders -contains $head[$c]) { $c } }); if ($o.Count -eq 1) { $idx.Os = $o[0] } }
+  $idCols = [ordered]@{}
+  foreach ($kind in $IdHeaders.Keys) {
+    $o = @(for ($c = 0; $c -lt $head.Count; $c++) { if ($c -ne $idx.Result -and $c -ne $idx.Name -and $IdHeaders[$kind] -contains $head[$c]) { $c } })
+    if ($o.Count -eq 1) { $idCols[$kind] = $o[0] }
+  }
 
   $out = New-Object System.Collections.ArrayList
   $notes = New-Object System.Collections.ArrayList
@@ -739,7 +764,9 @@ function Read-ExportFile($F, [DateTime]$Now) {
       $row = New-Row $pc (Get-Unguarded (& $cell $idx.User)) (Get-Cleaned (& $cell $idx.Result)) $Label $os
       $row.LastSeen = & $cell $idx.Seen
       if ($ours) { $row.LastReport = $row.LastSeen }
-      $row.Id = & $cell $idx.Id
+      $ids = @()
+      foreach ($kind in $idCols.Keys) { $v = (& $cell $idCols[$kind]).Trim(); if ($v -notmatch $NoId) { $ids += $kind + ':' + $v } }
+      $row.Ids = $ids
       $row.Unnamed = $unnamed
       [void]$out.Add((New-Object PSObject -Property (Set-Result $row (& $cell $idx.Det) $ours $Now)))
     }
@@ -747,40 +774,32 @@ function Read-ExportFile($F, [DateTime]$Now) {
   return @{ Rows = $out.ToArray(); Notes = $notes.ToArray() }
 }
 
-# A name (with the device id, where the file has one) seen more than once is not read as any of its
-# results. Each file lists a computer once, so the same name in two files is taken as one computer:
-# the name stands for as many computers as the file that lists it most often. A row with no name is
-# its own computer.
+# Two rows are one computer only when they share a device id: the newer result stands, and on the same
+# date the one that needs more attention. Rows that share only a name stay apart, as a name can be
+# given to more than one computer; the page says how many names repeat.
+function Test-Before($A, $B) {
+  if ($A.Dated -cne $B.Dated) { return [string]::CompareOrdinal($A.Dated, $B.Dated) -gt 0 }
+  return $StatusOrder[$A.Status] -lt $StatusOrder[$B.Status]
+}
 function Get-Deduplicated($Rows) {
-  $by = [ordered]@{}
+  $groupOf = New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)
+  $kept = New-Object System.Collections.ArrayList
+  $size = New-Object System.Collections.ArrayList
   foreach ($r in $Rows) {
-    if ($r.Unnamed) { continue }
-    $k = $r.PC.ToLowerInvariant() + '|' + $r.Id
-    if (-not $by.Contains($k)) { $by[$k] = New-Object System.Collections.ArrayList }
-    [void]$by[$k].Add($r)
+    $g = -1
+    foreach ($id in @($r.Ids)) { if ($groupOf.ContainsKey($id)) { $g = $groupOf[$id]; break } }
+    if ($g -lt 0) { $g = $kept.Count; [void]$kept.Add($r); [void]$size.Add(1) }
+    else { $size[$g] = $size[$g] + 1; if (Test-Before $r $kept[$g]) { $kept[$g] = $r } }
+    foreach ($id in @($r.Ids)) { if (-not $groupOf.ContainsKey($id)) { $groupOf[$id] = $g } }
   }
-  foreach ($k in @($by.PSBase.Keys)) {
-    $g = @($by[$k])
-    if ($g.Count -lt 2) { continue }
-    $per = @{}
-    foreach ($r in $g) { $per[$r.Source] = 1 + [int]$per[$r.Source] }
-    $keep = ($per.Values | Measure-Object -Maximum).Maximum
-    $from = (@($g | ForEach-Object { $_.Source }) | Select-Object -Unique) -join ', '
-    for ($i = 0; $i -lt $g.Count; $i++) {
-      $r = $g[$i]
-      if ($i -ge $keep) { $r.Dropped = $true; continue }
-      $r.Status = 'not_checked'; $r.Known = $false; $r.Kinds = @(); $r.Refs = @(); $r.Details = ''
-      $r.AgentKey = 'unknown'; $r.AgentKeyProviders = @(); $r.Sessions = 'unknown'; $r.McpTokens = 'unknown'
-      $r.Source = $from
-      $r.Why = "this name appears $($g.Count) times in the results read ($from), so it is not known which result is this computer's"
-    }
-  }
-  foreach ($r in $Rows) { if (-not $r.Dropped) { $r } }
+  $names = @{}
+  foreach ($r in $kept) { if (-not $r.Unnamed) { $k = $r.PC.ToLowerInvariant(); $names[$k] = 1 + [int]$names[$k] } }
+  return @{ Rows = $kept.ToArray(); Merged = @($size | Where-Object { $_ -gt 1 }).Count; Names = @($names.Values | Where-Object { $_ -gt 1 }).Count }
 }
 
 # --- Working out what the report says ----------------------------------------------------------
 
-function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
+function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now, $Dup) {
   $count = @{}
   foreach ($k in $StatusText.Keys) { $count[$k] = @($Rows | Where-Object { $_.Status -eq $k }).Count }
   $known = @($Rows | Where-Object { $_.Known })
@@ -835,7 +854,9 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
       foreach ($y in $yes) { foreach ($x in @($y.AgentKeyProviders)) { $nm = $x; if (-not $nm) { $nm = 'not named in the result' }; if ($pc.Contains($nm)) { $pc[$nm]++ } else { $pc[$nm] = 1 } } }
       $prov = @($pc.PSBase.Keys | ForEach-Object { $_ + ' (' + (Get-PcCount $pc[$_]) + ')' })
     }
-    $d.Paths += @{ Text = $pa.Text; Yes = (Get-PcCount $yes.Count); Providers = $prov; Unknown = (Get-PcCount @($Rows | Where-Object { $_.($pa.Prop) -ceq 'unknown' }).Count) }
+    $no = @($Rows | Where-Object { $_.($pa.Prop) -ceq 'no' })
+    $d.Paths += @{ Text = $pa.Text; Yes = $yes.Count; No = $no.Count; Unknown = @($Rows | Where-Object { $_.($pa.Prop) -ceq 'unknown' }).Count
+      Providers = $prov; NoOthers = @($no | Where-Object { $_.OtherProfiles -gt 0 }).Count }
   }
   $techs = [ordered]@{}
   foreach ($m in $MitreRows) { if ($m.Rel -cne 'none' -and -not $techs.Contains($m.Fw + ' ' + $m.Id)) { $techs[$m.Fw + ' ' + $m.Id] = $m } }
@@ -892,10 +913,16 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now) {
   $failedBare = @($Rows | Where-Object { $_.Status -eq 'failed' -and -not $_.Known }).Count
   $d.Limits += "$($count.no_result) with no result, $($count.stale) with a stale result, $failedBare failed with no result, and " +
     "$(@($Rows | Where-Object { $_.Status -eq 'not_checked' -and -not $_.Known }).Count) with a result this tool could not read. Nothing they may hold is in the counts above."
-  $partly = @($Rows | Where-Object { $_.Known -and ($_.Status -eq 'failed' -or $_.Status -eq 'not_checked') }).Count
+  $partly = @($Rows | Where-Object { $_.Known -and ($_.Status -eq 'failed' -or $_.Status -eq 'not_checked' -or @($_.Accts | Where-Object { $_.Items.ContainsKey('partial') -or $_.Outcome -ceq 'not_checked' }).Count -gt 0) }).Count
   if ($partly -gt 0) { $d.Limits += (Get-PcCount $partly) + ' failed or were partly checked but sent a result: what it names is in the counts above, and what the run did not reach is not known.' }
   $cut = @($known | Where-Object { $_.More }).Count
   if ($cut -gt 0) { $d.Limits += (Get-PcCount $cut) + ' sent a result cut to fit what the MDM keeps. Findings past the cut are not in the counts above.' }
+  if ($Dup.Merged -gt 0) {
+    $d.Limits += (Get-PcCount $Dup.Merged) + $(if ($Dup.Merged -eq 1) { ' is' } else { ' are' }) + ' listed more than once with the same device identifier. Each is counted once, from its newest result, or on the same date the one that needs more attention.'
+  }
+  if ($Dup.Names -gt 0) {
+    $d.Limits += "$($Dup.Names) computer name" + $(if ($Dup.Names -eq 1) { ' appears' } else { 's appear' }) + ' more than once across the files. Each was counted separately; some may be the same computer.'
+  }
   return $d
 }
 
@@ -968,13 +995,19 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
     }
     [void]$h.Append('</table></div>')
   }
-  [void]$h.Append('<h2>What could get out</h2><p>These count what was found in files on each computer. They do not show that a key was used, copied or sent anywhere.</p><ul>')
+  [void]$h.Append('<h2>What could get out</h2><p>These count what was found in files on each computer. They do not show that a key was used, copied or sent anywhere. Each line counts every one of the ' + (Get-PcCount $D.Total) + ' in this report once: found, none found or not known.</p><ul>')
   foreach ($p in $D.Paths) {
-    $t = (& $e $p.Text) + ': ' + $p.Yes + '.'
+    $t = (& $e $p.Text) + ': found on ' + (Get-PcCount $p.Yes) + ', none found on ' + (Get-PcCount $p.No) + ', not known for ' + (Get-PcCount $p.Unknown) + '.'
     if ($p.Providers.Count -gt 0) { $t += ' Providers of those keys: ' + (& $e ($p.Providers -join ', ')) + '.' }
-    [void]$h.Append('<li>' + $t + ' Not known for ' + $p.Unknown + '.</li>')
+    if ($p.NoOthers -gt 0) {
+      if ($p.No -eq 1) { $t += ' The computer with none found also has other accounts that were not read.' }
+      else { $t += " $($p.NoOthers) of the $($p.No) computers with none found also " + $(if ($p.NoOthers -eq 1) { 'has' } else { 'have' }) + ' other accounts that were not read.' }
+    }
+    [void]$h.Append('<li>' + $t + '</li>')
   }
-  [void]$h.Append('</ul><p class="muted">Not known: the computer sent no result, a stale or failed one, one cut to fit, one this tool could not read, one where an account was partly checked or not checked, or one from a PC with other accounts that were not checked. A computer counts as no only when every account on it was read in full.</p>')
+  [void]$h.Append('</ul><p class="muted">Found: an account on the computer showed it. None found: no account showed it, and every account its result lists was read in full, in a result that is fresh, whole and from a run that finished. ' +
+    'It speaks for those accounts only: a Windows result reads the person signed in when it ran, and other accounts on that PC are counted on their own. ' +
+    'Not known: the computer sent no result, a stale or failed one, one cut to fit or one this tool could not read, or an account in it was partly checked or not checked.</p>')
   [void]$h.Append('<h2>Techniques the findings relate to</h2>')
   if ($D.Techniques.Count -eq 0) { [void]$h.Append('<p class="muted">No finding relates to a MITRE technique.</p>') }
   else {
@@ -1088,10 +1121,9 @@ function Invoke-Report {
     foreach ($r in $got.Rows) { [void]$rows.Add($r) }
     foreach ($n in $got.Notes) { if (-not $notes.Contains($n)) { [void]$notes.Add($n) } }
   }
-  $rows = @(Get-Deduplicated $rows)
-  $order = @{ act = 0; not_checked = 1; failed = 2; stale = 3; no_result = 4; review = 5; clear = 6 }
-  $sorted = @($rows | Sort-Object @{ Expression = { $order[$_.Status] } }, @{ Expression = { $_.PC } })
-  $data = Get-ReportData $sorted $notes.ToArray() $sources $now
+  $dd = Get-Deduplicated $rows
+  $sorted = @($dd.Rows | Sort-Object @{ Expression = { $StatusOrder[$_.Status] } }, @{ Expression = { $_.PC } })
+  $data = Get-ReportData $sorted $notes.ToArray() $sources $now $dd
   $base = Save-Report $dir ($now.ToString('yyyyMMdd-HHmm', [Globalization.CultureInfo]::InvariantCulture)) (Get-ReportCsv $sorted) (Get-ReportPage $data)
   foreach ($n in $notes) { Write-Host ('Note: ' + $n) }
   $c = $data.Counts

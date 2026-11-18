@@ -250,6 +250,7 @@ if [ "$(uname -s)" != Darwin ]; then
 else
   wsh_users asha:act; form act "gird-fleet.sh run: every act item" "^v1 act $T \| asha: act wiper; incidents tanstack; lockfile axios; planted 2; keys 3 anthropic,aws" "$(wsh_run)"
   wsh_users bo:review; form review "gird-fleet.sh run: every review item" "^v1 review $T \| bo: review run-without-asking .*tmp-wiper; tmp-marks mastra$" "$(wsh_run)"
+  wsh_users asha:actpartial bo:clear; form act "gird-fleet.sh run: act and partly checked" "^v1 act $T \| asha: act keys 1; partial \| bo: clear$" "$(wsh_run)"
   wsh_users cy:partial dee:clear; form not_checked "gird-fleet.sh run: partly checked and clear" "^v1 not_checked $T \| cy: not_checked ssh-open 1; partial \| dee: clear$" "$(wsh_run)"
   mkdir -p "$IW/linked"; ln -s "$IW/linked" "$IW/homelink"
   wsh_users asha:clear 'bad!name:clear' 'nosh:clear::/usr/bin/false' "gone:clear:$IW/nothere" 'sysh:clear:/usr' "lnk:clear:$IW/homelink"
@@ -294,6 +295,7 @@ else
   wps act "every act item" "$P0 \| [^ ]+: act wiper; incidents tanstack; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-links 1; update mistral$" act
   wps review "every review item" "$P0 \| [^ ]+: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra$" review
   wps not_checked "partly checked" "$P0 \| [^ ]+: not_checked ssh-open 1; partial$" partial
+  wps act "act and partly checked" "$P0 \| [^ ]+: act keys 1; partial$" actpartial
   wps act "cut to fit" "^v1 act $T other_profiles=0 \| [^ ]+: act wiper; incidents [a-z0-9,]+ \+more$" huge
   wps not_checked "output it does not read" "$P0 \| [^ ]+: not_checked bad_output$" garbage
   wps failed "an account run with no output" "^v1 failed $T other_profiles=0 reason=no_output \| [^ ]+: not_checked no_output$" empty
@@ -369,8 +371,8 @@ plain_fail() { # name text: exit 1 or 2, the text on screen, no PowerShell error
 }
 report_file jamf PSModulePath="$IW/nomods" -- "$IW/files/jamf.csv" -SeenColumn 'Last Inventory Update'
 if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads a Jamf Pro export with result tags, with no Graph module"; else bad "intune: gird-report.ps1 reads a Jamf Pro export with result tags, with no Graph module" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
-if [ "$(wc -l < "$IW/o.txt" | tr -d ' ')" -eq 4 ] && grep -q '^Read 13 computers from jamf.csv\.$' "$IW/o.txt" && grep -q '^Need attention now: 2\. To review: 0\. Nothing found: 1\.$' "$IW/o.txt" \
-  && grep -q '^Not checked: 10 ' "$IW/o.txt" && grep -q "^Report: $IW/out/blindspot-report-[0-9-]*\.html " "$IW/o.txt"; then
+if [ "$(wc -l < "$IW/o.txt" | tr -d ' ')" -eq 4 ] && grep -q '^Read 13 computers from jamf.csv\.$' "$IW/o.txt" && grep -q '^Need attention now: 3\. To review: 0\. Nothing found: 2\.$' "$IW/o.txt" \
+  && grep -q '^Not checked: 8 ' "$IW/o.txt" && grep -q "^Report: $IW/out/blindspot-report-[0-9-]*\.html " "$IW/o.txt"; then
   ok "intune: gird-report.ps1 ends with four lines: computers read, attention now, not checked, and the report's path"
 else bad "intune: gird-report.ps1 ends with four lines: computers read, attention now, not checked, and the report's path" "$(cat "$IW/o.txt")"; fi
 report_file plain -- "$IW/files/plain.csv"
@@ -401,6 +403,8 @@ if [ "$RC" -eq 0 ]; then ok "intune: -ResultColumn settles which column holds th
 report_file paths -- "$IW/files/paths.csv"
 if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads the file of every way a result can be whole or not"; else bad "intune: gird-report.ps1 reads the file of every way a result can be whole or not" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
 report_file dup -- "$IW/files/dupa.csv" "$IW/files/dupb.csv"
+report_file dupnoid -- "$IW/files/dupc.csv" "$IW/files/dupd.csv"
+report_file winfleet -- "$IW/files/winfleet.csv"
 report_file clearonly -- "$IW/files/clearonly.csv"
 report_file noname -- "$IW/files/noname.csv"
 plain_fail "intune: gird-report.ps1 says plainly when no column holds the computer's name" "holds the computer's name. Its columns, with a value from each:"
@@ -531,6 +535,19 @@ if grep -q '^threw existing.csv$' "$IW/nrf.txt" && grep -q '^threw dangling.csv$
   && [ ! -e "$IW/nrf/gone/target.csv" ] && [ -z "$(ls "$IW/nrf/gone")" ]; then
   ok "intune: New-ReportFile throws on an existing file and on a dangling link, keeps the file and creates no link target"
 else bad "intune: New-ReportFile throws on an existing file and on a dangling link, keeps the file and creates no link target" "$(head -c 300 "$IW/nrf.txt"); gone: $(ls "$IW/nrf/gone" | tr '\n' ' ')"; fi
+# Get-InUseCodes, taken from the tool's source: errno 11 and 35 swap meanings between macOS and Linux.
+"$PWSH" -NoProfile -NonInteractive -Command "
+\$ast = [Management.Automation.Language.Parser]::ParseFile('$REPORT', [ref]\$null, [ref]\$null)
+\$fn = \$ast.Find({ param(\$n) \$n -is [Management.Automation.Language.FunctionDefinitionAst] -and \$n.Name -eq 'Get-InUseCodes' }, \$true)
+. ([scriptblock]::Create(\$fn.Extent.Text))
+'mac=' + (@(Get-InUseCodes 'Unix' 'Darwin 25.5.0 Darwin Kernel Version 25.5.0') -join ',')
+'linux=' + (@(Get-InUseCodes 'Unix' 'Linux 6.8.0-45-generic #45-Ubuntu SMP') -join ',')
+'win=' + (@(Get-InUseCodes 'Win32NT' '') -join ',')
+'other=' + (@(Get-InUseCodes 'Unix' 'FreeBSD 14.1') -join ',')
+" > "$IW/inuse.txt" 2>&1
+if [ "$(tr -d '\r' < "$IW/inuse.txt")" = "$(printf 'mac=35\nlinux=11\nwin=-2147024864,-2147024863\nother=')" ]; then
+  ok "intune: a file open in another program is told by the code of this system only: 35 on macOS, 11 on Linux"
+else bad "intune: a file open in another program is told by the code of this system only: 35 on macOS, 11 on Linux" "$(head -c 300 "$IW/inuse.txt")"; fi
 if grep -q '^239,187,191,97,98,99$' "$IW/nrf.txt"; then ok "intune: New-ReportFile writes the byte order mark and then the text"
 else bad "intune: New-ReportFile writes the byte order mark and then the text" "$(tail -c 200 "$IW/nrf.txt")"; fi
 
