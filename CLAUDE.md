@@ -7,9 +7,9 @@ checklist; read it first.
 
 ## macOS, Linux and Windows stay at par
 
-Blindspot gives the same features on macOS, Linux and Windows. That covers the check one person
-runs, fleet mode, the tools an admin uses, every kind of finding, the result formats, the mappings
-to outside frameworks, and the docs.
+Every feature must work on macOS, Linux and Windows. That covers the check one person runs, fleet
+mode, the tools an admin uses, every kind of finding, the result formats, the mappings to outside
+frameworks, and the docs. Where the three differ today, an open issue labelled `parity` says so.
 
 - Before you build a feature, write down what each of the three platforms gets.
 - A feature lands on all three in the same pull request. If one platform has to wait, the pull
@@ -22,6 +22,23 @@ to outside frameworks, and the docs.
 
 The twin rule under Tests is how the two check scripts are held to this. The same care applies to
 everything else.
+
+## One home for anything two files share
+
+Each script is one file a person downloads, so the scripts cannot load shared code. What they share
+is kept once and written into them by `tools/gen.sh`.
+
+- A list, a table, a format or a mapping that more than one file needs has one home in `data/`.
+  [CONTRIBUTING.md](CONTRIBUTING.md#lists-live-in-data) says how the lists there work.
+- Never type the same list into a second file. Add it to `data/`, have `tools/gen.sh` write it
+  into every file that needs it, and let `tools/gen.sh --check` fail when a copy drifts.
+- This holds for a format one file writes and another reads, such as the lines an account's check
+  sends and the result line a fleet run saves. The writer and the reader take their words from the
+  same home.
+- Logic cannot be shared between bash and PowerShell. It is written once in each, and the twin
+  tests hold the two to the same behaviour.
+- Each script keeps one job: `gird-check` checks one account, `gird-fleet` runs the check for a
+  fleet. A new job gets its own file, not a new mode in an existing one.
 
 ## This repository is public
 
