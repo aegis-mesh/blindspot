@@ -66,7 +66,7 @@ settings as well as ones that came in a cloned project.
 ## What the report shows
 
 The page has eight numbered sections: 01 Summary, 02 What could get out, 03 Computers to deal with
-first, 04 Findings by kind, 05 Summary by technique, 06 Computers not fully checked, 07 Every
+first, 04 Findings by kind, 05 Summary by technique and function, 06 Computers not fully checked, 07 Every
 computer and 08 Scope and method. Section 8 holds only text that is the same in every report; every
 figure about the computers read is in sections 1 to 7. `Get-ReportData` works the figures out and
 `Get-ReportPage` turns them into markup, escaping everything that came from an input file.
@@ -78,8 +78,10 @@ figure about the computers read is in sections 1 to 7. `Get-ReportData` works th
   commands without asking (excessive agency, OWASP LLM06:2025), and package versions from known
   software supply chain attacks. The term is on that row only; the lists of each computer's
   findings use the short label.
-- Section 5, by technique: a bar for each technique a finding relates to, with the PCs counted
-  once per technique in each relation, then the tactics of those techniques.
+- Section 5, by technique and function: a bar for each technique a finding relates to, with the PCs
+  counted once per technique in each relation; a bar for each NIST CSF 2.0 Function the findings
+  relate to, with each PC counted once per Function; then the tactics of those techniques. CSF ids
+  appear only here and in section 8, never on a finding's row.
 - What could get out: the PCs where an AI agent set to run commands without asking and a key in
   plain text are in the same account (with the providers the value names), the PCs with a key in an
   agent's session files, and the PCs with a token in an MCP config. Each counts what was found, never
@@ -113,13 +115,27 @@ figure about the computers read is in sections 1 to 7. `Get-ReportData` works th
 - Section 5 lists the ATT&CK and ATLAS tactics of the techniques the findings in this report relate
   to (none when nothing relates to one). Section 6 gives the limits of the results read. Section 8
   says what Blindspot does not look at (the network, the identity provider, the cloud control plane,
-  data platforms, what agents do while they run, malware not on its list) and every tactic a
-  technique in `data/mitre.tsv` belongs to.
+  data platforms, what agents do while they run, malware not on its list), every tactic a
+  technique in `data/mitre.tsv` belongs to, and each CSF outcome the findings help an organization
+  work toward, with its id and NIST's wording.
+
+## NIST CSF 2.0
+
+`data/mitre.tsv` also holds, for each finding word, a `csf` line: the CSF 2.0 Subcategory id, its
+outcome as NIST CSWP 29 Appendix A words it, and its Function and Category, or `none` with the
+reason (`platforms`, `on-open`, `partial`). `tools/gen.sh --check` refuses a word with no `csf` line,
+an id whose Function is not the one named, and a relation other than `supports`. The relation is
+always that a finding helps an organization work toward the outcome on the computers where it was
+found. The report never says an organization meets, misses or complies with the framework, and puts
+NIST's own wording sentence above the first CSF reference. No finding kind shows an outcome is not
+achieved: each Protect outcome turns on what the organization authorized or decided, which Blindspot
+cannot see.
 
 ## Terms
 
 ATT&CK's terms of use ask that a copy reproduce MITRE's copyright designation and its licence.
 ATLAS is published under the Apache License 2.0, whose section 4 asks a redistribution to give the
 licence (this repository's `LICENSE` is that text), to say what was changed, and to keep MITRE's
-copyright notice; ATLAS's terms page adds its ATT&CK notice. All of it is in `NOTICE`, and the
-copyright lines and versions are in the report's footer.
+copyright notice; ATLAS's terms page adds its ATT&CK notice. NIST asks for its citation followed by
+"Republished courtesy of the National Institute of Standards and Technology." All of it is in
+`NOTICE`, and the copyright lines, citation and versions are in the report's attribution.

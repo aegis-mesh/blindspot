@@ -7,7 +7,7 @@
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
 # versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv), and the MITRE references gird-report.ps1 shows (data/mitre.tsv), with
+# (data/bad-extensions.tsv), and the MITRE references and NIST CSF outcomes gird-report.ps1 shows (data/mitre.tsv), with
 # gird-report.ps1's shared block copied into gird-intune.ps1.
 # The scripts stay single files people can download and check.
 #
@@ -31,7 +31,7 @@ PY_IDS=" $( { rows data/bad-pypi.tsv | cut -f3; rows data/indicators.tsv | awk -
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
 # The finding words gird-report.ps1 reads, from its $Items table, their one home: every one needs an attack
-# line and an atlas line in data/mitre.tsv.
+# line, an atlas line and a csf line in data/mitre.tsv.
 ITEM_LINES=$(awk '/^\$Items = @\($/ { on = 1; next } on && /^\)$/ { exit } on { print }' gird-report.ps1)
 MITRE_WORDS=" $(printf '%s\n' "$ITEM_LINES" | sed -n "s/^  @{ Word = '\([a-z][a-z-]*\)'.*/\1/p" | tr '\n' ' ')"
 # A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
@@ -137,12 +137,21 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
         { ok = $0 ~ /^  @\{ Word = \047[a-z][a-z-]*\047; Arg = \047(none|count|list|keys)\047; Level = \047(act|review|partial)\047; Label = \047[A-Za-z][A-Za-z0-9 ,_():.&-]*\047 \}$/
           w = $0; sub(/^  @\{ Word = \047/, "", w); sub(/\047.*/, "", w)
           if (!ok || seen[w]++) print "gird-report.ps1: an $Items line it cannot read, or a word twice: " $0 }'
-      for _v in attack atlas; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done
+      for _v in attack atlas csf; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done
+      # A csf line names a CSF 2.0 Subcategory, its Function (the one its id starts with) and Category, and
+      # NIST's publication; its relation is only ever supports, for every computer with the finding.
       rows data/mitre.tsv | awk -F '\t' -v ids="$IDS" -v words="$MITRE_WORDS" '
         function safe(s) { return s != "" && s !~ /[\047"`$|\\<>&]/ }
-        { ok = NF == 10 && index(words, " " $1 " ") > 0 && $2 ~ /^(all|mac|win)$/ && $4 ~ /^(attack|atlas)$/
-          if ($3 != "all") { ok = ok && $1 ~ /^(incidents|lockfile|update|remove)$/; n = split($3, a, ","); for (i = 1; i <= n; i++) if (index(ids, " " a[i] " ") == 0) ok = 0 }
+        BEGIN { fn["GV"] = "Govern"; fn["ID"] = "Identify"; fn["PR"] = "Protect"; fn["DE"] = "Detect"; fn["RS"] = "Respond"; fn["RC"] = "Recover" }
+        { ok = NF == 10 && index(words, " " $1 " ") > 0 && $2 ~ /^(all|mac|win)$/ && $4 ~ /^(attack|atlas|csf)$/
+          if ($3 != "all") { ok = ok && $1 ~ /^(incidents|lockfile|update|remove)$/ && $4 != "csf"; n = split($3, a, ","); for (i = 1; i <= n; i++) if (index(ids, " " a[i] " ") == 0) ok = 0 }
           if ($8 == "none") ok = ok && $2 == "all" && $3 == "all" && $5 == "-" && $6 == "-" && $7 == "-" && $9 == "-" && $10 != "-" && safe($10)
+          else if ($4 == "csf") {
+            n = split($7, t, ",")
+            ok = ok && $2 == "all" && $8 == "supports" && $10 == "-" && safe($6) && $5 ~ /^(GV|ID|PR|DE|RS|RC)\.[A-Z][A-Z]-[0-9][0-9]$/ && n == 2 &&
+              t[1] == fn[substr($5, 1, 2)] && t[2] ~ /^[A-Z][A-Za-z ]*$/ && $9 == "https://doi.org/10.6028/NIST.CSWP.29"
+            k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7
+          }
           else {
             ok = ok && $8 ~ /^(exposure|indicator)$/ && $10 == "-" && safe($6) && $7 ~ /^[A-Z][A-Za-z ]*(,[A-Z][A-Za-z ]*)*$/
             if ($4 == "attack") { u = $5; sub(/^T/, "", u); gsub(/\./, "/", u); ok = ok && $5 ~ /^T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://attack.mitre.org/techniques/T" u "/" }
@@ -155,7 +164,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if (seen[$1 " " $2 " " $3 " " $4 " " $5]++) ok = 0
           if (!ok) print "data/mitre.tsv: " $0 }
         END { n = split(words, w, " "); for (i = 1; i <= n; i++) { if (!((w[i] " attack") in has)) print "data/mitre.tsv: no attack line for the finding word " w[i]
-                                                                   if (!((w[i] " atlas") in has)) print "data/mitre.tsv: no atlas line for the finding word " w[i] } }')
+                                                                   if (!((w[i] " atlas") in has)) print "data/mitre.tsv: no atlas line for the finding word " w[i]
+                                                                   if (!((w[i] " csf") in has)) print "data/mitre.tsv: no csf line for the finding word " w[i] } }')
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
@@ -434,7 +444,8 @@ rows data/bad-extensions.tsv | awk -F '\t' '
 # --- MITRE references, for gird-report.ps1 ------------------------------------------------
 # One hashtable per line, then the names of the incidents a scope names, so the report can say which.
 { rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $2 }'; rows data/mitre.tsv | awk -F '\t' '{ print "M\t" $0 }'; } | awk -F '\t' \
-  -v av="$(sed -n 's/^# attack-version: //p' data/mitre.tsv)" -v lv="$(sed -n 's/^# atlas-version: //p' data/mitre.tsv)" '
+  -v av="$(sed -n 's/^# attack-version: //p' data/mitre.tsv)" -v lv="$(sed -n 's/^# atlas-version: //p' data/mitre.tsv)" \
+  -v cv="$(sed -n 's/^# csf-version: //p' data/mitre.tsv)" '
   function list(s, sep,   a, k, i, o) { if (s == "all" || s == "-") return "@()"; k = split(s, a, sep); for (i = 1; i <= k; i++) o = o (i > 1 ? ", " : "") "\047" a[i] "\047"; return "@(" o ")" }
   function dash(s) { return s == "-" ? "" : s }
   $1 == "I" { inc[$2] = $3; next }
@@ -445,6 +456,7 @@ rows data/bad-extensions.tsv | awk -F '\t' '
     print "# >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it."
     print "$MitreAttackVersion = \047" av "\047"
     print "$MitreAtlasVersion = \047" lv "\047"
+    print "$CsfVersion = \047" cv "\047"
     print "$MitreRows = @("; for (i = 1; i <= n; i++) print ln[i]; print ")"
     printf "$MitreIncidentNames = @{"; for (i = 1; i <= m; i++) printf "%s\047%s\047 = \047%s\047", (i > 1 ? "; " : " "), wo[i], inc[wo[i]]; print " }"
     print "# <<< mitre"

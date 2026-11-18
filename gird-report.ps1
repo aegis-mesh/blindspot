@@ -157,6 +157,7 @@ $AnyWord = @($FailReasons + $WinWords + $MacWords)
 # >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it.
 $MitreAttackVersion = 'v20.1'
 $MitreAtlasVersion = '2026.10'
+$CsfVersion = '2.0'
 $MitreRows = @(
   @{ Word = 'wiper'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1485'; Name = 'Data Destruction'; Tactics = @('Impact'); Rel = 'indicator'; Url = 'https://attack.mitre.org/techniques/T1485/'; Note = '' }
   @{ Word = 'wiper'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'No ATLAS technique fits: the wiper does not act through an AI system.' }
@@ -206,6 +207,31 @@ $MitreRows = @(
   @{ Word = 'tmp-marks'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Markers in a folder every account can write to: a lead, not a finding.' }
   @{ Word = 'partial'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Says the account was partly checked. It is not a finding.' }
   @{ Word = 'partial'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Says the account was partly checked. It is not a finding.' }
+  @{ Word = 'wiper'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'incidents'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'lockfile'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'planted'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'run-without-asking'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'keys'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'history'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'sessions'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'mcp-tokens'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'allow-lists'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'ssh-links'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'ssh-open'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'update-tools'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'update-tools'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'PR.PS-02'; Name = 'Software is maintained, replaced, and removed commensurate with risk'; Tactics = @('Protect', 'Platform Security'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'update'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'update'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'PR.PS-02'; Name = 'Software is maintained, replaced, and removed commensurate with risk'; Tactics = @('Protect', 'Platform Security'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'remove'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'remove'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'PR.PS-02'; Name = 'Software is maintained, replaced, and removed commensurate with risk'; Tactics = @('Protect', 'Platform Security'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'to-read'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'possible'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'tmp-wiper'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'tmp-marks'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'platforms'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'The leak happened at the hosted platform. The result does not show the organization has the platform as a supplier.' }
+  @{ Word = 'on-open'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'The count takes in settings a person wrote for their own use, which are not a weakness, and the result gives only a count.' }
+  @{ Word = 'partial'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Says the account was partly checked. It is not a finding.' }
 )
 $MitreIncidentNames = @{ 'axios' = 'Axios takeover'; 'tanstack' = 'TanStack worm'; 'mistralpy' = 'mistralai 2.4.6'; 'guardrails' = 'guardrails-ai 0.10.1'; 'opensearch' = 'OpenSearch client'; 'bitwarden' = 'Bitwarden CLI'; 'minishai' = 'Mini Shai-Hulud worm'; 'lightning' = 'lightning 2.6.2 and 2.6.3'; 'durabletask' = 'durabletask 1.4.1 to 1.4.3'; 'telnyx' = 'telnyx 4.87.1 and 4.87.2'; 'mastra' = 'Mastra npm packages'; 'antv' = 'AntV account takeover'; 'redhat' = 'Red Hat Cloud Services packages'; 'keyv' = 'keyv worm'; 'keyvscope' = 'keyv account takeover'; 'keyvspread' = 'keyv worm spread'; 'sandworm' = 'SANDWORM_MODE worm'; 'sandsleep' = 'SANDWORM_MODE sleeper packages'; 'tensorlake' = 'tensorlake package'; 'litellm' = 'LiteLLM 1.107.0'; 'litellmmar' = 'LiteLLM 1.82.7 and 1.82.8'; 'glasswormuni' = 'GlassWorm invisible code'; 'glassworm' = 'GlassWorm extensions'; 'glasswormmar' = 'GlassWorm extensions'; 'glasswormvsix' = 'GlassWorm sleeper extensions'; 'glasswormapr' = 'GlassWorm sleeper extensions'; 'glasswormzig' = 'GlassWorm extensions'; 'glasswormdec' = 'GlassWorm native extensions'; 'glasswormoct' = 'GlassWorm-linked themes'; 'glasswasm' = 'GlassWASM extensions'; 'nxconsole' = 'Nx Console 18.95.0'; 'mistral' = 'Mistral AI npm packages' }
 # <<< mitre
@@ -391,6 +417,10 @@ $MitreSource = 'References: MITRE ATT&CK Enterprise ' + $MitreAttackVersion + ' 
 $FwName = @{ attack = 'ATT&CK'; atlas = 'ATLAS' }
 $NotCheckedWhy = 'no result, a stale or failed run, one with an account partly checked or not checked, or a result this tool could not read'
 $RelText = [ordered]@{ exposure = 'Exposure for'; indicator = 'Indicator of' }
+$CsfFunctions = @('Govern', 'Identify', 'Protect', 'Detect', 'Respond', 'Recover')
+$CsfMeaning = 'These NIST Cybersecurity Framework (CSF) 2.0 references are Blindspot''s own mapping, not NIST''s. Each one names the CSF outcome that a kind of finding helps the organization work toward, on the computers where it was found. A reference does not say whether the organization meets the framework, and NIST has not reviewed or endorsed Blindspot.'
+$CsfCredit = 'National Institute of Standards and Technology (2024) The NIST Cybersecurity Framework (CSF) 2.0. (National Institute of Standards and Technology, Gaithersburg, MD), NIST Cybersecurity White Paper (CSWP) NIST CSWP 29. https://doi.org/10.6028/NIST.CSWP.29 Republished courtesy of the National Institute of Standards and Technology.'
+$CsfOwn = 'The mapping of findings to NIST CSF 2.0 outcomes is Blindspot''s own, not reviewed or endorsed by NIST.'
 $NotLooked = @(
   'The network: no traffic, DNS or proxies. It cannot say whether a key left a computer.',
   'The identity provider: no sign-ins, sessions or account activity.',
@@ -417,7 +447,7 @@ function Get-MitreRefs($Row) {
   $os = 'mac'; if ($Row.Win) { $os = 'win' }
   $ids = Get-WordIds $Row
   foreach ($m in $MitreRows) {
-    if ($m.Rel -ceq 'none' -or @($Row.Kinds) -cnotcontains $m.Word) { continue }
+    if ($m.Rel -ceq 'none' -or $m.Fw -ceq 'csf' -or @($Row.Kinds) -cnotcontains $m.Word) { continue }
     if ($m.Os -cne 'all' -and $m.Os -cne $os) { continue }
     if (@($m.Scope).Count -gt 0) {
       if (-not $ids.ContainsKey($m.Word)) { continue }
@@ -941,7 +971,7 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now, [int]$Repeats, 
       Providers = $prov; NoOthers = @($no | Where-Object { $_.OtherProfiles -gt 0 }).Count }
   }
   $techs = [ordered]@{}
-  foreach ($m in $MitreRows) { if ($m.Rel -cne 'none' -and -not $techs.Contains($m.Fw + ' ' + $m.Id)) { $techs[$m.Fw + ' ' + $m.Id] = $m } }
+  foreach ($m in $MitreRows) { if ($m.Rel -cne 'none' -and $m.Fw -cne 'csf' -and -not $techs.Contains($m.Fw + ' ' + $m.Id)) { $techs[$m.Fw + ' ' + $m.Id] = $m } }
   $tl = @()
   foreach ($key in $techs.PSBase.Keys) {
     $m = $techs[$key]
@@ -952,6 +982,13 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now, [int]$Repeats, 
     $tl += New-Object PSObject -Property $t
   }
   $d.Techniques = @($tl | Sort-Object @{ Expression = { $_.FwKey } }, @{ Expression = { $_.N }; Descending = $true })
+  # A computer counts once for each CSF Function, however many of its findings fall under it.
+  $d.Csf = [ordered]@{}
+  foreach ($f in $CsfFunctions) {
+    $words = @($MitreRows | Where-Object { $_.Fw -ceq 'csf' -and $_.Rel -cne 'none' -and @($_.Tactics)[0] -ceq $f } | ForEach-Object { $_.Word })
+    if ($words.Count -eq 0) { continue }
+    $d.Csf[$f] = @($known | Where-Object { $kk = @($_.Kinds); @($words | Where-Object { $kk -ccontains $_ }).Count -gt 0 }).Count
+  }
   foreach ($fw in @('attack', 'atlas')) {
     $byTactic = [ordered]@{}
     foreach ($m in @($d.Techniques | Where-Object { $_.FwKey -ceq $fw })) {
@@ -1173,7 +1210,7 @@ td.num, th.num{text-align:right; white-space:nowrap}
 .more td{color:var(--muted); font-style:italic; text-align:center; background:var(--bg)}
 .foot-row th, .foot-row td{border-top:1px solid var(--line-2); font-weight:600; color:var(--ink); background:var(--bg)}
 .disclaim{border-left:3px solid var(--line-2); padding:8px 14px; margin:0 0 16px; font-size:12.5px; max-width:none}
-.charts{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:24px}
+.charts{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:24px}
 .chart h3{margin-bottom:4px}
 .chart .sub{font-size:12.5px; color:var(--muted); margin:0 0 10px}
 .bars{list-style:none; margin:0; padding:0}
@@ -1188,6 +1225,7 @@ td.num, th.num{text-align:right; white-space:nowrap}
 .bars .grp-lbl:first-child{margin-top:0}
 .b-exp{fill:var(--bar)}
 .b-ind{fill:url(#hatch)}
+.b-neu{fill:var(--bar-soft)}
 .track{fill:var(--line)}
 .legend{display:flex; flex-wrap:wrap; gap:6px 18px; font-size:12.5px; color:var(--body); margin:4px 0 16px; padding:0; list-style:none}
 .legend li{display:flex; align-items:center; gap:6px}
@@ -1252,7 +1290,7 @@ td.num, th.num{text-align:right; white-space:nowrap}
   #scope{break-before:page}
   h2, h3, .sec-head{break-after:avoid}
   .paths{grid-template-columns:repeat(3, minmax(0,1fr))}
-  .charts{grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px}
+  .charts{grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px}
   .cov{grid-template-columns:repeat(2, minmax(0,1fr))}
   .host{min-width:16ch} .acct{min-width:13ch}
   a{color:inherit; text-decoration:none}
@@ -1442,12 +1480,14 @@ function Get-ReportPage($D) {
   }
   [void]$h.Append('</section>' + "`n")
 
-  # 05 Summary by technique
-  [void]$h.Append('<section class="pad" aria-labelledby="s-sum"><div class="sec-head"><span class="num">05</span><h2 id="s-sum">Summary by technique</h2></div>')
-  if ($D.Techniques.Count -eq 0) { [void]$h.Append('<p class="muted">No finding relates to a MITRE technique.</p>') }
+  # 05 Summary by technique and function
+  [void]$h.Append('<section class="pad" aria-labelledby="s-sum"><div class="sec-head"><span class="num">05</span><h2 id="s-sum">Summary by technique and function</h2></div>')
+  $csfOn = @($D.Csf.PSBase.Keys | Where-Object { $D.Csf[$_] -gt 0 })
+  if ($D.Techniques.Count -eq 0 -and $csfOn.Count -eq 0) { [void]$h.Append('<p class="muted">No finding relates to a MITRE technique or a NIST CSF function.</p>') }
   else {
     $max = 1
     foreach ($t in $D.Techniques) { foreach ($rel in $RelText.Keys) { if ($t.$rel -gt $max) { $max = $t.$rel } } }
+    foreach ($f in $D.Csf.PSBase.Keys) { if ($D.Csf[$f] -gt $max) { $max = $D.Csf[$f] } }
     $relCls = @{ exposure = 'exp'; indicator = 'ind' }
     [void]$h.Append('<div class="sumfig"><ul class="legend" aria-label="Relations">')
     foreach ($rel in $RelText.Keys) { [void]$h.Append('<li><svg viewBox="0 0 22 8" aria-hidden="true"><rect width="22" height="8" rx="2" class="b-' + $relCls[$rel] + '"/></svg>' + $rel.Substring(0, 1).ToUpper() + $rel.Substring(1) + '</li>') }
@@ -1469,7 +1509,16 @@ function Get-ReportPage($D) {
       }
       [void]$h.Append('</ul></div>')
     }
-    [void]$h.Append('</div><p class="note">A computer counts once for each technique, in each relation that applies to it. The counts per finding are in section 4.</p></div>')
+    [void]$h.Append('<div class="chart csf"><h3>NIST CSF function</h3><p class="sub">Computers, CSF ' + (& $e $CsfVersion) + '</p><p class="sub">' + (& $e $CsfMeaning) + '</p><ul class="bars">')
+    foreach ($f in $D.Csf.PSBase.Keys) {
+      $w = $D.Csf[$f] / $max * 100; if ($D.Csf[$f] -gt 0 -and $w -lt 1.5) { $w = 1.5 }
+      [void]$h.Append('<li class="bar neu"><div class="lbl"><span>' + (& $e $f) + '</span></div><svg viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect width="100" height="8" class="track"/><rect width="' +
+        (Get-Num $w) + '" height="8" class="b-neu"/></svg><span class="val">' + $D.Csf[$f] + '</span></li>')
+    }
+    $untouched = @($CsfFunctions | Where-Object { -not $D.Csf.Contains($_) })
+    if ($untouched.Count -gt 0) { [void]$h.Append('</ul><p class="sub">No finding relates to ' + (& $e ((@($untouched | Select-Object -First ($untouched.Count - 1)) -join ', ') + $(if ($untouched.Count -gt 1) { ' or ' } else { '' }) + $untouched[$untouched.Count - 1])) + '.</p></div>') }
+    else { [void]$h.Append('</ul></div>') }
+    [void]$h.Append('</div><p class="note">A computer counts once for each technique, in each relation that applies to it, and once for each CSF function. The counts per finding are in section 4.</p></div>')
   }
   [void]$h.Append('<div class="blk tactics">')
   if ($D.Tactics.Count -eq 0) { [void]$h.Append('<p>No finding in this report relates to a MITRE tactic.</p>') }
@@ -1558,11 +1607,21 @@ function Get-ReportPage($D) {
     [void]$h.Append('<dt>' + (& $e $FwName[$fw]) + '</dt><dd>' + (& $e ($tl -join ', ')) + '</dd>')
   }
   [void]$h.Append('</dl></div>')
+  $outcomes = [ordered]@{}
+  foreach ($f in $CsfFunctions) { foreach ($m in $MitreRows) { if ($m.Fw -ceq 'csf' -and $m.Rel -cne 'none' -and @($m.Tactics)[0] -ceq $f -and -not $outcomes.Contains($m.Id)) { $outcomes[$m.Id] = $m } } }
+  $fns = @(); foreach ($m in $outcomes.Values) { if ($fns -cnotcontains @($m.Tactics)[0]) { $fns += @($m.Tactics)[0] } }
+  $untouched = @($CsfFunctions | Where-Object { $fns -cnotcontains $_ })
+  [void]$h.Append('<div class="blk nist"><h3>NIST Cybersecurity Framework ' + (& $e $CsfVersion) + '</h3><p>Blindspot''s findings help an organisation work toward these CSF outcomes, each quoted from NIST''s text:</p><ul>')
+  foreach ($m in $outcomes.Values) { [void]$h.Append('<li><b>' + (& $e $m.Id) + '</b> (' + (& $e (@($m.Tactics) -join ', ')) + '): &quot;' + (& $e $m.Name) + '&quot;</li>') }
+  [void]$h.Append('</ul>')
+  if ($untouched.Count -gt 0) { [void]$h.Append('<p>The findings relate to nothing under ' + (& $e ((@($untouched | Select-Object -First ($untouched.Count - 1)) -join ', ') + $(if ($untouched.Count -gt 1) { ' or ' } else { '' }) + $untouched[$untouched.Count - 1])) + '.</p>') }
+  [void]$h.Append('</div>')
   [void]$h.Append('<div class="blk"><h3>How results are handled</h3><dl class="kv">' +
     '<dt>Source</dt><dd>Each computer''s own saved result, read from the MDM''s export. A result holds counts and names from fixed lists and the names of accounts, never a file path, a file''s contents or a key. The full result stays on the computer: to see which files, the person runs Blindspot on their own account.</dd>' +
     '<dt>Building the report</dt><dd>The report is built on one computer from the export files and makes no network request.</dd>' +
-    '<dt>Frameworks</dt><dd>MITRE ATT&amp;CK Enterprise ' + (& $e $MitreAttackVersion) + '. MITRE ATLAS release ' + (& $e $MitreAtlasVersion) + '.</dd></dl></div>')
-  [void]$h.Append('<div class="blk"><h3>Attribution</h3><ul><li>' + (& $e $D.Credit) + '</li><li>OWASP Top 10 for LLM Applications is referenced by name only.</li></ul></div></section>' + "`n")
+    '<dt>Frameworks</dt><dd>MITRE ATT&amp;CK Enterprise ' + (& $e $MitreAttackVersion) + '. MITRE ATLAS release ' + (& $e $MitreAtlasVersion) + '. NIST Cybersecurity Framework (CSF) ' + (& $e $CsfVersion) + '.</dd></dl></div>')
+  [void]$h.Append('<div class="blk"><h3>Attribution</h3><ul><li>' + (& $e $D.Credit) + '</li><li>' + (& $e $CsfOwn) + '</li><li>' + (& $e $CsfCredit) + '</li>' +
+    '<li>OWASP Top 10 for LLM Applications is referenced by name only.</li></ul></div></section>' + "`n")
 
   [void]$h.Append('</main>' + "`n" + '<footer class="foot"><svg width="16" height="16" aria-hidden="true"><use href="#gird-mark"/></svg><span>Blindspot is open source, made by GIRD. <a href="https://gird.ai">gird.ai</a></span></footer>' + "`n")
   [void]$h.Append('</div>' + "`n" + '</body>' + "`n" + '</html>' + "`n")

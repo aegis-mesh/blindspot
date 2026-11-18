@@ -508,6 +508,12 @@ else bad "intune: gen.sh --check fails when a finding word has no ATT&CK line" "
 gen_copy; awk -F '\t' '!($1 == "update-tools" && $4 == "atlas")' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
 if [ "$RC" -eq 2 ] && grep -q 'no atlas line for the finding word update-tools' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when a finding word has no ATLAS decision, not even none"
 else bad "intune: gen.sh --check fails when a finding word has no ATLAS decision, not even none" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; awk -F '\t' '!($1 == "sessions" && $4 == "csf")' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q 'no csf line for the finding word sessions' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when a finding word has no NIST CSF decision"
+else bad "intune: gen.sh --check fails when a finding word has no NIST CSF decision" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "keys" && $4 == "csf" { $7 = "Protect,Risk Assessment" } { print }' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q '^data/mitre.tsv: keys	all	all	csf' "$IW/gen.txt"; then ok "intune: gen.sh --check fails on a CSF id filed under another Function"
+else bad "intune: gen.sh --check fails on a CSF id filed under another Function" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
 gen_copy; awk '{ print } /^  @\{ Word = .partial.;/ { print "  @{ Word = \047exfil\047; Arg = \047count\047; Level = \047review\047; Label = \047Data sent out\047 }" }' gird-report.ps1 > "$IW/gen/gird-report.ps1"; gen_check; RC=$?
 if [ "$RC" -eq 2 ] && grep -q 'no attack line for the finding word exfil' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for"
 else bad "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi

@@ -1029,12 +1029,30 @@ def main():
         if got is None or bare is None: print('\n'.join(R)); return
         html, plain = got[3], bare[3]
         heads = re.findall(r'<div class="sec-head"><span class="num">([0-9]{2})</span><h2 id="[a-z-]+">([^<]+)</h2></div>', html)
-        want = [('01', 'Summary'), ('02', 'What could get out'), ('03', 'Computers to deal with first'), ('04', 'Findings by kind'), ('05', 'Summary by technique'),
+        want = [('01', 'Summary'), ('02', 'What could get out'), ('03', 'Computers to deal with first'), ('04', 'Findings by kind'), ('05', 'Summary by technique and function'),
                 ('06', 'Computers not fully checked'), ('07', 'Every computer'), ('08', 'Scope and method')]
         check('the page has its eight sections, in order', heads == want and re.findall(r'<div class="sec-head">.*?</div>', plain) == re.findall(r'<div class="sec-head">.*?</div>', html), heads)
         check('the page has the GIRD mark and the title, and every source of where these results came from', '<symbol id="gird-mark" viewBox="0 0 1024 1024">' in html
               and '<h1>AI Exposure Report</h1>' in html and '<h3>Where these results came from</h3>' in section(html, '07') and 'page.csv (9)' in section(html, '07'))
-        check('no Armed relation and no NIST anywhere on the page', not re.search(r'armed|NIST', html + plain, re.I), re.findall(r'.{30}(?:armed|NIST).{30}', html, re.I)[:3])
+        check('no Armed relation anywhere on the page', not re.search(r'armed', html + plain, re.I), re.findall(r'.{30}armed.{30}', html, re.I)[:3])
+        csfid = r'\b(?:GV|ID|PR|DE|RS|RC)\.[A-Z]{2}-[0-9]{2}\b'
+        others = ''.join(section(html, x) for x in ('01', '02', '03', '04', '06', '07'))
+        check('NIST CSF is only in the summary by function and the scope, never on a finding row and never a placeholder',
+              len(others) > 1000 and not re.search(r'NIST|CSF|' + csfid, others) and not re.search(csfid, section(html, '04')) and '&lt;category' not in html
+              and 'NIST CSF function' in section(html, '05') and re.search(csfid, section(html, '08')) is not None, re.findall(r'.{30}(?:NIST|CSF).{30}', others)[:3])
+        fn = dict((a, int(b)) for a, b in re.findall(r'<li class="bar neu"><div class="lbl"><span>([A-Za-z]+)</span></div><svg[^>]*>(?:<rect[^>]*/>)+</svg><span class="val">([0-9]+)</span></li>', html))
+        check('the CSF function chart counts a computer once per function', fn == {'Identify': 4, 'Protect': 1, 'Detect': 2}, fn)
+        csfmean = 'These NIST Cybersecurity Framework (CSF) 2.0 references are Blindspot&#39;s own mapping, not NIST&#39;s.'
+        i = html.find('<div class="chart csf">'); nist = re.search(r'.*', html[i:html.find('<p class="note">A computer counts', i)]) if i >= 0 else None; scope = re.search(r'<div class="blk nist">.*?</div>', html, re.S)
+        near = (nist.group(0) if nist else '') + (scope.group(0) if scope else '')
+        check('every CSF reference helps work toward an outcome: none says comply, fail or gap, and NIST\'s sentence comes first, once',
+              nist is not None and scope is not None and not re.search(r'(?i)\bcompl(?:y|ies|iance|iant)|\bfail|\bgap', near) and html.count(csfmean) == 1
+              and html.find(csfmean) < html.find('<li class="bar neu">') < html.find('<div class="blk nist">') and 'help an organisation work toward' in scope.group(0)
+              and 'The findings relate to nothing under Govern, Respond or Recover.' in scope.group(0)
+              and '<b>ID.RA-01</b> (Identify, Risk Assessment): &quot;Vulnerabilities in assets are identified, validated, and recorded&quot;' in scope.group(0), near[:300])
+        check('the page carries NIST\'s citation and courtesy line, and says the CSF mapping is Blindspot\'s own',
+              '<li>National Institute of Standards and Technology (2024) The NIST Cybersecurity Framework (CSF) 2.0. (National Institute of Standards and Technology, Gaithersburg, MD), NIST Cybersecurity White Paper (CSWP) NIST CSWP 29. https://doi.org/10.6028/NIST.CSWP.29 Republished courtesy of the National Institute of Standards and Technology.</li>' in section(html, '08')
+              and '<li>The mapping of findings to NIST CSF 2.0 outcomes is Blindspot&#39;s own, not reviewed or endorsed by NIST.</li>' in section(html, '08'))
         ns = 'http://www.w3.org/2000/svg'
         def urls(h):
             data = re.findall(r'url\("data:image/svg\+xml,[^"]*"\)', h)
@@ -1043,9 +1061,9 @@ def main():
             return data, re.findall(r'(?i)(?:https?:)?//[a-z0-9.-]+[^\s"\'<>)]*', rest)
         data, found = urls(html)
         hosts = sorted(set(re.match(r'(?i)(?:https?:)?//([a-z0-9.-]+)', u).group(1).lower() for u in found))
-        check('the page runs no script and loads nothing: links only to MITRE, OWASP and gird.ai',
+        check('the page runs no script and loads nothing: links only to MITRE, OWASP, NIST and gird.ai',
               not re.search(r'(?i)<script|javascript:|<[^>]*\s(?:on[a-z]+|src)\s*=|<link|<img|<iframe|<object|<embed|@import', html) and len(data) == 1 and ns in data[0]
-              and all(h in ('attack.mitre.org', 'atlas.mitre.org', 'genai.owasp.org', 'owasp.org', 'gird.ai') for h in hosts)
+              and all(h in ('attack.mitre.org', 'atlas.mitre.org', 'genai.owasp.org', 'owasp.org', 'gird.ai', 'doi.org') or h == 'nist.gov' or h.endswith('.nist.gov') for h in hosts)
               and all(u.startswith('https://') for u in found) and re.findall(r'url\((?!"data:|#)', html) == [] and bad_links(html) == [], (hosts, bad_links(html)))
         org = HOSTILE_ORG; eo = html_escape(org)
         css = html[html.find('<style>'):html.find('</style>')]

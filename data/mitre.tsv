@@ -1,28 +1,44 @@
-# MITRE ATT&CK and ATLAS references for each kind of finding the fleet result names, shown by
-# gird-report.ps1. One line each, tab separated. After editing, run: bash tools/gen.sh
-# The mapping is Blindspot's own, not MITRE's. Blindspot reads files: it never detects a technique in use.
+# MITRE ATT&CK and ATLAS references, and NIST CSF 2.0 outcomes, for each kind of finding the fleet result
+# names, shown by gird-report.ps1. One line each, tab separated. After editing, run: bash tools/gen.sh
+# The mapping is Blindspot's own, not MITRE's or NIST's. Blindspot reads files: it never detects a technique in use.
 # A line goes in only when the result line itself carries enough to know the technique applies to that
 # finding on that system. Where it does not, the word gets a none line saying why.
 #   word       a finding word of the fleet inventory value, as gird-report.ps1's $Items lists it. Every
-#              word has at least one attack line and one atlas line, mapped or none (gen.sh refuses a word
+#              word has at least one attack, one atlas and one csf line, mapped or none (gen.sh refuses a word
 #              without one, and a word gird-report.ps1 does not know)
 #   os         all, mac or win: the line applies only to results from that system (a Windows result
 #              carries other_profiles=)
 #   scope      all, or the incident ids (data/incidents.tsv) the line applies to, comma separated: only
 #              for a word whose value lists incident ids (incidents, lockfile, update, remove). The report
 #              shows such a line only for PCs whose result names one of them
-#   framework  attack or atlas
-#   id         the technique id, or - on a none line
-#   name       the technique's name as MITRE's page gives it (a sub-technique as parent: name), or -
-#   tactics    the tactics MITRE lists for the technique, comma separated, or -
+#   framework  attack, atlas or csf (NIST Cybersecurity Framework 2.0)
+#   id         the technique id or the CSF Subcategory id, or - on a none line
+#   name       the technique's name as MITRE's page gives it (a sub-technique as parent: name), or the
+#              Subcategory's outcome as NIST's text gives it, or -
+#   tactics    the tactics MITRE lists for the technique, comma separated; for csf the Function, then the
+#              Category; or -
 #   relation   exposure: Blindspot found something the technique could exploit
 #              indicator: a trace that a published incident links to the technique
-#              none: no technique fits; the note says why
+#              supports (csf only): the finding helps an organization work toward the outcome on that
+#              computer. Never a statement that the outcome is met or missed
+#              none: no technique or outcome fits; the note says why
 #   url        the technique's page: https://attack.mitre.org/techniques/T1552/001/ or
-#              https://atlas.mitre.org/techniques/AML.T0055, or - on a none line
+#              https://atlas.mitre.org/techniques/AML.T0055; for csf https://doi.org/10.6028/NIST.CSWP.29;
+#              or - on a none line
 #   note       on a none line, why no technique fits, as the report shows it; - otherwise
 # attack-version: v20.1
 # atlas-version: 2026.10
+# csf-version: 2.0
+# CSF ids, Function and Category names and outcome text are from NIST CSWP 29, The NIST Cybersecurity
+# Framework (CSF) 2.0, 26 February 2024, Appendix A (https://doi.org/10.6028/NIST.CSWP.29), read on
+# 18 November 2026. No finding kind shows that an outcome is not achieved: each Protect outcome depends on
+# what the organization authorized or decided, which Blindspot cannot see. So every csf line is supports.
+#   ID.RA-01: a weakness Blindspot identifies and records (a readable key, an SSH key with no passphrase,
+#   a link to authorized_keys, an agent set to run without asking, a tool with a published fix).
+#   DE.CM-09: reading software and files for published malware traces; the leads fit "potentially".
+#   PR.PS-02: software to update or to remove.
+#   Tested and not used: ID.AM-02, ID.AM-04, ID.RA-03, PR.AA-01, PR.AA-05, PR.DS-01, PR.PS-01, PR.PS-05
+#   and all of DE.AE (Blindspot does not analyze or correlate events).
 # Read on 18 November 2026: ATT&CK Enterprise v20.1 (https://attack.mitre.org/resources/versions/, current
 # since 13 October 2026), each technique's page; ATLAS release 2026.10 of 28 October 2026, from the data the
 # site renders (https://atlas.mitre.org/atlas-data/dist/v6/ATLAS-2026.10.yaml, listed in
@@ -100,3 +116,28 @@ tmp-marks	all	all	attack	-	-	-	none	-	Markers in a folder every account can writ
 tmp-marks	all	all	atlas	-	-	-	none	-	Markers in a folder every account can write to: a lead, not a finding.
 partial	all	all	attack	-	-	-	none	-	Says the account was partly checked. It is not a finding.
 partial	all	all	atlas	-	-	-	none	-	Says the account was partly checked. It is not a finding.
+wiper	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+incidents	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+lockfile	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+planted	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+run-without-asking	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+keys	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+history	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+sessions	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+mcp-tokens	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+allow-lists	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+ssh-links	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+ssh-open	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+update-tools	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+update-tools	all	all	csf	PR.PS-02	Software is maintained, replaced, and removed commensurate with risk	Protect,Platform Security	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+update	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+update	all	all	csf	PR.PS-02	Software is maintained, replaced, and removed commensurate with risk	Protect,Platform Security	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+remove	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+remove	all	all	csf	PR.PS-02	Software is maintained, replaced, and removed commensurate with risk	Protect,Platform Security	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+to-read	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+possible	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+tmp-wiper	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+tmp-marks	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+platforms	all	all	csf	-	-	-	none	-	The leak happened at the hosted platform. The result does not show the organization has the platform as a supplier.
+on-open	all	all	csf	-	-	-	none	-	The count takes in settings a person wrote for their own use, which are not a weakness, and the result gives only a count.
+partial	all	all	csf	-	-	-	none	-	Says the account was partly checked. It is not a finding.
