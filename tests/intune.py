@@ -126,6 +126,11 @@ FORMS += [
     ('not_checked', 'gird-fleet.ps1 cut, partly checked', _ps(' | anna: not_checked +more')),
     ('act', 'gird-fleet.ps1 cut at the most characters it writes', _long(2047)),
     ('act', 'gird-fleet.ps1 cut with a machine row', _ps(' | anna: act | machine: review; possible mastra +more', 'act')),
+    ('not_checked', 'gird-fleet.ps1 machine marker owner unread', _ps(' | anna: clear | machine: not_checked; possible mastra')),
+    ('not_checked', 'gird-fleet.ps1 machine not checked, nothing else', _ps(' | anna: review ssh-open 1 | machine: not_checked')),
+    ('act', 'gird-fleet.ps1 act account and machine not checked', _ps(' | anna: act keys 1 | machine: not_checked; possible mastra', 'act')),
+    ('failed', 'gird-fleet.ps1 failed with the machine not checked', _ps(' reason=host_32bit | anna: not_checked host_32bit | machine: not_checked; possible mastra', 'failed')),
+    ('act', 'gird-fleet.ps1 cut with the machine not checked', _ps(' | anna: act | machine: not_checked; possible mastra +more', 'act')),
 ]
 for r in ('name', 'no_login_shell', 'home_missing', 'home_link', 'home_owner', 'home_shared', 'home_system', 'home_name',
           'home_no_answer', 'sudo', 'bad_output', 'time_limit', 'deadline', 'copy_changed'):
@@ -148,6 +153,13 @@ FORMS += [
     ('clear', 'gird-fleet.sh hashed names', 'v1 clear %s | 0123456789abcdef: clear | fedcba9876543210: clear' % T0),
     ('act', 'gird-fleet.sh cut', 'v1 act %s | asha: act wiper; incidents tanstack | bo: not_checked | cy: review +more' % T0),
     ('act', 'gird-fleet.sh cut, accounts left out', 'v1 act %s | asha: act +more' % T0),
+    ('clear', 'gird-fleet.sh old install', 'v1 clear %s | asha: clear | old-install' % T0),
+    ('review', 'gird-fleet.sh machine row and old install', 'v1 review %s | asha: clear | machine: review; possible litellm; tmp-wiper | old-install' % T0),
+    ('not_checked', 'gird-fleet.sh old install and no accounts', 'v1 not_checked %s | old-install | no accounts' % T0),
+    ('not_checked', 'gird-fleet.sh machine row, old install and no accounts', 'v1 not_checked %s | machine: review; possible litellm | old-install | no accounts' % T0),
+    ('act', 'gird-fleet.sh cut, accounts, machine row, old install', 'v1 act %s | asha: act wiper; incidents tanstack | bo: review | machine: act incidents litellm | old-install +more' % T0),
+    ('act', 'gird-fleet.sh cut, the machine row dropped, old install kept', 'v1 act %s | asha: act | bo: not_checked | old-install +more' % T0),
+    ('act', 'gird-fleet.sh cut, machine row, old install, no accounts', 'v1 act %s | machine: act incidents litellm | old-install | no accounts +more' % T0),
     ('not_checked', 'gird-fleet.sh an account named machine, clear, is not read as clear', 'v1 clear %s | machine: clear' % T0),
     ('not_checked', 'gird-fleet.sh an account named machine, clear, beside another', 'v1 clear %s | asha: clear | machine: clear' % T0),
     ('not_checked', 'gird-fleet.sh an account named machine, with its own findings', 'v1 act %s | machine: act keys 1' % T0),
@@ -174,7 +186,16 @@ NOT_WRITTEN = [
     ('tmp-marks on Windows', _ps(' | anna: review tmp-marks mastra', 'review')),
     ('tmp-wiper on Windows', _ps(' | anna: review tmp-wiper', 'review')),
     ('tmp-wiper on the Windows machine row', _ps(' | anna: clear | machine: review; tmp-wiper', 'review')),
-    ('a Windows machine row not checked', _ps(' | anna: clear | machine: not_checked')),
+    ('tmp-wiper on a Windows machine row not checked', _ps(' | anna: clear | machine: not_checked; tmp-wiper')),
+    ('a Windows machine row not checked under a clear outcome', _ps(' | anna: clear | machine: not_checked', 'clear')),
+    ('old-install on Windows', _ps(' | anna: clear | old-install', 'clear')),
+    ('old-install before an account', 'v1 clear %s | old-install | asha: clear' % T0),
+    ('old-install before the machine row', 'v1 review %s | asha: clear | old-install | machine: review; tmp-wiper' % T0),
+    ('old-install twice', 'v1 clear %s | asha: clear | old-install | old-install' % T0),
+    ('old-install after no accounts', 'v1 not_checked %s | no accounts | old-install' % T0),
+    ('old-install alone', 'v1 clear %s | old-install' % T0),
+    ('old-install alone, cut', 'v1 act %s | old-install +more' % T0),
+    ('old-install with a word after it', 'v1 clear %s | asha: clear | old-install yes' % T0),
     ('two account rows on Windows', _ps(' | anna: clear | bo: clear', 'clear')),
     ('no accounts on Windows', _ps(' | no accounts')),
     ('items out of order', _ps(' | anna: act keys 1; wiper', 'act')),
@@ -1114,6 +1135,9 @@ def main():
             for i, (st, label, value) in enumerate(rows):
                 r = by.get('FORM-%03d' % i, {})
                 check('writer form: %s' % label, r.get('status') == st, 'wanted %s, got %s (%s) for %s' % (st, r.get('status'), r.get('why'), value[:160]))
+            old = [(label, by.get('FORM-%03d' % i, {}).get('why', '')) for i, (st, label, value) in enumerate(rows) if not label.startswith('not written') and ' | old-install' in value]
+            check('a result naming an older install says so in its reason, and none other does', old and all('older install of Blindspot is still on this Mac' in w for _, w in old)
+                  and not [i for i, (st, label, value) in enumerate(rows) if ' | old-install' not in value and 'older install' in by.get('FORM-%03d' % i, {}).get('why', '')], old)
     elif mode == 'silent':
         got, out = load_out(w, 'silent')
         check('the report with a silent group saves its files', got is not None, out[-300:])

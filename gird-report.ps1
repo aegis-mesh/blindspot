@@ -270,7 +270,7 @@ function Test-Items([string]$Text, [bool]$Win, [System.Collections.ArrayList]$In
 }
 
 function Read-Inventory([string]$Raw) {
-  $r = @{ Ok = $false; Newer = ''; Outcome = ''; Time = $null; Accounts = @(); Kinds = @(); More = $false; OtherProfiles = 0; Reason = ''; Special = ''; Win = $false }
+  $r = @{ Ok = $false; Newer = ''; Outcome = ''; Time = $null; Accounts = @(); Kinds = @(); More = $false; OtherProfiles = 0; Reason = ''; Special = ''; Win = $false; OldInstall = $false }
   if ($null -eq $Raw) { return $r }
   $t = $Raw.TrimEnd(" `t`r`n".ToCharArray())
   $kept = $Raw
@@ -309,9 +309,15 @@ function Read-Inventory([string]$Raw) {
   $accounts = New-Object System.Collections.ArrayList
   $worst = 0
   $names = @{}
-  $rows = 0; $machine = $false; $noAcc = $false; $unknown = $false
+  $rows = 0; $machine = $false; $noAcc = $false; $unknown = $false; $old = $false
   foreach ($s in $segs) {
     if ($noAcc) { return $r }
+    if ($old -and $s -cne 'no accounts') { return $r }
+    if ($s -ceq 'old-install') {
+      if ($win) { return $r }
+      $old = $true
+      continue
+    }
     if ($s -ceq 'no accounts') {
       if ($win -or $rows -gt 0) { return $r }
       $noAcc = $true
@@ -325,7 +331,7 @@ function Read-Inventory([string]$Raw) {
       $machine = $true
       $so = $mm.Groups[1].Value
       $hasInc = $mm.Groups[2].Success; $hasPos = $mm.Groups[4].Success; $hasWip = $mm.Groups[6].Success
-      if ($win -and ($so -ceq 'not_checked' -or $hasWip)) { return $r }
+      if ($win -and $hasWip) { return $r }
       if (-not $more) {
         if ($so -ceq 'act' -and -not $hasInc) { return $r }
         if ($so -ceq 'review' -and -not ($hasInc -or $hasPos -or $hasWip)) { return $r }
@@ -379,6 +385,7 @@ function Read-Inventory([string]$Raw) {
   }
   if ($win -and $rows -ne 1) { return $r }
   if (-not $win -and $rows -eq 0 -and -not $noAcc -and -not $more) { return $r }
+  if ($old -and $rows -eq 0 -and -not $machine -and -not $noAcc) { return $r }
   $head = $Outcomes[$out]
   if ($worst -gt $head) { return $r }
   if ($out -cne 'failed' -and -not $more -and $worst -ne $head) { return $r }
@@ -386,6 +393,7 @@ function Read-Inventory([string]$Raw) {
   $r.Accounts = $accounts.ToArray()
   $r.Kinds = $kinds.ToArray()
   $r.Win = $win
+  $r.OldInstall = $old
   $r.Ok = $true
   return $r
 }
@@ -565,6 +573,7 @@ function Set-Result($Row, [string]$Det, [bool]$HasDet, [DateTime]$Now) {
   if ($none -gt 0) { $why += 'no accounts to check' }
   if ($p.More) { $why += 'more on the computer than its result keeps' }
   if ($p.OtherProfiles -gt 0) { $why += "$($p.OtherProfiles) other account" + $(if ($p.OtherProfiles -eq 1) { '' } else { 's' }) + ' on this PC not checked' }
+  if ($p.OldInstall) { $why += 'an older install of Blindspot is still on this Mac: remove its daily item, then its folder' }
   $row.Why = $why -join '; '
   return $row
 }

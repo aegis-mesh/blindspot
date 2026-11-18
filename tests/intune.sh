@@ -8,7 +8,8 @@
 # The values gird-report.ps1 reads are the ones gird-fleet.sh and gird-fleet.ps1 write: tests/intune.py
 # lists every form, and the writers are run here too, each with a stand-in for the account run, so
 # the reader and the writers cannot drift apart unseen. gird-fleet.ps1 runs when it is next to
-# gird-intune.ps1, or at INTUNE_FLEET_PS1.
+# gird-intune.ps1, or at INTUNE_FLEET_PS1; gird-fleet.sh next to it, or at INTUNE_FLEET_SH. Given
+# either path, every shape that writer's own value code makes also goes to Read-Inventory.
 # shellcheck disable=SC2016  # the PowerShell below is single-quoted on purpose
 INTUNE_ALONE=0
 if [ -z "${PASS+x}" ]; then
@@ -203,6 +204,8 @@ PY=$(command -v python3)
 cat > "$IW/launch.sh" <<EOF
 #!/bin/bash
 acct=""; prev=""; for a in "\$@"; do [ "\$prev" = -u ] && acct=\$a; prev=\$a; done
+# gird-fleet.sh starts itself again with only its GIRD_CHECK_ settings, so it passes these on in that name too.
+INTUNE_MODES=\${INTUNE_MODES:-\$GIRD_CHECK_INTUNE_MODES}; INTUNE_FLAVOUR=\${INTUNE_FLAVOUR:-\$GIRD_CHECK_INTUNE_FLAVOUR}
 mode=\$(/bin/cat "\$INTUNE_MODES/\${acct:-default}" 2>/dev/null)
 case "\$mode" in
   fail) exit 1 ;;
@@ -222,9 +225,9 @@ form() { # status label value-regex value: one value a writer printed, and the f
 }
 T='[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z'
 
-FLEETSH=$PWD/gird-fleet.sh; WS=$IW/wsh; U=$(id -u)
+FLEETSH=${INTUNE_FLEET_SH:-$PWD/gird-fleet.sh}; WS=$IW/wsh; U=$(id -u)
 wsh_users() { # name:mode:home:shell:uid ... (home, shell and uid optional)
-  rm -rf "$WS"; mkdir -p "$WS/modes" "$WS/tmp"; : > "$WS/users.tsv"
+  rm -rf "$WS"; mkdir -p "$WS/modes" "$WS/tmp" "$WS/old"; : > "$WS/users.tsv"
   for _e in "$@"; do
     IFS=: read -r _n _m _h _s _u <<< "$_e"
     [ -n "$_h" ] || { _h="$WS/h-$_n"; mkdir -p "$_h"; }
@@ -234,10 +237,10 @@ wsh_users() { # name:mode:home:shell:uid ... (home, shell and uid optional)
 }
 wsh_run() { # fleet options...: one --all-users run, then the --inventory line an MDM reads
   GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$WS/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$IW/launch.sh" GIRD_CHECK_FLEET_STATE="$WS/state" \
-    GIRD_CHECK_FLEET_SHARED_TMP="$WS/tmp" INTUNE_MODES="$WS/modes" INTUNE_FLAVOUR=sh /bin/bash "$FLEETSH" --all-users "$@" < /dev/null > "$WS/run.out" 2>&1
+    GIRD_CHECK_FLEET_SHARED_TMP="$WS/tmp" GIRD_CHECK_FLEET_OLD="$WS/old" GIRD_CHECK_INTUNE_MODES="$WS/modes" GIRD_CHECK_INTUNE_FLAVOUR=sh /bin/bash -p "$FLEETSH" --all-users "$@" < /dev/null > "$WS/run.out" 2>&1
   wsh_inv
 }
-wsh_inv() { GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$WS/state" /bin/bash "$FLEETSH" --inventory 2>&1 | head -n 1; }
+wsh_inv() { GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$WS/state" /bin/bash -p "$FLEETSH" --inventory 2>&1 | head -n 1; }
 wsh_epoch() { python3 - "$WS/state/last.json" "$1" <<'PY'
 import re, sys, time
 p = sys.argv[1]; t = open(p).read()
@@ -271,6 +274,20 @@ else
   wsh_users asha:clear; wsh_run > /dev/null; wsh_epoch 432000; form stale "gird-fleet.sh --inventory: an old run" "^stale: last run $T$" "$(wsh_inv)"
   wsh_users asha:clear; wsh_run > /dev/null; wsh_epoch 600; printf '%s 10' "$(( $(date -u +%s) - 300 ))" > "$WS/state/attempt"; chmod 600 "$WS/state/attempt"
   form failed "gird-fleet.sh --inventory: a run that did not finish" "^failed: the run started $T did not finish or could not save its result$" "$(wsh_inv)"
+  _ol="gird-fleet.sh runs here with an older install beside it"
+  if [ -z "${INTUNE_FLEET_SH:-}" ]; then skip "intune: $_ol" "INTUNE_FLEET_SH is not set"
+  else
+    wsh_users asha:clear; : > "$WS/old/gird-check.sh"
+    form clear "gird-fleet.sh run: an older install" "^v1 clear $T \| asha: clear \| old-install$" "$(wsh_run)"
+    wsh_users; : > "$WS/old/gird-fleet.sh"
+    form not_checked "gird-fleet.sh run: an older install and no accounts" "^v1 not_checked $T \| old-install \| no accounts$" "$(wsh_run)"
+    wsh_users asha:clear; : > "$WS/old/gird-check.sh"; : > "$WS/tmp/.pc_sq_1"; : > "$WS/tmp/gh-token-monitor.out.log"
+    form review "gird-fleet.sh run: the Mac's own row, then an older install" "^v1 review $T \| asha: clear \| machine: review; possible litellm; tmp-wiper \| old-install$" "$(wsh_run)"
+    wsh_users; : > "$WS/old/gird-check.sh"; : > "$WS/tmp/.pc_sq_1"
+    form not_checked "gird-fleet.sh run: the Mac's own row, an older install, no accounts" "^v1 not_checked $T \| machine: review; possible litellm \| old-install \| no accounts$" "$(wsh_run)"
+    wsh_users ann:act bob:act cat:act dan:act eve:review fay:partial gus:clear; : > "$WS/old/gird-check.sh"
+    form act "gird-fleet.sh run: cut to fit, keeping an older install" "^v1 act $T \| [^|]+: act.* \| old-install \+more$" "$(wsh_run)"
+  fi
 fi
 
 FLEETPS=${INTUNE_FLEET_PS1:-$PWD/gird-fleet.ps1}; WP=$IW/wps
@@ -313,6 +330,115 @@ else
   rm -rf "$WP"; mkdir -p "$WP/run" "$WP/local"; cp "$FLEETPS" "$WP/run/gird-fleet.ps1"
   _v=$(env -i PATH=/usr/bin:/bin HOME="$WP" LOCALAPPDATA="$WP/local" GIRD_CHECK_FLEET_TEST=1 "$PWSH" -NoProfile -NonInteractive -File "$WP/run/gird-fleet.ps1" 2>/dev/null | head -n 1)
   form failed "gird-fleet.ps1 run: no gird-check.ps1 to unpack" "^v1 failed $T other_profiles=0 reason=unpack \| [^ ]+: not_checked unpack$" "$_v"
+fi
+
+# Every shape each writer's own value code makes, read by Read-Inventory as the writer meant it: the
+# outcome, each row the reader returns with the outcome the writer gave it, and old-install. The Mac's
+# values come from fl_value in gird-fleet.sh, at every length either side of its 250 characters; the
+# PC's from Machine-Outcome, Machine-Part and Fit-Value in gird-fleet.ps1, either side of 2,047.
+DR=$IW/drift; mkdir -p "$DR"
+{ sed -n '/^\$Outcomes = @{/,/^function Get-UtcTime/p' "$REPORT" | sed '$d'; cat <<'PS'
+function Read-As([string]$v) {
+  $r = Read-Inventory $v
+  if (-not $r.Ok -or $r.Special) { return 'unread' }
+  $r.Outcome + ' old=' + ([string]$r.OldInstall).ToLower() + ' ' + ((@($r.Accounts) | ForEach-Object { $_.Name + '=' + $_.Outcome + ',' }) -join '')
+}
+if ($args[0] -eq 'mac') { foreach ($v in [IO.File]::ReadAllLines($args[1])) { Read-As $v }; return }
+. $args[1]
+$T = '2026-10-25T09:12Z'; $rank = @{ 'failed' = 5; 'act' = 4; 'not_checked' = 3; 'review' = 2; 'clear' = 1 }
+$n = 0; $bad = New-Object System.Collections.ArrayList
+$accts = @(
+  @('clear', 'anna: clear', '', ''), @('review', 'anna: review ssh-open 1', '', ''), @('not_checked', 'anna: not_checked ssh-open 1; partial', '', ''),
+  @('not_checked', 'anna: not_checked time_limit', '', ''), @('act', 'anna: act wiper; incidents tanstack; keys 3 anthropic,aws; possible ', 'anna: act wiper; incidents tanstack', ''),
+  @('review', 'anna: review possible ', '', ''), @('act', 'anna: act keys 1', '', 'save'), @('not_checked', 'anna: not_checked host_32bit', '', 'host_32bit'))
+foreach ($a in $accts) { foreach ($inc in @(@(), @('mastra'))) { foreach ($pos in @(@(), @('mastra'))) { foreach ($done in @($true, $false)) {
+  $st = @{ Inc = $inc; Poss = $pos; Complete = $done }
+  $mo = Machine-Outcome $inc $pos $done
+  $out = $a[0]; if ($rank[$mo] -gt $rank[$out]) { $out = $mo }; if ($a[3]) { $out = 'failed' }
+  $head = "v1 $out $T other_profiles=0"; if ($a[3]) { $head += " reason=$($a[3])" }
+  $tail = Machine-Part $st $mo
+  $lens = @(0); if ($a[1].EndsWith(' ')) { $lens = 1940..2100 }
+  foreach ($l in $lens) {
+    $acc = $a[1]
+    if ($l) { $ids = ''; while ($ids.Length -lt $l) { if ($ids) { $ids += ',' }; $ids += 'p' + ('a' * 40) }; $acc += $ids.Substring(0, $l).TrimEnd(',') }
+    $key = $a[2]; if (-not $key) { $key = 'anna: ' + $a[0] }
+    $v = Fit-Value $head $acc $key ('anna: ' + $a[0]) $tail
+    $want = @{ 'anna' = $a[0] }; if ($tail) { $want['machine'] = $mo }
+    $n++; $got = Read-As $v; $ok = $got -ne 'unread' -and $v.Length -le 2047
+    if ($ok) {
+      $f = $got.Split(' '); $ok = $f[0] -ceq $out -and $f[1] -ceq 'old=false'
+      foreach ($kv in ($f[2].Split(',') | Where-Object { $_ })) { $p = $kv.Split('='); if ($want[$p[0]] -cne $p[1]) { $ok = $false } }
+      if (@($f[2].Split(',') | Where-Object { $_ }).Count -ne $want.Count) { $ok = $false }
+    }
+    if (-not $ok -and $bad.Count -lt 3) { [void]$bad.Add($v.Substring(0, [Math]::Min(160, $v.Length)) + ' => ' + $got) }
+    elseif (-not $ok) { [void]$bad.Add('') }
+  }
+} } } }
+"$($bad.Count) of $n not read as meant; " + (($bad | Where-Object { $_ }) -join '; ')
+PS
+} > "$DR/read.ps1"
+_dn="the report reads every value gird-fleet.sh's own value code makes, of every shape and length, as the writer meant"
+if [ -z "${INTUNE_FLEET_SH:-}" ]; then skip "intune: $_dn" "INTUNE_FLEET_SH is not set"
+else
+  for _fn in fl_value fl_worst; do sed -n "/^$_fn() {/,/^}\$/p" "$INTUNE_FLEET_SH"; done > "$DR/value.sh"; . "$DR/value.sh"
+  : > "$DR/mac.in"; _da40=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  dpad() { # n: clear account rows, " | name: clear" each, n characters in all (n is 0, or 11 and more)
+    _dr=$1; _di=10; DP=""
+    while [ "$_dr" -gt 60 ]; do _di=$((_di + 1)); DP="$DP | c$_di${_da40:0:37}: clear"; _dr=$((_dr - 50)); done
+    [ "$_dr" -ge 11 ] && DP="$DP | e${_da40:0:$((_dr - 11))}: clear"
+  }
+  dids() { # n: a comma list of ids, n characters in all (n is 3 or more)
+    _dr=$1; _di=10; DI=""
+    while [ "$_dr" -gt 50 ]; do _di=$((_di + 1)); DI="$DI${DI:+,}i$_di${_da40:0:44}"; _dr=$((_dr - 48)); done
+    DI="$DI${DI:+,}j${_da40:0:$((_dr - 1))}"
+  }
+  dcase() { printf '%s\t%s\t%s\t%s\n' "$@" >> "$DR/mac.in"; } # outcome accounts old parts
+  # The lengths either side of the 250 a Mac value keeps, and one far on each side.
+  _dls="200 $(seq 236 264 | tr '\n' ' ')300"
+  for _do in 0 1; do
+    _dt=""; [ "$_do" -eq 1 ] && _dt=" | old-install"
+    for _dm in "" "machine: act incidents litellm; possible @; tmp-wiper" "machine: review; possible @" "machine: review; tmp-wiper" "machine: not_checked" "machine: not_checked incidents @; possible litellm" "machine: act incidents @"; do
+      _mo=${_dm#machine: }; _mo=${_mo%%[ ;]*}; _mr=""; [ -n "$_dm" ] && _mr=" | $_dm"
+      # No accounts: the machine's row grows.
+      _o=$(printf '%s\n' "${_mo:-clear}" not_checked | fl_worst); _b=$((21 + ${#_o} + ${#_mr} - 1 + 14 + ${#_dt}))
+      case "$_mr" in *@*) for _l in $_dls; do dids $((_l - _b)); dcase "$_o" 0 "$_do" "${_mr/@/$DI}$_dt"; done ;;
+        *) dcase "$_o" 0 "$_do" "$_mr$_dt" ;; esac
+      for _da in "act| | asha: act wiper; incidents litellm; keys 3 openai | bob: review ssh-open 1 | carol: not_checked sudo" "clear| | dee: clear" \
+                 "not_checked| | eve: not_checked ssh-open 1; partial" "failed| | a1: clear | a2: not_checked copy_changed"; do
+        _ao=${_da%%|*}; _ar=${_da#*|}; _o=$_ao; [ "$_ao" = failed ] || _o=$(printf '%s\n' "$_ao" "${_mo:-clear}" | fl_worst)
+        _ms=${_mr/@/litellm}; _b=$((21 + ${#_o} + ${#_ar} + ${#_ms} + ${#_dt}))
+        dcase "$_o" 1 "$_do" "$_ar$_ms$_dt"
+        for _l in $_dls; do _p=$((_l - _b)); [ "$_p" -ge 11 ] && { dpad "$_p"; dcase "$_o" 1 "$_do" "$_ar$DP$_ms$_dt"; }; done
+      done
+    done
+  done
+  while IFS="$(printf '\t')" read -r _o _n _x _ps; do printf '%s\n' "$(fl_value "v1 $_o 2026-10-25T09:12Z" "$_ps" "$_n")"; done < "$DR/mac.in" > "$DR/mac.txt"
+  # What the writer meant: the outcome, old-install, and each row's outcome as the parts give it.
+  awk -F '\t' '{ printf "%s old=%s ", $1, ($3 == 1 ? "true" : "false"); n = split($4, s, / [|] /)
+    for (i = 2; i <= n; i++) if (s[i] != "old-install") { split(s[i], p, "[ ;]"); k = p[1]; sub(/:$/, "", k); printf "%s=%s,", k, p[2] }
+    if ($2 == 0) printf "(no accounts)=not_checked,"; print "" }' "$DR/mac.in" > "$DR/mac.want"
+  "$PWSH" -NoProfile -NonInteractive -File "$DR/read.ps1" mac "$DR/mac.txt" > "$DR/mac.got" 2>&1
+  _drd=$(paste -d '\t' "$DR/mac.want" "$DR/mac.got" "$DR/mac.txt" | awk -F '\t' '
+    { split($1, w, " "); split($2, g, " "); bad = 0
+      if ($2 == "unread" || g[1] != w[1] || g[2] != w[2] || length($3) > 250) bad = 1
+      n = split(w[3], a, ","); for (i = 1; i < n; i++) { split(a[i], kv, "="); want[kv[1]] = kv[2] }
+      m = split(g[3], b, ","); for (i = 1; i < m; i++) { split(b[i], kv, "="); if (!(kv[1] in want) || want[kv[1]] != kv[2]) bad = 1 }
+      if ($3 !~ / \+more$/ && m != n) bad = 1
+      delete want
+      if (bad) { nb++; if (nb <= 3) printf "%s => %s; ", $3, $2 } }
+    END { printf "%d of %d not read as meant, %d cut", nb, NR, cut }
+    $3 ~ / \+more$/ { cut++ }')
+  if [ "$(wc -l < "$DR/mac.txt" | tr -d ' ')" -eq "$(wc -l < "$DR/mac.got" | tr -d ' ')" ] && [ "${_drd#0 of }" != "$_drd" ] && [ "${_drd% 0 cut}" = "$_drd" ]; then ok "intune: $_dn" "$_drd"
+  else bad "intune: $_dn" "$_drd"; fi
+fi
+_dn="the report reads every value gird-fleet.ps1's own value code makes, of every shape and length, as the writer meant"
+if [ ! -f "$FLEETPS" ]; then skip "intune: $_dn" "gird-fleet.ps1 is not next to gird-intune.ps1 and INTUNE_FLEET_PS1 is not set"
+else
+  { sed -n '/^\$FlIncidents = @{/p' "$FLEETPS"
+    for _fn in Commas Machine-Outcome Machine-Part Fit-Value; do sed -n "/^function $_fn(/,/^}/p" "$FLEETPS" | awk 'NR == 1 && /}$/ { print; exit } { print } /^}/ { exit }'; done; } > "$DR/writer.ps1"
+  _drd=$("$PWSH" -NoProfile -NonInteractive -File "$DR/read.ps1" pc "$DR/writer.ps1" 2>&1 | tail -n 1)
+  if [ "$(grep -c '^function ' "$DR/writer.ps1")" -eq 4 ] && [ "${_drd#0 of }" != "$_drd" ]; then ok "intune: $_dn" "${_drd%%;*}"
+  else bad "intune: $_dn" "$_drd"; fi
 fi
 
 intune_report forms
