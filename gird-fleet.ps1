@@ -495,9 +495,9 @@ foreach ($a in $Agents) {
 # Malware markers in %ProgramData%, where any account can create a file but, on NTFS, a standard
 # account cannot give one to another owner, so the owner decides: one that Administrators, SYSTEM or a
 # service owns is a finding for the PC; one the person owns is a finding on their own row, which the
-# account run reports; one another account owns, or whose owner can't be read, is a possible sign for
-# the PC. A link is nothing, and a file with more than one name, whoever owns it, only a possible sign
-# for the PC: any account can hard-link a file it can reach under a marker's name.
+# account run reports; one another account owns is a possible sign for the PC, and one whose owner
+# can't be read is too, and leaves the PC partly checked. A link is nothing, and a file with more than
+# one name, whoever owns it, only a possible sign for the PC: any account can hard-link a file it can reach under a marker's name.
 function Owner-Kind([string]$p) {
   if ($OnWindows) {
     try { $o = (Get-Acl -LiteralPath $p -ErrorAction Stop).GetOwner([Security.Principal.SecurityIdentifier]).Value } catch { return 'unknown' }
@@ -514,22 +514,30 @@ function Mark-Kind([string]$kind, [string]$linkType) {
   if ($linkType) { return 'possible' }
   switch ($kind) { 'person' { 'account' } 'machine' { 'incident' } default { 'possible' } }
 }
+$MComplete = $true
 if ($PD) {
   foreach ($r in $FlProgramData) {
     $mp = J $PD $r[1]
     if (-not ([IO.File]::Exists($mp) -or [IO.Directory]::Exists($mp))) { continue }
     if (Is-Reparse $mp) { continue }
     $lt = $null; try { $lt = (Get-Item -LiteralPath $mp -Force -ErrorAction Stop).LinkType } catch { $lt = 'unknown' }
-    switch (Mark-Kind (Owner-Kind $mp) ([string]$lt)) {
+    $ok = Owner-Kind $mp
+    if ($ok -eq 'unknown') { $MComplete = $false }
+    switch (Mark-Kind $ok ([string]$lt)) {
       'incident' { if (-not $MInc.Contains($r[0])) { $MInc.Add($r[0]) } }
       'possible' { if (-not $MPoss.Contains($r[0])) { $MPoss.Add($r[0]) } }
     }
   }
 }
-$MOut = 'clear'
-foreach ($x in $MInc) { if ($FlIncidents[$x] -eq 'act') { $MOut = 'act' } elseif ($MOut -ne 'act') { $MOut = 'review' } }
-if ($MPoss.Count -gt 0 -and $MOut -ne 'act') { $MOut = 'review' }
-$Machine = "{""complete"":true,""outcome"":""$MOut"",""agents"":$(Json-List $MAgents),""possible_signs"":$(Json-List $MPoss),""incidents"":$(Json-Incidents $MInc)}"
+function Machine-Outcome($inc, $poss, [bool]$complete) {
+  $o = 'clear'
+  foreach ($x in $inc) { if ($FlIncidents[$x] -eq 'act') { $o = 'act' } elseif ($o -ne 'act') { $o = 'review' } }
+  if ($poss.Count -gt 0 -and $o -ne 'act') { $o = 'review' }
+  if (-not $complete -and $o -ne 'act') { $o = 'not_checked' }
+  $o
+}
+$MOut = Machine-Outcome $MInc $MPoss $MComplete
+$Machine = "{""complete"":$(Json-Bool $MComplete),""outcome"":""$MOut"",""agents"":$(Json-List $MAgents),""possible_signs"":$(Json-List $MPoss),""incidents"":$(Json-Incidents $MInc)}"
 
 # --- The result -----------------------------------------------------------------
 $rank = @{ 'failed' = 5; 'act' = 4; 'not_checked' = 3; 'review' = 2; 'clear' = 1 }

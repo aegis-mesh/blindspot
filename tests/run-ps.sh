@@ -3851,6 +3851,13 @@ cat > "$FW/fn-mark.ps1" <<'PS'
 PS
 if [ "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")" = 'person/=account person/HardLink=possible machine/=incident machine/HardLink=possible machine/unknown=possible other/=possible unknown/=possible' ]
 then ok "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says"; else bad "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says" "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")"; fi
+cat > "$FW/fn-mach.ps1" <<'PS'
+$FlIncidents = @{ 'mastra' = 'act'; 'litellm' = 'review' }
+$a = [string[]]@('mastra'); $l = [string[]]@('litellm'); $p = [string[]]@('mastra'); $n = [string[]]@()
+(@(@($n, $n, $true), @($n, $p, $true), @($n, $n, $false), @($n, $p, $false), @($l, $n, $false), @($a, $p, $false)) | ForEach-Object { Machine-Outcome $_[0] $_[1] $_[2] }) -join ' '
+PS
+if [ "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")" = 'clear review not_checked not_checked not_checked act' ]
+then ok "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act"; else bad "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act" "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")"; fi
 cat > "$FW/fn-prof.ps1" <<'PS'
 (@(@('S-1-5-21-11-22-33-500', 'C:\Users\Administrator'), @('S-1-5-21-11-22-33-503', 'C:\Users\DefaultAccount'), @('S-1-5-21-11-22-33-1001', 'C:\Users\asha'),
   @('S-1-5-21-11-22-33-1002', 'C:\Users\defaultuser0'), @('S-1-12-1-11-22-33-44', 'C:\Users\bob'), @('S-1-5-18', 'C:\Windows\system32\config\systemprofile'),

@@ -882,8 +882,9 @@ The script then:
    can create a file there, but on NTFS a standard account cannot give a file to another owner, so
    the owner decides. A marker that Administrators, SYSTEM or a service owns is a finding for the
    PC. One the person owns is a finding on the person's row, at its incident's level, as the
-   person's own report shows it; the account run reports it. One another account owns, or whose
-   owner can't be read, is a possible sign for the PC. A link is nothing. A file with more than one
+   person's own report shows it; the account run reports it. One another account owns is a possible
+   sign for the PC. One whose owner can't be read is a possible sign too, and the PC reads partly
+   checked, never fully checked, unless a finding already makes it `act`. A link is nothing. A file with more than one
    name is only a possible sign for the PC, whoever owns it: any account can hard-link a file it can
    reach under a marker's name.
 7. Saves the result and prints the inventory value, one line, or with `-Json` the JSON and with
