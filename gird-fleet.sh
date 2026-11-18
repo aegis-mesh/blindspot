@@ -596,7 +596,7 @@ fl_copy_ok() { # the copy each account runs: owned by root, nobody else can chan
   [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644" ]
 }
 fl_nopath_ok() { # FL_NOPATH: a folder, reached through no link, root's alone (owned_only) and empty
-  [ -d "$FL_NOPATH" ] && [ ! -L "$FL_NOPATH" ] || return 1
+  [ ! -L "$FL_NOPATH" ] && [ -d "$FL_NOPATH" ] || return 1
   [ "$(cd "$FL_NOPATH" 2>/dev/null && /bin/pwd -P)" = "$FL_NOPATH" ] || return 1
   owned_only "$FL_OWNER" "$FL_NOPATH" || return 1
   _fne=$(/bin/ls -A "$FL_NOPATH" 2>/dev/null) && [ -z "$_fne" ]
