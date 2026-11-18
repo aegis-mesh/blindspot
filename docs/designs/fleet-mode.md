@@ -1112,7 +1112,8 @@ Graph, never a real tenant.
   hard, and are only possible signs there, for the account that owns them or, when root owns them,
   for the Mac: any account can hard-link a file it can reach under a marker's name (a review found
   that through root's own copy of gird-check.sh, which root now empties and gives away before
-  deleting it); a running LiteLLM loader counts only when root's own process holds its lock; a
+  deleting it); a running LiteLLM loader counts only when root's own process holds its lock, and a holder whose
+  account `ps` cannot give leaves the Mac partly checked, never read as another account's; a
   shell profile that moves an agent's folders leaves the account partly checked; each run is told
   its time, so its session check stops in time; every path an account or admin could make is
   tested as a link first and never followed; a `find` or `lsof` that does not answer in time

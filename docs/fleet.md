@@ -417,7 +417,7 @@ one name is a possible sign for the Mac, not a finding: any account can hard-lin
 can reach under a marker's name, and once root deletes the original the link is root's (root empties
 and gives away its copy of `gird-check.sh` before deleting it for that reason). One an account owns is
 on that account's row instead. When root owns the LiteLLM loader's lock file, root asks `lsof` which
-process holds it open: root's own is a finding, any other a possible sign. The temp folder's names are looked for with one timed
+process holds it open, and `ps` whose it is: root's own is a finding, any other a possible sign, and one whose account `ps` cannot give leaves the Mac partly checked. The temp folder's names are looked for with one timed
 `find` each, so a folder an account filled with such names cannot hold up the run. If `find` or `lsof`
 does not answer in time, the Mac reads partly checked. Those are the only running processes it looks at. It also looks by
 name for any startup file `data/indicators.tsv` lists outside a home folder; for macOS there are none

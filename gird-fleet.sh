@@ -440,7 +440,7 @@ zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that
 # Fleet mode, the root side (docs/designs/fleet-mode.md). Root lists the accounts, checks the
 # Mac's shared places, starts one account run at a time as that account, and builds every row
 # itself from lines it has checked. It calls every tool by its full path.
-# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof and find. They
+# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof, ps and find. They
 # are read only when the script is not running as root.
 # ===========================================================================
 FL_USERS=""; FL_LAUNCH=""; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
@@ -449,6 +449,7 @@ if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
   FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
   FL_SHARED_TMP=${GIRD_CHECK_FLEET_SHARED_TMP:-$FL_SHARED_TMP}; FL_LSOF=${GIRD_CHECK_FLEET_LSOF:-$FL_LSOF}
   FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}
+  FL_PS=${GIRD_CHECK_FLEET_PS:-$FL_PS}
 fi
 FL_OUT_MAX=4096                 # bytes root reads from one account run
 FL_US=$(printf '\037'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
@@ -753,12 +754,21 @@ EOF
   if [ ! -L "$_lk" ] && [ -f "$_lk" ] && [ "$(fl_ul "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
     fl_timed "${FM_LSOF_S:-10}" "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
     # A running loader is a sign only when root's own process holds the lock: any account can open a
-    # root-owned file it can read, and keep it open.
+    # root-owned file it can read, and keep it open. A holder whose account ps can't give (ps refused,
+    # or the process gone) leaves this part not checked, never read as another account's.
     _held=""; for _p in $(/usr/bin/tr -cs '0-9' ' ' < "$FL_TMP/lsof" 2>/dev/null); do
-      [ "$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' ')" = "$FL_OWNER" ] && { _held=root; break; }
-      _held=other
+      _pu=$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' \n')
+      case "$_pu" in
+        "$FL_OWNER") _held=root; break ;;
+        ''|*[!0-9]*) _held=unknown ;;
+        *) [ "$_held" = unknown ] || _held=other ;;
+      esac
     done
-    case "$_held" in root) FM_INC="$FM_INC litellm"; FM_ROOTLOADER=1 ;; other) FM_POSS="$FM_POSS litellm" ;; esac
+    case "$_held" in
+      root) FM_INC="$FM_INC litellm"; FM_ROOTLOADER=1 ;;
+      other) FM_POSS="$FM_POSS litellm" ;;
+      unknown) FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }who holds the LiteLLM loader's lock file could not be read" ;;
+    esac
     [ "$FL_TIMEOUT" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }a running LiteLLM loader could not be looked for in time"; }
   fi
   FM_AGENTS=$(printf '%s\n' $FM_AGENTS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)

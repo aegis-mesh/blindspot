@@ -3932,17 +3932,32 @@ hasnot "fleet: and no row says the malware ran as root" 'the malware ran as root
 hasnot "fleet: a link at that name in /tmp is nothing" '^machine\.(incidents|possible_signs)=.*mastra' "$FL/tllink.flat"
 # The readable report under macOS's own bash, with a finding on the Mac's row: a loader holding its lock.
 # A loader counts only when root's own process holds the lock: in a test run, a process of the tester's.
+# GIRD_CHECK_FLEET_PS stands in for /bin/ps, which some test machines refuse to run: it gives the
+# holder's account, the tester's here, and records that it was asked.
 printf '#!/bin/sh\necho $PPID\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
-GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" fl_run macterm
+printf '#!/bin/sh\necho "$*" >> "%s/ps.log"\necho "  %s"\n' "$FL" "$U" > "$FL/ps-tester"; chmod +x "$FL/ps-tester"
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-tester" fl_run macterm
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
 has    "fleet: the readable report names the Mac's finding under macOS's bash" '^  This Mac +act now$' "$FL/macterm.out"
 hasnot "fleet: and prints no shell error" 'syntax error|command substitution' "$FL/macterm.err"
-# Another account's process holding the root-owned lock (launchd, PID 1, stands in) is only a possible sign.
+# Another account's process holding the root-owned lock is only a possible sign: the stand-in for ps
+# gives an account that is not root's stand-in, and must have been asked, and the Mac is fully checked.
 printf '#!/bin/sh\necho 1\n' > "$FL/other-lsof"; chmod +x "$FL/other-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
-GIRD_CHECK_FLEET_LSOF="$FL/other-lsof" fl_run otherlock --json
+printf '#!/bin/sh\necho "$*" >> "%s/ps.log"\necho "  %s"\n' "$FL" "$((U + 1))" > "$FL/ps-other"; chmod +x "$FL/ps-other"; : > "$FL/ps.log"
+GIRD_CHECK_FLEET_LSOF="$FL/other-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-other" fl_run otherlock --json
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
-if grep -q '^machine\.possible_signs=litellm$' "$FL/otherlock.flat" && ! grep -q '^machine\.incidents=.*litellm' "$FL/otherlock.flat"; then ok "fleet: a lock another account's process holds is only a possible sign"
-else bad "fleet: a lock another account's process holds is only a possible sign" "$(grep '^machine' "$FL/otherlock.flat" | tr '\n' ' ')"; fi
+if grep -q '^machine\.possible_signs=litellm$' "$FL/otherlock.flat" && ! grep -q '^machine\.incidents=.*litellm' "$FL/otherlock.flat" && grep -q '^machine\.complete=true$' "$FL/otherlock.flat" && grep -qx -- '-o uid= -p 1' "$FL/ps.log"; then ok "fleet: a lock another account's process holds is only a possible sign"
+else bad "fleet: a lock another account's process holds is only a possible sign" "$(grep '^machine' "$FL/otherlock.flat" | tr '\n' ' ') ps: $(cat "$FL/ps.log")"; fi
+# When ps can't give the holder's account (refused, as on a machine that blocks it), the Mac reads
+# partly checked for the lock, never as if another account held it. (The lock file root owns is a
+# possible sign either way, as a marker in /tmp.)
+printf '#!/bin/sh\necho "ps: Operation not permitted" >&2\nexit 1\n' > "$FL/ps-refused"; chmod +x "$FL/ps-refused"; : > "$FL/sharedtmp/remote_code_loader.lock"
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-refused" fl_run nops --json
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-refused" fl_run nopsterm
+rm -f "$FL/sharedtmp/remote_code_loader.lock"
+if grep -q '^machine\.complete=false$' "$FL/nops.flat" && grep -q '^machine\.outcome=not_checked$' "$FL/nops.flat" && grep -q '^machine\.incidents=$' "$FL/nops.flat" &&
+   grep -q "Partly checked: who holds the LiteLLM loader's lock file could not be read" "$FL/nopsterm.out"; then ok "fleet: a lock whose holder's account can't be read leaves the Mac partly checked, never read as another account's"
+else bad "fleet: a lock whose holder's account can't be read leaves the Mac partly checked, never read as another account's" "$(grep '^machine' "$FL/nops.flat" | tr '\n' ' ')"; fi
 # An account links root's copy under a marker's name, to be left behind: the copy is emptied before it
 # goes, and the next run reads the link as no more than a possible sign.
 users "upd:$U:$FL/upd:/bin/zsh"; printf 'marklink\n' > "$FL/mode-upd"
