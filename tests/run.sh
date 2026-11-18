@@ -4023,7 +4023,7 @@ if printf '%s' "$_inv" | grep -qE ' \+more$'; then ok "fleet: and ends with +mor
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 # The secret is read only from a file root placed in the saved-result folder, never from an argument.
-fl_hashkey() { mkdir -p -m 700 "$FL/state"; chmod 700 "$FL/state"; printf '%s\n' "$1" > "$FL/state/hash-key"; chmod 600 "$FL/state/hash-key"; }
+fl_hashkey() { mkdir -p "$FL/state"; chmod 700 "$FL/state"; printf '%s\n' "$1" > "$FL/state/hash-key"; chmod 600 "$FL/state/hash-key"; }
 fl_hashkey first-secret; fl_run hash1
 fl_hashkey other-secret; fl_run hash2
 rm -f "$FL/state/hash-key"
@@ -4310,7 +4310,7 @@ echo "fleet mode: one file for the MDM (blindspot-fleet.sh)"
 # tools/gen.sh builds blindspot-fleet.sh for a release from a copy of the repo here; PWSH points nowhere,
 # so it stops before blindspot-fleet.ps1 (exit 3) once the Mac file is built.
 OF=$WORK/onefile; mkdir -p "$OF"
-of_repo() { rm -rf "$OF/$1"; mkdir -p "$OF/$1"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$OF/$1/"; }
+of_repo() { rm -rf "${OF:?}/${1:?}"; mkdir -p "$OF/$1"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$OF/$1/"; }
 of_gen() { (cd "$OF/$1" && PWSH=/nonexistent bash tools/gen.sh "${@:2}" > "$OF/$1.log" 2>&1); echo "$?" > "$OF/$1.rc"; }
 of_repo bld; of_gen bld
 ONEB=$OF/bld/blindspot-fleet.sh
