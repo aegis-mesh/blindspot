@@ -64,6 +64,27 @@ def run_states():
                     'preRemediationDetectionScriptOutput': output, 'managedDevice': dev})
     return out
 
+def md(i, name, aad, os_='Windows', user=None):
+    return {'id': 'md-%s' % i, 'deviceName': name, 'userPrincipalName': user or 'person-%s@example.com' % i,
+            'azureADDeviceId': aad, 'operatingSystem': os_}
+def member(aad, i):
+    return {'@odata.type': '#microsoft.graph.device', 'id': 'obj-%s' % i, 'deviceId': aad}
+SILENT_HOSTILE = '=cmd|' + HOSTILE_NAME
+SILENT_MANAGED = [
+    md('row', 'PC-HASROW', 'aad-row'),
+    md('s1', 'PC-SILENT-1', 'aad-s1'),
+    md('s2', 'PC-SILENT-2', 'aad-s2'),
+    md('h', HOSTILE_NAME, 'aad-h'),
+    md('f', SILENT_HOSTILE, 'aad-f'),
+    md('mac', 'MAC-SILENT', 'aad-mac', 'macOS'),
+    md('out', 'PC-NOTINGROUP', 'aad-out'),
+]
+SILENT_MEMBERS = [member('aad-row', 'row'), member('aad-s1', 's1'), member('aad-s2', 's2'), member('aad-h', 'h'),
+                  member('aad-f', 'f'), member('aad-mac', 'mac'), {'@odata.type': '#microsoft.graph.group', 'id': 'nested'}]
+SILENT_ROW = {'id': 'rs-row', 'detectionState': 'success', 'lastStateUpdateDateTime': NOW.isoformat(),
+              'preRemediationDetectionScriptOutput': 'v1 clear %s | asha: clear' % T0,
+              'managedDevice': {'id': 'md-row', 'deviceName': 'PC-HASROW', 'userPrincipalName': 'person-row@example.com', 'azureADDeviceId': 'aad-row'}}
+
 def tenant(name):
     s = {'pageSize': 2, 'groups': GROUPS, 'scripts': [OTHER, GLOBAL]}
     if name == 'lookalike': s['scripts'] = [OTHER, LOOKALIKE, GLOBAL]
@@ -72,6 +93,15 @@ def tenant(name):
     if name in ('report', 'badnext'):
         s['scripts'] = [OTHER, ours('ours-1')]
         s['runStates'] = {'ours-1': run_states()}
+    if name in ('silent', 'usergroup', 'othertarget'):
+        s['scripts'] = [OTHER, ours('ours-1')]
+        s['runStates'] = {'ours-1': [SILENT_ROW]}
+        s['managed'] = SILENT_MANAGED
+        s['members'] = {'g-eng': SILENT_MEMBERS}
+    if name == 'usergroup':
+        s['members'] = {'g-eng': [{'@odata.type': '#microsoft.graph.user', 'id': 'u1'}, {'@odata.type': '#microsoft.graph.user', 'id': 'u2'}]}
+    if name == 'othertarget':
+        s['scripts'][1]['assignments'] = [{'target': {'@odata.type': '#microsoft.graph.allLicensedUsersAssignmentTarget'}}]
     if name == 'badnext': s['nextHost'] = 'https://evil.example'
     return s
 
@@ -143,7 +173,7 @@ def main():
               left == ['other-1', 'look-1', 'copy-1', 'global-2', 'global-1'], left)
         check('-Remove signs in with the scripts write scope only', stub[0] == 'connect DeviceManagementScripts.ReadWrite.All', stub[0])
     elif mode == 'report':
-        check('-Report signs in with read scopes only', stub[0] == 'connect DeviceManagementScripts.Read.All,DeviceManagementManagedDevices.Read.All', stub[0])
+        check('-Report signs in with read scopes only', stub[0] == 'connect DeviceManagementScripts.Read.All,DeviceManagementManagedDevices.Read.All,GroupMember.ReadBasic.All,Device.Read.All', stub[0])
         pages = [r for r in reqs if r['method'] == 'GET' and r['path'].startswith('%s/ours-1/deviceRunStates' % BASE)]
         check('-Report follows every next-page link', len(pages) == (len(PCS) + 1) // 2, len(pages))
         csvs = glob.glob(os.path.join(w, 'out', '*.csv')); htmls = glob.glob(os.path.join(w, 'out', '*.html'))
@@ -177,6 +207,58 @@ def main():
         check('the HTML lists the PCs to deal with first, then no result, then nothing found', 0 < first < none < ok_at)
         order = [html.find(x) for x in ('PC-ACT', 'PC-PARTIAL', 'PC-FAILED', 'PC-STALE<')]
         check('the PCs to deal with first are act, then not checked, failed, stale', all(x > 0 for x in order) and order == sorted(order), order)
+    elif mode == 'silent':
+        def load(t):
+            csvs = glob.glob(os.path.join(w, 'out-' + t, '*.csv')); htmls = glob.glob(os.path.join(w, 'out-' + t, '*.html'))
+            if len(csvs) != 1 or len(htmls) != 1: return None
+            raw = open(csvs[0], encoding='utf-8-sig').read()
+            rows = list(csv.DictReader(raw.splitlines(True)))
+            return raw, rows, open(htmls[0], encoding='utf-8').read(), open(os.path.join(w, 'o-%s.txt' % t)).read()
+        got = load('silent')
+        check('-Report with a silent group saves its files', got is not None)
+        if got:
+            raw, rows, html, out = got
+            names = [r['pc'][1:] if r['pc'].startswith("'") else r['pc'] for r in rows]
+            by = dict(zip(names, rows))
+            check('a PC in the group with no result row is listed as no result yet',
+                  all(by.get(n, {}).get('status') == 'no_result' and 'no result yet' in by[n]['why'] for n in ('PC-SILENT-1', 'PC-SILENT-2')), by)
+            check('a PC with a result row is listed once, as read', names.count('PC-HASROW') == 1 and by['PC-HASROW']['status'] == 'clear', names)
+            check('a Mac and a PC outside the group are not listed', 'MAC-SILENT' not in names and 'PC-NOTINGROUP' not in names, names)
+            check('every PC is listed once', len(names) == len(set(names)) == 5, names)
+            check('the PCs with no result are counted as not checked, never clear',
+                  'Not checked: no result' in html and re.search(r'<b>4</b>Not checked: no result', html) is not None
+                  and '4 not checked' in out and '1 with nothing found' in out, out)
+            check('the silent PCs are in the no result section, not under nothing found',
+                  html.find('PC-SILENT-1') > html.find('<h2>No result') and html.find('PC-SILENT-1') < html.find('<h2>Nothing found'))
+            check('a device list on several pages is read to the end', 'PC-SILENT-2' in names and len(names) == 5)
+            check('a hostile PC name with no result is escaped in the HTML and guarded in the CSV',
+                  '<script>alert' not in html and '&lt;script&gt;alert(1)&lt;/script&gt;' in html
+                  and raw.count('"\'=cmd|<script>alert(1)</script>"') == 1 and '"\'<script>' not in raw and SILENT_HOSTILE in names and HOSTILE_NAME in names, raw[:400])
+            check('no CSV cell of a silent PC starts with a formula character',
+                  all(not c or c[0] not in '=+-@\t\r' for r in csv.reader(raw.splitlines(True)) for c in r))
+            check('a group with every PC listed has no could-not-list note', 'Could not list' not in html and 'Note:' not in out)
+        pages = [r for r in open(os.path.join(w, 'requests-silent.log')).read().splitlines() if '/managedDevices' in r]
+        check('-Report follows every next-page link of the device list', len(pages) == (len(SILENT_MANAGED) + 1) // 2, len(pages))
+        members = [r for r in open(os.path.join(w, 'requests-silent.log')).read().splitlines() if 'transitiveMembers' in r]
+        check('-Report follows every next-page link of the group members', len(members) == (len(SILENT_MEMBERS) + 1) // 2, len(members))
+        allreqs = [json.loads(l) for t in ('silent', 'usergroup', 'othertarget') for l in open(os.path.join(w, 'requests-%s.log' % t)) if l.strip()]
+        check('-Report with a silent group changes nothing in Intune', not [r for r in allreqs if r['method'] != 'GET'])
+        got = load('usergroup')
+        check('-Report with a group of people saves its files', got is not None)
+        if got:
+            raw, rows, html, out = got
+            names = [r['pc'] for r in rows]
+            check('a group of people says plainly it could not list the PCs with no result',
+                  'Could not list the PCs with no result for the people in group g-eng (2)' in html and 'does not mean they are clear' in html
+                  and 'Could not list every PC' in html and out.count('Note: Could not list') == 1, out)
+            check('a group of people lists no PC that was not read', names == ['PC-HASROW'], names)
+            check('a group of people does not read the silent PCs as clear', '0 with nothing found' not in out and '1 with nothing found' in out and 'PC-SILENT' not in html, out)
+        got = load('othertarget')
+        check('-Report with an assignment it cannot read saves its files', got is not None)
+        if got:
+            raw, rows, html, out = got
+            check('an assignment to every licensed user says it could not list the PCs with no result',
+                  'allLicensedUsersAssignmentTarget' in html and 'which does not mean they are clear' in html, out)
     print('\n'.join(R))
 
 main()

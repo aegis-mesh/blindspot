@@ -86,6 +86,12 @@ class H(http.server.BaseHTTPRequestHandler):
         body = json.loads(raw) if raw else None
         self.note(body)
         s = load(); url = urllib.parse.urlparse(self.path); p = url.path; m = self.command
+        if m == 'GET' and p.startswith('/v1.0/groups/') and p.endswith('/transitiveMembers'):
+            gid = p[len('/v1.0/groups/'):-len('/transitiveMembers')]
+            if gid in s.get('memberErrors', []): return self.send(403, {'error': 'forbidden'})
+            return self.send(200, self.page(s, s.get('members', {}).get(gid, []), url))
+        if m == 'GET' and p == '/v1.0/deviceManagement/managedDevices':
+            return self.send(200, self.page(s, s.get('managed', []), url))
         if m == 'GET' and p == '/v1.0/groups':
             f = urllib.parse.parse_qs(url.query).get('$filter', [''])[0]
             pre = "displayName eq '"
@@ -213,6 +219,17 @@ intune_run -- -Report -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
 if [ "$RC" -eq 0 ]; then ok "intune: -Report exits 0"; else bad "intune: -Report exits 0" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
 if [ "$(intune_writes)" -eq 0 ]; then ok "intune: -Report changes nothing in Intune"; else bad "intune: -Report changes nothing in Intune" "$(intune_writes) writes"; fi
 intune_check < <(python3 tests/intune.py check report "$IW")
+
+for T in silent usergroup othertarget; do
+  intune_state "$T"
+  rm -f "$IW/out"/*
+  intune_run -- -Report -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
+  if [ "$RC" -eq 0 ]; then ok "intune: -Report with the $T tenant exits 0"; else bad "intune: -Report with the $T tenant exits 0" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+  cp "$IW/o.txt" "$IW/o-$T.txt"
+  mkdir -p "$IW/out-$T"; cp "$IW/out"/* "$IW/out-$T"/ 2>/dev/null
+  cp "$IW/requests.log" "$IW/requests-$T.log"
+done
+intune_check < <(python3 tests/intune.py check silent "$IW")
 
 intune_state badnext
 rm -f "$IW/out"/*

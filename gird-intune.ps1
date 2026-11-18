@@ -9,7 +9,8 @@ Microsoft's own PowerShell module and sends nothing anywhere else.
                                           runs once a day as the signed-in person, 64-bit, no fix
                                           script. Run again with a newer release to update it.
   gird-intune.ps1 -Report                 reads each PC's latest result and saves a report (HTML
-                                          and CSV) in this folder, or in -OutDir
+                                          and CSV) in this folder, or in -OutDir. A Windows PC in the
+                                          assigned group with no result is listed as no result yet.
   gird-intune.ps1 -Remove                 deletes the Remediation this tool made, after showing it
 
   -FleetScript <path>   blindspot-fleet.ps1 to deploy (default: next to this file)
@@ -421,8 +422,86 @@ function ConvertTo-CsvCell([string]$S) {
   return '"' + $S.Replace('"', '""') + '"'
 }
 
+function Get-SilentPcs([string]$ScriptId, $States) {
+  $notes = New-Object System.Collections.ArrayList
+  $rows = @()
+  $include = @{}
+  $exclude = @{}
+  $everyPc = $false
+  $assigned = @(Get-GraphAll ($Beta + '/' + [Uri]::EscapeDataString($ScriptId) + '/assignments'))
+  foreach ($a in $assigned) {
+    $t = Get-Prop $a 'target'
+    $type = ([string](Get-Prop $t '@odata.type')).TrimStart('#')
+    $gid = [string](Get-Prop $t 'groupId')
+    $ft = [string](Get-Prop $t 'deviceAndAppManagementAssignmentFilterType')
+    if ($ft -and $ft -ne 'none') {
+      [void]$notes.Add('An assignment filter is set. This tool cannot apply it, so some PCs listed as no result yet may not be meant to run the check.')
+    }
+    if ($type -ceq 'microsoft.graph.allDevicesAssignmentTarget') { $everyPc = $true; continue }
+    if ($type -cne 'microsoft.graph.groupAssignmentTarget' -and $type -cne 'microsoft.graph.exclusionGroupAssignmentTarget') {
+      [void]$notes.Add("Could not list the PCs with no result for an assignment to '$type': Microsoft Graph does not say which PCs it reaches. PCs with no result there are not in this report, which does not mean they are clear.")
+      continue
+    }
+    if (-not $gid) { [void]$notes.Add('Could not list the PCs with no result for one assignment: Microsoft Graph sent it without a group.'); continue }
+    $excluding = $type -ceq 'microsoft.graph.exclusionGroupAssignmentTarget'
+    try { $members = @(Get-GraphAll ('https://graph.microsoft.com/v1.0/groups/' + [Uri]::EscapeDataString($gid) + '/transitiveMembers')) }
+    catch {
+      if ($_.Exception.Message.StartsWith('Stopped:')) { throw }
+      [void]$notes.Add("Could not list the PCs with no result for group $gid, because its members could not be read: " + $_.Exception.Message + ' PCs with no result there are not in this report, which does not mean they are clear.')
+      continue
+    }
+    $people = 0; $hidden = 0
+    foreach ($m in $members) {
+      $mt = ([string](Get-Prop $m '@odata.type')).TrimStart('#')
+      if ($mt -ceq 'microsoft.graph.device') {
+        $did = [string](Get-Prop $m 'deviceId')
+        if (-not $did) { $hidden++ }
+        elseif ($excluding) { $exclude[$did] = $true }
+        else { $include[$did] = $true }
+      }
+      elseif ($mt -ceq 'microsoft.graph.user') { $people++ }
+    }
+    if ($people -gt 0 -and $excluding) {
+      [void]$notes.Add("Group $gid is an exclusion group and holds people, so some PCs listed as no result yet may be excluded from the check.")
+    }
+    elseif ($people -gt 0) {
+      [void]$notes.Add("Could not list the PCs with no result for the people in group $gid ($people): Microsoft Graph does not say which of a person's PCs Intune runs the check on. PCs with no result there are not in this report, which does not mean they are clear.")
+    }
+    if ($hidden -gt 0) {
+      [void]$notes.Add("Could not read $hidden PC" + $(if ($hidden -eq 1) { '' } else { 's' }) + " in group $gid. Allow Device.Read.All for this tool and run -Report again. PCs with no result there are not in this report, which does not mean they are clear.")
+    }
+  }
+  if ($include.Count -eq 0 -and -not $everyPc) { return @{ Rows = @(); Notes = $notes.ToArray() } }
+
+  $seen = @{}
+  foreach ($st in $States) {
+    $dev = Get-Prop $st 'managedDevice'
+    foreach ($k in @('id', 'azureADDeviceId')) {
+      $v = [string](Get-Prop $dev $k)
+      if ($v) { $seen[$v] = $true }
+    }
+  }
+  $managed = @(Get-GraphAll ('https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?$select=id,deviceName,userPrincipalName,azureADDeviceId,operatingSystem'))
+  foreach ($d in $managed) {
+    if ([string](Get-Prop $d 'operatingSystem') -ne 'Windows') { continue }
+    $aad = [string](Get-Prop $d 'azureADDeviceId')
+    $mid = [string](Get-Prop $d 'id')
+    if ($mid -and $seen.ContainsKey($mid)) { continue }
+    if ($aad -and $seen.ContainsKey($aad)) { continue }
+    if ($aad -and $exclude.ContainsKey($aad)) { continue }
+    if (-not $everyPc -and -not ($aad -and $include.ContainsKey($aad))) { continue }
+    $pc = [string](Get-Prop $d 'deviceName')
+    if (-not $pc) { $pc = '(name not given) ' + $mid }
+    $rows += New-Object PSObject -Property ([ordered]@{
+      PC = $pc; User = [string](Get-Prop $d 'userPrincipalName'); Status = 'no_result'
+      Why = 'no result yet: Intune has no result row for this PC'; CheckedAt = ''; Details = ''; Kinds = @(); LastReport = ''; Output = ''
+    })
+  }
+  return @{ Rows = $rows; Notes = $notes.ToArray() }
+}
+
 function Invoke-Report {
-  Connect-Graph @('DeviceManagementScripts.Read.All', 'DeviceManagementManagedDevices.Read.All')
+  Connect-Graph @('DeviceManagementScripts.Read.All', 'DeviceManagementManagedDevices.Read.All', 'GroupMember.ReadBasic.All', 'Device.Read.All')
   $found = Get-Ours
   if ($found.Mine.Count -eq 0) { Stop-Tool 'No Remediation made by this tool was found. Run -Deploy first.' }
   if ($found.Mine.Count -gt 1) { Stop-Several $found.Mine }
@@ -431,6 +510,9 @@ function Invoke-Report {
   $now = [DateTime]::UtcNow
   $rows = @()
   foreach ($st in $states) { $rows += New-Object PSObject -Property (Get-PcRow $st $now) }
+  $silent = Get-SilentPcs $id $states
+  $rows += $silent.Rows
+  $notes = @($silent.Notes | Select-Object -Unique)
   $order = @{ act = 0; not_checked = 1; failed = 2; stale = 3; no_result = 4; review = 5; clear = 6 }
   $rows = @($rows | Sort-Object @{ Expression = { $order[$_.Status] } }, @{ Expression = { $_.PC } })
 
@@ -494,6 +576,11 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
   if ($notChecked -gt 0) {
     [void]$h.Append('<p>' + $notChecked + ' PC' + $(if ($notChecked -eq 1) { ' was' } else { 's were' }) + ' not checked: no result, a stale result, or a result that does not fit. None of them counts as clear.</p>')
   }
+  if ($notes.Count -gt 0) {
+    [void]$h.Append('<h2>Could not list every PC</h2><ul>')
+    foreach ($n in $notes) { [void]$h.Append('<li>' + (ConvertTo-Html $n) + '</li>') }
+    [void]$h.Append('</ul>')
+  }
   [void]$h.Append('<h2>What was found</h2>')
   if ($kindCount.Count -eq 0) { [void]$h.Append('<p class="muted">No finding in the results that were read.</p>') }
   else {
@@ -528,6 +615,7 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
   [IO.File]::WriteAllText($base + '.html', $h.ToString(), (New-Object System.Text.UTF8Encoding($false)))
 
   Write-Host ("$($rows.Count) PCs: $($count.act) to act on, $notChecked not checked, $($count.failed) failed, $($count.review) to review, $($count.clear) with nothing found.")
+  foreach ($n in $notes) { Write-Host ('Note: ' + $n) }
   Write-Host ('Saved: ' + $base + '.html')
   Write-Host ('Saved: ' + $base + '.csv')
 }

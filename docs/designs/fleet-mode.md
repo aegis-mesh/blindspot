@@ -395,7 +395,8 @@ How `gird-intune.ps1` keeps to its own Remediation and reads results:
 - It asks for the fewest Graph permissions each command needs: `-Deploy`
   DeviceManagementScripts.ReadWrite.All and Group.ReadBasic.All, `-Remove`
   DeviceManagementScripts.ReadWrite.All, `-Report` DeviceManagementScripts.Read.All and
-  DeviceManagementManagedDevices.Read.All (for each PC's name). It follows a next-page link only
+  DeviceManagementManagedDevices.Read.All (for each PC's name), GroupMember.ReadBasic.All and
+  Device.Read.All (to list the PCs of the assigned groups). It follows a next-page link only
   to `https://graph.microsoft.com/`, and stops at any other.
 - `-Report` reads the inventory value as `gird-fleet.sh` writes it, plus two Windows fields right
   after the time: `other_profiles=<n>`, and `reason=<why>` on a `failed` result only. It also reads
@@ -403,7 +404,19 @@ How `gird-intune.ps1` keeps to its own Remediation and reads results:
   second line, a finding word it does not know, an account outcome worse than the header, or a
   `clear` that Intune says did not succeed, is not checked. So is a result dated more than an hour
   ahead. A result older than `-StaleDays` (3 by default) is stale, whatever it says.
-- A PC that never ran the check has no row in Intune's results, so the report cannot list it.
+- A PC that never ran the check has no row in Intune's results, so `-Report` finds it another way.
+  It reads the Remediation's assignments, then the Windows PCs in each assigned group (nested
+  groups included) from `groups/{id}/transitiveMembers`, matches them to Intune's list of managed
+  PCs by their Entra device id, and lists each one with no result row as "no result yet". Those
+  count as not checked, never as clear. This needs two more read-only permissions, besides the
+  three above: GroupMember.ReadBasic.All and Device.Read.All (without it Graph hides each PC's
+  id). Paging follows next-page links. An assignment to All devices lists every managed Windows PC.
+- Graph cannot say which PCs a group of people reaches, so for people in an assigned group, an
+  assignment to all users, or any other kind of target, the report says it could not list the PCs
+  with no result there. It never implies there are none. An assignment filter is not applied, so
+  the list may then hold PCs that were not meant to run the check, and the report says so.
+- Needs a real tenant: that the Entra device id matches the managed PC's `azureADDeviceId`, that
+  a run-result row names its PC by the same Intune id, and what Graph returns for a very large group.
 - The report is an HTML file and a CSV file in the folder it runs in. Every value a PC sent is
   escaped in the HTML, and a CSV cell that starts with `=`, `+`, `-`, `@` or a tab gets a `'` first,
   so a spreadsheet does not run it.
@@ -441,6 +454,7 @@ Graph, never a real tenant.
 - A test-only `GIRD_CHECK_*` setting in the person's environment changes nothing.
 - `-Deploy` sends one Remediation with the settings above, and a second `-Deploy` updates it.
 - `-Report` lists a PC with no result, a stale result or a malformed result as not checked.
+- `-Report` lists a PC in the assigned group with no result row as no result yet, once, over several pages, with a hostile name escaped, and says plainly when it could not list the silent PCs of a group.
 
 ## Not covered
 
