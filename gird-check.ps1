@@ -56,7 +56,7 @@ if ($env:DO_NOT_TRACK -eq '1') { $OptOffline = $true }
 # An account run: started by gird-fleet.ps1 as the signed-in person. Its only output is the fixed
 # lines gird-fleet.ps1 reads, the same as gird-check.sh --account-run prints, written where the
 # checks end; everything else goes nowhere.
-$OptAcctRun = [bool]$AccountRun; $AcctOut = $null; $AcctEnd = $null
+$OptAcctRun = [bool]$AccountRun; $AcctOut = $null; $AcctEnd = $null; $AcctDeadline = $null
 if ($OptAcctRun) {
   if ($env:OS -eq 'Windows_NT') {
     try { if (@('S-1-5-18', 'S-1-5-19', 'S-1-5-20') -contains [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { exit 13 } } catch { exit 13 }
@@ -65,7 +65,7 @@ if ($OptAcctRun) {
   # The session check stops at three quarters of the time gird-fleet.ps1 gives the run, so what was
   # found still reaches it, with the sessions partly checked. Its ripgrep is stopped then even while the
   # rest of the check is still busy, so the run leaves no process behind when gird-fleet.ps1 stops it.
-  if ($AccountSeconds -match '^[0-9]{1,5}$') { $AcctEnd = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds * 3 / 4) }
+  if ($AccountSeconds -match '^[0-9]{1,5}$') { $AcctEnd = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds * 3 / 4); $AcctDeadline = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds) }
   $AcctOut = [Console]::Out
   [Console]::SetOut([IO.TextWriter]::Null); [Console]::SetError([IO.TextWriter]::Null)
 }
@@ -1216,7 +1216,7 @@ $SessRoots = @(@(foreach ($sessRow in $SessTable) {
 # Runs in its own runspace: lists the files newest first and checks them until told to stop, or
 # lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
 $SessWorker = {
-  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold, $stopAt)
+  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold, $stopAt, $graceMs)
   . ([scriptblock]::Create($fns))
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
   $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
@@ -1231,7 +1231,7 @@ $SessWorker = {
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
-    $halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() } catch { }; try { [void]$st.Proc.WaitForExit(2000) } catch { } }
+    $halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() } catch { }; $gone = $false; try { $gone = $st.Proc.WaitForExit(2000) } catch { }; if (-not $gone) { $st.Hung = $true } }
     try {
       $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
@@ -1249,12 +1249,14 @@ $SessWorker = {
       # of a file name that holds a newline.
       $frag = ''; $sb = New-Object Text.StringBuilder; $cb = New-Object char[] 65536; $so = $st.Proc.StandardOutput
       while ($true) {
+        if ($null -ne $stopAt -and [DateTime]::UtcNow -ge $stopAt) { & $halt; return }
         $rt = $so.ReadAsync($cb, 0, $cb.Length); $ms = -1
         if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
         if (-not $rt.Wait($ms)) { & $halt; return }
         $got = $rt.Result; if ($got -le 0) { break }
         $s = New-Object string($cb, 0, $got); $at = 0
         while (($nl = $s.IndexOf([char]10, $at)) -ge 0) {
+          if ($null -ne $stopAt -and [DateTime]::UtcNow -ge $stopAt) { & $halt; return }
           [void]$sb.Append($s, $at, $nl - $at); $l = $sb.ToString(); [void]$sb.Clear(); $at = $nl + 1
           $i = $l.IndexOf([char]0)
           if ($i -lt 0) { $frag += $l + '?'; continue }
@@ -1264,7 +1266,9 @@ $SessWorker = {
       }
       $l = $sb.ToString(); $i = $l.IndexOf([char]0)
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
-      $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
+      $ms = $graceMs; if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
+      if (-not $st.Proc.WaitForExit($ms)) { & $halt; return }
+      if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
     } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally {
       if ($st.Proc) { try { if (-not $st.Proc.HasExited) { & $halt } } catch { } }
       if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
@@ -1320,7 +1324,8 @@ $SessWorker = {
     } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Slow = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
+$SessGraceMs = 30000; if ($env:GIRD_CHECK_TEST_GRACE_MS -match '^[0-9]{1,6}$') { $SessGraceMs = [int]$env:GIRD_CHECK_TEST_GRACE_MS }   # tests only
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Slow = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hung = $false; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -1331,22 +1336,32 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD).AddArgument($AcctEnd)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD).AddArgument($AcctEnd).AddArgument($SessGraceMs)
   $SessHandle = $SessPs.BeginInvoke()
 }
-# Stops the check, or waits for it with -AllSessions.
+# Stops the check, or waits for it with -AllSessions. A check that does not end in time (by the end of
+# an account run's time, or within $SessGraceMs by hand) is left behind and its sessions are partly
+# checked. -AllSessions by hand waits in short steps, so Ctrl+C can still stop the run.
 function Sess-Stop([bool]$wait) {
   if ($null -eq $script:SessPs) { return }
   if (-not $wait) {
     $SessSt.Stop = $true
     if (-not $script:SessHandle.IsCompleted) {
       $SessSt.Stopped = $true; $p = $SessSt.Proc
-      if ($p) { try { $p.Kill() } catch { }; try { [void]$p.WaitForExit(2000) } catch { } }
+      if ($p) { try { $p.Kill() } catch { }; $gone = $false; try { $gone = $p.WaitForExit(2000) } catch { }; if (-not $gone) { $SessSt.Hung = $true } }
     }
   }
-  [void]$script:SessHandle.AsyncWaitHandle.WaitOne()
+  $done = $false
+  if ($wait -and $null -eq $AcctEnd) { while (-not $done) { $done = $script:SessHandle.AsyncWaitHandle.WaitOne(250) } }
+  else {
+    $ms = $SessGraceMs; if ($null -ne $AcctDeadline) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($AcctDeadline - [DateTime]::UtcNow).TotalMilliseconds)) }
+    $done = $script:SessHandle.AsyncWaitHandle.WaitOne($ms)
+  }
+  if (-not $done) { $SessSt.Stopped = $true; $SessSt.Hung = $true; $script:SessPs = $null; return }
   try { $script:SessPs.EndInvoke($script:SessHandle) | Out-Null } catch { }
   $script:SessPs.Dispose(); $script:SessPs = $null
+  # Disposed only here, after every Kill(): a Kill() after Dispose() would look ripgrep up again by its id.
+  if ($SessSt.Proc) { try { $SessSt.Proc.Dispose() } catch { } }
 }
 
 Scan-Home $HomeDir 0
@@ -6870,6 +6885,7 @@ $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
+if ($env:GIRD_CHECK_TEST_PAUSE_MS -match '^[0-9]{1,6}$') { Start-Sleep -Milliseconds ([int]$env:GIRD_CHECK_TEST_PAUSE_MS) }   # tests only
 if ($null -ne $AcctEnd -and $null -ne $SessPs) {
   $sessMs = [int][Math]::Max(0, [Math]::Min(2147483647, ($AcctEnd - [DateTime]::UtcNow).TotalMilliseconds))
   Sess-Stop ([bool]$SessHandle.AsyncWaitHandle.WaitOne($sessMs))
@@ -6897,7 +6913,7 @@ if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
 $sessClosed = @(@(foreach ($sessRow in $SessTable) { if ($sessRow[0] -eq 'read' -or $sessRow[0] -eq 'db') { Closed-Folder $sessRow[2] } }) | Where-Object { $_ } | Select-Object -Unique)
 if ($SESS_UNREAD -ge 0) { $SESS_UNREAD += $sessClosed.Count }
 $sessHits = New-Object System.Collections.Generic.List[string]
-foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
+foreach ($h in $SessSt.Hits.ToArray()) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
 # in each project, found by the home scan, and they are checked here. One counts as read once the
 # pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
@@ -6940,8 +6956,8 @@ $SessPlaces.Sort([Comparison[string]]{ param($x, $y) if ($sessPlaceN[$x] -ne $se
 $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
-# check was stopped), or a folder that could not be read.
-$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
+# check was stopped), a folder that could not be read, or a check or ripgrep that did not end when told to.
+$SESS_PARTIAL = $SessSt.Hung -or ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
 # The encrypted .pb files in those folders, by agent. A folder that holds none (Antigravity's newer
 # conversations are SQLite, read above) is never named.
 $SessSealedAg = New-Object System.Collections.Generic.List[string]; $SessSealedN = 0

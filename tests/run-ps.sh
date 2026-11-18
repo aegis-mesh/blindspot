@@ -3651,6 +3651,69 @@ if [ -s "$FW/rg.pid" ] && ! kill -0 "$(cat "$FW/rg.pid")" 2>/dev/null && [ "$T1"
   && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowrg.flat" && ! grep -qE "^$FA\\.(not_checked|stopped|processes_left)=" "$FW/slowrg.flat"
 then ok "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s"
 else bad "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s $(grep -E "^$FA\\.(session|not_checked|stopped|processes)" "$FW/slowrg.flat" | tr '\n' ' ')"; kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null; fi
+# An account run run directly, given 8 seconds: its ripgrep (a stand-in) is stopped at three quarters
+# of that, 6 seconds after the run starts, while the rest of the check is held 20 seconds before it
+# would stop the session check itself (GIRD_CHECK_TEST_PAUSE_MS, tests only), so the run ends at least
+# 14 seconds after that stop is due. The stand-in leaves a watcher that writes the second it saw the
+# stand-in end. One stand-in never prints; one prints all the time, so output is always waiting. The
+# bounds are generous, so load does not fail them: the stand-in ended no sooner than 6 seconds after
+# the run was started, and at least 6 seconds before the run ended.
+fw_home rgstop; mkdir -p "$FW/rgstop/.claude/projects/p" "$FW/rgquiet" "$FW/rgloud"; printf '{}\n' > "$FW/rgstop/.claude/projects/p/a.jsonl"
+_w='#!/bin/bash\necho "$$" > "$RGT_DIR/rg.pid"; me=$$\n( while kill -0 "$me" 2>/dev/null; do /bin/sleep 0.2; done; /bin/date +%%s > "$RGT_DIR/rg.end" ) < /dev/null > /dev/null 2>&1 &\n'
+printf "$_w"'exec /bin/sleep 300\n' > "$FW/rgquiet/rg"
+printf "$_w"'exec %s -e '\''print "f\\0nokey\\n" while 1'\''\n' "$(command -v perl)" > "$FW/rgloud/rg"; chmod +x "$FW/rgquiet/rg" "$FW/rgloud/rg"
+for _m in quiet loud; do
+  rm -f "$FW/rg.pid" "$FW/rg.end"; _t0=$(date +%s)
+  psrun "$FW/rgstop" PATH="$FW/rg$_m:$WORK/bin" RGT_DIR="$FW" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_TEST_PAUSE_MS=20000 -- -AccountRun --account-seconds=8 > "$FW/rg$_m.out" 2> /dev/null; _rc=$?
+  _t2=$(date +%s); for _i in $(seq 1 25); do [ -s "$FW/rg.end" ] && break; sleep 0.2; done   # safety ceiling for the watcher's last write
+  _e=$(cat "$FW/rg.end" 2>/dev/null); _e=${_e:-$((_t2 + 999))}
+  if [ "$_rc" -eq 0 ] && [ "$_e" -ge $((_t0 + 6)) ] && [ "$_e" -le $((_t2 - 6)) ] && grep -q '^sessions_partial=1$' "$FW/rg$_m.out" && grep -q '^engine=rg$' "$FW/rg$_m.out"
+  then ok "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "ended at $((_e - _t0))s of $((_t2 - _t0))s"
+  else bad "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "exit $_rc, ended at $((_e - _t0))s of $((_t2 - _t0))s, $(grep -E '^(sessions_partial|engine)=' "$FW/rg$_m.out" | tr '\n' ' ')"; fi
+  kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
+done
+# A ripgrep that closes its output and never ends does not hold up a run by hand, even with
+# -AllSessions: it gets a while (GIRD_CHECK_TEST_GRACE_MS, tests only) and is stopped, and the
+# sessions are partly checked. 120 seconds is a safety ceiling.
+mkdir -p "$FW/rgshut"; printf '#!/bin/bash\necho "$$" > "$RGT_DIR/rg.pid"\nexec >&-\nexec /bin/sleep 300\n' > "$FW/rgshut/rg"; chmod +x "$FW/rgshut/rg"; rm -f "$FW/rg.pid"
+psrun "$FW/rgstop" PATH="$FW/rgshut:$WORK/bin" RGT_DIR="$FW" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_TEST_GRACE_MS=2000 -- -Offline -AllSessions > "$FW/rgshut.out" 2>&1 &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done
+if kill -0 "$_bp" 2>/dev/null; then kill -9 "$_bp" 2>/dev/null; bad "a ripgrep that never ends after its output does not hold up -AllSessions" "still running after 120 s"
+elif kill -0 "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null; then bad "a ripgrep that never ends after its output does not hold up -AllSessions" "the stand-in is still running"
+else has "a ripgrep that never ends after its output does not hold up -AllSessions" 'Agent sessions were partly checked' "$FW/rgshut.out"; fi
+wait "$_bp" 2>/dev/null; kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
+# -AllSessions waiting on a session check that never ends can still be stopped with Ctrl+C (SIGINT
+# here). The signal is sent once the check has long reached that wait: twice as long as the same run
+# takes without the held check, plus 5 seconds. 30 seconds is a safety ceiling.
+: > "$FW/hold"; _t0=$SECONDS; psrun "$FW/rgstop" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > /dev/null 2>&1; _d=$((SECONDS - _t0))
+# A job started in the background ignores SIGINT; the run is started with it restored.
+"$(command -v python3)" -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' /usr/bin/env -i PATH="$WORK/bin" \
+  HOME="$WORK/pshome" USERPROFILE="$FW/rgstop" APPDATA="$FW/rgstop/AppData/Roaming" LOCALAPPDATA="$FW/rgstop/AppData/Local" TEMP="$FW/rgstop/AppData/Local/Temp" \
+  LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$FW/hold" "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline -AllSessions > /dev/null 2>&1 &
+_bp=$!; sleep $((2 * _d + 5)); kill -INT "$_bp" 2>/dev/null
+for _i in $(seq 1 150); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done
+if kill -0 "$_bp" 2>/dev/null; then kill -9 "$_bp" 2>/dev/null; bad "Ctrl+C stops -AllSessions waiting on a session check that never ends" "still running 30 s after the signal"
+else ok "Ctrl+C stops -AllSessions waiting on a session check that never ends"; fi
+wait "$_bp" 2>/dev/null; rm -f "$FW/hold"
+# When ripgrep has not ended 2 seconds after it is told to stop, the check says the sessions were
+# partly checked. $halt is run on its own, with a process that never ends.
+cat > "$FW/fn-halt.ps1" <<'PS'
+param([string]$File)
+$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+$a = $ast.Find({ param($x) $x -is [Management.Automation.Language.AssignmentStatementAst] -and $x.Left.Extent.Text -ceq '$halt' }, $true)
+$halt = [scriptblock]::Create($a.Right.Extent.Text.Trim().TrimStart('{').TrimEnd('}'))
+$out = foreach ($ends in @($false, $true)) {
+  $o = New-Object PSObject; $o | Add-Member ScriptMethod Kill { }; $o | Add-Member NoteProperty Ends $ends; $o | Add-Member ScriptMethod WaitForExit { param($ms) $this.Ends }
+  $st = @{ Proc = $o; Stop = $false; Stopped = $false; Hung = $false }
+  & $halt; "$($st.Stopped)/$($st.Hung)"
+}
+$p = $ast.Find({ param($x) $x -is [Management.Automation.Language.AssignmentStatementAst] -and $x.Left.Extent.Text -ceq '$SESS_PARTIAL' }, $true)
+$out += [string]($p.Right.Extent.Text.StartsWith('$SessSt.Hung -or '))
+$out -join ' '
+PS
+_h=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-halt.ps1" "$SCRIPT" 2>&1 | tr -d '\r')
+if [ "$_h" = 'True/True True/False True' ]; then ok "a ripgrep still running after it was stopped leaves the sessions partly checked"
+else bad "a ripgrep still running after it was stopped leaves the sessions partly checked" "$_h"; fi
 printf 'tmpmarks\n' > "$FW/mode"; fw_run tmpmarks "$FW/upd"
 has    "fleet: an account run that names markers in a shared /tmp is refused on Windows" "^$FA\\.not_checked=bad_output\$" "$FW/tmpmarks.flat"
 rm -f "$FW/mode"
@@ -3858,39 +3921,99 @@ cat > "$FW/fn-prof.ps1" <<'PS'
 PS
 if [ "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")" = 'False False True False True False False' ]; then ok "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's"
 else bad "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's" "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")"; fi
-# gird-fleet.ps1 kills one process, the account run, through the handle it got when it started it, and
-# never a process by its id: an id Windows has given to another process would kill that one.
+# Each script stops only a process it started, through the handle it got when it started it, and never
+# a process by its id: an id Windows has given to another process would stop that one. gird-fleet.ps1
+# stops the account run; gird-check.ps1 stops its ripgrep. Read by parsing both scripts.
 cat > "$FW/fn-kills.ps1" <<'PS'
-param([string]$File)
-$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+param([string]$Fleet, [string]$Check)
+$Start = '[Diagnostics.Process]::Start($psi)'
+# The only Kill() calls allowed: file, where it is (the function, or the variable holding the script
+# block), the process object it is called on, and what that object is assigned from there.
+$Sites = @(
+  @('fleet', 'Stop-Run', '$proc', 'Stop-Run $proc in Run-Account'),
+  @('check', '$halt', '$st.Proc', $Start),
+  @('check', 'Sess-Stop', '$p', '$SessSt.Proc'))
+# Where each script disposes of the process objects it kills: after every Kill() on them.
+$Disposed = @(@('fleet', 'Run-Account', '$proc', @('$proc')), @('check', 'Sess-Stop', '$SessSt.Proc', @('$st.Proc', '$p', '$SessSt.Proc')))
 $bad = New-Object System.Collections.Generic.List[string]
-foreach ($c in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] }, $true)) {
-  if ([string]$c.GetCommandName() -match '^(Stop-Process|spps|kill|taskkill(\.exe)?|tskill(\.exe)?|pkill|wmic(\.exe)?|Invoke-CimMethod|Invoke-WmiMethod|Get-Process|gps|ps)$') { $bad.Add($c.Extent.Text) }
+function Where-In($a) {
+  for ($x = $a.Parent; $x; $x = $x.Parent) {
+    if ($x -is [Management.Automation.Language.FunctionDefinitionAst]) { return $x.Name }
+    if ($x -is [Management.Automation.Language.ScriptBlockExpressionAst] -and $x.Parent -is [Management.Automation.Language.CommandExpressionAst] -and $x.Parent.Parent -is [Management.Automation.Language.AssignmentStatementAst]) { return $x.Parent.Parent.Left.Extent.Text }
+  }
+  ''
 }
-foreach ($x in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.StringConstantExpressionAst] -or $a -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
-  if ($x.Value -match '(?i)terminate|taskkill') { $bad.Add($x.Extent.Text) }
+function Site-Ast($ast, [string]$name) {
+  $ast.Find({ param($a) ($a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq $name) -or ($a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq $name -and $a.Right.Extent.Text.StartsWith('{')) }, $true)
 }
-$kills = 0
-foreach ($m in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
-  $n = [string]$m.Member.Extent.Text
-  if ($n -match '(?i)^(GetProcessById|GetProcesses|GetProcessesByName|Terminate)$') { $bad.Add($m.Extent.Text); continue }
-  if ($n -notmatch '(?i)^Kill$') { continue }
-  $kills++
-  $fn = $m.Parent; while ($fn -and -not ($fn -is [Management.Automation.Language.FunctionDefinitionAst])) { $fn = $fn.Parent }
-  if ($m.Expression.Extent.Text -cne '$proc' -or ($null -ne $m.Arguments -and $m.Arguments.Count -ne 0) -or -not $fn -or $fn.Name -cne 'Stop-Run') { $bad.Add($m.Extent.Text) }
+function Sets($ast, [string]$var) { @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq $var }, $true)) }
+$Asts = @{}
+foreach ($f in @(@('fleet', $Fleet), @('check', $Check))) {
+  $tag = $f[0]; $ast = [Management.Automation.Language.Parser]::ParseFile($f[1], [ref]$null, [ref]$null); $Asts[$tag] = $ast
+  foreach ($c in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] }, $true)) {
+    if ([string]$c.GetCommandName() -match '^(Stop-Process|spps|kill|killall|pkill|taskkill(\.exe)?|tskill(\.exe)?|wmic(\.exe)?|Stop-Computer|Restart-Computer|shutdown(\.exe)?|Invoke-CimMethod|Invoke-WmiMethod|Remove-CimInstance|Remove-WmiObject|Invoke-Expression|iex|Get-Process|gps|ps)$') { $bad.Add("$tag $($c.Extent.Text)") }
+  }
+  # A string naming a way to stop a process, handed to a command, a method or a program to start.
+  foreach ($x in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.StringConstantExpressionAst] -or $a -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
+    if ($x.Value -notmatch '(?i)terminate|taskkill|tskill|wmic|Stop-Process') { continue }
+    $prev = $x
+    for ($u = $x.Parent; $u -and -not ($u -is [Management.Automation.Language.StatementBlockAst] -or $u -is [Management.Automation.Language.NamedBlockAst] -or $u -is [Management.Automation.Language.ScriptBlockAst]); $u = $u.Parent) {
+      if ($u -is [Management.Automation.Language.CommandAst] -or ($u -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $prev -ne $u.Expression -and $prev -ne $u.Member) -or ($u -is [Management.Automation.Language.AssignmentStatementAst] -and $u.Left.Extent.Text -match '(?i)\.(FileName|Arguments)$')) { $bad.Add("$tag $($x.Extent.Text)"); break }
+      $prev = $u
+    }
+  }
+  $members = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true))
+  foreach ($m in $members) {
+    $n = [string]$m.Member.Extent.Text
+    if ($n -match '(?i)^(GetProcessById|GetProcesses|GetProcessesByName|Terminate)$') { $bad.Add("$tag $($m.Extent.Text)"); continue }
+    if ($n -match '(?i)^(Close|Dispose)$') {
+      $v = $m.Expression.Extent.Text
+      foreach ($k in $members) { if ([string]$k.Member.Extent.Text -match '(?i)^Kill$' -and $k.Expression.Extent.Text -ceq $v -and $k.Extent.StartOffset -gt $m.Extent.StartOffset) { $bad.Add("$tag $v disposed before $($k.Extent.Text)") } }
+    }
+    if ($n -notmatch '(?i)^Kill$') { continue }
+    $w = Where-In $m; $v = $m.Expression.Extent.Text
+    $row = @($Sites | Where-Object { $_[0] -ceq $tag -and $_[1] -ceq $w -and $_[2] -ceq $v })
+    if ($row.Count -ne 1 -or ($null -ne $m.Arguments -and $m.Arguments.Count -ne 0)) { $bad.Add("$tag $($m.Extent.Text) in $w") }
+  }
 }
-# Stop-Run's process is the one Run-Account started, and nothing else in Run-Account names $proc.
-$ra = $ast.Find({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq 'Run-Account' }, $true)
-$calls = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Stop-Run' }, $true))
-$sets = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq '$proc' }, $true))
-if ($calls.Count -ne 1 -or $calls[0].CommandElements[1].Extent.Text -cne '$proc' -or -not $ra -or $ra.Extent.Text.IndexOf($calls[0].Extent.Text) -lt 0) { $bad.Add('Stop-Run is called other than once, with the started process') }
-if ($sets.Count -ne 1 -or $sets[0].Right.Extent.Text -cne '[Diagnostics.Process]::Start($psi)') { $bad.Add('$proc is set other than by starting the account run') }
-if ($kills -ne 1) { $bad.Add("$kills Kill calls") }
-if ($bad.Count -eq 0) { 'none' } else { $bad -join ' | ' }
+foreach ($s in $Sites) {
+  $ast = $Asts[$s[0]]; $site = Site-Ast $ast $s[1]
+  if (-not $site) { $bad.Add("$($s[0]) has no $($s[1])"); continue }
+  $k = @($site.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'Kill' -and $a.Expression.Extent.Text -ceq $s[2] }, $true))
+  if ($k.Count -ne 1) { $bad.Add("$($k.Count) Kill calls on $($s[2]) in $($s[1])") }
+  if ($s[3] -ceq $Start) {
+    $sets = Sets $ast $s[2]
+    if ($sets.Count -lt 1 -or @($sets | Where-Object { $_.Right.Extent.Text -cne $Start }).Count -gt 0) { $bad.Add("$($s[2]) is set other than by starting a process") }
+  } elseif ($s[3] -ceq '$SessSt.Proc') {
+    $sets = Sets $site $s[2]
+    if ($sets.Count -lt 1 -or @($sets | Where-Object { $_.Right.Extent.Text -cne $s[3] }).Count -gt 0) { $bad.Add("$($s[2]) in $($s[1]) is set other than from $($s[3])") }
+    # $SessSt is the table the check gives its worker as $st, and its Proc is set only there.
+    if ((Sets $ast '$SessSt.Proc').Count -ne 0 -or $ast.Extent.Text.IndexOf('.AddArgument($SessSt)') -lt 0) { $bad.Add('$SessSt.Proc is not the worker''s $st.Proc') }
+  } else {
+    # Stop-Run's process is the one Run-Account started, and nothing else in Run-Account names $proc.
+    $ra = Site-Ast $ast 'Run-Account'
+    $calls = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Stop-Run' }, $true))
+    $sets = Sets $ast '$proc'
+    if ($calls.Count -ne 1 -or $calls[0].CommandElements[1].Extent.Text -cne '$proc' -or -not $ra -or $ra.Extent.Text.IndexOf($calls[0].Extent.Text) -lt 0) { $bad.Add('Stop-Run is called other than once, with the started process') }
+    if ($sets.Count -ne 1 -or $sets[0].Right.Extent.Text -cne $Start) { $bad.Add('$proc is set other than by starting the account run') }
+  }
+}
+foreach ($d in $Disposed) {
+  $ast = $Asts[$d[0]]; $last = -1
+  foreach ($m in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
+    $n = [string]$m.Member.Extent.Text; $v = $m.Expression.Extent.Text
+    if ($d[3] -cnotcontains $v) { continue }
+    if ($n -ceq 'Kill' -and $m.Extent.EndOffset -gt $last) { $last = $m.Extent.EndOffset }
+    if ($n -match '(?i)^(Close|Dispose)$' -and -not ((Where-In $m) -ceq $d[1] -and $v -ceq $d[2])) { $bad.Add("$($d[0]) $($m.Extent.Text) in $(Where-In $m)") }
+  }
+  $ds = @((Site-Ast $ast $d[1]).FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'Dispose' -and $a.Expression.Extent.Text -ceq $d[2] }, $true))
+  if ($ds.Count -ne 1 -or $ds[0].Extent.StartOffset -lt $last) { $bad.Add("$($d[2]) is not disposed once in $($d[1]), after every Kill() on it") }
+}
+if ($bad.Count -eq 0) { 'none' } else { 'refused (a guard against slips, not proof: a command name held in a variable cannot be ruled out): ' + ($bad -join ' | ') }
 PS
-_k=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-kills.ps1" "$FLEETPS" 2>&1 | tr -d '\r')
-if [ "$_k" = none ]; then ok "fleet: gird-fleet.ps1 kills no process by id, only the account run through the handle it started"
-else bad "fleet: gird-fleet.ps1 kills no process by id, only the account run through the handle it started" "$_k"; fi
+_k=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-kills.ps1" "$FLEETPS" "$SCRIPT" 2>&1 | tr -d '\r')
+if [ "$_k" = none ]; then ok "fleet: gird-fleet.ps1 and gird-check.ps1 stop no process by id, only the ones they started, through their own handles"
+else bad "fleet: gird-fleet.ps1 and gird-check.ps1 stop no process by id, only the ones they started, through their own handles" "$_k"; fi
 # After the stop, the process list is only read, to report. A process counts as left when it names the
 # account run (100, run from 1000 to 2000) as its parent and started while the run ran, or when its
 # start time or the run's can't be read. The process tables of the earlier stop's reviews: a child
