@@ -5,11 +5,14 @@
 # settings it was handed, then runs the command. $FWL_DIR/mode picks how the account run behaves:
 #   (none)     the real account run
 #   empty      stops before its first line: no output, exit 1
+#   clm        the one line gird-check.ps1 prints in the reduced language, as Windows PowerShell ends it
 #   other-row  the real output with a line for another account first
 #   machine    the real output with a forged machine line before its end
 #   oversize   more output than gird-fleet.ps1 reads
+#   bighold    more output than gird-fleet.ps1 reads, then holds it open past any limit
 #   endless    output that never stops
 #   malformed  the real output with one value that is not a number
+#   tmpmarks   the real output naming a marker in a shared /tmp, which Windows has none of
 #   maxed      output in the fixed format with every incident in each list that takes incidents, and
 #              the wiper: an inventory value too long to keep whole
 #   hold       prints v=1, starts a process of its own and holds its output open past any limit
@@ -27,17 +30,21 @@ mode=$(cat "$FWL_DIR/mode" 2>/dev/null)
 run() { env ${extra[@]+"${extra[@]}"} "$@"; }
 case "$mode" in
   empty) exit 1 ;;
+  clm) printf 'language_mode=1\r\n'; exit 13 ;;
   other-row) echo "account=itadmin"; run "$@" ;;
   machine) run "$@" | sed 's/^end=1$/machine_incidents=litellm\
 end=1/' ;;
   oversize) run "$@"; i=0; while [ "$i" -lt 300 ]; do echo "agents=claude-code codex"; i=$((i + 1)); done ;;
   endless) exec yes agents=claude-code ;;
+  bighold) echo "$$" > "$FWL_DIR/launcher.pid"; i=0; while [ "$i" -lt 300 ]; do echo "agents=claude-code codex"; i=$((i + 1)); done; exec sleep 300 ;;
   malformed) run "$@" | sed 's/^key_files=.*/key_files=99999 forged/' ;;
+  tmpmarks) run "$@" | sed 's/^tmp_marks=.*/tmp_marks=mastra/' ;;
   maxed)
     ids=$(grep -v '^#' "$FWL_REPO/data/incidents.tsv" | grep -v '^[[:space:]]*$' | cut -f1 | head -n 40 | paste -sd ' ' -)
-    for l in v=1 agents= yolo= tools= mcp_servers=0 mcp_token_files=0 key_files=0 key_providers= history_keys=0 session_files=0 \
-      sessions_partial=0 allow_list_keys=0 ssh_open=0 ak_links=0 planted=0 "possible=$ids" "incidents=$ids" platforms= on_open=0 \
-      to_read=0 "updates=$ids" wiper=1 "lock_only=$ids" "remove=$ids" not_read=0 moved=0 "tmp_marks=$ids" tmp_wiper=0 protected=ok \
+    provs=$(grep -v '^#' "$FWL_REPO/data/keys.tsv" | grep -v '^[[:space:]]*$' | cut -f1 | sed 's/_.*//' | awk '!s[$0]++' | paste -sd ' ' -)
+    for l in v=1 agents= "yolo=claude-code codex vs-code-copilot" "tools=amazonq claudecode mcpremote" mcp_servers=0 mcp_token_files=0 key_files=1 "key_providers=$provs" history_keys=0 session_files=0 \
+      sessions_partial=0 allow_list_keys=0 ssh_open=0 ak_links=0 planted=0 "possible=$ids" "incidents=$ids" "platforms=opencode railway zeabur" on_open=0 \
+      to_read=0 "updates=$ids" wiper=1 "lock_only=$ids" "remove=$ids" not_read=0 moved=0 tmp_marks= tmp_wiper=0 protected=ok \
       engine=dotnet end=1; do printf '%s\n' "$l"; done ;;
   hold) sleep 120 & echo "$!" > "$FWL_DIR/hold.pid"; echo "$$" > "$FWL_DIR/launcher.pid"; echo v=1; exec sleep 300 ;;
   *) exec env ${extra[@]+"${extra[@]}"} "$@" ;;

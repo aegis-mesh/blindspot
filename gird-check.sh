@@ -7931,11 +7931,14 @@ if [ "$ACCTRUN" -eq 1 ]; then
     esac
   }
   _mv_set='^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?'
+# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it.
+  _mv_agent='CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME'
   _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR|PNPM_HOME'
+# <<< folder-vars
   _moved=0
   for _pf in "$H/.zshenv" "$H/.zprofile" "$H/.zshrc" "$H/.bash_profile" "$H/.bashrc" "$H/.profile" "$H/.config/fish/config.fish"; do
     [ -f "$_pf" ] && fleet_ok "$_pf" || continue
-    grep -qE "${_mv_set}(CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME)([=[:space:]])" "$_pf" 2>/dev/null && _moved=1
+    grep -qE "${_mv_set}(${_mv_agent})([=[:space:]])" "$_pf" 2>/dev/null && _moved=1
     _mvl=$(awk -v re="${_mv_set}(${_mv_tool})([=[:space:]])" 'match($0, re) { n = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?/, "", n); sub(/[=[:space:]]$/, "", n); v = substr($0, RSTART + RLENGTH); sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+#.*$/, "", v); sub(/[[:space:]]*;.*$/, "", v); sub(/[[:space:]]+$/, "", v); print n "\t" v }' "$_pf" 2>/dev/null)
     while IFS="$TAB" read -r _mvn _mvv; do
       [ -n "$_mvn" ] || continue

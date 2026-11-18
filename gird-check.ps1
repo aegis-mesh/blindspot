@@ -20,7 +20,7 @@ the source of truth for every other check.
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Save      saves the full report as a text file
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -AllSessions  waits until every agent session is checked
   -NoColor (or NO_COLOR=1)                                            plain text, no colors
-  For IT teams: blindspot-fleet.ps1 checks the signed-in person's account from an MDM (docs/fleet.md)
+  For IT teams: blindspot-fleet.ps1 checks the signed-in person's account from an MDM (docs/designs/fleet-mode.md, Windows)
 
 Runs on Windows PowerShell 5.1 and PowerShell 7. This file is plain ASCII on purpose:
 Windows PowerShell 5.1 reads a script without a byte order mark as the ANSI code page,
@@ -31,6 +31,9 @@ param(
   [switch]$AccountRun,
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
+# The reduced language (Constrained Language Mode) refuses the .NET calls below. An account run says so
+# in the one line gird-fleet.ps1 reads for it, with statements that language allows.
+if (($AccountRun -or $Rest -contains '--account-run') -and $ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { 'language_mode=1'; exit 13 }
 
 $AccountSeconds = ''
 $OptAllSess = [bool]$AllSessions; $OptAll = [bool]$All; $OptFull = [bool]$Full; $OptOffline = [bool]$Offline; $OptSave = [bool]$Save; $OptNoColor = [bool]$NoColor
@@ -56,7 +59,7 @@ if ($env:DO_NOT_TRACK -eq '1') { $OptOffline = $true }
 $OptAcctRun = [bool]$AccountRun; $AcctOut = $null; $AcctEnd = $null
 if ($OptAcctRun) {
   if ($env:OS -eq 'Windows_NT') {
-    try { if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -eq 'S-1-5-18') { exit 13 } } catch { exit 13 }
+    try { if (@('S-1-5-18', 'S-1-5-19', 'S-1-5-20') -contains [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { exit 13 } } catch { exit 13 }
   }
   $OptOffline = $true; $OptSave = $false; $OptNoColor = $true; $OptFull = $true; $OptAll = $false; $OptAllSess = $true
   # The session check stops at three quarters of the time gird-fleet.ps1 gives the run, so what was
@@ -6754,10 +6757,8 @@ $Persist = New-Object System.Collections.Generic.List[object]
 # file to check ($ExtCheck), not a compromised machine.
 $ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
 $ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
-# $IndHits: the incidents of the startup files in $Persist, which an account run sends. $FleetTmpMark:
-# in an account run, the incidents of markers this person owns in %ProgramData%, which any account can
-# write to: possible signs, never findings, as markers in /tmp are on a Mac.
-$IndHits = New-Object System.Collections.Generic.List[string]; $FleetTmpMark = New-Object System.Collections.Generic.List[string]
+# $IndHits: the incidents of the startup files in $Persist, which an account run sends.
+$IndHits = New-Object System.Collections.Generic.List[string]
 $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
@@ -6786,9 +6787,11 @@ foreach ($r in $IndOn) {
   # A Python incident's startup file is shown in its row ($PyStart).
   if ($r[2] -eq 'startup' -and $PyIncidents -contains $r[0]) { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
+  # In %ProgramData% any account can create a file, but on NTFS a standard account cannot give one to
+  # another owner. An account run counts a marker there only under its one name and owned by this
+  # person; gird-fleet.ps1 judges every other one for the PC.
   if ($OptAcctRun -and $env:ProgramData -and $m.StartsWith($env:ProgramData.TrimEnd('\', '/') + $Sep, $PathCmp)) {
-    if (-not (Multi-Name $m) -and (Owns-File $m) -and -not $FleetTmpMark.Contains($r[0])) { $FleetTmpMark.Add($r[0]) }
-    continue
+    if ((Multi-Name $m) -or -not (Owns-File $m)) { continue }
   }
   if ($r[3] -eq 'yes') {
     if ($OnWindows) { continue }
@@ -7073,10 +7076,14 @@ if ($SCORE -ge 90) { $GRADE = 'A' } elseif ($SCORE -ge 78) { $GRADE = 'B' } else
 $SCAN_SECS = [int][Math]::Floor(([DateTime]::UtcNow - $ScanT0).TotalSeconds)
 Progress-Clear
 
+# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it.
+$FolderVarsAgent = @('CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'CODEX_SQLITE_HOME', 'GEMINI_CLI_HOME', 'QWEN_HOME', 'COPILOT_HOME', 'CLINE_DIR', 'CLINE_DATA_DIR', 'CLINE_SESSION_DATA_DIR', 'CONTINUE_GLOBAL_DIR', 'GOOSE_PATH_ROOT', 'KIRO_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME')
+$FolderVarsTool = @('NVM_DIR', 'VOLTA_HOME', 'BUN_INSTALL', 'BUN_INSTALL_GLOBAL_DIR', 'N_PREFIX', 'ASDF_DATA_DIR', 'MISE_DATA_DIR', 'MISE_INSTALLS_DIR', 'MAMBA_ROOT_PREFIX', 'PIPX_HOME', 'PIPX_GLOBAL_HOME', 'WORKON_HOME', 'UV_CACHE_DIR', 'UV_TOOL_DIR', 'UV_PYTHON_INSTALL_DIR', 'POETRY_CACHE_DIR', 'POETRY_VIRTUALENVS_PATH', 'HATCH_DATA_DIR', 'XDG_CACHE_HOME', 'npm_config_prefix', 'NPM_CONFIG_PREFIX', 'npm_config_userconfig', 'NPM_CONFIG_USERCONFIG', 'CLINE_PROVIDER_SETTINGS_PATH', 'QWEN_RUNTIME_DIR', 'PNPM_HOME')
+# <<< folder-vars
 # An account run's lines: only numbers and ids from the fixed lists, in gird-check.sh --account-run's
 # order. gird-fleet.ps1 checks every line again and builds the row itself. On Windows protected is
-# always ok (no folder needs a grant like Full Disk Access), moved 0 (the run keeps the person's own
-# environment), tmp_wiper 0 (Windows has no shared /tmp) and engine dotnet where gird-check.sh has perl.
+# always ok (no folder needs a grant like Full Disk Access), tmp_marks empty and tmp_wiper 0 (Windows
+# has no shared /tmp), and engine dotnet where gird-check.sh has perl.
 if ($OptAcctRun) {
   function Fleet-Ids($ids) {
     $o = New-Object System.Collections.Generic.List[string]
@@ -7096,6 +7103,60 @@ if ($OptAcctRun) {
   $fNr = $KeyUnread.Count + $Sec2Unread.Count + $AllowUnread.Count + $NpmUnread + $LockUnread.Count + $NpmSlow + $SlowFiles.Count + $ExtUnread + $PyUnread + $UnreadDirs.Count + $NmUnread.Count
   $fEngine = $SessEngine; if ($fEngine -eq 'net') { $fEngine = 'dotnet' }
   $fSp = 0; if ($SESS_PARTIAL) { $fSp = 1 }
+  # The run starts with -NoProfile, so a variable a profile sets is not followed. The profiles are read
+  # as text, never run: one that sets a variable of data/folder-vars.tsv to anything other than what
+  # this run sees moves a folder, and the account is partly checked. A tool's variable unset here is
+  # seen as the folder this check reads without it. A value this can't work out counts as moved.
+  $fMvFiles = New-Object System.Collections.Generic.List[string]
+  foreach ($f in $ShellRc) { $fMvFiles.Add($f) }
+  if ($OnWindows) {
+    foreach ($d in @((J $env:SystemRoot 'System32/WindowsPowerShell/v1.0'), (J $env:ProgramFiles 'PowerShell/7'))) {
+      foreach ($pf in @('profile.ps1', 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1')) { $fMvFiles.Add((J $d $pf)) }
+    }
+  }
+  $fMvDefault = @{
+    'NVM_DIR' = @((J $HomeDir '.nvm')); 'VOLTA_HOME' = @((J $LocalAppData 'Volta')); 'N_PREFIX' = @((J $HomeDir 'n'))
+    'ASDF_DATA_DIR' = @((J $HomeDir '.asdf')); 'MISE_DATA_DIR' = @((J $LocalAppData 'mise')); 'MAMBA_ROOT_PREFIX' = @((J $HomeDir 'micromamba'))
+    'UV_CACHE_DIR' = @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv')); 'PNPM_HOME' = @((J $LocalAppData 'pnpm'))
+    'POETRY_CACHE_DIR' = @((J $LocalAppData 'pypoetry/Cache')); 'POETRY_VIRTUALENVS_PATH' = @((J $LocalAppData 'pypoetry/Cache/virtualenvs'))
+    'HATCH_DATA_DIR' = @((J $LocalAppData 'hatch'))
+  }
+  function Fleet-MvNorm([string]$p) { ($p -replace '[\\/]+', [string]$Sep).TrimEnd($Sep) }
+  function Fleet-MvValue([string]$v, [bool]$sh) {
+    $v = $v.Trim()
+    if ($v -match "^'([^']*)'") { return $Matches[1] }
+    if ($v -match '^"([^"]*)"') { $x = $Matches[1] } elseif ($v -match '^([^\s;)}#,]+)') { $x = $Matches[1] } else { return $null }
+    if ($sh -and $x -match '^~(?=[\\/]|$)') { $x = $HomeDir + $x.Substring(1) }
+    foreach ($t in @(@('\$\{?env:USERPROFILE\}?', $HomeDir), @('\$\{?env:LOCALAPPDATA\}?', $LocalAppData), @('\$\{?env:APPDATA\}?', $AppData), @('\$\{?HOME\}?', $HomeDir))) {
+      $x = [regex]::Replace($x, $t[0] + '(?![A-Za-z0-9_])', $t[1].Replace('$', '$$'), 'IgnoreCase')
+    }
+    if ($x -match '[$`(]') { return $null }
+    $x
+  }
+  $fMvAlt = (@(@($FolderVarsAgent) + @($FolderVarsTool) | ForEach-Object { [regex]::Escape($_) }) -join '|')
+  $fMvRx = @(
+    ('\$(?:\{env:(' + $fMvAlt + ')\}|env:(' + $fMvAlt + '))\s*=(?!=)(.*)'),
+    ('SetEnvironmentVariable\(\s*[''"](' + $fMvAlt + ')[''"]\s*,(.*)'),
+    ('\b(?:Set-Item|New-Item|si|ni)\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?(' + $fMvAlt + ')[''"]?\s+(?:-Value\s+)?(.*)'),
+    ('^\s*(?:export\s+|set\s+-[A-Za-z]*x[A-Za-z]*\s+)?(' + $fMvAlt + ')[=\s](.*)')
+  ) | ForEach-Object { New-Object regex ($_, 'IgnoreCase') }
+  $fMoved = 0
+  foreach ($f in $fMvFiles) {
+    if ($fMoved -eq 1) { break }
+    $t = Read-Text $f
+    if ($null -eq $t) { continue }
+    foreach ($l in ($t -split "`r?`n")) {
+      if ($l -match '^\s*#') { continue }
+      for ($ri = 0; $ri -lt $fMvRx.Count; $ri++) {
+        $m = $fMvRx[$ri].Match($l); if (-not $m.Success) { continue }
+        $g = @($m.Groups | Select-Object -Skip 1 | Where-Object { $_.Success })
+        $n = $g[0].Value; $val = Fleet-MvValue $g[$g.Count - 1].Value ($ri -eq 3)
+        $cur = [Environment]::GetEnvironmentVariable($n)
+        $seen = @(); if ($cur) { $seen = @($cur) } elseif ($fMvDefault.ContainsKey($n)) { $seen = $fMvDefault[$n] }
+        if ($null -eq $val -or -not (@($seen | Where-Object { [string]::Equals((Fleet-MvNorm $_), (Fleet-MvNorm $val), $PathCmp) }).Count)) { $fMoved = 1 }
+      }
+    }
+  }
   $fl = @(
     'v=1'
     "agents=$(Fleet-Ids $AgentIds)"
@@ -7122,8 +7183,8 @@ if ($OptAcctRun) {
     "lock_only=$(Fleet-Ids $fLock)"
     "remove=$(Fleet-Ids $ExtUpdTags)"
     "not_read=$fNr"
-    'moved=0'
-    "tmp_marks=$(Fleet-Ids $FleetTmpMark)"
+    "moved=$fMoved"
+    'tmp_marks='
     'tmp_wiper=0'
     'protected=ok'
     "engine=$fEngine"

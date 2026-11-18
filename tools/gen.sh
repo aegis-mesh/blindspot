@@ -6,8 +6,9 @@
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
-# versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check.
+# versions with a published fix (data/outdated.tsv), extensions that shipped malware
+# (data/bad-extensions.tsv) and variables that move an agent's or a tool's folders
+# (data/folder-vars.tsv). The scripts stay single files people can download and check.
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -121,7 +122,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
-        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')
+        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }'
+      rows data/folder-vars.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || seen[$1]++ { print "data/folder-vars.tsv: " $0 }')
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
@@ -397,6 +399,16 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   { print $1 " " $2 " " $3 " " $4 " " $5 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
+# --- variables that move an agent's or a tool's folders, for an account run ---------------
+rows data/folder-vars.tsv | awk -F '\t' '
+  { L[$2] = L[$2] (L[$2] == "" ? "" : "|") $1 }
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
+        print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"; print "# <<< folder-vars" }' > "$WORK/folder-vars.sh"
+rows data/folder-vars.tsv | awk -F '\t' '
+  { L[$2] = L[$2] (L[$2] == "" ? "" : ", ") "\047" $1 "\047" }
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
+        print "$FolderVarsAgent = @(" L["agent"] ")"; print "$FolderVarsTool = @(" L["tool"] ")"; print "# <<< folder-vars" }' > "$WORK/folder-vars.ps1"
+
 # --- the ids gird-fleet.ps1 checks an account run's lines against ---------------------
 # Every incident with its level, the key providers, the agents of data/auto-approve.tsv, the tools of
 # data/outdated.tsv and the platforms, as Windows sees them, and the markers data/indicators.tsv puts in
@@ -446,7 +458,7 @@ RC=0
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
   elif [ "$f" = gird-fleet.ps1 ]; then blocks="agents fleet-tables"
-  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
+  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms folder-vars"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }
@@ -470,6 +482,7 @@ _sha=$(sha < gird-check.ps1)
 splice gird-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/blindspot-fleet.ps1" || exit 1
 _sz=$(wc -c < "$WORK/blindspot-fleet.ps1" | tr -d ' ')
 if [ "$_sz" -ge 204800 ]; then echo "blindspot-fleet.ps1 is $_sz bytes: Intune takes a script of under 200 KB (204,800 bytes)"; RC=1; fi
+if [ "$_sz" -lt 204800 ] && [ "$_sz" -ge 184320 ]; then echo "warning: blindspot-fleet.ps1 is $_sz bytes, past 90% of the 204,800 Intune takes"; fi
 _back=$(base64 -d < "$WORK/packed.b64" 2>/dev/null | gzip -dc | sha)
 if [ "$_back" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1"; RC=1; fi
 if [ "$CHECK" -eq 0 ] && [ "$RC" -eq 0 ] && ! cmp -s "$WORK/blindspot-fleet.ps1" blindspot-fleet.ps1; then cat "$WORK/blindspot-fleet.ps1" > blindspot-fleet.ps1; echo "built blindspot-fleet.ps1 ($_sz bytes)"; fi

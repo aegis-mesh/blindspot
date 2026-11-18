@@ -3587,8 +3587,26 @@ printf 'endless\n' > "$FW/mode"
 T0=$SECONDS; fw_run endless "$FW/upd" -- --deadline=60; T1=$((SECONDS - T0))
 if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/endless.flat" && [ "$T1" -lt 30 ]; then ok "fleet: root reads a set number of bytes, then stops the run" "${T1}s"; else bad "fleet: root reads a set number of bytes, then stops the run" "${T1}s $(grep "^$FA" "$FW/endless.flat")"; fi
 printf 'empty\n' > "$FW/mode"; fw_run empty "$FW/upd" -- --mac-exit-codes
-if grep -q '^outcome=failed$' "$FW/empty.flat" && grep -q '^reason=language_mode$' "$FW/empty.flat" && grep -q '^13$' "$FW/empty.rc" && grep -qE "$INVRX" "$FW/empty.out" && grep -q ' reason=language_mode |' "$FW/empty.out"
-then ok "fleet: an account run that stops before its first line is failed, reason=language_mode"; else bad "fleet: an account run that stops before its first line is failed, reason=language_mode" "$(cat "$FW/empty.rc" "$FW/empty.out")"; fi
+if grep -q '^outcome=failed$' "$FW/empty.flat" && grep -q '^reason=no_output$' "$FW/empty.flat" && grep -q '^13$' "$FW/empty.rc" && grep -qE "$INVRX" "$FW/empty.out" && grep -q ' reason=no_output |' "$FW/empty.out"
+then ok "fleet: an account run that prints nothing is failed, reason=no_output"; else bad "fleet: an account run that prints nothing is failed, reason=no_output" "$(cat "$FW/empty.rc" "$FW/empty.out")"; fi
+printf 'clm\n' > "$FW/mode"; fw_run clmrun "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/clmrun.flat" && grep -q '^reason=language_mode$' "$FW/clmrun.flat" && grep -q '^13$' "$FW/clmrun.rc" && grep -qE "$INVRX" "$FW/clmrun.out"
+then ok "fleet: an account run in the reduced language is failed, reason=language_mode"; else bad "fleet: an account run in the reduced language is failed, reason=language_mode" "$(cat "$FW/clmrun.rc" "$FW/clmrun.out")"; fi
+# The reduced language, set for a session here: gird-check.ps1 says so in its one line, and
+# gird-fleet.ps1's own result keeps the form each option asks for.
+fw_clm() { # out-prefix script args...: the script run in a session set to the reduced language
+  _p=$1; _s=$2; shift 2
+  env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" GIRD_CHECK_FLEET_TEST=1 \
+    "$PWSH" -NoProfile -NonInteractive -Command "\$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'; & '$_s' $*; exit \$LASTEXITCODE" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+}
+fw_clm clmac "$SCRIPT" --account-run
+if [ "$(cat "$FW/clmac.out")" = language_mode=1 ] && grep -q '^13$' "$FW/clmac.rc"; then ok "fleet: -AccountRun in the reduced language prints only language_mode=1"; else bad "fleet: -AccountRun in the reduced language prints only language_mode=1" "$(cat "$FW/clmac.rc" "$FW/clmac.out" | head -c 300)"; fi
+fw_clm clmv "$FLEETPS"; fw_clm clms "$FLEETPS" --summary-to-stdout; fw_clm clmj "$FLEETPS" --json --mac-exit-codes
+if grep -qE "$INVRX" "$FW/clmv.out" && grep -qE '^v1 failed [0-9T:-]+Z other_profiles=0 reason=language_mode \| ' "$FW/clmv.out" && grep -q '^1$' "$FW/clmv.rc" \
+  && grep -qE '^blindspot failed accounts=1 act=0 review=0 not_checked=1 other_profiles=0 v=unknown at=[0-9T:-]+Z reason=language_mode$' "$FW/clms.out" \
+  && python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d["outcome"] == "failed" and d["reason"] == "language_mode" and d["other_profiles"] == 0 else 1)' "$FW/clmj.out" 2>/dev/null && grep -q '^13$' "$FW/clmj.rc"
+then ok "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode"; else bad "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode" "$(cat "$FW/clmv.out" "$FW/clms.out" | head -c 300)"; fi
 
 # A run that holds its output open past its limit, with a process of its own.
 printf 'hold\n' > "$FW/mode"; rm -f "$FW/hold.pid"
@@ -3602,6 +3620,17 @@ rm -f "$FW/hold.pid" "$FW/launcher.pid"
 fw_run holdleft "$FW/upd" GIRD_CHECK_FLEET_NOSTOP=1 -- --deadline=40
 kill "$(cat "$FW/hold.pid" 2>/dev/null)" "$(cat "$FW/launcher.pid" 2>/dev/null)" 2>/dev/null
 has    "fleet: a process that outlives the stop is reported" "^$FA\\.processes_left=true\$" "$FW/holdleft.flat"
+# Output past the limit stops the run as a stuck one does, and a process that outlives it is reported.
+printf 'bighold\n' > "$FW/mode"; rm -f "$FW/launcher.pid"
+fw_run bighold "$FW/upd" -- --deadline=40
+if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/bighold.flat" && [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null && ! grep -q processes_left "$FW/bighold.flat"
+then ok "fleet: output past the limit stops the run and everything it started"; else bad "fleet: output past the limit stops the run and everything it started" "$(grep "^$FA" "$FW/bighold.flat" | tr '\n' ' ')"; fi
+rm -f "$FW/launcher.pid"; fw_run bigleft "$FW/upd" GIRD_CHECK_FLEET_NOSTOP=1 -- --deadline=40
+kill "$(cat "$FW/launcher.pid" 2>/dev/null)" 2>/dev/null
+if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/bigleft.flat" && grep -q "^$FA\\.processes_left=true\$" "$FW/bigleft.flat"; then ok "fleet: a process that outlives the stop after too much output is reported"
+else bad "fleet: a process that outlives the stop after too much output is reported" "$(grep "^$FA" "$FW/bigleft.flat" | tr '\n' ' ')"; fi
+printf 'tmpmarks\n' > "$FW/mode"; fw_run tmpmarks "$FW/upd"
+has    "fleet: an account run that names markers in a shared /tmp is refused on Windows" "^$FA\\.not_checked=bad_output\$" "$FW/tmpmarks.flat"
 rm -f "$FW/mode"
 fw_run late "$FW/upd" -- --deadline=1 --mac-exit-codes
 if grep -q "^$FA\\.not_checked=deadline\$" "$FW/late.flat" && grep -q '^deadline_reached=true$' "$FW/late.flat" && grep -q '^12$' "$FW/late.rc"; then ok "fleet: a run stopped by its deadline is not_checked"; else bad "fleet: a run stopped by its deadline is not_checked" "$(head -n 5 "$FW/late.flat")"; fi
@@ -3691,17 +3720,31 @@ FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone "$FW/clean" -- --mac-exit-code
 if grep -q '^outcome=failed$' "$FW/alone.flat" && grep -q '^reason=unpack$' "$FW/alone.flat" && grep -q '^13$' "$FW/alone.rc" && grep -qE "$INVRX" "$FW/alone.out"; then ok "fleet: without gird-check.ps1 next to it or packed inside, the run is failed"; else bad "fleet: without gird-check.ps1 next to it or packed inside, the run is failed" "$(cat "$FW/alone.rc" "$FW/alone.out")"; fi
 FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone1 "$FW/clean"
 has    "fleet: and failed exits 1 with the default codes" '^1$' "$FW/alone1.rc"
+# A saved-result folder that can't be made: failed, reason=save, and the JSON still printed.
+fw_home save; chmod 555 "$FW/save/AppData/Local"; : > "$FW/argv.log"
+fw_run save "$FW/save" -- --json --mac-exit-codes; chmod 755 "$FW/save/AppData/Local"
+if python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d["outcome"] == "failed" and d["reason"] == "save" else 1)' "$FW/save.out" 2>/dev/null && grep -q '^13$' "$FW/save.rc" && [ ! -s "$FW/argv.log" ]
+then ok "fleet: a result it can't save is failed, reason=save"; else bad "fleet: a result it can't save is failed, reason=save" "exit $(cat "$FW/save.rc") $(head -c 300 "$FW/save.out")"; fi
+fw_run start "$FW/clean" GIRD_CHECK_FLEET_LAUNCH="$FW/no-such-program" -- --mac-exit-codes
+if grep -q '^13$' "$FW/start.rc" && grep -qE "$INVRX" "$FW/start.out" && grep -q ' reason=start | ' "$FW/start.out"; then ok "fleet: an account run that can't be started is failed, reason=start"
+else bad "fleet: an account run that can't be started is failed, reason=start" "exit $(cat "$FW/start.rc") $(cat "$FW/start.out")"; fi
+# The file it starts is hashed again just before it starts: one it could not write again is never started.
+fw_home rehold; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/rehold/AppData/Local/Blindspot/$_v"
+printf 'Write-Output "v=1"\n' > "$FW/rehold/AppData/Local/Blindspot/$_v/gird-check.ps1"; chmod 555 "$FW/rehold/AppData/Local/Blindspot/$_v"; : > "$FW/argv.log"
+fw_run rehold "$FW/rehold" -- --mac-exit-codes; chmod 755 "$FW/rehold/AppData/Local/Blindspot/$_v"
+if grep -q '^reason=unpack$' "$FW/rehold.flat" && grep -q '^13$' "$FW/rehold.rc" && [ ! -s "$FW/argv.log" ]; then ok "fleet: an unpacked check it could not write again is never started, reason=unpack"
+else bad "fleet: an unpacked check it could not write again is never started, reason=unpack" "$(cat "$FW/rehold.rc" "$FW/argv.log"; head -n 6 "$FW/rehold.flat")"; fi
 
 # The inventory value, cut to what Intune keeps.
 printf 'maxed\n' > "$FW/mode"; fw_run maxed "$FW/clean"; rm -f "$FW/mode"
 sed -n 's/^inventory=//p' "$FW/maxed.flat" > "$FW/maxed.inv"
 has    "fleet: a long inventory value ends with +more" ' \+more$' "$FW/maxed.inv"
-if [ "$(tr -d '\n' < "$FW/maxed.inv" | wc -c)" -le 2048 ] && cmp -s "$FW/maxed.inv" "$FW/maxed.out"; then ok "fleet: and still fits"; else bad "fleet: and still fits" "$(wc -c < "$FW/maxed.inv")"; fi
+if [ "$(tr -d '\n' < "$FW/maxed.inv" | wc -c)" -le 2047 ] && cmp -s "$FW/maxed.inv" "$FW/maxed.out"; then ok "fleet: and still fits"; else bad "fleet: and still fits" "$(wc -c < "$FW/maxed.inv")"; fi
 has    "fleet: and keeps the accounts that need attention" "\\| $FA: act" "$FW/maxed.inv"
 has    "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "\\| $FA: act wiper; incidents [a-z0-9,]+ \\+more\$" "$FW/maxed.inv"
 has    "fleet: and ends with +more, since details were cut" ' \+more$' "$FW/maxed.inv"
 has    "fleet: the cut value has the header the admin tool reads" "$INVRX" "$FW/maxed.inv"
-if [ "$(tr -d '\n' < "$FW/two.inv" | wc -c)" -le 2048 ] && ! grep -qE '/|AppData|\.zshrc|\.env' "$FW/two.inv"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
+if [ "$(tr -d '\n' < "$FW/two.inv" | wc -c)" -le 2047 ] && ! grep -qE '/|AppData|\.zshrc|\.env' "$FW/two.inv"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
 
 # Possible signs and the account's own temp folder.
 fw_home gw; mkdir -p "$FW/gw/Library/LaunchAgents"; : > "$FW/gw/Library/LaunchAgents/com.user.nodestart.plist"
@@ -3715,17 +3758,119 @@ hasnot "fleet: and not for the Mac" '^machine\.incidents=.*litellm' "$FW/tm.flat
 fw_home tmd; mkdir -p "$FW/tmd/AppData/Local/Temp/.pc_sq_abc123"
 fw_run tmd "$FW/tmd"
 has    "fleet: a marker folder in the account's own temp folder counts for that account" "^$FA\\.incidents=litellm\$" "$FW/tmd.flat"
-# %ProgramData%, which any account can write to: a marker the person owns is a possible sign on their row.
-# GIRD_CHECK_FLEET_PROGRAMDATA is the folder the PC's own check reads; the account run reads the person's ProgramData.
+# %ProgramData%, where any account can create a file but a standard account can't give one to another
+# owner: the owner decides. GIRD_CHECK_FLEET_PROGRAMDATA is the folder the PC's own check reads.
 fw_home pd; mkdir -p "$FW/progdata/NodePackages"; : > "$FW/progdata/NodePackages/protocal.cjs"
 fw_run pd "$FW/pd" ProgramData="$FW/progdata" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/progdata"
-rm -rf "$FW/progdata"
 if grep -q '^machine\.possible_signs=$' "$FW/pd.flat" && grep -q '^machine\.incidents=$' "$FW/pd.flat"; then ok "fleet: a marker the person owns in %ProgramData% is not the PC's"; else bad "fleet: a marker the person owns in %ProgramData% is not the PC's" "$(grep '^machine' "$FW/pd.flat" | tr '\n' ' ')"; fi
-# Ownership in %ProgramData%, the reduced language, a 32-bit host and SYSTEM need a Windows PC, and the
-# owner tests a second account or administrator rights there too.
-skip "fleet: a marker the person owns in %ProgramData% is a possible sign on their row, not a finding" "needs a file in the real %ProgramData% of a Windows PC, which the suite does not write: the only marker data/indicators.tsv lists there is for Windows, so an account run elsewhere never looks for it"
-skip "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "needs a file another account owns in %ProgramData% on a Windows PC: setting an owner takes administrator rights"
-skip "fleet: one Administrators or SYSTEM own is a finding for the PC" "needs a file Administrators own in %ProgramData% on a Windows PC: setting an owner takes administrator rights"
+ln "$FW/progdata/NodePackages/protocal.cjs" "$FW/progdata/second-name"
+fw_run pdh "$FW/pd" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/progdata"
+if grep -q '^machine\.possible_signs=mastra$' "$FW/pdh.flat" && grep -q '^machine\.incidents=$' "$FW/pdh.flat"; then ok "fleet: a marker the person owns under two names in %ProgramData% is a possible sign for the PC"
+else bad "fleet: a marker the person owns under two names in %ProgramData% is a possible sign for the PC" "$(grep '^machine' "$FW/pdh.flat" | tr '\n' ' ')"; fi
+rm -rf "$FW/progdata"
+# Windows PowerShell on a Windows PC, with a fixture home's folders and the rest of the PC's own environment.
+fw_runwin() { # out-prefix home [env...] -- args...
+  _p=$1; _h=$2; shift 2; _e=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
+  env USERPROFILE="$(cygpath -w "$_h")" APPDATA="$(cygpath -w "$_h/AppData/Roaming")" LOCALAPPDATA="$(cygpath -w "$_h/AppData/Local")" \
+    TEMP="$(cygpath -w "$_h/AppData/Local/Temp")" TMP="$(cygpath -w "$_h/AppData/Local/Temp")" ${_e[@]+"${_e[@]}"} \
+    "$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" "$@" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+  python3 "$FWFLAT" "$_h/AppData/Local/Blindspot/last.json" > "$FW/$_p.flat" 2>/dev/null || : > "$FW/$_p.flat"
+}
+# A marker owned by someone else: administrator rights on Windows, or passwordless sudo elsewhere, give it away.
+fw_give() { # file owner(root|other): exit 0 when the file now has that owner
+  if [ -z "$WINONLY" ]; then [ "$2" = root ] && icacls "$(cygpath -w "$1")" /setowner '*S-1-5-32-544' > /dev/null 2>&1; return; fi
+  if [ "$2" = root ]; then sudo -n chown root "$1" 2> /dev/null; else sudo -n chown nobody "$1" 2> /dev/null; fi
+}
+fw_mark() { # out-prefix owner: a marker that owner owns, as the PC's own check classes it
+  mkdir -p "$FW/pd-$1/NodePackages"; : > "$FW/pd-$1/NodePackages/protocal.cjs"
+  if ! fw_give "$FW/pd-$1/NodePackages/protocal.cjs" "$2"; then sudo -n rm -rf "$FW/pd-$1" 2> /dev/null; rm -rf "$FW/pd-$1" 2> /dev/null; return 1; fi
+  if [ -z "$WINONLY" ]; then fw_runwin "$1" "$FW/pd" ProgramData="$(cygpath -w "$FW/pd-$1")" --; else fw_run "$1" "$FW/pd" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/pd-$1"; fi
+  sudo -n rm -rf "$FW/pd-$1" 2> /dev/null; rm -rf "$FW/pd-$1" 2> /dev/null; return 0
+}
+if fw_mark pdm root; then
+  if grep -q '^machine\.incidents=mastra$' "$FW/pdm.flat" && grep -q '^machine\.outcome=act$' "$FW/pdm.flat" && grep -q '^outcome=act$' "$FW/pdm.flat"; then ok "fleet: one Administrators or SYSTEM own is a finding for the PC"
+  else bad "fleet: one Administrators or SYSTEM own is a finding for the PC" "$(grep '^machine' "$FW/pdm.flat" | tr '\n' ' ')"; fi
+else skip "fleet: one Administrators or SYSTEM own is a finding for the PC" "giving a file to Administrators takes administrator rights on Windows, and to root passwordless sudo elsewhere, as CI runners have"; fi
+if [ -n "$WINONLY" ] && fw_mark pdo other; then
+  if grep -q '^machine\.possible_signs=mastra$' "$FW/pdo.flat" && grep -q '^machine\.incidents=$' "$FW/pdo.flat"; then ok "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding"
+  else bad "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "$(grep '^machine' "$FW/pdo.flat" | tr '\n' ' ')"; fi
+else skip "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "needs a second ordinary account on Windows, or passwordless sudo elsewhere, as CI runners have"; fi
+if [ -n "$WINONLY" ]; then
+  skip "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "$WINONLY: the only marker data/indicators.tsv lists in %ProgramData% is for Windows, so an account run elsewhere never looks for it"
+  skip "fleet: a stale unpacked check marked read-only is written again" "$WINONLY: off Windows a read-only file can be deleted from a folder its owner can write"
+else
+  fw_home pdw; mkdir -p "$FW/pdw-data/NodePackages"; : > "$FW/pdw-data/NodePackages/protocal.cjs"
+  if [ "$(powershell.exe -NoProfile -Command "(Get-Acl -LiteralPath '$(cygpath -w "$FW/pdw-data/NodePackages/protocal.cjs")').GetOwner([Security.Principal.SecurityIdentifier]).Value -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value" | tr -d '\r')" != True ]; then
+    skip "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "a file this account creates is not its own here (an administrator's new files can belong to Administrators)"
+  else
+    fw_runwin pdw "$FW/pdw" ProgramData="$(cygpath -w "$FW/pdw-data")" --
+    if grep -q "^$FA\\.incidents=mastra\$" "$FW/pdw.flat" && grep -q "^$FA\\.outcome=act\$" "$FW/pdw.flat" && grep -q '^machine\.incidents=$' "$FW/pdw.flat" && grep -q '^machine\.possible_signs=$' "$FW/pdw.flat"
+    then ok "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level"; else bad "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "$(grep -E "^($FA|machine)\\.(incidents|outcome|possible_signs)" "$FW/pdw.flat" | tr '\n' ' ')"; fi
+  fi
+  rm -rf "$FW/pdw-data"
+  fw_home ro; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/ro/AppData/Local/Blindspot/$_v"
+  printf 'Write-Output "v=1"\n' > "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1"; attrib.exe +R "$(cygpath -w "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1")"
+  fw_runwin ro "$FW/ro" --
+  if cmp -s "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && ! grep -q '^reason=' "$FW/ro.flat"; then ok "fleet: a stale unpacked check marked read-only is written again"; else bad "fleet: a stale unpacked check marked read-only is written again" "$(head -n 6 "$FW/ro.flat")"; fi
+fi
+# The decisions themselves, from gird-fleet.ps1's own functions: which marker goes where, which
+# profiles are people's, and which processes belong to the account run.
+cat > "$FW/fn.ps1" <<'PS'
+param([string]$File, [string]$Names, [string]$Code)
+$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+foreach ($f in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)) { if (($Names -split ',') -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) } }
+. ([scriptblock]::Create([IO.File]::ReadAllText($Code)))
+PS
+fw_fn() { "$PWSH" -NoProfile -NonInteractive -File "$FW/fn.ps1" "$FLEETPS" "$1" "$2" 2>&1 | tr -d '\r'; }
+cat > "$FW/fn-mark.ps1" <<'PS'
+(@(@('person', ''), @('person', 'HardLink'), @('machine', ''), @('machine', 'HardLink'), @('machine', 'unknown'), @('other', ''), @('unknown', '')) | ForEach-Object { $_[0] + '/' + $_[1] + '=' + (Mark-Kind $_[0] $_[1]) }) -join ' '
+PS
+if [ "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")" = 'person/=account person/HardLink=possible machine/=incident machine/HardLink=possible machine/unknown=possible other/=possible unknown/=possible' ]
+then ok "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says"; else bad "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says" "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")"; fi
+cat > "$FW/fn-prof.ps1" <<'PS'
+(@(@('S-1-5-21-11-22-33-500', 'C:\Users\Administrator'), @('S-1-5-21-11-22-33-503', 'C:\Users\DefaultAccount'), @('S-1-5-21-11-22-33-1001', 'C:\Users\asha'),
+  @('S-1-5-21-11-22-33-1002', 'C:\Users\defaultuser0'), @('S-1-12-1-11-22-33-44', 'C:\Users\bob'), @('S-1-5-18', 'C:\Windows\system32\config\systemprofile'),
+  @('S-1-5-21-11-22-33-1003', '')) | ForEach-Object { [string](Is-PersonProfile $_[0] $_[1]) }) -join ' '
+PS
+if [ "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")" = 'False False True False True False False' ]; then ok "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's"
+else bad "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's" "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")"; fi
+cat > "$FW/fn-tree.ps1" <<'PS'
+function Case($pairs, [int]$root, [long]$rs, $starts) {
+  $sb = { param($id) if ($starts.ContainsKey($id)) { $starts[$id] } else { -2 } }.GetNewClosure()
+  $t = Tree-From $pairs $root $rs $sb
+  ((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
+}
+$out = @()
+# A child that started before the run took a reused id for its parent: not the run's.
+$out += Case @(@(101, 100), @(102, 100), @(103, 101)) 100 1000 @{ 100 = [long]1000; 101 = [long]1100; 102 = [long]900; 103 = [long]1200 }
+# A child whose start time can't be read: left alone, and said.
+$out += Case @(,@(101, 100)) 100 1000 @{ 100 = [long]1000; 101 = [long]-1 }
+# The run's id now names a later process: a child older than that one is the run's; a newer one can't be told apart.
+$out += Case @(@(101, 100), @(102, 100)) 100 1000 @{ 100 = [long]3000; 101 = [long]2000; 102 = [long]3500 }
+# The run has ended and nothing took its id: its child is still its own.
+$out += Case @(,@(101, 100)) 100 1000 @{ 101 = [long]1100 }
+$out -join ' '
+PS
+if [ "$(fw_fn Tree-From "$FW/fn-tree.ps1")" = '100,101,103:False 100:True 100,101:True 100,101:False' ]; then ok "fleet: only a process proven to be under the account run is stopped"
+else bad "fleet: only a process proven to be under the account run is stopped" "$(fw_fn Tree-From "$FW/fn-tree.ps1")"; fi
+cat > "$FW/fn-fit.ps1" <<'PS'
+$h = 'v1 review 2026-01-01T00:00Z other_profiles=0'; $t = ' | machine: review; possible mastra'
+$fill = { param($n) 'asha: review to-read 1; possible ' + ('a' * ($n - ($h.Length + 3 + 'asha: review to-read 1; possible '.Length + $t.Length))) }
+$a = Fit-Value $h (& $fill 2047) 'asha: review' 'asha: review' $t
+$b = Fit-Value $h (& $fill 2048) 'asha: review' 'asha: review' $t
+"$($a.Length) $($a.EndsWith(' +more')) $($b.Length -le 2047) $($b.EndsWith(' +more'))"
+PS
+if [ "$(fw_fn Fit-Value "$FW/fn-fit.ps1")" = '2047 False True True' ]; then ok "fleet: an inventory value is at most 2,047 characters, and one cut ends with +more"
+else bad "fleet: an inventory value is at most 2,047 characters, and one cut ends with +more" "$(fw_fn Fit-Value "$FW/fn-fit.ps1")"; fi
+cat > "$FW/fn-name.ps1" <<'PS'
+(@('asha', 'machine', 'Machine', 'a b', '.x', 'machine2') | ForEach-Object { Shown-Name $_ }) -join ' '
+PS
+if [ "$(fw_fn Shown-Name "$FW/fn-name.ps1")" = 'asha invalid-name invalid-name invalid-name invalid-name machine2' ]; then ok "fleet: an account named machine shows as invalid-name, apart from the PC's row"
+else bad "fleet: an account named machine shows as invalid-name, apart from the PC's row" "$(fw_fn Shown-Name "$FW/fn-name.ps1")"; fi
+_tk=$(awk '/^[[:space:]]*#/ { next } /taskkill|\/T /' "$FLEETPS")
+if [ -z "$_tk" ]; then ok "fleet: no process is stopped by its tree alone (no taskkill /T)"; else bad "fleet: no process is stopped by its tree alone (no taskkill /T)" "$_tk"; fi
 skip "fleet: run as SYSTEM, it is failed, reason=system_account" "needs a PowerShell started as SYSTEM on a Windows PC, which takes administrator rights"
 if [ -n "$WINONLY" ]; then
   skip "fleet: a session in Constrained Language Mode is failed, reason=language_mode" "$WINONLY: Windows PowerShell's reduced language"
@@ -3785,6 +3930,31 @@ printf 'slowsess\n' > "$FW/mode"; fw_run slowsess "$FW/asha" -- --deadline=30; r
 if grep -q "^$FA\\.outcome=act\$" "$FW/slowsess.flat" && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowsess.flat" && ! grep -q "^$FA\\.not_checked=" "$FW/slowsess.flat"; then ok "fleet: a session check that runs long is stopped in time, and the findings still count"
 else bad "fleet: a session check that runs long is stopped in time, and the findings still count" "$(grep -E "^$FA\\.(outcome|sessions|not_checked|stopped)" "$FW/slowsess.flat" | tr '\n' ' ')"; fi
 
+# The account run starts with -NoProfile: a variable a profile sets to move an agent's folders is not
+# followed, so the profile is read as text and the account is partly checked.
+fw_prof() { # home lines...: the home's PowerShell profile, holding those lines
+  fw_home "$1"; mkdir -p "$FW/$1/Documents/PowerShell"; _h=$1; shift; printf '%s\n' "$@" > "$FW/$_h/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
+}
+fw_prof moved '$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-work"'
+fw_run moved "$FW/moved" -- --json
+if grep -q "^$FA\\.agent_folders_moved=true\$" "$FW/moved.flat" && grep -q "^$FA\\.outcome=not_checked\$" "$FW/moved.flat" && grep -qE "\\| $FA: not_checked partial\$" "$FW/moved.flat"
+then ok "fleet: a profile that moves an agent's folders leaves the account partly checked"; else bad "fleet: a profile that moves an agent's folders leaves the account partly checked" "$(grep "^$FA\\." "$FW/moved.flat" | tr '\n' ' ')"; fi
+fw_prof dflt '$env:NVM_DIR = "$env:USERPROFILE\.nvm"' '${env:PNPM_HOME} = "$env:LOCALAPPDATA\pnpm\"' "[Environment]::SetEnvironmentVariable('BUN_INSTALL', 'D:\\bun', 'User')" '# $env:CODEX_HOME = "D:\codex"' 'if ($env:CLAUDE_CONFIG_DIR -eq "x") { }'
+fw_run dflt "$FW/dflt" 'BUN_INSTALL=D:\bun'
+has    "fleet: a profile that sets a tool's folder to its default moves nothing" "^$FA\\.agent_folders_moved=false\$" "$FW/dflt.flat"
+fw_prof toolmv '$env:WORKON_HOME = "D:\envs"'
+fw_run toolmv "$FW/toolmv"
+has    "fleet: one that sets it elsewhere leaves the account partly checked" "^$FA\\.agent_folders_moved=true\$" "$FW/toolmv.flat"
+fw_prof pnmv 'Set-Item -Path env:PNPM_HOME -Value "$env:USERPROFILE\.cache\pnpm"'
+mkdir -p "$FW/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$FW/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios/package.json"
+fw_run pnmv "$FW/pnmv"
+has    "fleet: and so does one that moves pnpm's folder (PNPM_HOME)" "^$FA\\.agent_folders_moved=true\$" "$FW/pnmv.flat"
+hasnot "fleet: so a bad package only there never reads clear" "^$FA\\.outcome=clear\$" "$FW/pnmv.flat"
+fw_home gbash; printf 'export CODEX_HOME=/d/codex\n' > "$FW/gbash/.bashrc"
+fw_run gbash "$FW/gbash"
+has    "fleet: a Git Bash profile that moves an agent's folders counts too" "^$FA\\.agent_folders_moved=true\$" "$FW/gbash.flat"
+
 # blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
 mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf/"
 if (cd "$FW/bf" && bash tools/gen.sh > /dev/null 2>&1) && [ -f "$FW/bf/blindspot-fleet.ps1" ] && [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 204800 ]; then ok "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ') bytes"
@@ -3793,10 +3963,35 @@ fw_home bfh; mkdir -p "$FW/bfrun"; cp "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/"
 FW_SCRIPT="$FW/bfrun/blindspot-fleet.ps1" fw_run bfrun "$FW/bfh"
 _v=$(sed -n 's/^script=//p' "$FW/bfrun.flat")
 if [ -n "$_v" ] && cmp -s "$FW/bfh/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && grep -q '^outcome=clear$' "$FW/bfrun.flat"; then ok "fleet: and the check it unpacks and runs is gird-check.ps1, byte for byte"; else bad "fleet: and the check it unpacks and runs is gird-check.ps1, byte for byte" "$(head -n 3 "$FW/bfrun.flat")"; fi
+sed "s/^\\\$PackedSha = '[0-9a-f]*'\$/\$PackedSha = '$(printf '0%.0s' $(seq 64))'/" "$FW/bf/blindspot-fleet.ps1" > "$FW/bfrun/blindspot-bad.ps1"
+fw_home bfbad; : > "$FW/argv.log"
+FW_SCRIPT="$FW/bfrun/blindspot-bad.ps1" fw_run bfbad "$FW/bfbad"
+if ! cmp -s "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/blindspot-bad.ps1" && grep -qE ' reason=unpack \| ' "$FW/bfbad.out" && [ ! -s "$FW/argv.log" ]; then ok "fleet: a packed check whose SHA-256 differs is never started, reason=unpack"
+else bad "fleet: a packed check whose SHA-256 differs is never started, reason=unpack" "$(cat "$FW/bfbad.out" "$FW/argv.log")"; fi
+(cd "$FW/bf" && bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1)
+if [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -ge 184320 ] && grep -q 'past 90% of the 204,800' "$FW/bf-check.log" || { [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 184320 ] && ! grep -q 'past 90%' "$FW/bf-check.log"; }
+then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB"; else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "$(cat "$FW/bf-check.log")"; fi
 
 # Refusals, and the rules a reader checks in the file itself.
 fw_run all "$FW/clean" -- --all
 if grep -q '^13$' "$FW/all.rc" && grep -q -- '-All is refused' "$FW/all.err" && [ ! -s "$FW/argv.log" ]; then ok "fleet: --all with --all-users is refused"; else bad "fleet: --all with --all-users is refused" "exit $(cat "$FW/all.rc")"; fi
+fw_run js "$FW/clean" -- --json --summary-to-stdout
+if grep -q '^2$' "$FW/js.rc" && grep -q 'choose -Json or -Summary, not both' "$FW/js.err" && [ ! -s "$FW/js.out" ] && [ ! -s "$FW/argv.log" ]; then ok "fleet: -Json with -Summary is refused"; else bad "fleet: -Json with -Summary is refused" "exit $(cat "$FW/js.rc")"; fi
+_dl=""
+for d in 0 abc 100000 -5 1.5 ' 60' 060; do
+  fw_run dl "$FW/clean" -- "--deadline=$d"
+  grep -q '^2$' "$FW/dl.rc" && grep -q -- '-Deadline takes a number of seconds' "$FW/dl.err" && [ ! -s "$FW/argv.log" ] || _dl="$_dl [$d]"
+done
+fw_run dlp "$FW/clean" -- -Deadline abc
+grep -q '^2$' "$FW/dlp.rc" || _dl="$_dl [-Deadline abc]"
+if [ -z "$_dl" ]; then ok "fleet: a -Deadline that is not 1 to 99999 seconds is refused"; else bad "fleet: a -Deadline that is not 1 to 99999 seconds is refused" "$_dl"; fi
+# Run by a relative path from the script's folder; from standard input it can't read gird-check.ps1 next to it.
+( cd "$(dirname "$FLEETPS")" && FW_SCRIPT=gird-fleet.ps1 fw_run rel "$FW/upd" -- --summary-to-stdout )
+has    "fleet: runs by a relative path from the script's folder" '^blindspot review accounts=1 act=0 review=1 not_checked=0 ' "$FW/rel.out"
+( cd / && env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" \
+    "$PWSH" -NoProfile -NonInteractive -Command '$s = [Console]::In.ReadToEnd(); Invoke-Expression $s' < "$FLEETPS" > "$FW/stdin.out" 2> "$FW/stdin.err" ); RC=$?
+if [ "$RC" -eq 1 ] && grep -q 'run it from a file: gird-fleet.ps1 reads gird-check.ps1 from its own folder' "$FW/stdin.err" && grep -qE "$INVRX" "$FW/stdin.out" && grep -q ' reason=unpack | ' "$FW/stdin.out"
+then ok "fleet: from standard input it fails, and says why"; else bad "fleet: from standard input it fails, and says why" "exit $RC $(cat "$FW/stdin.err" "$FW/stdin.out")"; fi
 env -i PATH=/usr/bin:/bin USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" "$PWSH" -NoProfile -NonInteractive -File "$FLEETPS" > "$FW/notwin.out" 2> "$FW/notwin.err"; RC=$?
 if [ "$RC" -eq 13 ] && [ ! -s "$FW/notwin.out" ] && grep -q 'run gird-fleet.sh' "$FW/notwin.err"; then ok "fleet: off Windows it exits 13 and points to gird-fleet.sh"; else bad "fleet: off Windows it exits 13 and points to gird-fleet.sh" "exit $RC"; fi
 _unguarded=$(awk '/^[[:space:]]*#/ { next } /GIRD_CHECK_FLEET_/ && !/\$FlTest -and/ && !/^  if \(\$env:GIRD_CHECK_FLEET_TEST -ne .1.\) \{ Fl-Usage / { print NR ": " $0 }' "$FLEETPS")

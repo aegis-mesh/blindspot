@@ -1,6 +1,6 @@
 <#
 Blindspot for IT teams, on Windows: checks the signed-in person's account, run by an MDM.
-https://gird.ai/blindspot, docs/fleet.md
+https://gird.ai/blindspot, docs/designs/fleet-mode.md (Windows)
 
 It starts gird-check.ps1 -AccountRun as a separate Windows PowerShell process, as the person who
 is signed in, with that person's rights only, checks every line it sends back and builds the
@@ -25,16 +25,9 @@ param(
   [string]$Deadline = '',
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
-# The reduced language (Constrained Language Mode) refuses the .NET calls below: only statements it
-# allows come before this check. A PC that can't be checked never reads clear.
-if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
-  $at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm')
-  Write-Output "v1 failed $($at)Z reason=language_mode"
-  if ($MacExitCodes -or ($Rest -contains '--mac-exit-codes')) { exit 13 }
-  exit 1
-}
-
-$FlUsage = $null
+# Everything down to the language mode check is written in statements the reduced language
+# (Constrained Language Mode) allows: it refuses the .NET calls further down.
+$FlUsage = $null; $FlTest = $false
 foreach ($arg in $Rest) {
   switch -CaseSensitive ($arg) {
     '--json' { $Json = $true } '--summary-to-stdout' { $Summary = $true } '--exit-zero' { $ExitZero = $true }
@@ -44,6 +37,55 @@ foreach ($arg in $Rest) {
     default { if ($null -eq $FlUsage) { $FlUsage = "Unknown option: $arg (try -Help)" } }
   }
 }
+# Other people with a profile on this PC, whose accounts this run does not check. A profile counts
+# when its account is a person's: a local account other than the built-in ones (an account number of
+# 1000 or more), or a domain or Microsoft Entra ID account, whose folder exists and is not one of the
+# defaultuser profiles Windows setup leaves. A local account an IT team made for itself can't be told
+# from a person's, so it counts.
+function Is-PersonProfile([string]$sid, [string]$folder) {
+  if ($sid -cnotmatch '^S-1-(5-21|12-1)(-[0-9]+)+$') { return $false }
+  if ($sid.StartsWith('S-1-5-21-') -and [long](($sid -split '-')[-1]) -lt 1000) { return $false }
+  if (-not $folder -or (($folder -split '[\\/]')[-1]) -match '^defaultuser[0-9]*$') { return $false }
+  $true
+}
+# An account name as the result shows it: one with other characters, or named machine like the PC's own
+# row in the inventory value, shows as invalid-name.
+function Shown-Name([string]$n) {
+  if ($n -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' -or $n -eq 'machine') { return 'invalid-name' }
+  $n
+}
+function Count-Others([string]$sid, [string]$myFolder) {
+  if ($env:OS -ne 'Windows_NT') {
+    if ($FlTest -and $env:GIRD_CHECK_FLEET_PROFILES -match '^[0-9]{1,4}$') { return [int]$env:GIRD_CHECK_FLEET_PROFILES }
+    return 0
+  }
+  $n = 0
+  try {
+    foreach ($k in @(Get-ChildItem -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList' -ErrorAction Stop)) {
+      $s = [string]$k.PSChildName
+      $f = ''; try { $f = [string](Get-ItemProperty -LiteralPath $k.PSPath -Name ProfileImagePath -ErrorAction Stop).ProfileImagePath } catch { $f = '' }
+      if (($sid -and $s -eq $sid) -or ($myFolder -and $f -eq $myFolder)) { continue }
+      if ((Is-PersonProfile $s $f) -and (Test-Path -LiteralPath $f -PathType Container)) { $n++ }
+    }
+  } catch { }
+  $n
+}
+if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
+  $u = (Get-Date).ToUniversalTime()
+  $at = Get-Date -Date $u -UFormat '%Y-%m-%dT%H:%M:%SZ'
+  $ep = (Get-Date -Date $u -UFormat '%s') -replace '[.,].*$', ''
+  $nm = $env:USERNAME; if (-not $nm) { $nm = $env:USER }
+  $nm = Shown-Name $nm
+  $oth = Count-Others '' $env:USERPROFILE
+  $sl = "blindspot failed accounts=1 act=0 review=0 not_checked=1 other_profiles=$oth v=unknown at=$at reason=language_mode"
+  $iv = "v1 failed $($at.Substring(0, 16))Z other_profiles=$oth reason=language_mode | $($nm): not_checked language_mode"
+  if ($Json) {
+    Write-Output "{`n  ""blindspot"": ""1"",`n  ""script"": ""unknown"",`n  ""checked_at"": ""$at"",`n  ""checked_epoch"": $ep,`n  ""os"": ""other"",`n  ""outcome"": ""failed"",`n  ""reason"": ""language_mode"",`n  ""deadline_reached"": false,`n  ""other_profiles"": $oth,`n  ""accounts"": [{""account"":""$nm"",""complete"":false,""outcome"":""not_checked"",""not_checked"":""language_mode""}],`n  ""machine"": {""complete"":false,""outcome"":""not_checked"",""agents"":[],""possible_signs"":[],""incidents"":[]},`n  ""summary"": ""$sl"",`n  ""inventory"": ""$iv"",`n  ""learn_more"": ""https://gird.ai/argus""`n}"
+  } elseif ($Summary) { Write-Output $sl } else { Write-Output $iv }
+  if ($MacExitCodes) { exit 13 }
+  exit 1
+}
+
 if ($Help) {
   foreach ($l in ((Get-Content -LiteralPath $PSCommandPath -TotalCount 20) | Select-Object -Skip 1)) { [Console]::Out.WriteLine($l) }
   exit 0
@@ -57,7 +99,6 @@ if ($All) { Fl-Usage '-All is refused here: Desktop and Documents can hold cloud
 $OnWindows = $env:OS -eq 'Windows_NT'
 # The GIRD_CHECK_FLEET_* settings let the tests, which run off Windows, stand in for Windows' own
 # programs and folders. They are read only off Windows, where this script runs for tests alone.
-$FlTest = $false
 if (-not $OnWindows) {
   if ($env:GIRD_CHECK_FLEET_TEST -ne '1') { Fl-Usage 'gird-fleet.ps1 is for Windows. On a Mac, run gird-fleet.sh (docs/fleet.md)' 13 }
   $FlTest = $true
@@ -132,19 +173,9 @@ function Is-Reparse([string]$p) { try { (([IO.File]::GetAttributes($p)) -band [I
 $FlSid = ''
 if ($OnWindows) { try { $FlSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value } catch { $FlSid = '' } }
 $FlUser = [Environment]::UserName
-$FlShown = $FlUser
-if ($FlShown -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') { $FlShown = 'invalid-name' }
+$FlShown = Shown-Name $FlUser
 
-# Other people with a profile on this PC: their accounts are not checked by this run.
-$FlOther = 0
-if ($OnWindows) {
-  try {
-    $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
-    $k = $base.OpenSubKey('SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList')
-    if ($k) { foreach ($n in $k.GetSubKeyNames()) { if ($n -cmatch '^S-1-(5-21|12-1)-[0-9-]+$' -and $n -ne $FlSid) { $FlOther++ } }; $k.Close() }
-    $base.Close()
-  } catch { }
-} elseif ($FlTest -and $env:GIRD_CHECK_FLEET_PROFILES -match '^[0-9]{1,4}$') { $FlOther = [int]$env:GIRD_CHECK_FLEET_PROFILES }
+$FlOther = Count-Others $FlSid $env:USERPROFILE
 
 $FlOs = 'other'
 if ($OnWindows) {
@@ -153,10 +184,10 @@ if ($OnWindows) {
 }
 
 # A 32-bit PowerShell is shown another Program Files and another set of installed tools, so its
-# check would miss things. SYSTEM has no person's files to check: run as SYSTEM, a check would find an
-# empty profile and read clear.
+# check would miss things. SYSTEM, LocalService and NetworkService have no person's files to check: run
+# as one of them, a check would find an empty profile and read clear.
 if ($OnWindows -and [Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) { $FlReason = 'host_32bit' }
-elseif ($FlSid -eq 'S-1-5-18') { $FlReason = 'system_account' }
+elseif (@('S-1-5-18', 'S-1-5-19', 'S-1-5-20') -contains $FlSid) { $FlReason = 'system_account' }
 
 # The saved result's folder, in the person's own profile: one that is a link or not a folder is moved
 # aside and made again.
@@ -186,11 +217,14 @@ if (-not $FlReason) {
       $gz.CopyTo($out); $gz.Dispose(); $ms.Dispose()
       $FlCheckBytes = $out.ToArray(); $out.Dispose()
       $FlCheckSha = $PackedSha
+    } elseif (-not $PSScriptRoot) {
+      [Console]::Error.WriteLine('blindspot: run it from a file: gird-fleet.ps1 reads gird-check.ps1 from its own folder')
+      $FlReason = 'unpack'
     } else {
       $FlCheckBytes = [IO.File]::ReadAllBytes((J $PSScriptRoot 'gird-check.ps1'))
       $FlCheckSha = Sha256-Hex $FlCheckBytes
     }
-    if ((Sha256-Hex $FlCheckBytes) -ne $FlCheckSha) { $FlReason = 'unpack' }
+    if (-not $FlReason -and (Sha256-Hex $FlCheckBytes) -ne $FlCheckSha) { $FlReason = 'unpack' }
   } catch { $FlReason = 'unpack' }
 }
 if (-not $FlReason) {
@@ -209,48 +243,90 @@ if (-not $FlReason) {
       if ((Is-Reparse $vd) -or [IO.File]::Exists($vd)) { if ([IO.File]::Exists($vd)) { [IO.File]::Delete($vd) } else { [IO.Directory]::Delete($vd) } }
       [void][IO.Directory]::CreateDirectory($vd)
       if ([IO.Directory]::Exists($FlCheck)) { [IO.Directory]::Delete($FlCheck, $true) }
-      if ([IO.File]::Exists($FlCheck) -or (Is-Reparse $FlCheck)) { [IO.File]::Delete($FlCheck) }
+      if ([IO.File]::Exists($FlCheck) -or (Is-Reparse $FlCheck)) {
+        if (-not (Is-Reparse $FlCheck)) { [IO.File]::SetAttributes($FlCheck, [IO.FileAttributes]::Normal) }
+        [IO.File]::Delete($FlCheck)
+      }
       [IO.File]::WriteAllBytes($FlCheck, $FlCheckBytes)
     }
   } catch { }
 }
 
-# All the processes under one, read from the system's process list.
-function Proc-Tree([int]$root) {
-  $kids = @{}
-  if ($OnWindows) {
-    try { foreach ($p in (Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId -ErrorAction Stop)) { $pp = [int]$p.ParentProcessId; if (-not $kids.ContainsKey($pp)) { $kids[$pp] = New-Object System.Collections.Generic.List[int] }; $kids[$pp].Add([int]$p.ProcessId) } } catch { }
-  } else {
-    $pg = '/usr/bin/pgrep'; if (-not [IO.File]::Exists($pg)) { $pg = '/bin/pgrep' }
-    $q = New-Object System.Collections.Generic.List[int]; $q.Add($root); $i = 0
-    while ($i -lt $q.Count -and $i -lt 10000) {
-      $c = $q[$i]; $kids[$c] = New-Object System.Collections.Generic.List[int]
-      try { foreach ($l in (& $pg -P $c 2>$null)) { if ([string]$l -match '^\s*([0-9]+)\s*$') { $kids[$c].Add([int]$Matches[1]); $q.Add([int]$Matches[1]) } } } catch { }
-      $i++
-    }
-  }
-
-  $all = New-Object System.Collections.Generic.List[int]; $all.Add($root); $i = 0
-  while ($i -lt $all.Count) { $c = $all[$i]; if ($kids.ContainsKey($c)) { foreach ($x in $kids[$c]) { if ($x -ne $c -and -not $all.Contains($x)) { $all.Add($x) } } }; $i++ }
-  , $all
-}
-function Proc-Alive([int]$id) { try { $p = [Diagnostics.Process]::GetProcessById($id); $alive = -not $p.HasExited; $p.Dispose(); $alive } catch { $false } }
-# Stops the account run and every process it started that is still under it. Windows PowerShell can
-# only follow a process to the ones it started, so one that cut itself loose is not seen. True when
-# a process is still running afterwards.
-function Stop-Tree([Diagnostics.Process]$proc) {
-  $tree = Proc-Tree $proc.Id
-  if (-not ($FlTest -and $env:GIRD_CHECK_FLEET_NOSTOP -eq '1')) {
+# Process ids paired with their parent's: on Windows every process in the system's list, elsewhere
+# those under ROOT, from pgrep. $null when the list can't be read.
+function Proc-Pairs([int]$root) {
+  $l = New-Object System.Collections.Generic.List[object]
+  try {
     if ($OnWindows) {
-      $tk = J $env:SystemRoot 'System32/taskkill.exe'
-      try { & $tk /PID $proc.Id /T /F 2>&1 | Out-Null } catch { }
+      foreach ($p in (Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId -OperationTimeoutSec 20 -ErrorAction Stop)) { $l.Add(@([int]$p.ProcessId, [int]$p.ParentProcessId)) }
+    } else {
+      $pg = '/usr/bin/pgrep'; if (-not [IO.File]::Exists($pg)) { $pg = '/bin/pgrep' }
+      $q = New-Object System.Collections.Generic.List[int]; $q.Add($root); $i = 0
+      while ($i -lt $q.Count -and $i -lt 10000) {
+        $c = $q[$i]; $i++
+        foreach ($x in (& $pg -P $c 2>$null)) { if ([string]$x -match '^\s*([0-9]+)\s*$' -and -not $q.Contains([int]$Matches[1])) { $l.Add(@([int]$Matches[1], $c)); $q.Add([int]$Matches[1]) } }
+      }
     }
-    foreach ($id in $tree) { try { $p = [Diagnostics.Process]::GetProcessById($id); $p.Kill(); $p.Dispose() } catch { } }
+  } catch { return $null }
+  , $l
+}
+# A process's start time in UTC ticks: -2 when no process has that id, -1 when it can't be read.
+function Proc-Start([int]$id) {
+  $p = $null; try { $p = [Diagnostics.Process]::GetProcessById($id) } catch { return [long]-2 }
+  try { return [long]$p.StartTime.ToUniversalTime().Ticks } catch { return [long]-1 } finally { $p.Dispose() }
+}
+# The processes under ROOT. Windows keeps only each process's parent id, and gives that id to a new
+# process once the parent ends, so a process is under ROOT only when its parent is and it started no
+# earlier than that parent; and when the parent's id now names a later process, only when it started
+# before that one too. A process that cannot be proven either way is not taken, and Unsure says so.
+function Tree-From($pairs, [int]$root, [long]$rootStart, [scriptblock]$startOf) {
+  $kids = @{}
+  foreach ($q in $pairs) { if (-not $kids.ContainsKey($q[1])) { $kids[$q[1]] = New-Object System.Collections.Generic.List[int] }; $kids[$q[1]].Add($q[0]) }
+  $in = New-Object System.Collections.Generic.List[int]; $st = @{}; $unsure = $false
+  $in.Add($root); $st[$root] = $rootStart; $i = 0
+  while ($i -lt $in.Count) {
+    $par = $in[$i]; $i++
+    if (-not $kids.ContainsKey($par)) { continue }
+    $ps = [long]$st[$par]; $now = [long](& $startOf $par)
+    foreach ($c in $kids[$par]) {
+      if ($c -eq $par -or $st.ContainsKey($c)) { continue }
+      $cs = [long](& $startOf $c)
+      if ($cs -eq -2) { continue }
+      if ($cs -lt 0 -or $ps -lt 0) { $unsure = $true; continue }
+      if ($cs -lt $ps) { continue }
+      if ($now -ne -2 -and $now -ne $ps -and ($now -lt 0 -or $cs -ge $now)) { $unsure = $true; continue }
+      $in.Add($c); $st[$c] = $cs
+    }
   }
+  @{ In = $in; Start = $st; Unsure = $unsure }
+}
+# Stops the account run and every process proven to be under it, each by its id once its start time is
+# checked again; nothing is stopped by its tree alone. True when a process is still running afterwards,
+# or one could not be proven to be under the run or not.
+function Stop-Tree([Diagnostics.Process]$proc, [long]$rootStart) {
+  $nostop = $FlTest -and $env:GIRD_CHECK_FLEET_NOSTOP -eq '1'
+  $known = @{}; $unsure = $false; $more = $true; $pass = 0
+  while ($more -and $pass -lt 4) {
+    $pass++; $more = $false
+    $pairs = Proc-Pairs $proc.Id
+    if ($null -eq $pairs) { $unsure = $true; break }
+    $t = Tree-From $pairs $proc.Id $rootStart ${function:Proc-Start}
+    if ($t.Unsure) { $unsure = $true }
+    foreach ($id in $t.In) {
+      if ($known.ContainsKey($id)) { continue }
+      $known[$id] = [long]$t.Start[$id]; $more = $true
+      if ($nostop) { continue }
+      if ($id -eq $proc.Id) { try { $proc.Kill() } catch { }; continue }
+      try { $p = [Diagnostics.Process]::GetProcessById($id) } catch { continue }
+      try { if ($p.StartTime.ToUniversalTime().Ticks -eq $known[$id]) { $p.Kill() } } catch { } finally { $p.Dispose() }
+    }
+  }
+  if ($more) { $unsure = $true }
   $until = [DateTime]::UtcNow.AddSeconds(3)
   do {
-    $left = @($tree | Where-Object { Proc-Alive $_ })
-    if ($left.Count -eq 0) { return $false }
+    $left = @($known.Keys | Where-Object { $_ -ne $proc.Id -and (Proc-Start $_) -eq $known[$_] })
+    $rootUp = $true; try { $rootUp = -not $proc.HasExited } catch { }
+    if ($left.Count -eq 0 -and -not $rootUp) { return $unsure }
     Start-Sleep -Milliseconds 200
   } while ([DateTime]::UtcNow -lt $until)
   $true
@@ -282,6 +358,7 @@ function Run-Account([int]$limit) {
   try { $proc = [Diagnostics.Process]::Start($psi) } catch { return $r }
   if ($null -eq $proc) { return $r }
   $r.Started = $true
+  $rootStart = [long]-1; try { $rootStart = [long]$proc.StartTime.ToUniversalTime().Ticks } catch { }
   try { $proc.StandardInput.Close() } catch { }
   $errTask = $null; try { $errTask = $proc.StandardError.BaseStream.CopyToAsync([IO.Stream]::Null) } catch { }
   $buf = New-Object byte[] ($script:FlOutMax + 1); $got = 0
@@ -298,8 +375,7 @@ function Run-Account([int]$limit) {
     $ms = ($end - [DateTime]::UtcNow).TotalMilliseconds
     if ($ms -le 0 -or -not $proc.WaitForExit([int][Math]::Min(2147483647, $ms))) { $r.Timeout = $true }
   }
-  if ($r.Timeout -or $got -gt $script:FlOutMax -or -not $proc.HasExited) { $r.Left = Stop-Tree $proc } else { $r.Exited = $true }
-  if (-not $r.Timeout) { $r.Left = $false }
+  if ($r.Timeout -or $got -gt $script:FlOutMax -or -not $proc.HasExited) { $r.Left = Stop-Tree $proc $rootStart } else { $r.Exited = $true }
   $r.Bytes = New-Object byte[] $got; [Array]::Copy($buf, $r.Bytes, $got)
   try { $proc.Dispose() } catch { }
   $r
@@ -324,7 +400,8 @@ function Ids-Ok([string]$v, $allowed) { # every id allowed, none twice, at most 
 }
 # One account run's output. Every line must be the next key in FlKeys with a value of its kind; any
 # other line, any other byte, or more than FlOutMax bytes refuses the whole output. On Windows
-# protected is always ok, moved and tmp_wiper always 0, and engine rg, dotnet or none.
+# protected is always ok, tmp_marks always empty and tmp_wiper always 0 (Windows has no shared /tmp),
+# and engine rg, dotnet or none.
 function Parse-Account([byte[]]$b) {
   if ($b.Length -lt 1 -or $b.Length -gt $script:FlOutMax) { return $null }
   foreach ($c in $b) { if (-not ($c -eq 10 -or $c -eq 32 -or $c -eq 61 -or $c -eq 95 -or $c -eq 45 -or ($c -ge 48 -and $c -le 57) -or ($c -ge 97 -and $c -le 122))) { return $null } }
@@ -343,9 +420,10 @@ function Parse-Account([byte[]]$b) {
       'tools' { if (-not (Ids-Ok $v $FlTools)) { return $null } }
       'key_providers' { if (-not (Ids-Ok $v $IdProviders)) { return $null } }
       'platforms' { if (-not (Ids-Ok $v $FlPlatforms)) { return $null } }
-      { @('incidents', 'possible', 'updates', 'lock_only', 'remove', 'tmp_marks') -ccontains $_ } { if (-not (Ids-Ok $v $IdIncidents)) { return $null } }
-      { @('sessions_partial', 'wiper') -ccontains $_ } { if ($v -cnotmatch '^[01]$') { return $null } }
-      { @('moved', 'tmp_wiper') -ccontains $_ } { if ($v -cne '0') { return $null } }
+      { @('incidents', 'possible', 'updates', 'lock_only', 'remove') -ccontains $_ } { if (-not (Ids-Ok $v $IdIncidents)) { return $null } }
+      { @('sessions_partial', 'wiper', 'moved') -ccontains $_ } { if ($v -cnotmatch '^[01]$') { return $null } }
+      'tmp_marks' { if ($v -cne '') { return $null } }
+      'tmp_wiper' { if ($v -cne '0') { return $null } }
       'protected' { if ($v -cne 'ok') { return $null } }
       'engine' { if (@('rg', 'dotnet', 'none') -cnotcontains $v) { return $null } }
       { @('mcp_servers', 'mcp_token_files', 'key_files', 'history_keys', 'session_files', 'allow_list_keys', 'ssh_open', 'ak_links', 'planted', 'on_open', 'to_read', 'not_read') -ccontains $_ } { if ($v -cnotmatch '^(0|[1-9][0-9]{0,5})$') { return $null } }
@@ -374,7 +452,8 @@ else {
     if ($null -ne $FA) { if ($run.Timeout) { $stopped = $true } }
     elseif ($run.Timeout) { $FlNotChecked = 'time_limit' }
     elseif (-not $run.Started) { $FlReason = $run.Why; $FlNotChecked = $FlReason }
-    elseif ($run.Bytes.Length -eq 0 -and $run.Exited) { $FlReason = 'language_mode'; $FlNotChecked = $FlReason }
+    elseif ([Text.Encoding]::ASCII.GetString($run.Bytes).Trim() -ceq 'language_mode=1') { $FlReason = 'language_mode'; $FlNotChecked = $FlReason }
+    elseif ($run.Bytes.Length -eq 0 -and $run.Exited) { $FlReason = 'no_output'; $FlNotChecked = $FlReason }
     else { $FlNotChecked = 'bad_output' }
     if ($run.Timeout -and [DateTime]::UtcNow -ge $FlEnd) { $FlTimeHit = $true }
   }
@@ -382,7 +461,7 @@ else {
 $N_ACT = 0; $N_UPD = 0; $N_NC = 0
 if ($FlNotChecked) {
   $AccOut = 'not_checked'; $N_NC = 1
-  $pl = ''; if ($FlLeft -and $FlNotChecked -eq 'time_limit') { $pl = ',"processes_left":true' }
+  $pl = ''; if ($FlLeft) { $pl = ',"processes_left":true' }
   $Row = "{""account"":""$FlShown"",""complete"":false,""outcome"":""not_checked"",""not_checked"":""$FlNotChecked""$pl}"
   $AccInv = "$($FlShown): not_checked $FlNotChecked"
 } else {
@@ -412,14 +491,12 @@ if ($FlNotChecked) {
   foreach ($x in (@($iu) + @(Words $FA['updates']))) { if ($x -and -not $ul.Contains($x)) { $ul.Add($x) } }
   if ($ul.Count -gt 0) { $inv.Add("update $(Commas $ul)") }
   if ($FA['possible']) { $upd = $true; $inv.Add("possible $(Commas (Words $FA['possible']))") }
-  # Markers this person owns in %ProgramData%: any account can leave a file there, so a possible sign.
-  if ($FA['tmp_marks']) { $upd = $true; $inv.Add("tmp-marks $(Commas (Words $FA['tmp_marks']))") }
-  $complete = -not ($FA['sessions_partial'] -eq '1' -or [int]$FA['not_read'] -gt 0 -or $stopped)
+  $complete = -not ($FA['sessions_partial'] -eq '1' -or [int]$FA['not_read'] -gt 0 -or $FA['moved'] -eq '1' -or $stopped)
   if ($act) { $AccOut = 'act' } elseif (-not $complete) { $AccOut = 'not_checked' } elseif ($upd) { $AccOut = 'review' } else { $AccOut = 'clear' }
   switch ($AccOut) { 'act' { $N_ACT = 1 } 'review' { $N_UPD = 1 } 'not_checked' { $N_NC = 1 } }
   if (-not $complete) { $inv.Add('partial') }
   $extra = ''; if ($stopped) { $extra += ',"stopped":"time_limit"' }; if ($FlLeft) { $extra += ',"processes_left":true' }
-  $Row = "{""account"":""$FlShown"",""complete"":$(Json-Bool $complete),""outcome"":""$AccOut"",""agents"":$(Json-List (Words $FA['agents'])),""agents_run_without_asking"":$(Json-List (Words $FA['yolo'])),""tools_to_update"":$(Json-List (Words $FA['tools'])),""mcp_servers"":$($FA['mcp_servers']),""mcp_token_files"":$($FA['mcp_token_files']),""key_files"":$($FA['key_files']),""key_providers"":$(Json-List (Words $FA['key_providers'])),""history_keys"":$($FA['history_keys']),""session_files_with_keys"":$($FA['session_files']),""allow_list_keys"":$($FA['allow_list_keys']),""ssh_keys_no_passphrase"":$($FA['ssh_open']),""authorized_keys_links"":$($FA['ak_links']),""planted_files"":$($FA['planted']),""possible_signs"":$(Json-List (Words $FA['possible'])),""project_settings_on_open"":$($FA['on_open']),""files_to_read"":$($FA['to_read']),""versions_to_update"":$(Json-List (Words $FA['updates'])),""wiper"":$(Json-Bool ($FA['wiper'] -eq '1')),""lockfile_only_incidents"":$(Json-List (Words $FA['lock_only'])),""extensions_to_remove"":$(Json-List (Words $FA['remove'])),""platforms_found"":$(Json-List (Words $FA['platforms'])),""files_not_checked"":$($FA['not_read']),""agent_folders_moved"":false,""shared_tmp_markers"":$(Json-List (Words $FA['tmp_marks'])),""shared_tmp_wiper_logs"":false,""sessions_partly_checked"":$(Json-Bool ($FA['sessions_partial'] -eq '1')),""protected_folders"":""checked"",""session_engine"":""$($FA['engine'])""$extra,""incidents"":$(Json-Incidents (Words $FA['incidents']))}"
+  $Row = "{""account"":""$FlShown"",""complete"":$(Json-Bool $complete),""outcome"":""$AccOut"",""agents"":$(Json-List (Words $FA['agents'])),""agents_run_without_asking"":$(Json-List (Words $FA['yolo'])),""tools_to_update"":$(Json-List (Words $FA['tools'])),""mcp_servers"":$($FA['mcp_servers']),""mcp_token_files"":$($FA['mcp_token_files']),""key_files"":$($FA['key_files']),""key_providers"":$(Json-List (Words $FA['key_providers'])),""history_keys"":$($FA['history_keys']),""session_files_with_keys"":$($FA['session_files']),""allow_list_keys"":$($FA['allow_list_keys']),""ssh_keys_no_passphrase"":$($FA['ssh_open']),""authorized_keys_links"":$($FA['ak_links']),""planted_files"":$($FA['planted']),""possible_signs"":$(Json-List (Words $FA['possible'])),""project_settings_on_open"":$($FA['on_open']),""files_to_read"":$($FA['to_read']),""versions_to_update"":$(Json-List (Words $FA['updates'])),""wiper"":$(Json-Bool ($FA['wiper'] -eq '1')),""lockfile_only_incidents"":$(Json-List (Words $FA['lock_only'])),""extensions_to_remove"":$(Json-List (Words $FA['remove'])),""platforms_found"":$(Json-List (Words $FA['platforms'])),""files_not_checked"":$($FA['not_read']),""agent_folders_moved"":$(Json-Bool ($FA['moved'] -eq '1')),""shared_tmp_markers"":[],""shared_tmp_wiper_logs"":false,""sessions_partly_checked"":$(Json-Bool ($FA['sessions_partial'] -eq '1')),""protected_folders"":""checked"",""session_engine"":""$($FA['engine'])""$extra,""incidents"":$(Json-Incidents (Words $FA['incidents']))}"
   $AccInv = "$($FlShown): $AccOut"; if ($inv.Count -gt 0) { $AccInv += ' ' + ($inv -join '; ') }
 }
 
@@ -440,11 +517,12 @@ foreach ($a in $Agents) {
     }
   }
 }
-# Malware markers in %ProgramData%, which any account can write to, so the owner decides: one that
-# Administrators, SYSTEM or a service owns is a finding for the PC; one the person owns is on their
-# own row (tmp_marks); one another account owns, or whose owner can't be read, is a possible sign
-# for the PC. A link is nothing, and a file with more than one name only a possible sign: any account
-# can hard-link a file it can reach under a marker's name.
+# Malware markers in %ProgramData%, where any account can create a file but, on NTFS, a standard
+# account cannot give one to another owner, so the owner decides: one that Administrators, SYSTEM or a
+# service owns is a finding for the PC; one the person owns is a finding on their own row, which the
+# account run reports; one another account owns, or whose owner can't be read, is a possible sign for
+# the PC. A link is nothing, and a file with more than one name, whoever owns it, only a possible sign
+# for the PC: any account can hard-link a file it can reach under a marker's name.
 function Owner-Kind([string]$p) {
   if ($OnWindows) {
     try { $o = (Get-Acl -LiteralPath $p -ErrorAction Stop).GetOwner([Security.Principal.SecurityIdentifier]).Value } catch { return 'unknown' }
@@ -457,16 +535,20 @@ function Owner-Kind([string]$p) {
   if ($u -ceq 'root') { return 'machine' }
   if ($u) { 'other' } else { 'unknown' }
 }
+function Mark-Kind([string]$kind, [string]$linkType) {
+  if ($linkType) { return 'possible' }
+  switch ($kind) { 'person' { 'account' } 'machine' { 'incident' } default { 'possible' } }
+}
 if ($PD) {
   foreach ($r in $FlProgramData) {
     $mp = J $PD $r[1]
     if (-not ([IO.File]::Exists($mp) -or [IO.Directory]::Exists($mp))) { continue }
     if (Is-Reparse $mp) { continue }
     $lt = $null; try { $lt = (Get-Item -LiteralPath $mp -Force -ErrorAction Stop).LinkType } catch { $lt = 'unknown' }
-    $kind = Owner-Kind $mp
-    if ($kind -eq 'person') { continue }
-    if ($kind -eq 'machine' -and -not $lt) { if (-not $MInc.Contains($r[0])) { $MInc.Add($r[0]) } }
-    elseif (-not $MPoss.Contains($r[0])) { $MPoss.Add($r[0]) }
+    switch (Mark-Kind (Owner-Kind $mp) ([string]$lt)) {
+      'incident' { if (-not $MInc.Contains($r[0])) { $MInc.Add($r[0]) } }
+      'possible' { if (-not $MPoss.Contains($r[0])) { $MPoss.Add($r[0]) } }
+    }
   }
 }
 $MOut = 'clear'
@@ -479,27 +561,30 @@ $rank = @{ 'failed' = 5; 'act' = 4; 'not_checked' = 3; 'review' = 2; 'clear' = 1
 $Outcome = 'clear'
 foreach ($o in @($AccOut, $MOut)) { if ($rank[$o] -gt $rank[$Outcome]) { $Outcome = $o } }
 if ($FlReason) { $Outcome = 'failed' }
+# Intune keeps 2,048 characters of a script's output, and a value of 2,048 or more without +more could
+# be one Intune cut, so a value is at most 2,047. Too long, the account keeps its outcome, and an act
+# account its gh-token-monitor and incidents, and the value ends with +more; the saved file has the rest.
+function Fit-Value([string]$head, [string]$acc, [string]$key, [string]$base, [string]$tail) {
+  $v = "$head | $acc$tail"
+  if ($v.Length -le 2047) { return $v }
+  $v = "$head | $key$tail +more"
+  if ($v.Length -le 2047) { return $v }
+  "$head | $base$tail +more"
+}
 function Build-Text {
   $script:SummaryLine = "blindspot $script:Outcome accounts=1 act=$N_ACT review=$N_UPD not_checked=$N_NC other_profiles=$FlOther v=$FlRel at=$FlAt"
   if ($script:FlReason) { $script:SummaryLine += " reason=$($script:FlReason)" }
-  # The inventory value: one line, at most 2,048 characters (what Intune keeps of a script's output),
-  # no path, file name or key. Too long, the account keeps its outcome, and an act account its
-  # gh-token-monitor and incidents, and the value ends with +more; the saved file has the rest. The
-  # head is fixed: the outcome, the time, other_profiles, then reason on a failed result.
+  # The inventory value: one line, no path, file name or key, and the head fixed: the outcome, the
+  # time, other_profiles, then reason on a failed result.
   $head = "v1 $($script:Outcome) $($FlAt.Substring(0, 16))Z other_profiles=$FlOther"
   if ($script:FlReason) { $head += " reason=$($script:FlReason)" }
   $tail = ''
   if ($MOut -ne 'clear') {
     $tail = " | machine: $MOut"; if ($MInc.Count -gt 0) { $tail += " incidents $(Commas $MInc)" }; if ($MPoss.Count -gt 0) { $tail += "; possible $(Commas $MPoss)" }
   }
-  $v = "$head | $script:AccInv$tail"
-  if ($v.Length -gt 2048) {
-    $key = "$($FlShown): $AccOut"
-    if ($AccOut -eq 'act') { $ks = @($inv | Where-Object { $_ -eq 'wiper' -or $_.StartsWith('incidents ') }); if ($ks.Count -gt 0) { $key += ' ' + ($ks -join '; ') } }
-    $v = "$head | $key$tail +more"
-    if ($v.Length -gt 2048) { $v = "$head | $($FlShown): $AccOut$tail +more" }
-  }
-  $script:InventoryV = $v
+  $key = "$($FlShown): $AccOut"
+  if ($AccOut -eq 'act') { $ks = @($inv | Where-Object { $_ -eq 'wiper' -or $_.StartsWith('incidents ') }); if ($ks.Count -gt 0) { $key += ' ' + ($ks -join '; ') } }
+  $script:InventoryV = Fit-Value $head $script:AccInv $key "$($FlShown): $AccOut" $tail
   $dl = Json-Bool $FlTimeHit
   $rs = ''; if ($script:FlReason) { $rs = "`n  ""reason"": ""$($script:FlReason)""," }
   $script:JsonDoc = "{`n  ""blindspot"": ""1"",`n  ""script"": ""$FlRel"",`n  ""checked_at"": ""$FlAt"",`n  ""checked_epoch"": $FlEpoch,`n  ""os"": ""$FlOs"",`n  ""outcome"": ""$($script:Outcome)"",$rs`n  ""deadline_reached"": $dl,`n  ""other_profiles"": $FlOther,`n  ""accounts"": [$Row],`n  ""machine"": $Machine,`n  ""summary"": ""$($script:SummaryLine)"",`n  ""inventory"": ""$($script:InventoryV)"",`n  ""learn_more"": ""https://gird.ai/argus""`n}"
