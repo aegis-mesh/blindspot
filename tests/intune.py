@@ -56,7 +56,7 @@ PCS = [
     ('PC-REVIEW', 'fail', 'v1 review %s | bo: review run-without-asking claude-code; ssh-open 1' % T0, 'review', 'a result to review is listed to review'),
     ('PC-PARTIAL', 'fail', 'v1 not_checked %s | cy: not_checked ssh-open 1; partial' % T0, 'not_checked', 'a partly checked result is not checked'),
     ('PC-MORE', 'fail', 'v1 act %s | dee: act wiper; incidents tanstack +more' % T0, 'act', 'a result cut to fit, ending in +more, is read'),
-    ('PC-FAILED', 'fail', 'v1 failed %s reason=host_32bit' % T0, 'failed', 'a failed result with its reason is failed'),
+    ('PC-FAILED', 'fail', 'v1 failed %s other_profiles=0 reason=host_32bit | asha: not_checked host_32bit' % T0, 'failed', 'a failed result with its reason is failed'),
     ('PC-OTHER', 'success', 'v1 clear %s other_profiles=2 | eve: clear' % T0, 'clear', 'a clear result with other profiles is read'),
     ('PC-EMPTY', 'pending', '', 'no_result', 'a PC with no output is not checked'),
     ('PC-NULL', 'scriptError', None, 'failed', 'a PC whose check errored with no output is failed'),
@@ -86,10 +86,17 @@ PCS = [
 # and every account and machine row, and the cut forms ending in +more. tests/intune.sh adds to these
 # the values each writer prints when it is run here. (expected status, what it is, value)
 def _ps(rest, out='not_checked', profiles=0): return 'v1 %s %s other_profiles=%d%s' % (out, T0, profiles, rest)
+def _long(total):
+    head = _ps(' | anna: act lockfile %s; update %s; possible ' % (','.join(['tanstack'] * 63), ','.join(['tanstack'] * 63)), 'act')
+    need = total - len(' +more') - len(head)
+    n = -(-(need + 1) // 65)
+    size, extra = divmod(need - (n - 1), n)
+    return head + ','.join('a' * (size + (1 if i < extra else 0)) for i in range(n)) + ' +more'
+
 ACT_PS = 'anna: act wiper; incidents tanstack,axios; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-links 1; update mistral'
-REVIEW_PS = 'anna: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra; tmp-marks mastra'
-FORMS = [('failed', 'gird-fleet.ps1 in the reduced language, before any run', 'v1 failed %s reason=language_mode' % T0)]
-for r in ('host_32bit', 'system_account', 'unpack', 'save', 'start', 'language_mode'):
+REVIEW_PS = 'anna: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra'
+FORMS = []
+for r in ('host_32bit', 'system_account', 'unpack', 'start', 'language_mode', 'no_output'):
     FORMS.append(('failed', 'gird-fleet.ps1 reason %s' % r, _ps(' reason=%s | anna: not_checked %s' % (r, r), 'failed')))
 for r in ('deadline', 'time_limit', 'bad_output'):
     FORMS.append(('not_checked', 'gird-fleet.ps1 account %s' % r, _ps(' | anna: not_checked %s' % r)))
@@ -104,10 +111,12 @@ FORMS += [
     ('review', 'gird-fleet.ps1 machine possible sign', _ps(' | anna: clear | machine: review; possible mastra', 'review')),
     ('act', 'gird-fleet.ps1 machine incident and possible sign', _ps(' | anna: review ssh-open 1 | machine: act incidents mastra; possible mastra', 'act')),
     ('failed', 'gird-fleet.ps1 not saved after a full run', _ps(' reason=save | anna: act keys 1', 'failed')),
+    ('failed', 'gird-fleet.ps1 not saved after a run out of time', _ps(' reason=save | anna: not_checked time_limit', 'failed')),
     ('failed', 'gird-fleet.ps1 failed with a machine row', _ps(' reason=host_32bit | anna: not_checked host_32bit | machine: review; possible mastra', 'failed')),
     ('act', 'gird-fleet.ps1 cut, keeping the wiper and incidents', _ps(' | anna: act wiper; incidents tanstack,axios +more', 'act')),
     ('act', 'gird-fleet.ps1 cut to the outcome', _ps(' | anna: act +more', 'act')),
     ('not_checked', 'gird-fleet.ps1 cut, partly checked', _ps(' | anna: not_checked +more')),
+    ('act', 'gird-fleet.ps1 cut at the most characters it writes', _long(2047)),
     ('act', 'gird-fleet.ps1 cut with a machine row', _ps(' | anna: act | machine: review; possible mastra +more', 'act')),
 ]
 for r in ('name', 'no_login_shell', 'home_missing', 'home_link', 'home_owner', 'home_shared', 'home_system', 'home_name',
@@ -123,15 +132,63 @@ FORMS += [
     ('act', 'gird-fleet.sh machine loader as root', 'v1 act %s | asha: clear | machine: act incidents litellm' % T0),
     ('review', 'gird-fleet.sh machine wiper logs', 'v1 review %s | asha: clear | machine: review; tmp-wiper' % T0),
     ('review', 'gird-fleet.sh account wiper logs', 'v1 review %s | asha: review tmp-wiper' % T0),
+    ('review', 'gird-fleet.sh account markers in a shared folder', 'v1 review %s | asha: review run-without-asking claude-code; possible mastra; tmp-wiper; tmp-marks mastra' % T0),
+    ('act', 'gird-fleet.sh cut, the Mac row first', 'v1 act %s | machine: act incidents litellm | asha: act | bo: review +more' % T0),
+    ('act', 'gird-fleet.sh cut, the Mac row without its details', 'v1 act %s | asha: act | machine: act +more' % T0),
     ('clear', 'gird-fleet.sh two names it does not read', 'v1 clear %s | invalid-name: clear | invalid-name: clear' % T0),
     ('clear', 'gird-fleet.sh hashed names', 'v1 clear %s | 0123456789abcdef: clear | fedcba9876543210: clear' % T0),
     ('act', 'gird-fleet.sh cut', 'v1 act %s | asha: act wiper; incidents tanstack | bo: not_checked | cy: review +more' % T0),
     ('act', 'gird-fleet.sh cut, accounts left out', 'v1 act %s | asha: act +more' % T0),
+    ('not_checked', 'gird-fleet.sh an account named machine, clear, is not read as clear', 'v1 clear %s | machine: clear' % T0),
+    ('not_checked', 'gird-fleet.sh an account named machine, clear, beside another', 'v1 clear %s | asha: clear | machine: clear' % T0),
+    ('not_checked', 'gird-fleet.sh an account named machine, with its own findings', 'v1 act %s | machine: act keys 1' % T0),
+    ('not_checked', 'gird-fleet.sh an account named machine, not checked', 'v1 not_checked %s | machine: not_checked home_missing' % T0),
+    ('not_checked', 'gird-fleet.sh an account named machine, clear, beside the Mac row', 'v1 review %s | machine: clear | machine: review; possible litellm' % T0),
+    ('not_checked', 'gird-fleet.sh an account named machine, review, beside the Mac row', 'v1 review %s | machine: review ssh-open 1 | machine: review; possible litellm' % T0),
     ('no_result', 'gird-fleet.sh --inventory none', 'none'),
     ('not_checked', 'gird-fleet.sh --inventory unreadable', 'unreadable'),
     ('stale', 'gird-fleet.sh --inventory stale', 'stale: last run %s' % at(days=-5)),
     ('failed', 'gird-fleet.sh --inventory failed', 'failed: the run started %s did not finish or could not save its result' % T0),
 ]
+
+# Values neither writer writes: each must read as not checked, never as a result.
+NOT_WRITTEN = [
+    ('a failed result with no account row', 'v1 failed %s other_profiles=0 reason=language_mode' % T0),
+    ('a failed Windows result with no reason', _ps(' | anna: not_checked bad_output', 'failed')),
+    ('a reason on a result that did not fail', _ps(' reason=start | anna: not_checked start')),
+    ('a reason the writer does not write', _ps(' reason=sleepy | anna: not_checked sleepy', 'failed')),
+    ('a reason without other_profiles', 'v1 failed %s reason=start | anna: not_checked start' % T0),
+    ('a reason that is not the account row', _ps(' reason=start | anna: not_checked bad_output', 'failed')),
+    ('a failed reason on a result that did not fail', _ps(' | anna: not_checked language_mode')),
+    ('a Mac word on a Windows result', _ps(' | anna: not_checked home_missing')),
+    ('a Windows word that is a failure reason on a Mac result', 'v1 not_checked %s | anna: not_checked host_32bit' % T0),
+    ('tmp-marks on Windows', _ps(' | anna: review tmp-marks mastra', 'review')),
+    ('tmp-wiper on Windows', _ps(' | anna: review tmp-wiper', 'review')),
+    ('tmp-wiper on the Windows machine row', _ps(' | anna: clear | machine: review; tmp-wiper', 'review')),
+    ('a Windows machine row not checked', _ps(' | anna: clear | machine: not_checked')),
+    ('two account rows on Windows', _ps(' | anna: clear | bo: clear', 'clear')),
+    ('no accounts on Windows', _ps(' | no accounts')),
+    ('items out of order', _ps(' | anna: act keys 1; wiper', 'act')),
+    ('an item twice', _ps(' | anna: act keys 1; keys 2', 'act')),
+    ('an act account with no act item', _ps(' | anna: act ssh-open 1', 'act')),
+    ('a review account with an act item', _ps(' | anna: review keys 1', 'review')),
+    ('a review account partly checked', _ps(' | anna: review ssh-open 1; partial', 'review')),
+    ('a not checked account with an act item', _ps(' | anna: not_checked keys 1; partial')),
+    ('a not checked account with findings and no partial', _ps(' | anna: not_checked ssh-open 1')),
+    ('an act account with nothing to say why', _ps(' | anna: act', 'act')),
+    ('a machine row of act with no incident', _ps(' | anna: clear | machine: act', 'act')),
+    ('a machine row of review with nothing', _ps(' | anna: clear | machine: review', 'review')),
+    ('a machine row with an account item', _ps(' | anna: clear | machine: review keys 1', 'review')),
+    ('a machine row with its parts out of order', _ps(' | anna: clear | machine: act; possible mastra incidents mastra', 'act')),
+    ('two machine rows', _ps(' | anna: clear | machine: review; possible mastra | machine: review; possible mastra', 'review')),
+    ('an account after the machine row', _ps(' | machine: review; possible mastra | anna: clear', 'review')),
+    ('no accounts after an account', 'v1 not_checked %s | asha: clear | no accounts' % T0),
+    ('a row after no accounts', 'v1 not_checked %s | no accounts | asha: clear' % T0),
+    ('a list with a character it does not write', _ps(' | anna: review possible Mastra', 'review')),
+    ('a Windows result of 2,048 characters ending in +more', _long(2048)),
+    ('a Mac result longer than the Mac writer writes', 'v1 act %s | asha: act wiper; incidents %s' % (T0, ','.join(['tanstack'] * 40))),
+]
+FORMS += [('not_checked', 'not written: ' + d, v) for d, v in NOT_WRITTEN]
 
 def run_state(i, name, det, output, dev=None):
     s = {'@odata.type': '#microsoft.graph.deviceHealthScriptDeviceState', 'id': 'rs-%d' % i, 'lastStateUpdateDateTime': NOW.isoformat(),
@@ -195,7 +252,7 @@ def tenant(name, forms=None):
         s['runStates'] = {'ours-1': run_states()}
     if name == 'forms':
         s['pageSize'] = 50
-        s['runStates'] = {'ours-1': [run_state(i, 'FORM-%03d' % i, 'success' if st == 'clear' else 'fail', v) for i, (st, _, v) in enumerate(form_rows(forms))]}
+        s['runStates'] = {'ours-1': [run_state(i, 'FORM-%03d' % i, 'success' if st == 'clear' or ' clear ' in v[:12] else 'fail', v) for i, (st, _, v) in enumerate(form_rows(forms))]}
     if name == 'novalue': s['noValue'] = BASE + '/ours-1/deviceRunStates'
     if name in SILENT_TENANTS:
         s['scripts'] = [OTHER, ours('ours-1')]
@@ -454,16 +511,19 @@ def account(kind, flavour):
                  history_keys='1', session_files='2', mcp_token_files='1', allow_list_keys='1', ak_links='1')
     elif kind == 'review':
         a.update(yolo='claude-code codex', ssh_open='1', tools='amazonq', platforms='opencode', on_open='1', to_read='1', updates='mistral',
-                 remove='glassworm', possible='mastra', tmp_marks='mastra')
-        if flavour == 'sh': a['tmp_wiper'] = '1'
+                 remove='glassworm', possible='mastra')
+        if flavour == 'sh': a.update(tmp_wiper='1', tmp_marks='mastra')
+    elif kind == 'tmpmarks':
+        a.update(possible='mastra', tmp_marks='mastra')
     elif kind == 'partial':
         a.update(sessions_partial='1', ssh_open='1', not_read='2')
     elif kind == 'huge':
         ids = [i for i, _ in incidents()][:40]; acts = [i for i, lv in incidents() if lv == 'act'][:40]
         a.update(wiper='1', incidents=' '.join(acts), lock_only=' '.join(ids), possible=' '.join(ids), remove=' '.join(ids),
-                 tmp_marks=' '.join(ids), updates=' '.join(ids), key_files='3', key_providers='anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm',
+                 updates=' '.join(ids), key_files='3', key_providers='anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm',
                  yolo='claude-code codex gemini-cli cursor windsurf antigravity copilot-cli opencode goose aider cline continue', tools='amazonq claudecode mcpremote',
                  platforms='opencode railway zeabur', planted='999999', history_keys='999999', session_files='999999')
+        if flavour == 'sh': a['tmp_marks'] = ' '.join(ids)
     sys.stdout.write(''.join('%s=%s\n' % (k, a[k]) for k in KEYS))
 
 # --- The checks ------------------------------------------------------------------------------

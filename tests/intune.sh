@@ -186,6 +186,7 @@ mode=\$(/bin/cat "\$INTUNE_MODES/\${acct:-default}" 2>/dev/null)
 case "\$mode" in
   fail) exit 1 ;;
   empty) exit 0 ;;
+  language) echo language_mode=1; exit 0 ;;
   sleep) exec /bin/sleep 60 ;;
   garbage) echo v=2; exit 0 ;;
   chmod) for a in "\$@"; do case "\$a" in */gird-check.sh) /bin/chmod 666 "\$a" ;; esac; done
@@ -270,11 +271,13 @@ else
   P0="^v1 [a-z_]+ $T other_profiles=0"
   wps clear "clear, other profiles" "^v1 clear $T other_profiles=2 \| [A-Za-z0-9._-]+: clear$" clear GIRD_CHECK_FLEET_PROFILES=2
   wps act "every act item" "$P0 \| [^ ]+: act wiper; incidents tanstack; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-links 1; update mistral$" act
-  wps review "every review item" "$P0 \| [^ ]+: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra; tmp-marks mastra$" review
+  wps review "every review item" "$P0 \| [^ ]+: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra$" review
   wps not_checked "partly checked" "$P0 \| [^ ]+: not_checked ssh-open 1; partial$" partial
   wps act "cut to fit" "^v1 act $T other_profiles=0 \| [^ ]+: act wiper; incidents [a-z0-9,]+ \+more$" huge
   wps not_checked "output it does not read" "$P0 \| [^ ]+: not_checked bad_output$" garbage
-  wps failed "an account run with no output" "^v1 failed $T other_profiles=0 reason=language_mode \| [^ ]+: not_checked language_mode$" empty
+  wps failed "an account run with no output" "^v1 failed $T other_profiles=0 reason=no_output \| [^ ]+: not_checked no_output$" empty
+  wps failed "an account run in the reduced language" "^v1 failed $T other_profiles=0 reason=language_mode \| [^ ]+: not_checked language_mode$" language
+  wps not_checked "an account run that sends markers in a shared folder" "$P0 \| [^ ]+: not_checked bad_output$" tmpmarks
   wps failed "an account run that does not start" "^v1 failed $T other_profiles=0 reason=start \| [^ ]+: not_checked start$" clear GIRD_CHECK_FLEET_LAUNCH="$IW/no-such-launcher"
   wps not_checked "the deadline first" "$P0 \| [^ ]+: not_checked deadline$" clear -- -Deadline 3
   wps not_checked "out of time" "$P0 \| [^ ]+: not_checked time_limit$" sleep -- -Deadline 10

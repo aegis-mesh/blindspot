@@ -255,12 +255,22 @@ function Invoke-Remove {
   Write-Host "Deleted $shown. PCs stop running it at their next check-in with Intune."
 }
 
-# The inventory value, as gird-fleet.sh writes it (docs/designs/fleet-mode.md, "The result"),
-# with the Windows header fields other_profiles= and reason=. Anything else does not fit.
+# The inventory value, as gird-fleet.sh writes it (docs/designs/fleet-mode.md, "The result"), and
+# gird-fleet.ps1 on Windows, which adds other_profiles= and reason= to the header. Anything a writer
+# does not write does not fit.
 $Outcomes = @{ clear = 1; review = 2; not_checked = 3; act = 4; failed = 5 }
+$ItemOrder = @('wiper', 'incidents', 'lockfile', 'planted', 'run-without-asking', 'keys', 'history', 'sessions', 'mcp-tokens',
+  'allow-lists', 'ssh-links', 'ssh-open', 'update-tools', 'platforms', 'on-open', 'to-read', 'remove', 'update', 'possible',
+  'tmp-wiper', 'tmp-marks', 'partial')
+$ActItems = @('wiper', 'incidents', 'lockfile', 'planted', 'keys', 'history', 'sessions', 'mcp-tokens', 'allow-lists', 'ssh-links')
 $NoArg = @('wiper', 'tmp-wiper', 'partial')
 $NumArg = @('planted', 'history', 'sessions', 'mcp-tokens', 'allow-lists', 'ssh-links', 'ssh-open', 'on-open', 'to-read')
 $ListArg = @('incidents', 'lockfile', 'run-without-asking', 'update-tools', 'platforms', 'remove', 'update', 'possible', 'tmp-marks')
+$FailReasons = @('host_32bit', 'system_account', 'language_mode', 'unpack', 'save', 'start', 'no_output')
+$WinWords = @('deadline', 'time_limit', 'bad_output')
+$MacWords = @('name', 'no_login_shell', 'home_missing', 'home_link', 'home_owner', 'home_shared', 'home_system', 'home_name',
+  'home_no_answer', 'sudo', 'bad_output', 'time_limit', 'deadline', 'copy_changed')
+$AnyWord = @($FailReasons + $WinWords + $MacWords)
 $Kinds = [ordered]@{
   'wiper' = 'gh-token-monitor wiper installed'
   'incidents' = 'Malware incident found'
@@ -285,25 +295,36 @@ $Kinds = [ordered]@{
   'tmp-marks' = 'Malware markers in a shared folder'
   'partial' = 'Partly checked'
 }
-$ReasonRx = '^[a-z0-9_]{1,40}$'
 $IntuneKeeps = 2048
+$MaxWindows = 2047
+$MaxMac = 250
 $IdList = '^[a-z0-9][a-z0-9._-]{0,63}(,[a-z0-9][a-z0-9._-]{0,63}){0,63}$'
+$IdListIn = '[a-z0-9][a-z0-9._-]{0,63}(?:,[a-z0-9][a-z0-9._-]{0,63}){0,63}'
 
-function Test-Items([string]$Text, [System.Collections.ArrayList]$Into) {
+function Test-Items([string]$Text, [bool]$Win, [System.Collections.ArrayList]$Into) {
+  $last = -1
+  $r = @{ Act = $false; Rev = $false; Partial = $false }
   foreach ($it in $Text.Split([string[]]@('; '), [StringSplitOptions]::None)) {
     $sp = $it.IndexOf(' ')
     $k = $it; $a = $null
     if ($sp -ge 0) { $k = $it.Substring(0, $sp); $a = $it.Substring($sp + 1) }
-    if ($NoArg -ccontains $k) { if ($null -ne $a) { return $false } }
-    elseif ($NumArg -ccontains $k) { if ($null -eq $a -or $a -cnotmatch '^[1-9][0-9]{0,5}$') { return $false } }
-    elseif ($ListArg -ccontains $k) { if ($null -eq $a -or $a -cnotmatch $IdList) { return $false } }
+    $ix = [Array]::IndexOf($ItemOrder, $k)
+    if ($ix -le $last) { return $null }
+    $last = $ix
+    if ($Win -and $k.StartsWith('tmp-', [StringComparison]::Ordinal)) { return $null }
+    if ($NoArg -ccontains $k) { if ($null -ne $a) { return $null } }
+    elseif ($NumArg -ccontains $k) { if ($null -eq $a -or $a -cnotmatch '^[1-9][0-9]{0,5}$') { return $null } }
+    elseif ($ListArg -ccontains $k) { if ($null -eq $a -or $a -cnotmatch $IdList) { return $null } }
     elseif ($k -ceq 'keys') {
-      if ($null -eq $a -or $a -cnotmatch '^[1-9][0-9]{0,5}( [a-z0-9][a-z0-9._-]{0,63}(,[a-z0-9][a-z0-9._-]{0,63}){0,63})?$') { return $false }
+      if ($null -eq $a -or $a -cnotmatch ('^[1-9][0-9]{0,5}( ' + $IdListIn + ')?$')) { return $null }
     }
-    else { return $false }
+    else { return $null }
+    if ($k -ceq 'partial') { $r.Partial = $true }
+    elseif ($ActItems -ccontains $k) { $r.Act = $true }
+    else { $r.Rev = $true }
     if (-not $Into.Contains($k)) { [void]$Into.Add($k) }
   }
-  return $true
+  return $r
 }
 
 function Read-Inventory([string]$Raw) {
@@ -311,7 +332,7 @@ function Read-Inventory([string]$Raw) {
   if ($null -eq $Raw) { return $r }
   $t = $Raw.TrimEnd(" `t`r`n".ToCharArray())
   if ($Raw.Length -ge $IntuneKeeps -and -not $t.EndsWith(' +more', [StringComparison]::Ordinal)) { $r.Ok = $true; $r.Special = 'cut'; return $r }
-  if ($t.Length -eq 0 -or $t.Length -gt $IntuneKeeps) { return $r }
+  if ($t.Length -eq 0 -or $t.Length -gt $MaxWindows) { return $r }
   if ($t -cnotmatch '^[A-Za-z0-9 ._:;,|+=-]+$') { return $r }
   if ($t -ceq 'none') { $r.Ok = $true; $r.Special = 'none'; return $r }
   if ($t -ceq 'unreadable') { $r.Ok = $true; $r.Special = 'unreadable'; return $r }
@@ -321,49 +342,91 @@ function Read-Inventory([string]$Raw) {
   if ($m.Success) { $r.Ok = $true; $r.Special = 'failed'; $r.Time = $m.Groups[1].Value; return $r }
 
   if ($t.EndsWith(' +more', [StringComparison]::Ordinal)) { $r.More = $true; $t = $t.Substring(0, $t.Length - 6) }
-  $m = [regex]::Match($t, '^v1 (failed|act|not_checked|review|clear) ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z)( other_profiles=([0-9]{1,4}))?( reason=([a-z0-9_]{1,40}))?((?: \| [^|]+)*)$')
+  $m = [regex]::Match($t, '^v1 (failed|act|not_checked|review|clear) ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z)( other_profiles=([0-9]{1,4})( reason=([a-z_0-9]{1,40}))?)?((?: \| [^|]+)+)$')
   if (-not $m.Success) { return $r }
   $out = $m.Groups[1].Value
+  $win = $m.Groups[3].Success
+  $reason = ''
+  if ($m.Groups[6].Success) { $reason = $m.Groups[6].Value }
+  if ($reason -and ($out -cne 'failed' -or $FailReasons -cnotcontains $reason)) { return $r }
+  if ($win -and $out -ceq 'failed' -and -not $reason) { return $r }
+  if (-not $win -and $t.Length -gt $MaxMac) { return $r }
   $r.Outcome = $out
   $r.Time = $m.Groups[2].Value
-  if ($m.Groups[4].Success) { $r.OtherProfiles = [int]$m.Groups[4].Value }
-  if ($m.Groups[6].Success) {
-    if ($out -cne 'failed') { return $r }
-    $r.Reason = $m.Groups[6].Value
-  }
-  $segText = $m.Groups[7].Value
-  $segs = @()
-  if ($segText.Length -gt 0) { $segs = $segText.Substring(3).Split([string[]]@(' | '), [StringSplitOptions]::None) }
-  if ($segs.Count -eq 0 -and $out -cne 'failed') { return $r }
+  if ($win) { $r.OtherProfiles = [int]$m.Groups[4].Value }
+  $r.Reason = $reason
+  $segs = $m.Groups[7].Value.Substring(3).Split([string[]]@(' | '), [StringSplitOptions]::None)
+  $more = $r.More
   $kinds = New-Object System.Collections.ArrayList
   $accounts = New-Object System.Collections.ArrayList
   $worst = 0
   $names = @{}
+  $rows = 0; $machine = $false; $noAcc = $false
   foreach ($s in $segs) {
+    if ($noAcc) { return $r }
     if ($s -ceq 'no accounts') {
+      if ($win -or $rows -gt 0) { return $r }
+      $noAcc = $true
       if ($worst -lt 3) { $worst = 3 }
       [void]$accounts.Add(@{ Name = '(no accounts)'; Outcome = 'not_checked'; Detail = 'no accounts' })
       continue
     }
-    $sm = [regex]::Match($s, '^([A-Za-z0-9][A-Za-z0-9._-]{0,63}): (act|not_checked|review|clear)(;? (.+))?$')
+    if ($s.StartsWith('machine:', [StringComparison]::Ordinal)) {
+      $mm = [regex]::Match($s, '^machine: (act|review|not_checked)( incidents (' + $IdListIn + '))?(; possible (' + $IdListIn + '))?(; tmp-wiper)?$')
+      if (-not $mm.Success -or $machine) { return $r }
+      $machine = $true
+      $so = $mm.Groups[1].Value
+      $hasInc = $mm.Groups[2].Success; $hasPos = $mm.Groups[4].Success; $hasWip = $mm.Groups[6].Success
+      if ($win -and ($so -ceq 'not_checked' -or $hasWip)) { return $r }
+      if (-not $more) {
+        if ($so -ceq 'act' -and -not $hasInc) { return $r }
+        if ($so -ceq 'review' -and -not ($hasInc -or $hasPos -or $hasWip)) { return $r }
+      }
+      if ($hasInc -and -not $kinds.Contains('incidents')) { [void]$kinds.Add('incidents') }
+      if ($hasPos -and -not $kinds.Contains('possible')) { [void]$kinds.Add('possible') }
+      if ($hasWip -and -not $kinds.Contains('tmp-wiper')) { [void]$kinds.Add('tmp-wiper') }
+      $rank = $Outcomes[$so]
+      if ($rank -gt $worst) { $worst = $rank }
+      [void]$accounts.Add(@{ Name = 'machine'; Outcome = $so; Detail = $s.Substring(('machine: ' + $so).Length).TrimStart(';', ' ') })
+      continue
+    }
+    $sm = [regex]::Match($s, '^([A-Za-z0-9][A-Za-z0-9._-]{0,63}): (act|not_checked|review|clear)( (.+))?$')
     if (-not $sm.Success) { return $r }
     $who = $sm.Groups[1].Value; $so = $sm.Groups[2].Value; $rest = $sm.Groups[4].Value
+    if ($machine -and -not $more) { return $r }
     if ($names.ContainsKey($who) -and $who -cne 'invalid-name') { return $r }
     $names[$who] = $true
-    $semi = $sm.Groups[3].Success -and $sm.Groups[3].Value.StartsWith(';')
-    if ($semi -and $who -cne 'machine') { return $r }
+    $rows++
     if ($sm.Groups[3].Success) {
       if ($so -ceq 'clear') { return $r }
-      $isReason = $so -ceq 'not_checked' -and $rest -cmatch $ReasonRx -and -not ($NoArg -ccontains $rest)
-      if (-not $isReason -and -not (Test-Items $rest $kinds)) { return $r }
-    }
+      if ($so -ceq 'not_checked' -and $AnyWord -ccontains $rest) {
+        $allowed = $MacWords
+        if ($win) {
+          $allowed = $WinWords
+          if ($out -ceq 'failed') { if ($reason -ceq 'save') { $allowed = $WinWords + 'save' } else { $allowed = @($reason) } }
+        }
+        if ($allowed -cnotcontains $rest) { return $r }
+      } else {
+        if ($win -and $out -ceq 'failed' -and $reason -cne 'save') { return $r }
+        $it = Test-Items $rest $win $kinds
+        if ($null -eq $it) { return $r }
+        if (-not $more) {
+          if ($so -ceq 'act' -and -not $it.Act) { return $r }
+          if ($so -ceq 'review' -and ($it.Act -or $it.Partial -or -not $it.Rev)) { return $r }
+          if ($so -ceq 'not_checked' -and ($it.Act -or -not $it.Partial)) { return $r }
+        }
+      }
+    } elseif ($so -cne 'clear' -and -not $more) { return $r }
+    elseif ($win -and $out -ceq 'failed' -and $reason -cne 'save') { return $r }
     $rank = $Outcomes[$so]
     if ($rank -gt $worst) { $worst = $rank }
     [void]$accounts.Add(@{ Name = $who; Outcome = $so; Detail = $rest })
   }
+  if ($win -and $rows -ne 1) { return $r }
+  if (-not $win -and $rows -eq 0 -and -not $noAcc -and -not $more) { return $r }
   $head = $Outcomes[$out]
   if ($worst -gt $head) { return $r }
-  if ($out -cne 'failed' -and -not $r.More -and $worst -ne $head) { return $r }
+  if ($out -cne 'failed' -and -not $more -and $worst -ne $head) { return $r }
   $r.Accounts = $accounts.ToArray()
   $r.Kinds = $kinds.ToArray()
   $r.Ok = $true
