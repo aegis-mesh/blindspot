@@ -176,15 +176,21 @@ _ow=$(rows data/owasp.tsv | awk -F '\t' -v keys="$OW_KEYS" -v mf="$OW_MF" -v arm
   }')
 bad="$bad${bad:+${_ow:+
 }}$_ow"
-# owasp_kinds runs as root in gird-fleet.sh's copy, so its block calls only builtins, functions the
-# generated blocks define, and tools by their full path, as root's own code does: a bare name would
-# run whatever the MDM's PATH holds. The guard reads one line at a time, so it refuses what would carry
-# shell text past that line or past its reading: an unquoted or <<- here-document, a backtick, a quote
-# or a ( that does not close on its line, a line that ends in \, a here-document after a # or with no
-# end line. The body of a quoted here-document (<<'X', <<"X", <<\X) is skipped to the line that is
-# exactly X (docs/designs/owasp.md). Single-quoted text is skipped; each
+# owasp_kinds runs as root in gird-fleet.sh's copy. This guard is an early warning at build time. It
+# refuses a command word in the block that is not a builtin, a keyword, a function the generated
+# blocks define or a full path, and a > outside single quotes (the block writes no file). It reads one
+# line at a time, so it also refuses what would carry shell text past that line or past its reading: an
+# unquoted or <<- here-document, a backtick, a quote or a ( that does not close on its line, a line
+# that ends in \, a here-document after a # or with no end line. The body of a quoted here-document
+# (<<'X', <<"X", <<\X) is skipped to the line that is exactly X. Single-quoted text is skipped; each
 # command word after ; & | ( { $( and the shell keywords is checked; a ) only closes what is before it.
-# The block writes no file, so a > outside single quotes is refused.
+# It reads text, not the shell's grammar, so it does not catch everything: a command between quotes it
+# pairs wrongly (: "'" ; id ; "'"), a command in the first arm of a case (case x in *) id ;; esac), and
+# a full-path tool that looks a command up by name (/usr/bin/env id, /bin/sh -c id) all pass it. What
+# stops a command being found by name is the run: gird-fleet.sh runs the block with a search path that
+# holds nothing (fl_owasp_kinds), so such a command is not found and the run reads failed. Neither
+# stops a full-path tool given a script to run, such as /bin/sh -c /usr/bin/id, or a builtin that
+# finds a tool without the search path, such as command -p id: code review does (docs/designs/owasp.md).
 # bash 3.2 miscounts the parentheses of a program inside $( ), so the program is set apart first.
 OD_AWK='
   BEGIN { split("case esac for in do done while until if then else elif fi return printf read continue break [ test : true false local shift unset incident_level owasp_set owasp_kinds", a, " "); for (i in a) okw[a[i]] = 1 }

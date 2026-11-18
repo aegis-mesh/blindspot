@@ -1340,7 +1340,9 @@ machine.incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|-|mac
 # >>> owasp-derive: this block's home; tools/gen.sh copies it into gird-fleet.sh.
 # The one rule from findings to risks, which the person's report and root in gird-fleet.sh both run:
 # each reads the finding fields the account run sends (FA_<key>, set by finding_fields in gird-check.sh
-# and by fl_parse in gird-fleet.sh). Root runs this copy, so it calls builtins and generated functions only.
+# and by fl_parse in gird-fleet.sh). Root runs this copy with a search path that holds nothing
+# (fl_owasp_kinds in gird-fleet.sh), so it calls builtins and generated functions only: any other
+# command not given by its full path is not found, and fails the run.
 # owasp_set SOURCE: 0 when the field SOURCE names holds a finding: a number above 0, a list that is
 # not empty, or for incidents:act an act-level incident and for incidents:update one of any other level.
 owasp_set() {
@@ -1381,7 +1383,7 @@ owasp_kinds() {
     case "$_osrc" in
       ''|machine:*|report) continue ;;
     esac
-    owasp_set "$_osrc" && printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"
+    if owasp_set "$_osrc"; then printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"; fi
   done <<< "$OWASP_TABLE"
 }
 # <<< owasp-derive

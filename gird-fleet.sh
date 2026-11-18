@@ -327,7 +327,9 @@ machine.incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|-|mac
 # >>> owasp-derive: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
 # The one rule from findings to risks, which the person's report and root in gird-fleet.sh both run:
 # each reads the finding fields the account run sends (FA_<key>, set by finding_fields in gird-check.sh
-# and by fl_parse in gird-fleet.sh). Root runs this copy, so it calls builtins and generated functions only.
+# and by fl_parse in gird-fleet.sh). Root runs this copy with a search path that holds nothing
+# (fl_owasp_kinds in gird-fleet.sh), so it calls builtins and generated functions only: any other
+# command not given by its full path is not found, and fails the run.
 # owasp_set SOURCE: 0 when the field SOURCE names holds a finding: a number above 0, a list that is
 # not empty, or for incidents:act an act-level incident and for incidents:update one of any other level.
 owasp_set() {
@@ -368,7 +370,7 @@ owasp_kinds() {
     case "$_osrc" in
       ''|machine:*|report) continue ;;
     esac
-    owasp_set "$_osrc" && printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"
+    if owasp_set "$_osrc"; then printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"; fi
   done <<< "$OWASP_TABLE"
 }
 # <<< owasp-derive
@@ -382,10 +384,16 @@ owasp_kinds() {
 # ===========================================================================
 FL_STATE=/var/db/blindspot; FL_USERS=""; FL_LAUNCH=""; FL_OWNER=0; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
 FL_FIND=/usr/bin/find; FL_PS=/bin/ps
+# The search path root runs the owasp-derive block with: a folder that holds nothing, so a command the
+# block names without its full path is not found (docs/designs/owasp.md). macOS ships it empty, and it
+# and every folder above it are root's alone, so owned_only can check the whole path; a folder made
+# under /tmp could not pass that, as everyone can write to /tmp.
+FL_NOPATH=/private/var/empty
 if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
   FL_STATE=${GIRD_CHECK_FLEET_STATE:-$FL_STATE}; FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
   FL_SHARED_TMP=${GIRD_CHECK_FLEET_SHARED_TMP:-$FL_SHARED_TMP}; FL_LSOF=${GIRD_CHECK_FLEET_LSOF:-$FL_LSOF}
   FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}; FL_OWNER=$EUID
+  FL_NOPATH=${GIRD_CHECK_FLEET_NOPATH:-$FL_NOPATH}
 fi
 FL_PATH=/usr/bin:/bin:/usr/sbin:/sbin
 FL_OUT_MAX=4096                 # bytes root reads from one account run
@@ -585,6 +593,33 @@ fl_copy_ok() { # the copy each account runs: owned by root, nobody else can chan
   # Not its link count: any account can hard-link a file in /tmp, and a link can't change a file
   # root owns at 0644, so counting links would let one account stop every later account's check.
   [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644" ]
+}
+fl_nopath_ok() { # FL_NOPATH: a folder, reached through no link, root's alone (owned_only) and empty
+  [ -d "$FL_NOPATH" ] && [ ! -L "$FL_NOPATH" ] || return 1
+  [ "$(cd "$FL_NOPATH" 2>/dev/null && /bin/pwd -P)" = "$FL_NOPATH" ] || return 1
+  owned_only "$FL_OWNER" "$FL_NOPATH" || return 1
+  _fne=$(/bin/ls -A "$FL_NOPATH" 2>/dev/null) && [ -z "$_fne" ]
+}
+# fl_owasp_kinds: owasp_kinds for the FA_ fields fl_parse set, into FL_OWK. The block runs in its own
+# subshell with PATH set to FL_NOPATH, so neither it nor a tool it starts by its full path finds a
+# command by name, and the rest of root keeps FL_PATH. 1, with FL_OWFAIL set, when FL_NOPATH is not
+# safe, or the block exits non-zero, writes an error (such as a command not found) or prints a line
+# that is not one OWASP_TABLE gives, once and in its order.
+fl_owasp_kinds() {
+  FL_OWK=""
+  fl_nopath_ok || { FL_OWFAIL=${FL_OWFAIL:-nopath}; return 1; }
+  _fko=$(PATH=$FL_NOPATH; owasp_kinds 2>&1) || { FL_OWFAIL=${FL_OWFAIL:-rule}; return 1; }
+  _fkw=$NL
+  while IFS='|' read -r _fkk _fkr _fkn _fkl _fks _fksrc; do
+    case "$_fksrc" in ''|machine:*|report) continue ;; esac
+    _fkw="$_fkw$_fkr|$_fkk|$_fks|$_fkn|$_fkl$NL"
+  done <<< "$OWASP_TABLE"
+  if [ -n "$_fko" ]; then
+    while IFS= read -r _fkx; do
+      case "$_fkw" in *"$NL$_fkx$NL"*) _fkw=$NL${_fkw#*"$NL$_fkx$NL"} ;; *) FL_OWFAIL=${FL_OWFAIL:-rule}; return 1 ;; esac
+    done <<< "$_fko"
+  fi
+  FL_OWK=$_fko
 }
 fl_json_list() { _o=""; for _x in $1; do _o="${_o:+$_o,}\"$_x\""; done; printf '[%s]' "$_o"; }
 fl_json_incidents() { _o=""; for _x in $1; do _o="${_o:+$_o,}{\"id\":\"$_x\",\"level\":\"$(incident_level "$_x")\"}"; done; printf '[%s]' "$_o"; }
@@ -811,7 +846,7 @@ fleet_main() {
   _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 40 ] && _rs=40
   FM_FIND_S=$((_rs / 2)); [ "$FM_FIND_S" -gt 20 ] && FM_FIND_S=20; [ "$FM_FIND_S" -lt 1 ] && FM_FIND_S=1
   FM_LSOF_S=$((_rs / 4)); [ "$FM_LSOF_S" -gt 10 ] && FM_LSOF_S=10; [ "$FM_LSOF_S" -lt 1 ] && FM_LSOF_S=1
-  FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""
+  FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""; FL_OWFAIL=""
   # One version for both files: gird-check.sh's release, from its header.
   FL_REL=$(/usr/bin/sed -n '1,5{s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p;}' "$FL_CHECK" | /usr/bin/head -n 1)
   [ -n "$FL_REL" ] || FL_REL=unknown
@@ -919,25 +954,27 @@ fleet_main() {
       if [ "$FA_tmp_wiper" -eq 1 ]; then _upd=1; _lines="$_lines$NL    !  gh-token-monitor's logs in /tmp, this account's, nothing else of it: check them before anyone revokes a GitHub token"; _inv="$_inv; tmp-wiper"; fi
       for _x in $FA_tmp_marks; do _upd=1; _lines="$_lines$NL    !  Files named like the $(incident_name "$_x") markers in /tmp, this account's: check them, as another account can link one there"; done
       [ -n "$FA_tmp_marks" ] && _inv="$_inv; tmp-marks $(printf '%s' "$FA_tmp_marks" | /usr/bin/tr ' ' ',')"
+      # Its OWASP tags, from the fields fl_parse checked. Tags that could not be worked out leave the
+      # account partly checked and the run failed, never clear.
+      _owf=0; if fl_owasp_kinds; then _ok=$FL_OWK; else _ok=""; _owf=1; fi
       _why=""
       [ "$FA_sessions_partial" -eq 1 ] && _why="${_why:+$_why, }agent sessions partly checked"
       [ "$FA_not_read" -gt 0 ] && _why="${_why:+$_why, }$(fl_plural "$FA_not_read" "file or folder was" "files or folders were") not read"
       [ "$FA_moved" -eq 1 ] && _why="${_why:+$_why, }a shell profile moves an agent's folders, which this check does not follow"
       [ "$FA_protected" != ok ] && _why="${_why:+$_why, }folders macOS protects were not checked (Full Disk Access)"
       [ -n "$FA_stop" ] && _why="${_why:+$_why, }its check ran out of time"
+      [ "$_owf" -eq 1 ] && _why="${_why:+$_why, }its OWASP tags could not be worked out"
       [ -n "$_why" ] && _complete=false
       if [ "$_act" -eq 1 ]; then _out=act; elif [ "$_complete" = false ]; then _out=not_checked; elif [ "$_upd" -eq 1 ]; then _out=review; else _out=clear; fi
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      # Its OWASP tags, from the fields fl_parse checked (owasp_kinds). A partly checked account is
-      # tagged with what was found, and counted apart.
+      # A partly checked account is tagged with what was found, and counted apart.
       [ "$_complete" = false ] && N_PART=$((N_PART + 1))
-      _ok=$(owasp_kinds)
       while IFS= read -r _l; do [ -n "$_l" ] && OW_ALL="$OW_ALL$N_ACC|$_l$NL"; done <<EOF
 $_ok
 EOF
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_tools"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents"),\"owasp\":$(fl_json_list "$(printf '%s\n' "$_ok" | fl_codes)")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_tools"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true')$( [ "$_owf" = 1 ] && printf ',"owasp_failed":true'),\"incidents\":$(fl_json_incidents "$FA_incidents"),\"owasp\":$(fl_json_list "$(printf '%s\n' "$_ok" | fl_codes)")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
@@ -971,6 +1008,7 @@ EOF
   OUTS="$OUTS$FM_OUT$NL"
   [ "$N_ACC" -eq 0 ] && OUTS="${OUTS}not_checked$NL"
   [ -n "$FL_FAILED" ] && OUTS="${OUTS}failed$NL"
+  [ -n "$FL_OWFAIL" ] && OUTS="${OUTS}failed$NL"
   OUTCOME=$(printf '%s' "$OUTS" | fl_worst)
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
   # The OWASP part, by risk: how many checked accounts have it, +mac when the Mac has it. Every account
@@ -1041,6 +1079,8 @@ EOF
       [ "$N_PART" -gt 0 ] && printf '    %s\n' "$(fl_plural "$N_PART" "account partly checked: its tags may be incomplete" "accounts partly checked: their tags may be incomplete")"
     fi
     [ -n "$FL_FAILED" ] && printf '\n  The run stopped: the script copy each account runs was changed.\n'
+    [ "$FL_OWFAIL" = nopath ] && printf '\n  The run failed: no OWASP tags were worked out, as %s is not an empty folder only root can change.\n' "$FL_NOPATH"
+    [ "$FL_OWFAIL" = rule ] && printf '\n  The run failed: the rule that works out the OWASP tags did not run cleanly.\n'
     if [ "$FL_SAVED" -eq 1 ]; then printf '\n  Saved: %s/last.json\n' "$FL_STATE"; else printf '\n  Not saved: %s could not be written safely.\n' "$FL_STATE"; fi
     if [ "$TTY" -eq 1 ]; then
       if [ "$OUTCOME" = clear ]; then _a1="Nothing found on this Mac today."; else _a1="This is one Mac, checked once."; fi

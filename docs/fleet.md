@@ -230,7 +230,7 @@ Each run has one outcome, the worst of these, in this order:
 
 | Outcome | Means | Exit code |
 |---|---|---|
-| `failed` | The run could not finish safely, such as a changed script copy or a result it could not save. | 13 |
+| `failed` | The run could not finish safely, such as a changed script copy, OWASP tags it could not work out, or a result it could not save. | 13 |
 | `act` | Something to act on now: malware signs (the gh-token-monitor wiper is named first), files a worm plants in a project, npm malware listed only in a lockfile (act if that project was installed), a link to `~/.ssh/authorized_keys` outside `.ssh`, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
 | `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, an editor extension to remove whose malware was made for another system, a file named like the ones worms plant, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
@@ -239,7 +239,8 @@ Each run has one outcome, the worst of these, in this order:
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
 no login shell, its check could not start or ran out of time, its check sent back something
 unexpected, or part of it was not read: a protected folder, a folder it could not open, a file that
-is not a regular file or is over 16 MB, or agent sessions not all checked.
+is not a regular file or is over 16 MB, agent sessions not all checked, or OWASP tags that could not
+be worked out.
 
 The summary line:
 
@@ -286,7 +287,8 @@ accounts:
 - `last.json` has an `owasp` object: `accounts_counted`, `accounts_not_checked`,
   `accounts_partly_checked`, and `risks`, each with its `id`, `name`, `accounts`, `machine` and the
   `findings` (the JSON fields) that carry it. Each checked account's row, and the `machine` object,
-  has an `owasp` list of its risks.
+  has an `owasp` list of its risks. A row whose tags could not be worked out also has
+  `"owasp_failed": true`, is partly checked, and the run reads `failed`.
 - The inventory value gets the `owasp` part only when it fits in the value's 250 characters with
   every account's part whole: it never costs an account any of its content. So a long value often
   has none, and a value that was cut (it ends with `+more`) never has it. The summary line and
