@@ -5,6 +5,24 @@ only) must find the same things and print the same report. A change to one lands
 test in each suite. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules the scripts keep and the review
 checklist; read it first.
 
+## macOS, Linux and Windows stay at par
+
+Blindspot gives the same features on macOS, Linux and Windows. That covers the check one person
+runs, fleet mode, the tools an admin uses, every kind of finding, the result formats, the mappings
+to outside frameworks, and the docs.
+
+- Before you build a feature, write down what each of the three platforms gets.
+- A feature lands on all three in the same pull request. If one platform has to wait, the pull
+  request says which and why, and an issue is opened for it before the pull request merges.
+- A fix found on one platform is checked on the other two in the same pull request.
+- A real platform limit is not a gap. Say what the limit is in the docs a person reads, and make
+  the result show what was not checked. Never let it read as clear.
+- Review checks this. A feature for one platform, with no word on the other two, is a major
+  finding.
+
+The twin rule under Tests is how the two check scripts are held to this. The same care applies to
+everything else.
+
 ## This repository is public
 
 Everything here is published: files, comments, commit messages, pull request descriptions, review
