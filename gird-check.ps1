@@ -7104,14 +7104,19 @@ if ($OptAcctRun) {
   $fEngine = $SessEngine; if ($fEngine -eq 'net') { $fEngine = 'dotnet' }
   $fSp = 0; if ($SESS_PARTIAL) { $fSp = 1 }
   # The run starts with -NoProfile, so a variable a profile sets is not followed. The profiles are read
-  # as text, never run: one that sets a variable of data/folder-vars.tsv to anything other than what
-  # this run sees moves a folder, and the account is partly checked. A tool's variable unset here is
-  # seen as the folder this check reads without it. A value this can't work out counts as moved.
+  # as text, never run. A line that names a variable of data/folder-vars.tsv other than to read it moves
+  # a folder, and the account is partly checked, unless it is one of the plain assignments below of the
+  # value this run sees. A tool's variable unset here is seen as the folder this check reads without it.
+  # A file a profile sources is read too, one level down, if it is a regular file in the home; one this
+  # can't read counts only in a profile that names a variable of the list, so the common profile that
+  # sources a completion script is not partly checked for it. A tool's own script, sourced from its own
+  # folder (nvm.sh), sets that tool's variable to that folder, so it is not read.
   $fMvFiles = New-Object System.Collections.Generic.List[string]
   foreach ($f in $ShellRc) { $fMvFiles.Add($f) }
+  foreach ($d in $DocsRoots) { $fMvFiles.Add((J $d 'WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1')) }
   if ($OnWindows) {
-    foreach ($d in @((J $env:SystemRoot 'System32/WindowsPowerShell/v1.0'), (J $env:ProgramFiles 'PowerShell/7'))) {
-      foreach ($pf in @('profile.ps1', 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1')) { $fMvFiles.Add((J $d $pf)) }
+    foreach ($d in @((J $env:SystemRoot 'System32/WindowsPowerShell/v1.0'), (J $env:ProgramFiles 'PowerShell/7'), (J $env:ProgramFiles 'PowerShell/7-preview'))) {
+      foreach ($pf in @('profile.ps1', 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1', 'Microsoft.PowerShellISE_profile.ps1')) { $fMvFiles.Add((J $d $pf)) }
     }
   }
   $fMvDefault = @{
@@ -7133,30 +7138,85 @@ if ($OptAcctRun) {
     if ($x -match '[$`(]') { return $null }
     $x
   }
+  function Fleet-MvSeen([string]$n) {
+    $cur = [Environment]::GetEnvironmentVariable($n)
+    if ($cur) { return @($cur) }
+    if ($fMvDefault.ContainsKey($n)) { return @($fMvDefault[$n]) }
+    @()
+  }
+  function Fleet-MvUnder([string]$p, [string]$dir) {
+    $p = Fleet-MvNorm $p; $dir = Fleet-MvNorm $dir
+    $dir.Length -gt 0 -and $p.Length -gt $dir.Length + 1 -and $p.StartsWith($dir + $Sep, $PathCmp)
+  }
   $fMvAlt = (@(@($FolderVarsAgent) + @($FolderVarsTool) | ForEach-Object { [regex]::Escape($_) }) -join '|')
-  $fMvRx = @(
-    ('\$(?:\{env:(' + $fMvAlt + ')\}|env:(' + $fMvAlt + '))\s*=(?!=)(.*)'),
-    ('SetEnvironmentVariable\(\s*[''"](' + $fMvAlt + ')[''"]\s*,(.*)'),
-    ('\b(?:Set-Item|New-Item|si|ni)\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?(' + $fMvAlt + ')[''"]?\s+(?:-Value\s+)?(.*)'),
-    ('^\s*(?:export\s+|set\s+-[A-Za-z]*x[A-Za-z]*\s+)?(' + $fMvAlt + ')[=\s](.*)')
+  $fMvName = New-Object regex (('(?<![A-Za-z0-9_])(?:' + $fMvAlt + ')(?![A-Za-z0-9_])'), 'IgnoreCase')
+  $fMvRead = New-Object regex (('(?:(?<e>\$\{?env:)|(?<b>\$\{#?)|\$|%|GetEnvironmentVariable\(\s*[''"]|Test-Path\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?)$'), 'IgnoreCase')
+  $fMvRef = New-Object regex (('\$\{?(?:env:)?(' + $fMvAlt + ')\}?(?![A-Za-z0-9_])'), 'IgnoreCase')
+  $fMvSrcRx = New-Object regex (('(?:^|[;&|{(]|\b(?:then|else|do))\s*\\?(?:\.|source)\s+(?<p>"[^"]*"|''[^'']*''|[^\s;&|)}]+)'), 'IgnoreCase')
+  $fMvExport = New-Object regex ('^\s*export(?:\s+[A-Za-z_][A-Za-z0-9_]*)+\s*;?\s*(?:#.*)?$')
+  $fMvV = '(?<v>''[^'']*''|"[^"]*"|[^\s;''"#,)]+)'; $fMvT = '\s*;?\s*(?:#.*)?$'
+  $fMvSet = @(
+    ('^\s*\$(?:\{env:(?<n>' + $fMvAlt + ')\}|env:(?<n>' + $fMvAlt + '))\s*=\s*' + $fMvV + $fMvT),
+    ('^\s*\[(?:System\.)?Environment\]::SetEnvironmentVariable\(\s*[''"](?<n>' + $fMvAlt + ')[''"]\s*,\s*' + $fMvV + '\s*(?:,[^)]*)?\)' + $fMvT),
+    ('^\s*(?:Set-Item|New-Item|si|ni)\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?(?<n>' + $fMvAlt + ')[''"]?\s+(?:-Value\s+)?' + $fMvV + $fMvT),
+    ('^\s*(?:export\s+)?(?<n>' + $fMvAlt + ')=' + $fMvV + $fMvT),
+    ('^\s*set\s+-[A-Za-z]*x[A-Za-z]*\s+(?<n>' + $fMvAlt + ')\s+' + $fMvV + $fMvT)
   ) | ForEach-Object { New-Object regex ($_, 'IgnoreCase') }
-  $fMoved = 0
-  foreach ($f in $fMvFiles) {
-    if ($fMoved -eq 1) { break }
+  $fMvOwn = @(foreach ($n in $FolderVarsTool) { if ($n -notlike 'XDG_*') { Fleet-MvSeen $n } })
+  # What a source line names: $null when it can't be followed, '' for a tool's own script, else the file.
+  function Fleet-MvSrc([string]$raw, [string]$from) {
+    if ($raw -match "^'([^']*)'$") { $x = $Matches[1] } else {
+      if ($raw -match '^"([^"]*)"$') { $raw = $Matches[1] }
+      $raw = [regex]::Replace($raw, '\$\{?PSScriptRoot\}?', ([IO.Path]::GetDirectoryName($from)).Replace('$', '$$'), 'IgnoreCase')
+      $raw = $fMvRef.Replace($raw, [Text.RegularExpressions.MatchEvaluator] { param($m) $s = @(Fleet-MvSeen $m.Groups[1].Value); if ($s.Count) { $s[0] } else { $m.Value } })
+      $x = Fleet-MvValue ('"' + $raw + '"') $true
+    }
+    if (-not $x) { return $null }
+    try { if (-not [IO.Path]::IsPathRooted($x)) { return $null }; $x = [IO.Path]::GetFullPath((Fleet-MvNorm $x)) } catch { return $null }
+    foreach ($o in $fMvOwn) { if (Fleet-MvUnder $x $o) { return '' } }
+    if (-not (Fleet-MvUnder $x $HomeDir)) { return $null }
+    $h = Fleet-MvNorm $HomeDir; $q = Fleet-MvNorm $x
+    try {
+      while ($q.Length -gt $h.Length) {
+        if (([IO.File]::GetAttributes($q) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { return $null }
+        $q = [IO.Path]::GetDirectoryName($q)
+      }
+    } catch { return $null }
+    if (-not (Is-File $x) -or $null -eq (Read-Text $x)) { return $null }
+    $x
+  }
+  function Fleet-MvScan([string]$f, [int]$depth) {
     $t = Read-Text $f
-    if ($null -eq $t) { continue }
+    if ($null -eq $t) { return 0 }
+    $named = $false; $lost = $false
     foreach ($l in ($t -split "`r?`n")) {
       if ($l -match '^\s*#') { continue }
-      for ($ri = 0; $ri -lt $fMvRx.Count; $ri++) {
-        $m = $fMvRx[$ri].Match($l); if (-not $m.Success) { continue }
-        $g = @($m.Groups | Select-Object -Skip 1 | Where-Object { $_.Success })
-        $n = $g[0].Value; $val = Fleet-MvValue $g[$g.Count - 1].Value ($ri -eq 3)
-        $cur = [Environment]::GetEnvironmentVariable($n)
-        $seen = @(); if ($cur) { $seen = @($cur) } elseif ($fMvDefault.ContainsKey($n)) { $seen = $fMvDefault[$n] }
-        if ($null -eq $val -or -not (@($seen | Where-Object { [string]::Equals((Fleet-MvNorm $_), (Fleet-MvNorm $val), $PathCmp) }).Count)) { $fMoved = 1 }
+      $w = 0
+      foreach ($m in $fMvName.Matches($l)) {
+        $named = $true
+        $r = $fMvRead.Match($l.Substring(0, $m.Index)); $post = $l.Substring($m.Index + $m.Length)
+        if (-not $r.Success -or ($r.Groups['e'].Success -and $post -match '^\}?\s*(?:[-+*/%.?]|\?\?)?=(?!=)') -or ($r.Groups['b'].Success -and $post -match '^:?=')) { $w++ }
       }
+      foreach ($m in $fMvSrcRx.Matches($l)) {
+        $p = Fleet-MvSrc $m.Groups['p'].Value $f
+        if ($p -eq '') { continue }
+        if ($null -eq $p -or $depth -gt 0) { $lost = $true; continue }
+        if ((Fleet-MvScan $p 1) -eq 1) { return 1 }
+      }
+      if ($w -eq 0 -or $fMvExport.IsMatch($l)) { continue }
+      if ($w -gt 1) { return 1 }
+      $hit = $null
+      for ($ri = 0; $ri -lt $fMvSet.Count; $ri++) { $hit = $fMvSet[$ri].Match($l); if ($hit.Success) { break } }
+      if (-not $hit.Success) { return 1 }
+      $val = Fleet-MvValue $hit.Groups['v'].Value ($ri -ge 3)
+      $seen = @(Fleet-MvSeen $hit.Groups['n'].Value)
+      if ($null -eq $val -or -not (@($seen | Where-Object { [string]::Equals((Fleet-MvNorm $_), (Fleet-MvNorm $val), $PathCmp) }).Count)) { return 1 }
     }
+    if ($lost -and $named) { return 1 }
+    0
   }
+  $fMoved = 0
+  foreach ($f in $fMvFiles) { if ((Fleet-MvScan $f 0) -eq 1) { $fMoved = 1; break } }
   $fl = @(
     'v=1'
     "agents=$(Fleet-Ids $AgentIds)"

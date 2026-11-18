@@ -160,6 +160,7 @@ $FlReserve = [Math]::Min(40, [int][Math]::Floor($FlDeadline / 10))
 $FlEnd = $FlStart.AddSeconds($FlDeadline - $FlReserve)
 $FlReason = ''
 $FlOutMax = 4096
+$FlStopSecs = 10
 $FlKeys = @('v', 'agents', 'yolo', 'tools', 'mcp_servers', 'mcp_token_files', 'key_files', 'key_providers', 'history_keys', 'session_files', 'sessions_partial', 'allow_list_keys', 'ssh_open', 'ak_links', 'planted', 'possible', 'incidents', 'platforms', 'on_open', 'to_read', 'updates', 'wiper', 'lock_only', 'remove', 'not_read', 'moved', 'tmp_marks', 'tmp_wiper', 'protected', 'engine', 'end')
 
 function Sha256-Hex([byte[]]$b) {
@@ -253,12 +254,12 @@ if (-not $FlReason) {
 }
 
 # Process ids paired with their parent's: on Windows every process in the system's list, elsewhere
-# those under ROOT, from pgrep. $null when the list can't be read.
-function Proc-Pairs([int]$root) {
+# those under ROOT, from pgrep. $null when the list can't be read. SECS bounds the system's answer.
+function Proc-Pairs([int]$root, [int]$secs) {
   $l = New-Object System.Collections.Generic.List[object]
   try {
     if ($OnWindows) {
-      foreach ($p in (Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId -OperationTimeoutSec 20 -ErrorAction Stop)) { $l.Add(@([int]$p.ProcessId, [int]$p.ParentProcessId)) }
+      foreach ($p in (Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId -OperationTimeoutSec $secs -ErrorAction Stop)) { $l.Add(@([int]$p.ProcessId, [int]$p.ParentProcessId)) }
     } else {
       $pg = '/usr/bin/pgrep'; if (-not [IO.File]::Exists($pg)) { $pg = '/bin/pgrep' }
       $q = New-Object System.Collections.Generic.List[int]; $q.Add($root); $i = 0
@@ -277,9 +278,12 @@ function Proc-Start([int]$id) {
 }
 # The processes under ROOT. Windows keeps only each process's parent id, and gives that id to a new
 # process once the parent ends, so a process is under ROOT only when its parent is and it started no
-# earlier than that parent; and when the parent's id now names a later process, only when it started
-# before that one too. A process that cannot be proven either way is not taken, and Unsure says so.
-function Tree-From($pairs, [int]$root, [long]$rootStart, [scriptblock]$startOf) {
+# earlier than that parent; and when the parent's id no longer names that parent, only when it started
+# no later than the last time the parent was seen running (ALIVE, by id, in UTC ticks, kept from pass
+# to pass), since a later holder of the id may have started it. A process that cannot be proven either
+# way, or that looks older than its parent (the clock was set back, or its parent's id was reused), is
+# not taken, and Unsure says so.
+function Tree-From($pairs, [int]$root, [long]$rootStart, [scriptblock]$startOf, [hashtable]$alive) {
   $kids = @{}
   foreach ($q in $pairs) { if (-not $kids.ContainsKey($q[1])) { $kids[$q[1]] = New-Object System.Collections.Generic.List[int] }; $kids[$q[1]].Add($q[0]) }
   $in = New-Object System.Collections.Generic.List[int]; $st = @{}; $unsure = $false
@@ -287,30 +291,35 @@ function Tree-From($pairs, [int]$root, [long]$rootStart, [scriptblock]$startOf) 
   while ($i -lt $in.Count) {
     $par = $in[$i]; $i++
     if (-not $kids.ContainsKey($par)) { continue }
-    $ps = [long]$st[$par]; $now = [long](& $startOf $par)
+    $ps = [long]$st[$par]; $at = [DateTime]::UtcNow.Ticks; $now = [long](& $startOf $par)
+    if ($ps -ge 0 -and $now -eq $ps) { $alive[$par] = $at }
+    $seen = [long]-1; if ($alive.ContainsKey($par)) { $seen = [long]$alive[$par] }
     foreach ($c in $kids[$par]) {
       if ($c -eq $par -or $st.ContainsKey($c)) { continue }
-      $cs = [long](& $startOf $c)
+      $at = [DateTime]::UtcNow.Ticks; $cs = [long](& $startOf $c)
       if ($cs -eq -2) { continue }
-      if ($cs -lt 0 -or $ps -lt 0) { $unsure = $true; continue }
-      if ($cs -lt $ps) { continue }
-      if ($now -ne -2 -and $now -ne $ps -and ($now -lt 0 -or $cs -ge $now)) { $unsure = $true; continue }
-      $in.Add($c); $st[$c] = $cs
+      if ($cs -lt 0 -or $ps -lt 0 -or $cs -lt $ps) { $unsure = $true; continue }
+      if ($now -ne $ps -and $cs -gt $seen) { $unsure = $true; continue }
+      $in.Add($c); $st[$c] = $cs; $alive[$c] = $at
     }
   }
   @{ In = $in; Start = $st; Unsure = $unsure }
 }
 # Stops the account run and every process proven to be under it, each by its id once its start time is
-# checked again; nothing is stopped by its tree alone. True when a process is still running afterwards,
-# or one could not be proven to be under the run or not.
+# checked again; nothing is stopped by its tree alone. The whole stop, the system's process list
+# included, ends within FlStopSecs. True when a process is still running afterwards, one could not be
+# proven to be under the run or not, or the time ran out before the tree was read to its end.
 function Stop-Tree([Diagnostics.Process]$proc, [long]$rootStart) {
   $nostop = $FlTest -and $env:GIRD_CHECK_FLEET_NOSTOP -eq '1'
-  $known = @{}; $unsure = $false; $more = $true; $pass = 0
+  $stopEnd = [DateTime]::UtcNow.AddSeconds($script:FlStopSecs)
+  $known = @{}; $alive = @{ $proc.Id = [DateTime]::UtcNow.Ticks }; $unsure = $false; $more = $true; $pass = 0
   while ($more -and $pass -lt 4) {
+    $secs = [int][Math]::Floor(($stopEnd - [DateTime]::UtcNow).TotalSeconds) - 1
+    if ($secs -lt 1) { break }
     $pass++; $more = $false
-    $pairs = Proc-Pairs $proc.Id
+    $pairs = Proc-Pairs $proc.Id $secs
     if ($null -eq $pairs) { $unsure = $true; break }
-    $t = Tree-From $pairs $proc.Id $rootStart ${function:Proc-Start}
+    $t = Tree-From $pairs $proc.Id $rootStart ${function:Proc-Start} $alive
     if ($t.Unsure) { $unsure = $true }
     foreach ($id in $t.In) {
       if ($known.ContainsKey($id)) { continue }
@@ -322,14 +331,13 @@ function Stop-Tree([Diagnostics.Process]$proc, [long]$rootStart) {
     }
   }
   if ($more) { $unsure = $true }
-  $until = [DateTime]::UtcNow.AddSeconds(3)
-  do {
+  while ($true) {
     $left = @($known.Keys | Where-Object { $_ -ne $proc.Id -and (Proc-Start $_) -eq $known[$_] })
     $rootUp = $true; try { $rootUp = -not $proc.HasExited } catch { }
     if ($left.Count -eq 0 -and -not $rootUp) { return $unsure }
+    if ([DateTime]::UtcNow -ge $stopEnd) { return $true }
     Start-Sleep -Milliseconds 200
-  } while ([DateTime]::UtcNow -lt $until)
-  $true
+  }
 }
 function Quote-Arg([string]$a) {
   if ($a -and $a -notmatch '[\s"]') { return $a }
@@ -442,7 +450,7 @@ function Commas($ids) { (@($ids) -join ',') }
 $Row = ''; $AccOut = 'not_checked'; $AccInv = ''; $FlTimeHit = $false; $FlNotChecked = ''; $FlLeft = $false
 if ($FlReason) { $FlNotChecked = $FlReason }
 else {
-  $lim = [int][Math]::Floor(($FlEnd - [DateTime]::UtcNow).TotalSeconds) - 3
+  $lim = [int][Math]::Floor(($FlEnd - [DateTime]::UtcNow).TotalSeconds) - $FlStopSecs
   if ($lim -lt 1) { $FlNotChecked = 'deadline'; $FlTimeHit = $true }
   else {
     $run = Run-Account $lim

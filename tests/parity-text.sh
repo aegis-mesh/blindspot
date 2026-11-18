@@ -8,7 +8,10 @@
 # helper name assigned or quoted, and a file that ends inside a quote or a heredoc. It is not
 # proof that every test is counted; the runtime check is.
 #
-#   bash tests/parity-text.sh [run.sh run-ps.sh bash-only.txt]
+#   bash tests/parity-text.sh [run.sh run-ps.sh bash-only.txt payload.py ps-skips.txt]
+#
+# A reason in bash-only.txt or ps-skips.txt that names a test in single quotes ('a test') must
+# name one that run.sh or run-ps.sh has.
 #
 # Names are read from ok, has, hasnot, hasi, nokeys, skip and gen_refuses calls, and, for each
 # "payload_checks MODE" call, from that mode's check() calls in tests/payload.py, and compared as
@@ -16,8 +19,8 @@
 # It uses POSIX awk only.
 set -u
 cd "$(dirname "$0")/.." || exit 1
-RUN=${1:-tests/run.sh}; RUNPS=${2:-tests/run-ps.sh}; ONLY=${3:-tests/bash-only.txt}; PAY=${4:-tests/payload.py}
-for f in "$RUN" "$RUNPS" "$ONLY" "$PAY"; do [ -f "$f" ] || { echo "  parity: $f not found"; exit 1; }; done
+RUN=${1:-tests/run.sh}; RUNPS=${2:-tests/run-ps.sh}; ONLY=${3:-tests/bash-only.txt}; PAY=${4:-tests/payload.py}; PSK=${5:-tests/ps-skips.txt}
+for f in "$RUN" "$RUNPS" "$ONLY" "$PAY" "$PSK"; do [ -f "$f" ] || { echo "  parity: $f not found"; exit 1; }; done
 
 names() { # suite: "N<tab>name" per test, "L<tab>problem" per call it can't count
   LC_ALL=C awk -v pay="$PAY" -v src="$1" '
@@ -200,6 +203,24 @@ LC_ALL=C uniq -d "$W/only-all" | sed 's/^/  bash-only.txt lists twice: /' > "$W/
 LC_ALL=C comm -23 "$W/bash" "$W/ps" | LC_ALL=C comm -23 - "$W/only" | sed 's/^/  no PowerShell twin: /' >> "$W/report"
 LC_ALL=C comm -23 "$W/only" "$W/bash" | sed 's/^/  bash-only.txt names a test run.sh does not have: /' >> "$W/report"
 LC_ALL=C comm -12 "$W/only" "$W/ps" | LC_ALL=C comm -12 - "$W/bash" | sed 's/^\(.*\)$/  bash-only.txt lists \1, but run-ps.sh has it: remove the line/' >> "$W/report"
+# A quoted span opens after a space or ( and closes before a space, , ; : . ) or the line's end,
+# so the apostrophe in "an agent's" is not a quote.
+for f in "bash-only.txt:$ONLY" "ps-skips.txt:$PSK"; do
+  grep -v '^#' "${f#*:}" | grep "$T" | cut -f2- | LC_ALL=C awk -v SQ="'" '{
+    s = $0; n = length(s); i = 1
+    while (i <= n) {
+      c = substr(s, i, 1)
+      if (c == SQ && (i == 1 || substr(s, i - 1, 1) ~ /[ (]/)) {
+        for (j = i + 1; j <= n; j++) if (substr(s, j, 1) == SQ && (j == n || substr(s, j + 1, 1) ~ /[ ,;:.)]/)) break
+        if (j <= n) { print substr(s, i + 1, j - i - 1); i = j + 1; continue }
+      }
+      i++
+    }
+  }' | LC_ALL=C sed -e 's/ -Offline\([ ,]\)/ --offline\1/g' -e 's/ -Offline$/ --offline/' -e 's/^-Offline /--offline /' \
+    -e 's/^-Help /--help /' -e 's/^-Full /--full /' -e 's/^-Save /--save /' -e 's/ -AllSessions\([ ,]\)/ --all-sessions\1/g' \
+    | LC_ALL=C sort -u > "$W/cited"
+  LC_ALL=C sort -u "$W/bash" "$W/ps" | LC_ALL=C comm -23 "$W/cited" - | sed "s|^|  ${f%%:*} cites a test neither suite has: |" >> "$W/report"
+done
 if [ -s "$W/report" ]; then FAIL=1; cat "$W/report"; fi
 LC_ALL=C comm -13 "$W/bash" "$W/ps" > "$W/psonly"
 NB=$(grep -c . "$W/bash"); NP=$(grep -c . "$W/ps"); NO=$(grep -c . "$W/only"); NPO=$(grep -c . "$W/psonly")

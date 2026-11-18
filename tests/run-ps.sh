@@ -3837,24 +3837,56 @@ PS
 if [ "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")" = 'False False True False True False False' ]; then ok "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's"
 else bad "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's" "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")"; fi
 cat > "$FW/fn-tree.ps1" <<'PS'
-function Case($pairs, [int]$root, [long]$rs, $starts) {
+function Case($pairs, [int]$root, [long]$rs, $starts, $alive) {
   $sb = { param($id) if ($starts.ContainsKey($id)) { $starts[$id] } else { -2 } }.GetNewClosure()
-  $t = Tree-From $pairs $root $rs $sb
+  $t = Tree-From $pairs $root $rs $sb $alive
   ((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
 }
 $out = @()
-# A child that started before the run took a reused id for its parent: not the run's.
-$out += Case @(@(101, 100), @(102, 100), @(103, 101)) 100 1000 @{ 100 = [long]1000; 101 = [long]1100; 102 = [long]900; 103 = [long]1200 }
+# A child older than its parent (it took a reused id for its parent, or the clock was set back): not
+# the run's, and said, so the account reads partly checked.
+$out += Case @(@(101, 100), @(102, 100), @(103, 101)) 100 1000 @{ 100 = [long]1000; 101 = [long]1100; 102 = [long]900; 103 = [long]1200 } @{}
 # A child whose start time can't be read: left alone, and said.
-$out += Case @(,@(101, 100)) 100 1000 @{ 100 = [long]1000; 101 = [long]-1 }
-# The run's id now names a later process: a child older than that one is the run's; a newer one can't be told apart.
-$out += Case @(@(101, 100), @(102, 100)) 100 1000 @{ 100 = [long]3000; 101 = [long]2000; 102 = [long]3500 }
-# The run has ended and nothing took its id: its child is still its own.
-$out += Case @(,@(101, 100)) 100 1000 @{ 101 = [long]1100 }
+$out += Case @(,@(101, 100)) 100 1000 @{ 100 = [long]1000; 101 = [long]-1 } @{}
+# The run's id now names a later process, and the run was last seen at 2500: a child that started
+# before then is the run's; a newer one can't be told apart.
+$out += Case @(@(101, 100), @(102, 100)) 100 1000 @{ 100 = [long]3000; 101 = [long]2000; 102 = [long]3500 } @{ 100 = [long]2500 }
+# The run has ended, last seen at 1500: its child, started before then, is still its own.
+$out += Case @(,@(101, 100)) 100 1000 @{ 101 = [long]1100 } @{ 100 = [long]1500 }
 $out -join ' '
 PS
-if [ "$(fw_fn Tree-From "$FW/fn-tree.ps1")" = '100,101,103:False 100:True 100,101:True 100,101:False' ]; then ok "fleet: only a process proven to be under the account run is stopped"
+if [ "$(fw_fn Tree-From "$FW/fn-tree.ps1")" = '100,101,103:True 100:True 100,101:True 100,101:False' ]; then ok "fleet: only a process proven to be under the account run is stopped"
 else bad "fleet: only a process proven to be under the account run is stopped" "$(fw_fn Tree-From "$FW/fn-tree.ps1")"; fi
+# The run was last seen at 1050 and has ended; a later holder of its id started 101 and ended too:
+# 101 is not taken, and the account reads partly checked.
+cat > "$FW/fn-reuse.ps1" <<'PS'
+$t = Tree-From @(,@(101, 100)) 100 1000 { param($id) if ($id -eq 101) { [long]1100 } else { [long]-2 } } @{ 100 = [long]1050 }
+((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
+PS
+if [ "$(fw_fn Tree-From "$FW/fn-reuse.ps1")" = '100:True' ]; then ok "fleet: a child of an ended parent that started after the parent was last seen is not taken"
+else bad "fleet: a child of an ended parent that started after the parent was last seen is not taken" "$(fw_fn Tree-From "$FW/fn-reuse.ps1")"; fi
+# The stop, the system's process list included, ends within its budget, and what it could not confirm
+# stopped is reported. Here the list takes 2 seconds each time and names one more process each time.
+cat > "$FW/fn-stopt.ps1" <<'PS'
+$script:FlStopSecs = 3; $FlTest = $false; $script:n = 0
+$ps = (Get-Process -Id $PID).Path
+$root = [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command Start-Sleep 60')
+$kids = @(1..4 | ForEach-Object { [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command Start-Sleep 60') })
+function Proc-Pairs([int]$r, [int]$secs) {
+  Start-Sleep -Seconds 2; $script:n++
+  $l = New-Object System.Collections.Generic.List[object]
+  for ($i = 0; $i -lt [Math]::Min($script:n, 4); $i++) { $l.Add(@($kids[$i].Id, $r)) }
+  , $l
+}
+$w = [Diagnostics.Stopwatch]::StartNew()
+$left = Stop-Tree $root ([long]$root.StartTime.ToUniversalTime().Ticks)
+$w.Stop()
+foreach ($k in @($kids) + @($root)) { try { $k.Kill() } catch { } }
+"$left $([int][Math]::Ceiling($w.Elapsed.TotalSeconds))"
+PS
+_st=$(fw_fn Stop-Tree,Tree-From,Proc-Start "$FW/fn-stopt.ps1")
+if [ "${_st%% *}" = True ] && [ "${_st##* }" -le 4 ] 2> /dev/null; then ok "fleet: a stop whose process list is slow ends within its budget and reports what it could not confirm" "$_st"
+else bad "fleet: a stop whose process list is slow ends within its budget and reports what it could not confirm" "$_st"; fi
 cat > "$FW/fn-fit.ps1" <<'PS'
 $h = 'v1 review 2026-01-01T00:00Z other_profiles=0'; $t = ' | machine: review; possible mastra'
 $fill = { param($n) 'asha: review to-read 1; possible ' + ('a' * ($n - ($h.Length + 3 + 'asha: review to-read 1; possible '.Length + $t.Length))) }
@@ -3954,6 +3986,59 @@ hasnot "fleet: so a bad package only there never reads clear" "^$FA\\.outcome=cl
 fw_home gbash; printf 'export CODEX_HOME=/d/codex\n' > "$FW/gbash/.bashrc"
 fw_run gbash "$FW/gbash"
 has    "fleet: a Git Bash profile that moves an agent's folders counts too" "^$FA\\.agent_folders_moved=true\$" "$FW/gbash.flat"
+# A line that names a listed variable other than to read it counts, unless it is a plain assignment of
+# the value the run sees: forms the reader does not know fail safe. Each case is its own home.
+MV=$WORK/mv; mkdir -p "$MV"
+mv_case() { # name file lines...: an -AccountRun on a home holding that file; prints its moved= value
+  _n=$1; _f=$2; shift 2; mkdir -p "$MV/$_n/AppData/Local/Temp" "$MV/$_n/AppData/Roaming" "$(dirname "$MV/$_n/$_f")"
+  printf '%s\n' "$@" > "$MV/$_n/$_f"
+  printf '%s=%s\n' "$_n" "$(psrun "$MV/$_n" -- -AccountRun 2> /dev/null | sed -n 's/^moved=//p')"
+}
+PSP=Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+{ mv_case pluseq "$PSP" '$env:CODEX_HOME += "\codex"'
+  mv_case newitem "$PSP" 'New-Item -Path Env: -Name CODEX_HOME -Value "D:\codex"'
+  mv_case setcontent "$PSP" 'Set-Content env:CODEX_HOME "D:\codex"'
+  mv_case indirect "$PSP" '$n = "CODEX_HOME"; [Environment]::SetEnvironmentVariable($n, "D:\codex")'
+  mv_case remove "$PSP" 'Remove-Item env:NVM_DIR'
+  mv_case exportmulti .bashrc 'export A=1 CODEX_HOME=/d/codex'
+  mv_case declare .bashrc 'declare -x CODEX_HOME=/d/codex'
+  mv_case default .bashrc ': "${CODEX_HOME:=/d/codex}"'
+  mv_case ise Documents/WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1 '$env:CODEX_HOME = "D:\codex"'
+} > "$MV/forms.txt"
+if [ "$(grep -c '=1$' "$MV/forms.txt")" -eq 9 ]; then ok "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved"
+else bad "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved" "$(grep -v '=1$' "$MV/forms.txt" | tr '\n' ' ')"; fi
+# What installers write: nvm (and its own nvm.sh, which sets NVM_DIR its own way), pnpm, conda (and
+# the conda.sh it sources), oh-my-posh and starship, and a profile that reads a variable.
+mkdir -p "$MV/nvm/.nvm"; printf '%s\n' 'if [ -z "${NVM_DIR-}" ]; then' '  NVM_DIR="$(nvm_cd "$(dirname "${NVM_SCRIPT_SOURCE:-$0}")" >/dev/null && \pwd)"' '  export NVM_DIR' 'fi' > "$MV/nvm/.nvm/nvm.sh"
+mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='/opt/conda/bin/conda'" "export _CE_M=''" '__conda_exe() (' '    "$CONDA_EXE" $_CE_M "$@"' ')' > "$MV/conda/miniconda3/etc/profile.d/conda.sh"
+{ mv_case nvm .bashrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm' '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+  mv_case pnpm .bashrc '# pnpm' 'export PNPM_HOME="$HOME/AppData/Local/pnpm"' 'case ":$PATH:" in' '  *":$PNPM_HOME:"*) ;;' '  *) export PATH="$PNPM_HOME:$PATH" ;;' 'esac' '# pnpm end'
+  mv_case conda .bashrc '# >>> conda initialize >>>' '__conda_setup="$('"'"'/opt/conda/bin/conda'"'"' '"'"'shell.bash'"'"' '"'"'hook'"'"' 2> /dev/null)"' 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then' '        . "$HOME/miniconda3/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' '# <<< conda initialize <<<'
+  mv_case condaps "$PSP" '#region conda initialize' 'If (Test-Path "C:\Users\u\miniconda3\Scripts\conda.exe") {' '    (& "C:\Users\u\miniconda3\Scripts\conda.exe" "shell.powershell" "hook") | Out-String | ?{$_} | Invoke-Expression' '}' '#endregion'
+  mv_case omp "$PSP" 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression'
+  mv_case starship "$PSP" 'Invoke-Expression (&starship init powershell)' '$ENV:STARSHIP_CONFIG = "$HOME\.config\starship.toml"'
+  mv_case starsh .bashrc 'eval "$(starship init bash)"' 'eval "$(oh-my-posh init bash)"' 'source /usr/share/bash-completion/bash_completion'
+  mv_case reads "$PSP" 'if ($env:CLAUDE_CONFIG_DIR) { Write-Host $env:CLAUDE_CONFIG_DIR }' 'if ([Environment]::GetEnvironmentVariable("CODEX_HOME")) { }' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+} > "$MV/plain.txt"
+if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 8 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
+else bad "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing" "$(grep -v '=0$' "$MV/plain.txt" | tr '\n' ' ')"; fi
+# A file a profile sources is read one level down when it is a regular file in the home. One that
+# can't be followed (elsewhere, a link, or sourced from a sourced file) counts only in a file that
+# names a listed variable.
+mkdir -p "$MV/follow/Documents/PowerShell" "$MV/outside"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/follow/Documents/PowerShell/env.ps1"
+mkdir -p "$MV/link"; printf 'alias x=y\n' > "$MV/outside/env.sh"; ln -s "$MV/outside/env.sh" "$MV/link/.env.sh"
+mkdir -p "$MV/nested"; printf '%s\n' 'echo "$CODEX_HOME"' '. /nonexistent/blindspot/env.sh' > "$MV/nested/.env.sh"
+mkdir -p "$MV/aliases"; printf 'alias ll="ls -l"\n' > "$MV/aliases/.bash_aliases"
+{ mv_case follow "$PSP" '. "$PSScriptRoot\env.ps1"'
+  mv_case elsewhere .bashrc 'export NVM_DIR="$HOME/.nvm"' '. /nonexistent/blindspot/env.sh'
+  mv_case link .bashrc 'echo "$NVM_DIR"' '. ~/.env.sh'
+  mv_case nested .bashrc '. ~/.env.sh'
+} > "$MV/src1.txt"
+{ mv_case aliases .bashrc '[ -f ~/.bash_aliases ] && . ~/.bash_aliases'
+  mv_case plainsrc .bashrc '. /nonexistent/blindspot/env.sh'
+} > "$MV/src0.txt"
+if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 2 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
+else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
 
 # blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
 mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf/"
@@ -3970,9 +4055,18 @@ fw_home bfbad; : > "$FW/argv.log"
 FW_SCRIPT="$FW/bfrun/blindspot-bad.ps1" fw_run bfbad "$FW/bfbad"
 if ! cmp -s "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/blindspot-bad.ps1" && grep -qE ' reason=unpack \| ' "$FW/bfbad.out" && [ ! -s "$FW/argv.log" ]; then ok "fleet: a packed check whose SHA-256 differs is never started, reason=unpack"
 else bad "fleet: a packed check whose SHA-256 differs is never started, reason=unpack" "$(cat "$FW/bfbad.out" "$FW/argv.log")"; fi
-(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1)
-if [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -ge 184320 ] && grep -q 'past 90% of the 204,800' "$FW/bf-check.log" || { [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 184320 ] && ! grep -q 'past 90%' "$FW/bf-check.log"; }
-then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB"; else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "$(cat "$FW/bf-check.log")"; fi
+# The 90% warning, both ways: the build as it is (under 90% today, so no warning), and a copy whose
+# gird-fleet.ps1 carries comment lines that put blindspot-fleet.ps1 at about 190,000 bytes.
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1); _rc=$?
+_sz=$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ')
+mkdir -p "$FW/bf90"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf90/"
+python3 -c "import sys; n = 190000 - int(sys.argv[2]); open(sys.argv[1], 'a').write(('# ' + 'x' * 97 + '\n') * (n // 100))" "$FW/bf90/gird-fleet.ps1" "$_sz"
+(cd "$FW/bf90" && PWSH="$PWSH" bash tools/gen.sh > "$FW/bf90.log" 2>&1); _rc90=$?
+_sz90=$(wc -c < "$FW/bf90/blindspot-fleet.ps1" 2> /dev/null | tr -d ' ')
+if [ "$_rc" -eq 0 ] && { { [ "$_sz" -lt 184320 ] && ! grep -q 'past 90%' "$FW/bf-check.log"; } || { [ "$_sz" -ge 184320 ] && grep -q 'past 90%' "$FW/bf-check.log"; }; } \
+  && [ "$_rc90" -eq 0 ] && [ "${_sz90:-0}" -ge 184320 ] && [ "$_sz90" -lt 204800 ] && grep -q "^warning: blindspot-fleet.ps1 is $_sz90 bytes, past 90% of the 204,800 Intune takes\$" "$FW/bf90.log"
+then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "$_sz and $_sz90 bytes"
+else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "as built: exit $_rc, $_sz bytes, $(grep -c 'past 90%' "$FW/bf-check.log") warnings; inflated: exit $_rc90, $_sz90 bytes, $(head -n 2 "$FW/bf90.log")"; fi
 # blindspot-fleet.ps1 packs gird-check.ps1 without its comments (tools/strip-comments.ps1): it must
 # parse and run as gird-check.ps1 does, and nothing but comments may go.
 SC=$WORK/strip; mkdir -p "$SC"
@@ -4037,6 +4131,17 @@ if grep -qx '#requires -Version 5.1' "$SC/t-strip.ps1"; then ok "strip-comments:
 _ps=$(sed -n "s/^\\\$PackedSha = '\\([0-9a-f]*\\)'\$/\\1/p" "$FW/bf/blindspot-fleet.ps1")
 if [ -n "$_ps" ] && [ "$_ps" = "$(cat "$SC/sha.txt")" ] && [ "$_ps" = "$( (shasum -a 256 "$SC/check.ps1" 2> /dev/null || sha256sum "$SC/check.ps1") | cut -c1-64)" ]; then ok "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments"
 else bad "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments" "packed '$_ps', tool '$(cat "$SC/sha.txt")'"; fi
+# The self-check above is made with the PowerShell that builds the release. Windows PowerShell 5.1 must
+# parse the copy too, and the 5.1 command the design gives must print the same SHA-256.
+if [ -n "$WINONLY" ]; then skip "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256" "$WINONLY: Windows PowerShell 5.1 runs only on Windows"
+else
+  _w51="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
+  "$_w51" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$SC/check.ps1")', [ref]\$null, [ref]\$e); \$e.Count; \$PSVersionTable.PSVersion.Major" < /dev/null > "$SC/parse51.txt" 2>&1
+  "$_w51" -NoProfile -ExecutionPolicy Bypass -File 'tools\strip-comments.ps1' gird-check.ps1 < /dev/null > "$SC/sha51.txt" 2>&1; _rc=$?
+  if [ "$(tr -d '\r' < "$SC/parse51.txt" | tr '\n' ' ')" = '0 5 ' ] && [ "$_rc" -eq 0 ] && [ -s "$SC/sha.txt" ] && [ "$(tr -d '\r\n' < "$SC/sha51.txt")" = "$(tr -d '\r\n' < "$SC/sha.txt")" ]
+  then ok "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256"
+  else bad "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256" "parse: $(tr '\r\n' '  ' < "$SC/parse51.txt"); exit $_rc: $(head -c 200 "$SC/sha51.txt"); pwsh: $(cat "$SC/sha.txt")"; fi
+fi
 # A packed copy edited by hand, its SHA-256 left as built, fails --check.
 { cat "$SC/check.ps1"; printf 'Write-Output edited\n'; } | gzip -9 -n -c | base64 | tr -d '\n\r' > "$SC/edited.b64"
 cp "$FW/bf/blindspot-fleet.ps1" "$SC/built.ps1"

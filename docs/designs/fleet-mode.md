@@ -273,11 +273,26 @@ PC, so an admin can see what one run left out.
     person's rights.
   - `protected` is always `ok`. Windows has no folders that need a grant like Full Disk Access.
   - `moved` comes from the person's profiles, read as text and never run: PowerShell's profiles in
-    Documents and in the folder Windows keeps Documents in when it was moved, the profiles every
-    account's PowerShell runs, and the shell profiles in the home folder, which Git Bash runs. It is
-    `1` when one sets a variable of `data/folder-vars.tsv` to anything other than what the run sees.
-    A tool's variable that the run does not have is seen as the folder the check reads without it.
-    A value the check can't work out, such as one built by a command, counts as `1`.
+    Documents and in the folder Windows keeps Documents in when it was moved, the Windows
+    PowerShell ISE profile, the profiles every account's PowerShell runs (Windows PowerShell's, and
+    PowerShell 7's in `%ProgramFiles%\PowerShell\7` and, for a preview, `7-preview`), and the
+    shell profiles in the home folder, which Git Bash runs. A PowerShell 7 installed from the
+    Microsoft Store has no all-users profile: its install folder can't be written. Sources:
+    Microsoft's about_Profiles, about_Windows_PowerShell_ISE and "Install PowerShell 7 on Windows".
+    It is `1` when a line names a variable of `data/folder-vars.tsv` other than to read it, unless
+    the line is a plain assignment (`$env:X = ...`, `${env:X} = ...`, `Set-Item env:X ...`,
+    `[Environment]::SetEnvironmentVariable('X', ...)`, `export X=...`, `X=...`, fish's
+    `set -x X ...`) of the value the run sees. So a form the check does not know, such as `+=`,
+    `New-Item -Path Env: -Name X`, `export A=1 X=2` or `declare -x X=...`, counts as `1`. A tool's
+    variable that the run does not have is seen as the folder the check reads without it. A value
+    the check can't work out, such as one built by a command, counts as `1`. A file a profile
+    sources (`. file`, `source file`) is read the same way, one level down, when it is a regular
+    file in the home folder. One that can't be followed, because it is elsewhere, is a link, can't
+    be read or is sourced from a sourced file, counts as `1` only in a file that also names a
+    variable of the list: profiles commonly source completion scripts from system folders, and a
+    profile that names none of the variables gives no reason to think the sourced file moves one.
+    A tool's own script sourced from that tool's folder, such as `$NVM_DIR/nvm.sh`, is not read: it
+    sets the tool's variable to the folder it is in, the one the check reads.
   - `tmp_marks` is always empty and `tmp_wiper` always `0`. Windows has no shared `/tmp`. A marker
     in `%ProgramData%` is judged by its owner instead: see step 6 under "How a run goes".
   An account run in the reduced language prints only `language_mode=1`.
@@ -322,6 +337,8 @@ never join. A line left empty is dropped, unless the line before it ends with a 
 carries it on to the next. The copy is then parsed again, and is written only if it has no errors,
 the same code word for word apart from comments and blank lines, the same structure, and the same
 `#requires`. A script that is signed, or has help comments outside its header, is refused.
+This check is made with the PowerShell that builds the release; a Windows-only test parses the copy
+with Windows PowerShell 5.1 too and compares the SHA-256 the 5.1 command below prints.
 
 Anyone can check that the SHA-256 `blindspot-fleet.ps1` carries (`$PackedSha`) comes from the
 published `gird-check.ps1`. With both files from the same release, this prints that SHA-256:
@@ -374,10 +391,14 @@ The script then:
    30 minutes Intune allows a script. What was found by then still counts, and the account is
    partly checked. Windows keeps only each process's parent id, and gives an ended process's id to
    new processes. So a process counts as under the run only when its parent does and it started no
-   earlier than that parent; and when the parent's id now names a later process, only when it
-   started before that one too. Each is stopped by its id once its start time is checked again.
-   A process that can't be proven either way is never stopped. It is reported as left running,
-   with any process still running after the stop.
+   earlier than that parent; and when the parent has ended or its id now names a later process,
+   only when it started no later than the last time the parent was seen running, since a later
+   holder of the id may have started it. A process that looks older than its parent (the clock was set back, or
+   the parent's id was reused) is not stopped either. Each is stopped by its id once its start
+   time is checked again. A process that can't be proven either way is never stopped. It is
+   reported as left running, with any process still running after the stop. The whole stop,
+   reading the system's process list included, ends within 10 seconds, kept back from the account
+   run's time; a tree it could not read to its end in that time is reported as left running too.
 5. Looks for agents installed under `%ProgramFiles%`, by name.
 6. Looks in `%ProgramData%` for the malware markers `data/indicators.tsv` lists there. Any account
    can create a file there, but on NTFS a standard account cannot give a file to another owner, so
@@ -499,8 +520,12 @@ Graph, never a real tenant.
 - Each outcome and exit code, from a fixture that produces it.
 - A marker in `%ProgramData%` owned by an ordinary account is a possible sign, not a finding; one
   the person owns is a finding on their row; one with two names is a possible sign for the PC.
-- Only a process proven to be under the account run is stopped.
-- A profile that moves an agent's folders leaves the account partly checked.
+- Only a process proven to be under the account run is stopped: not one older than its parent,
+  nor one an ended parent's id may have started after the parent was last seen. The stop ends
+  within its time even when the process list is slow, and says what it could not confirm.
+- A profile that moves an agent's folders leaves the account partly checked, in a form the check
+  does not know too, and in a file the profile sources. What nvm, pnpm, conda, oh-my-posh and
+  starship write into a profile moves nothing.
 - A session in Constrained Language Mode: `failed`, with `reason=language_mode`.
 - A 32-bit PowerShell: `failed`, with `reason=host_32bit`.
 - A profile that would print or change something does not run.

@@ -4357,6 +4357,16 @@ cp tests/run.sh "$WORK/pr8.sh"; printf '%s\n' 'echo "a quote left open' >> "$WOR
 if ! pcase "$WORK/pr8.sh" tests/run-ps.sh && grep -q 'the file ends inside a quote' "$WORK/pcase.txt"; then ok "the text backstop fails on a file that ends inside a quote"; else bad "the text backstop fails on a file that ends inside a quote"; fi
 { cat tests/bash-only.txt; grep -v '^#' tests/bash-only.txt | grep . | head -n 1; } > "$WORK/only-twice.txt"
 if ! bash tests/parity-text.sh tests/run.sh tests/run-ps.sh "$WORK/only-twice.txt" > "$WORK/pcase.txt" 2>&1 && grep -q '^  bash-only\.txt lists twice: ' "$WORK/pcase.txt"; then ok "the text backstop fails on a bash-only line listed twice"; else bad "the text backstop fails on a bash-only line listed twice"; fi
+{ cat tests/bash-only.txt; printf "a cited test\tthe reason cites a renamed test, tested as 'no test has this name'\n"; } > "$WORK/only-cite.txt"
+printf "a cited test\tthe reason cites a test that is there, tested as 'both scripts match the data files'\n" > "$WORK/only-cite-ok.txt"
+cp tests/run.sh "$WORK/pr9.sh"; cat >> "$WORK/pr9.sh" <<'EOF2'
+ok "a cited test"
+EOF2
+bash tests/parity-text.sh "$WORK/pr9.sh" tests/run-ps.sh "$WORK/only-cite.txt" > "$WORK/pcase.txt" 2>&1; _rc=$?
+{ cat tests/bash-only.txt "$WORK/only-cite-ok.txt"; } > "$WORK/only-cite-ok2.txt"
+bash tests/parity-text.sh "$WORK/pr9.sh" tests/run-ps.sh "$WORK/only-cite-ok2.txt" > "$WORK/pcase-ok.txt" 2>&1; _rc2=$?
+if [ "$_rc" -ne 0 ] && grep -q "^  bash-only.txt cites a test neither suite has: no test has this name\$" "$WORK/pcase.txt" && [ "$_rc2" -eq 0 ]; then ok "the text backstop fails on a reason that cites a test neither suite has"
+else bad "the text backstop fails on a reason that cites a test neither suite has" "exit $_rc, $_rc2: $(grep -v '^    ' "$WORK/pcase.txt" "$WORK/pcase-ok.txt" | head -n 3)"; fi
 if bash tests/parity-text.sh > "$WORK/parity.txt" 2>&1; then ok "the text backstop finds a twin for every test"
 else bad "the text backstop finds a twin for every test" "$(grep -v '^    ' "$WORK/parity.txt")"; fi
 
