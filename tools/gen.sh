@@ -233,7 +233,10 @@ PATH_PS='function ps(p,   v, fb, rest, k, base) {
 # at each top-level |, one a line, an empty line between passes: grep gets one -e each and perl one
 # regex each, because BSD grep and perl read one long alternation many times slower than its parts
 # one by one. PASS_FIXED is each pass's starts as fixed strings, one a line, an empty line between
-# passes: grep skips a later pass in a file that holds none of them. A match is named by the in lines
+# passes: grep skips a later pass in a file that holds none of them. KEY_STARTS is every start once,
+# as one regex, which the session engines test a piece of a file against before its patterns; a
+# start keeps its pattern's boundary there where it can (prestart), so SG. in MSG. starts nothing.
+# A match is named by the in lines
 # first, each start tested at its place in the whole match (at() and Key-At, which allow the one or
 # two characters in front of a key), then by the start lines, tested against the start of the match
 # as in 1.2.0; max is the longest match kept for that provider (- for 300).
@@ -279,6 +282,31 @@ KEYS_GEN='function alts(p,   n, i, c, d, inb, cl, neg, cur, o) {
     }
     return o
   }
+  # A start for KEY_STARTS: a start that is one fixed text, of a pattern that is one alternative behind
+  # a boundary (^|[^...]), is tested after the start, by looking back: not after a character of that
+  # class, or after an escape \n, \t or \r, as a session reads the boundary. Written after the
+  # start, the start stays fixed text that perl and .NET look for fast.
+  function prestart(i,   j, s) {
+    s = st[i]
+    if (at[i] != "start" || index(s, "|") || index(alts(pat[i]), "\n") || substr(pat[i], 1, 5) != "(^|[^") return s
+    j = index(pat[i], "])"); if (!j) return s
+    return s "(?:(?<![" substr(pat[i], 6, j - 6) "]" s ")|(?<=\\\\[ntr]" s "))"
+  }
+  function allstarts(   i, o, s, seen) {
+    o = ""
+    for (i = 1; i <= n; i++) { s = prestart(i); if (s in seen) continue; seen[s] = 1; o = o (o == "" ? "" : "|") s }
+    return o
+  }
+  # PASS_FIXED: each fixed string once in its pass.
+  function passfixed(   i, o, k, a, j, seen) {
+    o = ""
+    for (i = 1; i <= n; i++) {
+      if (i > 1 && ps[i] != ps[i - 1]) { o = o "\n"; split("", seen) }
+      k = split(fixed(st[i]), a, "\n")
+      for (j = 1; j <= k; j++) if (a[j] != "" && !(a[j] in seen)) { seen[a[j]] = 1; o = o a[j] "\n" }
+    }
+    sub(/\n$/, "", o); return o
+  }
   function passes(q,   i, o, cur) {
     o = ""; cur = ""
     for (i = 1; i <= n; i++) {
@@ -290,15 +318,14 @@ KEYS_GEN='function alts(p,   n, i, c, d, inb, cl, neg, cur, o) {
 rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
   END {
     print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
-    all = ""; ids = ""; starts = ""; ka = ""
-    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i]; ka = ka (i > 1 ? (ps[i] != ps[i - 1] ? "\n\n" : "\n") : "") alts(pat[i]) }
+    all = ""; ids = ""; ka = ""
+    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; ka = ka (i > 1 ? (ps[i] != ps[i - 1] ? "\n\n" : "\n") : "") alts(pat[i]) }
     print "ALL_KEYS=\047" all "\047"
     print "KEY_PASSES=\047" passes("\n") "\047"
     print "KEY_ALTS=\047" ka "\047"
     print "PROVIDER_IDS=\"" ids "\""
-    print "KEY_STARTS=\047" starts "\047"
-    pf = ""; for (i = 1; i <= n; i++) pf = pf (i > 1 && ps[i] != ps[i - 1] ? "\n" : "") fixed(st[i])
-    sub(/\n$/, "", pf); print "PASS_FIXED=\047" pf "\047"
+    print "KEY_STARTS=\047" allstarts() "\047"
+    print "PASS_FIXED=\047" passfixed() "\047"
     print "PROV_AWK=\047"
     print "function at(s, t, o,   b) { for (b = 0; b <= 2; b++) if (substr(s, b + o + 1, length(t)) == t) return 1; return 0 }"
     print "function prov(s) {"
@@ -319,12 +346,12 @@ rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
 rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
   END {
     print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
-    all = ""; ids = ""; starts = ""
-    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i] }
+    all = ""; ids = ""
+    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; }
     print "$ALL_KEYS = \047" all "\047"
     print "$KEY_PASSES = @(\047" passes("\047, \047") "\047)"
     print "$PROVIDER_IDS = \047" ids "\047"
-    print "$KEY_STARTS = \047" starts "\047"
+    print "$KEY_STARTS = \047" allstarts() "\047"
     print "$KeyProviderFn = @\047"
     print "function Key-At([string]$s, [string]$t, [int]$o) { for ($b = 0; $b -le 2; $b++) { if ($s.Length -ge $b + $o + $t.Length -and $s.Substring($b + $o, $t.Length) -ceq $t) { return $true } }; $false }"
     print "function Key-Provider([string]$s) {"

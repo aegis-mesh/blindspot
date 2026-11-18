@@ -803,7 +803,7 @@ hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A
 (^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)
 (^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage"
-KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.]|pypi-AgEIcHlwaS5vcmc|dckr_pat_|dop_v1_|doo_v1_|dor_v1_|hvs[.]|nvapi-|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_|ops_eyJ|7Q~|8Q~|JQQJ99|JQQJ99|[+]ASt|AccountName='
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_(?:(?<![A-Za-z0-9_]hf_)|(?<=\\[ntr]hf_))|pplx-|r8_(?:(?<![A-Za-z0-9+/_-]r8_)|(?<=\\[ntr]r8_))|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi(?:(?<![A-Za-z0-9_-]dapi)|(?<=\\[ntr]dapi))|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.](?:(?<![A-Za-z0-9_.-]SG[.])|(?<=\\[ntr]SG[.]))|pypi-AgEIcHlwaS5vcmc(?:(?<![A-Za-z0-9_-]pypi-AgEIcHlwaS5vcmc)|(?<=\\[ntr]pypi-AgEIcHlwaS5vcmc))|dckr_pat_(?:(?<![A-Za-z0-9_-]dckr_pat_)|(?<=\\[ntr]dckr_pat_))|dop_v1_|doo_v1_|dor_v1_|hvs[.](?:(?<![A-Za-z0-9_.-]hvs[.])|(?<=\\[ntr]hvs[.]))|nvapi-(?:(?<![A-Za-z0-9_-]nvapi-)|(?<=\\[ntr]nvapi-))|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_(?:(?<![A-Za-z0-9_-]sb_secret_)|(?<=\\[ntr]sb_secret_))|ops_eyJ(?:(?<![A-Za-z0-9_-]ops_eyJ)|(?<=\\[ntr]ops_eyJ))|7Q~|8Q~|JQQJ99|[+]ASt|AccountName='
 PASS_FIXED='sk-ant-
 sk-or-v1-
 sk-
@@ -858,7 +858,6 @@ sb_secret_
 ops_eyJ
 7Q~
 8Q~
-JQQJ99
 JQQJ99
 +ASt
 AccountName='
@@ -1805,20 +1804,16 @@ elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
 [ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
 # SESS_FAIL is set when the check could not start, so the report can say the sessions were not checked.
 SESS_FAIL=0
-# Stops the ripgrep run in progress, from inside the job that started it ($_rgp, its own child; $_me,
-# the job's own process id). In Git Bash a signal does not stop ripgrep, a Windows program, so it is
-# ended with taskkill, by its own Windows process id and never as a tree (/T would also end every
-# process whose recorded parent has that id, and Windows reuses ids). The id is read here, while
-# ripgrep is this job's child and not yet waited for: the job still holds its process, so Windows
-# can't give the id to another one. And only when ripgrep's parent is this job: otherwise the id
-# names some other process, and ripgrep is left to finish, the sessions reported partly checked.
+# Stops the ripgrep run in progress, from inside the job that started it: TERM to $_rgp, the process
+# that job started, and nothing else. No process is ever stopped by an id read from somewhere else
+# (such as /proc or a process list): by the time it is used, the process may be gone and its id
+# given to another. Under Git Bash ripgrep is a Windows program and TERM may not end it. Then
+# sess_stop stops the filter it started, awk: tr, which passes ripgrep's output on to it, ends at its
+# next write, which closes the pipe ripgrep writes to, and ripgrep ends at its own next write. A ripgrep that finds nothing
+# more writes nothing, so it reads on to the end of the session files and exits, and tr with it:
+# both only read. The run is reported partly checked either way, as any stopped run is.
 rg_stop() {
-  [ -n "$_rgp" ] || return 0
-  if [ "$WIN" -eq 1 ] && [ -n "$_me" ] && [ -r "$_proc/$_rgp/winpid" ] && [ "$(cat "$_proc/$_rgp/ppid" 2>/dev/null)" = "$_me" ]; then
-    _wp=$(cat "$_proc/$_rgp/winpid" 2>/dev/null)
-    case "$_wp" in ''|*[!0-9]*) ;; *) taskkill //F //PID "$_wp" >/dev/null 2>&1 ;; esac
-  fi
-  kill -TERM "$_rgp" 2>/dev/null
+  [ -n "$_rgp" ] && kill -TERM "$_rgp" 2>/dev/null
 }
 sess_start() {
   [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" != none ] || return 0
@@ -1834,7 +1829,12 @@ EOF
     [ -n "$GIRD_CHECK_SESSIONS_HOLD" ] && _roots+=("$GIRD_CHECK_SESSIONS_HOLD")  # tests only: a pipe nobody writes to holds ripgrep
     # --null ends each file name with a NUL, the one byte a path can't hold: tr turns it into the
     # tab the filter splits on, and every real tab into ?, so a file name can't shift the fields.
-    tr '\000\t' '\t?' < "$SESS_FIFO" | sess_filter rg > "$SESS_FILE" &
+    # tr runs on its own, through a second pipe, never in the filter's job: it may outlive the
+    # script, with a ripgrep left to finish (rg_stop), and a wait for the filter would wait for it
+    # too. So it holds none of the script's output or fd 3, and nothing ever waits for it.
+    mkfifo -m 600 "$SESS_DIR/text" 2>/dev/null || { rm -rf "$SESS_DIR"; SESS_DIR=""; SESS_FILE=""; SESS_FIFO=""; SESS_FAIL=1; return 0; }
+    tr '\000\t' '\t?' < "$SESS_FIFO" > "$SESS_DIR/text" 2>/dev/null 3>&- &
+    sess_filter rg < "$SESS_DIR/text" > "$SESS_FILE" &
     SESS_FILTER_PID=$!
     # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
     # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed. The
@@ -1844,7 +1844,7 @@ EOF
     # and stops the run in progress when it is stopped (rg_stop). Its status is the worst of the
     # runs': 2 for an error, else 0 when any found a key.
     (
-      _rgp=""; _me=${BASHPID:-}; _proc=/proc
+      _rgp=""
       trap 'rg_stop; exit 143' TERM
       _rgs=1
       while IFS= read -r _rgx; do

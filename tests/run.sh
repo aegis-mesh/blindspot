@@ -3392,26 +3392,68 @@ has    "where a Storage key in its place is one"             '~/code/az/\.mcp\.j
 hasnot "nor a saved command with a key in an allow rule"     '~/code/az/\.claude/settings\.local\.json A saved command contains a key' "$PV/pub.txt"
 has    "where a Storage key in its place is one too"         '~/code/az/\.claude/settings\.local\.json A saved command contains a key' "$PV/real.txt"
 
-echo "stopping ripgrep on Windows"
-# Git Bash: ripgrep, a Windows program, is ended with taskkill by its own Windows process id, never
-# as a tree (/T ends every process whose recorded parent has that id, and Windows reuses ids).
-if grep -n 'taskkill' gird-check.sh | grep -v '^[0-9]*:[[:space:]]*#' | grep -qiE '(^|[[:space:]])//?T([[:space:]]|$)'; then bad "taskkill never ends a process tree" "$(grep -n taskkill gird-check.sh | head -n 3 | tr '\n' '|')"
-else ok "taskkill never ends a process tree"; fi
-# And only ripgrep, the job's own child, by the Windows id /proc gives for it: with a stand-in /proc
-# and taskkill, rg_stop ends that id alone; not when the process with ripgrep's id has another
-# parent (the id passed to another process), nor with no /proc entry, nor with no run in progress.
-# kill is a no-op here: the ids are made up and must never reach a real process.
-RS=$WORK/rgstop; mkdir -p "$RS/bin" "$RS/proc/4100"
-printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/taskkill.log"\n' "$RS" > "$RS/bin/taskkill"; chmod +x "$RS/bin/taskkill"
-printf '4242\n' > "$RS/proc/4100/winpid"; printf '77\n' > "$RS/proc/4100/ppid"
-awk '/^rg_stop\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' "$SCRIPT" > "$RS/fn.sh"
-_rs() { ( . "$RS/fn.sh"; kill() { :; }; WIN=1; _proc=$RS/proc; _rgp=$1; _me=$2; PATH="$RS/bin:$PATH"; rg_stop ); }
-: > "$RS/taskkill.log"; _rs 4100 77; _a=$(cat "$RS/taskkill.log")
-: > "$RS/taskkill.log"; _rs 4100 78; _b=$(cat "$RS/taskkill.log")
-: > "$RS/taskkill.log"; _rs 4101 77; _c=$(cat "$RS/taskkill.log")
-: > "$RS/taskkill.log"; _rs "" 77; _d=$(cat "$RS/taskkill.log")
-if [ "$_a" = "//F //PID 4242" ] && [ -z "$_b$_c$_d" ]; then ok "Git Bash: only ripgrep, by its own Windows id, while it is the job's child"
-else bad "Git Bash: only ripgrep, by its own Windows id, while it is the job's child" "own: [$_a] other parent: [$_b] gone: [$_c] none: [$_d]"; fi
+echo "stopping processes"
+# gird-check.sh stops only a process it started and still holds, by the variable that holds it, and
+# never one by an id read from somewhere (taskkill, wmic, kill -f, /proc): that id may by then be
+# another program's. Every place it signals a process is in this one list, each a signal to a process
+# this script started (SPIN_PID, SP_PID, GAME_PID, KEYS_PID, SESS_PID, SESS_FILTER_PID, the job's
+# ripgrep run _rgp, g_keys's $1 which is GAME_PID, the perl workers @kids), or the advice the report
+# prints for a person to run. kill -0 and perl's kill(0, ...) only ask whether a process is there.
+STOP_SITES='kill "$SPIN_PID"
+kill "$SP_PID"
+kill "$GAME_PID"
+kill "$KEYS_PID"
+kill -USR1 "$GAME_PID"
+kill -USR2 "$1"
+kill -ALRM "$1"
+kill -VTALRM "$1"
+kill -PROF "$1"
+kill -TERM "$SESS_PID"
+kill -TERM "$SESS_FILTER_PID"
+kill -TERM "$_rgp"
+kill "TERM", @kids
+pkill -f gh-token-monitor"'
+_kw='(p?kill|killall|taskkill|tskill|wmic|Stop-Process)'
+_ks=$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -oE "(^[[:space:]]*|[;&|({)!][[:space:]]*|(then|do|else|if|elif|while|until)[[:space:]]+)$_kw(([[:space:]]|\\()[^;&|)<>]*|\$)" |
+  sed -E "s/^.*(^|[^A-Za-z_-])($_kw([[:space:]]|\\(|\$))/\\2/; s/[[:space:]]+[0-9]*\$//" | grep -vE '^kill( -0 |\(0, )' | sort -u)
+_kx=$(printf '%s\n' "$STOP_SITES" | sort -u)
+_kn=$(grep -nE 'taskkill|tskill|wmic|Stop-Process|killall|(^|[^a-z])kill +(-f|//[Ff])|/bin/kill' "$SCRIPT" | grep -v '^[0-9]*:[[:space:]]*#' | head -n 3 | tr '\n' '|')
+if [ -z "$_kn" ] && [ "$_ks" = "$_kx" ]; then ok "the script stops only processes it started"
+else bad "the script stops only processes it started" "forbidden: [$_kn] not listed: [$(comm -23 <(printf '%s\n' "$_ks") <(printf '%s\n' "$_kx") | tr '\n' '|')] listed, not found: [$(comm -13 <(printf '%s\n' "$_ks") <(printf '%s\n' "$_kx") | tr '\n' '|')]"; fi
+# A stopped ripgrep run, with a stand-in ripgrep that never finishes and writes nothing: once with one
+# that ends on TERM, once with one that ignores it, as a Windows rg.exe under Git Bash may. Either way
+# the run ends, the sessions read partly checked, and nothing but the stand-in gets a signal: its own
+# child and a process the test started live on, and one that ignores TERM is left to finish.
+RGS=$WORK/rgstand; mkdir -p "$RGS/bin" "$RGS/home/.claude/projects/p"; printf '{}\n' > "$RGS/home/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash
+[ "$1" = --version ] && { echo "ripgrep 14.1.0"; exit 0; }
+D=%s; [ -e "$D/rg.pid" ] && exit 1
+echo $$ > "$D/rg.pid"
+/bin/sleep 300 < /dev/null > /dev/null 2>&1 & echo $! > "$D/child.pid"
+if [ -e "$D/ignore" ]; then trap "echo ignored >> $D/rg.term" TERM; else trap "echo term >> $D/rg.term; exit 143" TERM; fi
+while :; do /bin/sleep 0.2; done
+' "$RGS" > "$RGS/bin/rg"; chmod +x "$RGS/bin/rg"
+_rgstand() { # term|ignore
+  rm -f "$RGS/rg.pid" "$RGS/child.pid" "$RGS/rg.term" "$RGS/ignore"; [ "$1" = ignore ] && : > "$RGS/ignore"
+  /bin/sleep 300 < /dev/null > /dev/null 2>&1 & _dp=$!
+  HOME="$RGS/home" PATH="$RGS/bin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$RGS/$1.txt"
+  _rp=$(cat "$RGS/rg.pid" 2>/dev/null); _cp=$(cat "$RGS/child.pid" 2>/dev/null)
+  _st="$1: report[$(grep -c 'Agent sessions were partly checked' "$RGS/$1.txt")] signal[$(cat "$RGS/rg.term" 2>/dev/null)]"
+  if [ -n "$_rp" ] && kill -0 "$_rp" 2>/dev/null; then _st="$_st stand-in[running]"; else _st="$_st stand-in[ended]"; fi
+  if [ -n "$_cp" ] && kill -0 "$_cp" 2>/dev/null; then _st="$_st child[running]"; else _st="$_st child[ended]"; fi
+  if kill -0 "$_dp" 2>/dev/null; then _st="$_st other[running]"; else _st="$_st other[ended]"; fi
+  [ -n "$_rp" ] && kill -KILL "$_rp" 2>/dev/null; [ -n "$_cp" ] && kill "$_cp" 2>/dev/null; kill "$_dp" 2>/dev/null; wait "$_dp" 2>/dev/null
+  printf '%s' "$_st"
+}
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) skip "a stopped ripgrep leaves the sessions partly checked and stops nothing else" "a bash stand-in for ripgrep is not a Windows program" ;;
+  *)
+    _t=$(_rgstand term); _i=$(_rgstand ignore)
+    if [ "$_t" = "term: report[1] signal[term] stand-in[ended] child[running] other[running]" ] &&
+       [ "$_i" = "ignore: report[1] signal[ignored] stand-in[running] child[running] other[running]" ]; then
+      ok "a stopped ripgrep leaves the sessions partly checked and stops nothing else"
+    else bad "a stopped ripgrep leaves the sessions partly checked and stops nothing else" "$_t | $_i"; fi ;;
+esac
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

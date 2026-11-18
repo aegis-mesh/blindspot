@@ -125,10 +125,13 @@ machines will differ:
   has its own pipe to the parent, which is the only writer, so result lines never interleave.
   Workers also exit when their parent or the script itself is gone, checked before each file and
   each 1 MB piece of one, so after a kill -9 of the script they stop within one piece. ripgrep is
-  stopped by the job that started it (one run a pass), by its process ID; under Git Bash that job
-  ends it with `taskkill` by ripgrep's own Windows process ID, never as a tree (`/T`), and only while
-  ripgrep is its child and not yet waited for, so the ID can't have passed to another process.
-  Otherwise ripgrep runs to its end and the sessions read partly checked. After a kill -9 of the
+  run by a job, one run a pass, and stopping that job sends TERM to the ripgrep run it started, and
+  to nothing else. No process is stopped by an ID read from somewhere (`/proc`, a process list,
+  `taskkill`): the process may have ended and Windows may have given its ID to another program.
+  Under Git Bash, ripgrep is a Windows program and TERM may not end it. Then stopping the filter
+  that reads its output closes the pipe it writes to, and ripgrep ends at its next write; one that
+  finds nothing more writes nothing, and reads on to the end of the session files before it exits.
+  It only reads. Either way no more passes start, and the sessions read partly checked. After a kill -9 of the
   script it runs to its end. The pipe and the results file live in a `mktemp -d` folder (owner only, name
   not guessable) removed by the existing cleanup; if it can't be made, the report says the
   sessions were not checked. The filter the keys pass through is stopped with the engine,

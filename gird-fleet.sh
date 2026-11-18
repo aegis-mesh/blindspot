@@ -188,7 +188,7 @@ hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A
 (^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)
 (^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
 PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage"
-KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.]|pypi-AgEIcHlwaS5vcmc|dckr_pat_|dop_v1_|doo_v1_|dor_v1_|hvs[.]|nvapi-|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_|ops_eyJ|7Q~|8Q~|JQQJ99|JQQJ99|[+]ASt|AccountName='
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_(?:(?<![A-Za-z0-9_]hf_)|(?<=\\[ntr]hf_))|pplx-|r8_(?:(?<![A-Za-z0-9+/_-]r8_)|(?<=\\[ntr]r8_))|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi(?:(?<![A-Za-z0-9_-]dapi)|(?<=\\[ntr]dapi))|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.](?:(?<![A-Za-z0-9_.-]SG[.])|(?<=\\[ntr]SG[.]))|pypi-AgEIcHlwaS5vcmc(?:(?<![A-Za-z0-9_-]pypi-AgEIcHlwaS5vcmc)|(?<=\\[ntr]pypi-AgEIcHlwaS5vcmc))|dckr_pat_(?:(?<![A-Za-z0-9_-]dckr_pat_)|(?<=\\[ntr]dckr_pat_))|dop_v1_|doo_v1_|dor_v1_|hvs[.](?:(?<![A-Za-z0-9_.-]hvs[.])|(?<=\\[ntr]hvs[.]))|nvapi-(?:(?<![A-Za-z0-9_-]nvapi-)|(?<=\\[ntr]nvapi-))|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_(?:(?<![A-Za-z0-9_-]sb_secret_)|(?<=\\[ntr]sb_secret_))|ops_eyJ(?:(?<![A-Za-z0-9_-]ops_eyJ)|(?<=\\[ntr]ops_eyJ))|7Q~|8Q~|JQQJ99|[+]ASt|AccountName='
 PASS_FIXED='sk-ant-
 sk-or-v1-
 sk-
@@ -243,7 +243,6 @@ sb_secret_
 ops_eyJ
 7Q~
 8Q~
-JQQJ99
 JQQJ99
 +ASt
 AccountName='
@@ -828,9 +827,9 @@ fleet_main() {
   [ -n "$FL_REL" ] || FL_REL=unknown
   # An account run may name only the key types this file knows, so a gird-check.sh with other key
   # types would have every account's output refused as unexpected: that is named instead, for every
-  # account, and nothing is run. Only the key types are compared, not the release: neither file
-  # states a version of its own that a new release always changes, so two releases with the same
-  # key types are not told apart.
+  # account, and nothing is run. Only the key types are compared, not the release: gird-check.sh
+  # states its release in its header (line 2), but this file states none to compare it with, so two
+  # releases with the same key types are not told apart.
   FL_SKEW=0
   [ "$(/usr/bin/sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' "$FL_CHECK" | /usr/bin/head -n 1)" = "$PROVIDER_IDS" ] || FL_SKEW=1
   FL_AT=$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ); FL_EPOCH=$(/bin/date -u +%s)
