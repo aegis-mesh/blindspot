@@ -38,21 +38,24 @@ nokeys() { if [ -n "$SKIPPING" ]; then skip "$1" "$SKIPPING"; elif grep -aqF -f 
 #   PATH=$(hide_platform_clis DIR)
 hide_platform_clis() {
   _hc=" $(awk -F '\t' '!/^#/ && NF > 2 && $3 != "-" { printf "%s ", $3 }' data/platforms.tsv)"
-  _hp=""; _hn=0; _hifs=$IFS; IFS=:
-  for _hd in $PATH; do
-    IFS=$_hifs; _hhit=0
-    for _hx in $_hc; do [ -n "$_hd" ] && [ -e "$_hd/$_hx" ] && _hhit=1; done
+  # Split by hand, not by IFS: a folder name with * or ? stays as it is, and empty entries are kept.
+  # A folder that is relative or can't be listed is kept whole: linking only part of it would hide
+  # tools the tests need.
+  _hp=""; _hn=0; _hrest=$PATH; _hfirst=1
+  while :; do
+    _hd=${_hrest%%:*}; _hhit=0
+    for _hx in $_hc; do case "$_hd" in /*) [ -r "$_hd" ] && [ -e "$_hd/$_hx" ] && _hhit=1 ;; esac; done
     if [ "$_hhit" -eq 1 ]; then
       _hn=$((_hn + 1)); mkdir -p "$1/$_hn"
-      for _hf in "$_hd"/*; do
+      for _hf in "$_hd"/* "$_hd"/.[!.]*; do
         _hb=${_hf##*/}
         case "$_hc" in *" $_hb "*) ;; *) [ -e "$_hf" ] && ln -s "$_hf" "$1/$_hn/$_hb" ;; esac
       done
       _hd=$1/$_hn
     fi
-    _hp="$_hp${_hp:+:}$_hd"
+    if [ "$_hfirst" -eq 1 ]; then _hp=$_hd; _hfirst=0; else _hp="$_hp:$_hd"; fi
+    case "$_hrest" in *:*) _hrest=${_hrest#*:} ;; *) break ;; esac
   done
-  IFS=$_hifs
   printf '%s\n' "$_hp"
 }
 # The suite's last line. A result reported outside these helpers' shell (in a subshell or a pipe)
