@@ -4883,7 +4883,7 @@ else bad "fleet one file: the guide's inventory reader reads an attempt time wit
 mkdir -p "$OF/old"; : > "$OF/old/gird-fleet.sh"; of_run old "$ONE" --all-users --json; rm -rf "$OF/old"; of_run noold "$ONE" --all-users --json
 of_env /bin/bash -p "$ONE" --all-users < /dev/null > "$OF/oldterm.out" 2>&1
 mkdir -p "$OF/old"; : > "$OF/old/gird-check.sh"; of_env /bin/bash -p "$ONE" < /dev/null > "$OF/oldsum.out" 2>&1; of_env /bin/bash -p "$ONE" --all-users < /dev/null > "$OF/oldterm2.out" 2>&1; rm -rf "$OF/old"
-if grep -q '^old_install=true$' "$OF/old.flat" && grep -q '^old_install=false$' "$OF/noold.flat" && grep -qE '^inventory=v1 act .*\| old-install( \||$)' "$OF/old.flat" \
+if grep -q '^old_install=true$' "$OF/old.flat" && grep -q '^old_install=false$' "$OF/noold.flat" && grep -qE '^inventory=v1 act .*\| old-install( \|| \+more$|$)' "$OF/old.flat" \
   && grep -q '^blindspot act accounts=2 .* old_install=yes$' "$OF/oldsum.out" && grep -q 'An older install of Blindspot' "$OF/oldterm2.out" && ! grep -q 'older install' "$OF/oldterm.out"; then
   ok "fleet one file: an older two-file install is named in the result"
 else bad "fleet one file: an older two-file install is named in the result" "$(grep -E '^(old_install|inventory)=' "$OF/old.flat" "$OF/noold.flat") $(cat "$OF/oldsum.out")"; fi
