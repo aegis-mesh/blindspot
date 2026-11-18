@@ -405,6 +405,7 @@ if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads the file of every way
 report_file oem -- "$IW/files/oem.csv"
 report_file mdmid -- "$IW/files/mdma.csv" "$IW/files/mdmb.csv"
 report_file dupname -- "$IW/files/dupc.csv" "$IW/files/dupd.csv"
+report_file dupws -- "$IW/files/dupws.csv"
 report_file winfleet -- "$IW/files/winfleet.csv"
 report_file clearonly -- "$IW/files/clearonly.csv"
 report_file noname -- "$IW/files/noname.csv"

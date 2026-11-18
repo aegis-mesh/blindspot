@@ -293,6 +293,7 @@ DUPS = {
     'mdmb.csv': 'Computer Name,UDID,Blindspot\nMAC-MDMB,5,%s\n' % ACT,
     'dupc.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\niMac,%s\nMAC-ONLY-C,%s\n' % (CLR, CLR, CLR),
     'dupd.csv': 'Computer Name,Blindspot\nMacBook-Pro,%s\nimac,%s\n' % (ACT, CLR),
+    'dupws.csv': 'Computer Name,Blindspot\n" A ",%s\na,%s\nB,%s\n"B ",%s\n' % (CLR, CLR, CLR, CLR),
 }
 def write_files(d):
     os.makedirs(d, exist_ok=True)
@@ -965,6 +966,8 @@ def main():
         check('the same names in two files are each counted, and the limits say how many names repeat', got is not None
               and sorted((unquote_cell(r['pc']).lower(), r['status']) for r in got[1]) == [('imac', 'clear'), ('imac', 'clear'), ('mac-only-c', 'clear'), ('macbook-pro', 'act'), ('macbook-pro', 'clear')]
               and '<b>5</b>Computers' in got[3] and '<td>Keys in plain text</td><td>1</td>' in got[3] and reps(got[3]) == [rep(2)], (out[-300:], got and reps(got[3])))
+        got, out = load_out(w, 'dupws')
+        check('names that differ only in spaces or case count as repeats', got is not None and reps(got[3]) == [rep(2)], (out[-300:], got and reps(got[3])))
         got, out = load_out(w, 'winfleet')
         check('a Windows fleet with second profiles is read', got is not None, out[-300:])
         if got:

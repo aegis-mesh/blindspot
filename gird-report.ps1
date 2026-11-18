@@ -778,7 +778,7 @@ function Get-RepeatCount($Rows) {
   $seen = New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)
   foreach ($r in $Rows) {
     $keys = @($r.Ids)
-    if (-not $r.Unnamed) { $keys += 'name:' + $r.PC.ToLowerInvariant() }
+    if (-not $r.Unnamed) { $keys += 'name:' + $r.PC.Trim().ToLowerInvariant() }
     foreach ($k in $keys) { $seen[$k] = 1 + [int]$seen[$k] }
   }
   return @($seen.Values | Where-Object { $_ -gt 1 }).Count
