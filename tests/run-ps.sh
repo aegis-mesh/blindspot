@@ -3865,6 +3865,53 @@ $t = Tree-From @(,@(101, 100)) 100 1000 { param($id) if ($id -eq 101) { [long]11
 PS
 if [ "$(fw_fn Tree-From "$FW/fn-reuse.ps1")" = '100:True' ]; then ok "fleet: a child of an ended parent that started after the parent was last seen is not taken"
 else bad "fleet: a child of an ended parent that started after the parent was last seen is not taken" "$(fw_fn Tree-From "$FW/fn-reuse.ps1")"; fi
+# The run (100, started at 1000) has ended; its id now names an unrelated process X, started at 2000,
+# whose child Y started at 2500. Y is not the run's, whether the run was last seen at its exit (1500)
+# or, as a stop that took the moment it began for the last sighting would have it, at 3000.
+cat > "$FW/fn-reused.ps1" <<'PS'
+function Case($pairs, [long]$rs, $starts, $alive) {
+  $sb = { param($id) if ($starts.ContainsKey($id)) { $starts[$id] } else { [long]-2 } }.GetNewClosure()
+  $t = Tree-From $pairs 100 $rs $sb $alive
+  ((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
+}
+$out = @()
+$out += Case @(,@(200, 100)) 1000 @{ 100 = [long]2000; 200 = [long]2500 } @{ 100 = [long]1500 }
+$out += Case @(,@(200, 100)) 1000 @{ 100 = [long]2000; 200 = [long]2500 } @{ 100 = [long]3000 }
+# The run still running: its child and grandchild are taken.
+$out += Case @(@(101, 100), @(102, 101)) 1000 @{ 100 = [long]1000; 101 = [long]1100; 102 = [long]1200 } @{}
+# A child whose start time can't be read is never taken, and said.
+$out += Case @(@(101, 100), @(102, 100)) 1000 @{ 100 = [long]1000; 101 = [long]-1; 102 = [long]1100 } @{}
+# A child of the run (101) ends while the tree is read: its child that started before 101 was last
+# seen is taken; one that started after is not.
+$T = [DateTime]::UtcNow.Ticks; $script:c101 = 0
+$sb = { param($id) switch ($id) { 100 { $T - 1000000000 } 101 { $script:c101++; if ($script:c101 -eq 1) { $T - 900000000 } else { [long]-2 } } 102 { $T - 800000000 } 103 { $T + 1000000000000 } default { [long]-2 } } }
+$t = Tree-From @(@(101, 100), @(102, 101), @(103, 101)) 100 ($T - 1000000000) $sb @{}
+$out += ((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
+$out -join ' '
+PS
+_rt=$(fw_fn Tree-From "$FW/fn-reused.ps1")
+if [ "$_rt" = '100:True 100:True 100,101,102:False 100,102:True 100,101,102:True' ]; then ok "fleet: a process started by a later holder of the ended run's id is never taken"
+else bad "fleet: a process started by a later holder of the ended run's id is never taken" "$_rt"; fi
+# The same through the stop itself: the run has ended, and its id names a process started after that,
+# whose child the stop must leave alone. The run's last sighting is its exit time, not the stop's start.
+cat > "$FW/fn-stopr.ps1" <<'PS'
+$script:FlStopSecs = 3; $FlTest = $true; $env:GIRD_CHECK_FLEET_NOSTOP = '1'
+$ps = (Get-Process -Id $PID).Path
+$root = [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command exit 0')
+$rs = [long]$root.StartTime.ToUniversalTime().Ticks
+$root.WaitForExit(); Start-Sleep -Milliseconds 300
+$ex = [long]$root.ExitTime.ToUniversalTime().Ticks
+$seen = Run-Seen $root
+function Proc-Pairs([int]$r, [int]$secs) { $l = New-Object System.Collections.Generic.List[object]; $l.Add(@(4242420, $r)); , $l }
+function Proc-Start([int]$id) { if ($id -eq $root.Id) { $ex + 10000 } elseif ($id -eq 4242420) { $ex + 20000 } else { [long]-2 } }
+$orig = ${function:Tree-From}; $script:taken = @()
+function Tree-From { $r = & $orig @args; $script:taken += @($r.In); $r }
+$left = Stop-Tree $root $rs
+"$($seen -eq $ex) $left $((@($script:taken | Sort-Object -Unique) | Where-Object { $_ -ne $root.Id }).Count)"
+PS
+_sr=$(fw_fn Stop-Tree,Tree-From,Proc-Start,Run-Seen "$FW/fn-stopr.ps1")
+if [ "$_sr" = 'True True 0' ]; then ok "fleet: an ended run's last sighting is its exit time, and the stop leaves the next holder's child alone"
+else bad "fleet: an ended run's last sighting is its exit time, and the stop leaves the next holder's child alone" "$_sr"; fi
 # The stop, the system's process list included, ends within its budget, and what it could not confirm
 # stopped is reported. Here the list takes 2 seconds each time and names one more process each time.
 cat > "$FW/fn-stopt.ps1" <<'PS'
@@ -3884,7 +3931,7 @@ $w.Stop()
 foreach ($k in @($kids) + @($root)) { try { $k.Kill() } catch { } }
 "$left $([int][Math]::Ceiling($w.Elapsed.TotalSeconds))"
 PS
-_st=$(fw_fn Stop-Tree,Tree-From,Proc-Start "$FW/fn-stopt.ps1")
+_st=$(fw_fn Stop-Tree,Tree-From,Proc-Start,Run-Seen "$FW/fn-stopt.ps1")
 if [ "${_st%% *}" = True ] && [ "${_st##* }" -le 4 ] 2> /dev/null; then ok "fleet: a stop whose process list is slow ends within its budget and reports what it could not confirm" "$_st"
 else bad "fleet: a stop whose process list is slow ends within its budget and reports what it could not confirm" "$_st"; fi
 cat > "$FW/fn-fit.ps1" <<'PS'
@@ -3992,7 +4039,7 @@ MV=$WORK/mv; mkdir -p "$MV"
 mv_case() { # name file lines...: an -AccountRun on a home holding that file; prints its moved= value
   _n=$1; _f=$2; shift 2; mkdir -p "$MV/$_n/AppData/Local/Temp" "$MV/$_n/AppData/Roaming" "$(dirname "$MV/$_n/$_f")"
   printf '%s\n' "$@" > "$MV/$_n/$_f"
-  printf '%s=%s\n' "$_n" "$(psrun "$MV/$_n" -- -AccountRun 2> /dev/null | sed -n 's/^moved=//p')"
+  printf '%s=%s\n' "$_n" "$(psrun "$MV/$_n" ${MVENV:+"$MVENV"} -- -AccountRun 2> /dev/null | sed -n 's/^moved=//p')"
 }
 PSP=Documents/PowerShell/Microsoft.PowerShell_profile.ps1
 { mv_case pluseq "$PSP" '$env:CODEX_HOME += "\codex"'
@@ -4022,23 +4069,109 @@ mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='
 } > "$MV/plain.txt"
 if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 8 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
 else bad "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing" "$(grep -v '=0$' "$MV/plain.txt" | tr '\n' ' ')"; fi
-# A file a profile sources is read one level down when it is a regular file in the home. One that
-# can't be followed (elsewhere, a link, or sourced from a sourced file) counts only in a file that
-# names a listed variable.
+# A file a profile sources is read too, to any depth, wherever it is on a local disk. One that is there
+# but can't be followed or read counts only where some file read names a listed variable.
 mkdir -p "$MV/follow/Documents/PowerShell" "$MV/outside"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/follow/Documents/PowerShell/env.ps1"
 mkdir -p "$MV/link"; printf 'alias x=y\n' > "$MV/outside/env.sh"; ln -s "$MV/outside/env.sh" "$MV/link/.env.sh"
-mkdir -p "$MV/nested"; printf '%s\n' 'echo "$CODEX_HOME"' '. /nonexistent/blindspot/env.sh' > "$MV/nested/.env.sh"
+mkdir -p "$MV/nested"; printf '%s\n' 'echo "$CODEX_HOME"' '. ~/.env2.sh' > "$MV/nested/.env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/nested/.env2.sh"
 mkdir -p "$MV/aliases"; printf 'alias ll="ls -l"\n' > "$MV/aliases/.bash_aliases"
+mkdir -p "$MV/unread"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/unread/.secret.sh"; chmod 000 "$MV/unread/.secret.sh"
 { mv_case follow "$PSP" '. "$PSScriptRoot\env.ps1"'
-  mv_case elsewhere .bashrc 'export NVM_DIR="$HOME/.nvm"' '. /nonexistent/blindspot/env.sh'
   mv_case link .bashrc 'echo "$NVM_DIR"' '. ~/.env.sh'
   mv_case nested .bashrc '. ~/.env.sh'
+  mv_case unread .bashrc 'echo "$NVM_DIR"' '. ~/.secret.sh'
 } > "$MV/src1.txt"
 { mv_case aliases .bashrc '[ -f ~/.bash_aliases ] && . ~/.bash_aliases'
   mv_case plainsrc .bashrc '. /nonexistent/blindspot/env.sh'
+  mv_case elsewhere .bashrc 'export NVM_DIR="$HOME/.nvm"' '. /nonexistent/blindspot/env.sh'
 } > "$MV/src0.txt"
-if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 2 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
+chmod 600 "$MV/unread/.secret.sh"
+if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
 else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# Each way a profile can reach a file that moves a folder: from outside the home, two files down, by
+# & or Import-Module of a path, through a module's manifest, in a loop over a folder's files, and a
+# file placed in a tool's own folder that is not the tool's own script.
+mkdir -p "$MV/ext"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ext/env.sh"
+mkdir -p "$MV/twodeep"; printf '. ~/.b.sh\n' > "$MV/twodeep/.a.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/twodeep/.b.sh"
+mkdir -p "$MV/impmod/Documents/PowerShell/Modules/corp"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/impmod/Documents/PowerShell/Modules/corp/corp.psm1"
+mkdir -p "$MV/amp/Documents/PowerShell"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/amp/Documents/PowerShell/setenv.ps1"
+mkdir -p "$MV/psd1/tools/corp"; printf '%s\n' '@{' "  RootModule = 'corp.psm1'" "  ModuleVersion = '1.0'" '}' > "$MV/psd1/tools/corp/corp.psd1"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/psd1/tools/corp/corp.psm1"
+mkdir -p "$MV/loop/.bashrc.d"; printf 'alias k=kubectl\n' > "$MV/loop/.bashrc.d/00-alias.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/loop/.bashrc.d/10-codex.sh"
+mkdir -p "$MV/psloop/Documents/PowerShell/profile.d"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/psloop/Documents/PowerShell/profile.d/codex.ps1"
+mkdir -p "$MV/ownfolder/.nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ownfolder/.nvm/extra.sh"
+{ mv_case outside .bashrc ". '$MV/ext/env.sh'"
+  mv_case twodeep .bashrc '. ~/.a.sh'
+  mv_case impmod "$PSP" 'Import-Module "$env:USERPROFILE\Documents\PowerShell\Modules\corp\corp.psm1"'
+  mv_case amp "$PSP" '& "$PSScriptRoot\setenv.ps1"'
+  mv_case psd1 "$PSP" 'Import-Module -Force "$HOME\tools\corp\corp.psd1"'
+  mv_case loop .bashrc 'for f in ~/.bashrc.d/*.sh; do . "$f"; done'
+  mv_case psloop "$PSP" 'Get-ChildItem "$PSScriptRoot\profile.d\*.ps1" | ForEach-Object { . $_.FullName }'
+  mv_case ownfolder .bashrc '[ -s "$NVM_DIR/extra.sh" ] && . "$NVM_DIR/extra.sh"'
+} > "$MV/reach.txt"
+if [ "$(grep -c '=1$' "$MV/reach.txt")" -eq 8 ]; then ok "fleet: a folder moved in a file sourced from outside the home, two files down, by & or Import-Module, or in a sourcing loop counts"
+else bad "fleet: a folder moved in a file sourced from outside the home, two files down, by & or Import-Module, or in a sourcing loop counts" "$(grep -v '=1$' "$MV/reach.txt" | tr '\n' ' ')"; fi
+# What reads partly checked on an ordinary PC for no reason: a tool's folder set to the folder the check
+# reads, a listed name in a comment, asdf 0.16's lines, source <(...), a file sourced from outside the
+# home beside a line that only reads a listed variable, and files that source each other.
+mkdir -p "$MV/Program Files/Corp"; printf '%s\n' 'Set-Alias k kubectl' '$env:CORP_TOOLS = "C:\Corp\bin"' > "$MV/Program Files/Corp/init.ps1"
+mkdir -p "$MV/cycle"; printf '%s\n' '. ~/.bashrc' 'echo "$NVM_DIR"' > "$MV/cycle/.a.sh"
+{ mv_case bun .bashrc '# bun' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case volta "$PSP" '$env:VOLTA_HOME = "$env:LOCALAPPDATA\Volta"'
+  mv_case voltash .bashrc 'export VOLTA_HOME="$HOME/.volta"' 'export PATH="$VOLTA_HOME/bin:$PATH"'
+  mv_case npmpfx "$PSP" '$env:NPM_CONFIG_PREFIX = "$env:APPDATA\npm"'
+  mv_case npmpfxsh .bashrc 'export NPM_CONFIG_PREFIX=~/.npm-global' 'export PATH=~/.npm-global/bin:$PATH'
+  mv_case comment .bashrc "alias ll='ls -l'  # CODEX_HOME stays where it is"
+  mv_case pscomment "$PSP" 'Set-Alias g git # sets nothing, not even CLAUDE_CONFIG_DIR' '<#' '$env:CODEX_HOME = "D:\old"' '#>'
+  mv_case xdg .bashrc 'export XDG_CONFIG_HOME="$HOME/.config"'
+  mv_case asdf16 .bashrc 'export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"' '. <(asdf completion bash)'
+  mv_case procsub .bashrc 'source <(kubectl completion bash)' 'echo "$NVM_DIR"'
+  mv_case progfiles "$PSP" ". '$MV/Program Files/Corp/init.ps1'" '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case cycle .bashrc '. ~/.a.sh'
+} > "$MV/quiet.txt"
+if [ "$(grep -c '=0$' "$MV/quiet.txt")" -eq 12 ]; then ok "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing"
+else bad "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing" "$(grep -v '=0$' "$MV/quiet.txt" | tr '\n' ' ')"; fi
+# What the tools write into a profile, or a profile written for them.
+mkdir -p "$MV/bunzsh/.bun"; printf 'export BUN_INSTALL=/elsewhere\n' > "$MV/bunzsh/.bun/_bun"
+mkdir -p "$MV/asdf15/.asdf/completions"; printf '%s\n' 'export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"' 'ASDF_DATA_DIR=/elsewhere' > "$MV/asdf15/.asdf/asdf.sh"; printf 'complete -F _asdf asdf\n' > "$MV/asdf15/.asdf/completions/asdf.bash"
+mkdir -p "$MV/uv/.local/bin"; printf '%s\n' '#!/bin/sh' 'case ":${PATH}:" in' '    *:"$HOME/.local/bin":*)' '        ;;' '    *)' '        export PATH="$HOME/.local/bin:$PATH"' '        ;;' 'esac' > "$MV/uv/.local/bin/env"
+mkdir -p "$MV/choco/ProgramData/chocolatey/helpers/functions"; printf '%s\n' '$thisDirectory = (Split-Path -parent $MyInvocation.MyCommand.Definition);' '. $thisDirectory\functions\Update-SessionEnvironment.ps1' '. $thisDirectory\ChocolateyTabExpansion.ps1' 'Set-Alias refreshenv Update-SessionEnvironment' > "$MV/choco/ProgramData/chocolatey/helpers/chocolateyProfile.psm1"
+printf '%s\n' 'function Update-SessionEnvironment {' '  $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine")' '}' > "$MV/choco/ProgramData/chocolatey/helpers/functions/Update-SessionEnvironment.ps1"
+printf '%s\n' 'function script:chocoCommands { choco -h }' > "$MV/choco/ProgramData/chocolatey/helpers/ChocolateyTabExpansion.ps1"
+{ mv_case nvmwin "$PSP" 'if ($env:NVM_SYMLINK) { $env:PATH = "$env:NVM_SYMLINK;$env:PATH" }'
+  mv_case fnm "$PSP" 'fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression'
+  mv_case fnmsh .bashrc 'eval "$(fnm env --use-on-cd --shell bash)"'
+  mv_case bunzsh .bashrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case mise "$PSP" '(&mise activate pwsh) | Out-String | Invoke-Expression'
+  mv_case misesh .bashrc 'eval "$(~/.local/bin/mise activate bash)"'
+  mv_case asdf15 .bashrc '. "$HOME/.asdf/asdf.sh"' '. "$HOME/.asdf/completions/asdf.bash"'
+  mv_case uv .bashrc '. "$HOME/.local/bin/env"' 'eval "$(uv generate-shell-completion bash)"'
+  mv_case uvps "$PSP" '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
+  mv_case pipx .bashrc 'eval "$(register-python-argcomplete pipx)"' 'export PATH="$PATH:/c/Users/u/.local/bin"'
+  mv_case poetry "$PSP" '$env:Path += ";$env:APPDATA\Python\Scripts"' 'poetry completions powershell | Out-String | Invoke-Expression'
+  mv_case poshgit "$PSP" 'Import-Module posh-git' '$GitPromptSettings.DefaultPromptAbbreviateHomeDirectory = $true' "Import-Module 'C:\tools\poshgit\dahlbyk-posh-git-9bda399\src\posh-git.psd1'"
+  mv_case psrl "$PSP" 'Import-Module PSReadLine' 'Set-PSReadLineOption -PredictionSource History -EditMode Windows' 'Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete' 'Set-PSReadLineOption -HistorySavePath "$env:APPDATA\PSReadLine\history.txt"'
+  MVENV="ChocolateyInstall=$MV/choco/ProgramData/chocolatey" mv_case choco "$PSP" '# Import the Chocolatey Profile that contains the necessary code to enable' '# tab-completions to function for `choco`.' '$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"' 'if (Test-Path($ChocolateyProfile)) {' '  Import-Module "$ChocolateyProfile"' '}' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case vsdev "$PSP" 'Import-Module "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"' 'Enter-VsDevShell 3f2a1b0c -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"' "& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64"
+  mv_case corp "$PSP" '$env:HTTPS_PROXY = "http://proxy.example.com:8080"' '$env:NO_PROXY = "localhost,127.0.0.1,.example.com"' 'function prompt { "[$env:USERNAME@$env:COMPUTERNAME] $(Get-Location)> " }' '. "\\fileserver\it$\profile\corp.ps1"' 'Set-Location $HOME'
+} > "$MV/tools.txt"
+if [ "$(grep -c '=0$' "$MV/tools.txt")" -eq 16 ]; then ok "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing"
+else bad "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing" "$(grep -v '=0$' "$MV/tools.txt" | tr '\n' ' ')"; fi
+# The caps: 64 files and 16 MiB read in all, and no file over 16 MiB. Past one, moved is 1 only where a
+# file read names a listed variable.
+for h in chain chainn; do mkdir -p "$MV/$h/.c"; for i in $(seq 1 70); do printf '. ~/.c/%s.sh\n' "$((i + 1))" > "$MV/$h/.c/$i.sh"; done; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.c/71.sh"; done
+for h in big bign; do mkdir -p "$MV/$h"; for f in a b; do awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 9437; i++) print s }' > "$MV/$h/.$f.sh"; done; done
+for h in huge hugen; do mkdir -p "$MV/$h"; awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 17000; i++) print s }' > "$MV/$h/.h.sh"; done
+{ mv_case chain .bashrc '. ~/.c/1.sh'
+  mv_case big .bashrc '. ~/.a.sh' '. ~/.b.sh'
+  mv_case huge .bashrc '. ~/.h.sh'
+} > "$MV/cap0.txt"
+{ mv_case chainn .bashrc 'echo "$NVM_DIR"' '. ~/.c/1.sh'
+  mv_case bign .bashrc 'echo "$NVM_DIR"' '. ~/.a.sh' '. ~/.b.sh'
+  mv_case hugen .bashrc 'echo "$NVM_DIR"' '. ~/.h.sh'
+} > "$MV/cap1.txt"
+rm -rf "$MV/big" "$MV/bign" "$MV/huge" "$MV/hugen"
+if [ "$(grep -c '=0$' "$MV/cap0.txt")" -eq 3 ] && [ "$(grep -c '=1$' "$MV/cap1.txt")" -eq 3 ]; then ok "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named"
+else bad "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named" "$(cat "$MV/cap0.txt" "$MV/cap1.txt" | tr '\n' ' ')"; fi
 
 # blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
 mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf/"

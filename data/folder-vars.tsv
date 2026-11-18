@@ -2,49 +2,55 @@
 # mode does not run the person's shell or PowerShell profiles, so a variable set only there is not
 # followed: the run reads each profile as text, never runs it, and leaves the account partly checked
 # when one sets a variable below. One line each, tab separated. After editing, run: bash tools/gen.sh
-#   name  the variable, as the agent or tool reads it
-#   kind  agent: it moves an agent's own folders, so setting it anywhere counts.
-#         tool: an npm or Python tool's folder, which counts only when set to somewhere other than the
-#         folder the check reads when it is not set (an installer can write that default into a profile).
-# name	kind
-CLAUDE_CONFIG_DIR	agent
-CODEX_HOME	agent
-CODEX_SQLITE_HOME	agent
-GEMINI_CLI_HOME	agent
-QWEN_HOME	agent
-COPILOT_HOME	agent
-CLINE_DIR	agent
-CLINE_DATA_DIR	agent
-CLINE_SESSION_DATA_DIR	agent
-CONTINUE_GLOBAL_DIR	agent
-GOOSE_PATH_ROOT	agent
-KIRO_HOME	agent
-XDG_CONFIG_HOME	agent
-XDG_DATA_HOME	agent
-XDG_STATE_HOME	agent
-NVM_DIR	tool
-VOLTA_HOME	tool
-BUN_INSTALL	tool
-BUN_INSTALL_GLOBAL_DIR	tool
-N_PREFIX	tool
-ASDF_DATA_DIR	tool
-MISE_DATA_DIR	tool
-MISE_INSTALLS_DIR	tool
-MAMBA_ROOT_PREFIX	tool
-PIPX_HOME	tool
-PIPX_GLOBAL_HOME	tool
-WORKON_HOME	tool
-UV_CACHE_DIR	tool
-UV_TOOL_DIR	tool
-UV_PYTHON_INSTALL_DIR	tool
-POETRY_CACHE_DIR	tool
-POETRY_VIRTUALENVS_PATH	tool
-HATCH_DATA_DIR	tool
-XDG_CACHE_HOME	tool
-npm_config_prefix	tool
-NPM_CONFIG_PREFIX	tool
-npm_config_userconfig	tool
-NPM_CONFIG_USERCONFIG	tool
-CLINE_PROVIDER_SETTINGS_PATH	tool
-QWEN_RUNTIME_DIR	tool
-PNPM_HOME	tool
+#   name     the variable, as the agent or tool reads it
+#   kind     agent: it moves an agent's own folders. gird-check.sh counts it set anywhere.
+#            tool: an npm or Python tool's folder, which counts only when set to somewhere other than
+#            a folder the check reads when it is not set (an installer can write that default into a
+#            profile).
+#   sh       those folders for gird-check.sh, separated by ;, from ~, or - for none.
+#   windows  those folders for gird-check.ps1, which counts any variable set to one of them as not
+#            moved: from ~, {LOCALAPPDATA} or {APPDATA}, or - for none.
+#   scripts  the tool's own scripts in its folder, which gird-check.ps1 does not read when a profile
+#            sources them from there: each sets the tool's variable to the folder it is in. - for none.
+# name	kind	sh	windows	scripts
+CLAUDE_CONFIG_DIR	agent	-	-	-
+CODEX_HOME	agent	-	-	-
+CODEX_SQLITE_HOME	agent	-	-	-
+GEMINI_CLI_HOME	agent	-	-	-
+QWEN_HOME	agent	-	-	-
+COPILOT_HOME	agent	-	-	-
+CLINE_DIR	agent	-	-	-
+CLINE_DATA_DIR	agent	-	-	-
+CLINE_SESSION_DATA_DIR	agent	-	-	-
+CONTINUE_GLOBAL_DIR	agent	-	-	-
+GOOSE_PATH_ROOT	agent	-	-	-
+KIRO_HOME	agent	-	-	-
+XDG_CONFIG_HOME	agent	-	~/.config	-
+XDG_DATA_HOME	agent	-	~/.local/share	-
+XDG_STATE_HOME	agent	-	-	-
+NVM_DIR	tool	~/.nvm	~/.nvm	nvm.sh;bash_completion
+VOLTA_HOME	tool	~/.volta	{LOCALAPPDATA}/Volta;~/.volta	-
+BUN_INSTALL	tool	~/.bun	~/.bun	_bun
+BUN_INSTALL_GLOBAL_DIR	tool	-	-	-
+N_PREFIX	tool	~/n	~/n	-
+ASDF_DATA_DIR	tool	~/.asdf	~/.asdf	asdf.sh;asdf.fish;completions/asdf.bash
+MISE_DATA_DIR	tool	~/.local/share/mise	{LOCALAPPDATA}/mise	-
+MISE_INSTALLS_DIR	tool	-	-	-
+MAMBA_ROOT_PREFIX	tool	~/micromamba	~/micromamba	-
+PIPX_HOME	tool	~/.local/pipx;~/.local/share/pipx	~/.local/pipx;~/pipx;{LOCALAPPDATA}/pipx	-
+PIPX_GLOBAL_HOME	tool	-	-	-
+WORKON_HOME	tool	~/.virtualenvs;~/.local/share/virtualenvs	~/.virtualenvs;~/Envs	-
+UV_CACHE_DIR	tool	~/.cache/uv	{LOCALAPPDATA}/uv/cache;~/.cache/uv	-
+UV_TOOL_DIR	tool	-	-	-
+UV_PYTHON_INSTALL_DIR	tool	-	-	-
+POETRY_CACHE_DIR	tool	~/Library/Caches/pypoetry;~/.cache/pypoetry	{LOCALAPPDATA}/pypoetry/Cache	-
+POETRY_VIRTUALENVS_PATH	tool	~/Library/Caches/pypoetry/virtualenvs;~/.cache/pypoetry/virtualenvs	{LOCALAPPDATA}/pypoetry/Cache/virtualenvs	-
+HATCH_DATA_DIR	tool	~/Library/Application Support/hatch;~/.local/share/hatch	{LOCALAPPDATA}/hatch	-
+XDG_CACHE_HOME	tool	~/.cache	-	-
+npm_config_prefix	tool	~/.npm-global	{APPDATA}/npm;~/.npm-global	-
+NPM_CONFIG_PREFIX	tool	~/.npm-global	{APPDATA}/npm;~/.npm-global	-
+npm_config_userconfig	tool	-	-	-
+NPM_CONFIG_USERCONFIG	tool	-	-	-
+CLINE_PROVIDER_SETTINGS_PATH	tool	-	-	-
+QWEN_RUNTIME_DIR	tool	-	-	-
+PNPM_HOME	tool	~/Library/pnpm;~/.local/share/pnpm	{LOCALAPPDATA}/pnpm	-

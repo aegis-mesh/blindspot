@@ -277,12 +277,13 @@ function Proc-Start([int]$id) {
   try { return [long]$p.StartTime.ToUniversalTime().Ticks } catch { return [long]-1 } finally { $p.Dispose() }
 }
 # The processes under ROOT. Windows keeps only each process's parent id, and gives that id to a new
-# process once the parent ends, so a process is under ROOT only when its parent is and it started no
-# earlier than that parent; and when the parent's id no longer names that parent, only when it started
-# no later than the last time the parent was seen running (ALIVE, by id, in UTC ticks, kept from pass
-# to pass), since a later holder of the id may have started it. A process that cannot be proven either
-# way, or that looks older than its parent (the clock was set back, or its parent's id was reused), is
-# not taken, and Unsure says so.
+# process once the parent ends, so a process is under ROOT only when its parent is and it started after
+# that parent. When the parent's id no longer names that parent, a later holder of the id may have
+# started the child, so it counts only when it started before the last time the parent was seen running
+# (ALIVE, by id, in UTC ticks: the run's exit time from its own handle, or the moment a process was
+# looked up and found with its own start time) and before the id's present holder started. A process
+# that cannot be proven either way, or that looks no younger than its parent (the clock was set back,
+# or its parent's id was reused), is not taken, and Unsure says so.
 function Tree-From($pairs, [int]$root, [long]$rootStart, [scriptblock]$startOf, [hashtable]$alive) {
   $kids = @{}
   foreach ($q in $pairs) { if (-not $kids.ContainsKey($q[1])) { $kids[$q[1]] = New-Object System.Collections.Generic.List[int] }; $kids[$q[1]].Add($q[0]) }
@@ -298,12 +299,19 @@ function Tree-From($pairs, [int]$root, [long]$rootStart, [scriptblock]$startOf, 
       if ($c -eq $par -or $st.ContainsKey($c)) { continue }
       $at = [DateTime]::UtcNow.Ticks; $cs = [long](& $startOf $c)
       if ($cs -eq -2) { continue }
-      if ($cs -lt 0 -or $ps -lt 0 -or $cs -lt $ps) { $unsure = $true; continue }
-      if ($now -ne $ps -and $cs -gt $seen) { $unsure = $true; continue }
+      if ($cs -lt 0 -or $ps -lt 0 -or $cs -le $ps) { $unsure = $true; continue }
+      if ($now -ne $ps -and ($seen -lt 0 -or $cs -ge $seen -or $now -eq -1 -or ($now -ge 0 -and $cs -ge $now))) { $unsure = $true; continue }
       $in.Add($c); $st[$c] = $cs; $alive[$c] = $at
     }
   }
   @{ In = $in; Start = $st; Unsure = $unsure }
+}
+# When the account run was last known to be running, in UTC ticks, from its own handle: now while it
+# runs, its exit time once it has ended, -1 when neither can be read.
+function Run-Seen([Diagnostics.Process]$proc) {
+  $at = [DateTime]::UtcNow.Ticks
+  try { if (-not $proc.HasExited) { return [long]$at } } catch { return [long]-1 }
+  try { return [long]$proc.ExitTime.ToUniversalTime().Ticks } catch { return [long]-1 }
 }
 # Stops the account run and every process proven to be under it, each by its id once its start time is
 # checked again; nothing is stopped by its tree alone. The whole stop, the system's process list
@@ -312,7 +320,7 @@ function Tree-From($pairs, [int]$root, [long]$rootStart, [scriptblock]$startOf, 
 function Stop-Tree([Diagnostics.Process]$proc, [long]$rootStart) {
   $nostop = $FlTest -and $env:GIRD_CHECK_FLEET_NOSTOP -eq '1'
   $stopEnd = [DateTime]::UtcNow.AddSeconds($script:FlStopSecs)
-  $known = @{}; $alive = @{ $proc.Id = [DateTime]::UtcNow.Ticks }; $unsure = $false; $more = $true; $pass = 0
+  $known = @{}; $alive = @{}; $rs = Run-Seen $proc; if ($rs -ge 0) { $alive[$proc.Id] = $rs }; $unsure = $false; $more = $true; $pass = 0
   while ($more -and $pass -lt 4) {
     $secs = [int][Math]::Floor(($stopEnd - [DateTime]::UtcNow).TotalSeconds) - 1
     if ($secs -lt 1) { break }

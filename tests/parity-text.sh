@@ -10,8 +10,8 @@
 #
 #   bash tests/parity-text.sh [run.sh run-ps.sh bash-only.txt payload.py ps-skips.txt]
 #
-# A reason in bash-only.txt or ps-skips.txt that names a test in single quotes ('a test') must
-# name one that run.sh or run-ps.sh has.
+# A reason in bash-only.txt or ps-skips.txt that cites a test ("tested as 'a test'", "run-ps.sh's
+# 'a test'", and "and 'another'" right after a citation) must name one that run.sh or run-ps.sh has.
 #
 # Names are read from ok, has, hasnot, hasi, nokeys, skip and gen_refuses calls, and, for each
 # "payload_checks MODE" call, from that mode's check() calls in tests/payload.py, and compared as
@@ -204,15 +204,20 @@ LC_ALL=C comm -23 "$W/bash" "$W/ps" | LC_ALL=C comm -23 - "$W/only" | sed 's/^/ 
 LC_ALL=C comm -23 "$W/only" "$W/bash" | sed 's/^/  bash-only.txt names a test run.sh does not have: /' >> "$W/report"
 LC_ALL=C comm -12 "$W/only" "$W/ps" | LC_ALL=C comm -12 - "$W/bash" | sed 's/^\(.*\)$/  bash-only.txt lists \1, but run-ps.sh has it: remove the line/' >> "$W/report"
 # A quoted span opens after a space or ( and closes before a space, , ; : . ) or the line's end,
-# so the apostrophe in "an agent's" is not a quote.
+# so the apostrophe in "an agent's" is not a quote. It is a citation only after "tested as ",
+# "run.sh's " or "run-ps.sh's ", or after " and " that follows a citation: other quoted words are text.
 for f in "bash-only.txt:$ONLY" "ps-skips.txt:$PSK"; do
   grep -v '^#' "${f#*:}" | grep "$T" | cut -f2- | LC_ALL=C awk -v SQ="'" '{
-    s = $0; n = length(s); i = 1
+    s = $0; n = length(s); i = 1; last = 0
     while (i <= n) {
       c = substr(s, i, 1)
       if (c == SQ && (i == 1 || substr(s, i - 1, 1) ~ /[ (]/)) {
         for (j = i + 1; j <= n; j++) if (substr(s, j, 1) == SQ && (j == n || substr(s, j + 1, 1) ~ /[ ,;:.)]/)) break
-        if (j <= n) { print substr(s, i + 1, j - i - 1); i = j + 1; continue }
+        if (j <= n) {
+          pre = substr(s, 1, i - 1)
+          if (pre ~ ("(tested as|run\\.sh" SQ "s|run-ps\\.sh" SQ "s) $") || (last && substr(s, last + 1, i - last - 1) ~ /^,? and $/)) { print substr(s, i + 1, j - i - 1); last = j } else last = 0
+          i = j + 1; continue
+        }
       }
       i++
     }

@@ -285,14 +285,23 @@ PC, so an admin can see what one run left out.
     `set -x X ...`) of the value the run sees. So a form the check does not know, such as `+=`,
     `New-Item -Path Env: -Name X`, `export A=1 X=2` or `declare -x X=...`, counts as `1`. A tool's
     variable that the run does not have is seen as the folder the check reads without it. A value
-    the check can't work out, such as one built by a command, counts as `1`. A file a profile
-    sources (`. file`, `source file`) is read the same way, one level down, when it is a regular
-    file in the home folder. One that can't be followed, because it is elsewhere, is a link, can't
-    be read or is sourced from a sourced file, counts as `1` only in a file that also names a
-    variable of the list: profiles commonly source completion scripts from system folders, and a
-    profile that names none of the variables gives no reason to think the sourced file moves one.
-    A tool's own script sourced from that tool's folder, such as `$NVM_DIR/nvm.sh`, is not read: it
-    sets the tool's variable to the folder it is in, the one the check reads.
+    the check can't work out, such as one built by a command, counts as `1`. Each file a profile
+    sources is read the same way, to any depth: `. file`, `source file`, a loop that sources
+    each file of a folder, and in PowerShell `& file.ps1`, `Import-Module` of a `.ps1`, `.psm1`
+    or `.psd1` file and a manifest's `RootModule`. Only an existing regular file on a local disk
+    is read, as text: never a link, a network path, a device or pipe, or a cloud file not on the
+    disk. At most 64 files and 16 MiB in all are read, and no file over 16 MiB, the limit the
+    check keeps for profiles. A sourced file that is there but can't be followed or read, or a
+    limit reached, counts as `1` only when some file read names a variable of the list: an
+    ordinary setup sources completion scripts and plugins by the dozen, and one that names none of
+    the variables gives no reason to think the rest moves one. A tool's own script in its own
+    folder (`$NVM_DIR/nvm.sh`, the `scripts` column of `data/folder-vars.tsv`) is not read: it sets
+    the tool's variable to the folder it is in, the one the check reads. Any other file in that
+    folder is read. A variable set to one of the folders in that file's `windows` column, the
+    folders the check reads, counts as not moved; `tools/gen.sh` writes them, and gird-check.sh's
+    `sh` column, into the scripts. A setting made by running a command is not seen: what a command
+    prints for the shell to run (`eval "$(...)"`, `source <(...)`, `... | Invoke-Expression`), or a
+    module imported by name.
   - `tmp_marks` is always empty and `tmp_wiper` always `0`. Windows has no shared `/tmp`. A marker
     in `%ProgramData%` is judged by its owner instead: see step 6 under "How a run goes".
   An account run in the reduced language prints only `language_mode=1`.
@@ -390,11 +399,15 @@ The script then:
    under it. `-Deadline` sets the limit in seconds. It is 1500 when not given, to finish inside the
    30 minutes Intune allows a script. What was found by then still counts, and the account is
    partly checked. Windows keeps only each process's parent id, and gives an ended process's id to
-   new processes. So a process counts as under the run only when its parent does and it started no
-   earlier than that parent; and when the parent has ended or its id now names a later process,
-   only when it started no later than the last time the parent was seen running, since a later
-   holder of the id may have started it. A process that looks older than its parent (the clock was set back, or
-   the parent's id was reused) is not stopped either. Each is stopped by its id once its start
+   new processes. So a process counts as under the run only when its parent does and it started
+   after that parent. When the parent has ended or its id now names a later process, it counts
+   only when it also started before the last time the parent was seen running and before the
+   id's present holder started, since a later holder of the id may have started it. The last time
+   the parent was seen running is, for the account run, the moment the stop found it still
+   running or, once it has ended, its exit time, both read from the run's own handle; for any
+   other process, the moment it was looked up and found with its own start time. A process that
+   looks no younger than its parent (the clock was set back, or the parent's id was reused) is not
+   stopped either. Each is stopped by its id once its start
    time is checked again. A process that can't be proven either way is never stopped. It is
    reported as left running, with any process still running after the stop. The whole stop,
    reading the system's process list included, ends within 10 seconds, kept back from the account
@@ -521,11 +534,17 @@ Graph, never a real tenant.
 - A marker in `%ProgramData%` owned by an ordinary account is a possible sign, not a finding; one
   the person owns is a finding on their row; one with two names is a possible sign for the PC.
 - Only a process proven to be under the account run is stopped: not one older than its parent,
-  nor one an ended parent's id may have started after the parent was last seen. The stop ends
+  nor one an ended parent's id may have started after the parent was last seen, nor a child of a
+  process that took the ended run's id; an ended run was last seen at its exit time. The stop ends
   within its time even when the process list is slow, and says what it could not confirm.
 - A profile that moves an agent's folders leaves the account partly checked, in a form the check
-  does not know too, and in a file the profile sources. What nvm, pnpm, conda, oh-my-posh and
-  starship write into a profile moves nothing.
+  does not know too, and in a file it sources from outside the home, two files down, by `&`,
+  `Import-Module` or a manifest, in a sourcing loop, or placed in a tool's own folder. Past 64
+  files or 16 MiB read, it does only where a listed variable was named.
+- What nvm, nvm-windows, fnm, Volta, pnpm, bun, conda, mise, asdf (0.16 too), uv, pipx, Poetry,
+  oh-my-posh, starship, posh-git, PSReadLine, Chocolatey, the Visual Studio developer shell and a
+  corporate profile write moves nothing; nor does a default folder, a listed name in a comment,
+  `source <(...)`, a file sourced from outside the home, or files that source each other.
 - A session in Constrained Language Mode: `failed`, with `reason=language_mode`.
 - A 32-bit PowerShell: `failed`, with `reason=host_32bit`.
 - A profile that would print or change something does not run.
