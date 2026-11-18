@@ -1145,8 +1145,9 @@ Graph, never a real tenant.
   `gird-check.sh`, the script each person runs, holds no root code: it keeps `--account-run`, the
   fixed lines one account's check sends back, and given `--all-users` it points to `gird-fleet.sh`.
   Root never sources `gird-check.sh`: `tools/gen.sh` writes the tables root reads (keys, agents set
-  to run without asking, incidents, indicators, outdated tools, platforms) into `gird-fleet.sh` from
-  `data/`, and copies `gird-check.sh`'s agents table, which has no data file; `--check` covers both.
+  to run without asking, incidents, indicators, outdated tools, platforms, the agents, and the keys
+  of the lines an account run sends) into `gird-fleet.sh` from `data/`; `--check` covers them, and
+  fails when the lines `gird-check.sh` prints are not those of `data/account-run.tsv`.
 - `gird-fleet.sh` needs to run from a file, since it copies `gird-check.sh` from its own folder for
   each account; from standard input it stops with a message. Root refuses to start (exit 13) unless
   `gird-fleet.sh`, `gird-check.sh` next to it and every folder above them are owned by root and

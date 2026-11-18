@@ -338,7 +338,7 @@ Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.ini
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
-# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
@@ -585,7 +585,9 @@ FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
+# >>> account-run-keys: generated from data/account-run.tsv by tools/gen.sh. Edit that file, then run it.
 FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected engine end"
+# <<< account-run-keys
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do

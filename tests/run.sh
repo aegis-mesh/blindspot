@@ -92,6 +92,13 @@ sed 's/^    else case "\${_oo_m#\* }" in ??\[2367\]?|???\[2367\]) return 1 ;; es
 if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
 else bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "$(cat "$WORK/ow.txt")"; fi
+# The lines an account run prints have one home, data/account-run.tsv: the readers are written from it,
+# and a printer that sends another key, or the keys in another order, fails gen.sh --check.
+mkdir -p "$WORK/ar"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ar/"
+sed 's/^    echo "moved=\$_moved"$/    echo "folders_moved=$_moved"/' gird-check.sh > "$WORK/ar/gird-check.sh"
+if cmp -s gird-check.sh "$WORK/ar/gird-check.sh"; then bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "the edit did not apply"
+elif ! (cd "$WORK/ar" && bash tools/gen.sh --check > "$WORK/ar.txt" 2>&1) && grep -q 'gird-check.sh --account-run prints' "$WORK/ar.txt"; then ok "an account-run line not in data/account-run.tsv fails gen.sh --check"
+else bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "$(cat "$WORK/ar.txt")"; fi
 
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
@@ -3125,6 +3132,9 @@ gen_refuses "a platform advice with a \$"               platforms.tsv "railway${
 gen_refuses "a platform with another found word"        platforms.tsv "railway${T}X${T}x${T}~/.x/${T}present${T}advice${T}summary"
 gen_refuses "a platform path that is only the home"     platforms.tsv "railway${T}X${T}x${T}~${T}CLI found${T}advice${T}summary"
 gen_refuses "a folder variable line without its folders" folder-vars.tsv "ZZ_DIR${T}tool"
+gen_refuses "an agent path from a place the scripts do not know" agents.tsv "Made${T}-${T}{NOPE}/x${T}-${T}-${T}-${T}made"
+gen_refuses "an MCP config of an app not in the list"   mcp-files.tsv "Made${T}nosuch${T}~/.made.json${T}~/.made.json"
+gen_refuses "an MCP server alias that is another server's id" mcp-servers.tsv "madeup${T}github"
 gen_refuses "a folder variable's folder outside the home" folder-vars.tsv "ZZ_DIR${T}tool${T}/opt/zz${T}-${T}-"
 gen_refuses "a folder variable's Windows folder with a \$" folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}{LOCALAPPDATA}/\$x${T}-"
 gen_refuses "a tool's own script outside its folder"     folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}-${T}../x.sh"

@@ -510,20 +510,14 @@ function Providers-In([string]$f, [string]$minus = '') {
 # file name or a name you gave an MCP server. gird.ai keeps the same lists and
 # drops anything else, so change all three together.
 # ---------------------------------------------------------------------------
+# MCP apps (data/mcp-clients.tsv), well-known MCP servers and the labels that mean them
+# (data/mcp-servers.tsv), and kinds of file (data/key-places.tsv).
+# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it.
 $MCP_CLIENT_IDS = 'claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other'
-$MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
-  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
-  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
-  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
-  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
-  shadcn deepwiki neon prisma netlify heroku azure huggingface'
-$MCP_ALIASES = 'gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
-  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
-  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
-  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
-  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
-  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface'
+$MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster shadcn deepwiki neon prisma netlify heroku azure huggingface'
+$MCP_ALIASES = 'gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres sqlite3=sqlite mongo=mongodb browserbasehq=browserbase notionhq=notion figma-dev-mode=figma figma-developer=figma brave=brave-search perplexity-ask=perplexity sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface'
 $KEY_PLACE_IDS = 'shell_rc shell_history env_file mcp_config agent_config project_file other'
+# <<< report-lists
 function Ids([string]$list) { , ($list -split '\s+' | Where-Object { $_ }) }
 
 # The well-known ids among MCP server labels, in list order, and how many labels
@@ -1384,10 +1378,9 @@ $ProjectMcp = @(@($Found) + @($LinkFiles) | Where-Object { $n = [IO.Path]::GetFi
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 
 # --- 1. Coding agents --------------------------------------------------------
-# name | commands (separated by ;) | install paths | folders that change when it is used | id
-# Windsurf became Devin Desktop on 2 June 2026: the devin-desktop command, and editor data under Devin,
-# not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
-# >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.ps1.
+# name | commands (separated by ;) | install paths | folders that change when it is used | id, from
+# data/agents.tsv
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
@@ -1400,8 +1393,7 @@ $Agents = @(
   @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
   @('Goose', 'goose', @((J $AppData 'Block/goose')), @($GooseData), 'goose'),
   @('Aider', 'aider', @(), @(), 'aider'),
-  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')),
-    @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
+  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')), @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
   @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
 )
 # <<< agents
@@ -1431,13 +1423,14 @@ $N_AG = $AgentIds.Count; $N_IDLE = $IdleIds.Count
 if ($N_AG -gt 0) { Progress "Found $(Plural $N_AG 'coding agent' 'coding agents'): $(First-Names $AgNames 3)" } else { Progress 'No coding agents found' }
 
 # --- 2. MCP servers ----------------------------------------------------------
-# app | client id, from the fixed list | config file
+# app | client id, from the fixed list | config file (data/mcp-files.tsv)
+# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it.
 $McpFiles = @(
   @('Claude Code', 'claude-code', (J $HomeDir '.claude.json')),
   @('Claude Desktop', 'claude-desktop', (J $AppData 'Claude/claude_desktop_config.json')),
   @('Cursor', 'cursor', (J $HomeDir '.cursor/mcp.json')),
   @('Windsurf', 'windsurf', (J $HomeDir '.codeium/windsurf/mcp_config.json')),
-  @('Devin Desktop', 'windsurf', (J $HomeDir '.codeium/mcp_config.json')),  # Windsurf renamed (docs.devin.ai/desktop/devin-desktop-faq)
+  @('Devin Desktop', 'windsurf', (J $HomeDir '.codeium/mcp_config.json')),
   @('Codex', 'codex', (J $HomeDir '.codex/config.toml')),
   @('Gemini CLI', 'gemini-cli', (J $HomeDir '.gemini/settings.json')),
   @('VS Code', 'vscode', (J $AppData 'Code/User/mcp.json')),
@@ -1448,6 +1441,7 @@ $McpFiles = @(
   @('Goose', 'goose', (J $AppData 'Block/goose/config/config.yaml')),
   @('OpenCode', 'opencode', (J $HomeDir '.config/opencode/opencode.json'))
 )
+# <<< mcp-files
 $McpRows = New-Object System.Collections.Generic.List[object]
 $N_MCP = 0; $N_MCP_TOKEN = 0; $McpTokFirst = ''; $N_MCP_CACHE = 0; $N_MCP_CACHEF = 0
 $McpTally = @{}; $McpNames = New-Object System.Collections.Generic.List[string]; $McpTokIds = New-Object System.Collections.Generic.List[string]

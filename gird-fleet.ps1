@@ -116,7 +116,7 @@ $Inv = [Globalization.CultureInfo]::InvariantCulture
 # ---------------------------------------------------------------------------
 # The tables, written here by tools/gen.sh: never edit them here.
 # ---------------------------------------------------------------------------
-# >>> agents: copied from gird-check.ps1 by tools/gen.sh. Edit it there, then run it.
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
@@ -129,8 +129,7 @@ $Agents = @(
   @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
   @('Goose', 'goose', @((J $AppData 'Block/goose')), @($GooseData), 'goose'),
   @('Aider', 'aider', @(), @(), 'aider'),
-  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')),
-    @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
+  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')), @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
   @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
 )
 # <<< agents
@@ -143,6 +142,7 @@ $FlPlatforms = @('opencode', 'railway', 'zeabur')
 $FlProgramData = @(
   ,@('mastra', 'NodePackages/protocal.cjs')
 )
+$FlKeys = @('v', 'agents', 'yolo', 'tools', 'mcp_servers', 'mcp_token_files', 'key_files', 'key_providers', 'history_keys', 'session_files', 'sessions_partial', 'allow_list_keys', 'ssh_open', 'ak_links', 'planted', 'possible', 'incidents', 'platforms', 'on_open', 'to_read', 'updates', 'wiper', 'lock_only', 'remove', 'not_read', 'moved', 'tmp_marks', 'tmp_wiper', 'protected', 'engine', 'end')
 # <<< fleet-tables
 # >>> packed-check: written into blindspot-fleet.ps1 by tools/gen.sh; empty here, where gird-check.ps1 sits next to this file.
 $PackedCheck = ''
@@ -161,7 +161,6 @@ $FlEnd = $FlStart.AddSeconds($FlDeadline - $FlReserve)
 $FlReason = ''
 $FlOutMax = 4096
 $FlStopSecs = 10
-$FlKeys = @('v', 'agents', 'yolo', 'tools', 'mcp_servers', 'mcp_token_files', 'key_files', 'key_providers', 'history_keys', 'session_files', 'sessions_partial', 'allow_list_keys', 'ssh_open', 'ak_links', 'planted', 'possible', 'incidents', 'platforms', 'on_open', 'to_read', 'updates', 'wiper', 'lock_only', 'remove', 'not_read', 'moved', 'tmp_marks', 'tmp_wiper', 'protected', 'engine', 'end')
 
 function Sha256-Hex([byte[]]$b) {
   $sha = [Security.Cryptography.SHA256]::Create()

@@ -1,0 +1,18 @@
+# MCP apps, the fixed list mcp_clients and mcp_token_clients send (TELEMETRY.md), in the order the
+# report lists them, by the file the servers are in. gird.ai keeps the same list and drops any other
+# id, so change both together. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id      the app's id: lowercase letters, digits and -. other, for any other file, comes last
+#   files   the files it counts, for people reading this file
+# id	files
+claude-code	~/.claude.json, and .mcp.json in a project folder
+claude-desktop	Claude Desktop's claude_desktop_config.json
+cursor	~/.cursor/mcp.json, and .cursor/mcp.json in a project folder
+windsurf	~/.codeium/windsurf/mcp_config.json
+codex	~/.codex/config.toml
+gemini-cli	~/.gemini/settings.json
+vscode	VS Code's mcp.json, and .vscode/mcp.json in a project folder
+cline	Cline's cline_mcp_settings.json, in VS Code or in Cursor
+continue	~/.continue/config.json and ~/.continue/config.yaml
+goose	~/.config/goose/config.yaml
+opencode	~/.config/opencode/opencode.json
+other	any other file

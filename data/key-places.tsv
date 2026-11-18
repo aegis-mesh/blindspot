@@ -1,0 +1,13 @@
+# Kinds of file, the fixed list key_places sends (TELEMETRY.md). Each file counted in key_files gets
+# the first that fits. gird.ai keeps the same list and drops any other id, so change both together.
+# One line each, tab separated. After editing, run: bash tools/gen.sh
+#   id      the kind's id: lowercase letters, digits and _
+#   what    the files it is, for people reading this file
+# id	what
+shell_rc	~/.zshrc .zprofile .zshenv .zlogin .bashrc .bash_profile .profile, fish's config.fish
+shell_history	the shell and REPL history files, the same ones history_keys counts
+env_file	.env, .env.* and .envrc, anywhere
+mcp_config	an MCP config from the list of clients above, at home or in a project folder
+agent_config	other coding-agent settings, like ~/.claude/settings.json or ~/.aider.conf.yml
+project_file	any other file found in a project folder
+other	anything else

@@ -883,54 +883,20 @@ command_secret() {
 # Fixed lists for the case-study counts in the report. Only ids from these
 # lists, counts and yes/no leave the Mac: never a path, a file name or a name
 # you gave an MCP server. gird.ai keeps the same lists and drops anything else,
-# so change both together. Agent ids are in the table under "1. Coding agents".
+# so change both together. Agent ids are in data/agents.tsv.
 # ---------------------------------------------------------------------------
 # Key providers, for key_providers and provider_files (names in providers_in).
 
-# MCP clients, for mcp_clients and mcp_token_clients, by the file the servers are in:
-#   claude-code     ~/.claude.json, and .mcp.json in a project folder
-#   claude-desktop  Claude Desktop's claude_desktop_config.json
-#   cursor          ~/.cursor/mcp.json, and .cursor/mcp.json in a project folder
-#   windsurf        ~/.codeium/windsurf/mcp_config.json
-#   codex           ~/.codex/config.toml
-#   gemini-cli      ~/.gemini/settings.json
-#   vscode          VS Code's mcp.json, and .vscode/mcp.json in a project folder
-#   cline           Cline's cline_mcp_settings.json, in VS Code or in Cursor
-#   continue        ~/.continue/config.json and ~/.continue/config.yaml
-#   goose           ~/.config/goose/config.yaml
-#   opencode        ~/.config/opencode/opencode.json
-#   other           any other file
+# MCP apps, for mcp_clients and mcp_token_clients (data/mcp-clients.tsv); well-known MCP servers, for
+# mcp_known, and the labels that mean them (data/mcp-servers.tsv says how a server's label is matched:
+# any other label only adds one to mcp_other, and is never sent); and kinds of file, for key_places
+# (data/key-places.tsv).
+# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it.
 MCP_CLIENT_IDS="claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other"
-
-# Well-known MCP servers, for mcp_known. A server's label, its name in the
-# config, is lowercased and cut to the part after the last / (so @scope/name
-# gives name). Spaces, dots and underscores become -, and mcp- and server- come
-# off the front and -mcp and -server off the end, as often as they appear. When
-# nothing is left, as with @playwright/mcp, the part before the / is used. What
-# remains must equal an id below or an alias (alias=id). Any other label only
-# adds one to mcp_other, and is never sent.
-MCP_KNOWN_IDS="github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
-  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
-  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
-  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
-  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
-  shadcn deepwiki neon prisma netlify heroku azure huggingface"
-MCP_ALIASES="gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
-  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
-  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
-  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
-  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
-  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface"
-
-# Places, for key_places. Each file counted in key_files gets the first that fits:
-#   shell_rc       ~/.zshrc .zprofile .zshenv .zlogin .bashrc .bash_profile .profile, fish's config.fish
-#   shell_history  the shell and REPL history files, the same ones history_keys counts
-#   env_file       .env, .env.* and .envrc, anywhere
-#   mcp_config     an MCP config from the list of clients above, at home or in a project folder
-#   agent_config   other coding-agent settings, like ~/.claude/settings.json or ~/.aider.conf.yml
-#   project_file   any other file found in a project folder
-#   other          anything else
+MCP_KNOWN_IDS="github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster shadcn deepwiki neon prisma netlify heroku azure huggingface"
+MCP_ALIASES="gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres sqlite3=sqlite mongo=mongodb browserbasehq=browserbase notionhq=notion figma-dev-mode=figma figma-developer=figma brave=brave-search perplexity-ask=perplexity sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface"
 KEY_PLACE_IDS="shell_rc shell_history env_file mcp_config agent_config project_file other"
+# <<< report-lists
 
 in_list() { for _il in $2; do [ "$_il" = "$1" ] && return 0; done; return 1; } # id list
 # The well-known ids among MCP server labels ("=label" lines on stdin), in list
@@ -1227,10 +1193,8 @@ case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=w
 # Git Bash, MSYS2 and Cygwin uppercase only a few Windows variables' names (PROGRAMFILES and SYSTEMDRIVE
 # among them, their runtime's environ.cc), so ProgramData keeps its Windows spelling.
 _pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-${ProgramData:-}}"); _pd=${_pd%/}; fi
-# Coding agents: name | commands | install paths | folders that change when it is used | id
-# Windsurf became Devin Desktop on 2 June 2026: Devin.app, the devin-desktop command, and editor data
-# under Devin, not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
-# >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.sh.
+# Coding agents (data/agents.tsv): name | commands | install paths | folders that change when it is used | id
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
@@ -1854,8 +1818,8 @@ if [ "$N_AG" -gt 0 ]; then progress i "Found $(plural "$N_AG" "coding agent" "co
 else progress i "No coding agents found"; fi
 
 # --- 2. MCP servers ----------------------------------------------------------
-# app | client id, from the fixed list | config file
-# Devin Desktop, Windsurf renamed, keeps its MCP config in ~/.codeium (docs.devin.ai/desktop/devin-desktop-faq).
+# app | client id, from the fixed list | config file (data/mcp-files.tsv)
+# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it.
 MCP_FILES="Claude Code|claude-code|$H/.claude.json
 Claude Desktop|claude-desktop|$AS/Claude/claude_desktop_config.json
 Cursor|cursor|$H/.cursor/mcp.json
@@ -1870,6 +1834,7 @@ Continue|continue|$H/.continue/config.json
 Continue|continue|$H/.continue/config.yaml
 Goose|goose|$GOOSE_CFG/config.yaml
 OpenCode|opencode|$H/.config/opencode/opencode.json"
+# <<< mcp-files
 
 MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""; N_MCP_CACHE=0; N_MCP_CACHEF=0
 # Configs inside plugin catalogs and caches (Codex's .tmp/plugins, Claude's plugins folder) are
