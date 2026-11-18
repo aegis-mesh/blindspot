@@ -88,7 +88,7 @@ if grep -nE '\$([0-9]+|NF)(\+\+|--)' gird-check.sh gird-fleet.sh > "$WORK/inc.tx
 else ok "no ++ or -- on an awk field, which BusyBox refuses"; fi
 # gird-fleet.sh's copy of the ownership walk has its home in gird-check.sh: a hand edit to the copy is drift.
 mkdir -p "$WORK/ow"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ow/"
-sed 's/^    case "\${_oo_m#\* }" in ?\[2367\]?|??\[2367\]) return 1 ;; esac$/    :/' gird-fleet.sh > "$WORK/ow/gird-fleet.sh"
+sed 's/^    else case "\${_oo_m#\* }" in ??\[2367\]?|???\[2367\]) return 1 ;; esac; fi$/    else :; fi/' gird-fleet.sh > "$WORK/ow/gird-fleet.sh"
 if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
 else bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "$(cat "$WORK/ow.txt")"; fi
@@ -3865,35 +3865,16 @@ if [ ! -e "$FL/fake-ran" ] && [ -z "$(ls "$FL/cwd")" ]; then ok "fleet: opens no
 ( cd / && env -i PATH=/usr/bin:/bin GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" \
     GIRD_CHECK_FLEET_STATE="$FL/state" GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" /bin/bash "$FLEETSH" --all-users --summary-to-stdout < /dev/null > "$FL/mdm.out" 2>&1 )
 has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspot act accounts=2 ' "$FL/mdm.out"
-# An MDM item passes its options in one line under the first line (docs/fleet.md), whatever arguments the MDM adds.
-mkdir -p "$FL/inst"; cp "$SCRIPT" "$FL/inst/gird-check.sh"
-python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\ncase \" \$* \" in *\" --inventory \"*|*\" --list \"*|*\" --help \"*|*\" -h \"*) ;; *) set -- --all-users --summary-to-stdout --deadline=600 ;; esac\n' + l[1])" "$FLEETSH" "$FL/inst/mdm-item.sh"
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "$FLBASH" "$FL/inst/mdm-item.sh" / "$(hostname)" root < /dev/null > "$FL/mdm-item.out" 2>&1
-FLVER=$(sed -n '2s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p' "$SCRIPT")
-has    "fleet: an MDM item's options line works whatever arguments the MDM adds" "^blindspot act accounts=2 act=1 review=1 not_checked=0 v=${FLVER:-no-version} at=" "$FL/mdm-item.out"
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "$FLBASH" "$FL/inst/mdm-item.sh" --inventory < /dev/null > "$FL/mdm-inv.out" 2>&1
-has    "fleet: with the options line in the file, --inventory still only reads the result" '^v1 act ' "$FL/mdm-inv.out"
-: > "$FL/argv.log"
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  FLL_DIR="$FL" "$FLBASH" "$FL/inst/mdm-item.sh" --all-users --list < /dev/null > "$FL/mdm-list.out" 2>&1
-if grep -q 'will be checked$' "$FL/mdm-list.out" && [ ! -s "$FL/argv.log" ]; then ok "fleet: and --list only lists"; else bad "fleet: and --list only lists" "$(head -n 3 "$FL/mdm-list.out")"; fi
-python3 -c "import sys; l = open(sys.argv[1]).read().split('\n', 1); open(sys.argv[2], 'w').write(l[0] + '\ncase \" \$* \" in *\" --inventory \"*|*\" --list \"*|*\" --help \"*|*\" -h \"*) ;; *) set -- --all-users --summary-to-stdout --hash-accounts=fleet-test-secret-42 ;; esac\n' + l[1])" "$FLEETSH" "$FL/inst/mdm-secret.sh"
-rm -f "$FL/copycheck"
-GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" FLL_COPYCHECK=fleet-test-secret-42 "$FLBASH" "$FL/inst/mdm-secret.sh" < /dev/null > "$FL/mdm-secret.out" 2>&1
-if [ "$(tr -d '\n' < "$FL/copycheck" 2>/dev/null)" = 00 ] && grep -q '^blindspot act ' "$FL/mdm-secret.out"; then ok "fleet: the copy each account runs leaves out the options line and its secret"; else bad "fleet: the copy each account runs leaves out the options line and its secret" "$(cat "$FL/copycheck" 2>/dev/null)"; fi
-if cmp -s "$FL/copy-seen.sh" "$SCRIPT"; then ok "fleet: and removes nothing else"; else bad "fleet: and removes nothing else" "$(diff "$SCRIPT" "$FL/copy-seen.sh" 2>&1 | head -n 4)"; fi
 # Root runs for every account only what root alone can change.
 mkdir -p "$FL/gw"; cp "$SCRIPT" "$FLEETSH" "$FL/gw/"; chmod 775 "$FL/gw"; : > "$FL/argv.log"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   FLL_DIR="$FL" "$FLBASH" "$FL/gw/gird-fleet.sh" --all-users < /dev/null > "$FL/gw.out" 2> "$FL/gw.err"; RC=$?
-if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above them must be owned by root and writable by no one else' "$FL/gw.err"; then ok "fleet: a script in a folder others can write to is refused"; else bad "fleet: a script in a folder others can write to is refused" "exit $RC $(cat "$FL/gw.err")"; fi
+if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'must be owned by root and writable by no one else' "$FL/gw.err"; then ok "fleet: a script in a folder others can write to is refused"; else bad "fleet: a script in a folder others can write to is refused" "exit $RC $(cat "$FL/gw.err")"; fi
 chmod 755 "$FL/gw"
 mkdir -p "$FL/gw2"; cp "$SCRIPT" "$FLEETSH" "$FL/gw2/"; chmod 664 "$FL/gw2/gird-check.sh"; : > "$FL/argv.log"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   FLL_DIR="$FL" "$FLBASH" "$FL/gw2/gird-fleet.sh" --all-users < /dev/null > "$FL/gw2.out" 2> "$FL/gw2.err"; RC=$?
-if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'every folder above them must be owned by root and writable by no one else' "$FL/gw2.err"; then ok "fleet: a gird-check.sh others can write to is refused"; else bad "fleet: a gird-check.sh others can write to is refused" "exit $RC $(cat "$FL/gw2.err")"; fi
+if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'must be owned by root and writable by no one else' "$FL/gw2.err"; then ok "fleet: a gird-check.sh others can write to is refused"; else bad "fleet: a gird-check.sh others can write to is refused" "exit $RC $(cat "$FL/gw2.err")"; fi
 mkdir -p "$FL/alone"; cp "$FLEETSH" "$FL/alone/"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   FLL_DIR="$FL" "$FLBASH" "$FL/alone/gird-fleet.sh" --all-users < /dev/null > /dev/null 2> "$FL/alone.err"; RC=$?
@@ -3905,15 +3886,15 @@ for M in 002 020; do
   : > "$FL/mode$M"; chmod "$M" "$FL/mode$M"
   GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
     GIRD_CHECK_FLEET_CHECK_ALSO="$FL/mode$M" FLL_DIR="$FL" "$FLBASH" "$FLEETSH" --all-users < /dev/null > "$FL/m$M.out" 2> "$FL/m$M.err"
-  has "fleet: a path with mode $M is refused as writable by others" 'every folder above them must be owned by root and writable by no one else' "$FL/m$M.err"
+  has "fleet: a path with mode $M is refused as writable by others" 'must be owned by root and writable by no one else' "$FL/m$M.err"
 done
 # Run by a relative path from the script's folder, as the guide shows; from standard input it can't copy itself.
 ( cd "$(dirname "$FLEETSH")" && GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
-  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "$FLBASH" gird-fleet.sh --all-users --summary-to-stdout < /dev/null > "$FL/rel.out" 2>&1 )
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "$FLBASH" ./gird-fleet.sh --all-users --summary-to-stdout < /dev/null > "$FL/rel.out" 2>&1 )
 has    "fleet: runs by a relative path from the script's folder" '^blindspot act accounts=2 act=1 review=1 not_checked=0 ' "$FL/rel.out"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/state" \
   FLL_DIR="$FL" "$FLBASH" -s -- --all-users < "$FLEETSH" > "$FL/stdin.out" 2> "$FL/stdin.err"; RC=$?
-if [ "$RC" -eq 13 ] && grep -q 'run it from a file: it copies gird-check.sh from its own folder' "$FL/stdin.err"; then ok "fleet: from standard input it fails, and says why"; else bad "fleet: from standard input it fails, and says why" "exit $RC $(cat "$FL/stdin.err")"; fi
+if [ "$RC" -eq 13 ] && grep -q 'run it from a file, by a path that holds a slash' "$FL/stdin.err"; then ok "fleet: from standard input it fails, and says why"; else bad "fleet: from standard input it fails, and says why" "exit $RC $(cat "$FL/stdin.err")"; fi
 
 # The Mac's shared places. In a test run root's stand-in owns the stand-in shared temp folder's files,
 # so a marker there is one root made; one in the real /tmp is the account's own.
@@ -4041,11 +4022,14 @@ if printf '%s' "$_inv" | grep -qE ' \+more$'; then ok "fleet: and ends with +mor
 
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
-fl_run hash1 --hash-accounts=first-secret
-fl_run hash2 --hash-accounts=other-secret
+# The secret is read only from a file root placed in the saved-result folder, never from an argument.
+fl_hashkey() { mkdir -p -m 700 "$FL/state"; chmod 700 "$FL/state"; printf '%s\n' "$1" > "$FL/state/hash-key"; chmod 600 "$FL/state/hash-key"; }
+fl_hashkey first-secret; fl_run hash1
+fl_hashkey other-secret; fl_run hash2
+rm -f "$FL/state/hash-key"
 if grep -qE '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat" && ! grep -q 'asha' "$FL/state/last.json" && [ "$(grep -cE '^[0-9a-f]{16}\.outcome=' "$FL/hash1.flat")" -eq 2 ] \
    && [ "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat")" != "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash2.flat")" ]
-then ok "fleet: --hash-accounts shows a keyed hash, never the name"; else bad "fleet: --hash-accounts shows a keyed hash, never the name" "$(grep outcome "$FL/hash1.flat" "$FL/hash2.flat")"; fi
+then ok "fleet: a hash-key file root placed shows a keyed hash, never the name"; else bad "fleet: a hash-key file root placed shows a keyed hash, never the name" "$(grep outcome "$FL/hash1.flat" "$FL/hash2.flat")"; fi
 
 # Possible signs, and the account's own temp folder (tests/fleet-launch.sh hands each account run
 # $FL/usertmp-<account> as the one macOS would give it).
@@ -4315,6 +4299,208 @@ then ok "fleet: gird-fleet.sh tests a path for a link before it stats it"; else 
 if grep -v '^[[:space:]]*#' "$SCRIPT" | grep -qE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)'; then bad "gird-check.sh runs no sudo or dscl" "$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -nE '(^|[^A-Za-z0-9_.-])(sudo|dscl)([^A-Za-z0-9_-]|$)' | head -n 3)"; else ok "gird-check.sh runs no sudo or dscl"; fi
 bash "$SCRIPT" --all-users > "$FL/cs-all.out" 2> "$FL/cs-all.err"; RC=$?
 if [ "$RC" -eq 2 ] && [ ! -s "$FL/cs-all.out" ] && grep -q 'run gird-fleet.sh as root' "$FL/cs-all.err"; then ok "gird-check.sh --all-users points to gird-fleet.sh"; else bad "gird-check.sh --all-users points to gird-fleet.sh" "exit $RC"; fi
+
+SKIPPING=$FSKIP
+{
+echo "fleet mode: one file for the MDM (blindspot-fleet.sh)"
+# tools/gen.sh builds blindspot-fleet.sh for a release from a copy of the repo here; PWSH points nowhere,
+# so it stops before blindspot-fleet.ps1 (exit 3) once the Mac file is built.
+OF=$WORK/onefile; mkdir -p "$OF"
+of_repo() { rm -rf "$OF/$1"; mkdir -p "$OF/$1"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$OF/$1/"; }
+of_gen() { (cd "$OF/$1" && PWSH=/nonexistent bash tools/gen.sh "${@:2}" > "$OF/$1.log" 2>&1); echo "$?" > "$OF/$1.rc"; }
+of_repo bld; of_gen bld
+ONEB=$OF/bld/blindspot-fleet.sh
+of_unpack() { awk '/^# >>> packed-check[: ]/ && !s { s = 1; next } s { if (n) print p; p = $0; n = 1 } END { exit !(s && p == "# <<< packed-check") }' "$1"; }
+sed '/^# >>> game$/,/^# <<< game$/d' "$SCRIPT" > "$OF/nogame.sh"
+_osz=$(wc -c < "$ONEB" 2>/dev/null | tr -d ' ')
+if [ "$(cat "$OF/bld.rc")" = 3 ] && [ "${_osz:-1000000}" -lt 1000000 ] && [ "$(head -n 1 "$ONEB")" = '#!/bin/bash' ]; then ok "fleet one file: tools/gen.sh builds it under 1,000,000 bytes, starting #!/bin/bash" "$_osz bytes"
+else bad "fleet one file: tools/gen.sh builds it under 1,000,000 bytes, starting #!/bin/bash" "exit $(cat "$OF/bld.rc"), ${_osz:-no file}, $(head -n 2 "$OF/bld.log")"; fi
+of_unpack "$ONEB" > "$OF/unpacked.sh"
+if cmp -s "$OF/unpacked.sh" "$OF/nogame.sh" && grep -qx "FL_PACKED_SHA='$(shasum -a 256 < "$OF/nogame.sh" | cut -c1-64)'" "$ONEB" && ! cmp -s "$OF/nogame.sh" "$SCRIPT"; then
+  ok "fleet one file: it carries gird-check.sh without the game block, byte for byte, and that SHA-256"
+else bad "fleet one file: it carries gird-check.sh without the game block, byte for byte, and that SHA-256" "$(cmp "$OF/unpacked.sh" "$OF/nogame.sh" 2>&1)"; fi
+of_out() { awk '/^# >>> packed-/ { s = 1 } !s { print } /^# <<< packed-/ { s = 0 }' "$1"; }
+if cmp -s <(of_out "$ONEB") <(of_out "$FLEETSH") && [ "$(grep -c '^# >>> packed-' "$ONEB")" = 2 ]; then ok "fleet one file: outside its two packed blocks it is gird-fleet.sh"
+else bad "fleet one file: outside its two packed blocks it is gird-fleet.sh"; fi
+# A hand edit to the built file fails --check: in the packed copy, and in the SHA-256.
+cp "$ONEB" "$OF/bld/keep.sh"
+sed 's/^ORIG_LANG=/ORIG_LANG= /' "$OF/bld/keep.sh" > "$ONEB"; of_gen bld --check; _r1=$(cat "$OF/bld.rc"); grep -q 'blindspot-fleet.sh is out of date' "$OF/bld.log"; _g1=$?
+sed "s/^FL_PACKED_SHA='[0-9a-f]*'/FL_PACKED_SHA='$(printf '0%.0s' $(seq 64))'/" "$OF/bld/keep.sh" > "$ONEB"; of_gen bld --check; _r2=$(cat "$OF/bld.rc"); grep -q 'blindspot-fleet.sh is out of date' "$OF/bld.log"; _g2=$?
+cp "$OF/bld/keep.sh" "$ONEB"; of_gen bld --check; _r3=$(cat "$OF/bld.rc")
+if [ "$_r1" = 1 ] && [ "$_g1" = 0 ] && [ "$_r2" = 1 ] && [ "$_g2" = 0 ] && [ "$_r3" = 3 ]; then ok "fleet one file: a hand-edited copy or SHA-256 fails tools/gen.sh --check"
+else bad "fleet one file: a hand-edited copy or SHA-256 fails tools/gen.sh --check" "exits $_r1 $_r2, unedited $_r3"; fi
+# Size: a warning from 800,000 bytes, a failure at 1,000,000, from comment lines added to a copy's gird-fleet.sh.
+of_pad() { python3 -c "import sys; p = sys.argv[1]; l = open(p).read().split('\n', 1); n = int(sys.argv[2]) - int(sys.argv[3]); open(p, 'w').write(l[0] + '\n' + ('# ' + 'x' * 97 + '\n') * (n // 100) + l[1])" "$OF/$1/gird-fleet.sh" "$2" "$_osz"; }
+of_repo pad8; of_pad pad8 850000; of_gen pad8; _s8=$(wc -c < "$OF/pad8/blindspot-fleet.sh" 2>/dev/null | tr -d ' ')
+of_repo pad10; of_pad pad10 1010000; of_gen pad10
+if [ "$(cat "$OF/pad8.rc")" = 3 ] && grep -qx "warning: blindspot-fleet.sh is $_s8 bytes, past 80% of the 1,000,000 Intune for macOS takes" "$OF/pad8.log" \
+  && ! grep -q 'past 80%' "$OF/bld.log" && [ "$(cat "$OF/pad10.rc")" = 1 ] && grep -q '^blindspot-fleet.sh is [0-9]* bytes: Intune for macOS takes a script of under 1 MB (1,000,000 bytes)$' "$OF/pad10.log" && [ ! -e "$OF/pad10/blindspot-fleet.sh" ]; then
+  ok "fleet one file: tools/gen.sh warns from 800,000 bytes and fails at 1,000,000"
+else bad "fleet one file: tools/gen.sh warns from 800,000 bytes and fails at 1,000,000" "$_s8: exit $(cat "$OF/pad8.rc") $(head -n 1 "$OF/pad8.log"); exit $(cat "$OF/pad10.rc") $(head -n 1 "$OF/pad10.log")"; fi
+of_repo nest; python3 -c "import sys; p = sys.argv[1]; s = open(p).read(); s = s.replace('# <<< game\n', '# >>> inner\n# <<< inner\n# <<< game\n', 1); open(p, 'w').write(s)" "$OF/nest/gird-check.sh"; of_gen nest
+if [ "$(cat "$OF/nest.rc")" = 1 ] && grep -q 'needs one game block' "$OF/nest.log" && [ ! -e "$OF/nest/blindspot-fleet.sh" ]; then ok "fleet one file: tools/gen.sh refuses a block inside the game block"
+else bad "fleet one file: tools/gen.sh refuses a block inside the game block" "exit $(cat "$OF/nest.rc")"; fi
+
+# The copy without the game behaves as gird-check.sh does.
+if /bin/bash -n "$OF/unpacked.sh"; then ok "fleet one file: the copy without the game parses on macOS's bash"; else bad "fleet one file: the copy without the game parses on macOS's bash"; fi
+sed -n '/^# >>> game$/,/^# <<< game$/p' "$SCRIPT" > "$OF/game.sh"
+_gf=$(sed -n 's/^\([a-z_][a-z0-9_]*\)() .*/\1/p' "$OF/game.sh" | grep -vx game_start | tr '\n' '|'); _gf=${_gf%|}
+if [ -n "$_gf" ] && ! grep -v '^[[:space:]]*#' "$OF/unpacked.sh" | grep -qwE "$_gf"; then ok "fleet one file: no function the game defines is named in the copy, but game_start's default"
+else bad "fleet one file: no function the game defines is named in the copy, but game_start's default" "${_gf:-no functions}: $(grep -v '^[[:space:]]*#' "$OF/unpacked.sh" | grep -nwE "${_gf:-x}" | head -n 2)"; fi
+# bash's own reprint: each file wrapped in a function, read by /bin/bash and printed with declare -f, which
+# prints what bash parsed, without comments. The copy's reprint is the original's with the game's lines out.
+# A function defined inside the wrapper ends "};" when more follows and "}" when last, so both read "}".
+of_reprint() { { printf 'blindspot_wrap() {\n'; cat "$1"; printf '\n}\n'; } > "$OF/wrap.sh"; /bin/bash -c '. "$1" && declare -f blindspot_wrap' _ "$OF/wrap.sh" | LC_ALL=C sed 's/^    };$/    }/'; }
+of_reprint "$SCRIPT" > "$OF/rp-orig.txt"; of_reprint "$OF/unpacked.sh" > "$OF/rp-copy.txt"; of_reprint "$OF/game.sh" | LC_ALL=C sed '1,2d;$d' > "$OF/rp-game.txt"
+if python3 -c '
+import sys
+o, c, g = (open(f, "rb").read().splitlines() for f in sys.argv[1:4])
+sys.exit(0 if len(g) > 10 and any(o[k:k + len(g)] == g and o[:k] + o[k + len(g):] == c for k in range(len(c) + 1)) else 1)' "$OF/rp-orig.txt" "$OF/rp-copy.txt" "$OF/rp-game.txt"; then
+  ok "fleet one file: bash's reprint of the copy is the original's, less the game's reprint"
+else bad "fleet one file: bash's reprint of the copy is the original's, less the game's reprint" "$(diff "$OF/rp-copy.txt" "$OF/rp-orig.txt" | grep '^[0-9]' | head -n 3)"; fi
+mkdir -p "$OF/ut1" "$OF/ut2"
+for s in orig copy; do
+  _f=$SCRIPT; [ "$s" = copy ] && _f=$OF/unpacked.sh; _t=$OF/ut1; [ "$s" = copy ] && _t=$OF/ut2
+  env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$FL/asha" GIRD_CHECK_FLEET_USER_TMP="$_t" GIRD_CHECK_FLEET_RG_ADMIN="$OF/no-rg/rg" /bin/bash "$_f" --account-run < /dev/null > "$OF/ar-$s.txt" 2>&1
+  (cd "$OF" && env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$WORK/home" NO_COLOR=1 TERM=dumb /bin/bash "$_f" --offline --full < /dev/null > "$OF/full-$s.txt" 2>&1)
+done
+if [ -s "$OF/ar-orig.txt" ] && grep -q '^end=1$' "$OF/ar-orig.txt" && cmp -s "$OF/ar-orig.txt" "$OF/ar-copy.txt"; then ok "fleet one file: --account-run prints the same lines from the copy"
+else bad "fleet one file: --account-run prints the same lines from the copy" "$(diff "$OF/ar-orig.txt" "$OF/ar-copy.txt" | head -n 3)"; fi
+of_norm() { LC_ALL=C sed -E 's/[0-9]+(\.[0-9]+)?s\b/Ns/g; s/20[0-9]{2}-[0-9]{2}-[0-9]{2}[ T][0-9:]{5,8}Z?/DATE/g' "$1"; }
+if grep -q 'Anthropic' "$OF/full-orig.txt" && cmp -s <(of_norm "$OF/full-orig.txt") <(of_norm "$OF/full-copy.txt"); then ok "fleet one file: --offline --full prints the same report from the copy"
+else bad "fleet one file: --offline --full prints the same report from the copy" "$(diff <(of_norm "$OF/full-orig.txt") <(of_norm "$OF/full-copy.txt") | head -n 4)"; fi
+
+# Running it, as root's stand-in.
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
+mkdir -p "$OF/run"; chmod 755 "$OF/run"; cp "$ONEB" "$OF/run/blindspot-fleet.sh"; chmod 644 "$OF/run/blindspot-fleet.sh"
+ONE=$OF/run/blindspot-fleet.sh
+of_env() { env GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/ostate" \
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" GIRD_CHECK_FLEET_OLD="$OF/old" FLL_DIR="$FL" "$@"; }
+of_run() { # out-prefix file args...: stdout, stderr, exit code, flat JSON
+  _p=$1; _f=$2; shift 2; : > "$FL/argv.log"
+  of_env /bin/bash "$_f" "$@" > "$OF/$_p.out" 2> "$OF/$_p.err" < /dev/null; echo "$?" > "$OF/$_p.rc"
+  python3 tests/fleet-flat.py "$FL/ostate/last.json" > "$OF/$_p.flat" 2>/dev/null || : > "$OF/$_p.flat"
+}
+of_stages() { ls -d "$FLP/blindspot-run."* 2>/dev/null | wc -l | tr -d ' '; }
+FLP=/private/tmp
+rm -rf "$FL/ostate"; _s0=$(of_stages); of_run def "$ONE"
+if grep -q "^blindspot act accounts=2 act=1 review=1 not_checked=0 v=[0-9.]* at=" "$OF/def.out" && [ "$(grep -c . "$OF/def.out")" = 1 ] && [ "$(cat "$OF/def.rc")" = 0 ] && [ "$(grep -c . "$FL/argv.log")" = 2 ]; then
+  ok "fleet one file: with no options it prints the summary line and exits 0 on a finding"
+else bad "fleet one file: with no options it prints the summary line and exits 0 on a finding" "exit $(cat "$OF/def.rc") $(head -n 2 "$OF/def.out" "$OF/def.err")"; fi
+if [ "$(of_stages)" = "$_s0" ] && [ -f "$FL/ostate/blindspot-fleet.sh" ] && cmp -s "$FL/ostate/blindspot-fleet.sh" "$ONE" && [ "$(stat -f %Lp "$FL/ostate/blindspot-fleet.sh")" = 700 ]; then
+  ok "fleet one file: after a run the inventory reader's copy is the file, its owner's alone, and the start's folder is gone"
+else bad "fleet one file: after a run the inventory reader's copy is the file, its owner's alone, and the start's folder is gone" "$_s0 to $(of_stages); $(ls -l "$FL/ostate" 2>&1 | tail -n +2 | tr '\n' ' ')"; fi
+of_run jamf1 "$ONE" / mac01 ""
+if grep -q '^blindspot act accounts=2 ' "$OF/jamf1.out" && [ "$(cat "$OF/jamf1.rc")" = 0 ] && [ ! -s "$OF/jamf1.err" ]; then ok "fleet one file: Jamf's three arguments are dropped, an empty user name too"
+else bad "fleet one file: Jamf's three arguments are dropped, an empty user name too" "exit $(cat "$OF/jamf1.rc") $(cat "$OF/jamf1.err")"; fi
+of_run jamf2 "$ONE" / mac01 asha
+if grep -q '^blindspot act accounts=2 ' "$OF/jamf2.out" && [ "$(cat "$OF/jamf2.rc")" = 0 ] && [ ! -s "$OF/jamf2.err" ]; then ok "fleet one file: Jamf's three arguments are dropped, with a user name"
+else bad "fleet one file: Jamf's three arguments are dropped, with a user name" "exit $(cat "$OF/jamf2.rc") $(cat "$OF/jamf2.err")"; fi
+of_run jamfo "$ONE" / mac01 asha --all-users --summary-to-stdout "" ""
+if grep -q '^blindspot act accounts=2 ' "$OF/jamfo.out" && [ "$(cat "$OF/jamfo.rc")" = 10 ]; then ok "fleet one file: after Jamf's three, the options given are taken as they are, empty ones dropped"
+else bad "fleet one file: after Jamf's three, the options given are taken as they are, empty ones dropped" "exit $(cat "$OF/jamfo.rc") $(cat "$OF/jamfo.err")"; fi
+_bad=""
+for W in "/ mac01" "mac01" "--all-users --nope" "all-users" "/ mac01 asha / mac02 asha"; do
+  # shellcheck disable=SC2086
+  of_run word "$ONE" $W
+  if [ "$(cat "$OF/word.rc")" = 2 ] && [ ! -s "$FL/argv.log" ] && [ ! -s "$OF/word.out" ] && grep -q 'it does not take ' "$OF/word.err"; then :; else _bad="$_bad [$W: exit $(cat "$OF/word.rc")]"; fi
+done
+if [ -z "$_bad" ]; then ok "fleet one file: a word it does not take is refused, never read as a full check"; else bad "fleet one file: a word it does not take is refused, never read as a full check" "$_bad"; fi
+of_run hk "$ONE" --all-users --hash-accounts=fleet-test-secret-77
+if [ "$(cat "$OF/hk.rc")" = 2 ] && [ ! -s "$FL/argv.log" ] && grep -q -- '--hash-accounts is not taken as an argument' "$OF/hk.err" && ! grep -q 'fleet-test-secret-77' "$OF/hk.err" "$OF/hk.out" "$FL/ostate/refused"; then
+  ok "fleet one file: --hash-accounts on the command line is refused, and the secret is never repeated"
+else bad "fleet one file: --hash-accounts on the command line is refused, and the secret is never repeated" "exit $(cat "$OF/hk.rc") $(cat "$OF/hk.err")"; fi
+# The start, in order: no copy, no exec and no bash it did not name before the file is checked.
+mkdir -p "$OF/plant"; printf '#!/bin/sh\n: > "%s/planted-ran"\nexit 0\n' "$OF" > "$OF/plant/bash"; chmod 755 "$OF/plant/bash"
+cp "$ONE" "$OF/plant/blindspot-fleet.sh"; chmod 755 "$OF/plant/blindspot-fleet.sh"; rm -f "$OF/planted-ran"; _s0=$(of_stages)
+: > "$FL/argv.log"
+(cd "$OF/plant" && PATH="$OF/plant:$PATH" of_env /bin/bash -s < blindspot-fleet.sh > "$OF/stdin.out" 2> "$OF/stdin.err"; echo "$?" > "$OF/stdin.rc")
+(cd "$OF/plant" && PATH="$OF/plant:$PATH" of_env /bin/bash blindspot-fleet.sh < /dev/null > "$OF/bare.out" 2> "$OF/bare.err"; echo "$?" > "$OF/bare.rc")
+(cd "$OF/plant" && PATH="$OF/plant:$PATH" of_env /bin/bash -c "$(head -c 200000 blindspot-fleet.sh)" < /dev/null > "$OF/dashc.out" 2> "$OF/dashc.err"; echo "$?" > "$OF/dashc.rc")
+_nrun=$(grep -c . "$FL/argv.log")
+if [ "$(cat "$OF/stdin.rc")" = 13 ] && [ "$(cat "$OF/bare.rc")" = 13 ] && [ "$(cat "$OF/dashc.rc")" = 13 ] && [ "$_nrun" = 0 ] && [ "$(of_stages)" = "$_s0" ] \
+  && grep -q 'run it from a file, by a path that holds a slash' "$OF/stdin.err" && grep -q 'run it from a file, by a path that holds a slash' "$OF/bare.err" && grep -q 'run it from a file, by a path that holds a slash' "$OF/dashc.err"; then
+  ok "fleet one file: standard input, bash -c and a bare file name are refused before any copy or exec"
+else bad "fleet one file: standard input, bash -c and a bare file name are refused before any copy or exec" "exits $(cat "$OF/stdin.rc") $(cat "$OF/bare.rc") $(cat "$OF/dashc.rc"), $_nrun runs, stages $_s0 to $(of_stages)"; fi
+(cd "$OF/plant" && PATH="$OF/plant:$PATH" of_env "$OF/plant/blindspot-fleet.sh" < /dev/null > "$OF/shebang.out" 2> "$OF/shebang.err")
+(cd "$OF/plant" && PATH=".:$OF/plant:/usr/bin:/bin" of_env /bin/bash ./blindspot-fleet.sh < /dev/null > "$OF/dot.out" 2> "$OF/dot.err")
+if [ ! -e "$OF/planted-ran" ] && grep -q '^blindspot act accounts=2 ' "$OF/shebang.out" && grep -q '^blindspot act accounts=2 ' "$OF/dot.out"; then ok "fleet one file: a bash planted in the current folder or on PATH is never run"
+else bad "fleet one file: a bash planted in the current folder or on PATH is never run" "$( [ -e "$OF/planted-ran" ] && echo ran) $(cat "$OF/shebang.err" "$OF/dot.err" | head -n 2)"; fi
+# Ownership: a file or folder another account can write to is refused, naming it, before anything runs.
+mkdir -p "$OF/ww"; cp "$ONE" "$OF/ww/"; chmod 777 "$OF/ww"; _s0=$(of_stages); rm -rf "$FL/ostate"; mkdir -m 700 "$FL/ostate"
+of_run ww "$OF/ww/blindspot-fleet.sh"
+chmod 755 "$OF/ww"
+if [ "$(cat "$OF/ww.rc")" = 13 ] && [ ! -s "$FL/argv.log" ] && grep -q "must be owned by root and writable by no one else (/private$OF/ww is not)" "$OF/ww.err" && [ "$(of_stages)" = "$_s0" ]; then
+  ok "fleet one file: in a folder another account can write to it is refused, naming that folder"
+else bad "fleet one file: in a folder another account can write to it is refused, naming that folder" "exit $(cat "$OF/ww.rc") $(cat "$OF/ww.err")"; fi
+if grep -qE '^refused 20[0-9-]{8}T[0-9:]{5}Z: the file or a folder above it can be changed by an account other than root$' "$FL/ostate/refused" && [ "$(stat -f %Lp "$FL/ostate/refused")" = 600 ]; then
+  ok "fleet one file: a refused run records why in the saved-result folder"
+else bad "fleet one file: a refused run records why in the saved-result folder" "$(cat "$FL/ostate/refused" 2>&1)"; fi
+chmod 666 "$OF/ww/blindspot-fleet.sh"; of_run wf "$OF/ww/blindspot-fleet.sh"
+if [ "$(cat "$OF/wf.rc")" = 13 ] && [ ! -s "$FL/argv.log" ] && grep -q "($OF/ww/blindspot-fleet.sh is not)\|(/private$OF/ww/blindspot-fleet.sh is not)" "$OF/wf.err"; then ok "fleet one file: a file another account can write to is refused"
+else bad "fleet one file: a file another account can write to is refused" "exit $(cat "$OF/wf.rc") $(cat "$OF/wf.err")"; fi
+# Exported functions and PERL5OPT in its environment change nothing: the walk is its own, and the copy starts under env -i.
+(owned_only() { return 0; }; oo_mode() { echo "$1 0755"; }; export -f owned_only oo_mode
+ PERL5OPT=-MNoSuchModuleBlindspot of_env /bin/bash "$OF/ww/blindspot-fleet.sh" < /dev/null > "$OF/envf.out" 2> "$OF/envf.err"; echo "$?" > "$OF/envf.rc")
+chmod 644 "$OF/ww/blindspot-fleet.sh"
+(PERL5OPT=-MNoSuchModuleBlindspot of_env /bin/bash "$ONE" < /dev/null > "$OF/perl.out" 2> "$OF/perl.err")
+if [ "$(cat "$OF/envf.rc")" = 13 ] && grep -q 'writable by no one else' "$OF/envf.err" && grep -q '^blindspot act accounts=2 ' "$OF/perl.out"; then ok "fleet one file: exported functions and PERL5OPT in its environment change nothing"
+else bad "fleet one file: exported functions and PERL5OPT in its environment change nothing" "exit $(cat "$OF/envf.rc"); $(head -n 2 "$OF/perl.out" "$OF/perl.err")"; fi
+# A folder root owns with the sticky bit, as /private/tmp: accepted, because what runs is the copy.
+_st="$FLP/blindspot-test-$$.sh"; cp "$ONE" "$_st"; chmod 644 "$_st"
+of_run sticky "$_st"
+rm -f "$_st"
+if [ "$(stat -f '%u %Mp%Lp' "$FLP")" = "0 1777" ] && grep -q '^blindspot act accounts=2 ' "$OF/sticky.out" && [ "$(cat "$OF/sticky.rc")" = 0 ]; then ok "fleet one file: in a sticky folder root owns, as /private/tmp, it runs from its copy"
+else bad "fleet one file: in a sticky folder root owns, as /private/tmp, it runs from its copy" "exit $(cat "$OF/sticky.rc") $(cat "$OF/sticky.err")"; fi
+mkdir -p "$OF/stk"; chmod 1777 "$OF/stk"; cp "$ONE" "$OF/stk/"; of_run stk "$OF/stk/blindspot-fleet.sh"; chmod 755 "$OF/stk"
+if [ "$(cat "$OF/stk.rc")" = 13 ] && grep -q "($OF/stk is not)\|(/private$OF/stk is not)" "$OF/stk.err"; then ok "fleet one file: a sticky folder another account owns is refused"
+else bad "fleet one file: a sticky folder another account owns is refused" "exit $(cat "$OF/stk.rc") $(cat "$OF/stk.err")"; fi
+# It runs only from the copy its start made: never from a BLINDSPOT_STAGE carried in, even the file's own folder.
+: > "$FL/argv.log"
+of_env BLINDSPOT_STAGE="$OF/run" /bin/bash "$ONE" < /dev/null > "$OF/stage.out" 2> "$OF/stage.err"; _r1=$?
+of_env BLINDSPOT_STAGE="$FLP" /bin/bash "$ONE" < /dev/null > /dev/null 2>> "$OF/stage.err"; _r2=$?
+if [ "$_r1" = 13 ] && [ "$_r2" = 13 ] && [ ! -s "$FL/argv.log" ] && [ "$(grep -c 'its copy is not in a folder its start made' "$OF/stage.err")" = 2 ] && [ -f "$ONE" ]; then
+  ok "fleet one file: it never runs from a BLINDSPOT_STAGE carried in"
+else bad "fleet one file: it never runs from a BLINDSPOT_STAGE carried in" "exits $_r1 $_r2 $(cat "$OF/stage.err")"; fi
+# The copy's SHA-256: a copy that differs from the file it was made from is refused before it runs.
+of_env GIRD_CHECK_FLEET_STAGE_EDIT=1 /bin/bash "$ONE" < /dev/null > "$OF/sedit.out" 2> "$OF/sedit.err"; _r1=$?
+if [ "$_r1" = 13 ] && grep -q 'did not match the file it was made from' "$OF/sedit.err" && [ ! -s "$OF/sedit.out" ]; then ok "fleet one file: a copy whose SHA-256 differs from the file is never run"
+else bad "fleet one file: a copy whose SHA-256 differs from the file is never run" "exit $_r1 $(cat "$OF/sedit.err")"; fi
+# The packed check: written out and compared with FL_PACKED_SHA before any account starts.
+sed "s/^FL_PACKED_SHA='[0-9a-f]*'/FL_PACKED_SHA='$(printf '1%.0s' $(seq 64))'/" "$ONE" > "$OF/run/blindspot-bad.sh"
+of_run badsha "$OF/run/blindspot-bad.sh" --all-users --json
+if [ "$(cat "$OF/badsha.rc")" = 13 ] && [ ! -s "$FL/argv.log" ] && grep -q '^outcome=failed$' "$OF/badsha.flat" && grep -q '^asha\.not_checked=copy_changed$' "$OF/badsha.flat"; then
+  ok "fleet one file: a packed check whose SHA-256 differs is never started"
+else bad "fleet one file: a packed check whose SHA-256 differs is never started" "exit $(cat "$OF/badsha.rc") $(head -n 3 "$OF/badsha.flat")"; fi
+# The inventory: a refused run after a finished one reads failed, with why; a finished one after it, its value.
+rm -rf "$FL/ostate"; of_run inv1 "$ONE"
+mkdir -p "$OF/ww2"; cp "$ONE" "$OF/ww2/"; chmod 777 "$OF/ww2"; sleep 1; of_run inv2 "$OF/ww2/blindspot-fleet.sh"; chmod 755 "$OF/ww2"
+of_env /bin/bash "$ONE" --inventory < /dev/null > "$OF/inv-ref.out" 2>&1
+sleep 1; of_run inv3 "$ONE"; of_env /bin/bash "$ONE" --inventory < /dev/null > "$OF/inv-ok.out" 2>&1
+if grep -qE '^failed: refused 20[0-9-]{8}T[0-9:]{5}Z: the file or a folder above it can be changed by an account other than root$' "$OF/inv-ref.out" && grep -q '^v1 act ' "$OF/inv-ok.out"; then
+  ok "fleet one file: the inventory reads failed and why after a refused run, never the older result"
+else bad "fleet one file: the inventory reads failed and why after a refused run, never the older result" "$(cat "$OF/inv-ref.out" "$OF/inv-ok.out")"; fi
+# The reader lines the guide gives an MDM's inventory field, run as an account that can't open the folder.
+awk '{ sub(/^   /, "") } /^blindspot_inventory\(\) \{$/ { s = 1 } s { print } s && /^}$/ { exit }' docs/fleet.md > "$OF/reader.sh"
+of_reader() { sed "s|^  d=/var/db/blindspot\$|  d=$1|" "$OF/reader.sh" > "$OF/reader-t.sh"; /bin/bash -c '. "$1"; blindspot_inventory' _ "$OF/reader-t.sh" 2>&1; }
+mkdir -p "$OF/rd-closed"; cp "$FL/ostate/last.json" "$FL/ostate/blindspot-fleet.sh" "$OF/rd-closed/"; chmod 000 "$OF/rd-closed"
+mkdir -p "$OF/rd-ref"; printf 'refused 2026-11-18T09:00Z: the file or a folder above it can be changed by an account other than root\n1795000000\n' > "$OF/rd-ref/refused"
+_o1=$(of_reader "$OF/rd-closed"); _o2=$(of_reader "$OF/rd-none"); _o3=$(of_reader "$OF/rd-ref"); _o4=$(of_reader "$FL/ostate")
+chmod 700 "$OF/rd-closed"
+if grep -q 'd=/var/db/blindspot' "$OF/reader.sh" && [ "$_o1" = unreadable ] && [ "$_o2" = none ] && [ "$_o4" = unreadable ] \
+  && [ "$_o3" = "failed: refused 2026-11-18T09:00Z: the file or a folder above it can be changed by an account other than root" ]; then
+  ok "fleet one file: the guide's inventory reader prints unreadable where it can't read, never none"
+else bad "fleet one file: the guide's inventory reader prints unreadable where it can't read, never none" "[$_o1] [$_o2] [$_o3] [$_o4]"; fi
+# A two-file install left in /Library/Application Support/Blindspot is named in the result.
+mkdir -p "$OF/old"; : > "$OF/old/gird-fleet.sh"; of_run old "$ONE" --all-users --json; rm -rf "$OF/old"; of_run noold "$ONE" --all-users --json
+of_env /bin/bash "$ONE" --all-users < /dev/null > "$OF/oldterm.out" 2>&1
+mkdir -p "$OF/old"; : > "$OF/old/gird-check.sh"; of_env /bin/bash "$ONE" < /dev/null > "$OF/oldsum.out" 2>&1; of_env /bin/bash "$ONE" --all-users < /dev/null > "$OF/oldterm2.out" 2>&1; rm -rf "$OF/old"
+if grep -q '^old_install=true$' "$OF/old.flat" && grep -q '^old_install=false$' "$OF/noold.flat" && grep -qE '^inventory=v1 act .*\| old-install( \||$)' "$OF/old.flat" \
+  && grep -q '^blindspot act accounts=2 .* old_install=yes$' "$OF/oldsum.out" && grep -q 'An older install of Blindspot' "$OF/oldterm2.out" && ! grep -q 'older install' "$OF/oldterm.out"; then
+  ok "fleet one file: an older two-file install is named in the result"
+else bad "fleet one file: an older two-file install is named in the result" "$(grep -E '^(old_install|inventory)=' "$OF/old.flat" "$OF/noold.flat") $(cat "$OF/oldsum.out")"; fi
+}
+SKIPPING=""
 
 echo "the text backstop to tests/parity.sh"
 # Each case is a copy of a suite with lines added through a heredoc, which the backstop skips here.

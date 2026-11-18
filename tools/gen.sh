@@ -10,12 +10,12 @@
 # (data/bad-extensions.tsv) and variables that move an agent's or a tool's folders
 # (data/folder-vars.tsv). The scripts stay single files people can download and check.
 #
-#   bash tools/gen.sh           rewrite the blocks, and build blindspot-fleet.ps1
-#   bash tools/gen.sh --check   exit 1 if a block differs from the data files, or blindspot-fleet.ps1
-#                               would not be under 200 KB or is not what gen.sh builds
+#   bash tools/gen.sh           rewrite the blocks, and build blindspot-fleet.sh and blindspot-fleet.ps1
+#   bash tools/gen.sh --check   exit 1 if a block differs from the data files, or a one-file build
+#                               would not be under its MDM's size limit or is not what gen.sh builds
 #
 # Building blindspot-fleet.ps1 needs PowerShell: pwsh on PATH, or PWSH=/path/to/pwsh. Without it the
-# blocks are still written or checked, and the exit code is 3 when they are right.
+# blocks and blindspot-fleet.sh are still written or checked, and the exit code is 3 when they are right.
 set -eu
 cd "$(dirname "$0")/.."
 CHECK=0; [ "${1:-}" = --check ] && CHECK=1
@@ -492,11 +492,50 @@ for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1; do
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
 done
 
+if command -v sha256sum > /dev/null 2>&1; then sha() { sha256sum | cut -c1-64; }; else sha() { shasum -a 256 | cut -c1-64; }; fi
+# --- the size rule both one-file builds follow ----------------------------------
+# size_ok FILE BYTES LIMIT LIMIT-WRITTEN-OUT LIMIT-IN-WORDS WHO: fails at LIMIT bytes or more, the
+# tightest limit an MDM documents for the file, and warns from 80% of it, to keep 20% for growth.
+size_ok() {
+  if [ "$2" -ge "$3" ]; then echo "$1 is $2 bytes: $6 takes a script of under $5 ($4 bytes)"; return 1; fi
+  if [ "$2" -ge $(( $3 * 8 / 10 )) ]; then echo "warning: $1 is $2 bytes, past 80% of the $4 $6 takes"; fi
+  return 0
+}
+
+# --- blindspot-fleet.sh, the one file an MDM runs on a Mac -------------------------
+# gird-fleet.sh with gird-check.sh after its last line, without the game (the lines from "# >>> game"
+# to "# <<< game", nothing else changed), and that copy's SHA-256 in FL_PACKED_SHA. bash never reaches
+# those lines: the file's own copy writes them out (fl_unpack in gird-fleet.sh). Built from the files as
+# they are here and never checked in. Intune takes a macOS script of under 1 MB, so --check fails at
+# 1,000,000 bytes, and when the copy it unpacks is not gird-check.sh without its game byte for byte.
+# A blindspot-fleet.sh already here must be that build.
+if ! awk '/^# >>> game$/ { if (g || n) exit 1; g = 1; n = 1; next } /^# <<< game$/ { if (!g) exit 1; g = 0; next }
+    g && /^# >>> / { exit 1 } !g { print > out } END { if (g || n != 1) exit 1 }' out="$WORK/nogame.sh" gird-check.sh; then
+  echo "blindspot-fleet.sh not built: gird-check.sh needs one game block, \"# >>> game\" to \"# <<< game\", with no other block inside it"; RC=1
+elif grep -qE '^# (>>>|<<<) packed-' "$WORK/nogame.sh"; then
+  echo "blindspot-fleet.sh not built: gird-check.sh holds a packed- marker line, which would end the copy early"; RC=1
+else
+  _shs=$(sha < "$WORK/nogame.sh")
+  printf '# >>> packed-sha: written into blindspot-fleet.sh by tools/gen.sh.\nFL_PACKED_SHA=\047%s\047\n# <<< packed-sha\n' "$_shs" > "$WORK/packed-sha.sh"
+  { printf '# >>> packed-check: gird-check.sh without its game, written in by tools/gen.sh. bash stops at the exit above and never runs it here.\n'
+    cat "$WORK/nogame.sh"; printf '# <<< packed-check\n'; } > "$WORK/packed-check.sh"
+  splice gird-fleet.sh packed-sha "$WORK/packed-sha.sh" > "$WORK/bf1.sh" && splice "$WORK/bf1.sh" packed-check "$WORK/packed-check.sh" > "$WORK/blindspot-fleet.sh" || RC=1
+  _szs=$(wc -c < "$WORK/blindspot-fleet.sh" | tr -d ' ')
+  size_ok blindspot-fleet.sh "$_szs" 1000000 1,000,000 "1 MB" "Intune for macOS" || RC=1
+  unpacked_sh() { awk '/^# >>> packed-check[: ]/ && !s { s = 1; next } s { if (n) print p; p = $0; n = 1 } END { exit !(s && p == "# <<< packed-check") }' "$1" | sha; }
+  [ "$(unpacked_sh "$WORK/blindspot-fleet.sh")" = "$_shs" ] || { echo "blindspot-fleet.sh does not unpack to gird-check.sh without its game"; RC=1; }
+  [ "$(head -n 1 "$WORK/blindspot-fleet.sh")" = '#!/bin/bash' ] || { echo "blindspot-fleet.sh must start with #!/bin/bash"; RC=1; }
+  if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.sh ] && ! cmp -s blindspot-fleet.sh "$WORK/blindspot-fleet.sh"; then
+    echo "blindspot-fleet.sh is out of date with gird-fleet.sh and gird-check.sh, or was edited: run bash tools/gen.sh"; RC=1
+  fi
+  if [ "$CHECK" -eq 0 ] && [ "$RC" -eq 0 ] && ! cmp -s "$WORK/blindspot-fleet.sh" blindspot-fleet.sh; then cat "$WORK/blindspot-fleet.sh" > blindspot-fleet.sh; echo "built blindspot-fleet.sh ($_szs bytes)"; fi
+fi
+
 # --- blindspot-fleet.ps1, the one file an MDM runs ------------------------------
 # gird-fleet.ps1 with gird-check.ps1 packed inside it, without its comments (tools/strip-comments.ps1,
 # which needs PowerShell), gzip-compressed and base64-encoded, and the SHA-256 of that copy. Built from
 # the files as they are here and never checked in: tools/gen.sh builds it for each release. Intune
-# takes a script of under 200 KB, so --check builds it and fails at 200 KB or more, or when the check
+# takes a script of under 200 KB, so --check builds it and fails at 200 KB or more (size_ok), or when the check
 # it unpacks is not gird-check.ps1 without its comments byte for byte. A blindspot-fleet.ps1 already
 # here must be that build too, apart from how gzip compressed it.
 PWSH=${PWSH:-$(command -v pwsh 2> /dev/null || true)}
@@ -505,7 +544,6 @@ if [ -z "$PWSH" ] || [ ! -x "$PWSH" ]; then
   [ "$RC" -eq 0 ] && RC=3
   exit "$RC"
 fi
-if command -v sha256sum > /dev/null 2>&1; then sha() { sha256sum | cut -c1-64; }; else sha() { shasum -a 256 | cut -c1-64; }; fi
 if ! "$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 gird-check.ps1 "$WORK/stripped.ps1" > /dev/null; then
   echo "blindspot-fleet.ps1 not built: tools/strip-comments.ps1 could not remove gird-check.ps1's comments"; exit 1
 fi
@@ -516,8 +554,7 @@ _sha=$(sha < "$WORK/stripped.ps1")
   printf '$PackedSha = \047%s\047\n# <<< packed-check\n' "$_sha"; } > "$WORK/packed-check.ps1"
 splice gird-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/blindspot-fleet.ps1" || exit 1
 _sz=$(wc -c < "$WORK/blindspot-fleet.ps1" | tr -d ' ')
-if [ "$_sz" -ge 204800 ]; then echo "blindspot-fleet.ps1 is $_sz bytes: Intune takes a script of under 200 KB (204,800 bytes)"; RC=1; fi
-if [ "$_sz" -lt 204800 ] && [ "$_sz" -ge 184320 ]; then echo "warning: blindspot-fleet.ps1 is $_sz bytes, past 90% of the 204,800 Intune takes"; fi
+size_ok blindspot-fleet.ps1 "$_sz" 204800 204,800 "200 KB" Intune || RC=1
 unpacked() { sed -n "s|^\\\$PackedCheck = '\\([A-Za-z0-9+/=]*\\)'\$|\\1|p" "$1" | base64 -d 2> /dev/null | gzip -dc 2> /dev/null | sha; }
 if [ "$(unpacked "$WORK/blindspot-fleet.ps1")" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1 without its comments"; RC=1; fi
 if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.ps1 ]; then

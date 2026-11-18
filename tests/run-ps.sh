@@ -4184,7 +4184,8 @@ fw_home bfbad; : > "$FW/argv.log"
 FW_SCRIPT="$FW/bfrun/blindspot-bad.ps1" fw_run bfbad "$FW/bfbad"
 if ! cmp -s "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/blindspot-bad.ps1" && grep -qE ' reason=unpack \| ' "$FW/bfbad.out" && [ ! -s "$FW/argv.log" ]; then ok "fleet: a packed check whose SHA-256 differs is never started, reason=unpack"
 else bad "fleet: a packed check whose SHA-256 differs is never started, reason=unpack" "$(cat "$FW/bfbad.out" "$FW/argv.log")"; fi
-# The 90% warning, both ways: the build as it is (under 90% today, so no warning), and a copy whose
+# The 80% warning (size_ok in tools/gen.sh, as for blindspot-fleet.sh), both ways: the build as it is
+# (under 80% today, so no warning), and a copy whose
 # gird-fleet.ps1 carries comment lines that put blindspot-fleet.ps1 at about 190,000 bytes.
 (cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1); _rc=$?
 _sz=$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ')
@@ -4192,10 +4193,10 @@ mkdir -p "$FW/bf90"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet
 python3 -c "import sys; n = 190000 - int(sys.argv[2]); open(sys.argv[1], 'a').write(('# ' + 'x' * 97 + '\n') * (n // 100))" "$FW/bf90/gird-fleet.ps1" "$_sz"
 (cd "$FW/bf90" && PWSH="$PWSH" bash tools/gen.sh > "$FW/bf90.log" 2>&1); _rc90=$?
 _sz90=$(wc -c < "$FW/bf90/blindspot-fleet.ps1" 2> /dev/null | tr -d ' ')
-if [ "$_rc" -eq 0 ] && { { [ "$_sz" -lt 184320 ] && ! grep -q 'past 90%' "$FW/bf-check.log"; } || { [ "$_sz" -ge 184320 ] && grep -q 'past 90%' "$FW/bf-check.log"; }; } \
-  && [ "$_rc90" -eq 0 ] && [ "${_sz90:-0}" -ge 184320 ] && [ "$_sz90" -lt 204800 ] && grep -q "^warning: blindspot-fleet.ps1 is $_sz90 bytes, past 90% of the 204,800 Intune takes\$" "$FW/bf90.log"
-then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "$_sz and $_sz90 bytes"
-else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "as built: exit $_rc, $_sz bytes, $(grep -c 'past 90%' "$FW/bf-check.log") warnings; inflated: exit $_rc90, $_sz90 bytes, $(head -n 2 "$FW/bf90.log")"; fi
+if [ "$_rc" -eq 0 ] && { { [ "$_sz" -lt 163840 ] && ! grep -q 'blindspot-fleet.ps1 is .* past 80%' "$FW/bf-check.log"; } || { [ "$_sz" -ge 163840 ] && grep -q 'blindspot-fleet.ps1 is .* past 80%' "$FW/bf-check.log"; }; } \
+  && [ "$_rc90" -eq 0 ] && [ "${_sz90:-0}" -ge 163840 ] && [ "$_sz90" -lt 204800 ] && grep -q "^warning: blindspot-fleet.ps1 is $_sz90 bytes, past 80% of the 204,800 Intune takes\$" "$FW/bf90.log"
+then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 80% of 200 KB" "$_sz and $_sz90 bytes"
+else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 80% of 200 KB" "as built: exit $_rc, $_sz bytes, $(grep -c 'blindspot-fleet.ps1 is .* past 80%' "$FW/bf-check.log") warnings; inflated: exit $_rc90, $_sz90 bytes, $(head -n 2 "$FW/bf90.log")"; fi
 # blindspot-fleet.ps1 packs gird-check.ps1 without its comments (tools/strip-comments.ps1): it must
 # parse and run as gird-check.ps1 does, and nothing but comments may go.
 SC=$WORK/strip; mkdir -p "$SC"

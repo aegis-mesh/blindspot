@@ -4,3 +4,6 @@ gird-ai-key-check-*.txt
 
 # blindspot-fleet.ps1 is built by bash tools/gen.sh for each release, never checked in.
 blindspot-fleet.ps1
+
+# blindspot-fleet.sh is built by bash tools/gen.sh for each release, never checked in.
+blindspot-fleet.sh

@@ -400,6 +400,11 @@ spin_stop() {
   printf '\r%s%s' "${E}[K" "$SHOW"
 }
 
+# The game below is cut from the copy of this script that blindspot-fleet.sh carries (tools/gen.sh):
+# with it gone, game_start stays this one, GAME_PID stays empty and the spinner runs instead.
+GAME_PID=""; KEYS_PID=""; GAME_RC=0; SAVED_TTY=""
+game_start() { return 1; }
+# >>> game
 # ---------------------------------------------------------------------------
 # GIRD Runner, a small game for the wait. It runs in a background process while
 # the scan runs in the foreground. When the scan is done the game gets USR1 and
@@ -412,8 +417,16 @@ spin_stop() {
 #                it back after both have stopped, so they never race over its mode.
 # The runner is drawn with half-height blocks, so it moves in half-row steps.
 # ---------------------------------------------------------------------------
-GAME_PID=""; KEYS_PID=""; GAME_RC=0; SAVED_TTY=""
-if [ -n "${EPOCHREALTIME:-}" ]; then G_MODE=A; elif [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then G_MODE=B; else G_MODE=C; fi
+game_start() { # starts the game in the background, or returns 1 when it can't run here
+  if [ -n "${EPOCHREALTIME:-}" ]; then G_MODE=A; elif [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then G_MODE=B; else G_MODE=C; fi
+  game_ok || return 1
+  SAVED_TTY=$(stty -g </dev/tty 2>/dev/null)
+  [ "$G_MODE" = C ] && stty -echo -icanon min 0 time 5 </dev/tty 2>/dev/null
+  game_loop </dev/tty &
+  GAME_PID=$!
+  if [ "$G_MODE" = C ]; then g_keys "$GAME_PID" </dev/tty & KEYS_PID=$!; fi
+  return 0
+}
 # stty must work on /dev/tty too: some Windows terminals (mintty without a console)
 # have a terminal on stdin that stty can't set, and then the spinner is shown instead.
 game_ok() {
@@ -706,6 +719,7 @@ game_loop() {
   if [ "$G_PLAYED" -eq 1 ]; then _b=$((G_BEST / 50 + 1)); [ "$_b" -gt 100 ] && _b=100; exit "$_b"; fi
   exit 0
 }
+# <<< game
 
 # Keys for the menu at the end: one key, read straight from the terminal.
 read_key() {
@@ -1338,15 +1352,7 @@ SCAN_ERR=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null || mktemp /tmp/blindspot.
 SCAN_LOST=0; [ -n "$SCAN_ERR" ] || SCAN_LOST=1
 # An account run counts each folder the scan could not read as not checked, so it needs the file.
 if [ "$ACCTRUN" -eq 1 ] && [ -z "$SCAN_ERR" ]; then exit 13; fi
-if game_ok; then
-  SAVED_TTY=$(stty -g </dev/tty 2>/dev/null)
-  [ "$G_MODE" = C ] && stty -echo -icanon min 0 time 5 </dev/tty 2>/dev/null
-  game_loop </dev/tty &
-  GAME_PID=$!
-  if [ "$G_MODE" = C ]; then g_keys "$GAME_PID" </dev/tty & KEYS_PID=$!; fi
-else
-  spin_start "Checking your agents, configs and keys"
-fi
+game_start || spin_start "Checking your agents, configs and keys"
 SCAN_T0=$SECONDS
 
 # --- Keys in agent sessions, checked in the background --------------------------
@@ -1565,18 +1571,27 @@ sess_filter() { # [rg]
 SESS_ENGINE=none; SESS_RC=""
 RG_BIN=$(type -P rg 2>/dev/null)
 # >>> owned-walk: this function's home; tools/gen.sh copies it into gird-fleet.sh.
-# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
-# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
-# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
+# owned_only UID PATH [sticky]: 0 when PATH and every folder above it are owned by root or UID and
+# writable by no one else: the full mode read with four digits (so 002 is not read as 2), and no ACL
+# entry that lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be
+# resolved. With sticky, a folder that root owns with mode 1777, as /private/tmp, passes:
+# there no other account can rename, unlink or replace a file root owns. Only gird-fleet.sh's start
+# asks for it, and it then runs a copy of the file in a folder of its own (docs/designs/fleet-mode.md).
+# The two calls that differ by OS: owner and mode, and whether an ACL entry lets anyone write (macOS).
+oo_mode() { /usr/bin/stat -f '%u %Mp%03Lp' "$1" 2>/dev/null; }
+oo_acl_open() { # 0: an entry lets someone write; 1: none does; 2: the ACL could not be read
+  _oo_a=$(/bin/ls -lde "$1" 2>/dev/null) || return 2
+  printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }'
+}
 owned_only() {
   _oo_p=$2
   while :; do
-    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
+    _oo_m=$(oo_mode "$_oo_p")
     case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
-    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
-    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
+    case "${_oo_m#* }" in [0-7][0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    if [ "${3:-}" = sticky ] && [ "$_oo_m" = "0 1777" ] && [ -d "$_oo_p" ]; then :
+    else case "${_oo_m#* }" in ??[2367]?|???[2367]) return 1 ;; esac; fi
+    oo_acl_open "$_oo_p"; [ $? -eq 1 ] || return 1
     [ "$_oo_p" = / ] && return 0
     _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
   done
