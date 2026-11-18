@@ -478,7 +478,7 @@ if ($FlNotChecked) {
 # --- The PC's shared places, by name only: nothing in them is read or run ------------
 # Agents installed for every account under %ProgramFiles%, where the per-person install folders of
 # the agents table (under %LOCALAPPDATA%\Programs) have their machine-wide twin.
-$MAgents = New-Object System.Collections.Generic.List[string]; $MInc = New-Object System.Collections.Generic.List[string]; $MPoss = New-Object System.Collections.Generic.List[string]
+$MAgents = New-Object System.Collections.Generic.List[string]
 $PF = @(); $PD = ''
 if ($OnWindows) { $PF = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }; $PD = $env:ProgramData }
 elseif ($FlTest -and ($env:GIRD_CHECK_FLEET_PROGRAMFILES -or $env:GIRD_CHECK_FLEET_PROGRAMDATA)) { $PF = @($env:GIRD_CHECK_FLEET_PROGRAMFILES) | Where-Object { $_ }; $PD = $env:GIRD_CHECK_FLEET_PROGRAMDATA }
@@ -514,20 +514,23 @@ function Mark-Kind([string]$kind, [string]$linkType) {
   if ($linkType) { return 'possible' }
   switch ($kind) { 'person' { 'account' } 'machine' { 'incident' } default { 'possible' } }
 }
-$MComplete = $true
-if ($PD) {
+# The markers found, by where they go, and whether every owner could be read.
+function Scan-Markers([string]$pd) {
+  $st = @{ Inc = (New-Object System.Collections.Generic.List[string]); Poss = (New-Object System.Collections.Generic.List[string]); Complete = $true }
+  if (-not $pd) { return $st }
   foreach ($r in $FlProgramData) {
-    $mp = J $PD $r[1]
+    $mp = J $pd $r[1]
     if (-not ([IO.File]::Exists($mp) -or [IO.Directory]::Exists($mp))) { continue }
     if (Is-Reparse $mp) { continue }
     $lt = $null; try { $lt = (Get-Item -LiteralPath $mp -Force -ErrorAction Stop).LinkType } catch { $lt = 'unknown' }
     $ok = Owner-Kind $mp
-    if ($ok -eq 'unknown') { $MComplete = $false }
+    if ($ok -eq 'unknown') { $st.Complete = $false }
     switch (Mark-Kind $ok ([string]$lt)) {
-      'incident' { if (-not $MInc.Contains($r[0])) { $MInc.Add($r[0]) } }
-      'possible' { if (-not $MPoss.Contains($r[0])) { $MPoss.Add($r[0]) } }
+      'incident' { if (-not $st.Inc.Contains($r[0])) { $st.Inc.Add($r[0]) } }
+      'possible' { if (-not $st.Poss.Contains($r[0])) { $st.Poss.Add($r[0]) } }
     }
   }
+  $st
 }
 function Machine-Outcome($inc, $poss, [bool]$complete) {
   $o = 'clear'
@@ -536,8 +539,18 @@ function Machine-Outcome($inc, $poss, [bool]$complete) {
   if (-not $complete -and $o -ne 'act') { $o = 'not_checked' }
   $o
 }
-$MOut = Machine-Outcome $MInc $MPoss $MComplete
-$Machine = "{""complete"":$(Json-Bool $MComplete),""outcome"":""$MOut"",""agents"":$(Json-List $MAgents),""possible_signs"":$(Json-List $MPoss),""incidents"":$(Json-Incidents $MInc)}"
+function Machine-Json($st, [string]$out, $agents) {
+  "{""complete"":$(Json-Bool $st.Complete),""outcome"":""$out"",""agents"":$(Json-List $agents),""possible_signs"":$(Json-List $st.Poss),""incidents"":$(Json-Incidents $st.Inc)}"
+}
+# The PC's part of the inventory value: nothing when it is clear.
+function Machine-Part($st, [string]$out) {
+  if ($out -eq 'clear') { return '' }
+  $t = " | machine: $out"; if ($st.Inc.Count -gt 0) { $t += " incidents $(Commas $st.Inc)" }; if ($st.Poss.Count -gt 0) { $t += "; possible $(Commas $st.Poss)" }
+  $t
+}
+$MSt = Scan-Markers $PD
+$MOut = Machine-Outcome $MSt.Inc $MSt.Poss $MSt.Complete
+$Machine = Machine-Json $MSt $MOut $MAgents
 
 # --- The result -----------------------------------------------------------------
 $rank = @{ 'failed' = 5; 'act' = 4; 'not_checked' = 3; 'review' = 2; 'clear' = 1 }
@@ -561,10 +574,7 @@ function Build-Text {
   # time, other_profiles, then reason on a failed result.
   $head = "v1 $($script:Outcome) $($FlAt.Substring(0, 16))Z other_profiles=$FlOther"
   if ($script:FlReason) { $head += " reason=$($script:FlReason)" }
-  $tail = ''
-  if ($MOut -ne 'clear') {
-    $tail = " | machine: $MOut"; if ($MInc.Count -gt 0) { $tail += " incidents $(Commas $MInc)" }; if ($MPoss.Count -gt 0) { $tail += "; possible $(Commas $MPoss)" }
-  }
+  $tail = Machine-Part $MSt $MOut
   $key = "$($FlShown): $AccOut"
   if ($AccOut -eq 'act') { $ks = @($inv | Where-Object { $_ -eq 'wiper' -or $_.StartsWith('incidents ') }); if ($ks.Count -gt 0) { $key += ' ' + ($ks -join '; ') } }
   $script:InventoryV = Fit-Value $head $script:AccInv $key "$($FlShown): $AccOut" $tail

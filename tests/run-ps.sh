@@ -3858,6 +3858,20 @@ $a = [string[]]@('mastra'); $l = [string[]]@('litellm'); $p = [string[]]@('mastr
 PS
 if [ "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")" = 'clear review not_checked not_checked not_checked act' ]
 then ok "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act"; else bad "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act" "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")"; fi
+# The same through the marker scan itself, with the owner lookup made to fail: the PC's row says it
+# was not fully checked, in the JSON and in the inventory value.
+mkdir -p "$FW/pdu/NodePackages"; : > "$FW/pdu/NodePackages/protocal.cjs"
+cat > "$FW/fn-scan.ps1" <<PS
+\$Sep = [IO.Path]::DirectorySeparatorChar
+\$FlIncidents = @{ 'mastra' = 'act' }; \$FlProgramData = @(,@('mastra', 'NodePackages/protocal.cjs'))
+function Owner-Kind([string]\$p) { 'unknown' }
+\$st = Scan-Markers '$FW/pdu'; \$o = Machine-Outcome \$st.Inc \$st.Poss \$st.Complete
+(Machine-Json \$st \$o @()) + (Machine-Part \$st \$o)
+PS
+_fs=$(fw_fn Scan-Markers,Machine-Outcome,Machine-Json,Machine-Part,Mark-Kind,J,Is-Reparse,Json-Bool,Json-List,Json-Incidents,Commas "$FW/fn-scan.ps1")
+if [ "$_fs" = '{"complete":false,"outcome":"not_checked","agents":[],"possible_signs":["mastra"],"incidents":[]} | machine: not_checked; possible mastra' ]
+then ok "fleet: a marker whose owner can't be read leaves the PC's row not complete and not_checked in the JSON and the inventory value"; else bad "fleet: a marker whose owner can't be read leaves the PC's row not complete and not_checked in the JSON and the inventory value" "$_fs"; fi
+rm -rf "$FW/pdu"
 cat > "$FW/fn-prof.ps1" <<'PS'
 (@(@('S-1-5-21-11-22-33-500', 'C:\Users\Administrator'), @('S-1-5-21-11-22-33-503', 'C:\Users\DefaultAccount'), @('S-1-5-21-11-22-33-1001', 'C:\Users\asha'),
   @('S-1-5-21-11-22-33-1002', 'C:\Users\defaultuser0'), @('S-1-12-1-11-22-33-44', 'C:\Users\bob'), @('S-1-5-18', 'C:\Windows\system32\config\systemprofile'),
