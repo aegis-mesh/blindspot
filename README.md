@@ -9,16 +9,16 @@
 [![release](https://img.shields.io/github/v/release/aegis-mesh/blindspot?color=0D9488&label=release)](https://github.com/aegis-mesh/blindspot/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-0D9488)](LICENSE)
 
-Your developers use AI coding tools such as Claude Code, Codex and Cursor. These tools are also called coding agents. An agent works with its user's access: it can open the same files and run the same commands. That includes the keys developers keep on their computers, the passwords programs use to reach services such as AWS, GitHub or OpenAI.
+Your developers use AI coding tools such as Claude Code, Codex and Cursor, also called coding agents. An agent works with its user's access: it can open the same files and run the same commands. That includes the keys on a developer's computer. A key is the password a program uses to reach a service such as AWS, GitHub or OpenAI.
 
 Blindspot tells an IT or security team, for each computer:
 
 - which AI coding tools are installed, and which are set to run commands without asking;
 - where AI and cloud keys sit unprotected, in plain text;
 - which keys an AI tool has already read;
-- whether a recent software supply-chain attack reached that computer.
+- whether a recent supply-chain attack, malware planted in software packages that developers install, reached that computer.
 
-It answers with one word for each computer and a short list of what was found. On Macs it runs from your MDM, the tool you already use to manage company computers.
+It answers with one outcome for each computer and a short list of what was found for each account on it. On Macs it runs from your MDM, the tool you already use to manage company computers.
 
 **Safe to deploy.** It only reads files. It changes nothing in anyone's files and never shows a key. Run from an MDM, it sends nothing to GIRD or anyone else. The code is open, and [your own tools can review it](docs/fleet-reference.md#have-your-coding-agent-review-it) before you deploy.
 
@@ -30,7 +30,7 @@ Each computer reports one outcome. When more than one applies, it reports the on
 |---|---|---|
 | `failed` | The check could not finish. | Treat it as not checked. |
 | `act` | Something to deal with now, such as a key in plain text, a key an AI tool has read, or signs of malware. | Start here. |
-| `not_checked` | The computer, or part of it, could not be checked. This is never shown as clear. | Find out why. |
+| `not_checked` | An account, or part of one, could not be checked. This is never shown as clear. | Find out why. |
 | `review` | Something to change or confirm, not urgent, such as a tool that needs an update or an AI tool set to run without asking. | Plan it. |
 | `clear` | Everything was checked and nothing was found. | Nothing. |
 
@@ -40,9 +40,9 @@ The result shows in your MDM next to each computer, as one line, for example:
 v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
 ```
 
-That line reads: the account `asha` has signs of the TanStack attack, two files with keys for Anthropic and AWS, three AI tool session files that hold a key, and one SSH key with no passphrase. The account `itadmin` is clear.
+That line reads: the account `asha` has signs of the TanStack attack, a May 2026 attack that stole keys through software packages. It also has two files with keys for Anthropic and AWS, three AI tool session files that hold a key, and one SSH key, a key for logging in to other computers, with no password protecting it. The account `itadmin` is clear.
 
-The result never holds a file path, a file name, a key or anything a person typed. To see which files a finding is about, the person runs Blindspot on their own account.
+The result never holds a file path, a file name or a key. It does name each account. To see which files a finding is about, the person runs Blindspot on their own account.
 
 [What to do about each finding](docs/fleet-reference.md#act-on-a-finding) is one table.
 
@@ -51,14 +51,17 @@ The result never holds a file path, a file name, a key or anything a person type
 Rollout from an MDM is for Macs today. On Windows and Linux, each person runs the check themselves: see [Run it on one computer](#run-it-on-one-computer).
 
 1. **Try it on one Mac.** [docs/fleet.md](docs/fleet.md) is the one-screen quick start.
-2. **Add it to your MDM.** [docs/mdm/](docs/mdm/) has a page each for Jamf Pro, Iru and Microsoft Intune. Each page says whether its steps have been run end to end on a real Mac. The MDM installs two files once, runs the check once a day, and shows the result.
-3. **Read the results.** Filter your MDM's list for `act` first, then `not_checked`.
+2. **Add it to your MDM.** [docs/mdm/](docs/mdm/) has a page each for Jamf Pro, Iru and Microsoft Intune. The MDM installs two files once, runs the check once a day, and shows the result. None of the three pages has been run end to end on a real Mac yet, so try it on a few Macs before the whole fleet.
+3. **Read the results.** Look at `act` first, then `not_checked`, `failed` and `stale`, which means the last run is more than 3 days old. Treat `none`, meaning no run yet, and `unreadable` as not checked too.
 
 What an admin should know before deploying:
 
-- `gird-fleet.sh` runs as root, the Mac's administrator account. It checks each person's account with that person's own rights, never root's, using `gird-check.sh`.
+- `gird-fleet.sh` runs as root, the Mac's built-in system account with every right. It checks each person's account with that person's own rights, never root's, using `gird-check.sh`.
 - Root runs both files only from a folder that root alone can change.
-- It makes no network request. The result stays on the Mac for your MDM to read.
+- It makes no network request. The result stays on the Mac, in `/var/db/blindspot/last.json`, which only root can read, for your MDM to show.
+- Your MDM's own agent needs Full Disk Access, the macOS permission to read protected folders. Give it to that agent, never to `/bin/bash`. Without it, each account reads `not_checked`. The page for your MDM says how.
+- It runs once a day in the background, one account after another, and stops at a time limit you set: 50 minutes unless you change it. A developer with a long AI tool history takes minutes to check, or seconds if you also install ripgrep, a fast search tool.
+- A check stopped at its time limit can leave small temp files behind. [docs/fleet-reference.md](docs/fleet-reference.md#files-that-can-be-left-behind) says which and how to remove them.
 
 [docs/fleet-reference.md](docs/fleet-reference.md) has every option, the timing, and how to update or remove it.
 
@@ -66,19 +69,19 @@ What an admin should know before deploying:
 
 [docs/checks.md](docs/checks.md) lists every tool, setting, key type, package, extension and file it looks for.
 
-1. **AI coding tools.** Which are installed, and which were used in the last 30 days. It flags a tool set to run commands without asking the person first, and a version with a published security fix. A tool nobody opens can still be driven by a poisoned software package: that is how the Nx attack stole keys from developer laptops.
-2. **Connections to other systems.** AI tools reach systems such as GitHub or a database through add-ons called MCP servers. Blindspot lists the ones each tool starts, and flags an access token written straight into their settings. It also flags project settings that run a command as soon as a tool opens the folder. A project copied from the internet brings these with it.
-3. **Keys in plain text.** AI and cloud keys in the files developers commonly keep them in, and in the AI tools' own history of past sessions. A key in a session history is one the tool has already read. It also lists login files any tool can read, such as an SSH key with no passphrase.
+1. **AI coding tools.** Which are installed, such as Claude Code, Codex, Cursor, Gemini CLI and OpenCode, and which were used in the last 30 days. It flags a tool set to run commands without asking the person first, and a version with a published security fix. A tool nobody opens can still be driven by a poisoned software package: that is how the Nx attack, in a widely used developer package, stole keys from developer laptops.
+2. **Connections to other systems.** AI tools reach systems such as GitHub or a database through add-ons called MCP servers. Blindspot lists the ones each tool starts, and flags an access token written straight into their settings. It also flags project settings that act as soon as a tool or editor opens the folder, such as hooks and tasks that run commands. A project copied from the internet brings these with it.
+3. **Keys in plain text.** AI and cloud keys in the files developers commonly keep them in: shell settings, the history of typed commands, AI tool settings and `.env` files. It also reads the AI tools' own history of past sessions. A key in a session history is one the tool has already read. It also lists login files any tool can read, such as an SSH key with no passphrase.
 4. **Keys saved by "always allow".** When a person clicks "always allow" on a command that has a key in it, Claude Code saves the whole command, key included, in the project's settings file. Blindspot flags each one, and whether publishing that project would publish the key.
-5. **Recent attacks.** The package versions, editor extensions and leftover files from this year's software supply-chain attacks. Each finding says what the attack did and links its source. One piece of malware, `gh-token-monitor`, runs a destructive command when its stolen GitHub token stops working. If Blindspot finds it, it says to stop and remove it before anyone revokes a token.
+5. **Recent attacks.** The npm and Python package versions, editor extensions and leftover files from this year's supply-chain attacks. It looks in each project's list of installed packages, in packages installed for the whole computer, in download caches and in Python environments. Each finding says what the attack did and links its source. One piece of malware, `gh-token-monitor`, runs a destructive command when its stolen GitHub token stops working. If Blindspot finds it, it says to stop and remove it before anyone revokes a token.
 
 ## What it never does
 
 - Show a key. It names the provider, such as AWS, never the value.
 - Change, create or delete anything in a person's files.
 - Ask for a password, or use administrator rights in a person's own run.
-- Start an AI tool, an MCP server or Python.
-- Send a file path, a key, a username, a computer name or a raw hardware ID anywhere.
+- Start an AI tool, one of its add-ons (an MCP server) or Python.
+- Send a file path, a key, a username, a computer name or a raw hardware ID to GIRD or anyone else. In a run from an MDM, your MDM sees each account's name.
 
 ## Run it on one computer
 
