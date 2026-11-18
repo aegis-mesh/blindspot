@@ -89,18 +89,16 @@ def corpus(out, n):
 # The new key types: for each, keys in many places (cases), near misses that are not keys, and
 # published example values (built from data/public-values.tsv and random characters). A case is a
 # file and the provider the scripts must name in it, or - for none.
-def sas(order='sv', long=False):
-    sig = 'sig=' + r(AN, 40) + '%2B' + r(AN, 3) + '%3D'
-    q = 'sv=2024-11-04&ss=b&srt=sco&sp=rl&se=2026-01-01T00%3A00%3A00Z&spr=https'
-    if long:
-        q = 'sv=2024-11-04&sr=c&sp=rl&skoid=' + r(HEX, 8) + '-' + r(HEX, 4) + '-' + r(HEX, 4) + '-' + r(HEX, 4) + '-' + r(HEX, 12) + \
-            '&sktid=' + r(HEX, 8) + '-' + r(HEX, 4) + '-' + r(HEX, 4) + '-' + r(HEX, 4) + '-' + r(HEX, 12) + \
-            '&skt=2026-01-01T00%3A00%3A00Z&ske=2026-01-02T00%3A00%3A00Z&sks=b&skv=2024-11-04&st=2026-01-01T00%3A00%3A00Z&se=2026-01-02T00%3A00%3A00Z&spr=https'
-    return 'https://' + r(string.ascii_lowercase, 10) + '.blob.core.windows.net/c/f.txt?' + (q + '&' + sig if order == 'sv' else sig + '&' + q)
+def msft(tag, pre=''):
+    return pre + r(AN, 52 - len(pre)) + 'JQQ' 'J99' + r(AN, 1) + random.choice('ABCDEFGHIJKL') + r(AN, 12) + tag + r(AN, 4)
 
 
-def msft(tag):
-    return r(AN, 52) + 'JQQ' 'J99' + r(AN, 1) + random.choice('ABCDEFGHIJKL') + r(AN, 12) + tag + r(AN, 4)
+# The first characters of a key whose fixed part is in its middle can look like another key's start
+# or be ones the naming step once dropped (a digit, _, ., ~): each type gets a key with each of these
+# on purpose, and must still be named as itself.
+ENTRA_PRE = ['38_', '_ab', 'hf_', 'r8_', 'sk-', 'SG.', 'AQ.', '.~-', '9-x', '000']
+MSFT_PRE = ['38', '0', 'AKIA', 'ASIA', 'ABSK', 'dapi', 'xai']
+STORAGE_PRE = ['+', '/', '38', 'AKIA', 'ABSK', 'dapi', '+/']
 
 
 def b64n(k): return ''.join(random.choice(AN + '+/') for _ in range(k))
@@ -115,22 +113,22 @@ def new_kinds():
     glued to a word in front (2)."""
     U2 = URL + '.~'
     return {
-        'azureentra': ('Microsoft Entra', [(lambda: r(U2, 3) + random.choice('78') + 'Q' '~' + r(U2, 34), 0), (lambda: r(U2, 3) + '8Q' '~' + r(U2, 31), 0)],
+        'azureentra': ('Microsoft Entra', [(lambda: r(U2, 3) + random.choice('78') + 'Q' '~' + r(U2, 34), 0), (lambda: r(U2, 3) + '8Q' '~' + r(U2, 31), 0)] +
+                       [(lambda p=p: p + random.choice('78') + 'Q' '~' + r(U2, 34), 0) for p in ENTRA_PRE],
                        [('digit 6', lambda: r(U2, 3) + '6Q' '~' + r(U2, 34)), ('30 after', lambda: r(U2, 3) + '8Q' '~' + r(U2, 30)),
                         ('35 after', lambda: r(U2, 3) + '8Q' '~' + r(U2, 35))]),
-        'azuredevops': ('Azure DevOps', [(lambda: msft('AAAAA' 'ZDO'), 0), (lambda: msft('AAAAA' 'ZDO') + r(AN, 2) + '==', 0)],
+        'azuredevops': ('Azure DevOps', [(lambda: msft('AAAAA' 'ZDO'), 0), (lambda: msft('AAAAA' 'ZDO') + r(AN, 2) + '==', 0)] +
+                        [(lambda p=p: msft('AAAAA' 'ZDO', p), 0) for p in MSFT_PRE],
                         [('no JQQJ99', lambda: r(AN, 52) + 'XQQ' 'J99' + r(AN, 14) + 'AAAAA' 'ZDO' + r(AN, 4)),
                          ('51 before', lambda: msft('AAAAA' 'ZDO')[1:]), ('documented example shape', lambda: r(AN, 76) + 'AZ' 'DO' + r(AN, 4))]),
-        'azureai': ('Azure AI', [(lambda: msft('AAA' + random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabdefghijklmno') + 'ACOG'), 0)],
+        'azureai': ('Azure AI', [(lambda: msft('AAA' + random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabdefghijklmno') + 'ACOG'), 0)] +
+                    [(lambda p=p: msft('AAA' + random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabdefghijklmno') + 'ACOG', p), 0) for p in MSFT_PRE],
                     [('Microsoft dummy', lambda: msft('AAA' 'cACOG')), ('past o', lambda: msft('AAA' 'pACOG'))]),
-        'azurestorage': ('Azure Storage', [(lambda: b64n(76) + '+A' 'St' + b64n(5) + random.choice('AQgw') + '==', 0), (lambda: storage_cs(b64n(86) + '=='), 1)],
+        'azurestorage': ('Azure Storage', [(lambda: b64n(76) + '+A' 'St' + b64n(5) + random.choice('AQgw') + '==', 0), (lambda: storage_cs(b64n(86) + '=='), 1)] +
+                         [(lambda p=p: p + b64n(76 - len(p)) + '+A' 'St' + b64n(5) + random.choice('AQgw') + '==', 0) for p in STORAGE_PRE],
                          [('no +ASt', lambda: b64n(86) + '=='), ('85 in a connection string', lambda: storage_cs(b64n(85) + '==')),
                           ('Cosmos DB', lambda: 'AccountEndpoint=https://x.documents.azure.com:443/;Account' 'Key=' + b64n(86) + '==;'),
                           ('lowercase', lambda: storage_cs(b64n(86) + '==').replace('AccountKey', 'accountkey'))]),
-        'azuresas': ('Azure Storage SAS', [(lambda: sas('sv'), 1), (lambda: sas('sig'), 1), (lambda: sas('sv', True), 1)],
-                     [('sv=1.0', lambda: 'https://x.logic.azure.com/workflows/' + r(HEX, 32) + '/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=' + r(URL, 43)),
-                      ('Service Bus', lambda: 'SharedAccessSignature sr=https%3A%2F%2Fx.servicebus.windows.net&sig=' + r(AN, 43) + '%3D&se=1700000000&skn=RootManageSharedAccessKey'),
-                      ('42 sig', lambda: 'https://x.blob.core.windows.net/c?sv=2024-11-04&sp=r&sig=' + r(AN, 42))]),
         'databricks': ('Databricks', [(lambda: 'da' 'pi' + r(HEX, 32), 0), (lambda: 'da' 'pi' + r(HEX, 32) + '-2', 0)],
                        [('upper-case hex', lambda: 'da' 'pi' + r('0123456789ABCDEF', 32)), ('31 hex', lambda: 'da' 'pi' + r(HEX, 31))]),
         'gitlab': ('GitLab', [(lambda: random.choice(['gl' 'pat-', 'gl' 'dt-', 'gl' 'rt-', 'gl' 'ft-', 'gl' 'soat-']) + r(URL, 20), 0)],
@@ -175,16 +173,15 @@ def public_cases(pv):
         i, part, _ = line.rstrip('\n').split('\t')
         if i == 'azurestorage':
             out.append((i, 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account' 'Key=' + part + b64n(86 - len(part)) + '==;'))
-        elif i == 'azuresas':
-            out.append((i, 'SharedAccessSignature=sv=2015-04-05&sr=b&si=tutorial-policy-635959936145100803&sig=' + part + r(AN, 8) + '%3D'))
-            out.append((i, 'SharedAccessSignature=sv=2015-07-08&sig=' + part + r(AN, 4) + '%3D&spr=https&st=2016-04-12T03%3A24%3A31Z'))
         elif i == 'slack':
             out.append((i, 'xo' 'xb-17653672481-' + part))
     return out
 
 
 def cases(home, manifest, keys, ids, pv):
-    """One .env file a case, in HOME/code/CASE/, and the manifest: CASE<tab>provider or -."""
+    """One .env file a case, in HOME/code/CASE/, and the manifest: CASE<tab>provider or -. The same
+    files every run (a fixed seed), so a case that fails, fails every time."""
+    random.seed(20261118)
     kinds = {k: v for k, v in new_kinds().items() if k in ids}
     rows, made = [], []
 
@@ -215,7 +212,6 @@ def cases(home, manifest, keys, ids, pv):
     # A key of a later pass glued to an older one, or one character before it, never hides it: the
     # older type's own pass finds it, and it is named first.
     near_old = [
-        ('azuresas', 'OpenAI', 'https://x.blob.core.windows.net/c?sv=2024-11-04&sp=r&sig=' + r(AN, 42) + 'sk' '-proj-' + r(AN, 20) + 'T3Blb' 'kFJ' + r(AN, 20)),
         ('azurestorage', 'Google', 'AccountName=' + r(string.ascii_lowercase, 8) + ';Account' 'Key=' + b64n(86) + '==' + 'AI' 'za' + r(URL, 35)),
         ('databricks', 'Hugging Face', 'da' 'pi' + r(HEX, 32) + ' ' + 'h' 'f_' + r(AN, 36)),
     ]
@@ -230,7 +226,8 @@ def cases(home, manifest, keys, ids, pv):
 
 def home(h, keys, ids, sess):
     """One .env file for each key type in IDS, in HOME/code/ID/, and every key in one agent session
-    file at SESS under HOME, each after an escaped newline. Prints the providers' names."""
+    file at SESS under HOME, each after an escaped newline. Prints the providers' names. A fixed seed."""
+    random.seed(20261118)
     kinds = {k: v for k, v in new_kinds().items() if k in ids}
     made, lines = [], []
     for i, (name, makers, _) in sorted(kinds.items()):

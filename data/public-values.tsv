@@ -4,6 +4,4 @@
 # its key pattern matches alone, and where the vendor publishes it. After editing, run: bash tools/gen.sh
 # id	part	source
 azurestorage	Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u	https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string
-azuresas	9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX	https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string
-azuresas	iCvQmdZngZNW%2F4vw43j6%2BVz6fndHF5LI639QJ	https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string
 slack	19874698323-pdFZKVeTuE8sk7oOcBrzbqgy	https://docs.slack.dev/reference/methods/oauth.v2.access

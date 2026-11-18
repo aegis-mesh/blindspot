@@ -238,7 +238,8 @@ Each run has one outcome, the worst of these, in this order:
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
 no login shell, its check could not start or ran out of time, its check sent back something
-unexpected, `gird-check.sh` and `gird-fleet.sh` are from different releases (`release_mismatch`), or
+unexpected, `gird-check.sh` and `gird-fleet.sh` know different key types, as two releases can
+(`release_mismatch`; two releases with the same key types are not told apart), or
 part of it was not read: a protected folder, a folder it could not open, a file that
 is not a regular file or is over 16 MB, or agent sessions not all checked.
 

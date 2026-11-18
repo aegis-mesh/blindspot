@@ -63,6 +63,12 @@ still a key that was sent.
   (`data/public-values.tsv`) in it, or a match longer than its key type's `max` in `data/keys.tsv`
   (300 characters unless the line says more). Shell history is not filtered this way, because its matches come from commands
   the person typed; transcripts also hold tool output such as test fixtures.
+- What matching misses. Within a pass the leftmost match wins, so a key glued to another key of
+  the same pass, or one character after it, can be hidden by it: two new key types side by side
+  can hide one another, though never a key of 1.2.0's types, which have a pass of their own. The
+  perl and .NET engines read a file in pieces of about 1 MB, each ending after a character that no
+  key holds, so no key is cut in two; a run of 8 MB with no such character is cut where it ends,
+  and a key across that cut is missed.
 - Amazon Q CLI caches temporary AWS credentials for its own telemetry in its `data.sqlite3` (the
   `telemetry-cognito-credentials` entry of its `state` table, an `ASIA` key id from Cognito), and
   Kiro CLI, the same CLI renamed and closed source, keeps the same entry by third-party accounts.
@@ -119,8 +125,11 @@ machines will differ:
   has its own pipe to the parent, which is the only writer, so result lines never interleave.
   Workers also exit when their parent or the script itself is gone, checked before each file and
   each 1 MB piece of one, so after a kill -9 of the script they stop within one piece. ripgrep is
-  killed by its process ID, and under Git Bash with `taskkill`; after a kill -9 of the script it
-  runs to its end. The pipe and the results file live in a `mktemp -d` folder (owner only, name
+  stopped by the job that started it (one run a pass), by its process ID; under Git Bash that job
+  ends it with `taskkill` by ripgrep's own Windows process ID, never as a tree (`/T`), and only while
+  ripgrep is its child and not yet waited for, so the ID can't have passed to another process.
+  Otherwise ripgrep runs to its end and the sessions read partly checked. After a kill -9 of the
+  script it runs to its end. The pipe and the results file live in a `mktemp -d` folder (owner only, name
   not guessable) removed by the existing cleanup; if it can't be made, the report says the
   sessions were not checked. The filter the keys pass through is stopped with the engine,
   which also traps HUP from now on; a kill -9 leaves it behind, holding paths and provider names

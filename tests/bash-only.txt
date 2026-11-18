@@ -356,3 +356,7 @@ grep finds with the split key patterns what one alternation finds	it checks gird
 grep and perl get each key pattern on its own	it counts the patterns gird-check.sh hands to grep and perl; gird-check.ps1 runs neither
 fleet: a gird-check.sh from another release is named, and no account is run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and the summary says to install both from one release	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+grep runs a later pass only on text that holds its fixed strings	it counts gird-check.sh grep calls; gird-check.ps1 runs no grep, and its .NET passes are compiled regexes
+Git Bash: only ripgrep, by its own Windows id, while it is the job's child	it runs gird-check.sh's Git Bash stop path (rg_stop) with a stand-in /proc and taskkill; gird-check.ps1 stops ripgrep through the Process object it started, which its twin of "taskkill never ends a process tree" reads
+an in line's start without its place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a start line's start with a place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

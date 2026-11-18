@@ -3033,6 +3033,17 @@ PSEOF
 read -r _n _m _d < "$KP/net.txt"
 if [ "${_n:-0}" -gt 400 ] && [ "${_m:-0}" -gt 0 ] && [ "${_d:-x}" = 0 ]; then ok "net: the session engine finds what one plain alternation of the key patterns finds" "$_n files, $_m matches"
 else bad "net: the session engine finds what one plain alternation of the key patterns finds" "$(head -c 300 "$KP/net.txt")"; fi
+# ripgrep reads every session folder once a pass: count its runs, so a change that adds one shows.
+SKIPPING=$NORG
+if [ -z "$SKIPPING" ]; then
+  mkdir -p "$KP/rgshim" "$KP/rglog"
+  printf '#!/bin/bash\n[ "$1" = --version ] || /usr/bin/mktemp "%s/r.XXXXXX" > /dev/null\nexec %s "$@"\n' "$KP/rglog" "$RG" > "$KP/rgshim/rg"; chmod +x "$KP/rgshim/rg"
+  psrun "$WORK/home" PATH="$WORK/bin:$KP/rgshim" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions > "$KP/rgshim.txt" 2>&1
+  _nr=$(find "$KP/rglog" -name 'r.*' | grep -c .); _np=$(sed -n "s/^\$KEY_PASSES = @(\(.*\))\$/\1/p" "$SCRIPT" | grep -o "', '" | grep -c .); _np=$((_np + 1))
+fi
+if [ -n "$SKIPPING" ] || { [ "${_nr:-0}" -eq "${_np:-x}" ] 2>/dev/null; }; then ok "ripgrep runs once for each pass" "${_nr:-} runs, ${_np:-} passes"
+else bad "ripgrep runs once for each pass" "${_nr:-?} runs, ${_np:-?} passes"; fi
+SKIPPING=""
 
 # The new key types, case by case through the script's own Providers-In: each found and named at a
 # line start, mid-line, after an escaped newline and in an escaped quote; and not a key one character
@@ -3080,7 +3091,7 @@ echo "data platform login files"
 LG=$WORK/lg; _sec=$(rnd 32)
 mkdir -p "$LG"; for _h in has none env sys; do cp -R "$WORK/clean" "$LG/$_h"; done
 mkdir -p "$LG/has/.azure" "$LG/has/.dbt" "$LG/has/.snowflake" "$LG/none/.azure" "$LG/none/.dbt" "$LG/none/.snowflake" \
-  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf" "$LG/sys/AppData/Local/snowflake"
+  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf" "$LG/sys/Library/Application Support/snowflake" "$LG/sys/.config/snowflake"
 printf '[{"client_id": "%s", "tenant": "t", "client_secret": "%s"}]\n' "$(rnd 8)" "$_sec" > "$LG/has/.azure/service_principal_entries.json"
 printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\ntoken = %s\n' "$_sec" > "$LG/has/.databrickscfg"
 printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n' "$_sec" > "$LG/has/.dbt/profiles.yml"
@@ -3090,7 +3101,9 @@ printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nauth_type = data
 printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
 printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\n' > "$LG/none/.snowflake/connections.toml"
 cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
-cp "$LG/has/.snowflake/connections.toml" "$LG/sys/AppData/Local/snowflake/config.toml"
+# The system's own folder, as gird-check.sh picks it: Application Support on a Mac, ~/.config on Linux.
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/Library/Application Support/snowflake/config.toml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/.config/snowflake/config.toml"
 for _h in has none sys; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
 psrun "$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
 _want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
@@ -3099,23 +3112,56 @@ hasnot "but not one with only a certificate, a host, an env_var or a browser log
 has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
 has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
 if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
+# A dbt password in single quotes is one too, and Snowflake's Windows folder is not read off Windows.
+for _h in sq win; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/sq/.dbt" "$LG/win/AppData/Local/snowflake"
+printf "app:\n  outputs:\n    dev:\n      type: postgres\n      password: '%s'\n" "$_sec" > "$LG/sq/.dbt/profiles.yml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connections.toml"
+for _h in sq win; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
+hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
 
-echo "advice for a shared access signature"
-# A SAS has no revoke of its own: the advice says what to change instead, for a SAS in a .env file
-# or in an agent session, and never for a Storage account key alone.
-mkdir -p "$WORK/sas/s1" "$WORK/sas/s2" "$WORK/sas/s3"
-for _h in s1 s2 s3; do cp -R "$WORK/clean/." "$WORK/sas/$_h/"; done
-_sig="sig=$(rnd 40)%2B$(rnd 3)%3D"
-mkdir -p "$WORK/sas/s1/code/blob" "$WORK/sas/s2/.claude/projects/p" "$WORK/sas/s3/code/blob"
-printf 'BLOB_URL=https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&se=2026-01-01&%s\n' "$_sig" > "$WORK/sas/s1/code/blob/.env"
-printf '{"t":"curl https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&%s"}\n' "$_sig" > "$WORK/sas/s2/.claude/projects/p/s.jsonl"
-printf 'AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=acct;Account%s=%s==\n' Key "$(rnd 86)" > "$WORK/sas/s3/code/blob/.env"
-for _h in s1 s2 s3; do psrun "$WORK/sas/$_h" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/sas/$_h.txt"; done
-_adv="A shared access signature \(SAS\) for Azure Storage can't be revoked by itself: regenerate the storage account key that signed it, or, for a user delegation SAS, revoke the user delegation keys\. One that uses a stored access policy ends when you delete the policy\."
-has    "a shared access signature in a .env file gets advice: it can't be revoked by itself" "$_adv" "$WORK/sas/s1.txt"
-has    "and one in an agent session too" "$_adv" "$WORK/sas/s2.txt"
-hasnot "but a Storage account key alone does not" "shared access signature" "$WORK/sas/s3.txt"
-has    "which is found as an Azure Storage key" 'Azure Storage' "$WORK/sas/s3.txt"
+echo "shared access signatures"
+# A shared access signature is not a key type: GitHub hands out short-lived signed links to its own
+# storage (container registry blobs, Actions artifacts) that turn up in docker and curl output, and
+# the text alone can't tell one from a signature for storage the person owns.
+SA=$WORK/sas; mkdir -p "$SA"; cp -R "$WORK/clean" "$SA/h"
+mkdir -p "$SA/h/code/blob" "$SA/h/.claude/projects/p"
+printf 'BLOB_URL=https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&se=2099-01-01&sig=%s%%2B%s%%3D\n' "$(rnd 40)" "$(rnd 3)" > "$SA/h/code/blob/.env"
+printf '{"t":"curl -L https://pkg-containers.githubusercontent.com/ghcr1/blobs/sha256:%s?se=2099-01-01T00%%3A00%%3A00Z&sig=%s%%3D&sp=r&spr=https&sr=b&sv=2019-12-12"}\n' "$(rnd 64)" "$(rnd 43)" > "$SA/h/.claude/projects/p/s.jsonl"
+psrun "$SA/h" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SA/h.txt"
+has    "a shared access signature is not a key, in a .env file or an agent session: the check ran" 'KEYS IN PLAIN TEXT' "$SA/h.txt"
+hasnot "and names none" 'Azure Storage|shared access signature|code[/\\]blob[/\\]\.env' "$SA/h.txt"
+
+echo "published values in every section"
+# Azurite's published account key (data/public-values.tsv) is not a key wherever a key is judged: in
+# a .env file (section 3), in an MCP config (section 2) and in a Claude Code allow rule (section 4).
+# The same files with a Storage key of the same shape in its place are flagged in all three.
+PV=$WORK/pv; mkdir -p "$PV"
+_azp=$(awk -F '\t' '$1 == "azurestorage" { print $2; exit }' data/public-values.tsv)
+for _v in pub real; do
+  cp -R "$WORK/clean" "$PV/$_v"; mkdir -p "$PV/$_v/code/az/.claude"
+  if [ "$_v" = pub ]; then _k="$_azp$(rnd 46)=="; else _k="$(rnd 86)=="; fi
+  _cs="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account""Key=$_k;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+  printf 'AZURE_STORAGE_CONNECTION_STRING=%s\n' "$_cs" > "$PV/$_v/code/az/.env"
+  printf '{"mcpServers":{"az":{"command":"npx","args":["-y","@azure/mcp"],"env":{"AZURE_STORAGE_CONNECTION_STRING":"%s"}}}}\n' "$_cs" > "$PV/$_v/code/az/.mcp.json"
+  printf '{"permissions":{"allow":["Bash(az storage blob list --connection-string %s)"]}}\n' "$_cs" > "$PV/$_v/code/az/.claude/settings.local.json"
+  psrun "$PV/$_v" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$PV/$_v.txt"
+done
+_d='[/\\]'
+hasnot "Azurite's published key is not a key in plain text"  "~${_d}code${_d}az${_d}\\.env Azure Storage" "$PV/pub.txt"
+has    "and a Storage key in its place is"                   "~${_d}code${_d}az${_d}\\.env Azure Storage" "$PV/real.txt"
+hasnot "nor a token in an MCP config"                       "~${_d}code${_d}az${_d}\\.mcp\\.json 1 server, token in the file" "$PV/pub.txt"
+has    "where a Storage key in its place is one"             "~${_d}code${_d}az${_d}\\.mcp\\.json 1 server, token in the file" "$PV/real.txt"
+hasnot "nor a saved command with a key in an allow rule"     "~${_d}code${_d}az${_d}\\.claude${_d}settings\\.local\\.json A saved command contains a key" "$PV/pub.txt"
+has    "where a Storage key in its place is one too"         "~${_d}code${_d}az${_d}\\.claude${_d}settings\\.local\\.json A saved command contains a key" "$PV/real.txt"
+
+echo "stopping ripgrep on Windows"
+# gird-check.ps1 stops ripgrep through the Process object it started ($SessSt.Proc.Kill(): that process
+# alone, by the handle .NET holds), never by an id it looked up and never as a tree.
+_k=$(grep -n 'taskkill\|Stop-Process\|\.Kill(\|Kill(\$true)' "$SCRIPT" | grep -v '^[0-9]*:[[:space:]]*#')
+if [ "$(printf '%s\n' "$_k" | grep -c .)" = 1 ] && printf '%s\n' "$_k" | grep -qF '$SessSt.Proc.Kill()'; then ok "taskkill never ends a process tree"
+else bad "taskkill never ends a process tree" "$(printf '%s' "$_k" | head -n 3 | tr '\n' '|')"; fi
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

@@ -72,6 +72,21 @@ KEYS_OK='function starts_ok(s,   i, c, inb, n) {
     }
     return !inb
   }
+  # An in line names each start as TEXT@N: fixed text, its one-character choices single characters
+  # such as [+], and where it is in the key; TEXT@N&TEXT@N needs all its parts. A start line names none.
+  function marks_ok(s, inl,   n, a, i, t, m, b, j) {
+    n = split(s, a, "|")
+    for (i = 1; i <= n; i++) {
+      if (!inl) { if (a[i] ~ /[@&]/) return 0; continue }
+      m = split(a[i], b, "&")
+      for (j = 1; j <= m; j++) {
+        if (b[j] !~ /^[^@]+@[0-9]+$/) return 0
+        t = b[j]; sub(/@[0-9]+$/, "", t)
+        if (!starts_ok(t) || t ~ /\[[^]][^]]+\]/) return 0
+      }
+    }
+    return 1
+  }
   function pattern_ok(p,   s, b, q) {
     if (p == "" || p ~ /[\047`]/ || index(p, "[:") > 0 || p ~ /\\[sdwtSDWT]/) return 0
     s = p
@@ -82,8 +97,9 @@ KEYS_OK='function starts_ok(s,   i, c, inb, n) {
     }
     return 1
   }
+  function plain(s) { gsub(/@[0-9]+/, "", s); gsub(/&[^|]*/, "", s); return s }
   function key_ok() {
-    return NF == 6 && $1 ~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/ && $2 != "" && $2 !~ /[\047"`$\\]/ && starts_ok($3) && pattern_ok($4) &&
+    return NF == 6 && $1 ~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/ && $2 != "" && $2 !~ /[\047"`$\\]/ && starts_ok(plain($3)) && marks_ok($3, $5 == "in") && pattern_ok($4) &&
       $5 ~ /^(start|in)$/ && ($6 == "-" || ($6 ~ /^[0-9]+$/ && $6 + 0 >= 20 && $6 + 0 <= 1024))
   }'
 # No regex intervals ({n}) in the awk programs: older mawk (Ubuntu 22.04) does not support them.
@@ -216,8 +232,11 @@ PATH_PS='function ps(p,   v, fb, rest, k, base) {
 # an earlier pass (KEY_PASSES, one regex a pass, for ripgrep and .NET). KEY_ALTS is the patterns cut
 # at each top-level |, one a line, an empty line between passes: grep gets one -e each and perl one
 # regex each, because BSD grep and perl read one long alternation many times slower than its parts
-# one by one. A start is tested against the start of a match (at start) or anywhere in it (in); max
-# is the longest match kept for that provider (- for 300).
+# one by one. PASS_FIXED is each pass's starts as fixed strings, one a line, an empty line between
+# passes: grep skips a later pass in a file that holds none of them. A match is named by the in lines
+# first, each start tested at its place in the whole match (at() and Key-At, which allow the one or
+# two characters in front of a key), then by the start lines, tested against the start of the match
+# as in 1.2.0; max is the longest match kept for that provider (- for 300).
 KPASS=$(awk -F '\t' '/^#pass$/ { p++; next } /^#/ || !NF { next } { printf "%d ", p + 1 }' data/keys.tsv)
 KEYS_GEN='function alts(p,   n, i, c, d, inb, cl, neg, cur, o) {
     n = 0; d = 0; inb = 0; cur = ""; o = ""
@@ -233,7 +252,33 @@ KEYS_GEN='function alts(p,   n, i, c, d, inb, cl, neg, cur, o) {
     return o (n ? "\n" : "") cur
   }
   BEGIN { split(kp, ps, " ") }
-  { id[NR] = $1; nm[NR] = $2; st[NR] = $3; pat[NR] = $4; at[NR] = $5; mx[NR] = $6; n = NR }
+  { id[NR] = $1; nm[NR] = $2; mk[NR] = $3; st[NR] = $3; gsub(/@[0-9]+/, "", st[NR]); gsub(/&[^|]*/, "", st[NR]); pat[NR] = $4; at[NR] = $5; mx[NR] = $6; n = NR }
+  # The fixed strings a start stands for: [abc] is a, b or c.
+  function fixed(s,   o, a, k, i, j, b, e, pre, post, m, c) {
+    o = ""; k = split(s, a, "|")
+    for (i = 1; i <= k; i++) {
+      b = index(a[i], "[")
+      if (!b) { o = o a[i] "\n"; continue }
+      e = index(a[i], "]"); pre = substr(a[i], 1, b - 1); post = substr(a[i], e + 1); m = substr(a[i], b + 1, e - b - 1)
+      for (j = 1; j <= length(m); j++) o = o fixed(pre substr(m, j, 1) post) 
+    }
+    return o
+  }
+  # For an in line: one test a start, TEXT at its place N, as the at() call (bash) or Key-At (.NET).
+  function marks(r, ps1,   o, k, a, i, t, pos, m, b, j, c) {
+    o = ""; k = split(mk[r], a, "|")
+    for (i = 1; i <= k; i++) {
+      c = ""; m = split(a[i], b, "&")
+      for (j = 1; j <= m; j++) {
+        t = b[j]; pos = t; sub(/@[0-9]+$/, "", t); sub(/^.*@/, "", pos); gsub(/[][]/, "", t)
+        if (ps1) c = c (c == "" ? "" : " -and ") "(Key-At $s \047" t "\047 " pos ")"
+        else c = c (c == "" ? "" : " && ") "at(s, \"" t "\", " pos ")"
+      }
+      if (m > 1) c = "(" c ")"
+      o = o (o == "" ? "" : (ps1 ? " -or " : " || ")) c
+    }
+    return o
+  }
   function passes(q,   i, o, cur) {
     o = ""; cur = ""
     for (i = 1; i <= n; i++) {
@@ -252,10 +297,14 @@ rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
     print "KEY_ALTS=\047" ka "\047"
     print "PROVIDER_IDS=\"" ids "\""
     print "KEY_STARTS=\047" starts "\047"
+    pf = ""; for (i = 1; i <= n; i++) pf = pf (i > 1 && ps[i] != ps[i - 1] ? "\n" : "") fixed(st[i])
+    sub(/\n$/, "", pf); print "PASS_FIXED=\047" pf "\047"
     print "PROV_AWK=\047"
+    print "function at(s, t, o,   b) { for (b = 0; b <= 2; b++) if (substr(s, b + o + 1, length(t)) == t) return 1; return 0 }"
     print "function prov(s) {"
+    for (i = 1; i <= n; i++) if (at[i] == "in") print "  if (" marks(i, 0) ") return \"" nm[i] "\""
     print "  sub(/^[^A-Za-z]*\\\\[ntr\"]/, \"\", s); sub(/^[^A-Za-z]+/, \"\", s)"
-    for (i = 1; i <= n; i++) print "  if (s ~ /" (at[i] == "start" ? "^" : "") "(" st[i] ")/) return \"" nm[i] "\""
+    for (i = 1; i <= n; i++) if (at[i] == "start") print "  if (s ~ /^(" st[i] ")/) return \"" nm[i] "\""
     print "  return \"\""
     print "}"
     printf "function pmax(p) {"
@@ -277,9 +326,11 @@ rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
     print "$PROVIDER_IDS = \047" ids "\047"
     print "$KEY_STARTS = \047" starts "\047"
     print "$KeyProviderFn = @\047"
+    print "function Key-At([string]$s, [string]$t, [int]$o) { for ($b = 0; $b -le 2; $b++) { if ($s.Length -ge $b + $o + $t.Length -and $s.Substring($b + $o, $t.Length) -ceq $t) { return $true } }; $false }"
     print "function Key-Provider([string]$s) {"
+    for (i = 1; i <= n; i++) if (at[i] == "in") print "  if (" marks(i, 1) ") { return \047" nm[i] "\047 }"
     print "  $s = $s -replace \047^[^A-Za-z]*\\\\[ntr\"]\047, \047\047 -replace \047^[^A-Za-z]+\047, \047\047"
-    for (i = 1; i <= n; i++) print "  if ($s -cmatch \047" (at[i] == "start" ? "^" : "") "(" st[i] ")\047) { return \047" nm[i] "\047 }"
+    for (i = 1; i <= n; i++) if (at[i] == "start") print "  if ($s -cmatch \047^(" st[i] ")\047) { return \047" nm[i] "\047 }"
     print "  $null"
     print "}"
     printf "function Key-Max([string]$p) { switch -CaseSensitive ($p) {"
