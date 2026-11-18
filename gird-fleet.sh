@@ -519,6 +519,7 @@ fl_reason_text() {
     time_limit) printf 'not checked: its check ran out of time' ;;
     deadline) printf 'not checked: the run reached its deadline first' ;;
     copy_changed) printf 'not checked: the script copy was changed during the run' ;;
+    release_mismatch) printf 'not checked: gird-check.sh and gird-fleet.sh are from different releases: install both from one release' ;;
     *) printf 'not checked' ;;
   esac
 }
@@ -769,6 +770,11 @@ fleet_main() {
   # One version for both files: gird-check.sh's release, from its header.
   FL_REL=$(/usr/bin/sed -n '1,5{s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p;}' "$FL_CHECK" | /usr/bin/head -n 1)
   [ -n "$FL_REL" ] || FL_REL=unknown
+  # Both files come from one release: an account run may name only the key types this file knows, so
+  # a gird-check.sh with other key types would have every account's output refused as unexpected.
+  # It is named instead, for every account, and nothing is run.
+  FL_SKEW=0
+  [ "$(/usr/bin/sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' "$FL_CHECK" | /usr/bin/head -n 1)" = "$PROVIDER_IDS" ] || FL_SKEW=1
   FL_AT=$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ); FL_EPOCH=$(/bin/date -u +%s)
   fl_attempt || :   # a folder that cannot be written fails the save at the end, too
   FL_OS="macOS $(/usr/bin/sw_vers -productVersion 2>/dev/null | /usr/bin/tr -cd '0-9.' | /usr/bin/cut -d. -f1-2)"; FL_OS=${FL_OS% }
@@ -790,6 +796,7 @@ fleet_main() {
       # spends only its own share.
       _lim=$(( (FL_END - SECONDS) / (_left > 0 ? _left : 1) - 3 )); _left=$((_left - 1))
       if [ -n "$FL_FAILED" ]; then _r=copy_changed
+      elif [ "$FL_SKEW" -eq 1 ]; then _r=release_mismatch
       elif [ "$_lim" -lt 1 ]; then _r=deadline; FL_DEADLINE_HIT=1
       elif ! fl_copy_ok; then _r=copy_changed; FL_FAILED=copy
       else

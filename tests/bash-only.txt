@@ -354,3 +354,5 @@ a settings read whose awk fails names the file as not read	gird-check.ps1 reads 
 every key id passes the fleet id filter	fleet mode (fleet_ids, gird-fleet.sh) is gird-check.sh's alone: gird-check.ps1 has no account run
 grep finds with the split key patterns what one alternation finds	it checks gird-check.sh's grep calls; gird-check.ps1 runs no grep
 grep and perl get each key pattern on its own	it counts the patterns gird-check.sh hands to grep and perl; gird-check.ps1 runs neither
+fleet: a gird-check.sh from another release is named, and no account is run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the summary says to install both from one release	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

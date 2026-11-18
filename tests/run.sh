@@ -3925,6 +3925,14 @@ has    "fleet: sudo failing means not checked" '^asha\.not_checked=sudo$' "$FL/s
 printf 'chmod\n' > "$FL/mode-asha"; fl_run copy
 if grep -q '^13$' "$FL/copy.rc" && grep -q '^outcome=failed$' "$FL/copy.flat" && grep -q '^itadmin\.not_checked=copy_changed$' "$FL/copy.flat"; then ok "fleet: a script copy an account could write stops the run"; else bad "fleet: a script copy an account could write stops the run" "$(cat "$FL/copy.rc"; grep -E '^(outcome|itadmin\.not)' "$FL/copy.flat")"; fi
 rm -f "$FL/mode-asha"
+# A gird-check.sh from another release, with key types this gird-fleet.sh does not know: every
+# account is named as not checked for that reason, and none is run.
+mkdir -p "$FL/skew"; cp gird-fleet.sh "$FL/skew/"
+sed 's/^PROVIDER_IDS="\(.*\)"$/PROVIDER_IDS="\1 newertype"/' gird-check.sh > "$FL/skew/gird-check.sh"
+_fs=$FLEETSH; FLEETSH=$FL/skew/gird-fleet.sh; fl_run skew; FLEETSH=$_fs
+if grep -q '^asha\.not_checked=release_mismatch$' "$FL/skew.flat" && grep -q '^itadmin\.not_checked=release_mismatch$' "$FL/skew.flat" && [ ! -s "$FL/argv.log" ]; then ok "fleet: a gird-check.sh from another release is named, and no account is run"
+else bad "fleet: a gird-check.sh from another release is named, and no account is run" "$(grep -E 'not_checked' "$FL/skew.flat" | head -n 3 | tr '\n' ' '; head -c 200 "$FL/skew.err")"; fi
+has    "fleet: and the summary says to install both from one release" 'gird-check\.sh and gird-fleet\.sh are from different releases: install both from one release' "$FL/skew.out"
 
 # A run that holds its output open past its limit, and a process that leaves its group.
 printf 'hold\n' > "$FL/mode-asha"

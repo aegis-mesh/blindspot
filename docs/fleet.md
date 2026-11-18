@@ -238,7 +238,8 @@ Each run has one outcome, the worst of these, in this order:
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
 no login shell, its check could not start or ran out of time, its check sent back something
-unexpected, or part of it was not read: a protected folder, a folder it could not open, a file that
+unexpected, `gird-check.sh` and `gird-fleet.sh` are from different releases (`release_mismatch`), or
+part of it was not read: a protected folder, a folder it could not open, a file that
 is not a regular file or is over 16 MB, or agent sessions not all checked.
 
 The summary line:
@@ -298,7 +299,9 @@ hook sends npm tokens out on every push. Then:
 ## 6. Update or remove it
 
 To update, paste the new release of both files, with the options line, into the install script
-after checking their SHA-256, and have your MDM run the install again. To remove it, delete the MDM's items, then remove
+after checking their SHA-256, and have your MDM run the install again. Always install the two files
+from one release, together: a `gird-check.sh` can look for key types an older `gird-fleet.sh` does not
+know, and then every account reads `not_checked` until both match. To remove it, delete the MDM's items, then remove
 the installed script and the saved result on each Mac:
 
 ```sh
