@@ -73,7 +73,7 @@ v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
 `none` means the check has not run yet, `failed` means the last run stopped part-way or refused to
-start (the reason follows), and `unreadable` means the saved result could not be trusted or read. Treat each of those, and an empty result, as not checked.
+start (the reason follows; a start without `-p` that is refused records nothing, so the field keeps its last value until it goes stale, after 3 days by default), and `unreadable` means the saved result could not be trusted or read. Treat each of those, and an empty result, as not checked.
 
 In **Scripts** > `Blindspot` > **Device status**, **Success** means the check finished.
 **Failed** means it could not run safely (`failed`), or Intune stopped it.
@@ -91,7 +91,7 @@ Checked 2026-10-24:
   `--deadline=3000` aims to finish the check within 50 minutes.
 - A shell script runs as root unless **Run script as signed-in user** is **Yes**.
 - A shell script must start with `#!` and a shell (checked 2026-11-18). The file starts `#!/bin/bash -p`, and stops
-  (exit 13) if it was started without `-p`. The guide does not say outright that the agent starts the
+  (exit 13) if it was started without `-p`, with the exceptions in [docs/fleet.md](../fleet.md#1-try-it-on-your-own-mac). The guide does not say outright that the agent starts the
   file by that line; if the output says `start it as its first line says`, it did not.
 - A non-zero exit code reads **Failed**, so the check uses `--exit-zero`.
 - Custom attribute scripts run every 8 hours. The value must be 20 KB or less; Blindspot's is at

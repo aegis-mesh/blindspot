@@ -107,8 +107,10 @@ sudo /bin/bash -p /var/root/blindspot-fleet.sh --all-users
 ```
 
 Start it with `/bin/bash -p`, as its first line says. Without `-p`, bash takes functions and
-settings from its environment before the file can check anything, so the file stops (exit 13) when
-it was started without it. You get a report per account and where the result was saved. With no options it runs as your MDM
+settings from its environment before the file can check anything. Started without it, the file
+usually stops (exit 13). A run whose environment sets `SHELLOPTS=privileged` and imports no function
+goes on as normal, because nothing foreign is loaded. A run whose environment sets `SHELLOPTS=noexec`
+or `onecmd` makes bash exit 0 without running the file, and records nothing. You get a report per account and where the result was saved. With no options it runs as your MDM
 will: one summary line, exit 0 whenever it finished. To see which files a finding is about, the
 person runs Blindspot on their own account: `bash gird-check.sh`.
 
@@ -165,7 +167,7 @@ folder to make and no second file. The page for your MDM has the steps. Each has
        a=$(/usr/bin/head -n 1 "$d/attempt"); s=${a%% *}; l=${a#* }
        case "$s" in ''|*[!0-9]*) echo unreadable; return ;; esac
        case "$l" in ''|*[!0-9]*) echo unreadable; return ;; esac
-       if [ "${#s}" -le 12 ] && [ "${#l}" -le 5 ] && [ $(( $(/bin/date -u +%s) - s )) -gt "$l" ]; then
+       if [ "${#s}" -le 12 ] && [ "${#l}" -le 5 ] && s=$((10#$s)) && [ $(( $(/bin/date -u +%s) - s )) -gt "$l" ]; then
          echo "failed: the run started $(/bin/date -u -r "$s" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
        else echo none; fi
      else echo none; fi
@@ -177,6 +179,10 @@ folder to make and no second file. The page for your MDM has the steps. Each has
    that cannot open `/var/db/blindspot`, they print `unreadable`, never `none`. Before the one file
    has finished a run, they print `failed` and why when it refused to start or when its first run
    stopped part-way, and `old-install` while the only saved result is an earlier release's.
+   `old-install` can also mean that a run of the one file saved its result but keeping the copy for
+   this field failed or was killed. A first run that is killed on a Mac that also has an old
+   install reads `old-install`, not `failed`. Neither reads `clear`: treat `old-install` as not
+   checked.
 
 Where the MDM writes the file before it runs it is not in any MDM's documentation. Root runs it only
 when the file and every folder above it are root's and writable by no one else, by mode or by ACL. A
@@ -193,7 +199,8 @@ when it names none; Jamf's scripting guide writes its scripts with a `#!` line. 
 that it starts the file by that line, which is one reason each page stays marked untested. Started
 as `bash <file>` or `sh <file>`, the file stops before doing anything (exit 13) and says so. That
 refusal is not recorded, so the inventory field does not change: its exit code and message are
-what your MDM keeps of the run.
+what your MDM keeps of the run. The field keeps its last value until it goes stale (after
+`--stale-days`, 3 by default).
 
 **ripgrep (optional).** Each account's check reads agent sessions with the system's perl, unless
 ripgrep is installed at `/Library/Application Support/Blindspot/rg`: there and nowhere else, as a

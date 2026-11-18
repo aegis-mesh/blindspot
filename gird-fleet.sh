@@ -780,8 +780,8 @@ fl_unfinished() { # epoch of the last finished run, 0 for none: prints "failed" 
   _a="$FL_STATE/attempt"
   [ ! -L "$_a" ] && [ -f "$_a" ] && [ "$(fl_um "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
   _at=$(/usr/bin/head -c 64 "$_a" | /usr/bin/sed -n '1s/^\([0-9]\{1,12\}\) \([0-9]\{1,5\}\)$/\1 \2/p')
-  [ -n "$_at" ] && [ "${_at% *}" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - ${_at% *} )) -gt "${_at#* }" ] || return 1
-  fl_inv_out "failed: the run started $(/bin/date -u -r "${_at% *}" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
+  [ -n "$_at" ] && _ae=$((10#${_at% *})) && [ "$_ae" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - _ae )) -gt "${_at#* }" ] || return 1
+  fl_inv_out "failed: the run started $(/bin/date -u -r "$_ae" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
 }
 fl_refused() { # epoch of the last finished run, 0 for none: prints "failed" and why when a later run was refused
   _rf="$FL_STATE/refused"

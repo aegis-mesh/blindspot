@@ -4220,6 +4220,10 @@ has    "fleet: --inventory says failed when a later run did not finish by its de
 python3 -c "import sys, time; open(sys.argv[1], 'w').write('%d 3000\n' % (int(time.time()) - 5))" "$FL/state/attempt"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash -p "$FLEETSH" --inventory > "$FL/attempt-run.out" 2>&1
 has    "fleet: and the last result while that run still has time" '^v1 ' "$FL/attempt-run.out"
+mv "$FL/state/last.json" "$FL/state/last.keep"; printf '0900000000 3000\n' > "$FL/state/attempt"; chmod 600 "$FL/state/attempt"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash -p "$FLEETSH" --inventory > "$FL/attempt-zero.out" 2>&1
+has    "fleet: --inventory reads an attempt time with a leading zero as decimal" '^failed: the run started 1998-' "$FL/attempt-zero.out"
+mv "$FL/state/last.keep" "$FL/state/last.json"
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash -p "$FLEETSH" --inventory --stale-days=31 > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "fleet: --stale-days is at most 30"; else bad "fleet: --stale-days is at most 30" "exit $RC"; fi
 # An account run uses ripgrep only from the admin path (FLL_RG_ADMIN in tests), as a regular file
@@ -4501,8 +4505,8 @@ if [ -z "$_withp" ]; then ok "fleet one file: started with -p, no code from BASH
 else bad "fleet one file: started with -p, no code from BASH_FUNC_, BASH_ENV, SHELLOPTS or PS4 runs" "$_withp"; fi
 of_env /bin/sh "$ONE" < /dev/null > /dev/null 2> "$OF/n-sh.err"; _r=$?
 { [ "$_r" = 13 ] && grep -q 'start it as its first line says' "$OF/n-sh.err"; } || _without="$_without [sh: exit $_r]"
-if [ -z "$_without" ]; then ok "fleet one file: started without -p it stops (exit 13), and only BASH_ENV and PS4 have run code"
-else bad "fleet one file: started without -p it stops (exit 13), and only BASH_ENV and PS4 have run code" "$_without"; fi
+if [ -z "$_without" ]; then ok "fleet one file: started without -p it usually stops (exit 13), and only BASH_ENV and PS4 have run code"
+else bad "fleet one file: started without -p it usually stops (exit 13), and only BASH_ENV and PS4 have run code" "$_without"; fi
 # SHELLOPTS=privileged puts p in $- while bash still imports functions.
 rm -f "$OF/mk-priv"; : > "$FL/argv.log"
 of_env SHELLOPTS=privileged "BASH_FUNC_declare%%=() { : > $OF/mk-priv; }" "BASH_FUNC_unset%%=() { : > $OF/mk-priv; }" "BASH_FUNC_printf%%=() { : > $OF/mk-priv; }" \
@@ -4569,6 +4573,11 @@ _o1=$(of_reader "$OF/rd-old"); _o2=$(of_reader "$OF/rd-killed"); _o3=$(of_reader
 if [ "$_o1" = "old-install: the saved result is from an earlier release" ] && [ "$_o2" = "failed: the run started 2001-09-09T01:46Z did not finish or could not save its result" ] \
   && [ "$_o3" = none ] && [ "$_o4" = unreadable ]; then ok "fleet one file: the guide's inventory reader reads an earlier release's result and a first run that stopped"
 else bad "fleet one file: the guide's inventory reader reads an earlier release's result and a first run that stopped" "[$_o1] [$_o2] [$_o3] [$_o4]"; fi
+# An attempt file whose time has a leading zero is read as decimal, not octal.
+mkdir -p "$OF/rd-zero"; printf '0900000000 3000\n' > "$OF/rd-zero/attempt"
+_o1=$(of_reader "$OF/rd-zero")
+if [ "$_o1" = "failed: the run started 1998-07-09T16:00Z did not finish or could not save its result" ]; then ok "fleet one file: the guide's inventory reader reads an attempt time with a leading zero as decimal"
+else bad "fleet one file: the guide's inventory reader reads an attempt time with a leading zero as decimal" "[$_o1]"; fi
 # A two-file install left in /Library/Application Support/Blindspot is named in the result.
 mkdir -p "$OF/old"; : > "$OF/old/gird-fleet.sh"; of_run old "$ONE" --all-users --json; rm -rf "$OF/old"; of_run noold "$ONE" --all-users --json
 of_env /bin/bash -p "$ONE" --all-users < /dev/null > "$OF/oldterm.out" 2>&1

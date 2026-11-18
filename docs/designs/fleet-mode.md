@@ -335,10 +335,15 @@ In this order, before anything else:
    - `SHELLOPTS`: options turned on from the start, such as `xtrace`;
    - `PS4`: with `xtrace` on, expanded before each command, so a `$(...)` in it runs.
 
-   With `-p`, bash ignores all four (measured on `/bin/bash` 3.2.57). The file's first lines check
+   With `-p`, bash ignores `BASH_FUNC_<name>%%`, `BASH_ENV` and `SHELLOPTS`, and imports no function
+   (measured on `/bin/bash` 3.2.57). It still reads `PS4` from the environment, which runs only if `-x`
+   is on the command line; the documented commands never use `-x`. The file's first lines check
    that it was started so, using only an assignment, `case` and special builtins: `POSIXLY_CORRECT=1`
    makes bash find the special builtins `set`, `unset` and `exit` before any function; `set` turns off
-   `xtrace` and the other options `SHELLOPTS` can turn on; `unset -f declare`, then `declare -F` must
+   `xtrace`, `verbose`, `keyword`, `allexport`, `errexit`, `nounset`, `noglob`, `noclobber`,
+   `errtrace` and `functrace` (`set +xvkaeufCET`), not every option `SHELLOPTS` can turn on: `monitor`, `physical`,
+   `histexpand`, `pipefail` and `posix` survive this stage, which is harmless because stage 2 starts
+   clean with `env -i /bin/bash -p`; `unset -f declare`, then `declare -F` must
    print nothing, `$-` must hold `p` and must not hold `x`. `$-` alone is not enough:
    `SHELLOPTS=privileged` puts `p` in it while the functions are still imported, and only a real
    `-p` start imports none. Otherwise it runs `unset -f printf`, prints why, and exits 13.
@@ -349,7 +354,10 @@ In this order, before anything else:
    `bash <file>` gets a plain failure, not a run nobody can vouch for. Starting itself again with `-p`
    would reopen the file by its path before any check, which the first review rejected.
 
-   What remains when an MDM starts it without `-p`: whatever `BASH_ENV`, or `PS4` with
+   What happens when an MDM starts it without `-p`: it usually stops (exit 13). A run whose environment sets
+   `SHELLOPTS=privileged` and imports no function goes on normally, which is safe because nothing
+   foreign is loaded. `SHELLOPTS=noexec` or `onecmd` makes bash exit 0 without running the script, and
+   nothing is recorded. What remains: whatever `BASH_ENV`, or `PS4` with
    `SHELLOPTS=xtrace`, names has already run as root by the time the first line can act, and no script
    can stop that. The file then runs nothing of its own: no imported function is ever called, so
    `BASH_FUNC_*` runs nothing. The refusal is not recorded in `/var/db/blindspot`,
@@ -598,7 +606,8 @@ The reader lines, the same for every release (`docs/fleet.md`, step 3), are a fu
 cannot open it, as when an MDM runs them as another account, never `none`; the kept copy's
 `--inventory` when there is one, or `unreadable` when that fails; `failed: ` and the recorded refusal
 when a run was refused before any run finished; `old-install: the saved result is from an earlier
-release` when only the two-file install's `last.json` is there; `failed: the run started <time> did
+release` when only the two-file install's `last.json` is there, which a one-file run that saved but
+could not keep its copy, or a killed first run on a Mac with an old install, also leaves; `failed: the run started <time> did
 not finish or could not save its result` when the first run's `attempt` is older than its deadline
 (`unreadable` when that file is not two numbers); `none` otherwise, a first run still under way
 included. The reader starts the kept copy with `/bin/bash -p` and starts with `#!/bin/bash -p`. Jamf's last line wraps the function's
@@ -655,8 +664,8 @@ the users file, `tests/fleet-launch.sh` for `sudo`), with the account running th
 - The game proofs 2 to 6 above.
 - The start: each of `BASH_FUNC_declare%%`, `BASH_FUNC_export%%`, `BASH_ENV`, `SHELLOPTS=xtrace`
   with a `PS4` that runs a command, and `SHELLOPTS=privileged` with imported functions, started with
-  and without `-p`: with `-p` no code runs and the run goes on; without it the run stops (exit 13)
-  and only `BASH_ENV` and `PS4` have run code; `SHELLOPTS=privileged` with functions is refused and
+  and without `-p`: with `-p` no code runs and the run goes on; without it the run usually stops
+  (exit 13) and only `BASH_ENV` and `PS4` have run code; `SHELLOPTS=privileged` with functions is refused and
   no function runs. `bash <file>` and `sh <file>` refused. A copy refused at its own checks leaves
   no folder. Standard input, `bash -c` and a bare file name refused before any copy or exec; a `bash`
   planted in the current folder and first on PATH never runs, started by its first line or by
@@ -672,7 +681,8 @@ the users file, `tests/fleet-launch.sh` for `sudo`), with the account running th
 - The inventory: the kept copy is the file, 0700; a refused run recorded and read as `failed`, a
   later finished run read as its value; the guide's reader lines print `unreadable` for a folder they
   cannot open, `none` with no folder, the recorded refusal, `old-install` for an earlier release's
-  `last.json` alone, `failed` for a first run that stopped part-way and `none` for one under way.
+  `last.json` alone (it also reads so when a one-file run saved but could not keep its copy, and for a
+  killed first run on a Mac with an old install), `failed` for a first run that stopped part-way and `none` for one under way.
 - The removal command in `docs/fleet.md`, step 6, taken from the guide and pointed at a scratch
   folder: as written, it selects neither the tester's own folder of a matching name nor a link of a
   matching name to a folder root owns; with the tester standing in for root, it removes only the
