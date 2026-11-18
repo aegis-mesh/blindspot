@@ -9,20 +9,80 @@
 [![release](https://img.shields.io/github/v/release/aegis-mesh/blindspot?color=0D9488&label=release)](https://github.com/aegis-mesh/blindspot/releases/latest)
 [![license](https://img.shields.io/badge/license-Apache--2.0-0D9488)](LICENSE)
 
-Coding agents run with your access: your shell, your repos and the keys in your home folder. What they read lands in their session history, and with a hosted model it goes to the AI service too.
+Your developers use AI coding tools such as Claude Code, Codex and Cursor. These tools are also called coding agents. An agent works with its user's access: it can open the same files and run the same commands. That includes the keys developers keep on their computers, the passwords programs use to reach services such as AWS, GitHub or OpenAI.
 
-Blindspot shows you:
+Blindspot tells an IT or security team, for each computer:
 
-- where your AI keys sit in plain text,
-- which keys your agents have already seen,
-- which coding agents could read them,
-- whether this year's npm malware and key leaks touched you.
+- which AI coding tools are installed, and which are set to run commands without asking;
+- where AI and cloud keys sit unprotected, in plain text;
+- which keys an AI tool has already read;
+- whether a recent software supply-chain attack reached that computer.
 
-You get a one-screen summary and the first thing to fix.
+It answers with one word for each computer and a short list of what was found. On Macs it runs from your MDM, the tool you already use to manage company computers.
 
-**Safe to run.** It only reads your files. It never prints a key, never uses sudo, and never starts an agent, an MCP server or Python. It takes under a minute. With `--offline` it shares nothing.
+**Safe to deploy.** It only reads files. It changes nothing in anyone's files and never shows a key. Run from an MDM, it sends nothing to GIRD or anyone else. The code is open, and [your own tools can review it](docs/fleet-reference.md#have-your-coding-agent-review-it) before you deploy.
 
-## Run it
+## What you get
+
+Each computer reports one outcome. When more than one applies, it reports the one highest in this table:
+
+| Outcome | What it means | What to do |
+|---|---|---|
+| `failed` | The check could not finish. | Treat it as not checked. |
+| `act` | Something to deal with now, such as a key in plain text, a key an AI tool has read, or signs of malware. | Start here. |
+| `not_checked` | The computer, or part of it, could not be checked. This is never shown as clear. | Find out why. |
+| `review` | Something to change or confirm, not urgent, such as a tool that needs an update or an AI tool set to run without asking. | Plan it. |
+| `clear` | Everything was checked and nothing was found. | Nothing. |
+
+The result shows in your MDM next to each computer, as one line, for example:
+
+```
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
+```
+
+That line reads: the account `asha` has signs of the TanStack attack, two files with keys for Anthropic and AWS, three AI tool session files that hold a key, and one SSH key with no passphrase. The account `itadmin` is clear.
+
+The result never holds a file path, a file name, a key or anything a person typed. To see which files a finding is about, the person runs Blindspot on their own account.
+
+[What to do about each finding](docs/fleet-reference.md#act-on-a-finding) is one table.
+
+## Roll it out
+
+Rollout from an MDM is for Macs today. On Windows and Linux, each person runs the check themselves: see [Run it on one computer](#run-it-on-one-computer).
+
+1. **Try it on one Mac.** [docs/fleet.md](docs/fleet.md) is the one-screen quick start.
+2. **Add it to your MDM.** [docs/mdm/](docs/mdm/) has a page each for Jamf Pro, Iru and Microsoft Intune. Each page says whether its steps have been run end to end on a real Mac. The MDM installs two files once, runs the check once a day, and shows the result.
+3. **Read the results.** Filter your MDM's list for `act` first, then `not_checked`.
+
+What an admin should know before deploying:
+
+- `gird-fleet.sh` runs as root, the Mac's administrator account. It checks each person's account with that person's own rights, never root's, using `gird-check.sh`.
+- Root runs both files only from a folder that root alone can change.
+- It makes no network request. The result stays on the Mac for your MDM to read.
+
+[docs/fleet-reference.md](docs/fleet-reference.md) has every option, the timing, and how to update or remove it.
+
+## What it checks
+
+[docs/checks.md](docs/checks.md) lists every tool, setting, key type, package, extension and file it looks for.
+
+1. **AI coding tools.** Which are installed, and which were used in the last 30 days. It flags a tool set to run commands without asking the person first, and a version with a published security fix. A tool nobody opens can still be driven by a poisoned software package: that is how the Nx attack stole keys from developer laptops.
+2. **Connections to other systems.** AI tools reach systems such as GitHub or a database through add-ons called MCP servers. Blindspot lists the ones each tool starts, and flags an access token written straight into their settings. It also flags project settings that run a command as soon as a tool opens the folder. A project copied from the internet brings these with it.
+3. **Keys in plain text.** AI and cloud keys in the files developers commonly keep them in, and in the AI tools' own history of past sessions. A key in a session history is one the tool has already read. It also lists login files any tool can read, such as an SSH key with no passphrase.
+4. **Keys saved by "always allow".** When a person clicks "always allow" on a command that has a key in it, Claude Code saves the whole command, key included, in the project's settings file. Blindspot flags each one, and whether publishing that project would publish the key.
+5. **Recent attacks.** The package versions, editor extensions and leftover files from this year's software supply-chain attacks. Each finding says what the attack did and links its source. One piece of malware, `gh-token-monitor`, runs a destructive command when its stolen GitHub token stops working. If Blindspot finds it, it says to stop and remove it before anyone revokes a token.
+
+## What it never does
+
+- Show a key. It names the provider, such as AWS, never the value.
+- Change, create or delete anything in a person's files.
+- Ask for a password, or use administrator rights in a person's own run.
+- Start an AI tool, an MCP server or Python.
+- Send a file path, a key, a username, a computer name or a raw hardware ID anywhere.
+
+## Run it on one computer
+
+A developer can run the same check on their own Mac, Linux or Windows computer in under a minute. They get a one-screen summary and the first thing to fix.
 
 Download the script, check its hash, read it, then run it:
 
@@ -37,7 +97,13 @@ bash gird-check.sh
 
 Reading it first is the point, so please don't pipe it straight into a shell. If you'd rather not read it all, [your coding agent can review it](#have-your-coding-agent-review-it) for you.
 
-While it scans, press space to play GIRD Runner.
+A run by one person differs from a run from an MDM in three ways:
+
+- **It shares counts with gird.ai**, unless run with `--offline`. [What it shares](#what-it-shares) lists them.
+- **It shows how the result compares** with other people who ran it, and offers a result page to share.
+- **It has a small game**, GIRD Runner, to play while it scans. Press space.
+
+At the end, press 1 to 5 for the details of a check, or s to save the full report. Press ENTER for the AI Exposure Check: a page with the result, the steps to fix what it found, and an image to post on LinkedIn or X. Everyone who shares their result gets a number, and the first 1,000 are marked. `--full` prints every detail instead, and so does running it into a file or a pipe.
 
 | Option | What it does |
 |---|---|
@@ -49,25 +115,9 @@ While it scans, press space to play GIRD Runner.
 | `--all-sessions` | Waits until every agent session is checked. |
 | `NO_COLOR=1` | Plain text, no colors. |
 
-## What it checks
+To read AI tool sessions it runs ripgrep, a search tool, if the person has it, otherwise perl, and stops them when it finishes. It never starts an agent, an MCP server or Python.
 
-[docs/checks.md](docs/checks.md) lists every agent, setting, key type, package, extension and file it looks for.
-
-1. **Coding agents.** Which agents are installed, such as Claude Code, Codex, Cursor, Gemini CLI and OpenCode, and which you used in the last 30 days. It flags agents set to run commands without asking, and agent versions with a published security fix. An agent you never open can still be driven by a poisoned package: that is how the Nx attack stole keys from developer laptops.
-2. **MCP servers.** The servers each agent starts, and any token written straight into their config. It also flags project settings that act as soon as an agent or editor opens the folder, such as hooks and tasks that run commands. A cloned repo brings these with it.
-3. **Keys in plain text.** AI and cloud keys in shell profiles, shell history, agent configs and `.env` files, and in your agents' session transcripts. A key in a transcript is one an agent has already read. It also lists login files any agent can read, such as SSH keys without a passphrase.
-4. **Keys saved in Claude Code allow lists.** Click "always allow" on a command that has a key in it, and Claude Code saves the whole command in the project's settings file. Blindspot flags each one, and whether an npm publish from that folder would ship it.
-5. **Recent key leaks.** The npm and Python package versions, editor extensions and leftover files from this year's supply-chain attacks, in your lockfiles, global installs, caches and Python environments. Each finding says what the incident did and links its source. If it finds `gh-token-monitor`, it tells you to stop it before you revoke any GitHub token, because it runs a destructive command when the stolen token stops working.
-
-At the end you get a short summary: how you compare with the other AI builders who ran it, one line per check, and the first thing to fix. Everyone who shares their result gets a number, and the first 1,000 are marked. Press 1 to 5 for the details of a check, or s to save the full report. Press ENTER for your AI Exposure Check: a page with your result, the steps to fix what it found, and an image to post on LinkedIn or X. `--full` prints every detail instead, and so does running it into a file or a pipe.
-
-## What it never does
-
-- Print a key. It names the provider, never the value.
-- Use sudo or ask for your password.
-- Start an agent, an MCP server or Python. To read agent sessions it runs ripgrep if you have it, otherwise perl, and stops them when it finishes.
-- Leave a file behind, unless you ask it to save the report. While it runs it keeps a few small temp files, and deletes them when it exits. They hold the progress line, the public totals and the home scan's error messages. One, in a folder only you can open, lists which session files had keys from which provider, never a key. (Run by an IT team's `gird-fleet.sh` and stopped at its time limit, it can leave its temp files: see [docs/fleet-reference.md](docs/fleet-reference.md#files-that-can-be-left-behind).)
-- Send a path, a key, a username, a hostname or your raw hardware ID.
+It leaves no file behind, unless asked to save the report. While it runs it keeps a few small temp files, and deletes them when it exits. They hold the progress line, the public totals and the home scan's error messages. One, in a folder only that person can open, lists which session files had keys from which provider, never a key. Run from an MDM and stopped at its time limit, it can leave its temp files: see [docs/fleet-reference.md](docs/fleet-reference.md#files-that-can-be-left-behind).
 
 ## What it shares
 
@@ -152,12 +202,6 @@ powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 ```
 
 `-ExecutionPolicy Bypass` applies to that one run. The switches are `-All`, `-Full`, `-Offline`, `-Save` and `-AllSessions`, and `DO_NOT_TRACK=1` works too. It has no game. On the same PC, Git Bash and PowerShell send the same device ID.
-
-## For IT teams
-
-`gird-fleet.sh` checks every account on a Mac from your MDM. It runs as root, checks each account as that account with `gird-check.sh`, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. All the root work is in `gird-fleet.sh`; `gird-check.sh` holds none. Root runs both only from a folder root alone can change, such as `/Library/Application Support/Blindspot`. macOS only for now.
-
-[docs/fleet.md](docs/fleet.md) is the quick start, and [docs/mdm/](docs/mdm/) has a page each for Jamf Pro, Iru and Microsoft Intune.
 
 ## Limits
 
