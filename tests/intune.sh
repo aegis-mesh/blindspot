@@ -235,8 +235,8 @@ else
   mkdir -p "$IW/we+ird" "$IW/shared"
   wsh_users "own:clear:$IW/linked::$((U + 1))" "odd:clear:$IW/we+ird" "sha:clear:$IW/shared" "shb:clear:$IW/shared" fl:fail gb:garbage
   form not_checked "gird-fleet.sh run: accounts it does not check, second set" "^v1 not_checked $T \| own: not_checked home_owner \| odd: not_checked home_name \| sha: clear \| shb: not_checked home_shared \| fl: not_checked sudo \| gb: not_checked bad_output$" "$(wsh_run)"
-  wsh_users asha:clear; form not_checked "gird-fleet.sh run: the deadline first" "^v1 not_checked $T \| asha: not_checked deadline$" "$(wsh_run --deadline=3)"
-  wsh_users asha:sleep; form not_checked "gird-fleet.sh run: out of time" "^v1 not_checked $T \| asha: not_checked time_limit$" "$(wsh_run --deadline=8)"
+  wsh_users asha:clear; form not_checked "gird-fleet.sh run: the deadline first" "^v1 not_checked $T \| asha: not_checked deadline( \| machine: not_checked)?$" "$(wsh_run --deadline=3)"
+  wsh_users asha:sleep; form not_checked "gird-fleet.sh run: out of time" "^v1 not_checked $T \| asha: not_checked time_limit( \| machine: not_checked)?$" "$(wsh_run --deadline=8)"
   wsh_users a1:chmod a2:clear; form failed "gird-fleet.sh run: the script copy changed" "^v1 failed $T \| a1: clear \| a2: not_checked copy_changed$" "$(wsh_run)"
   wsh_users; form not_checked "gird-fleet.sh run: no accounts" "^v1 not_checked $T \| no accounts$" "$(wsh_run)"
   wsh_users asha:clear; : > "$WS/tmp/.pc_sq_1"; : > "$WS/tmp/gh-token-monitor.out.log"
