@@ -142,7 +142,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
         function scripts_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (a[i] !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/) return 0; return 1 }
         NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }'
       rows data/term-programs.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[A-Za-z0-9._-]+$/ || $2 !~ /^[a-z0-9-]+$/ || seen[$1]++ { print "data/term-programs.tsv: " $0 }'
-      rows data/tool-scripts.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/ || $2 == "" || seen[$1]++ { print "data/tool-scripts.tsv: " $0 }'
+      rows data/tool-scripts.tsv | awk -F '\t' 'NF != 3 || $1 !~ /^[a-z0-9][a-z0-9_.@+-]*$/ || $2 !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/ || $3 == "" || seen[$1 "/" $2]++ { print "data/tool-scripts.tsv: " $0 }'
       # A path is a token or ~, then folders and files made of plain characters; - is none.
       rows data/agents.tsv | awk -F '\t' '
         function paths_ok(s, toks,   n, a, i, t) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) {
@@ -448,12 +448,14 @@ rows data/bad-extensions.tsv | awk -F '\t' '
 
 # --- variables that move an agent's or a tool's folders, for an account run ---------------
 # gird-check.sh gets the list of each kind, fleet_dflt, the folders of the sh column, fleet_scripts,
-# the tools' own scripts, and _mv_own, those of data/tool-scripts.tsv; gird-check.ps1 the lists, the
+# the tools' own scripts, and _mv_own, the whole paths of data/tool-scripts.tsv; gird-check.ps1 the lists, the
 # folders of the windows column and the tools' own scripts of both files. Windows reads a variable's name in any case, so a PowerShell table keeps a name's first line
 # (npm_config_prefix's).
-OWN_SH=$(rows data/tool-scripts.tsv | cut -f1)
-OWN_PS=$(rows data/tool-scripts.tsv | cut -f1 | sed "s/.*/'&'/" | paste -sd, - | sed 's/,/, /g')
-rows data/folder-vars.tsv | OWN="$OWN_SH" awk -F '\t' '
+# Each script of data/tool-scripts.tsv as a profile writes its whole path from Homebrew's prefix.
+OWN_ALL=$(rows data/tool-scripts.tsv | awk -F '\t' '{ for (i = 1; i <= 2; i++) print (i == 1 ? "/opt/homebrew" : "/usr/local") "/opt/" $1 "/" $2
+  print "$(brew --prefix)/opt/" $1 "/" $2; print "$(brew --prefix " $1 ")/" $2; print "$HOMEBREW_PREFIX/opt/" $1 "/" $2; print "${HOMEBREW_PREFIX}/opt/" $1 "/" $2 }')
+OWN_PS=$(printf '%s\n' "$OWN_ALL" | sed "s/.*/'&'/" | paste -sd, - | sed 's/,/, /g')
+rows data/folder-vars.tsv | OWN="$OWN_ALL" awk -F '\t' '
   { L[$2] = L[$2] (L[$2] == "" ? "" : "|") $1
     if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" }
     if ($5 != "-") { n = split($5, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " " a[i]; S = S "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }

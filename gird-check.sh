@@ -7904,7 +7904,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
         if (q == DQ) { if (c == DQ) q = ""; else if (c == "\\") i++; continue }
         if (c == SQ || c == DQ) { q = c; continue }
         if (c == "\\") { i++; continue }
-        if (c == "#" && (i == 1 || index(" \t;(){|&", substr(l, i - 1, 1)) > 0)) return substr(l, 1, i - 1)
+        if (c == "#" && (i == 1 || index(" \t;(){|&", substr(l, i - 1, 1)) > 0) && !(i > 2 && substr(l, i - 1, 1) == "(" && index(" \t;(){|&", substr(l, i - 2, 1)) == 0)) return substr(l, 1, i - 1)
       }
       return l
     }
@@ -7920,6 +7920,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
     function expand(raw,   x, out, m, d, hasd, v, bad) {
       if (raw ~ /^\047[^\047]*\047$/) x = substr(raw, 2, length(raw) - 2)
       else {
+        if (raw ~ /\$\{[^}]*\$/) return NUL
         x = repl(raw, DQ, ""); out = ""; bad = 0
         while (match(x, /\$\{[A-Za-z_][A-Za-z0-9_]*(:?-[^}]*)?\}|\$[A-Za-z_][A-Za-z0-9_]*/)) {
           m = substr(x, RSTART, RLENGTH); out = out substr(x, 1, RSTART - 1); x = substr(x, RSTART + RLENGTH); d = ""; hasd = 0
@@ -7936,7 +7937,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
         if (bad) return NUL
       }
       if (x ~ /^~(\/|$)/) x = H substr(x, 2)
-      if (x ~ /[$`]/ || x ~ /^\(/) return NUL
+      if (x ~ /[$`()]/) return NUL
       return x
     }
     function value(v,   x, k, o) {
@@ -7957,14 +7958,16 @@ if [ "$ACCTRUN" -eq 1 ]; then
     }
     function norm(p) { gsub(/\/+/, "/", p); if (length(p) > 1) sub(/\/$/, "", p); return p }
     function bound(raw,   x, v) {
-      x = raw; if (x ~ /\$\{?[0-9@*#]/) return 1
-      while (match(x, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { v = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH); gsub(/[${]/, "", v); if ((v in LOOPS) || (v in FNV)) return 1 }
+      x = raw; gsub(/["\047]/, "", x); gsub(/\$\{?([A-Za-z_][A-Za-z0-9_]*|[0-9@*#])\}?/, "", x); if (x ~ /[$`()]/) return 0
+      if (raw ~ /\$\{?[0-9@*#]/ && inner(1)) return 1
+      x = raw
+      while (match(x, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { v = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH); gsub(/[${]/, "", v); if (isb(v)) return 1 }
       return 0
     }
     function follow(raw,   v, n, g, i, x, p) {
       if (raw ~ /^</ || raw == "-" || raw ~ /^\{/) return
       x = raw; gsub(/["\047]/, "", x)
-      for (i = 1; i <= NOWN; i++) if (x == OWN[i] || substr(x, length(x) - length(OWN[i])) == "/" OWN[i]) return
+      for (i = 1; i <= NOWN; i++) if (x == OWN[i]) return
       if (raw ~ /^"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?$/) {
         v = raw; gsub(/["${}]/, "", v)
         if (v in LOOPS) { n = split(LOOPS[v], g, " "); for (i = 1; i <= n; i++) { x = expand(g[i]); if (x == NUL) print "L"; else print "G\t" x }; return }
@@ -7980,12 +7983,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
         if (match(r, /^("[^"]*"|\047[^\047]*\047|[^ \t;\047"]*)/)) {
           v = substr(r, 1, RLENGTH)
           if (substr(r, RLENGTH + 1) ~ /^[ \t]*(;|$)/) { VARS[n] = expand(v); print "V\t" n "\t" VARS[n] }
-          if (v ~ /\$\{?[0-9@*]/) FNV[n] = 1
         }
-      }
-      if (match(l, /^[ \t]*local[ \t]/)) {
-        r = substr(l, RLENGTH + 1); gsub(/"[^"]*"|\047[^\047]*\047/, "", r); n = split(r, a, /[ \t;]+/)
-        for (i = 1; i <= n; i++) { sub(/=.*/, "", a[i]); if (a[i] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) FNV[a[i]] = 1 }
       }
       r = l
       while (match(r, /for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+[^;]*|for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)/)) {
@@ -7994,7 +7992,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
         sub(/^for[ \t]+/, "", w); match(w, /^[A-Za-z_][A-Za-z0-9_]*/); n = substr(w, 1, RLENGTH); w = substr(w, RLENGTH + 1)
         if (w ~ /^[ \t]*\(/) { sub(/^[ \t]*\(/, "", w); sub(/\)$/, "", w) } else sub(/^[ \t]+in[ \t]+/, "", w)
         gsub(/[ \t]+/, " ", w); sub(/^ /, "", w); sub(/ $/, "", w)
-        k = split(w, a, " "); w = ""; for (i = 1; i <= k; i++) { if (a[i] ~ /[*?][^()]*\([^()]*\)$/) sub(/\([^()]*\)$/, "", a[i]); w = w (i > 1 ? " " : "") a[i] }
+        k = split(w, a, " "); w = ""; for (i = 1; i <= k; i++) { if (a[i] ~ /[*?][^()]*\([N.]+\)$/) sub(/\([N.]+\)$/, "", a[i]); w = w (i > 1 ? " " : "") a[i] }
         LOOPS[n] = w
       }
     }
@@ -8007,8 +8005,60 @@ if [ "$ACCTRUN" -eq 1 ]; then
         if (!(pre == "" || pre ~ /[;&|{(]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|else|do)$/ || pre ~ /(^|[^A-Za-z0-9_])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)$/)) continue
         if (i > 1 && substr(l, i - 1, 1) !~ /[ \t;&|{()]/) continue
         rest = substr(rest, RLENGTH + 1)
-        if (match(rest, /^("[^"]*"|\047[^\047]*\047|(\$\{[^}]*\}|\$\([^)]*\)|[^ \t;&|)}])+)/)) follow(substr(rest, 1, RLENGTH))
+        if (match(rest, /^("[^"]*"|\047[^\047]*\047|(\$\{[^}]*\}|\$\([^)]*\)|[^ \t;&|)}])+)/)) { NSRC++; SP[NSRC] = i; SR[NSRC] = substr(rest, 1, RLENGTH) }
       }
+    }
+    # Where a function or a loop begins and ends, as far as the words of a line tell: a name it binds
+    # (a loop variable, a local of a function or one set from its arguments) counts as bound only inside it.
+    # A } or done at the start of a line ends every one.
+    function san(l,   o, n, i, c, q, d) {
+      o = ""; n = length(l); q = ""; d = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(l, i, 1)
+        if (d > 0) { if (c == "{" || c == "(") d++; else if (c == "}" || c == ")") d--; o = o "_"; continue }
+        if (q != "") { if (c == q) q = ""; else if (c == "\\" && q == DQ && i < n) { o = o "_"; i++ }; o = o "_"; continue }
+        if (c == SQ || c == DQ || c == "`") { q = c; o = o "_"; continue }
+        if (c == "\\" && i < n) { o = o "_" substr(l, i + 1, 1); i++; continue }
+        if (c == "$" && (substr(l, i + 1, 1) == "{" || substr(l, i + 1, 1) == "(")) { d = 1; o = o "__"; i++; continue }
+        o = o c
+      }
+      return o
+    }
+    function push(k) { SID++; NS++; STK[NS] = SID; KIND[SID] = k; ACT[SID] = 1; return SID }
+    function pop(k,   id) { while (NS > 0) { id = STK[NS--]; ACT[id] = 0; if (KIND[id] == k || (k == "b" && KIND[id] == "f")) return } }
+    function bind(n, id) { if (id) BND[n] = BND[n] " " id }
+    function inner(f,   i) { for (i = NS; i > 0; i--) if (ACT[STK[i]] && (!f || KIND[STK[i]] == "f")) return STK[i]; return 0 }
+    function isb(n,   a, k, i) { k = split(BND[n], a, " "); for (i = 1; i <= k; i++) if (ACT[a[i]]) return 1; return 0 }
+    function walk(l,   s, r, p, nt, tk, tp, k, j, t, cmd, si, nm, f, d) {
+      s = san(l); r = s; p = 0; nt = 0
+      while (match(r, /[;&|()]|[^ \t;&|()]+/)) { nt++; tk[nt] = substr(r, RSTART, RLENGTH); tp[nt] = p + RSTART; p += RSTART + RLENGTH - 1; r = substr(r, RSTART + RLENGTH) }
+      cmd = 1; si = 1
+      for (k = 1; k <= nt; k++) {
+        t = tk[k]; while (si <= NSRC && SP[si] <= tp[k]) follow(SR[si++])
+        if (t ~ /^[;&|()]$/) { cmd = 1; continue }
+        if (!cmd) continue
+        cmd = 0
+        if (t == "{") { if (PFN && NR - PFN <= 1) { push("f"); PFN = 0 } else { f = push("b"); if (PFOR != "" && NR - PFL <= 1) { bind(PFOR, f); PFOR = "" } }; cmd = 1 }
+        else if (t == "}") { pop("b"); cmd = 1 }
+        else if (t == "do") { f = push("d"); if (PFOR != "" && NR - PFL <= 1) { bind(PFOR, f); PFOR = "" }; cmd = 1 }
+        else if (t == "done") { pop("d"); cmd = 1 }
+        else if (t ~ /^(then|else|elif|if|while|until|!|builtin|command|time)$/) cmd = 1
+        else if (t == "for" && k < nt && tk[k + 1] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+          nm = tk[++k]; PFOR = nm; PFL = NR
+          if (k < nt && tk[k + 1] == "(") {
+            d = 0; for (j = k + 1; j <= nt; j++) { if (tk[j] == "(") d++; else if (tk[j] == ")" && --d == 0) break }
+            if (j < nt && tk[j + 1] !~ /^(;|do|\{)$/) { bind(nm, push("l")); PFOR = "" }
+            k = j; cmd = 1
+          }
+        }
+        else if (t == "function" && k < nt) { k++; PFN = NR; cmd = 1 }
+        else if (k + 2 <= nt && tk[k + 1] == "(" && tk[k + 2] == ")") { PFN = NR; k += 2; cmd = 1 }
+        else if (t == "local") { f = inner(1); for (j = k + 1; j <= nt && tk[j] !~ /^[;&|()]$/; j++) { nm = tk[j]; sub(/=.*/, "", nm); if (f && nm ~ /^[A-Za-z_][A-Za-z0-9_]*$/) bind(nm, f) }; k = j - 1 }
+        else if (match(t, /^[A-Za-z_][A-Za-z0-9_]*=/)) { if ((f = inner(1)) && substr(l, tp[k] + RLENGTH) ~ /^["\047]?\$\{?[0-9@*]/) bind(substr(t, 1, RLENGTH - 1), f); cmd = 1 }
+      }
+      while (si <= NSRC) follow(SR[si++])
+      while (NS > 0 && KIND[STK[NS]] == "l") ACT[STK[NS--]] = 0
+      if (s ~ /^(\}|done)([ \t;]|$)/) while (NS > 0) ACT[STK[NS--]] = 0
     }
     BEGIN {
       SQ = "\047"; DQ = "\""; NUL = "\001"; H = ENVIRON["MV_H"]
@@ -8028,7 +8078,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
         if (pre !~ /\$\{?#?$/ || pre ~ /\$#$/) w++
         else if (pre ~ /\$\{#?$/ && post ~ /^:?=/) w++
       }
-      sources(l)
+      NSRC = 0; sources(l); walk(l)
       if (w == 0 || l ~ /^[ \t]*export([ \t]+[A-Za-z_][A-Za-z0-9_]*)+[ \t]*;?[ \t]*$/) next
       if (w > 1) { print "M"; exit }
       r = l; sub(/^[ \t]+/, "", r); n = ""
@@ -8042,10 +8092,24 @@ if [ "$ACCTRUN" -eq 1 ]; then
 # >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it.
   _mv_agent='CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME'
   _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR|PNPM_HOME'
-  _mv_own='opt/nvm/nvm.sh
-opt/nvm/etc/bash_completion.d/nvm
-libexec/asdf.sh
-oh-my-zsh.sh'
+  _mv_own='/opt/homebrew/opt/nvm/nvm.sh
+/usr/local/opt/nvm/nvm.sh
+$(brew --prefix)/opt/nvm/nvm.sh
+$(brew --prefix nvm)/nvm.sh
+$HOMEBREW_PREFIX/opt/nvm/nvm.sh
+${HOMEBREW_PREFIX}/opt/nvm/nvm.sh
+/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm
+/usr/local/opt/nvm/etc/bash_completion.d/nvm
+$(brew --prefix)/opt/nvm/etc/bash_completion.d/nvm
+$(brew --prefix nvm)/etc/bash_completion.d/nvm
+$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm
+${HOMEBREW_PREFIX}/opt/nvm/etc/bash_completion.d/nvm
+/opt/homebrew/opt/asdf/libexec/asdf.sh
+/usr/local/opt/asdf/libexec/asdf.sh
+$(brew --prefix)/opt/asdf/libexec/asdf.sh
+$(brew --prefix asdf)/libexec/asdf.sh
+$HOMEBREW_PREFIX/opt/asdf/libexec/asdf.sh
+${HOMEBREW_PREFIX}/opt/asdf/libexec/asdf.sh'
   fleet_dflt() { # variable: the folders the run reads when it is not set
     case "$1" in
       XDG_CONFIG_HOME) printf '%s\n' "$H/.config" ;;
@@ -8083,13 +8147,15 @@ oh-my-zsh.sh'
   # on a local disk is read: never a link, a device or pipe, a file under /Volumes or /Network, or one
   # over FLEET_MAX bytes. At most 64 files and 16 MiB in all are read. A sourced file that exists but
   # can't be followed or read, or a cap reached, counts only when some file read names a listed
-  # variable: ordinary setups source completion scripts and plugins by the dozen. A path built from a
-  # loop's or a function's own variable, or from an argument, does not count: it names whatever the
-  # loop or function is given (a plugin loader's). A tool's own script sourced from its own folder
-  # (fleet_scripts, such as nvm.sh), or by name from where its installer puts it (_mv_own, such as
-  # Homebrew's opt/nvm/nvm.sh and Oh My Zsh's oh-my-zsh.sh), is not read: it sets the tool's variable
-  # its own way, or loads the tool's own plugins. What a command prints (eval "$(...)", source <(...))
-  # is not followed. gird-check.ps1 -AccountRun reads them the same way.
+  # variable: ordinary setups source completion scripts and plugins by the dozen. When unsure, the
+  # account reads partly checked, never clear: a path with a command in it, a nested ${...} or a zsh
+  # glob qualifier other than (N), (.) and (.N) can't be followed. A path built from a loop's or a
+  # function's own variable, or from an argument, does not count inside that loop or function: it
+  # names whatever the loop or function is given (a plugin loader's). A tool's own script sourced from
+  # its own folder (fleet_scripts, such as nvm.sh), or by its whole path from Homebrew's prefix
+  # (_mv_own, such as $HOMEBREW_PREFIX/opt/nvm/nvm.sh), is not read: it sets the tool's variable its
+  # own way. What a command prints (eval "$(...)", source <(...)) is not followed. gird-check.ps1
+  # -AccountRun reads them the same way.
   _mv_names="$_mv_agent|$_mv_tool"; _mv_dflt=""; _mv_scr=""
   for _mvn in $(printf '%s' "$_mv_names" | tr '|' ' '); do
     _mv_dflt="$_mv_dflt$(fleet_dflt "$_mvn" | sed "s/^/$_mvn$TAB/")$NL"

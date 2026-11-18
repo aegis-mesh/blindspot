@@ -780,10 +780,20 @@ PC, so an admin can see what one run left out.
     check keeps for profiles. A sourced file that is there but can't be followed or read, or a
     limit reached, counts as `1` only when some file read names a variable of the list: an
     ordinary setup sources completion scripts and plugins by the dozen, and one that names none of
-    the variables gives no reason to think the rest moves one. A tool's own script in its own
+    the variables gives no reason to think the rest moves one. This is deliberately conservative:
+    the check reads profiles as text, follows the loading it understands, and when it can't follow
+    something and a variable of the list is named, the account reads partly checked, never clear.
+    A shell file's path with a command in it, a nested `${...}` or a zsh glob qualifier other than
+    `(N)`, `(.)` and `(.N)` can't be followed. A path built from a variable of a loop or a function
+    (a loop variable, a shell `local` or one set from the arguments, a PowerShell `param()` or
+    `foreach` variable) is let pass only inside that loop or function, as far as the words of the
+    file show where it ends; outside it, it can't be followed. A tool's own script in its own
     folder (`$NVM_DIR/nvm.sh`, the `scripts` column of `data/folder-vars.tsv`) is not read: it sets
     the tool's variable to the folder it is in, the one the check reads. Any other file in that
-    folder is read. A variable set to one of the folders in that file's `windows` column, the
+    folder is read. nvm's and asdf's own scripts where Homebrew installs them (`data/tool-scripts.tsv`)
+    are not read either, matched only by the whole path written from Homebrew's prefix
+    (`/opt/homebrew/opt/nvm/nvm.sh`, `$(brew --prefix)/opt/...`, `$HOMEBREW_PREFIX/opt/...`); a file
+    with such a name anywhere else is read. A variable set to one of the folders in that file's `windows` column, the
     folders the check reads, counts as not moved; `tools/gen.sh` writes them, and gird-check.sh's
     `sh` column, into the scripts. A setting made by running a command is not seen: what a command
     prints for the shell to run (`eval "$(...)"`, `source <(...)`, `... | Invoke-Expression`), or a
@@ -1024,7 +1034,10 @@ Graph, never a real tenant.
 - A profile that moves an agent's folders leaves the account partly checked, in a form the check
   does not know too, and in a file it sources from outside the home, two files down, by `&`,
   `Import-Module` or a manifest, in a sourcing loop, or placed in a tool's own folder. Past 64
-  files or 16 MiB read, it does only where a listed variable was named.
+  files or 16 MiB read, it does only where a listed variable was named. So does one that names a
+  listed variable beside a loop over a zsh glob qualifier the check does not parse, or a source line
+  outside the function whose `param()` builds its path; a file named like nvm's own script outside
+  Homebrew's prefix is read.
 - What nvm, nvm-windows, fnm, Volta, pnpm, bun, conda, mise, asdf (0.16 too), uv, pipx, Poetry,
   oh-my-posh, starship, posh-git, PSReadLine, Chocolatey, the Visual Studio developer shell and a
   corporate profile write moves nothing; nor does a default folder, a listed name in a comment,

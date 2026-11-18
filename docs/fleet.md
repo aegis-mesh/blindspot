@@ -406,9 +406,14 @@ and fish's) are read as text, never run, as on Windows, and so is each file they
 `source` whose path can be told from the text, to any depth, including the files of a loop over a
 folder. A line that sets one of those variables to a folder the check does not read, or in a form it
 does not know, leaves the account partly checked, and so does a loaded file it can't follow where a
-file read names one of the variables. Not followed: what a command prints for the shell to run
-(`eval "$(...)"`, `source <(...)`), a path built from a loop's or a function's own variable, and the
-tools' own scripts of `data/tool-scripts.tsv`, such as Homebrew's nvm and Oh My Zsh with its plugins. Each run is
+file read names one of the variables. This is deliberately conservative: when the check can't follow
+how a profile loads a file and a folder setting is mentioned, the account reads partly checked, never
+clear. Not followed: what a command prints for the shell to run (`eval "$(...)"`, `source <(...)`); a
+path with a command in it, a nested `${...}`, or a zsh glob qualifier other than `(N)`, `(.)` and
+`(.N)`; a path built from a loop's or a function's own variable, inside that loop or function only
+(Oh My Zsh's plugins and themes load this way); and the tools' own scripts of
+`data/tool-scripts.tsv` (nvm and asdf), only where Homebrew installs them and with the whole path
+written from Homebrew's prefix. A file with such a name anywhere else is read. Each run is
 told its time, so its session check stops in time and what it found still counts, with the sessions
 partly checked. `sudo` writes one line to the system log for each account.
 
