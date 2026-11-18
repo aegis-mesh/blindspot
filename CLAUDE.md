@@ -8,20 +8,22 @@ checklist; read it first.
 ## macOS, Linux and Windows stay at par
 
 Every feature must work on macOS, Linux and Windows. That covers the check one person runs, fleet
-mode, the tools an admin uses, every kind of finding, the result formats, the mappings to outside
-frameworks, and the docs. Where the three differ today, an open issue labelled `parity` says so.
+mode, the tools an admin uses, every kind of finding, the result formats and the docs. Windows
+means both `gird-check.sh` in Git Bash and `gird-check.ps1` in PowerShell.
 
 - Before you build a feature, write down what each of the three platforms gets.
 - A feature lands on all three in the same pull request. If one platform has to wait, the pull
-  request says which and why, and an issue is opened for it before the pull request merges.
-- A fix found on one platform is checked on the other two in the same pull request.
-- A real platform limit is not a gap. Say what the limit is in the docs a person reads, and make
-  the result show what was not checked. Never let it read as clear.
-- Review checks this. A feature for one platform, with no word on the other two, is a major
-  finding.
-
-The twin rule under Tests is how the two check scripts are held to this. The same care applies to
-everything else.
+  request says which and why, and an issue labelled `parity` is opened for it before the pull
+  request merges. Look at the open `parity` issues before you start.
+- A fix found on one platform is checked on the other two in the same pull request: run its test
+  there, or say why it cannot be tested.
+- A limit is real only when the operating system cannot do the thing: Linux has no Keychain, and
+  WSL cannot read the Windows side's files. A missing tool, a harder port or extra work is a gap,
+  not a limit. When in doubt, open a `parity` issue and say why.
+- For a real limit, say what it is in the docs a person reads, and make the result show what was
+  not checked. Never let it read as clear.
+- When you review a change, check this. A feature for one platform, with no word on the other
+  two, is a major finding.
 
 ## One home for anything two files share
 
