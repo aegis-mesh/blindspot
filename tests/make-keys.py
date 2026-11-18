@@ -19,6 +19,7 @@ HEX = '0123456789abcdef'
 B64 = AN + '+/'
 URL = AN + '_-'
 UP = string.ascii_uppercase + string.digits
+DIG = string.digits
 
 
 def r(cs, k): return ''.join(random.choice(cs) for _ in range(k))
@@ -110,7 +111,8 @@ def storage_cs(key): return 'DefaultEndpointsProtocol=https;AccountName=' + r(st
 
 def new_kinds():
     """id: (name, [(maker of a key, kept)], [(label, near miss)]), where kept says the key's own text
-    carries what makes it a key, so it still counts glued to a word or inside base64."""
+    carries what makes it a key, so it still counts glued to a word and inside base64 (1), or only
+    glued to a word in front (2)."""
     U2 = URL + '.~'
     return {
         'azureentra': ('Microsoft Entra', [(lambda: r(U2, 3) + random.choice('78') + 'Q' '~' + r(U2, 34), 0), (lambda: r(U2, 3) + '8Q' '~' + r(U2, 31), 0)],
@@ -129,6 +131,38 @@ def new_kinds():
                      [('sv=1.0', lambda: 'https://x.logic.azure.com/workflows/' + r(HEX, 32) + '/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=' + r(URL, 43)),
                       ('Service Bus', lambda: 'SharedAccessSignature sr=https%3A%2F%2Fx.servicebus.windows.net&sig=' + r(AN, 43) + '%3D&se=1700000000&skn=RootManageSharedAccessKey'),
                       ('42 sig', lambda: 'https://x.blob.core.windows.net/c?sv=2024-11-04&sp=r&sig=' + r(AN, 42))]),
+        'databricks': ('Databricks', [(lambda: 'da' 'pi' + r(HEX, 32), 0), (lambda: 'da' 'pi' + r(HEX, 32) + '-2', 0)],
+                       [('upper-case hex', lambda: 'da' 'pi' + r('0123456789ABCDEF', 32)), ('31 hex', lambda: 'da' 'pi' + r(HEX, 31))]),
+        'gitlab': ('GitLab', [(lambda: random.choice(['gl' 'pat-', 'gl' 'dt-', 'gl' 'rt-', 'gl' 'ft-', 'gl' 'soat-']) + r(URL, 20), 0)],
+                   [('19', lambda: 'gl' 'pat-' + r(URL, 19)), ('21', lambda: 'gl' 'pat-' + r(URL, 21)), ('feed token prefix glf', lambda: 'gl' 'f-' + r(URL, 20))]),
+        'slack': ('Slack', [(lambda: random.choice(['xo' 'xb-', 'xo' 'xp-']) + r(DIG, 11) + '-' + r(DIG, 12) + '-' + r(AN, 24), 0),
+                            (lambda: random.choice(['', 'xo' 'xe.']) + 'xa' 'pp-1-A' + r(UP, 10) + '-' + r(DIG, 13) + '-' + r(HEX, 64), 0),
+                            (lambda: 'https://hooks.sl' 'ack.com/services/T' + r(UP, 10) + '/B' + r(UP, 10) + '/' + r(AN, 24), 2)],
+                  [('short parts, as in the docs', lambda: 'xo' 'xp-' + r(DIG, 3) + '-' + r(DIG, 3) + '-' + r(DIG, 3) + '-' + r(HEX, 32)),
+                   ('webhook of 23', lambda: 'https://hooks.sl' 'ack.com/services/T' + r(UP, 10) + '/B' + r(UP, 10) + '/' + r(AN, 23)),
+                   ('workflow token', lambda: 'xw' 'fp-' + r(DIG, 11) + '-' + r(DIG, 12) + '-' + r(AN, 24))]),
+        'stripe': ('Stripe', [(lambda: random.choice(['sk' '_live_', 'rk' '_live_']) + r(AN, 99), 0), (lambda: 'wh' 'sec_' + r(AN, 32), 0)],
+                   [('test key', lambda: 'sk' '_test_' + r(AN, 99)), ('publishable', lambda: 'pk' '_live_' + r(AN, 99)), ('19', lambda: 'sk' '_live_' + r(AN, 19))]),
+        'sendgrid': ('SendGrid', [(lambda: 'S' 'G.' + r(URL, 22) + '.' + r(URL, 43), 0)],
+                     [('42 after', lambda: 'S' 'G.' + r(URL, 22) + '.' + r(URL, 42)), ('in a longer dotted name', lambda: 'S' 'G.' + r(URL, 22) + '.' + r(URL, 43) + '.' + r(URL, 5))]),
+        'pypi': ('PyPI', [(lambda: 'py' 'pi-AgEIcHlwaS5vcmc' + r(URL, 150), 0), (lambda: 'py' 'pi-AgEIcHlwaS5vcmc' + r(URL, 300), 0)],
+                 [('TestPyPI', lambda: 'py' 'pi-AgENdGVzdC5weXBpLm9yZw' + r(URL, 150)), ('69 after', lambda: 'py' 'pi-AgEIcHlwaS5vcmc' + r(URL, 69))]),
+        'dockerhub': ('Docker Hub', [(lambda: 'dckr' '_pat_' + r(URL, 27), 0)],
+                      [('organization token', lambda: 'dckr' '_oat_' + r(URL, 27)), ('26', lambda: 'dckr' '_pat_' + r(URL, 26))]),
+        'digitalocean': ('DigitalOcean', [(lambda: random.choice(['do' 'p_v1_', 'do' 'o_v1_', 'do' 'r_v1_']) + r(HEX, 64), 0)],
+                         [('63 hex', lambda: 'do' 'p_v1_' + r(HEX, 63)), ('upper-case hex', lambda: 'do' 'p_v1_' + r('0123456789ABCDEF', 64))]),
+        'vault': ('HashiCorp Vault', [(lambda: 'hv' 's.' + r(URL, 95), 0)],
+                  [('28, as in the docs', lambda: 'hv' 's.' + r(URL, 24)), ('89', lambda: 'hv' 's.' + r(URL, 89)), ('batch token', lambda: 'hv' 'b.' + r(URL, 120))]),
+        'nvidia': ('NVIDIA', [(lambda: 'nv' 'api-' + r(URL, 64), 0)], [('63', lambda: 'nv' 'api-' + r(URL, 63)), ('65', lambda: 'nv' 'api-' + r(URL, 65))]),
+        'langsmith': ('LangSmith', [(lambda: random.choice(['lsv2' '_pt_', 'lsv2' '_sk_']) + r(HEX, 32) + '_' + r(HEX, 10), 0)],
+                      [('trace token', lambda: 'lsv2' '_tr_' + r(HEX, 32) + '_' + r(HEX, 10)), ('9 hex', lambda: 'lsv2' '_pt_' + r(HEX, 32) + '_' + r(HEX, 9))]),
+        'shopify': ('Shopify', [(lambda: random.choice(['shp' 'at_', 'shp' 'pa_']) + r(HEX, 32), 0)],
+                    [('custom app prefix', lambda: 'shp' 'ca_' + r(HEX, 32)), ('31 hex', lambda: 'shp' 'at_' + r(HEX, 31))]),
+        'sentry': ('Sentry', [(lambda: 'sntr' 'yu_' + r(HEX, 64), 0), (lambda: 'sntr' 'ys_' + 'eyJ' + r(B64, 200) + '_' + r(B64, 43), 0)],
+                   [('63 hex', lambda: 'sntr' 'yu_' + r(HEX, 63)), ('a DSN', lambda: 'https://' + r(HEX, 32) + '@o' + r(DIG, 6) + '.ingest.sentry.io/' + r(DIG, 7))]),
+        'supabase': ('Supabase', [(lambda: 'sb' '_secret_' + r(URL.replace('_', ''), 22) + '_' + r(URL.replace('_', ''), 8), 0)],
+                     [('publishable', lambda: 'sb' '_publishable_' + r(AN, 22) + '_' + r(AN, 8)), ('21', lambda: 'sb' '_secret_' + r(AN, 21) + '_' + r(AN, 8))]),
+        'onepassword': ('1Password', [(lambda: 'op' 's_eyJ' + r(B64, 620), 0)], [('short', lambda: 'op' 's_eyJ' + r(B64, 200))]),
     }
 
 
@@ -165,8 +199,11 @@ def cases(home, manifest, keys, ids, pv):
         for j, (mk, ctx) in enumerate(makers):
             for where, fmt in [('start', '{}\n'), ('mid', 'X_KEY=a {} b\n'), ('esc', '{{"a":"x\\n{}\\ny"}}\n'), ('quote', '{{"a":"x \\"{}\\" y"}}\n')]:
                 k = mk(); made.append(k); put('%s-%d-%s' % (i, j, where), fmt.format(k), name)
+            # Inside base64: the Azure keys are base64 text themselves; any other key starts with
+            # characters base64 never holds, so it is put among letters and digits instead.
+            pad = b64n if i.startswith('azure') else (lambda n: r(AN, n))
             k = mk(); made.append(k)
-            put('%s-%d-base64' % (i, j), '{"data":"' + b64n(40) + k + b64n(40) + '"}\n', name if ctx else '-')
+            put('%s-%d-base64' % (i, j), '{"data":"' + pad(40) + k + pad(40) + '"}\n', name if ctx == 1 else '-')
             k = mk(); made.append(k)
             put('%s-%d-glued' % (i, j), 'TOKEN=word' + k + '\n', name if ctx else '-')
         for j, (label, mk) in enumerate(near):
@@ -175,6 +212,16 @@ def cases(home, manifest, keys, ids, pv):
     for j, (i, text) in enumerate(public_cases(pv)):
         if i in kinds:
             put('%s-public-%d' % (i, j), 'X=' + text + '\n', '-')
+    # A key of a later pass glued to an older one, or one character before it, never hides it: the
+    # older type's own pass finds it, and it is named first.
+    near_old = [
+        ('azuresas', 'OpenAI', 'https://x.blob.core.windows.net/c?sv=2024-11-04&sp=r&sig=' + r(AN, 42) + 'sk' '-proj-' + r(AN, 20) + 'T3Blb' 'kFJ' + r(AN, 20)),
+        ('azurestorage', 'Google', 'AccountName=' + r(string.ascii_lowercase, 8) + ';Account' 'Key=' + b64n(86) + '==' + 'AI' 'za' + r(URL, 35)),
+        ('databricks', 'Hugging Face', 'da' 'pi' + r(HEX, 32) + ' ' + 'h' 'f_' + r(AN, 36)),
+    ]
+    for j, (i, old, text) in enumerate(near_old):
+        if i in kinds:
+            made.append(text); put('%s-before-old-%d' % (i, j), text + '\n', old + ', ' + kinds[i][0])
     with open(manifest, 'w') as f:
         f.write('\n'.join(rows) + '\n')
     with open(keys, 'w') as f:

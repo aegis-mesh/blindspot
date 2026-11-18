@@ -248,9 +248,10 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])sv=[0-9]{4}-[0-9]{2}-[0-9]{2}&[A-Za-z0-9%&=:;._,-]{0,255}sig=[A-Za-z0-9%+/]{43,}|(^|[^A-Za-z0-9_])sig=[A-Za-z0-9%+/]{43,}=?&[A-Za-z0-9%&=:;._,-]{0,255}sv=[0-9]{4}-[0-9]{2}-[0-9]{2}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
-$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm azuresas azureentra azuredevops azureai azurestorage'
-$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|sv=|sig=|7Q~|8Q~|AAAAAZDO|JQQJ99|[+]ASt|AccountKey='
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])sv=[0-9]{4}-[0-9]{2}-[0-9]{2}&[A-Za-z0-9%&=:;._,-]{0,255}sig=[A-Za-z0-9%+/]{43,}|(^|[^A-Za-z0-9_])sig=[A-Za-z0-9%+/]{43,}=?&[A-Za-z0-9%&=:;._,-]{0,255}sv=[0-9]{4}-[0-9]{2}-[0-9]{2}|(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+$KEY_PASSES = @('sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}', '(^|[^A-Za-z0-9_])sv=[0-9]{4}-[0-9]{2}-[0-9]{2}&[A-Za-z0-9%&=:;._,-]{0,255}sig=[A-Za-z0-9%+/]{43,}|(^|[^A-Za-z0-9_])sig=[A-Za-z0-9%+/]{43,}=?&[A-Za-z0-9%&=:;._,-]{0,255}sv=[0-9]{4}-[0-9]{2}-[0-9]{2}|(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}==')
+$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm azuresas databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage'
+$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|sv=|sig=|dapi|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.]|pypi-AgEIcHlwaS5vcmc|dckr_pat_|dop_v1_|doo_v1_|dor_v1_|hvs[.]|nvapi-|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_|ops_eyJ|7Q~|8Q~|AAAAAZDO|JQQJ99|[+]ASt|AccountKey='
 $KeyProviderFn = @'
 function Key-Provider([string]$s) {
   $s = $s -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', ''
@@ -267,24 +268,42 @@ function Key-Provider([string]$s) {
   if ($s -cmatch '^(gh[pousr]_|github_pat_)') { return 'GitHub' }
   if ($s -cmatch '^(npm_)') { return 'npm' }
   if ($s -cmatch '^(sv=|sig=)') { return 'Azure Storage SAS' }
+  if ($s -cmatch '^(dapi)') { return 'Databricks' }
+  if ($s -cmatch '^(glpat-|gldt-|glrt-|glft-|glsoat-)') { return 'GitLab' }
+  if ($s -cmatch '^(xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com)') { return 'Slack' }
+  if ($s -cmatch '^(sk_live_|rk_live_|whsec_)') { return 'Stripe' }
+  if ($s -cmatch '^(SG[.])') { return 'SendGrid' }
+  if ($s -cmatch '^(pypi-AgEIcHlwaS5vcmc)') { return 'PyPI' }
+  if ($s -cmatch '^(dckr_pat_)') { return 'Docker Hub' }
+  if ($s -cmatch '^(dop_v1_|doo_v1_|dor_v1_)') { return 'DigitalOcean' }
+  if ($s -cmatch '^(hvs[.])') { return 'HashiCorp Vault' }
+  if ($s -cmatch '^(nvapi-)') { return 'NVIDIA' }
+  if ($s -cmatch '^(lsv2_pt_|lsv2_sk_)') { return 'LangSmith' }
+  if ($s -cmatch '^(shpat_|shppa_)') { return 'Shopify' }
+  if ($s -cmatch '^(sntryu_|sntrys_)') { return 'Sentry' }
+  if ($s -cmatch '^(sb_secret_)') { return 'Supabase' }
+  if ($s -cmatch '^(ops_eyJ)') { return '1Password' }
   if ($s -cmatch '(7Q~|8Q~)') { return 'Microsoft Entra' }
   if ($s -cmatch '(AAAAAZDO)') { return 'Azure DevOps' }
   if ($s -cmatch '(JQQJ99)') { return 'Azure AI' }
   if ($s -cmatch '([+]ASt|AccountKey=)') { return 'Azure Storage' }
   $null
 }
-function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } 'Azure Storage SAS' { 600 } default { 300 } } }
-function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } 'Azure Storage SAS' { 'azuresas' } 'Microsoft Entra' { 'azureentra' } 'Azure DevOps' { 'azuredevops' } 'Azure AI' { 'azureai' } 'Azure Storage' { 'azurestorage' } default { $null } } }
+function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } 'Azure Storage SAS' { 600 } 'PyPI' { 600 } 'Sentry' { 320 } '1Password' { 1024 } default { 300 } } }
+function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } 'Azure Storage SAS' { 'azuresas' } 'Databricks' { 'databricks' } 'GitLab' { 'gitlab' } 'Slack' { 'slack' } 'Stripe' { 'stripe' } 'SendGrid' { 'sendgrid' } 'PyPI' { 'pypi' } 'Docker Hub' { 'dockerhub' } 'DigitalOcean' { 'digitalocean' } 'HashiCorp Vault' { 'vault' } 'NVIDIA' { 'nvidia' } 'LangSmith' { 'langsmith' } 'Shopify' { 'shopify' } 'Sentry' { 'sentry' } 'Supabase' { 'supabase' } '1Password' { 'onepassword' } 'Microsoft Entra' { 'azureentra' } 'Azure DevOps' { 'azuredevops' } 'Azure AI' { 'azureai' } 'Azure Storage' { 'azurestorage' } default { $null } } }
 '@
 # <<< keys
 # >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
 $PublicValuesFn = @'
-function Is-Public([string]$k) { $false -or $k.Contains('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u') -or $k.Contains('9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX') -or $k.Contains('iCvQmdZngZNW%2F4vw43j6%2BVz6fndHF5LI639QJ') }
+function Is-Public([string]$k) { $false -or $k.Contains('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u') -or $k.Contains('9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX') -or $k.Contains('iCvQmdZngZNW%2F4vw43j6%2BVz6fndHF5LI639QJ') -or $k.Contains('19874698323-pdFZKVeTuE8sk7oOcBrzbqgy') }
 '@
 # <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
 $TR_KEYS = $ALL_KEYS -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])'
+# One regex for each pass of data/keys.tsv: each is matched on its own, so a key of a later pass
+# never hides one of an earlier pass. $TR_KEYS, all of them in one, is for a yes or no.
+$TR_PASSES = @($KEY_PASSES | ForEach-Object { $_ -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])' })
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 # These match what gird-check.sh's patterns match, rewritten so .NET's backtracking
 # stays linear: a name is tried once from its first character, (?>...) never gives
@@ -326,10 +345,12 @@ if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_C
 # times faster compiled, and each is built once.
 $RxKeyOpt = $RxOpt -bor [Text.RegularExpressions.RegexOptions]::Compiled
 $RxKeys = New-Object regex($TR_KEYS, $RxKeyOpt, $RxTimeout)
+$RxKeyPasses = @($TR_PASSES | ForEach-Object { New-Object regex($_, $RxKeyOpt, $RxTimeout) })
 $RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxKeyOpt, $RxTimeout)
+$RxInlines = @(for ($i = 0; $i -lt $TR_PASSES.Count; $i++) { if ($i -eq 0) { New-Object regex("$($TR_PASSES[0])|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxKeyOpt, $RxTimeout) } else { $RxKeyPasses[$i] } })
 $RxHeaderYaml = New-Object regex($P_HEADERYAML, $RxOpt, $RxTimeout)
 $RxHeaderSq = New-Object regex($P_HEADERSQ, $RxOpt, $RxTimeout)
-$RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxKeyOpt, $RxTimeout)
+$RxCommands = @(for ($i = 0; $i -lt $TR_PASSES.Count; $i++) { if ($i -eq 0) { New-Object regex("$($TR_PASSES[0])|$P_ASSIGN", $RxKeyOpt, $RxTimeout) } else { $RxKeyPasses[$i] } })
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
 $RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
 $SlowFiles = New-Object System.Collections.Generic.List[string]
@@ -435,12 +456,12 @@ function Yaml-Headers([string]$t) {
   }
   $keep -join "`n"
 }
-function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders, [switch]$YamlHeaders) {
+function Has-RealMatch([string]$f, [regex[]]$rxs, [switch]$NoEnvHeaders, [switch]$YamlHeaders) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
   if ($NoEnvHeaders) { $t = No-EnvHeaders $t }
   if ($YamlHeaders) { $t = Yaml-Headers $t }
-  try { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } catch { Mark-Slow $f }
+  try { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } } catch { Mark-Slow $f }
   $false
 }
 # The provider of a matched key (generated above) and whether a key looks made up. Text, so the
@@ -479,10 +500,10 @@ function Providers-In([string]$f, [string]$minus = '') {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
   $seen = New-Object System.Collections.Generic.List[string]
-  try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
+  try { $all = @(foreach ($rx in $RxKeyPasses) { $rx.Matches($t) }) } catch { Mark-Slow $f; return @() }
   $skip = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
   if ($minus) {
-    try { foreach ($m in $RxKeys.Matches($minus)) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
+    try { foreach ($m in @(foreach ($rx in $RxKeyPasses) { $rx.Matches($minus) })) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
   }
   foreach ($m in $all) {
     if ($skip.Count -gt 0) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k) -and $skip[$k] -gt 0) { $skip[$k] = $skip[$k] - 1; continue } }
@@ -1203,7 +1224,7 @@ $SessWorker = {
   param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold)
   . ([scriptblock]::Create($fns))
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
-  $rx = New-Object regex($keys, ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Compiled), $to)
+  $rxs = @($keys | ForEach-Object { New-Object regex($_, ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Compiled), $to) })
   $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
   $rxSep = New-Object regex('[^A-Za-z0-9_.+/=\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
@@ -1215,10 +1236,15 @@ $SessWorker = {
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
-    try {
-      $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
+    # One run for each pass of data/keys.tsv ($keys), one after the other; RgExit is the worst of
+    # their codes: 2 for an error, else 0 when any found a key.
+    $first = $true; $worst = 1
+    try { foreach ($kp in $keys) {
+      if ($st.Stop) { break }
+      if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+      $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $kp)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
-      $rgRoots = @($roots); if ($hold) { $rgRoots += $hold }
+      $rgRoots = @($roots); if ($hold -and $first) { $rgRoots += $hold }; $first = $false
       # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
       # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed.
       $psi.Arguments = '-a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
@@ -1242,7 +1268,9 @@ $SessWorker = {
       }
       $l = $sb.ToString(); $i = $l.IndexOf([char]0)
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
-      $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
+      $st.Proc.WaitForExit()
+      if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -gt 1) { $worst = $c } elseif ($c -eq 0 -and $worst -le 1) { $worst = 0 }; $st.RgExit = $worst }
+    }
     } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
     return
   }
@@ -1281,9 +1309,9 @@ $SessWorker = {
           $at = $sep.Index + 1
           $carry = $t.Substring($at); $t = $t.Substring(0, $at)
         } else { $carry = '' }
-        if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
+        if ($rxPre.IsMatch($t)) { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } } }
       }
-      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
+      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } } }
       if ($whole) { $st.Done++ }
     } catch {
       # A pattern that ran out of time leaves the file not checked: it is counted as one that took
@@ -1306,7 +1334,7 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_PASSES).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
   $SessHandle = $SessPs.BeginInvoke()
 }
 # Stops the check, or waits for it with -AllSessions.
@@ -1446,7 +1474,7 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
   }
   $tok = $false; $toml = $f.EndsWith('.toml')
   $yaml = $f.EndsWith('.yaml') -or $f.EndsWith('.yml')
-  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline -NoEnvHeaders:$toml)) { $tok = $true }
+  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInlines -NoEnvHeaders:$toml)) { $tok = $true }
   elseif (($toml -or $yaml) -and (Has-RealMatch $f $RxHeaderSq -NoEnvHeaders:$toml)) { $tok = $true }
   elseif ($yaml -and (Has-RealMatch $f $RxHeaderYaml -YamlHeaders)) { $tok = $true }
   if ($c -eq 0 -and $null -ne $c -and -not $tok) { return }
@@ -2087,11 +2115,11 @@ $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeD
 $AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }
-  if (-not (Has-RealMatch $f $RxCommand)) { continue }
+  if (-not (Has-RealMatch $f $RxCommands)) { continue }
   # A key in its permission rules (Cc-Rules) is a saved command; one elsewhere, such as its env, is a key
   # in plain text (section 3) and nothing more.
   $rules = Cc-Rules $f; $real = $false
-  try { foreach ($m in $RxCommand.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } } } catch { Mark-Slow $f }
+  try { foreach ($rx in $RxCommands) { foreach ($m in $rx.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } }; if ($real) { break } } } catch { Mark-Slow $f }
   if (-not $real) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
@@ -6860,7 +6888,6 @@ foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
 # in each project, found by the home scan, and they are checked here. One counts as read once the
 # pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
-$rxTr = $RxKeys
 # A session file whose pattern ran out of time in the check above is one of them too. It is counted,
 # not listed: a session file's path can spell out a project folder (see Sess-Where below).
 $SESS_SLOW = [int]$SessSt.Slow
@@ -6869,7 +6896,7 @@ foreach ($f in $AiderFiles) {
   $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }
   $seenA = @{}
   try {
-    foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
+    foreach ($m in @(foreach ($rx in $RxKeyPasses) { $rx.Matches($t) })) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
     if ($SESS_DONE -ge 0) { $SESS_DONE++ }
   } catch { Mark-Slow $f; $SESS_SLOW++ }
 }

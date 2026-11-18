@@ -3198,6 +3198,8 @@ gen_refuses "a key max over 1024"                       keys.tsv "newkey${T}New$
 gen_refuses "a key pattern that counts past 255"       keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20,300}${T}start${T}-"
 gen_refuses "a key pattern with a POSIX class"         keys.tsv "newkey${T}New${T}nk-${T}nk-[[:alnum:]]{20}${T}start${T}-"
 gen_refuses "a key start that is not fixed text"       keys.tsv "newkey${T}New${T}[A-Z]*nk-${T}nk-[a-z]{20}${T}in${T}-"
+gen_refuses "a #pass line with no key line after it"     keys.tsv "#pass"
+gen_refuses "a start line after an in line"            keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
 # A published value (data/public-values.tsv) is a part of a known key type's value, never a whole key.
 gen_refuses "a published value of an unknown key type" public-values.tsv "nosuch${T}abcdefghij0123456789xyz${T}https://example.com/doc"
 gen_refuses "a published value shorter than 20"        public-values.tsv "groq${T}short0123456789${T}https://example.com/doc"
@@ -3213,25 +3215,26 @@ grep '^fleet_ids() ' gird-check.sh > "$KP/fids.sh"; . "$KP/fids.sh"
 _ids=$(sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' gird-check.sh)
 if [ -n "$_ids" ] && [ "$(printf '%s' "$_ids" | fleet_ids)" = "$_ids" ]; then ok "every key id passes the fleet id filter"
 else bad "every key id passes the fleet id filter" "$_ids"; fi
-# grep and perl get the key patterns one at a time (KEY_E, SESS_KEYS), and must find just what the
-# one alternation of them all finds (perl given it as its one pattern): grep -o the same matches in every file, and perl
-# the same matches. Over the fixture homes and a corpus of every key type in many contexts.
+# grep and perl get the key patterns one at a time (key_o, SESS_KEYS), and must find just what one
+# alternation of each pass's patterns finds (perl given each as one pattern): grep -o the same
+# matches in every file, and perl the same matches. Over the fixture homes and a corpus of every key
+# type and its near misses in many contexts.
 python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
 { awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< public-values/ { on = 0 }' gird-check.sh
-  awk '/^TR_KEYS=/ { on = 1 } on { print } on && /^EOF$/ { exit }' gird-check.sh
+  awk '/^TR_KEYS=/ { on = 1 } /^# A secret written as a value/ { exit } on' gird-check.sh
   awk '/^SESS_PERL=/ { on = 1 } on { print } on && /^1 while wait/ { exit }' gird-check.sh; } > "$KP/keys.sh"
 . "$KP/keys.sh"
 _n=0; _diff=""
 while IFS= read -r _f; do
   _n=$((_n + 1))
-  if ! cmp -s <(grep -aoE "$TR_KEYS" "$_f" 2>/dev/null) <(grep -aoE "${KEY_E[@]}" "$_f" 2>/dev/null); then _diff="$_diff ${_f#"$WORK"/}"; fi
+  if ! cmp -s <(printf '%s\n' "$TR_PASSES" | while IFS= read -r _p; do grep -aoE "$_p" "$_f" 2>/dev/null; done) <(key_o cat "$_f" 2>/dev/null); then _diff="$_diff ${_f#"$WORK"/}"; fi
 done <<EOF
 $(find "$KP/corpus" "$WORK/home" -type f | sort)
 EOF
 if [ "$_n" -gt 400 ] && [ -z "$_diff" ]; then ok "grep finds with the split key patterns what one alternation finds" "$_n files"
 else bad "grep finds with the split key patterns what one alternation finds" "$_n files, differ:$_diff"; fi
 SESS_KEYS=$TR_ALTS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/split.txt"
-SESS_KEYS=$TR_KEYS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/one.txt"
+SESS_KEYS=$(printf '%s\n' "$TR_PASSES" | sed G) SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/one.txt"
 if [ -s "$KP/one.txt" ] && cmp -s "$KP/one.txt" "$KP/split.txt"; then ok "perl: the session engine finds what one plain alternation of the key patterns finds" "$(grep -c . < "$KP/one.txt") matches"
 else bad "perl: the session engine finds what one plain alternation of the key patterns finds" "$(diff "$KP/one.txt" "$KP/split.txt" | head -n 4 | tr '\n' '|')"; fi
 # What the split saves is the work of one long alternation: count it. Every pattern grep is given
@@ -3251,7 +3254,7 @@ for f in glob.glob(sys.argv[2] + "/g.*"):
     n = max([sum(1 for a in alts if a in x) for x in args] or [0])
     calls += n > 0; most = max(most, n)
 for f in glob.glob(sys.argv[2] + "/p.*"):
-    ls = open(f).read().split("\n"); perls += 1
+    ls = [l for l in open(f).read().split("\n") if l]; perls += 1
     plines = len(ls) if all(l in alts for l in ls) and len(set(ls)) == len(alts) else -1
 print(most, calls, perls, plines, len(alts))' "$KP/alts.txt" "$KP/log")
 read -r _c1 _c2 _c3 _c4 _c5 <<EOF

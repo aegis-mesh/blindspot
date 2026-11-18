@@ -118,6 +118,8 @@ a key max over 1024	tools/gen.sh is one bash tool that writes the data files int
 a key pattern that counts past 255	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a key pattern with a POSIX class	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a key start that is not fixed text	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a #pass line with no key line after it	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a start line after an in line	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a published value of an unknown key type	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a published value shorter than 20	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a published value that is a whole key	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

@@ -91,7 +91,8 @@ KEYS_OK='function starts_ok(s,   i, c, inb, n) {
 # incident id no line of data/incidents.tsv has. A key id names its provider once: gird.ai's counts
 # are keyed on it. The regexes spell out counts
 # ([0-9][0-9][0-9][0-9], not [0-9]{4}): Debian 12's mawk has no {n} intervals and would refuse every line.
-bad=$(rows data/keys.tsv | awk -F '\t' "$KEYS_OK"'
+bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line with no key line before it"; last = 1; next } /^#/ || !NF { next } { rows = 1; last = 0 } END { if (last) print "data/keys.tsv: a #pass line with no key line after it" }' data/keys.tsv
+      rows data/keys.tsv | awk -F '\t' "$KEYS_OK"'
         { if (!key_ok() || seen[$1]++ || ($5 == "start" && inl)) print "data/keys.tsv: " $0; n++; if ($5 == "in") inl = 1 }
         END { if (n > 40) print "data/keys.tsv: " n " key types, more than the 40 gird-fleet.sh takes from one account (fl_ids_ok)" }'
       rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF < 6 || NF > 8) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF >= 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0 || ($7 ~ /^First / && ($6 != "act" || $7 ~ /[Rr]otate|[Rr]evoke/)))) || (NF == 8 && ($6 != "update" || $8 == "" || $8 ~ /[\047"`$|\\]/ || length($8) > 49)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
@@ -210,11 +211,14 @@ PATH_PS='function ps(p,   v, fb, rest, k, base) {
   function psq(s) { gsub(/\047/, "\047\047", s); return "\047" s "\047" }'
 
 # --- keys -------------------------------------------------------------------
-# ALL_KEYS is every pattern joined into one regex (ripgrep, .NET). KEY_ALTS is the same patterns cut at
-# each top-level |, one a line, in order: grep gets one -e each and perl one regex each, because
-# BSD grep and perl read one long alternation many times slower than its parts one by one. A start
-# is tested against the start of a match (at start) or anywhere in it (in); max is the longest match
-# kept for that provider (- for 300).
+# ALL_KEYS is every pattern joined into one regex, for a yes or no. A line #pass in data/keys.tsv
+# starts the next pass: each pass is matched on its own, so a key of a later pass never hides one of
+# an earlier pass (KEY_PASSES, one regex a pass, for ripgrep and .NET). KEY_ALTS is the patterns cut
+# at each top-level |, one a line, an empty line between passes: grep gets one -e each and perl one
+# regex each, because BSD grep and perl read one long alternation many times slower than its parts
+# one by one. A start is tested against the start of a match (at start) or anywhere in it (in); max
+# is the longest match kept for that provider (- for 300).
+KPASS=$(awk -F '\t' '/^#pass$/ { p++; next } /^#/ || !NF { next } { printf "%d ", p + 1 }' data/keys.tsv)
 KEYS_GEN='function alts(p,   n, i, c, d, inb, cl, neg, cur, o) {
     n = 0; d = 0; inb = 0; cur = ""; o = ""
     for (i = 1; i <= length(p); i++) {
@@ -228,13 +232,23 @@ KEYS_GEN='function alts(p,   n, i, c, d, inb, cl, neg, cur, o) {
     }
     return o (n ? "\n" : "") cur
   }
-  { id[NR] = $1; nm[NR] = $2; st[NR] = $3; pat[NR] = $4; at[NR] = $5; mx[NR] = $6; n = NR }'
-rows data/keys.tsv | awk -F '\t' "$KEYS_GEN"'
+  BEGIN { split(kp, ps, " ") }
+  { id[NR] = $1; nm[NR] = $2; st[NR] = $3; pat[NR] = $4; at[NR] = $5; mx[NR] = $6; n = NR }
+  function passes(q,   i, o, cur) {
+    o = ""; cur = ""
+    for (i = 1; i <= n; i++) {
+      if (i > 1 && ps[i] != ps[i - 1]) { o = o cur q; cur = "" }
+      cur = cur (cur == "" ? "" : "|") pat[i]
+    }
+    return o cur
+  }'
+rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
   END {
     print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
     all = ""; ids = ""; starts = ""; ka = ""
-    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i]; ka = ka (i > 1 ? "\n" : "") alts(pat[i]) }
+    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i]; ka = ka (i > 1 ? (ps[i] != ps[i - 1] ? "\n\n" : "\n") : "") alts(pat[i]) }
     print "ALL_KEYS=\047" all "\047"
+    print "KEY_PASSES=\047" passes("\n") "\047"
     print "KEY_ALTS=\047" ka "\047"
     print "PROVIDER_IDS=\"" ids "\""
     print "KEY_STARTS=\047" starts "\047"
@@ -253,12 +267,13 @@ rows data/keys.tsv | awk -F '\t' "$KEYS_GEN"'
     print "# <<< keys"
   }' > "$WORK/keys.sh"
 
-rows data/keys.tsv | awk -F '\t' "$KEYS_GEN"'
+rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
   END {
     print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
     all = ""; ids = ""; starts = ""
     for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i] }
     print "$ALL_KEYS = \047" all "\047"
+    print "$KEY_PASSES = @(\047" passes("\047, \047") "\047)"
     print "$PROVIDER_IDS = \047" ids "\047"
     print "$KEY_STARTS = \047" starts "\047"
     print "$KeyProviderFn = @\047"

@@ -3011,19 +3011,20 @@ has    "and in the fix"                               "Stop any process started 
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mu-tmp.txt"
 
 echo "key patterns"
-# gird-check.ps1 matches every key type with one compiled .NET regex: compiled, it must find just
-# what the plain one finds, over the fixture home and a corpus of every key type in many contexts.
+# gird-check.ps1 matches the key types with one compiled .NET regex for each pass of data/keys.tsv:
+# compiled, each must find just what the plain one finds, over the fixture home and a corpus of every
+# key type and its near misses in many contexts.
 KP=$WORK/kp; mkdir -p "$KP"
 python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
-grep -E '^\$ALL_KEYS = |^\$TR_KEYS = ' "$SCRIPT" > "$KP/keys.ps1"
+grep -E '^\$KEY_PASSES = |^\$TR_PASSES = ' "$SCRIPT" > "$KP/keys.ps1"
 find "$KP/corpus" "$WORK/home" -type f | sort > "$KP/files.txt"
 cat > "$KP/cmp.ps1" <<'PSEOF'
 . $args[0]; $o = [Text.RegularExpressions.RegexOptions]::Multiline
-$plain = New-Object regex($TR_KEYS, $o); $comp = New-Object regex($TR_KEYS, ($o -bor [Text.RegularExpressions.RegexOptions]::Compiled))
+$plain = @($TR_PASSES | ForEach-Object { New-Object regex($_, $o) }); $comp = @($TR_PASSES | ForEach-Object { New-Object regex($_, ($o -bor [Text.RegularExpressions.RegexOptions]::Compiled)) })
 $latin = [Text.Encoding]::GetEncoding(28591); $n = 0; $m = 0; $diff = 0
 foreach ($f in [IO.File]::ReadAllLines($args[1])) {
   $t = [IO.File]::ReadAllText($f, $latin); $n++
-  $a = @($plain.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" }); $b = @($comp.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" })
+  $a = @($plain | ForEach-Object { $_.Matches($t) } | ForEach-Object { "$($_.Index):$($_.Value)" }); $b = @($comp | ForEach-Object { $_.Matches($t) } | ForEach-Object { "$($_.Index):$($_.Value)" })
   $m += $a.Count; if (($a -join "`n") -cne ($b -join "`n")) { $diff++ }
 }
 "$n $m $diff"
@@ -3039,7 +3040,7 @@ else bad "net: the session engine finds what one plain alternation of the key pa
 # word, unless what makes it a key is its own text (a connection string, a signed address).
 PIDS=$(sed -n "s/^\$PROVIDER_IDS = '\(.*\)'\$/\1/p" "$SCRIPT")
 { awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< public-values/ { on = 0 }' "$SCRIPT"
-  grep -E '^\$TR_KEYS = |^\$RxOpt = |^\$RxTimeout = |^\$RxKeyOpt = |^\$RxKeys = ' "$SCRIPT"
+  grep -E '^\$TR_KEYS = |^\$TR_PASSES = |^\$RxOpt = |^\$RxTimeout = |^\$RxKeyOpt = |^\$RxKeys = |^\$RxKeyPasses = ' "$SCRIPT"
   awk '/^\$KeyFns = / { on = 1 } on { print } on && /^\. \(\[scriptblock\]::Create\(\$KeyFns\)\)/ { exit }' "$SCRIPT"
   grep -E '^function Key-Norm' "$SCRIPT"
   awk '/^function Providers-In/ { on = 1 } on { print } on && /^}/ { exit }' "$SCRIPT"
