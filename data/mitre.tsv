@@ -16,7 +16,7 @@
 #   name       the technique's name as MITRE's page gives it (a sub-technique as parent: name), or the
 #              Subcategory's outcome as NIST's text gives it, or -
 #   tactics    the tactics MITRE lists for the technique, comma separated; for csf the Function, then the
-#              Category; or -
+#              Category (Identify, Protect or Detect only; gen.sh knows each Category used, by name); or -
 #   relation   exposure: Blindspot found something the technique could exploit
 #              indicator: a trace that a published incident links to the technique
 #              supports (csf only): the finding helps an organization work toward the outcome on that

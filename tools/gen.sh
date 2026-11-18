@@ -139,17 +139,20 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
           if (!ok || seen[w]++) print "gird-report.ps1: an $Items line it cannot read, or a word twice: " $0 }'
       for _v in attack atlas csf; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done
       # A csf line names a CSF 2.0 Subcategory, its Function (the one its id starts with) and Category, and
-      # NIST's publication; its relation is only ever supports, for every computer with the finding.
+      # NIST's publication; its relation is only ever supports, for every computer with the finding. A file
+      # finding supports nothing under Govern, Respond or Recover, which are what an organization decides and
+      # does. cat holds the Categories data/mitre.tsv uses, named as CSWP 29 names them: add one here first.
       rows data/mitre.tsv | awk -F '\t' -v ids="$IDS" -v words="$MITRE_WORDS" '
         function safe(s) { return s != "" && s !~ /[\047"`$|\\<>&]/ }
-        BEGIN { fn["GV"] = "Govern"; fn["ID"] = "Identify"; fn["PR"] = "Protect"; fn["DE"] = "Detect"; fn["RS"] = "Respond"; fn["RC"] = "Recover" }
+        BEGIN { fn["ID"] = "Identify"; fn["PR"] = "Protect"; fn["DE"] = "Detect"
+                cat["ID.RA"] = "Risk Assessment"; cat["PR.PS"] = "Platform Security"; cat["DE.CM"] = "Continuous Monitoring" }
         { ok = NF == 10 && index(words, " " $1 " ") > 0 && $2 ~ /^(all|mac|win)$/ && $4 ~ /^(attack|atlas|csf)$/
           if ($3 != "all") { ok = ok && $1 ~ /^(incidents|lockfile|update|remove)$/ && $4 != "csf"; n = split($3, a, ","); for (i = 1; i <= n; i++) if (index(ids, " " a[i] " ") == 0) ok = 0 }
           if ($8 == "none") ok = ok && $2 == "all" && $3 == "all" && $5 == "-" && $6 == "-" && $7 == "-" && $9 == "-" && $10 != "-" && safe($10)
           else if ($4 == "csf") {
             n = split($7, t, ",")
-            ok = ok && $2 == "all" && $8 == "supports" && $10 == "-" && safe($6) && $5 ~ /^(GV|ID|PR|DE|RS|RC)\.[A-Z][A-Z]-[0-9][0-9]$/ && n == 2 &&
-              t[1] == fn[substr($5, 1, 2)] && t[2] ~ /^[A-Z][A-Za-z ]*$/ && $9 == "https://doi.org/10.6028/NIST.CSWP.29"
+            ok = ok && $2 == "all" && $8 == "supports" && $10 == "-" && safe($6) && $5 ~ /^(ID|PR|DE)\.[A-Z][A-Z]-[0-9][0-9]$/ && n == 2 &&
+              t[1] == fn[substr($5, 1, 2)] && (substr($5, 1, 5) in cat) && t[2] == cat[substr($5, 1, 5)] && $9 == "https://doi.org/10.6028/NIST.CSWP.29"
             k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7
           }
           else {
