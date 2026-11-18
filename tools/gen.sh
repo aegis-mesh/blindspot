@@ -135,7 +135,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
             if (a[i] !~ /^~\/[^\/]/ && !(win && a[i] ~ /^\{(LOCALAPPDATA|APPDATA)\}\/[^\/]/)) return 0 }
           return 1 }
         function scripts_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (a[i] !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/) return 0; return 1 }
-        NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || ($2 == "agent" && $3 != "-") || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }')
+        NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }')
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
@@ -412,15 +412,18 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
 # --- variables that move an agent's or a tool's folders, for an account run ---------------
-# gird-check.sh gets the list of each kind and fleet_dflt, the folders of the sh column; gird-check.ps1
-# the lists, the folders of the windows column and the tools' own scripts. Windows reads a variable's
-# name in any case, so a PowerShell table keeps a name's first line (npm_config_prefix's).
+# gird-check.sh gets the list of each kind, fleet_dflt, the folders of the sh column, and fleet_scripts,
+# the tools' own scripts; gird-check.ps1 the lists, the folders of the windows column and the tools' own
+# scripts. Windows reads a variable's name in any case, so a PowerShell table keeps a name's first line
+# (npm_config_prefix's).
 rows data/folder-vars.tsv | awk -F '\t' '
   { L[$2] = L[$2] (L[$2] == "" ? "" : "|") $1
-    if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }
+    if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" }
+    if ($5 != "-") { n = split($5, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " " a[i]; S = S "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }
   END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
         print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"
         print "  fleet_dflt() { # variable: the folders the run reads when it is not set"; print "    case \"$1\" in"; printf "%s", D; print "    esac"; print "  }"
+        print "  fleet_scripts() { # variable: its tool\047s own scripts in its folder, which set it to that folder"; print "    case \"$1\" in"; printf "%s", S; print "    esac"; print "  }"
         print "# <<< folder-vars" }' > "$WORK/folder-vars.sh"
 rows data/folder-vars.tsv | awk -F '\t' '
   function ps(p) { if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"; if (p ~ /^\{LOCALAPPDATA\}/) return "(J $LocalAppData \047" substr(p, 16) "\047)"; return "(J $AppData \047" substr(p, 11) "\047)" }

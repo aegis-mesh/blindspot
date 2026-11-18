@@ -398,8 +398,12 @@ malware markers in the account's own temp folder, the one macOS gives each accou
 `/var/folders`. The markers in `/tmp` that must be the person's own, such as gh-token-monitor's logs,
 count for the account that owns them under one name, never through a link, symbolic or hard, and
 only as a possible sign: another account can hard-link one of this account's files there, once the
-original is renamed away. The clean environment drops any variable that moves an agent's folders, such as
-`CLAUDE_CONFIG_DIR`: when a shell profile sets one, the account reads partly checked. Each run is
+original is renamed away. The clean environment drops any variable that moves an agent's or a tool's
+folders (`data/folder-vars.tsv`), such as `CLAUDE_CONFIG_DIR`. So the shell profiles (zsh's, bash's
+and fish's) and every file they load with `.` or `source`, to any depth, are read as text, never run,
+as on Windows: a line that sets one of those variables to a folder the check does not read, or in a
+form it does not know, leaves the account partly checked. What a command prints for the shell to run
+(`eval "$(...)"`, `source <(...)`) is not followed. Each run is
 told its time, so its session check stops in time and what it found still counts, with the sessions
 partly checked. `sudo` writes one line to the system log for each account.
 

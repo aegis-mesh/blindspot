@@ -4201,6 +4201,132 @@ has    "fleet: a profile that sets a tool's folder to its default moves nothing"
 has    "fleet: one that sets it elsewhere leaves the account partly checked" '^toolmv\.agent_folders_moved=true$' "$FL/toolmv.flat"
 has    "fleet: and so does one that moves pnpm's folder (PNPM_HOME)" '^pnmv\.agent_folders_moved=true$' "$FL/toolmv.flat"
 hasnot "fleet: so a bad package only there never reads clear" '^pnmv\.outcome=clear$' "$FL/toolmv.flat"
+# A line that names a listed variable other than to read it counts, unless it is a plain assignment of
+# the value the run sees: forms the reader does not know fail safe. Each case is its own home, read by
+# an account run as root starts it. The same forms as run-ps.sh's twins, in a Mac's shell files.
+MV=$FL/mv; mkdir -p "$MV"
+mv_case() { # name file lines...: an account run on a home holding that file; prints its moved= value
+  _n=$1; _f=$2; shift 2; mkdir -p "$MV/$_n" "$(dirname "$MV/$_n/$_f")"
+  printf '%s\n' "$@" > "$MV/$_n/$_f"
+  printf '%s=%s\n' "$_n" "$(env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$MV/$_n" /bin/bash "$SCRIPT" --account-run 2> /dev/null < /dev/null | sed -n 's/^moved=//p')"
+}
+{ mv_case exportmulti .bashrc 'export A=1 CODEX_HOME=/d/codex'
+  mv_case declare .bashrc 'declare -x CODEX_HOME=/d/codex'
+  mv_case default .bashrc ': "${CODEX_HOME:=/d/codex}"'
+  mv_case typeset .zshrc 'typeset -gx CODEX_HOME=/d/codex'
+  mv_case unset .zshrc 'unset NVM_DIR'
+  mv_case readvar .zshrc 'read -r CODEX_HOME < ~/.codex-home'
+  mv_case printfv .bashrc 'printf -v CODEX_HOME %s /d/codex'
+  mv_case zlogin .zlogin 'export CODEX_HOME=/d/codex'
+  mv_case fishset .config/fish/config.fish 'set -gx CODEX_HOME /d/codex'
+} > "$MV/forms.txt"
+if [ "$(grep -c '=1$' "$MV/forms.txt")" -eq 9 ]; then ok "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved"
+else bad "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved" "$(grep -v '=1$' "$MV/forms.txt" | tr '\n' ' ')"; fi
+# What installers write: nvm (and its own nvm.sh, which sets NVM_DIR its own way), pnpm, conda (and
+# the conda.sh it sources), oh-my-posh and starship, and a profile that reads a variable.
+mkdir -p "$MV/nvm/.nvm"; printf '%s\n' 'if [ -z "${NVM_DIR-}" ]; then' '  NVM_DIR="$(nvm_cd "$(dirname "${NVM_SCRIPT_SOURCE:-$0}")" >/dev/null && \pwd)"' '  export NVM_DIR' 'fi' > "$MV/nvm/.nvm/nvm.sh"
+mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='/opt/conda/bin/conda'" "export _CE_M=''" '__conda_exe() (' '    "$CONDA_EXE" $_CE_M "$@"' ')' > "$MV/conda/miniconda3/etc/profile.d/conda.sh"
+{ mv_case nvm .zshrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm' '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+  mv_case pnpm .zshrc '# pnpm' 'export PNPM_HOME="$HOME/Library/pnpm"' 'case ":$PATH:" in' '  *":$PNPM_HOME:"*) ;;' '  *) export PATH="$PNPM_HOME:$PATH" ;;' 'esac' '# pnpm end'
+  mv_case conda .zshrc '# >>> conda initialize >>>' '__conda_setup="$('"'"'/opt/conda/bin/conda'"'"' '"'"'shell.zsh'"'"' '"'"'hook'"'"' 2> /dev/null)"' 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then' '        . "$HOME/miniconda3/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' '# <<< conda initialize <<<'
+  mv_case omp .zshrc 'eval "$(oh-my-posh init zsh --config "$(brew --prefix oh-my-posh)/themes/jandedobbeleer.omp.json")"'
+  mv_case starship .zshrc 'eval "$(starship init zsh)"' 'export STARSHIP_CONFIG="$HOME/.config/starship.toml"'
+  mv_case starfish .config/fish/config.fish 'starship init fish | source' 'set -gx STARSHIP_CONFIG ~/.config/starship.toml'
+  mv_case reads .zshrc 'if [ -n "$CLAUDE_CONFIG_DIR" ]; then echo "$CLAUDE_CONFIG_DIR"; fi' 'echo "${#CODEX_HOME}"' 'export PATH="$PNPM_HOME:$PATH"'
+} > "$MV/plain.txt"
+if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 7 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
+else bad "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing" "$(grep -v '=0$' "$MV/plain.txt" | tr '\n' ' ')"; fi
+# A file a profile sources is read too, to any depth, wherever it is on a local disk. One that is there
+# but can't be followed or read counts only where some file read names a listed variable.
+mkdir -p "$MV/outside"; printf 'alias x=y\n' > "$MV/outside/env.sh"; mkdir -p "$MV/link"; ln -s "$MV/outside/env.sh" "$MV/link/.env.sh"
+mkdir -p "$MV/nested"; printf '%s\n' 'echo "$CODEX_HOME"' '. ~/.env2.sh' > "$MV/nested/.env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/nested/.env2.sh"
+mkdir -p "$MV/aliases"; printf 'alias ll="ls -l"\n' > "$MV/aliases/.bash_aliases"
+mkdir -p "$MV/unread"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/unread/.secret.sh"; chmod 000 "$MV/unread/.secret.sh"
+mkdir -p "$MV/fifo"; mkfifo "$MV/fifo/.env.sh"
+{ mv_case link .bashrc 'echo "$NVM_DIR"' '. ~/.env.sh'
+  mv_case nested .bashrc '. ~/.env.sh'
+  mv_case unread .bashrc 'echo "$NVM_DIR"' '. ~/.secret.sh'
+  mv_case fifo .zshrc 'echo "$NVM_DIR"' 'source ~/.env.sh'
+} > "$MV/src1.txt"
+{ mv_case aliases .bashrc '[ -f ~/.bash_aliases ] && . ~/.bash_aliases'
+  mv_case plainsrc .bashrc '. /nonexistent/blindspot/env.sh'
+  mv_case elsewhere .bashrc 'export NVM_DIR="$HOME/.nvm"' '. /nonexistent/blindspot/env.sh'
+} > "$MV/src0.txt"
+chmod 600 "$MV/unread/.secret.sh"
+if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
+else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# Each way a profile can reach a file that moves a folder: from outside the home, two files down, in a
+# loop over a folder's files (bash's and zsh's), through a variable set earlier, and a file placed in
+# a tool's own folder that is not the tool's own script.
+mkdir -p "$MV/ext"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ext/env.sh"
+mkdir -p "$MV/twodeep"; printf '. ~/.b.sh\n' > "$MV/twodeep/.a.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/twodeep/.b.sh"
+mkdir -p "$MV/loop/.bashrc.d"; printf 'alias k=kubectl\n' > "$MV/loop/.bashrc.d/00-alias.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/loop/.bashrc.d/10-codex.sh"
+mkdir -p "$MV/zloop/.zshrc.d"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/zloop/.zshrc.d/codex.zsh"
+mkdir -p "$MV/viavar/dotfiles"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/viavar/dotfiles/env.sh"
+mkdir -p "$MV/ownfolder/.nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ownfolder/.nvm/extra.sh"
+{ mv_case outside .bashrc ". '$MV/ext/env.sh'"
+  mv_case twodeep .bashrc '. ~/.a.sh'
+  mv_case loop .bashrc 'for f in ~/.bashrc.d/*.sh; do . "$f"; done'
+  mv_case zloop .zshrc 'for f (~/.zshrc.d/*.zsh) source $f'
+  mv_case viavar .zshrc 'DOTFILES="$HOME/dotfiles"' 'source "$DOTFILES/env.sh"'
+  mv_case ownfolder .bashrc '[ -s "$NVM_DIR/extra.sh" ] && . "$NVM_DIR/extra.sh"'
+} > "$MV/reach.txt"
+if [ "$(grep -c '=1$' "$MV/reach.txt")" -eq 6 ]; then ok "fleet: a folder moved in a file sourced from outside the home, two files down, through a variable or in a sourcing loop counts"
+else bad "fleet: a folder moved in a file sourced from outside the home, two files down, through a variable or in a sourcing loop counts" "$(grep -v '=1$' "$MV/reach.txt" | tr '\n' ' ')"; fi
+# What reads partly checked on an ordinary Mac for no reason: a tool's folder set to the folder the check
+# reads, a listed name in a comment, asdf 0.16's lines, source <(...), a file sourced from outside the
+# home beside a line that only reads a listed variable, and files that source each other.
+mkdir -p "$MV/Shared Tools/corp"; printf '%s\n' 'alias k=kubectl' 'export CORP_TOOLS=/opt/corp/bin' > "$MV/Shared Tools/corp/init.sh"
+mkdir -p "$MV/cycle"; printf '%s\n' '. ~/.bashrc' 'echo "$NVM_DIR"' > "$MV/cycle/.a.sh"
+{ mv_case bun .zshrc '# bun' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case voltash .zshrc 'export VOLTA_HOME="$HOME/.volta"' 'export PATH="$VOLTA_HOME/bin:$PATH"'
+  mv_case npmpfxsh .bashrc 'export NPM_CONFIG_PREFIX=~/.npm-global' 'export PATH=~/.npm-global/bin:$PATH'
+  mv_case comment .bashrc "alias ll='ls -l'  # CODEX_HOME stays where it is"
+  mv_case xdg .zshrc 'export XDG_CONFIG_HOME="$HOME/.config"'
+  mv_case asdf16 .zshrc 'export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"' '. <(asdf completion zsh)'
+  mv_case procsub .bashrc 'source <(kubectl completion bash)' 'echo "$NVM_DIR"'
+  mv_case shared .zshrc ". '$MV/Shared Tools/corp/init.sh'" 'export PATH="$PNPM_HOME:$PATH"'
+  mv_case cycle .bashrc '. ~/.a.sh'
+} > "$MV/quiet.txt"
+if [ "$(grep -c '=0$' "$MV/quiet.txt")" -eq 9 ]; then ok "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing"
+else bad "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing" "$(grep -v '=0$' "$MV/quiet.txt" | tr '\n' ' ')"; fi
+# What the tools a Mac's profile commonly carries write into it.
+mkdir -p "$MV/bunzsh/.bun"; printf 'export BUN_INSTALL=/elsewhere\n' > "$MV/bunzsh/.bun/_bun"
+mkdir -p "$MV/asdf15/.asdf/completions"; printf '%s\n' 'export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"' 'ASDF_DATA_DIR=/elsewhere' > "$MV/asdf15/.asdf/asdf.sh"; printf 'complete -F _asdf asdf\n' > "$MV/asdf15/.asdf/completions/asdf.bash"
+mkdir -p "$MV/uv/.local/bin"; printf '%s\n' '#!/bin/sh' 'case ":${PATH}:" in' '    *:"$HOME/.local/bin":*)' '        ;;' '    *)' '        export PATH="$HOME/.local/bin:$PATH"' '        ;;' 'esac' > "$MV/uv/.local/bin/env"
+mkdir -p "$MV/rustup/.cargo"; printf '%s\n' '#!/bin/sh' 'case ":${PATH}:" in' '    *:"$HOME/.cargo/bin":*) ;;' '    *) export PATH="$HOME/.cargo/bin:$PATH" ;;' 'esac' > "$MV/rustup/.cargo/env"
+mkdir -p "$MV/omz/.oh-my-zsh"; printf '%s\n' 'ZSH_CACHE_DIR="$ZSH/cache"' 'for config_file ("$ZSH"/lib/*.zsh); do source "$config_file"; done' > "$MV/omz/.oh-my-zsh/oh-my-zsh.sh"
+{ mv_case fnmsh .zshrc 'eval "$(fnm env --use-on-cd --shell zsh)"'
+  mv_case bunzsh .zshrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case misesh .zshrc 'eval "$(~/.local/bin/mise activate zsh)"'
+  mv_case asdf15 .bashrc '. "$HOME/.asdf/asdf.sh"' '. "$HOME/.asdf/completions/asdf.bash"'
+  mv_case uv .zshrc '. "$HOME/.local/bin/env"' 'eval "$(uv generate-shell-completion zsh)"'
+  mv_case pipx .zshrc 'autoload -U bashcompinit' 'bashcompinit' 'eval "$(register-python-argcomplete pipx)"' 'export PATH="$PATH:$HOME/.local/bin"'
+  mv_case brew .zprofile 'eval "$(/opt/homebrew/bin/brew shellenv)"'
+  mv_case pyenv .zshrc 'export PYENV_ROOT="$HOME/.pyenv"' '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' 'eval "$(pyenv init - zsh)"'
+  mv_case rustup .zshenv '. "$HOME/.cargo/env"'
+  mv_case omz .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh'
+  mv_case sdkman .zshrc 'export SDKMAN_DIR="$HOME/.sdkman"' '[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"'
+  mv_case orbstack .zprofile 'source ~/.orbstack/shell/init.zsh 2>/dev/null || :'
+} > "$MV/tools.txt"
+if [ "$(grep -c '=0$' "$MV/tools.txt")" -eq 12 ]; then ok "fleet: what fnm, bun, mise, asdf, uv, pipx, Homebrew, pyenv, rustup, Oh My Zsh, SDKMAN! and OrbStack write on a Mac moves nothing"
+else bad "fleet: what fnm, bun, mise, asdf, uv, pipx, Homebrew, pyenv, rustup, Oh My Zsh, SDKMAN! and OrbStack write on a Mac moves nothing" "$(grep -v '=0$' "$MV/tools.txt" | tr '\n' ' ')"; fi
+# The caps: 64 files and 16 MiB read in all, and no file over 16 MiB. Past one, moved is 1 only where a
+# file read names a listed variable.
+for h in chain chainn; do mkdir -p "$MV/$h/.c"; i=1; while [ "$i" -le 70 ]; do printf '. ~/.c/%s.sh\n' "$((i + 1))" > "$MV/$h/.c/$i.sh"; i=$((i + 1)); done; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.c/71.sh"; done
+for h in big bign; do mkdir -p "$MV/$h"; for f in a b; do awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 9437; i++) print s }' > "$MV/$h/.$f.sh"; done; done
+for h in huge hugen; do mkdir -p "$MV/$h"; awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 17000; i++) print s }' > "$MV/$h/.h.sh"; done
+{ mv_case chain .bashrc '. ~/.c/1.sh'
+  mv_case big .bashrc '. ~/.a.sh' '. ~/.b.sh'
+  mv_case huge .bashrc '. ~/.h.sh'
+} > "$MV/cap0.txt"
+{ mv_case chainn .bashrc 'echo "$NVM_DIR"' '. ~/.c/1.sh'
+  mv_case bign .bashrc 'echo "$NVM_DIR"' '. ~/.a.sh' '. ~/.b.sh'
+  mv_case hugen .bashrc 'echo "$NVM_DIR"' '. ~/.h.sh'
+} > "$MV/cap1.txt"
+rm -rf "$MV/big" "$MV/bign" "$MV/huge" "$MV/hugen"
+if [ "$(grep -c '=0$' "$MV/cap0.txt")" -eq 3 ] && [ "$(grep -c '=1$' "$MV/cap1.txt")" -eq 3 ]; then ok "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named"
+else bad "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named" "$(cat "$MV/cap0.txt" "$MV/cap1.txt" | tr '\n' ' ')"; fi
 # A project Codex config the settings check can't read in full (a line past 64 KB that a string can
 # span) is a file not checked for the account, so its full-access setting can't hide behind it.
 fl_home cut; mkdir -p "$FL/cut/code/evil/.codex"

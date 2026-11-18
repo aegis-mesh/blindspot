@@ -1114,7 +1114,9 @@ Graph, never a real tenant.
   that through root's own copy of gird-check.sh, which root now empties and gives away before
   deleting it); a running LiteLLM loader counts only when root's own process holds its lock, and a holder whose
   account `ps` cannot give leaves the Mac partly checked, never read as another account's; a
-  shell profile that moves an agent's folders leaves the account partly checked; each run is told
+  shell profile that moves an agent's folders leaves the account partly checked, read the way the
+  Windows account run reads it (`moved`, under Windows), with the same caps, apart from the forms only
+  PowerShell has; each run is told
   its time, so its session check stops in time; every path an account or admin could make is
   tested as a link first and never followed; a `find` or `lsof` that does not answer in time
   leaves the Mac's row not complete; agents in the account's own install folders
