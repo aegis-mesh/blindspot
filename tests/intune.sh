@@ -371,7 +371,7 @@ plain_fail() { # name text: exit 1 or 2, the text on screen, no PowerShell error
 }
 report_file jamf PSModulePath="$IW/nomods" -- "$IW/files/jamf.csv" -SeenColumn 'Last Inventory Update'
 if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads a Jamf Pro export with result tags, with no Graph module"; else bad "intune: gird-report.ps1 reads a Jamf Pro export with result tags, with no Graph module" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
-if [ "$(wc -l < "$IW/o.txt" | tr -d ' ')" -eq 4 ] && grep -q '^Read 13 computers from jamf.csv\.$' "$IW/o.txt" && grep -q '^Need attention now: 3\. To review: 0\. Nothing found: 2\.$' "$IW/o.txt" \
+if [ "$(wc -l < "$IW/o.txt" | tr -d ' ')" -eq 4 ] && grep -q '^Read 13 computers from jamf.csv\.$' "$IW/o.txt" && grep -q '^Need attention now: 3\. To review: 0\. Clear: 2\.$' "$IW/o.txt" \
   && grep -q '^Not checked: 8 ' "$IW/o.txt" && grep -q "^Report: $IW/out/blindspot-report-[0-9-]*\.html " "$IW/o.txt"; then
   ok "intune: gird-report.ps1 ends with four lines: computers read, attention now, not checked, and the report's path"
 else bad "intune: gird-report.ps1 ends with four lines: computers read, attention now, not checked, and the report's path" "$(cat "$IW/o.txt")"; fi
@@ -408,6 +408,8 @@ report_file dupname -- "$IW/files/dupc.csv" "$IW/files/dupd.csv"
 report_file dupws -- "$IW/files/dupws.csv"
 report_file winfleet -- "$IW/files/winfleet.csv"
 report_file clearonly -- "$IW/files/clearonly.csv"
+report_file page -- "$IW/files/page.csv" -Organisation "$(cat "$IW/files/org.txt")"
+report_file pagebare -- "$IW/files/page.csv"
 report_file noname -- "$IW/files/noname.csv"
 plain_fail "intune: gird-report.ps1 says plainly when no column holds the computer's name" "holds the computer's name. Its columns, with a value from each:"
 report_file noresult -- "$IW/files/noresult.csv"
@@ -469,6 +471,7 @@ if [ "$RC" -eq 0 ] && grep -qF 'powershell -ExecutionPolicy Bypass -File .\gird-
   ok "intune: gird-report.ps1 with nothing after it prints a short usage with the line to run, not an error"
 else bad "intune: gird-report.ps1 with nothing after it prints a short usage with the line to run, not an error" "exit $RC: $(head -c 400 "$IW/o.txt")"; fi
 intune_check < <(python3 tests/intune.py check files "$IW")
+intune_check < <(python3 tests/intune.py check page "$IW")
 
 # -OutDir: one path, resolved once from PowerShell's location, which is not the process's folder.
 mkdir -p "$IW/loc/rel" "$IW/cwd/rel"

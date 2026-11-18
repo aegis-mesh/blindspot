@@ -294,7 +294,8 @@ It finds the name and result columns, the delimiter and the encoding itself, and
 a CSV report in that folder. Several files go in one run, such as a Jamf Pro export and an Intune
 one. When it cannot tell which column to read, it shows each column with a value from it and the
 line to run next. A computer with no result, an old result or one it cannot read is listed as not
-checked, never as clear.
+checked, never as clear. Add `-Organisation "Example Ltd"` to put your organisation's name under the
+report's title.
 
 Each row is counted as its own computer, even when two rows share a name or a device id, because
 different computers can share one. So give it an export with one row per computer, and give each

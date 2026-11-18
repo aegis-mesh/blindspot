@@ -65,10 +65,21 @@ settings as well as ones that came in a cloned project.
 
 ## What the report shows
 
-- For each kind of finding, its plain label, the number of PCs, then each reference that applies to
-  at least one of them, linked to its MITRE page, or why there is none.
-- A table by technique: the PCs with a finding that relates to it, each PC counted once per
-  technique, and split by relation.
+The page has eight numbered sections: 01 Summary, 02 What could get out, 03 Computers to deal with
+first, 04 Findings by kind, 05 Summary by technique, 06 Computers not fully checked, 07 Every
+computer and 08 Scope and method. Section 8 holds only text that is the same in every report; every
+figure about the computers read is in sections 1 to 7. `Get-ReportData` works the figures out and
+`Get-ReportPage` turns them into markup, escaping everything that came from an input file.
+
+- Section 4, for each kind of finding: its label, the number of PCs, the relation, then each
+  reference that applies to at least one of them, in a column per framework, linked to its MITRE
+  page, or why there is none. Three labels carry an industry term, checked against its published
+  definition: keys in plain text (unsecured credentials, MITRE ATT&CK T1552), an agent set to run
+  commands without asking (excessive agency, OWASP LLM06:2025), and package versions from known
+  software supply chain attacks. The term is on that row only; the lists of each computer's
+  findings use the short label.
+- Section 5, by technique: a bar for each technique a finding relates to, with the PCs counted
+  once per technique in each relation, then the tactics of those techniques.
 - What could get out: the PCs where an AI agent set to run commands without asking and a key in
   plain text are in the same account (with the providers the value names), the PCs with a key in an
   agent's session files, and the PCs with a token in an MCP config. Each counts what was found, never
@@ -99,10 +110,11 @@ settings as well as ones that came in a cloned project.
 
   `Get-PathState` in `gird-report.ps1` is the table's one home. It is tested row by row in
   `tests/intune.py` (`PATHS`), with values the two writers write.
-- What the report covers and does not cover: the ATT&CK and ATLAS tactics of the techniques the
-  findings in this report relate to (none when nothing relates to one), what Blindspot does not look
-  at (the network, the identity provider, the cloud control plane, data platforms, what agents do
-  while they run, malware not on its list), and the limits of the results read.
+- Section 5 lists the ATT&CK and ATLAS tactics of the techniques the findings in this report relate
+  to (none when nothing relates to one). Section 6 gives the limits of the results read. Section 8
+  says what Blindspot does not look at (the network, the identity provider, the cloud control plane,
+  data platforms, what agents do while they run, malware not on its list) and every tactic a
+  technique in `data/mitre.tsv` belongs to.
 
 ## Terms
 

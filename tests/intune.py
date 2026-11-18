@@ -284,6 +284,22 @@ WINFLEET = [('W-%02d' % i, _ps(' | anna: clear', 'clear', 1 if i <= 7 else 0)) f
     ('W-11', _ps(' | anna: act keys 1; partial', 'act')),
 ]
 def csv_cell(v): return '"' + v.replace('"', '""') + '"'
+# The page itself: every outcome, a computer and an account name that are markup, and the three findings whose
+# labels carry an industry term. Written in the columns gird-intune.ps1 -Export writes, so the account is read.
+HOSTILE_PC = '<svg onload=alert(1)><title>x</title>"&amp;'
+HOSTILE_USER = '"><img src=x onerror=alert(2)></title>'
+HOSTILE_ORG = '</style><script>alert(3)</script> & "Co" \\00B7 </title>'
+PAGE = [
+    (HOSTILE_PC, HOSTILE_USER, _ps(' | anna: act wiper; run-without-asking claude-code; keys 1 aws; update mistral', 'act'), 'fail'),
+    ('PG-ACT', 'ann@example.com', _ps(' | anna: act incidents tanstack; sessions 1', 'act'), 'fail'),
+    ('PG-REVIEW', 'bo@example.com', _ps(' | bo: review run-without-asking codex; ssh-open 1', 'review'), 'fail'),
+    ('PG-CLEAR', 'cy@example.com', _ps(' | cy: clear', 'clear', 1), 'success'),
+    ('PG-CLEAR2', 'dee@example.com', _ps(' | dee: clear', 'clear'), 'success'),
+    ('PG-PARTIAL', 'eve@example.com', _ps(' | eve: not_checked ssh-open 1; partial'), 'fail'),
+    ('PG-FAILED', 'fay@example.com', _ps(' reason=host_32bit | fay: not_checked host_32bit', 'failed'), 'fail'),
+    ('PG-STALE', 'gus@example.com', 'stale: last run %s' % at(days=-5), 'fail'),
+    ('PG-NONE', 'hal@example.com', '', 'pending'),
+]
 CLR = 'v1 clear %s | asha: clear' % T0
 ACT = 'v1 act %s | asha: act keys 1' % T0
 OEM = 'To be filled by O.E.M.'
@@ -324,6 +340,10 @@ def write_files(d):
         with open(os.path.join(d, n), 'w', newline='') as f: f.write(rows)
     with open(os.path.join(d, 'winfleet.csv'), 'w', newline='') as f:
         f.write('Device name,Result\n' + ''.join('%s,%s\n' % (n, csv_cell(v)) for n, v in WINFLEET))
+    with open(os.path.join(d, 'page.csv'), 'w', encoding='utf-8-sig', newline='') as f:
+        f.write('"Device name","Device id","User","OS","Result","Detection state","Last reported","Note"\r\n')
+        for i, (n, u, v, det) in enumerate(PAGE): f.write(','.join(csv_cell(c) for c in (n, 'dev-%d' % i, u, 'Windows', v, det, '2026-11-18 09:00:00', '')) + '\r\n')
+    with open(os.path.join(d, 'org.txt'), 'w') as f: f.write(HOSTILE_ORG)
     with open(os.path.join(d, 'clearonly.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
     with open(os.path.join(d, 'locked.csv'), 'w', newline='') as f:
@@ -693,34 +713,53 @@ def scripts(w):
     with open(os.path.join(w, 'state.json')) as f: return json.load(f)['scripts']
 def refused(reqs): return [(r['method'], r['path'], r.get('code')) for r in reqs if r.get('code', 200) >= 400]
 def unquote_cell(c): return c[1:] if c.startswith("'") else c
+def html_escape(s): return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;').replace("'", '&#39;')
 def formula(c): return bool(c) and c.lstrip(' ')[:1] in ('=', '+', '-', '@', '\t', '\r')
 MEANING = 'MITRE ATT&amp;CK and ATLAS references show which attack technique each finding relates to.'
 MEANING_CSV = 'MITRE ATT&CK and ATLAS references show which attack technique each finding relates to. Blindspot reads files on each computer. It does not watch for attacks and does not detect any technique in use.'
 def bad_links(html):
     return [u for u in re.findall(r'href\s*=\s*["\']?([^"\' >]*)', html)
-            if not re.match(r'^https://(attack\.mitre\.org/techniques/T[0-9]{4}(/[0-9]{3})?/|atlas\.mitre\.org/techniques/AML\.T[0-9]{4}(\.[0-9]{3})?)$', u)]
+            if not re.match(r'^(#[a-z-]+|https://gird\.ai|https://(attack\.mitre\.org/techniques/T[0-9]{4}(/[0-9]{3})?/|atlas\.mitre\.org/techniques/AML\.T[0-9]{4}(\.[0-9]{3})?))$', u)]
 def first_ref(html):
     at = [i for i in (html.find('attack.mitre.org'), html.find('atlas.mitre.org'), html.find('>T1'), html.find('>AML.')) if i >= 0]
     return min(at) if at else len(html)
-def found_cell(html, label):
-    m = re.search(r'<tr><td>%s</td><td>([0-9]+)</td><td class="ref">(.*?)</td></tr>' % re.escape(label), html)
-    return (int(m.group(1)), m.group(2)) if m else (None, '')
-def tech_row(html, tid): # (computers, exposure, indicator)
-    m = re.search(r'<tr><td>[^<]*<span class="muted"><a href="[^"]*"[^>]*>%s</a></span></td><td>([^<]*)</td><td>([0-9]+)</td><td>([0-9]+)</td><td>([0-9]+)</td></tr>' % re.escape(tid), html)
-    return tuple(int(x) for x in m.groups()[1:]) if m else None
+KEYS_LABEL = 'Keys in plain text (unsecured credentials, MITRE ATT&amp;CK T1552)'
+YOLO = 'Agent set to run commands without asking (excessive agency, OWASP LLM06:2025)'
+PKGS = 'Package versions from known software supply chain attacks'
+def found_cell(html, label): # (computers, the ATT&CK cell, the ATLAS cell): one cell across both is both
+    m = re.search(r'<tr><th scope="row">%s</th><td class="num">([0-9]+)</td><td>(.*?)</td>(.*?)</tr>' % re.escape(label), html)
+    if not m: return (None, '', '')
+    cells = re.findall(r'<td(?: colspan="[0-9]+")?>(.*?)</td>', m.group(3))
+    if len(cells) == 1: return (int(m.group(1)), cells[0], cells[0])
+    return (int(m.group(1)), cells[0], cells[1]) if len(cells) == 2 else (None, '', '')
+def tech_row(html, tid): # (exposure, indicator): the bars of section 5
+    got = []
+    for cls in ('exp', 'ind'):
+        m = re.search(r'<li class="bar %s"><div class="lbl"><b>%s</b><span>[^<]*</span></div><svg[^>]*>(?:<rect[^>]*/>)+</svg><span class="val">([0-9]+)</span></li>' % (cls, re.escape(tid)), html)
+        got.append(int(m.group(1)) if m else 0)
+    return tuple(got) if any(got) else None
 AK = 'An AI agent set to run commands without asking, with a key in plain text in the same account'
 SE = 'A key in an AI agent&#39;s saved session files'
 MC = 'A token written in an MCP server&#39;s config'
-def path_line(html, text): # (found, none found, not known, the rest of the line)
-    m = re.search(r'<li>%s: found on ([0-9]+) computers?, none found on ([0-9]+) computers?, not known for ([0-9]+) computers?\.(.*?)</li>' % re.escape(text), html)
-    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4).strip()) if m else None
+def path_line(html, text): # (found, none found, not known, the rest of the card)
+    m = re.search(r'<li class="path"><div class="n">([0-9]+) <span>computers?</span></div><p>%s\.</p><div class="tally">Found on ([0-9]+) computers?, none found on ([0-9]+) computers?, not known for ([0-9]+) computers?\.</div>(.*?)</li>' % re.escape(text), html)
+    if not m or m.group(1) != m.group(2): return None
+    return (int(m.group(2)), int(m.group(3)), int(m.group(4)), ' '.join(re.findall(r'<div class="prov">(.*?)</div>', m.group(5))))
+def total(html):
+    m = re.search(r'<p class="lede"><b>[0-9]+ of ([0-9]+) computers?</b>', html); return int(m.group(1)) if m else -1
 def adds_up(html):
-    m = re.search(r'<b>([0-9]+)</b>Computers', html); n = int(m.group(1)) if m else -1
+    n = total(html)
     got = [path_line(html, t) for t in (AK, SE, MC)]
     return n > 0 and all(g is not None and g[0] + g[1] + g[2] == n for g in got) and ('every one of the %d computers in this report once' % n) in html, (n, got)
 def tactics(html):
-    i = html.find('<h2>What this report covers')
-    return html[i:html.find('<b>What Blindspot does not look at', i)] if i >= 0 else ''
+    i = html.find('<div class="blk tactics">')
+    return html[i:html.find('</div>', i)] if i >= 0 else ''
+def section(html, num): # the markup of one numbered section
+    i = html.find('<span class="num">%s</span>' % num)
+    return html[i:html.find('</section>', i)] if i >= 0 else ''
+def every_row(html, pc): # the outcome a computer is shown with in section 7
+    m = re.search(r'<tr><th scope="row" class="host">%s</th><td class="acct">.*?</td><td class="sys">[^<]*</td><td><span class="oc"><svg class="mk c-([a-z]+)"[^>]*><use href="#o-[a-z]+"/></svg>([^<]*)</span>' % re.escape(pc), section(html, '07'))
+    return (m.group(1), m.group(2)) if m else None
 def load_out(w, t):
     csvs = glob.glob(os.path.join(w, 'out-' + t, '*.csv')); htmls = glob.glob(os.path.join(w, 'out-' + t, '*.html'))
     out = open(os.path.join(w, 'o-%s.txt' % t)).read()
@@ -835,16 +874,18 @@ def main():
               and '&lt;script&gt;alert(1)&lt;/script&gt;' in html)
         check('the HTML loads nothing from outside', re.search(r'src\s*=\s*["\']?(https?:)?//', html) is None and '<link' not in html)
         check('the HTML links only to MITRE technique pages', bad_links(html) == [], bad_links(html))
-        n, cell = found_cell(html, 'Malware incident found')
+        n, at, al = found_cell(html, 'Malware incident found')
         check('a kind whose ATLAS reference fits only some incidents does not show it when none of them was found',
-              n == 2 and 'AML.T0010.001' not in cell and 'AML.T0011.001' not in cell and 'T1195.001' in cell and 'ATLAS: none applies to what these computers sent.' in cell, cell)
+              n == 2 and 'AML.T001' not in al and 'T1195.001' in at and al == '<span class="ref muted">None applies to what these computers sent.</span>', (n, at, al))
         check('the MITRE sentence comes before the first MITRE reference', 0 <= html.find(MEANING) < first_ref(html), (html.find(MEANING), first_ref(html)))
-        check('the HTML counts the PCs with each kind of finding', '<td>Keys in plain text</td><td>1</td>' in html
-              and '<td>SSH keys without a passphrase</td><td>3</td>' in html and '<td>Malware incident found</td><td>2</td>' in html)
-        first = html.find('Deal with these first'); none = html.find('<h2>No result'); ok_at = html.find('<h2>Nothing found')
-        check('the HTML lists the PCs to deal with first, then no result, then nothing found', 0 < first < none < ok_at)
-        order = [html.find(x) for x in ('PC-ACT', 'PC-PARTIAL', 'PC-FAILED', 'PC-STALE<')]
-        check('the PCs to deal with first are act, then not checked, failed, stale', all(x > 0 for x in order) and order == sorted(order), order)
+        check('the HTML counts the PCs with each kind of finding', found_cell(html, KEYS_LABEL)[0] == 1
+              and found_cell(html, 'SSH keys without a passphrase')[0] == 3 and found_cell(html, 'Malware incident found')[0] == 2,
+              [found_cell(html, x)[0] for x in (KEYS_LABEL, 'SSH keys without a passphrase', 'Malware incident found')])
+        every = section(html, '07')
+        order = [every.find('>%s</th>' % x) for x in ('PC-ACT', 'PC-PARTIAL', 'PC-FAILED', 'PC-STALE', 'PC-EMPTY', 'PC-REVIEW', 'PC-CLEAR')]
+        check('every computer is listed act first, then not checked, failed, stale, no result, review and clear', all(x > 0 for x in order) and order == sorted(order), order)
+        check('each computer shows its outcome', every_row(html, 'PC-ACT') == ('act', 'Act now') and every_row(html, 'PC-EMPTY') == ('nc', 'Not checked: no result')
+              and every_row(html, 'PC-CLEAR') == ('clear', 'Clear') and every_row(html, 'PC-REVIEW') == ('review', 'Review'), [every_row(html, x) for x in ('PC-ACT', 'PC-EMPTY', 'PC-CLEAR', 'PC-REVIEW')])
     elif mode == 'mitre':
         got, out = load_out(w, 'mitre')
         check('the report on the MITRE fleet saves its files', got is not None, out[-300:])
@@ -852,25 +893,26 @@ def main():
         raw, rows, by, html = got
         check('the HTML links only to MITRE technique pages, in the MITRE fleet too', bad_links(html) == [] and 'attack.mitre.org' in html and 'atlas.mitre.org' in html, bad_links(html))
         check('the MITRE sentence comes before the first MITRE reference, in the MITRE fleet too', 0 <= html.find(MEANING) < first_ref(html), (html.find(MEANING), first_ref(html)))
-        check('a PC with three findings under one technique is counted once for it, as an exposure', tech_row(html, 'T1552.001') == (3, 3, 0), tech_row(html, 'T1552.001'))
+        check('a PC with three findings under one technique is counted once for it, as an exposure', tech_row(html, 'T1552.001') == (3, 0), tech_row(html, 'T1552.001'))
         check('project settings that act when a folder opens relate to no technique: the supply chain technique counts the incidents only',
-              tech_row(html, 'T1195.001') == (3, 0, 3) and tech_row(html, 'AML.T0081') is None, (tech_row(html, 'T1195.001'), tech_row(html, 'AML.T0081')))
-        n, cell = found_cell(html, 'Project settings that act when a folder opens')
-        check('project settings that act when a folder opens say why there is no reference', n == 1 and 'href' not in cell and 'cannot tell those from settings a person wrote' in cell
-              and 'not AI agent settings' in cell, cell)
-        check('the wiper is an indicator of data destruction on every system, and never a launch agent', tech_row(html, 'T1485') == (2, 0, 2) and tech_row(html, 'T1543.001') is None
+              tech_row(html, 'T1195.001') == (0, 3) and tech_row(html, 'AML.T0081') is None, (tech_row(html, 'T1195.001'), tech_row(html, 'AML.T0081')))
+        n, at, al = found_cell(html, 'Project settings that act when a folder opens')
+        check('project settings that act when a folder opens say why there is no reference', n == 1 and 'href' not in at + al and 'cannot tell those from settings a person wrote' in at
+              and 'not AI agent settings' in al, (at, al))
+        check('the wiper is an indicator of data destruction on every system, and never a launch agent', tech_row(html, 'T1485') == (0, 2) and tech_row(html, 'T1543.001') is None
               and 'T1543' not in html and 'Armed' not in html and 'armed' not in html, (tech_row(html, 'T1485'), tech_row(html, 'T1543.001')))
-        check('a Windows-only technique counts Windows PCs only', tech_row(html, 'T1698') == (3, 3, 0) and tech_row(html, 'AML.T0053') == (4, 4, 0),
+        check('a Windows-only technique counts Windows PCs only', tech_row(html, 'T1698') == (3, 0) and tech_row(html, 'AML.T0053') == (4, 0),
               (tech_row(html, 'T1698'), tech_row(html, 'AML.T0053')))
         check('a key in agent sessions relates to ATLAS Unsecured Credentials, not to data from an AI service',
-              'AML.T0085' not in html and 'AML.T0055' in found_cell(html, 'Keys in agent sessions')[1] and tech_row(html, 'AML.T0055') == (4, 4, 0), tech_row(html, 'AML.T0055'))
-        check('the table of findings names the relations it uses', '<th>MITRE technique (exposure or indicator)</th>' in html and '<th>Exposure</th><th>Indicator</th></tr>' in html)
-        n, cell = found_cell(html, 'Malware incident found')
+              'AML.T0085' not in html and 'AML.T0055' in found_cell(html, 'Keys in agent sessions')[2] and tech_row(html, 'AML.T0055') == (4, 0), tech_row(html, 'AML.T0055'))
+        check('the table of findings and the charts name the relations they use', '<th scope="col">Relation</th>' in html and '<span class="rel ind">Indicator</span>' in html
+              and '<span class="rel">Exposure</span>' in html and 'class="b-exp"/></svg>Exposure</li>' in html and 'class="b-ind"/></svg>Indicator</li>' in html)
+        n, at, al = found_cell(html, 'Malware incident found')
         check('an ATLAS reference that fits only some incidents is shown for those, with their count, not for the whole kind',
-              n == 3 and 'AML.T0010.001</a> Supply Chain Compromise: Software (only for the incidents LiteLLM 1.107.0: 1 computer)' in cell, cell)
-        check('the plain label leads and the reference follows it', n == 3 and cell.startswith('ATT&amp;CK: Indicator of <a href="https://attack.mitre.org/techniques/T1195/001/"'), cell[:200])
-        n, cell = found_cell(html, 'Tools with a security fix to install')
-        check('a kind mapped to no technique shows no reference, and says why', n == 1 and cell.startswith('No MITRE reference: ') and 'href' not in cell and 'T1' not in cell, cell)
+              n == 3 and 'AML.T0010.001</a></b> Supply Chain Compromise: Software</span><span class="ref muted">Only for the incidents LiteLLM 1.107.0: 1 computer</span>' in al, al)
+        check('the plain label leads and the reference follows it', n == 3 and at.startswith('<span class="ref"><b><a href="https://attack.mitre.org/techniques/T1195/001/"'), at[:200])
+        n, at, al = found_cell(html, 'Tools with a security fix to install')
+        check('a kind mapped to no technique shows no reference, and says why', n == 1 and at == al and at.startswith('<span class="ref muted">No MITRE reference: ') and 'href' not in at and 'T1' not in at, at)
         check('a CSV row with no reference has none', 'T1698' in by['M-REVIEW']['mitre'] and 'AML.T0053' in by['M-REVIEW']['mitre'] and 'T1195' not in by['M-REVIEW']['mitre']
               and 'AML.T0081' not in by['M-REVIEW']['mitre'] and 'amazonq' not in by['M-REVIEW']['mitre'] and by['M-CLEAR']['mitre'] == '', (by['M-REVIEW']['mitre'], by['M-CLEAR']['mitre']))
         others = '1 of the %d computers with none found also has other accounts that were not read.'
@@ -893,12 +935,12 @@ def main():
         check('the footer names the versions, MITRE\'s notice and that the mapping is Blindspot\'s own',
               'MITRE ATT&amp;CK Enterprise v20.1 and MITRE ATLAS 2026.10' in html and re.search(r'(\u00a9|&#169;|&copy;) 2026 The MITRE Corporation\. This work', html) is not None and ' 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.' in html
               and 'Copyright 2021-2026 MITRE, licensed under the Apache License, Version 2.0' in html and 'is Blindspot&#39;s own, not MITRE&#39;s' in html)
-        check('the report says what it does not look at', all(x in html for x in ('The network:', 'The identity provider:', 'The cloud control plane:', 'lakehouse', 'What AI agents do while they run')))
+        check('the report says what it does not look at', all(x in html for x in ('<b>The network</b>:', '<b>The identity provider</b>:', '<b>The cloud control plane</b>:', 'lakehouse', '<b>What AI agents do while they run</b>:')))
         check('the report says one account per Windows PC and counts the PCs with others', '1 computer had other accounts that were not checked.' in html)
         tc = tactics(html)
         check('the report lists the tactics of the techniques its findings relate to, and only those',
               '<li>Credential Access: Unsecured Credentials: Credentials In Files (T1552.001)' in tc and '<li>Credential Access: Unsecured Credentials (AML.T0055); Credentials from AI Agent Configuration (AML.T0083)</li>' in tc
-              and 'tactics the findings in this report relate to:' in tc and 'Persistence' not in tc and 'Collection' not in tc and 'Defense Evasion' not in tc, tc[:600])
+              and 'tactics the findings in this report relate to</h3>' in tc and 'Persistence' not in tc and 'Collection' not in tc and 'Defense Evasion' not in tc, tc[:600])
     elif mode == 'files':
         got, out = load_out(w, 'jamf')
         check('gird-report.ps1 reads a Jamf Pro export and saves its files', got is not None, out[-300:])
@@ -912,13 +954,13 @@ def main():
         check('a Mac summary line says it names no findings', 'summary line' in by['MAC-SUMMARY']['why'], by['MAC-SUMMARY'])
         check('a name given twice with two serial numbers is two computers, each read', by['MAC-DUP']['status'] == 'clear' and by['mac-dup']['status'] == 'act'
               and '<li>1 computer name (or device identifier) appears more than once across the rows. Each row was counted as its own computer, so some computers may be counted more than once.</li>' in html, (by['MAC-DUP'], by['mac-dup']))
-        check('a Mac wiper is an indicator of data destruction and is not said to be a launch agent', tech_row(html, 'T1543.001') is None and tech_row(html, 'T1485') == (1, 0, 1), (tech_row(html, 'T1543.001'), tech_row(html, 'T1485')))
-        check('a Mac agent set to run without asking relates to ATLAS only', tech_row(html, 'AML.T0053') == (2, 2, 0) and tech_row(html, 'T1698') is None, tech_row(html, 'AML.T0053'))
+        check('a Mac wiper is an indicator of data destruction and is not said to be a launch agent', tech_row(html, 'T1543.001') is None and tech_row(html, 'T1485') == (0, 1), (tech_row(html, 'T1543.001'), tech_row(html, 'T1485')))
+        check('a Mac agent set to run without asking relates to ATLAS only', tech_row(html, 'AML.T0053') == (2, 0) and tech_row(html, 'T1698') is None, tech_row(html, 'AML.T0053'))
         tc = tactics(html)
         check('the tactics listed are those of the techniques found, not every one the tool can name',
               'Credential Access' in tc and 'Impact' in tc and 'Initial Access' not in tc and 'Persistence' not in tc and 'Collection' not in tc, tc[:600])
-        n, cell = found_cell(html, 'Malware markers in a shared folder')
-        check('a Mac-only finding word shows its decision', n == 1 and cell.startswith('No MITRE reference: '), cell)
+        n, at, al = found_cell(html, 'Malware markers in a shared folder')
+        check('a Mac-only finding word shows its decision', n == 1 and at == al and at.startswith('<span class="ref muted">No MITRE reference: '), at)
         check('the path statements read Mac rows', path_line(html, AK) == (1, 4, 8, 'Providers of those keys: anthropic (1 computer), github (1 computer).'), path_line(html, AK))
         check('each statement adds up to the computers in the report, from a file too', adds_up(html)[0], adds_up(html)[1])
         check('the Windows one-account sentence is left out when no result is from Windows, and the Mac one is there',
@@ -957,15 +999,15 @@ def main():
         got, out = load_out(w, 'oem')
         check('two PCs sharing the serial number To be filled by O.E.M. are both counted, and the act is shown', got is not None
               and sorted((unquote_cell(r['pc']), r['status']) for r in got[1]) == [('PC-OEM1', 'act'), ('PC-OEM2', 'clear')]
-              and '<b>2</b>Computers' in got[3] and '<td>Keys in plain text</td><td>1</td>' in got[3] and reps(got[3]) == [rep(1)], (out[-300:], got and reps(got[3])))
+              and total(got[3]) == 2 and found_cell(got[3], KEYS_LABEL)[0] == 1 and reps(got[3]) == [rep(1)], (out[-300:], got and reps(got[3])))
         got, out = load_out(w, 'mdmid')
         check('two MDM device ids of 5 from two files are both counted, and the finding is shown', got is not None
               and sorted((unquote_cell(r['pc']), r['status'], r['source']) for r in got[1]) == [('MAC-MDMB', 'act', 'mdmb.csv'), ('PC-MDMA', 'clear', 'mdma.csv')]
-              and '<b>2</b>Computers' in got[3] and '<td>Keys in plain text</td><td>1</td>' in got[3] and reps(got[3]) == [rep(1)], (out[-300:], got and reps(got[3])))
+              and total(got[3]) == 2 and found_cell(got[3], KEYS_LABEL)[0] == 1 and reps(got[3]) == [rep(1)], (out[-300:], got and reps(got[3])))
         got, out = load_out(w, 'dupname')
         check('the same names in two files are each counted, and the limits say how many names repeat', got is not None
               and sorted((unquote_cell(r['pc']).lower(), r['status']) for r in got[1]) == [('imac', 'clear'), ('imac', 'clear'), ('mac-only-c', 'clear'), ('macbook-pro', 'act'), ('macbook-pro', 'clear')]
-              and '<b>5</b>Computers' in got[3] and '<td>Keys in plain text</td><td>1</td>' in got[3] and reps(got[3]) == [rep(2)], (out[-300:], got and reps(got[3])))
+              and total(got[3]) == 5 and found_cell(got[3], KEYS_LABEL)[0] == 1 and reps(got[3]) == [rep(2)], (out[-300:], got and reps(got[3])))
         got, out = load_out(w, 'dupws')
         check('names that differ only in spaces or case count as repeats', got is not None and reps(got[3]) == [rep(2)], (out[-300:], got and reps(got[3])))
         got, out = load_out(w, 'winfleet')
@@ -981,6 +1023,70 @@ def main():
                   '<li>1 computer failed or were partly checked but sent a result' in html and 'partly checked' in got[2].get('W-11', {}).get('why', ''), (got[2].get('W-11'), re.findall(r'<li>[^<]*partly[^<]*</li>', html)))
         got, out = load_out(w, 'big')
         check('a file of 20,000 computers is read in full', got is not None and len(got[1]) == 20000 and sum(1 for r in got[1] if r['status'] == 'act') == 13333, out[-300:])
+    elif mode == 'page':
+        got, out = load_out(w, 'page'); bare, bout = load_out(w, 'pagebare')
+        check('the page fixture is read, with and without -Organisation', got is not None and bare is not None, (out[-300:], bout[-300:]))
+        if got is None or bare is None: print('\n'.join(R)); return
+        html, plain = got[3], bare[3]
+        heads = re.findall(r'<div class="sec-head"><span class="num">([0-9]{2})</span><h2 id="[a-z-]+">([^<]+)</h2></div>', html)
+        want = [('01', 'Summary'), ('02', 'What could get out'), ('03', 'Computers to deal with first'), ('04', 'Findings by kind'), ('05', 'Summary by technique'),
+                ('06', 'Computers not fully checked'), ('07', 'Every computer'), ('08', 'Scope and method')]
+        check('the page has its eight sections, in order', heads == want and re.findall(r'<div class="sec-head">.*?</div>', plain) == re.findall(r'<div class="sec-head">.*?</div>', html), heads)
+        check('the page has the GIRD mark and the title, and every source of where these results came from', '<symbol id="gird-mark" viewBox="0 0 1024 1024">' in html
+              and '<h1>AI Exposure Report</h1>' in html and '<h3>Where these results came from</h3>' in section(html, '07') and 'page.csv (9)' in section(html, '07'))
+        check('no Armed relation and no NIST anywhere on the page', not re.search(r'armed|NIST', html + plain, re.I), re.findall(r'.{30}(?:armed|NIST).{30}', html, re.I)[:3])
+        ns = 'http://www.w3.org/2000/svg'
+        def urls(h):
+            data = re.findall(r'url\("data:image/svg\+xml,[^"]*"\)', h)
+            rest = h
+            for x in data: rest = rest.replace(x, '')
+            return data, re.findall(r'(?i)(?:https?:)?//[a-z0-9.-]+[^\s"\'<>)]*', rest)
+        data, found = urls(html)
+        hosts = sorted(set(re.match(r'(?i)(?:https?:)?//([a-z0-9.-]+)', u).group(1).lower() for u in found))
+        check('the page runs no script and loads nothing: links only to MITRE, OWASP and gird.ai',
+              not re.search(r'(?i)<script|javascript:|<[^>]*\s(?:on[a-z]+|src)\s*=|<link|<img|<iframe|<object|<embed|@import', html) and len(data) == 1 and ns in data[0]
+              and all(h in ('attack.mitre.org', 'atlas.mitre.org', 'genai.owasp.org', 'owasp.org', 'gird.ai') for h in hosts)
+              and all(u.startswith('https://') for u in found) and re.findall(r'url\((?!"data:|#)', html) == [] and bad_links(html) == [], (hosts, bad_links(html)))
+        org = HOSTILE_ORG; eo = html_escape(org)
+        css = html[html.find('<style>'):html.find('</style>')]
+        check('the organisation is on its own line, escaped, only when -Organisation is given', '<p class="subject wrap">%s</p>' % eo in html
+              and '<title>AI Exposure Report: %s, ' % eo in html and org not in html and '<script' not in html
+              and 'class="subject' not in plain and '<title>AI Exposure Report, ' in plain and 'AI Exposure Report  \\00B7  \\00002F' not in plain
+              and re.search(r'"  GIRD  \\00B7  AI Exposure Report  \\00B7  \\00003C\\00002Fstyle\\00003E[^"]*"', css) is not None and 'style>' not in css[7:], css[-300:])
+        names = [(HOSTILE_PC, 3), (HOSTILE_USER, 2)]
+        svgs = ''.join(re.findall(r'<svg.*?</svg>', html, re.S))
+        check('a hostile computer and account name are escaped everywhere they are shown, and never reach an SVG',
+              all(n not in html and html.count(html_escape(n)) == k and html_escape(n) not in svgs and n not in svgs for n, k in names)
+              and all('<' not in t for t in re.findall(r'<title>(.*?)</title>', svgs)), [(html.count(html_escape(n)), k) for n, k in names])
+        terms = [KEYS_LABEL, YOLO, PKGS]
+        rows = [re.findall(r'<tr><th scope="row">%s</th>.*?</tr>' % re.escape(t), html) for t in terms]
+        check('the three industry terms are the labels of their own rows and appear nowhere else',
+              all(html.count(t) == 1 and len(r) == 1 for t, r in zip(terms, rows)) and not any(re.search(r'(?i)stolen|leaked|detected|compromised\b', r[0]) for r in rows if r)
+              and 'MITRE ATT&amp;CK T1552' not in plain.replace(KEYS_LABEL, ''), [html.count(t) for t in terms])
+        rules = re.findall(r'([^{}]+)\{([^{}]*)\}', re.sub(r'@media[^{]*\{|@page\{|@bottom-[a-z]+\{', '', css))
+        def users(var): return sorted(set(sel.strip() for sel, body in rules for sel in sel.split(',') if 'var(--%s)' % var in body))
+        marks = {'act': 'Act now', 'review': 'Review', 'clear': 'Clear'}
+        def shown(k):
+            after = [html[m.end():m.end() + 40] for m in re.finditer(r'<svg class="mk c-%s" aria-hidden="true"><use href="#o-%s"/></svg>' % (k, k), html)]
+            titles = re.findall(r'class="s-%s"><title>([^<]*)</title>' % k, html)
+            return after and all(a.startswith(marks[k]) for a in after) and all(t.startswith(marks[k] + ':') for t in titles)
+        green = [h for h in ('#4F7F5C', '#8FC2A0') if html.count(h) != css.count('--clear:' + h)]
+        check('green marks only Clear and the GIRD mark, red only Act now, amber only Review',
+              users('clear') == ['.c-clear', '.s-clear'] and users('act') == ['.c-act', '.first', '.s-act'] and users('review') == ['.c-review', '.s-review']
+              and all(shown(k) for k in marks) and not green and html.count('#14E4D0') == 6 and css.count('%2314E4D0') == 6, (users('clear'), users('act'), users('review'), green))
+        n = total(html); tiles = [int(x) for x in re.findall(r'</svg>[A-Za-z ]+</div><div class="v">([0-9]+)</div>', section(html, '01'))]
+        note = re.search(r'Not fully checked: ([^<]*)\. None of them counts as clear', html)
+        parts = sum(int(x) for x in re.findall(r'([0-9]+) (?:not checked|with)', note.group(1))) if note else -1
+        groups = [int(x) for x in re.findall(r'</svg>[^<]*, ([0-9]+)</span></th></tr>', section(html, '06'))]
+        foot = re.search(r'<th scope="row">Total</th><td class="num">([0-9]+)</td>', html)
+        kcap = re.search(r'Computers with each kind of finding, of the ([0-9]+) computers in this report\.', section(html, '04'))
+        rows07 = len(re.findall(r'<tr><th scope="row" class="host">', section(html, '07')))
+        check('the totals of sections 1, 2, 4, 6 and 7 agree', n == len(PAGE) and len(tiles) == 4 and sum(tiles) == n and adds_up(html)[0]
+              and kcap is not None and int(kcap.group(1)) == n and foot is not None and int(foot.group(1)) == tiles[1] == sum(groups) == parts and rows07 == n,
+              (n, tiles, parts, groups, foot and foot.group(1), kcap and kcap.group(1), rows07))
+        check('the page prints: light colours, a footer with the GIRD mark and the page number, rows kept whole', '@media print{' in css and '@page{' in css
+              and 'content:"Page " counter(page) " of " counter(pages)' in css and '@bottom-left{content:url("data:image/svg+xml,' in css and 'thead{display:table-header-group}' in css
+              and 'break-inside:avoid' in css and 'color-scheme:light;' in css[css.find('@media print{'):])
     elif mode == 'forms':
         rows = form_rows(os.path.join(w, 'forms.tsv'))
         got, out = load_out(w, 'forms')
@@ -1002,9 +1108,9 @@ def main():
             check('a Mac and a PC outside the group are not listed', 'MAC-SILENT' not in names and 'PC-NOTINGROUP' not in names, names)
             check('every PC is listed once', len(names) == len(set(names)) == 5, names)
             check('the PCs with no result are counted as not checked, never clear',
-                  re.search(r'<b>4</b>Not checked: no result', html) is not None and 'Not checked: 4 ' in out and 'Nothing found: 1.' in out, out)
-            check('the silent PCs are in the no result section, not under nothing found',
-                  html.find('<h2>No result') < html.find('PC-SILENT-1') < html.find('<h2>Nothing found'))
+                  '<use href="#o-nc"/></svg>No result, 4</span>' in section(html, '06') and 'Not checked: 4 ' in out and 'Clear: 1.' in out, out)
+            check('the silent PCs are in the no result group, not clear',
+                  'PC-SILENT-1' in section(html, '06') and every_row(html, 'PC-SILENT-1') == ('nc', 'Not checked: no result'), every_row(html, 'PC-SILENT-1'))
             check('a hostile PC name with no result is escaped in the HTML and guarded in the CSV',
                   '<script>alert' not in html and '&lt;script&gt;alert(1)&lt;/script&gt;' in html
                   and raw.count('"\'=cmd|<script>alert(1)</script>"') == 1 and '"\'<script>' not in raw and SILENT_HOSTILE in names and HOSTILE_NAME in names, raw[:400])

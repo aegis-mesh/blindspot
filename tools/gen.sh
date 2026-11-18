@@ -134,7 +134,7 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       # Each $Items line has exactly this form, so a word with a mistyped argument form or level is refused
       # here rather than read by nothing.
       printf '%s\n' "$ITEM_LINES" | awk '
-        { ok = $0 ~ /^  @\{ Word = \047[a-z][a-z-]*\047; Arg = \047(none|count|list|keys)\047; Level = \047(act|review|partial)\047; Label = \047[A-Za-z][A-Za-z0-9 ,_-]*\047 \}$/
+        { ok = $0 ~ /^  @\{ Word = \047[a-z][a-z-]*\047; Arg = \047(none|count|list|keys)\047; Level = \047(act|review|partial)\047; Label = \047[A-Za-z][A-Za-z0-9 ,_():.&-]*\047 \}$/
           w = $0; sub(/^  @\{ Word = \047/, "", w); sub(/\047.*/, "", w)
           if (!ok || seen[w]++) print "gird-report.ps1: an $Items line it cannot read, or a word twice: " $0 }'
       for _v in attack atlas; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done

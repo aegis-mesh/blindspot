@@ -19,3 +19,6 @@ hold only the technique ids, names and tactics of the ATLAS techniques Blindspot
 kind of finding, with Blindspot's own mapping added. Nothing else from ATLAS is included.
 ATLAS's terms of use (https://atlas.mitre.org/terms) add: This project makes use of MITRE ATT&CK®.
 ATT&CK® Terms of Use - https://attack.mitre.org/resources/terms-of-use/
+
+gird-report.ps1 labels one kind of finding with "excessive agency, OWASP LLM06:2025". The OWASP Top 10 for
+LLM Applications is referenced by name only: nothing from it is reproduced.
