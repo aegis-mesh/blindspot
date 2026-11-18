@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -p
 # Blindspot for IT teams: checks every account on a Mac, run as root by an MDM (macOS).
 # https://gird.ai/blindspot, docs/fleet.md
 #
@@ -8,31 +8,41 @@
 # Root checks every line and builds the account's row itself. The result is saved in
 # /var/db/blindspot/last.json, readable by root only. Nothing is sent anywhere.
 # blindspot-fleet.sh carries gird-check.sh inside it; gird-fleet.sh needs gird-check.sh next to it.
-# Run it from a file, by a path that holds a slash. The file and every folder above it must be
-# root's alone (a folder root owns with the sticky bit, as /private/tmp, is accepted).
+# Run it from a file, by a path that holds a slash, with /bin/bash -p as its first line says. The file
+# and every folder above it must be root's alone (a folder root owns with the sticky bit, as
+# /private/tmp, is accepted).
 #
-#   sudo /bin/bash ./blindspot-fleet.sh               what an MDM runs: with no options it is
-#                                                     --all-users --exit-zero --summary-to-stdout
-#                                                     --deadline=3000
-#   sudo /bin/bash ./blindspot-fleet.sh --all-users   a report per account
+#   sudo /bin/bash -p ./blindspot-fleet.sh               what an MDM runs: with no options it is
+#                                                        --all-users --exit-zero --summary-to-stdout
+#                                                        --deadline=3000
+#   sudo /bin/bash -p ./blindspot-fleet.sh --all-users   a report per account
 #     --all-users --list     who would be checked, and why anyone is not
 #     --all-users --json     the result as JSON (--summary-to-stdout: one line)
 #     --exit-zero  --deadline=<seconds>
-#   sudo /bin/bash ./blindspot-fleet.sh --inventory   the saved inventory value (--stale-days=<days>,
-#                                                     --result-tags)
+#   sudo /bin/bash -p ./blindspot-fleet.sh --inventory   the saved inventory value
+#                                                        (--stale-days=<days>, --result-tags)
 #   Jamf Pro's three first arguments (/, the computer's name, the user's name) are dropped.
 #   Accounts are shown as a keyed hash of their names when /var/db/blindspot/hash-key holds a secret.
 
 # shellcheck disable=SC2034  # the generated tables carry fields only gird-check.sh reads
 
-# The start (docs/designs/fleet-mode.md, How a run starts), before anything else: a fixed PATH; the
-# file's own path, which must hold a slash; that file and every folder above it root's alone; a copy
-# of it in a new folder only root can open, checked by SHA-256; then that copy, started again with an
-# empty environment. Everything after the start runs from the copy.
+# The start (docs/designs/fleet-mode.md, How a run starts), before anything else: bash started with -p;
+# a fixed PATH; the file's own path, which must hold a slash; that file and every folder above it
+# root's alone; a copy of it in a new folder only root can open, checked by SHA-256; then that copy,
+# started again with an empty environment. Everything after the start runs from the copy.
+# Until -p is proven, a function from the environment may stand in for any builtin but the special
+# ones, which posix mode finds first: so only an assignment, case and special builtins run here, and
+# printf only after unset -f. SHELLOPTS=privileged puts p in $- yet imports functions, so both count.
+POSIXLY_CORRECT=1; FL_O=$-; set +xvkaeufCET -B; unset -f declare; FL_FN=$(declare -F)
+case $FL_O in *x*) FL_O= ;; esac
+case $FL_O in *p*) case $FL_FN in '') FL_O=ok ;; esac ;; esac
+case $FL_O in
+  ok) unset POSIXLY_CORRECT FL_O FL_FN ;;
+  *) unset -f printf; printf '%s\n' "blindspot: start it as its first line says, with /bin/bash -p, and without -x: without -p, bash takes functions and settings from its environment before the file can check anything. It stopped before doing anything." >&2; exit 13 ;;
+esac
 PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
 unset BASH_ENV ENV CDPATH GLOBIGNORE TMPDIR
 IFS=$' \t\n'; umask 077; export LC_ALL=C
-set -f; for _f in $(declare -F | /usr/bin/awk '{ print $3 }'); do unset -f "$_f"; done; set +f
 NL=$'\n'
 FLEET_REAL=0
 # Every read of a GIRD_CHECK_* test setting below also needs FLEET_REAL=0 and EUID not 0, and the
@@ -139,7 +149,7 @@ if [ -z "${BLINDSPOT_STAGE:-}" ]; then
   FL_SELF=${BASH_SOURCE[0]:-}
   case "$FL_SELF" in
     */*) ;;
-    *) fl_refuse 13 "not run from a file by its path" "run it from a file, by a path that holds a slash, such as /bin/bash ./blindspot-fleet.sh: before anything else it checks who can change that file, then copies it. Standard input, bash -c and a bare file name are refused" ;;
+    *) fl_refuse 13 "not run from a file by its path" "run it from a file, by a path that holds a slash, such as /bin/bash -p ./blindspot-fleet.sh: before anything else it checks who can change that file, then copies it. Standard input, bash -c and a bare file name are refused" ;;
   esac
   _d=$(cd -P -- "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
   FL_SELF="${_d%/}/${FL_SELF##*/}"
@@ -171,7 +181,7 @@ if [ -z "${BLINDSPOT_STAGE:-}" ]; then
     [ "$_ok" -eq 1 ] && [ "$(fl_sha256 "$FL_STAGE/${_p##*:}")" = "$_h" ] || _ok=0
   done
   [ "$_ok" -eq 1 ] || { /bin/rm -rf -- "$FL_STAGE"; fl_refuse 13 "its copy did not match the file" "its copy in $FL_STAGE did not match the file it was made from"; }
-  set -- "PATH=$FL_PATH" "BLINDSPOT_STAGE=$FL_STAGE" /bin/bash "$FL_STAGE/blindspot-fleet.sh" "$@"
+  set -- "PATH=$FL_PATH" "BLINDSPOT_STAGE=$FL_STAGE" /bin/bash -p "$FL_STAGE/blindspot-fleet.sh" "$@"
   if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
     for _v in $(compgen -e); do case "$_v" in GIRD_CHECK_*|FLL_*) set -- "$_v=${!_v}" "$@" ;; esac; done   # tests only
   fi
@@ -184,11 +194,15 @@ fl_record_args "$@"
 FL_STAGE=$BLINDSPOT_STAGE; unset BLINDSPOT_STAGE
 FL_SELF=${BASH_SOURCE[0]:-}
 case "$FL_STAGE" in "$FL_TMPROOT"/blindspot-run.????????) ;; *) FL_STAGE="" ;; esac
-if [ -z "$FL_STAGE" ] || [ "$FL_SELF" != "$FL_STAGE/blindspot-fleet.sh" ] || [ -L "$FL_STAGE" ] || [ "$(fl_um "$FL_STAGE")" != "$FL_OWNER 700" ] ||
-   [ -L "$FL_SELF" ] || [ ! -f "$FL_SELF" ] || [ "$(fl_um "$FL_SELF")" != "$FL_OWNER 600" ] || ! owned_only "$FL_OWNER" "$FL_SELF" sticky; then
+if [ -z "$FL_STAGE" ] || [ "$FL_SELF" != "$FL_STAGE/blindspot-fleet.sh" ] || [ -L "$FL_STAGE" ] || [ "$(fl_um "$FL_STAGE")" != "$FL_OWNER 700" ]; then
   fl_refuse 13 "its copy was not where its start put it" "its copy is not in a folder its start made: run the file itself, never with BLINDSPOT_STAGE set"
 fi
+# The folder is root's, named as the start names it, and bash is reading this file from it: from here
+# a refusal removes it too.
 trap '/bin/rm -rf -- "$FL_STAGE"' EXIT
+if [ -L "$FL_SELF" ] || [ ! -f "$FL_SELF" ] || [ "$(fl_um "$FL_SELF")" != "$FL_OWNER 600" ] || ! owned_only "$FL_OWNER" "$FL_SELF" sticky; then
+  fl_refuse 13 "its copy was not where its start put it" "its copy is not in a folder its start made: run the file itself, never with BLINDSPOT_STAGE set"
+fi
 FL_CHECK="$FL_STAGE/gird-check.sh"
 cd / || exit 13
 
@@ -232,8 +246,8 @@ fi
 if [ "$ALLUSERS" -eq 1 ] && { [ -L "$FL_STATE/hash-key" ] || [ -e "$FL_STATE/hash-key" ]; }; then
   _hk="$FL_STATE/hash-key"; _hd=$(cd -P -- "$FL_STATE" 2>/dev/null && /bin/pwd -P)
   if fl_state_ok && [ -n "$_hd" ] && [ ! -L "$_hk" ] && [ -f "$_hk" ] && [ "$(fl_um "$_hk")" = "$FL_OWNER 600" ] && owned_only "$FL_OWNER" "$_hd/hash-key" &&
-     [ "$(fl_size "$_hk")" -le 200 ] && [ "$(/usr/bin/wc -l < "$_hk" | /usr/bin/tr -d ' ')" -le 1 ]; then
-    HASHKEY=$(/usr/bin/head -n 1 "$_hk")
+     [ "$(fl_size "$_hk")" -le 200 ]; then
+    HASHKEY=$(/bin/cat -- "$_hk"; printf x); HASHKEY=${HASHKEY%x}; HASHKEY=${HASHKEY%"$NL"}
   fi
   case "$HASHKEY" in ''|*[!A-Za-z0-9._~+/=-]*) fl_refuse 13 "the hash-key file is not root's alone, or not one line of letters and digits" "$_hk must be root's, mode 0600, in a folder that is root's with mode 0700, and hold one line of letters, digits and . _ ~ + / = - only" ;; esac
 fi

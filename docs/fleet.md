@@ -97,16 +97,18 @@ sudo /usr/bin/install -o root -g wheel -m 0700 blindspot-fleet.sh /var/root/
 See who it would check, without checking anything:
 
 ```sh
-sudo /bin/bash /var/root/blindspot-fleet.sh --all-users --list
+sudo /bin/bash -p /var/root/blindspot-fleet.sh --all-users --list
 ```
 
 Then run it:
 
 ```sh
-sudo /bin/bash /var/root/blindspot-fleet.sh --all-users
+sudo /bin/bash -p /var/root/blindspot-fleet.sh --all-users
 ```
 
-You get a report per account and where the result was saved. With no options it runs as your MDM
+Start it with `/bin/bash -p`, as its first line says. Without `-p`, bash takes functions and
+settings from its environment before the file can check anything, so the file stops (exit 13) when
+it was started without it. You get a report per account and where the result was saved. With no options it runs as your MDM
 will: one summary line, exit 0 whenever it finished. To see which files a finding is about, the
 person runs Blindspot on their own account: `bash gird-check.sh`.
 
@@ -149,22 +151,32 @@ folder to make and no second file. The page for your MDM has the steps. Each has
    result, through the copy of the file the last run kept, and never check anything:
 
    ```sh
-   #!/bin/bash
+   #!/bin/bash -p
    # Blindspot: prints the saved result. It never checks anything.
    blindspot_inventory() {
      d=/var/db/blindspot
      [ -e "$d" ] || { echo none; return; }
      [ -r "$d" ] && [ -x "$d" ] || { echo unreadable; return; }
      if [ -f "$d/blindspot-fleet.sh" ]; then
-       /usr/bin/env -i /bin/bash "$d/blindspot-fleet.sh" --inventory --stale-days=3 2>/dev/null || echo unreadable
+       /usr/bin/env -i /bin/bash -p "$d/blindspot-fleet.sh" --inventory --stale-days=3 2>/dev/null || echo unreadable
      elif [ -f "$d/refused" ]; then echo "failed: $(/usr/bin/head -n 1 "$d/refused")"
+     elif [ -f "$d/last.json" ]; then echo "old-install: the saved result is from an earlier release"
+     elif [ -f "$d/attempt" ]; then
+       a=$(/usr/bin/head -n 1 "$d/attempt"); s=${a%% *}; l=${a#* }
+       case "$s" in ''|*[!0-9]*) echo unreadable; return ;; esac
+       case "$l" in ''|*[!0-9]*) echo unreadable; return ;; esac
+       if [ "${#s}" -le 12 ] && [ "${#l}" -le 5 ] && [ $(( $(/bin/date -u +%s) - s )) -gt "$l" ]; then
+         echo "failed: the run started $(/bin/date -u -r "$s" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
+       else echo none; fi
      else echo none; fi
    }
    blindspot_inventory
    ```
 
    For Jamf Pro, the last line is `echo "<result>$(blindspot_inventory)</result>"`. Run as an account
-   that cannot open `/var/db/blindspot`, they print `unreadable`, never `none`.
+   that cannot open `/var/db/blindspot`, they print `unreadable`, never `none`. Before the one file
+   has finished a run, they print `failed` and why when it refused to start or when its first run
+   stopped part-way, and `old-install` while the only saved result is an earlier release's.
 
 Where the MDM writes the file before it runs it is not in any MDM's documentation. Root runs it only
 when the file and every folder above it are root's and writable by no one else, by mode or by ACL. A
@@ -174,6 +186,14 @@ folder only root can open. Otherwise it stops before it does anything else (exit
 that failed, and records why, so the inventory field reads `failed`. It also stops when the MDM hands
 it the script on standard input or with `bash -c`, which leaves no file to check. The page for your
 MDM says what is known.
+
+Your MDM must start the file by its first line, `#!/bin/bash -p`. Intune's guide requires a script
+to start with `#!` and a shell; Iru's says a script names its own shell and runs with `/bin/sh`
+when it names none; Jamf's scripting guide writes its scripts with a `#!` line. None says outright
+that it starts the file by that line, which is one reason each page stays marked untested. Started
+as `bash <file>` or `sh <file>`, the file stops before doing anything (exit 13) and says so. That
+refusal is not recorded, so the inventory field does not change: its exit code and message are
+what your MDM keeps of the run.
 
 **ripgrep (optional).** Each account's check reads agent sessions with the system's perl, unless
 ripgrep is installed at `/Library/Application Support/Blindspot/rg`: there and nowhere else, as a
@@ -186,7 +206,7 @@ the hash the release publishes, and installs it; if any of that fails it says so
 yet been run end to end on a real Mac.
 
 ```sh
-#!/bin/bash
+#!/bin/bash -p
 d="/Library/Application Support/Blindspot"
 umask 077
 blindspot_rg() {
@@ -289,8 +309,9 @@ in `/var/db/blindspot/last.json`. The inventory field shows `stale: last run <ti
 is older than `--stale-days`, `failed: the run started <time> did not finish or could not save its
 result` when a later run stopped part-way (your MDM's time limit, a restart) or could not save,
 `failed: refused <time>: <why>` when a later run refused to start (the file in a folder another
-account can write to, for one), `none` before the first run, and `unreadable` when the saved file is
-not root's own or the reader cannot open the folder. Treat each of those, and any outcome your MDM does not show,
+account can write to, for one), `old-install: the saved result is from an earlier release` when the
+one file has not yet finished a run where the two-file install saved one, `none` before the first
+run, and `unreadable` when the saved file is not root's own or the reader cannot open the folder. Treat each of those, and any outcome your MDM does not show,
 as not checked. An account whose name Blindspot does not read shows as `invalid-name`, not checked.
 
 To find the Macs to deal with first, filter the inventory field for values starting `v1 act`, then
@@ -343,10 +364,19 @@ named `/tmp/blindspot.` and six characters and owned by that account. Root does 
 so it does not remove them. They hold paths and counts, never a key, and can be removed once no
 Blindspot check is running. If the MDM kills the check itself, as at its own time limit, root's
 work folders are left too: `/private/tmp/blindspot-run.`, `/tmp/blindspot-fleet.` and
-`/tmp/blindspot-copy.` and eight characters, root's, holding counts and copies of the file and of
-`gird-check.sh`. The next run makes new ones; remove them with
-`sudo /bin/rm -rf /private/tmp/blindspot-run.* /tmp/blindspot-fleet.* /tmp/blindspot-copy.*` once no
-Blindspot check is running.
+`/tmp/blindspot-copy.` and eight characters (`/tmp` is `/private/tmp`), root's, holding counts and
+copies of the file and of `gird-check.sh`. The next run makes new ones. Once no Blindspot check is
+running, remove them with:
+
+```sh
+sudo /usr/bin/find /private/tmp -mindepth 1 -maxdepth 1 -type d -user 0 \( -name 'blindspot-run.????????' -o -name 'blindspot-fleet.????????' -o -name 'blindspot-copy.????????' \) -exec /bin/rm -rf {} +
+```
+
+It removes only folders root owns, directly in `/private/tmp`, named exactly so. Any account can
+make a file, folder or link in `/private/tmp` with such a name, but not one root owns, and `find`
+does not follow a link unless told to (`-L`), so a link with such a name is not a folder to it and
+is left alone. `rm -rf` does not follow links inside a folder either. The command for the saved
+result above is safe as it is: only root can make anything in `/var/db`.
 
 ## What it checks for each account
 

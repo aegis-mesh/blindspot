@@ -67,6 +67,10 @@ A finding still reads **Pass**: the word after `blindspot` is what to filter on.
 Checked 2026-10-24:
 
 - Custom scripts always run as root.
+- A script may name its own shell; one that names none runs with `/bin/sh` (checked 2026-11-18).
+  The file names `/bin/bash -p` on its first line, and stops (exit 13) if it was started without
+  `-p`. If the output says `start it as its first line says`, Iru did not start it by that line;
+  please report it.
 - They run at every check-in (about every 15 minutes), daily, or on demand from Self Service.
 - Standard output and standard error are kept in the script's audit information.
 - An audit script that exits 0 reads **Pass**; any other exit code reads **Error** and starts the

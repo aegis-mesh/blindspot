@@ -241,7 +241,9 @@ real Mac.
 For IT teams that manage Macs, and for engineers changing `gird-fleet.sh` or `tools/gen.sh`. Built
 as described here; revised after a review that found three majors in the first draft (the start
 reopened itself by a name bash could look up, the here-document's temporary file was said to follow
-`TMPDIR`, and `--hash-accounts` had nowhere safe to live).
+`TMPDIR`, and `--hash-accounts` had nowhere safe to live), and again after a review of the build
+(bash took functions and settings from the MDM's environment before the first line, the removal
+command for leftover work folders matched anyone's, and a stale size threshold).
 
 `blindspot-fleet.sh` is the one file an IT admin gives the MDM for a Mac. The MDM runs it as root,
 once a day, with no arguments and nothing to edit. It checks every account and prints one summary
@@ -287,14 +289,16 @@ Updating is replacing the file in the MDM's item with the next release. Removing
 MDM's items, then one command on each Mac:
 `sudo /bin/rm -rf /var/db/blindspot /var/db/blindspot.replaced-* "/Library/Application Support/Blindspot"`
 (the saved result, the copy kept for the inventory field, saved-result folders moved aside, and
-ripgrep if it was installed).
+ripgrep if it was installed). Root's work folders a killed run leaves in `/private/tmp` are removed
+by the `find` command in `docs/fleet.md`, step 6, which picks only folders root owns, at depth 1,
+named exactly as `mktemp` names them (each prefix and 8 characters), and never follows a link.
 
 ### What is inside
 
-1. Line 1 is `#!/bin/bash`, never `#!/usr/bin/env bash`, in `gird-fleet.sh` too. An MDM that starts a
-   file by its first line would otherwise have `env` look for `bash` on the MDM's PATH, where a copy
-   in `/usr/local/bin` or `/opt/homebrew/bin` belongs to whoever installed it, and run that copy as
-   root.
+1. Line 1 is `#!/bin/bash -p`, never `#!/usr/bin/env bash`, in `gird-fleet.sh` too. An MDM that
+   starts a file by its first line would otherwise have `env` look for `bash` on the MDM's PATH, where
+   a copy in `/usr/local/bin` or `/opt/homebrew/bin` belongs to whoever installed it, and run that copy
+   as root. `-p` is step 1 of the start.
 2. `gird-fleet.sh`, unchanged apart from its two packed blocks.
 3. The `packed-sha` block, near the top: `FL_PACKED_SHA='<SHA-256 of the copy>'`.
 4. The `packed-check` block, after the file's last line of code (`exit $?`): the marker line,
@@ -322,26 +326,52 @@ published file's SHA-256 before uploading it to the MDM.
 
 In this order, before anything else:
 
-1. **A fixed PATH and full-path tools.** `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `BASH_ENV`, `ENV`,
-   `CDPATH`, `GLOBIGNORE` and `TMPDIR` unset, `IFS` and `umask 077` set, every function bash imported
-   from the environment unset. Every tool from here on is named by its full path. One thing this
-   cannot undo: a `BASH_ENV` in the MDM's own environment runs before line 1, as it does for every
-   script that MDM runs. That environment belongs to root and the MDM; no account can set it.
-   Jamf Pro's three arguments are dropped here (see Arguments), and a Mac that is not macOS stops
-   here (exit 13).
-2. **The file's own path, from `BASH_SOURCE`.** bash sets `BASH_SOURCE` to the file it reads. Empty,
+1. **Started with `-p`.** Without `-p`, bash takes four things from its environment before the file's
+   first line can act:
+   - `BASH_FUNC_<name>%%`: a function that stands in for any command of that name but the special
+     builtins: `declare`, `export`, `[` or `printf`, so the file's own commands run someone else's
+     code;
+   - `BASH_ENV`: a file bash runs before the first line;
+   - `SHELLOPTS`: options turned on from the start, such as `xtrace`;
+   - `PS4`: with `xtrace` on, expanded before each command, so a `$(...)` in it runs.
+
+   With `-p`, bash ignores all four (measured on `/bin/bash` 3.2.57). The file's first lines check
+   that it was started so, using only an assignment, `case` and special builtins: `POSIXLY_CORRECT=1`
+   makes bash find the special builtins `set`, `unset` and `exit` before any function; `set` turns off
+   `xtrace` and the other options `SHELLOPTS` can turn on; `unset -f declare`, then `declare -F` must
+   print nothing, `$-` must hold `p` and must not hold `x`. `$-` alone is not enough:
+   `SHELLOPTS=privileged` puts `p` in it while the functions are still imported, and only a real
+   `-p` start imports none. Otherwise it runs `unset -f printf`, prints why, and exits 13.
+
+   Why it refuses rather than carry on or start itself again: Intune's guide requires a script to
+   start with `#!` and a shell, Iru's lets a script name its shell, and Jamf's writes its scripts with
+   one, so an MDM that starts the file by its first line loses nothing, and one that runs
+   `bash <file>` gets a plain failure, not a run nobody can vouch for. Starting itself again with `-p`
+   would reopen the file by its path before any check, which the first review rejected.
+
+   What remains when an MDM starts it without `-p`: whatever `BASH_ENV`, or `PS4` with
+   `SHELLOPTS=xtrace`, names has already run as root by the time the first line can act, and no script
+   can stop that. The file then runs nothing of its own: no imported function is ever called, so
+   `BASH_FUNC_*` runs nothing. The refusal is not recorded in `/var/db/blindspot`,
+   because recording needs commands that are not yet safe to call: the MDM keeps the exit code and
+   message. Only root and the MDM set that environment; no account can.
+2. **A fixed PATH and full-path tools.** `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `BASH_ENV`, `ENV`,
+   `CDPATH`, `GLOBIGNORE` and `TMPDIR` unset, `IFS` and `umask 077` set. Every tool from here on is
+   named by its full path. Jamf Pro's three arguments are dropped here (see Arguments), and a Mac
+   that is not macOS stops here (exit 13).
+3. **The file's own path, from `BASH_SOURCE`.** bash sets `BASH_SOURCE` to the file it reads. Empty,
    it read standard input or `bash -c`; with no `/`, bash may have found the name in the current
    folder or on PATH. Either is refused, exit 13, with a plain message. The path is made absolute
    with `cd -P` and `/bin/pwd -P` in a subshell; a link is refused.
-3. **The ownership check** on that absolute path and every folder above it: `owned_only` with
+4. **The ownership check** on that absolute path and every folder above it: `owned_only` with
    `sticky` (below). In `gird-fleet.sh`, `gird-check.sh` next to it too. A failure stops the run
    (exit 13) and names the first path, from `/` down, that failed.
-4. **The copy.** `/usr/bin/mktemp -d /private/tmp/blindspot-run.XXXXXXXX` makes a new folder, root's,
+5. **The copy.** `/usr/bin/mktemp -d /private/tmp/blindspot-run.XXXXXXXX` makes a new folder, root's,
    mode 0700. The file's SHA-256 is read, the file is copied in (mode 0600), and the copy's SHA-256
    must equal it, or the run stops (exit 13) and the folder is removed.
-5. **The copy, started again.** `exec /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin
-   BLINDSPOT_STAGE=<folder> /bin/bash <folder>/blindspot-fleet.sh <arguments>`. `/bin/bash` by its
-   full path, never a name. A test run (not root) also passes its `GIRD_CHECK_*` settings on.
+6. **The copy, started again.** `exec /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin
+   BLINDSPOT_STAGE=<folder> /bin/bash -p <folder>/blindspot-fleet.sh <arguments>`. `/bin/bash` by its
+   full path, never a name, and with `-p`, which the copy's step 1 checks too. A test run (not root) also passes its `GIRD_CHECK_*` settings on.
 
 The first draft started with `exec /usr/bin/env -i ... /bin/bash "$0"` before any check. Run from
 standard input or with `-c`, `$0` is `sh` or `bash`, and bash then looks for a script of that name in
@@ -353,7 +383,9 @@ nothing runs before the checks, and what runs after them is a copy no one else c
 `/private/tmp/blindspot-run.` and eight characters, it is not a link, it is root's with mode 0700,
 `BASH_SOURCE` is `blindspot-fleet.sh` in it, root's with mode 0600, and the ownership walk passes. A
 `BLINDSPOT_STAGE` carried in from an MDM's environment therefore stops the run rather than skip the
-copy. Everything after, the check each account runs, the version, and the copy kept for the inventory
+copy. Once the folder's name, owner and mode check out and `BASH_SOURCE` is in it, the folder is
+removed however the run ends, a refusal at the copy's remaining checks included; before that, the
+folder may not be the start's, so it is left alone. Everything after, the check each account runs, the version, and the copy kept for the inventory
 reader, comes from this copy. The folder is removed when the run ends.
 
 **A root-owned sticky folder above the file.** `owned_only UID PATH sticky` accepts a folder root owns
@@ -386,8 +418,9 @@ nothing, and a run that is not root cannot.
 process arguments, which every account can read with `ps` while the run lasts, and in the MDM's logs.
 So `--hash-accounts` as an argument is refused (exit 2), and the secret is read only from
 `/var/db/blindspot/hash-key`: a regular file, not a link, root's with mode 0600, in the saved-result
-folder (root's, 0700), passing the ownership walk without `sticky`, at most 200 bytes and one line of
-`A-Z a-z 0-9 . _ ~ + / = -`. A `hash-key` that fails any of these stops the run (exit 13): showing the
+folder (root's, 0700), passing the ownership walk without `sticky`, at most 200 bytes and exactly one line of
+`A-Z a-z 0-9 . _ ~ + / = -`, with or without a final newline: the whole file is read, so a second
+line, with or without its own newline, a carriage return or an empty file is refused, never cut. A `hash-key` that fails any of these stops the run (exit 13): showing the
 names an admin meant to hide would be worse than no result. Chosen over leaving the feature out
 because the saved-result folder is already root's alone and checked on every run, the checks are the
 ones the rest of the start uses, and admins who hash names today keep doing so.
@@ -397,18 +430,19 @@ mode) and `oo_acl_open` (an ACL entry that lets anyone write) in the ownership w
 `fl_ul`, `fl_size` and `fl_sha256` in `gird-fleet.sh`, with the paths `FL_TMPROOT`, `FL_STATE` and
 `FL_OLD` as constants. They use macOS's `stat -f`, `ls -le` and `shasum`. A Linux fleet mode would add
 its own versions of these (`stat -c`, `getfacl`, `sha256sum`); it is not built, and on Linux the file
-exits 13 at step 1, before any of them runs.
+exits 13 at step 2, before any of them runs.
 
 ### The safety rules, one by one
 
 | Rule | How |
 |---|---|
-| A fixed PATH before the first command | Step 1. |
-| Every tool by its full path | Also line 1 (`/bin/bash`), the exec (`/usr/bin/env`, `/bin/bash`), the copy out (`/usr/bin/awk`) and the SHA-256 (`/usr/bin/shasum` under `env -i`, so no `PERL5OPT` reaches it). |
-| `env -i` before the work starts | Step 5, after the checks. |
-| Its own file and every folder above it root's alone | Step 3, plus the sticky rule, because of step 4. |
-| Run from a file, never standard input or `-c` | Step 2. |
-| Never trust a file an account could change | The copy in step 4; the check's copy written from it into the same folder. |
+| Nothing taken from the environment before the first line | `-p` on line 1 and on the exec, checked in step 1. |
+| A fixed PATH before the first command | Step 2. |
+| Every tool by its full path | Also line 1 (`/bin/bash -p`), the exec (`/usr/bin/env`, `/bin/bash`), the copy out (`/usr/bin/awk`) and the SHA-256 (`/usr/bin/shasum` under `env -i`, so no `PERL5OPT` reaches it). |
+| `env -i` before the work starts | Step 6, after the checks. |
+| Its own file and every folder above it root's alone | Step 4, plus the sticky rule, because of step 5. |
+| Run from a file, never standard input or `-c` | Step 3. |
+| Never trust a file an account could change | The copy in step 5; the check's copy written from it into the same folder. |
 | The copy each account runs in a new root-owned folder, checked before each start | As before, plus its SHA-256 before each start. |
 | Test-only `GIRD_CHECK_*` settings ignored as root | Unchanged; the exec passes them on only when not root. |
 | The copy emptied and given away before it is deleted | Unchanged. |
@@ -471,7 +505,7 @@ leaves 222,285 bytes before the 800,000 line: about 27 branches the size of a ne
 So the copy goes in plain: no compression, no encoding, comments kept. `tools/gen.sh --check` fails
 when `blindspot-fleet.sh` reaches 1,000,000 bytes and warns from 800,000 (`size_ok`, the one rule
 both one-file builds follow: fail at the MDM's documented limit, warn from 80% of it). As built, the
-file is 588,597 bytes, 59% of the limit; the start and the inventory copy added about 10 KB to
+file is 589,754 bytes, 59% of the limit; the start and the inventory copy added about 11 KB to
 `gird-fleet.sh`.
 
 ### Removing the game
@@ -553,7 +587,7 @@ install, and the MDM pages would differ.
 |---|---|---|
 | The daily check | The MDM runs the file, with no arguments (Jamf adds its three). | Checks every account, saves the result, keeps a copy of itself for the inventory reader, prints the summary line, exits 0 unless the run `failed` (13). |
 | The inventory field | Jamf's extension attribute and Intune's custom attribute each run lines they hold. | The reader lines below run the kept copy with `--inventory`. |
-| An admin trying it | `sudo /usr/bin/install -o root -g wheel -m 0700 blindspot-fleet.sh /var/root/`, then `sudo /bin/bash /var/root/blindspot-fleet.sh --all-users`. | The readable report for every account. `--all-users --list` shows who would be checked. |
+| An admin trying it | `sudo /usr/bin/install -o root -g wheel -m 0700 blindspot-fleet.sh /var/root/`, then `sudo /bin/bash -p /var/root/blindspot-fleet.sh --all-users`. | The readable report for every account. `--all-users --list` shows who would be checked. |
 
 The copy kept for the inventory field is `/var/db/blindspot/blindspot-fleet.sh`, root's 0700 file in
 root's 0700 folder, written from the run's own copy to a temporary name, compared with `cmp` and
@@ -563,7 +597,11 @@ The reader lines, the same for every release (`docs/fleet.md`, step 3), are a fu
 `blindspot_inventory`: `none` when `/var/db/blindspot` does not exist; `unreadable` when the reader
 cannot open it, as when an MDM runs them as another account, never `none`; the kept copy's
 `--inventory` when there is one, or `unreadable` when that fails; `failed: ` and the recorded refusal
-when a run was refused before any run finished; `none` otherwise. Jamf's last line wraps the function's
+when a run was refused before any run finished; `old-install: the saved result is from an earlier
+release` when only the two-file install's `last.json` is there; `failed: the run started <time> did
+not finish or could not save its result` when the first run's `attempt` is older than its deadline
+(`unreadable` when that file is not two numbers); `none` otherwise, a first run still under way
+included. The reader starts the kept copy with `/bin/bash -p` and starts with `#!/bin/bash -p`. Jamf's last line wraps the function's
 output in `<result>` tags. Iru has no inventory field: the daily check's output is the result.
 
 **An older two-file install.** When `/Library/Application Support/Blindspot` still holds
@@ -610,12 +648,17 @@ In `tests/run.sh`, under "fleet mode: one file for the MDM", each with a line in
 `tests/bash-only.txt`. Root is stood in for as the other fleet tests do (`GIRD_CHECK_FLEET_ROOT`,
 the users file, `tests/fleet-launch.sh` for `sudo`), with the account running the tests as owner.
 
-- The build: under 1,000,000 bytes and `#!/bin/bash` first; its copy is `gird-check.sh` without the
+- The build: under 1,000,000 bytes and `#!/bin/bash -p` first; its copy is `gird-check.sh` without the
   game block with that SHA-256; outside its two blocks it is `gird-fleet.sh`; a hand-edited copy or
   SHA-256 fails `--check`; a warning from 800,000 bytes and a failure at 1,000,000 (padded copies); a
   block inside the game block refused.
 - The game proofs 2 to 6 above.
-- The start: standard input, `bash -c` and a bare file name refused before any copy or exec; a `bash`
+- The start: each of `BASH_FUNC_declare%%`, `BASH_FUNC_export%%`, `BASH_ENV`, `SHELLOPTS=xtrace`
+  with a `PS4` that runs a command, and `SHELLOPTS=privileged` with imported functions, started with
+  and without `-p`: with `-p` no code runs and the run goes on; without it the run stops (exit 13)
+  and only `BASH_ENV` and `PS4` have run code; `SHELLOPTS=privileged` with functions is refused and
+  no function runs. `bash <file>` and `sh <file>` refused. A copy refused at its own checks leaves
+  no folder. Standard input, `bash -c` and a bare file name refused before any copy or exec; a `bash`
   planted in the current folder and first on PATH never runs, started by its first line or by
   `./`; a folder or file another account can write to refused, naming it; exported functions and
   `PERL5OPT` change nothing; a root-owned sticky folder (`/private/tmp`) accepted, another account's
@@ -623,15 +666,23 @@ the users file, `tests/fleet-launch.sh` for `sudo`), with the account running th
   a packed check whose SHA-256 differs never started.
 - Arguments: none gives the summary line and exit 0 on a finding; `/ mac01 ''` and `/ mac01 asha`
   behave as none; options after Jamf's three taken as given; unknown words refused; `--hash-accounts`
-  refused without repeating the secret; the `hash-key` file used.
+  refused without repeating the secret; the `hash-key` file used; a `hash-key` that is a link, a
+  fifo, mode 0644, another owner's, over 200 bytes, two lines with no final newline, holding a
+  carriage return, or empty, each refused with exit 13 and no account name printed.
 - The inventory: the kept copy is the file, 0700; a refused run recorded and read as `failed`, a
   later finished run read as its value; the guide's reader lines print `unreadable` for a folder they
-  cannot open, `none` with no folder, and the recorded refusal.
+  cannot open, `none` with no folder, the recorded refusal, `old-install` for an earlier release's
+  `last.json` alone, `failed` for a first run that stopped part-way and `none` for one under way.
+- The removal command in `docs/fleet.md`, step 6, taken from the guide and pointed at a scratch
+  folder: as written, it selects neither the tester's own folder of a matching name nor a link of a
+  matching name to a folder root owns; with the tester standing in for root, it removes only the
+  folders at depth 1 named exactly so, never a longer or shorter name, a file, a link or a folder
+  one level deeper.
 - An older two-file install named in the JSON, the summary line, the inventory value and the report.
 - On Linux: exit 13 with the macOS-only message.
 - Need root or a real MDM, so not tested here: where each MDM writes the file and whether the
   ownership rule passes there; Jamf's real arguments; whether Jamf's and Iru's script fields take
-  589 KB pasted; Intune's upload of it; Full Disk Access through `sudo`; the start under a real root,
+  590 KB pasted; Intune's upload of it; Full Disk Access through `sudo`; the start under a real root,
   `/private/tmp` as root's folder with root's copy in it.
 
 ### Open decisions
@@ -717,7 +768,7 @@ PC, so an admin can see what one run left out.
 - `blindspot-fleet.ps1` is the one file an MDM runs. `tools/gen.sh` builds it for each release:
   `gird-fleet.ps1` with `gird-check.ps1` packed inside it, without its comments and compressed,
   and the SHA-256 of that copy written next to it. It is under 200 KB, the largest script Intune
-  accepts. `tools/gen.sh --check` fails if it grows past that and warns past 90%. See "The check a
+  accepts. `tools/gen.sh --check` fails at 200 KB and warns from 80% of it. See "The check a
   PC runs" below.
 - `gird-intune.ps1` is the admin's tool for Microsoft Intune. It runs on the admin's own PC, never
   on the fleet.
@@ -892,7 +943,7 @@ PowerShell module. It sends nothing anywhere else.
 Intune keeps at most 2,048 characters of a script's output. The inventory value is at most 2,047,
 so a value of 2,048 or more without `+more` can only be one Intune cut, and is cut to fit as on a
 Mac. The script exits 1 unless the outcome is `clear`, which Intune lists as a PC with issues.
-`blindspot-fleet.ps1` must stay under 200 KB; `tools/gen.sh` warns once it passes 90% of that.
+`blindspot-fleet.ps1` must stay under 200 KB; `tools/gen.sh` warns from 80% of that.
 
 The report never calls a PC clear that sent no result, sent one older than the stale age, or sent
 one that does not fit the inventory value's format. Those are listed as not checked.

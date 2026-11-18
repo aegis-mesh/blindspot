@@ -93,6 +93,10 @@ Checked 2026-10-24:
   the value Blindspot prints is at most 250 characters.
 - A policy runs once per computer, once every day, week or month, or on every trigger ("Ongoing")
   ([Execution Frequency for Policies](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Execution_Frequency_for_Policies)).
+- Jamf's [Scripting 201 guide](https://resources.jamf.com/documents/white_papers/apple-scripting-201.pdf)
+  writes its scripts with a `#!` line naming the shell (checked 2026-11-18). The file starts `#!/bin/bash -p`, and stops
+  (exit 13) if it was started without `-p`. If the policy log shows `start it as its first line
+  says`, Jamf did not start it by that line; please report it.
 - Jamf's documentation does not state a time limit for a policy's script, which account it runs as,
   what it does with the script's exit code, a size limit for a script, or where it writes the script
   before running it. The file is about 590 KB. The check needs root, so `--exit-zero` keeps a finding

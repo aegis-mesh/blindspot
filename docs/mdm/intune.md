@@ -75,21 +75,24 @@ It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 `none` means the check has not run yet, `failed` means the last run stopped part-way or refused to
 start (the reason follows), and `unreadable` means the saved result could not be trusted or read. Treat each of those, and an empty result, as not checked.
 
-In **Scripts** > `Blindspot check` > **Device status**, **Success** means the check finished.
+In **Scripts** > `Blindspot` > **Device status**, **Success** means the check finished.
 **Failed** means it could not run safely (`failed`), or Intune stopped it.
 
 ## Intune's limits
 
 Checked 2026-10-24:
 
-- A shell script file must be less than 1 MB. `blindspot-fleet.sh` is about 590 KB; each release
-  is built to stay under 800,000 bytes, and refused at 1,000,000.
+- A shell script file must be less than 1 MB. `blindspot-fleet.sh` is about 590 KB. `tools/gen.sh`
+  warns when a release passes 800,000 bytes and does not build one of 1,000,000 bytes or more.
 - Microsoft's guide does not say where the agent writes the script before running it. If the script's
   output says `must be owned by root and writable by no one else`, it names that folder; please
   report it.
 - A shell script that runs longer than 60 minutes is stopped and reported as failed.
   `--deadline=3000` aims to finish the check within 50 minutes.
 - A shell script runs as root unless **Run script as signed-in user** is **Yes**.
+- A shell script must start with `#!` and a shell (checked 2026-11-18). The file starts `#!/bin/bash -p`, and stops
+  (exit 13) if it was started without `-p`. The guide does not say outright that the agent starts the
+  file by that line; if the output says `start it as its first line says`, it did not.
 - A non-zero exit code reads **Failed**, so the check uses `--exit-zero`.
 - Custom attribute scripts run every 8 hours. The value must be 20 KB or less; Blindspot's is at
   most 250 characters. A script that exits non-zero reads **Failed**.

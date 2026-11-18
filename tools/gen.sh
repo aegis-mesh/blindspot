@@ -507,7 +507,8 @@ size_ok() {
 # to "# <<< game", nothing else changed), and that copy's SHA-256 in FL_PACKED_SHA. bash never reaches
 # those lines: the file's own copy writes them out (fl_unpack in gird-fleet.sh). Built from the files as
 # they are here and never checked in. Intune takes a macOS script of under 1 MB, so --check fails at
-# 1,000,000 bytes, and when the copy it unpacks is not gird-check.sh without its game byte for byte.
+# 1,000,000 bytes, when the copy it unpacks is not gird-check.sh without its game byte for byte, and
+# when its first line is not #!/bin/bash -p.
 # A blindspot-fleet.sh already here must be that build.
 if ! awk '/^# >>> game$/ { if (g || n) exit 1; g = 1; n = 1; next } /^# <<< game$/ { if (!g) exit 1; g = 0; next }
     g && /^# >>> / { exit 1 } !g { print > out } END { if (g || n != 1) exit 1 }' out="$WORK/nogame.sh" gird-check.sh; then
@@ -524,7 +525,7 @@ else
   size_ok blindspot-fleet.sh "$_szs" 1000000 1,000,000 "1 MB" "Intune for macOS" || RC=1
   unpacked_sh() { awk '/^# >>> packed-check[: ]/ && !s { s = 1; next } s { if (n) print p; p = $0; n = 1 } END { exit !(s && p == "# <<< packed-check") }' "$1" | sha; }
   [ "$(unpacked_sh "$WORK/blindspot-fleet.sh")" = "$_shs" ] || { echo "blindspot-fleet.sh does not unpack to gird-check.sh without its game"; RC=1; }
-  [ "$(head -n 1 "$WORK/blindspot-fleet.sh")" = '#!/bin/bash' ] || { echo "blindspot-fleet.sh must start with #!/bin/bash"; RC=1; }
+  [ "$(head -n 1 "$WORK/blindspot-fleet.sh")" = '#!/bin/bash -p' ] || { echo "blindspot-fleet.sh must start with #!/bin/bash -p"; RC=1; }
   if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.sh ] && ! cmp -s blindspot-fleet.sh "$WORK/blindspot-fleet.sh"; then
     echo "blindspot-fleet.sh is out of date with gird-fleet.sh and gird-check.sh, or was edited: run bash tools/gen.sh"; RC=1
   fi
