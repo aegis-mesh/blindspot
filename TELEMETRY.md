@@ -31,12 +31,12 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | `mcp_servers`, `mcp_configs`, `mcp_token_files` | `6`, `3`, `1` | MCP servers, config files with servers, and configs with a token written in. Configs inside plugin folders and caches are not counted in the first two |
 | `mcp_clients`, `mcp_token_clients` | `{"claude-code":4,"codex":2}`, `["codex"]` | How many MCP servers each app has, and which apps keep a token written in their config. Apps from a fixed list |
 | `mcp_known`, `mcp_other` | `["github","playwright"]`, `3` | Which well-known MCP servers you have, from a fixed list, and how many others. Any other server name is never sent |
-| `key_files`, `key_providers`, `history_keys` | `4`, `["anthropic","aws"]`, `1` | Files with keys in plain text, which providers from a fixed list, and how many shell history files hold keys |
+| `key_files`, `key_providers`, `history_keys` | `4`, `["anthropic","aws"]`, `1` | Files with keys in plain text, which providers from a fixed list, and how many shell history files hold keys. The list: `anthropic`, `openrouter`, `openai`, `google`, `groq`, `xai`, `huggingface`, `perplexity`, `replicate`, `aws`, `github`, `npm`, `azuresas`, `databricks`, `gitlab`, `slack`, `stripe`, `sendgrid`, `pypi`, `dockerhub`, `digitalocean`, `vault`, `nvidia`, `langsmith`, `shopify`, `sentry`, `supabase`, `onepassword`, `azureentra`, `azuredevops`, `azureai`, `azurestorage` |
 | `key_places` | `{"shell_rc":1,"shell_history":1,"env_file":2}` | Where those files sit, by kind of file: shell config, shell history, .env files, MCP configs, agent settings, project files or other. Each file counts once |
 | `provider_files` | `{"anthropic":3,"aws":1}` | How many files hold each provider's keys |
 | `env_files` | `12` | `.env` files scanned |
 | `allow_list_files`, `allow_list_keys`, `allow_list_npm` | `2`, `1`, `1` | Claude Code settings files, how many hold a saved command with a key, and how many an npm publish would ship |
-| `login_files` | `["aws","ssh"]` | Kinds of login files present, from a fixed list |
+| `login_files` | `["aws","ssh"]` | Kinds of login files present, from a fixed list: `aws`, `gcloud`, `azure`, `azure-sp`, `kube`, `docker`, `npm`, `netrc`, `git-credentials`, `gh`, `pypi`, `codex`, `claude-code`, `gemini`, `opencode`, `railway`, `databricks`, `dbt`, `snowflake`, `ssh` |
 | `ssh_keys`, `ssh_no_passphrase` | `2`, `1` | SSH private keys, and how many have no passphrase |
 | `python_envs`, `litellm_installed`, `litellm_found` | `6`, `2`, `0` | Python environments checked, LiteLLM installs, and whether 1.107.0 malware signs were found |
 | `opencode`, `railway` | `1`, `0` | Whether the OpenCode and Railway tools are installed |
