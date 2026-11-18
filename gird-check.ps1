@@ -7053,6 +7053,10 @@ $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Man
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
+# A SAS has no revoke of its own (learn.microsoft.com, SAS overview): what signed it is what to change.
+if ($ProvIds.Contains('azuresas') -or @($sessHits | Where-Object { $_.EndsWith("`tAzure Storage SAS") }).Count -gt 0) {
+  Add-Todo 3 "A shared access signature (SAS) for Azure Storage can't be revoked by itself: regenerate the storage account key that signed it, or, for a user delegation SAS, revoke the user delegation keys. One that uses a stored access policy ends when you delete the policy."
+}
 if ($HIST_KEYS -gt 0) { Add-Todo 3 'Keys in shell history were typed into a command. Treat them as exposed and rotate them.' }
 if ($N_SESS -gt 0) { Add-Todo 3 "Keys turned up in $(Plural $N_SESS 'agent session file' 'agent session files'). An agent read or was given them: treat them as exposed and rotate them." }
 if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs with environment variable references, then rotate them.' }

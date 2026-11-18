@@ -3100,6 +3100,23 @@ has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azur
 has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
 if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
 
+echo "advice for a shared access signature"
+# A SAS has no revoke of its own: the advice says what to change instead, for a SAS in a .env file
+# or in an agent session, and never for a Storage account key alone.
+mkdir -p "$WORK/sas/s1" "$WORK/sas/s2" "$WORK/sas/s3"
+for _h in s1 s2 s3; do cp -R "$WORK/clean/." "$WORK/sas/$_h/"; done
+_sig="sig=$(rnd 40)%2B$(rnd 3)%3D"
+mkdir -p "$WORK/sas/s1/code/blob" "$WORK/sas/s2/.claude/projects/p" "$WORK/sas/s3/code/blob"
+printf 'BLOB_URL=https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&se=2026-01-01&%s\n' "$_sig" > "$WORK/sas/s1/code/blob/.env"
+printf '{"t":"curl https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&%s"}\n' "$_sig" > "$WORK/sas/s2/.claude/projects/p/s.jsonl"
+printf 'AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=acct;Account%s=%s==\n' Key "$(rnd 86)" > "$WORK/sas/s3/code/blob/.env"
+for _h in s1 s2 s3; do psrun "$WORK/sas/$_h" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/sas/$_h.txt"; done
+_adv="A shared access signature \(SAS\) for Azure Storage can't be revoked by itself: regenerate the storage account key that signed it, or, for a user delegation SAS, revoke the user delegation keys\. One that uses a stored access policy ends when you delete the policy\."
+has    "a shared access signature in a .env file gets advice: it can't be revoked by itself" "$_adv" "$WORK/sas/s1.txt"
+has    "and one in an agent session too" "$_adv" "$WORK/sas/s2.txt"
+hasnot "but a Storage account key alone does not" "shared access signature" "$WORK/sas/s3.txt"
+has    "which is found as an Azure Storage key" 'Azure Storage' "$WORK/sas/s3.txt"
+
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
 mkdir -p "$WORK/mcp-pl/.codex/.tmp/plugins/plugins/a" "$WORK/mcp-pl/.claude/plugins/synced/b"
