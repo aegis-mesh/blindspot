@@ -395,23 +395,20 @@ The script then:
 3. Reads at most 4096 bytes of what the account run prints and checks each line against the fixed
    format. A line that does not fit makes the account `not_checked`. Nothing the account run
    printed, on its output or its error stream, is copied into the result or reaches the MDM.
-4. Stops the account run at the time limit, or when it prints more than it may, with every process
-   under it. `-Deadline` sets the limit in seconds. It is 1500 when not given, to finish inside the
+4. Stops the check it started at the time limit, or when it prints more than it may, and nothing
+   else. `-Deadline` sets the limit in seconds. It is 1500 when not given, to finish inside the
    30 minutes Intune allows a script. What was found by then still counts, and the account is
-   partly checked. Windows keeps only each process's parent id, and gives an ended process's id to
-   new processes. So a process counts as under the run only when its parent does and it started
-   after that parent. When the parent has ended or its id now names a later process, it counts
-   only when it also started before the last time the parent was seen running and before the
-   id's present holder started, since a later holder of the id may have started it. The last time
-   the parent was seen running is, for the account run, the moment the stop found it still
-   running or, once it has ended, its exit time, both read from the run's own handle; for any
-   other process, the moment it was looked up and found with its own start time. A process that
-   looks no younger than its parent (the clock was set back, or the parent's id was reused) is not
-   stopped either. Each is stopped by its id once its start
-   time is checked again. A process that can't be proven either way is never stopped. It is
-   reported as left running, with any process still running after the stop. The whole stop,
-   reading the system's process list included, ends within 10 seconds, kept back from the account
-   run's time; a tree it could not read to its end in that time is reported as left running too.
+   partly checked. The script stops only the process it started, through the handle Windows gave
+   it when it started it. It never looks a process up by its id to stop it: Windows gives an ended
+   process's id to new processes, so an id can name an unrelated program.
+   The check stops the tools it started itself. Its only one is ripgrep, for the session check,
+   and the check stops it at three quarters of its time, or when it ends for any other reason,
+   then waits briefly for it to exit.
+   A tool can still be running for a moment after the check is stopped. It is reported, not
+   force-closed: the script reads the system's process list once, and a process that names the
+   check as its parent and started while the check ran, or whose start time can't be read, makes
+   the account report a process left running. When the list can't be read in time, a process may be left, and the account says so.
+   The stop and that one read end within 10 seconds, kept back from the account run's time.
 5. Looks for agents installed under `%ProgramFiles%`, by name.
 6. Looks in `%ProgramData%` for the malware markers `data/indicators.tsv` lists there. Any account
    can create a file there, but on NTFS a standard account cannot give a file to another owner, so
@@ -526,17 +523,17 @@ Graph, never a real tenant.
   `-Offline -Full` report for the suites' fixtures, and has the same strings, here-strings and
   tables, token for token. In a small script, a `#` in a string, a here-string and a regex stays,
   `#requires` stays, and the script prints the same.
-- An account run that outlives its time limit is stopped, with everything it started, and the
-  account is partly checked. A process still running after the stop is reported.
+- An account run that outlives its time limit is stopped, and the account is partly checked. A
+  process it started that is still running is reported and left running. When the process list
+  can't be read, a process is reported as maybe left, never as none.
+- A slow tool the account run started is stopped by the account run itself, before its limit.
 - No network request, no browser, no saved report.
 - The JSON, the summary and the inventory value hold no path, file name or planted key.
 - Each outcome and exit code, from a fixture that produces it.
 - A marker in `%ProgramData%` owned by an ordinary account is a possible sign, not a finding; one
   the person owns is a finding on their row; one with two names is a possible sign for the PC.
-- Only a process proven to be under the account run is stopped: not one older than its parent,
-  nor one an ended parent's id may have started after the parent was last seen, nor a child of a
-  process that took the ended run's id; an ended run was last seen at its exit time. The stop ends
-  within its time even when the process list is slow, and says what it could not confirm.
+- `gird-fleet.ps1` stops no process by its id: the only process it stops is the account run,
+  through the handle it started it with. The process list decides only what is reported.
 - A profile that moves an agent's folders leaves the account partly checked, in a form the check
   does not know too, and in a file it sources from outside the home, two files down, by `&`,
   `Import-Module` or a manifest, in a sourcing loop, or placed in a tool's own folder. Past 64

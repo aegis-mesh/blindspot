@@ -63,7 +63,8 @@ if ($OptAcctRun) {
   }
   $OptOffline = $true; $OptSave = $false; $OptNoColor = $true; $OptFull = $true; $OptAll = $false; $OptAllSess = $true
   # The session check stops at three quarters of the time gird-fleet.ps1 gives the run, so what was
-  # found still reaches it, with the sessions partly checked.
+  # found still reaches it, with the sessions partly checked. Its ripgrep is stopped then even while the
+  # rest of the check is still busy, so the run leaves no process behind when gird-fleet.ps1 stops it.
   if ($AccountSeconds -match '^[0-9]{1,5}$') { $AcctEnd = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds * 3 / 4) }
   $AcctOut = [Console]::Out
   [Console]::SetOut([IO.TextWriter]::Null); [Console]::SetError([IO.TextWriter]::Null)
@@ -1215,7 +1216,7 @@ $SessRoots = @(@(foreach ($sessRow in $SessTable) {
 # Runs in its own runspace: lists the files newest first and checks them until told to stop, or
 # lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
 $SessWorker = {
-  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold)
+  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold, $stopAt)
   . ([scriptblock]::Create($fns))
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
   $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
@@ -1230,6 +1231,7 @@ $SessWorker = {
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
+    $halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() } catch { }; try { [void]$st.Proc.WaitForExit(2000) } catch { } }
     try {
       $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
@@ -1239,13 +1241,18 @@ $SessWorker = {
       $psi.Arguments = '-a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
+      if ($st.Stop) { & $halt; return }
       # --null ends the file name with a NUL, the one character a path can't hold. ripgrep ends a
       # match with a newline (LF) alone, and its lines are split there only: a carriage return can be
       # the byte before a key, and ReadLine would end the line at it, dropping the key or gluing it to
       # the next file name. So all text after a NUL is the match, and a line without one is a piece
       # of a file name that holds a newline.
       $frag = ''; $sb = New-Object Text.StringBuilder; $cb = New-Object char[] 65536; $so = $st.Proc.StandardOutput
-      while (($got = $so.Read($cb, 0, $cb.Length)) -gt 0) {
+      while ($true) {
+        $rt = $so.ReadAsync($cb, 0, $cb.Length); $ms = -1
+        if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
+        if (-not $rt.Wait($ms)) { & $halt; return }
+        $got = $rt.Result; if ($got -le 0) { break }
         $s = New-Object string($cb, 0, $got); $at = 0
         while (($nl = $s.IndexOf([char]10, $at)) -ge 0) {
           [void]$sb.Append($s, $at, $nl - $at); $l = $sb.ToString(); [void]$sb.Clear(); $at = $nl + 1
@@ -1258,7 +1265,10 @@ $SessWorker = {
       $l = $sb.ToString(); $i = $l.IndexOf([char]0)
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
       $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
-    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
+    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally {
+      if ($st.Proc) { try { if (-not $st.Proc.HasExited) { & $halt } } catch { } }
+      if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+    }
     return
   }
   # Stopped while still listing: Listed stays false and the report says the sessions were not all checked.
@@ -1321,7 +1331,7 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD).AddArgument($AcctEnd)
   $SessHandle = $SessPs.BeginInvoke()
 }
 # Stops the check, or waits for it with -AllSessions.
@@ -1329,7 +1339,10 @@ function Sess-Stop([bool]$wait) {
   if ($null -eq $script:SessPs) { return }
   if (-not $wait) {
     $SessSt.Stop = $true
-    if (-not $script:SessHandle.IsCompleted) { $SessSt.Stopped = $true; if ($SessSt.Proc) { try { $SessSt.Proc.Kill() } catch { } } }
+    if (-not $script:SessHandle.IsCompleted) {
+      $SessSt.Stopped = $true; $p = $SessSt.Proc
+      if ($p) { try { $p.Kill() } catch { }; try { [void]$p.WaitForExit(2000) } catch { } }
+    }
   }
   [void]$script:SessHandle.AsyncWaitHandle.WaitOne()
   try { $script:SessPs.EndInvoke($script:SessHandle) | Out-Null } catch { }

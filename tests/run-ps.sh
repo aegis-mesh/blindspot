@@ -3522,6 +3522,16 @@ echo "fleet mode on Windows (gird-fleet.ps1)"
 # what gird-fleet.ps1 starts and can make the account run misbehave ($FW/mode). gird-fleet.ps1 reads them only
 # off Windows. The account is the person running the tests.
 FW=$WORK/fleetw; mkdir -p "$FW"
+# GIRD_CHECK_FLEET_PS stands in for ps, the process list gird-fleet.ps1 reads after it stops an account
+# run: the processes in $FW/procs that still run. Windows keeps a process's parent id after the parent
+# ends; macOS and Linux give the process a new parent, so the list is kept here as Windows would show it.
+cat > "$FW/ps" <<'SH'
+#!/bin/bash
+[ -f "$FWL_DIR/procs" ] || exit 0
+while read -r p rest; do kill -0 "$p" 2>/dev/null && printf '%s %s\n' "$p" "$rest"; done < "$FWL_DIR/procs"
+exit 0
+SH
+chmod +x "$FW/ps"
 FLEETPS=$PWD/gird-fleet.ps1; FWL=$PWD/tests/fleet-launch-ps.sh; FWFLAT=$PWD/tests/fleet-flat.py
 FA=$(id -un); printf '%s' "$FA" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' || FA=invalid-name
 WINONLY=""; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) WINONLY="needs Windows" ;; esac
@@ -3529,10 +3539,10 @@ fw_home() { mkdir -p "$FW/$1/AppData/Local/Temp" "$FW/$1/AppData/Roaming"; }
 fw_run() { # out-prefix home [env...] -- args...: a run of gird-fleet.ps1; stdout, stderr, exit code, flat JSON
   _p=$1; _h=$2; shift 2; _e=()
   while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
-  : > "$FW/argv.log"; : > "$FW/env.log"
+  : > "$FW/argv.log"; : > "$FW/env.log"; rm -f "$FW/procs"
   env -i PATH="${FW_PATH:-$WORK/bin}" HOME="$WORK/pshome" USERPROFILE="$_h" APPDATA="$_h/AppData/Roaming" LOCALAPPDATA="$_h/AppData/Local" \
     TEMP="$_h/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" \
-    GIRD_CHECK_FLEET_LAUNCH="$FWL" FWL_DIR="$FW" FWL_REPO="$PWD" ${_e[@]+"${_e[@]}"} \
+    GIRD_CHECK_FLEET_LAUNCH="$FWL" GIRD_CHECK_FLEET_PS="$FW/ps" FWL_DIR="$FW" FWL_REPO="$PWD" ${_e[@]+"${_e[@]}"} \
     "$PWSH" -NoProfile -NonInteractive -File "${FW_SCRIPT:-$FLEETPS}" "$@" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
   echo "$?" > "$FW/$_p.rc"
   python3 "$FWFLAT" "$_h/AppData/Local/Blindspot/last.json" > "$FW/$_p.flat" 2>/dev/null || : > "$FW/$_p.flat"
@@ -3608,27 +3618,39 @@ if grep -qE "$INVRX" "$FW/clmv.out" && grep -qE '^v1 failed [0-9T:-]+Z other_pro
   && python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d["outcome"] == "failed" and d["reason"] == "language_mode" and d["other_profiles"] == 0 else 1)' "$FW/clmj.out" 2>/dev/null && grep -q '^13$' "$FW/clmj.rc"
 then ok "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode"; else bad "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode" "$(cat "$FW/clmv.out" "$FW/clms.out" | head -c 300)"; fi
 
-# A run that holds its output open past its limit, with a process of its own.
-printf 'hold\n' > "$FW/mode"; rm -f "$FW/hold.pid"
+# A run that holds its output open past its limit, with a process of its own that keeps running.
+# gird-fleet.ps1 stops the run and nothing else: that process is reported, and left alone.
+printf 'hold\n' > "$FW/mode"; rm -f "$FW/hold.pid" "$FW/launcher.pid"
 T0=$SECONDS; fw_run hold "$FW/upd" -- --deadline=40 --summary-to-stdout --mac-exit-codes; T1=$((SECONDS - T0))
 if [ "$T1" -lt 40 ] && grep -q '^12$' "$FW/hold.rc" && grep -q '^blindspot not_checked ' "$FW/hold.out"; then ok "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s"; else bad "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s, $(cat "$FW/hold.rc" "$FW/hold.out")"; fi
 has    "fleet: that account is partly checked" "^$FA\\.not_checked=time_limit\$" "$FW/hold.flat"
-if [ -s "$FW/hold.pid" ] && ! kill -0 "$(cat "$FW/hold.pid")" 2>/dev/null; then ok "fleet: and every process it started is stopped too"; else bad "fleet: and every process it started is stopped too"; fi
-hasnot "fleet: and no process is reported left" 'processes_left' "$FW/hold.flat"
-# A process still running after the stop: GIRD_CHECK_FLEET_NOSTOP keeps gird-fleet.ps1 from stopping any.
-rm -f "$FW/hold.pid" "$FW/launcher.pid"
-fw_run holdleft "$FW/upd" GIRD_CHECK_FLEET_NOSTOP=1 -- --deadline=40
-kill "$(cat "$FW/hold.pid" 2>/dev/null)" "$(cat "$FW/launcher.pid" 2>/dev/null)" 2>/dev/null
-has    "fleet: a process that outlives the stop is reported" "^$FA\\.processes_left=true\$" "$FW/holdleft.flat"
-# Output past the limit stops the run as a stuck one does, and a process that outlives it is reported.
+if [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null; then ok "fleet: the account run itself is stopped"; else bad "fleet: the account run itself is stopped"; fi
+has    "fleet: a process that outlives the stop is reported" "^$FA\\.processes_left=true\$" "$FW/hold.flat"
+if [ -s "$FW/hold.pid" ] && kill -0 "$(cat "$FW/hold.pid")" 2>/dev/null; then ok "fleet: and that process is not stopped by gird-fleet.ps1"; else bad "fleet: and that process is not stopped by gird-fleet.ps1"; fi
+kill "$(cat "$FW/hold.pid" 2>/dev/null)" 2>/dev/null
+# A stuck run with no process of its own: nothing is reported left.
+printf 'stuck\n' > "$FW/mode"; rm -f "$FW/launcher.pid"; fw_run stuck "$FW/upd" -- --deadline=40
+if grep -q "^$FA\\.not_checked=time_limit\$" "$FW/stuck.flat" && [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null && ! grep -q processes_left "$FW/stuck.flat"
+then ok "fleet: a stopped run that left nothing running reports no process left"; else bad "fleet: a stopped run that left nothing running reports no process left" "$(grep "^$FA" "$FW/stuck.flat" | tr '\n' ' ')"; fi
+# The process list could not be read: a process may be left, and the account says so.
+rm -f "$FW/launcher.pid"; fw_run stucknops "$FW/upd" GIRD_CHECK_FLEET_PS="$FW/no-such-program" -- --deadline=40
+if grep -q "^$FA\\.not_checked=time_limit\$" "$FW/stucknops.flat" && grep -q "^$FA\\.processes_left=true\$" "$FW/stucknops.flat"; then ok "fleet: a process list that can't be read reports processes left, never none"
+else bad "fleet: a process list that can't be read reports processes left, never none" "$(grep "^$FA" "$FW/stucknops.flat" | tr '\n' ' ')"; fi
+# Output past the limit stops the run as a stuck one does.
 printf 'bighold\n' > "$FW/mode"; rm -f "$FW/launcher.pid"
 fw_run bighold "$FW/upd" -- --deadline=40
 if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/bighold.flat" && [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null && ! grep -q processes_left "$FW/bighold.flat"
-then ok "fleet: output past the limit stops the run and everything it started"; else bad "fleet: output past the limit stops the run and everything it started" "$(grep "^$FA" "$FW/bighold.flat" | tr '\n' ' ')"; fi
-rm -f "$FW/launcher.pid"; fw_run bigleft "$FW/upd" GIRD_CHECK_FLEET_NOSTOP=1 -- --deadline=40
-kill "$(cat "$FW/launcher.pid" 2>/dev/null)" 2>/dev/null
-if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/bigleft.flat" && grep -q "^$FA\\.processes_left=true\$" "$FW/bigleft.flat"; then ok "fleet: a process that outlives the stop after too much output is reported"
-else bad "fleet: a process that outlives the stop after too much output is reported" "$(grep "^$FA" "$FW/bigleft.flat" | tr '\n' ' ')"; fi
+then ok "fleet: output past the limit stops the run"; else bad "fleet: output past the limit stops the run" "$(grep "^$FA" "$FW/bighold.flat" | tr '\n' ' ')"; fi
+# A tool the account run starts that never finishes: a stand-in for ripgrep. The account run stops it
+# itself, at three quarters of the 26 seconds it is given here, and ends before its limit with the sessions
+# partly checked.
+rm -f "$FW/mode" "$FW/rg.pid"; fw_home slowrg; mkdir -p "$FW/slowrg/.claude/projects/p" "$FW/slowrgbin"; printf '{}\n' > "$FW/slowrg/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash\necho "$$" > "$FWL_DIR/rg.pid"\nexec /bin/sleep 300\n' > "$FW/slowrgbin/rg"; chmod +x "$FW/slowrgbin/rg"
+T0=$SECONDS; FW_PATH="$FW/slowrgbin:$WORK/bin" fw_run slowrg "$FW/slowrg" -- --deadline=40; T1=$((SECONDS - T0))
+if [ -s "$FW/rg.pid" ] && ! kill -0 "$(cat "$FW/rg.pid")" 2>/dev/null && [ "$T1" -ge 15 ] && [ "$T1" -lt 26 ] && grep -q "^$FA\\.session_engine=rg\$" "$FW/slowrg.flat" \
+  && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowrg.flat" && ! grep -qE "^$FA\\.(not_checked|stopped|processes_left)=" "$FW/slowrg.flat"
+then ok "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s"
+else bad "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s $(grep -E "^$FA\\.(session|not_checked|stopped|processes)" "$FW/slowrg.flat" | tr '\n' ' ')"; kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null; fi
 printf 'tmpmarks\n' > "$FW/mode"; fw_run tmpmarks "$FW/upd"
 has    "fleet: an account run that names markers in a shared /tmp is refused on Windows" "^$FA\\.not_checked=bad_output\$" "$FW/tmpmarks.flat"
 rm -f "$FW/mode"
@@ -3816,7 +3838,7 @@ else
   if cmp -s "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && ! grep -q '^reason=' "$FW/ro.flat"; then ok "fleet: a stale unpacked check marked read-only is written again"; else bad "fleet: a stale unpacked check marked read-only is written again" "$(head -n 6 "$FW/ro.flat")"; fi
 fi
 # The decisions themselves, from gird-fleet.ps1's own functions: which marker goes where, which
-# profiles are people's, and which processes belong to the account run.
+# profiles are people's, and how the account run is stopped.
 cat > "$FW/fn.ps1" <<'PS'
 param([string]$File, [string]$Names, [string]$Code)
 $ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
@@ -3836,104 +3858,78 @@ cat > "$FW/fn-prof.ps1" <<'PS'
 PS
 if [ "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")" = 'False False True False True False False' ]; then ok "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's"
 else bad "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's" "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")"; fi
-cat > "$FW/fn-tree.ps1" <<'PS'
-function Case($pairs, [int]$root, [long]$rs, $starts, $alive) {
-  $sb = { param($id) if ($starts.ContainsKey($id)) { $starts[$id] } else { -2 } }.GetNewClosure()
-  $t = Tree-From $pairs $root $rs $sb $alive
-  ((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
+# gird-fleet.ps1 kills one process, the account run, through the handle it got when it started it, and
+# never a process by its id: an id Windows has given to another process would kill that one.
+cat > "$FW/fn-kills.ps1" <<'PS'
+param([string]$File)
+$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+$bad = New-Object System.Collections.Generic.List[string]
+foreach ($c in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] }, $true)) {
+  if ([string]$c.GetCommandName() -match '^(Stop-Process|spps|kill|taskkill(\.exe)?|tskill(\.exe)?|pkill|wmic(\.exe)?|Invoke-CimMethod|Invoke-WmiMethod|Get-Process|gps|ps)$') { $bad.Add($c.Extent.Text) }
 }
+foreach ($x in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.StringConstantExpressionAst] -or $a -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
+  if ($x.Value -match '(?i)terminate|taskkill') { $bad.Add($x.Extent.Text) }
+}
+$kills = 0
+foreach ($m in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
+  $n = [string]$m.Member.Extent.Text
+  if ($n -match '(?i)^(GetProcessById|GetProcesses|GetProcessesByName|Terminate)$') { $bad.Add($m.Extent.Text); continue }
+  if ($n -notmatch '(?i)^Kill$') { continue }
+  $kills++
+  $fn = $m.Parent; while ($fn -and -not ($fn -is [Management.Automation.Language.FunctionDefinitionAst])) { $fn = $fn.Parent }
+  if ($m.Expression.Extent.Text -cne '$proc' -or ($null -ne $m.Arguments -and $m.Arguments.Count -ne 0) -or -not $fn -or $fn.Name -cne 'Stop-Run') { $bad.Add($m.Extent.Text) }
+}
+# Stop-Run's process is the one Run-Account started, and nothing else in Run-Account names $proc.
+$ra = $ast.Find({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq 'Run-Account' }, $true)
+$calls = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Stop-Run' }, $true))
+$sets = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq '$proc' }, $true))
+if ($calls.Count -ne 1 -or $calls[0].CommandElements[1].Extent.Text -cne '$proc' -or -not $ra -or $ra.Extent.Text.IndexOf($calls[0].Extent.Text) -lt 0) { $bad.Add('Stop-Run is called other than once, with the started process') }
+if ($sets.Count -ne 1 -or $sets[0].Right.Extent.Text -cne '[Diagnostics.Process]::Start($psi)') { $bad.Add('$proc is set other than by starting the account run') }
+if ($kills -ne 1) { $bad.Add("$kills Kill calls") }
+if ($bad.Count -eq 0) { 'none' } else { $bad -join ' | ' }
+PS
+_k=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-kills.ps1" "$FLEETPS" 2>&1 | tr -d '\r')
+if [ "$_k" = none ]; then ok "fleet: gird-fleet.ps1 kills no process by id, only the account run through the handle it started"
+else bad "fleet: gird-fleet.ps1 kills no process by id, only the account run through the handle it started" "$_k"; fi
+# After the stop, the process list is only read, to report. A process counts as left when it names the
+# account run (100, run from 1000 to 2000) as its parent and started while the run ran, or when its
+# start time or the run's can't be read. The process tables of the earlier stop's reviews: a child
+# whose parent id was reused (it started before the run), one a later holder of the run's id started
+# (after the run ended), the clock set back, a grandchild, and no child at all.
+cat > "$FW/fn-left.ps1" <<'PS'
 $out = @()
-# A child older than its parent (it took a reused id for its parent, or the clock was set back): not
-# the run's, and said, so the account reads partly checked.
-$out += Case @(@(101, 100), @(102, 100), @(103, 101)) 100 1000 @{ 100 = [long]1000; 101 = [long]1100; 102 = [long]900; 103 = [long]1200 } @{}
-# A child whose start time can't be read: left alone, and said.
-$out += Case @(,@(101, 100)) 100 1000 @{ 100 = [long]1000; 101 = [long]-1 } @{}
-# The run's id now names a later process, and the run was last seen at 2500: a child that started
-# before then is the run's; a newer one can't be told apart.
-$out += Case @(@(101, 100), @(102, 100)) 100 1000 @{ 100 = [long]3000; 101 = [long]2000; 102 = [long]3500 } @{ 100 = [long]2500 }
-# The run has ended, last seen at 1500: its child, started before then, is still its own.
-$out += Case @(,@(101, 100)) 100 1000 @{ 101 = [long]1100 } @{ 100 = [long]1500 }
+$out += Left-Running @(,@(101, 100, [long]1100)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]900)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]2500)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]-1)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]1100)) 100 -1 2000
+$out += Left-Running @(@(101, 7, [long]1100), @(102, 101, [long]1200)) 100 1000 2000
+$out += Left-Running @(,@(100, 100, [long]1000)) 100 1000 2000
+$out += Left-Running @() 100 1000 2000
 $out -join ' '
 PS
-if [ "$(fw_fn Tree-From "$FW/fn-tree.ps1")" = '100,101,103:True 100:True 100,101:True 100,101:False' ]; then ok "fleet: only a process proven to be under the account run is stopped"
-else bad "fleet: only a process proven to be under the account run is stopped" "$(fw_fn Tree-From "$FW/fn-tree.ps1")"; fi
-# The run was last seen at 1050 and has ended; a later holder of its id started 101 and ended too:
-# 101 is not taken, and the account reads partly checked.
-cat > "$FW/fn-reuse.ps1" <<'PS'
-$t = Tree-From @(,@(101, 100)) 100 1000 { param($id) if ($id -eq 101) { [long]1100 } else { [long]-2 } } @{ 100 = [long]1050 }
-((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
-PS
-if [ "$(fw_fn Tree-From "$FW/fn-reuse.ps1")" = '100:True' ]; then ok "fleet: a child of an ended parent that started after the parent was last seen is not taken"
-else bad "fleet: a child of an ended parent that started after the parent was last seen is not taken" "$(fw_fn Tree-From "$FW/fn-reuse.ps1")"; fi
-# The run (100, started at 1000) has ended; its id now names an unrelated process X, started at 2000,
-# whose child Y started at 2500. Y is not the run's, whether the run was last seen at its exit (1500)
-# or, as a stop that took the moment it began for the last sighting would have it, at 3000.
-cat > "$FW/fn-reused.ps1" <<'PS'
-function Case($pairs, [long]$rs, $starts, $alive) {
-  $sb = { param($id) if ($starts.ContainsKey($id)) { $starts[$id] } else { [long]-2 } }.GetNewClosure()
-  $t = Tree-From $pairs 100 $rs $sb $alive
-  ((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
-}
+_l=$(fw_fn Left-Running "$FW/fn-left.ps1")
+if [ "$_l" = 'True False False True True False False False' ]; then ok "fleet: a process left is reported from one read of the process list, and the list is never used to stop one"
+else bad "fleet: a process left is reported from one read of the process list, and the list is never used to stop one" "$_l"; fi
+# The stop through Stop-Run itself: the run is stopped, and a list that can't be read is unknown, so
+# processes are reported left; an empty list reports none. The stop ends within its time.
+cat > "$FW/fn-stop.ps1" <<'PS'
+$script:FlStopSecs = 3; $OnWindows = $false; $FlTest = $false
+$ps = (Get-Process -Id $PID).Path
+function Proc-Rows([int]$secs) { if ($script:none) { return $null }; , (New-Object System.Collections.Generic.List[object]) }
 $out = @()
-$out += Case @(,@(200, 100)) 1000 @{ 100 = [long]2000; 200 = [long]2500 } @{ 100 = [long]1500 }
-$out += Case @(,@(200, 100)) 1000 @{ 100 = [long]2000; 200 = [long]2500 } @{ 100 = [long]3000 }
-# The run still running: its child and grandchild are taken.
-$out += Case @(@(101, 100), @(102, 101)) 1000 @{ 100 = [long]1000; 101 = [long]1100; 102 = [long]1200 } @{}
-# A child whose start time can't be read is never taken, and said.
-$out += Case @(@(101, 100), @(102, 100)) 1000 @{ 100 = [long]1000; 101 = [long]-1; 102 = [long]1100 } @{}
-# A child of the run (101) ends while the tree is read: its child that started before 101 was last
-# seen is taken; one that started after is not.
-$T = [DateTime]::UtcNow.Ticks; $script:c101 = 0
-$sb = { param($id) switch ($id) { 100 { $T - 1000000000 } 101 { $script:c101++; if ($script:c101 -eq 1) { $T - 900000000 } else { [long]-2 } } 102 { $T - 800000000 } 103 { $T + 1000000000000 } default { [long]-2 } } }
-$t = Tree-From @(@(101, 100), @(102, 101), @(103, 101)) 100 ($T - 1000000000) $sb @{}
-$out += ((@($t.In) | Sort-Object) -join ',') + ':' + $t.Unsure
+foreach ($none in @($true, $false)) {
+  $script:none = $none
+  $p = [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command Start-Sleep 60')
+  $w = [Diagnostics.Stopwatch]::StartNew()
+  $r = Stop-Run $p ([long]$p.StartTime.ToUniversalTime().Ticks)
+  $out += "$r/$($p.HasExited)/$($w.Elapsed.TotalSeconds -le 4)"
+}
 $out -join ' '
 PS
-_rt=$(fw_fn Tree-From "$FW/fn-reused.ps1")
-if [ "$_rt" = '100:True 100:True 100,101,102:False 100,102:True 100,101,102:True' ]; then ok "fleet: a process started by a later holder of the ended run's id is never taken"
-else bad "fleet: a process started by a later holder of the ended run's id is never taken" "$_rt"; fi
-# The same through the stop itself: the run has ended, and its id names a process started after that,
-# whose child the stop must leave alone. The run's last sighting is its exit time, not the stop's start.
-cat > "$FW/fn-stopr.ps1" <<'PS'
-$script:FlStopSecs = 3; $FlTest = $true; $env:GIRD_CHECK_FLEET_NOSTOP = '1'
-$ps = (Get-Process -Id $PID).Path
-$root = [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command exit 0')
-$rs = [long]$root.StartTime.ToUniversalTime().Ticks
-$root.WaitForExit(); Start-Sleep -Milliseconds 300
-$ex = [long]$root.ExitTime.ToUniversalTime().Ticks
-$seen = Run-Seen $root
-function Proc-Pairs([int]$r, [int]$secs) { $l = New-Object System.Collections.Generic.List[object]; $l.Add(@(4242420, $r)); , $l }
-function Proc-Start([int]$id) { if ($id -eq $root.Id) { $ex + 10000 } elseif ($id -eq 4242420) { $ex + 20000 } else { [long]-2 } }
-$orig = ${function:Tree-From}; $script:taken = @()
-function Tree-From { $r = & $orig @args; $script:taken += @($r.In); $r }
-$left = Stop-Tree $root $rs
-"$($seen -eq $ex) $left $((@($script:taken | Sort-Object -Unique) | Where-Object { $_ -ne $root.Id }).Count)"
-PS
-_sr=$(fw_fn Stop-Tree,Tree-From,Proc-Start,Run-Seen "$FW/fn-stopr.ps1")
-if [ "$_sr" = 'True True 0' ]; then ok "fleet: an ended run's last sighting is its exit time, and the stop leaves the next holder's child alone"
-else bad "fleet: an ended run's last sighting is its exit time, and the stop leaves the next holder's child alone" "$_sr"; fi
-# The stop, the system's process list included, ends within its budget, and what it could not confirm
-# stopped is reported. Here the list takes 2 seconds each time and names one more process each time.
-cat > "$FW/fn-stopt.ps1" <<'PS'
-$script:FlStopSecs = 3; $FlTest = $false; $script:n = 0
-$ps = (Get-Process -Id $PID).Path
-$root = [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command Start-Sleep 60')
-$kids = @(1..4 | ForEach-Object { [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command Start-Sleep 60') })
-function Proc-Pairs([int]$r, [int]$secs) {
-  Start-Sleep -Seconds 2; $script:n++
-  $l = New-Object System.Collections.Generic.List[object]
-  for ($i = 0; $i -lt [Math]::Min($script:n, 4); $i++) { $l.Add(@($kids[$i].Id, $r)) }
-  , $l
-}
-$w = [Diagnostics.Stopwatch]::StartNew()
-$left = Stop-Tree $root ([long]$root.StartTime.ToUniversalTime().Ticks)
-$w.Stop()
-foreach ($k in @($kids) + @($root)) { try { $k.Kill() } catch { } }
-"$left $([int][Math]::Ceiling($w.Elapsed.TotalSeconds))"
-PS
-_st=$(fw_fn Stop-Tree,Tree-From,Proc-Start,Run-Seen "$FW/fn-stopt.ps1")
-if [ "${_st%% *}" = True ] && [ "${_st##* }" -le 4 ] 2> /dev/null; then ok "fleet: a stop whose process list is slow ends within its budget and reports what it could not confirm" "$_st"
-else bad "fleet: a stop whose process list is slow ends within its budget and reports what it could not confirm" "$_st"; fi
+_s=$(fw_fn Stop-Run,Left-Running "$FW/fn-stop.ps1")
+if [ "$_s" = 'True/True/True False/True/True' ]; then ok "fleet: a process list that can't be read in time is unknown, not none"
+else bad "fleet: a process list that can't be read in time is unknown, not none" "$_s"; fi
 cat > "$FW/fn-fit.ps1" <<'PS'
 $h = 'v1 review 2026-01-01T00:00Z other_profiles=0'; $t = ' | machine: review; possible mastra'
 $fill = { param($n) 'asha: review to-read 1; possible ' + ('a' * ($n - ($h.Length + 3 + 'asha: review to-read 1; possible '.Length + $t.Length))) }

@@ -15,7 +15,9 @@
 #   tmpmarks   the real output naming a marker in a shared /tmp, which Windows has none of
 #   maxed      output in the fixed format with every incident in each list that takes incidents, and
 #              the wiper: an inventory value too long to keep whole
-#   hold       prints v=1, starts a process of its own and holds its output open past any limit
+#   hold       prints v=1, starts a process of its own and holds its output open past any limit; the
+#              process is added to $FWL_DIR/procs, the process list the tests' stand-in for ps prints
+#   stuck      prints v=1 and holds its output open past any limit, with no process of its own
 #   slowsess   the real run, with its session check held so it never ends on its own
 # FWL_API, when set, is handed to the account run as GIRD_CHECK_API and GIRD_CHECK_WEB, to show it
 # sends nothing.
@@ -46,6 +48,8 @@ end=1/' ;;
       sessions_partial=0 allow_list_keys=0 ssh_open=0 ak_links=0 planted=0 "possible=$ids" "incidents=$ids" "platforms=opencode railway zeabur" on_open=0 \
       to_read=0 "updates=$ids" wiper=1 "lock_only=$ids" "remove=$ids" not_read=0 moved=0 tmp_marks= tmp_wiper=0 protected=ok \
       engine=dotnet end=1; do printf '%s\n' "$l"; done ;;
-  hold) sleep 120 & echo "$!" > "$FWL_DIR/hold.pid"; echo "$$" > "$FWL_DIR/launcher.pid"; echo v=1; exec sleep 300 ;;
+  hold) sleep 120 & echo "$!" > "$FWL_DIR/hold.pid"; echo "$$" > "$FWL_DIR/launcher.pid"
+    printf '%s %s %s\n' "$!" "$$" "$(LC_ALL=C date '+%a %b %e %H:%M:%S %Y')" >> "$FWL_DIR/procs"; echo v=1; exec sleep 300 ;;
+  stuck) echo "$$" > "$FWL_DIR/launcher.pid"; echo v=1; exec sleep 300 ;;
   *) exec env ${extra[@]+"${extra[@]}"} "$@" ;;
 esac
