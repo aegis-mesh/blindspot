@@ -341,4 +341,26 @@ if [ "$RC" -eq 0 ] && [ -z "$(ls "$IW/elsewhere")" ] && [ "$(ls "$IW/out" | grep
 else bad "intune: -Report writes only new files, never through a name already there" "exit $RC; elsewhere: $(ls "$IW/elsewhere" | tr '\n' ' '); out: $(ls "$IW/out" | tr '\n' ' ')"; fi
 fi
 
+# New-ReportFile, taken from the tool's own source and called directly: Test-Taken is not in the way.
+rm -rf "$IW/nrf"; mkdir -p "$IW/nrf/gone"
+printf 'keep' > "$IW/nrf/existing.csv"
+ln -s "$IW/nrf/gone/target.csv" "$IW/nrf/dangling.csv"
+"$PWSH" -NoProfile -NonInteractive -Command "
+\$ErrorActionPreference = 'Stop'
+\$ast = [Management.Automation.Language.Parser]::ParseFile('$TOOL', [ref]\$null, [ref]\$null)
+\$fn = \$ast.Find({ param(\$n) \$n -is [Management.Automation.Language.FunctionDefinitionAst] -and \$n.Name -eq 'New-ReportFile' }, \$true)
+. ([scriptblock]::Create(\$fn.Extent.Text))
+foreach (\$name in 'existing.csv', 'dangling.csv') {
+  try { New-ReportFile ('$IW/nrf/' + \$name) 'new text' \$true; 'wrote ' + \$name } catch { 'threw ' + \$name }
+}
+New-ReportFile '$IW/nrf/fresh.csv' 'abc' \$true
+[IO.File]::ReadAllBytes('$IW/nrf/fresh.csv') -join ','
+" > "$IW/nrf.txt" 2>&1
+if grep -q '^threw existing.csv$' "$IW/nrf.txt" && grep -q '^threw dangling.csv$' "$IW/nrf.txt" && [ "$(cat "$IW/nrf/existing.csv")" = keep ] \
+  && [ ! -e "$IW/nrf/gone/target.csv" ] && [ -z "$(ls "$IW/nrf/gone")" ]; then
+  ok "intune: New-ReportFile throws on an existing file and on a dangling link, keeps the file and creates no link target"
+else bad "intune: New-ReportFile throws on an existing file and on a dangling link, keeps the file and creates no link target" "$(head -c 300 "$IW/nrf.txt"); gone: $(ls "$IW/nrf/gone" | tr '\n' ' ')"; fi
+if grep -q '^239,187,191,97,98,99$' "$IW/nrf.txt"; then ok "intune: New-ReportFile writes the byte order mark and then the text"
+else bad "intune: New-ReportFile writes the byte order mark and then the text" "$(tail -c 200 "$IW/nrf.txt")"; fi
+
 if [ "$INTUNE_ALONE" -eq 1 ]; then finish; else intune_cleanup; fi

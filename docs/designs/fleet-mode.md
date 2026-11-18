@@ -409,7 +409,10 @@ How `gird-intune.ps1` keeps to its own Remediation and reads results:
   second line, a finding word it does not know, an account outcome worse than the header, or a
   `clear` that Intune does not say succeeded, is not checked. So is a result dated more than an hour
   ahead, and one of 2,048 characters or more that does not end in `+more`, which Intune may have
-  cut. A result older than `-StaleDays` (3 by default) is stale, whatever it says. A `failed` result
+  cut; the one line end the writer prints after the value is not counted. A result with a version
+  header other than `v1`, or a finding word the tool does not know in an otherwise well-formed
+  value, is also not checked, and says the PCs run a newer Blindspot than the tool reads, so the
+  admin should update the tool. A result older than `-StaleDays` (3 by default) is stale, whatever it says. A `failed` result
   is listed as failed, with its reason.
 - A PC that never ran the check has no row in Intune's results, so `-Report` finds it another way.
   It reads the Remediation's assignments, then the Windows PCs in each assigned group (nested

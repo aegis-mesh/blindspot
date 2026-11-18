@@ -49,6 +49,14 @@ CTL_NAME = 'Blindspot fleet check\x1b[2J\x07\u202e'
 
 HOSTILE_NAME = '<script>alert(1)</script>'
 HOSTILE_OUT = '=HYPERLINK("http://x","y")<img src=x onerror=alert(1)>'
+def _ps(rest, out='not_checked', profiles=0): return 'v1 %s %s other_profiles=%d%s' % (out, T0, profiles, rest)
+def _long(total, tail=' +more'):
+    head = _ps(' | anna: act lockfile %s; update %s; possible ' % (','.join(['tanstack'] * 63), ','.join(['tanstack'] * 63)), 'act')
+    need = total - len(tail) - len(head)
+    n = -(-(need + 1) // 65)
+    size, extra = divmod(need - (n - 1), n)
+    return head + ','.join('a' * (size + (1 if i < extra else 0)) for i in range(n)) + tail
+
 # name, detection state, output, expected status, the test's name
 PCS = [
     ('PC-ACT', 'fail', 'v1 act %s | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear' % T0, 'act', 'a result to act on is listed to act on'),
@@ -80,19 +88,18 @@ PCS = [
      'a result of 2,048 characters not ending in +more, which Intune may have cut, is not checked'),
     ('PC-CUTSPACE', 'fail', ('v1 act %s other_profiles=0 | anna: act keys 1' % T0).ljust(2048), 'not_checked',
      'a result of 2,048 characters ending in spaces is not checked'),
+    ('PC-FULL', 'fail', _long(2047, '') + '\n', 'act', 'a full 2,047 character result and its line end is read, not called cut'),
+    ('PC-FULLCRLF', 'fail', _long(2047, '') + '\r\n', 'act', 'a full 2,047 character result and its CR LF line end is read, not called cut'),
+    ('PC-CUT2048', 'fail', _long(2048, ''), 'not_checked', 'a valid looking result of 2,048 characters with no line end and no +more is called cut'),
+    ('PC-CUT2047NL2', 'fail', _long(2047, '') + '\n\n', 'not_checked', 'a result of 2,047 characters and two line ends is called cut: only one is the writer\'s'),
+    ('PC-NEWITEM', 'fail', _ps(' | anna: review ssh-open 1; exfil 3', 'review'), 'not_checked', 'a result with a finding word this tool does not know is not checked'),
+    ('PC-NEWITEMACT', 'fail', 'v1 act %s | anna: act keys 1; exfil 3 | bo: clear' % T0, 'not_checked', 'a Mac style result with a finding word this tool does not know is not checked'),
+    ('PC-V3', 'fail', _ps(' | anna: act keys 1', 'act').replace('v1 ', 'v3 ', 1), 'not_checked', 'a result with a newer version header is not checked'),
 ]
 
 # Every form gird-fleet.ps1 and gird-fleet.sh can write, as each writes it: an outcome, every reason
 # and every account and machine row, and the cut forms ending in +more. tests/intune.sh adds to these
 # the values each writer prints when it is run here. (expected status, what it is, value)
-def _ps(rest, out='not_checked', profiles=0): return 'v1 %s %s other_profiles=%d%s' % (out, T0, profiles, rest)
-def _long(total):
-    head = _ps(' | anna: act lockfile %s; update %s; possible ' % (','.join(['tanstack'] * 63), ','.join(['tanstack'] * 63)), 'act')
-    need = total - len(' +more') - len(head)
-    n = -(-(need + 1) // 65)
-    size, extra = divmod(need - (n - 1), n)
-    return head + ','.join('a' * (size + (1 if i < extra else 0)) for i in range(n)) + ' +more'
-
 ACT_PS = 'anna: act wiper; incidents tanstack,axios; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-links 1; update mistral'
 REVIEW_PS = 'anna: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra'
 FORMS = []
@@ -632,6 +639,17 @@ def main():
         check('-Report calls only the fully read clear results clear', clear == ['PC-CLEAR', 'PC-CRLF', 'PC-OTHER'], clear)
         check('the other profiles a result names are shown', 'other accounts on this PC not checked' in by.get('PC-OTHER', {}).get('why', ''), by.get('PC-OTHER'))
         check('a result Intune may have cut says so', 'may have cut it short' in by.get('PC-CUT', {}).get('why', ''), by.get('PC-CUT'))
+        check('a result Intune may have cut says so, also at 2,048 characters', 'may have cut it short' in by.get('PC-CUT2048', {}).get('why', ''), by.get('PC-CUT2048'))
+        check('a full result with its line end is not said to be cut', all('cut' not in by.get(n, {}).get('why', '') for n in ('PC-FULL', 'PC-FULLCRLF')), (by.get('PC-FULL'), by.get('PC-FULLCRLF')))
+        newer = 'newer Blindspot'
+        check('a newer version header says the PCs run a newer Blindspot and the tool needs updating',
+              all(newer in by.get(n, {}).get('why', '') and 'newer format' in by[n]['why'] and 'update this tool' in by[n]['why'] for n in ('PC-V2', 'PC-V3')), (by.get('PC-V2'), by.get('PC-V3')))
+        check('an item word this tool does not know says the PCs run a newer Blindspot and the tool needs updating',
+              all(newer in by.get(n, {}).get('why', '') and 'does not know' in by[n]['why'] and 'update this tool' in by[n]['why'] for n in ('PC-NEWITEM', 'PC-NEWITEMACT', 'PC-UNKNOWN')),
+              [by.get(n) for n in ('PC-NEWITEM', 'PC-NEWITEMACT', 'PC-UNKNOWN')])
+        check('a malformed result does not claim a newer Blindspot', all(newer not in by.get(n, {}).get('why', '') for n in ('PC-LIE', 'PC-TWOLINES', 'PC-CLEARDETAIL')),
+              [by.get(n) for n in ('PC-LIE', 'PC-TWOLINES', 'PC-CLEARDETAIL')])
+        check('no newer-version or unknown-word PC reads as clear', not [n for n in ('PC-V2', 'PC-V3', 'PC-NEWITEM', 'PC-NEWITEMACT', 'PC-UNKNOWN') if by.get(n, {}).get('status') == 'clear'])
         check('CSV cells that start like a formula are quoted', raw.count('"\'=cmd|calc"') == 1 and '"\'@SUM(1)"' in raw and '"\'+1"' in raw
               and '"\'=HYPERLINK(""http://x"",""y"")<img src=x onerror=alert(1)>"' in raw, raw[:300])
         check('CSV cells that start like a formula after spaces are quoted', '"\' =SUM(2)"' in raw and '"\'  -2+3"' in raw and '"\' -1"' in raw)

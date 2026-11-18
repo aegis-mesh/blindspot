@@ -303,12 +303,13 @@ $IdListIn = '[a-z0-9][a-z0-9._-]{0,63}(?:,[a-z0-9][a-z0-9._-]{0,63}){0,63}'
 
 function Test-Items([string]$Text, [bool]$Win, [System.Collections.ArrayList]$Into) {
   $last = -1
-  $r = @{ Act = $false; Rev = $false; Partial = $false }
+  $r = @{ Act = $false; Rev = $false; Partial = $false; Unknown = $false }
   foreach ($it in $Text.Split([string[]]@('; '), [StringSplitOptions]::None)) {
     $sp = $it.IndexOf(' ')
     $k = $it; $a = $null
     if ($sp -ge 0) { $k = $it.Substring(0, $sp); $a = $it.Substring($sp + 1) }
     $ix = [Array]::IndexOf($ItemOrder, $k)
+    if ($ix -lt 0 -and $k -cmatch '^[a-z][a-z0-9-]{0,30}$') { return @{ Unknown = $true } }
     if ($ix -le $last) { return $null }
     $last = $ix
     if ($Win -and $k.StartsWith('tmp-', [StringComparison]::Ordinal)) { return $null }
@@ -328,10 +329,13 @@ function Test-Items([string]$Text, [bool]$Win, [System.Collections.ArrayList]$In
 }
 
 function Read-Inventory([string]$Raw) {
-  $r = @{ Ok = $false; Outcome = ''; Time = $null; Accounts = @(); Kinds = @(); More = $false; OtherProfiles = 0; Reason = ''; Special = '' }
+  $r = @{ Ok = $false; Newer = ''; Outcome = ''; Time = $null; Accounts = @(); Kinds = @(); More = $false; OtherProfiles = 0; Reason = ''; Special = '' }
   if ($null -eq $Raw) { return $r }
   $t = $Raw.TrimEnd(" `t`r`n".ToCharArray())
-  if ($Raw.Length -ge $IntuneKeeps -and -not $t.EndsWith(' +more', [StringComparison]::Ordinal)) { $r.Ok = $true; $r.Special = 'cut'; return $r }
+  $kept = $Raw
+  if ($kept.EndsWith("`r`n", [StringComparison]::Ordinal)) { $kept = $kept.Substring(0, $kept.Length - 2) }
+  elseif ($kept.EndsWith("`n", [StringComparison]::Ordinal)) { $kept = $kept.Substring(0, $kept.Length - 1) }
+  if ($kept.Length -ge $IntuneKeeps -and -not $t.EndsWith(' +more', [StringComparison]::Ordinal)) { $r.Ok = $true; $r.Special = 'cut'; return $r }
   if ($t.Length -eq 0 -or $t.Length -gt $MaxWindows) { return $r }
   if ($t -cnotmatch '^[A-Za-z0-9 ._:;,|+=-]+$') { return $r }
   if ($t -ceq 'none') { $r.Ok = $true; $r.Special = 'none'; return $r }
@@ -343,7 +347,10 @@ function Read-Inventory([string]$Raw) {
 
   if ($t.EndsWith(' +more', [StringComparison]::Ordinal)) { $r.More = $true; $t = $t.Substring(0, $t.Length - 6) }
   $m = [regex]::Match($t, '^v1 (failed|act|not_checked|review|clear) ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z)( other_profiles=([0-9]{1,4})( reason=([a-z_0-9]{1,40}))?)?((?: \| [^|]+)+)$')
-  if (-not $m.Success) { return $r }
+  if (-not $m.Success) {
+    if ($t -cmatch '^v(?!1 )[0-9]{1,3} [a-z_]{1,20} [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z( |$)') { $r.Newer = 'version' }
+    return $r
+  }
   $out = $m.Groups[1].Value
   $win = $m.Groups[3].Success
   $reason = ''
@@ -361,7 +368,7 @@ function Read-Inventory([string]$Raw) {
   $accounts = New-Object System.Collections.ArrayList
   $worst = 0
   $names = @{}
-  $rows = 0; $machine = $false; $noAcc = $false
+  $rows = 0; $machine = $false; $noAcc = $false; $unknown = $false
   foreach ($s in $segs) {
     if ($noAcc) { return $r }
     if ($s -ceq 'no accounts') {
@@ -410,7 +417,8 @@ function Read-Inventory([string]$Raw) {
         if ($win -and $out -ceq 'failed' -and $reason -cne 'save') { return $r }
         $it = Test-Items $rest $win $kinds
         if ($null -eq $it) { return $r }
-        if (-not $more) {
+        if ($it.Unknown) { $unknown = $true }
+        elseif (-not $more) {
           if ($so -ceq 'act' -and -not $it.Act) { return $r }
           if ($so -ceq 'review' -and ($it.Act -or $it.Partial -or -not $it.Rev)) { return $r }
           if ($so -ceq 'not_checked' -and ($it.Act -or -not $it.Partial)) { return $r }
@@ -427,6 +435,7 @@ function Read-Inventory([string]$Raw) {
   $head = $Outcomes[$out]
   if ($worst -gt $head) { return $r }
   if ($out -cne 'failed' -and -not $more -and $worst -ne $head) { return $r }
+  if ($unknown) { $r.Newer = 'item'; return $r }
   $r.Accounts = $accounts.ToArray()
   $r.Kinds = $kinds.ToArray()
   $r.Ok = $true
@@ -466,7 +475,13 @@ function Get-PcRow($State, [DateTime]$Now) {
     return $row
   }
   $p = Read-Inventory $raw
-  if (-not $p.Ok) { $row.Status = 'not_checked'; $row.Why = 'its result does not fit the expected format'; return $row }
+  if (-not $p.Ok) {
+    $row.Status = 'not_checked'
+    if ($p.Newer -ceq 'version') { $row.Why = 'its result is in a newer format than this report tool reads: the PCs run a newer Blindspot, so update this tool' }
+    elseif ($p.Newer -ceq 'item') { $row.Why = 'its result names a finding this report tool does not know: the PCs run a newer Blindspot, so update this tool' }
+    else { $row.Why = 'its result does not fit the expected format' }
+    return $row
+  }
   switch ($p.Special) {
     'none' { $row.Status = 'no_result'; $row.Why = 'the check has not finished a run on this PC'; return $row }
     'unreadable' { $row.Status = 'not_checked'; $row.Why = 'the saved result could not be read'; return $row }
@@ -619,7 +634,11 @@ function Test-Taken([string]$Path) {
 
 function New-ReportFile([string]$Path, [string]$Text, [bool]$Bom) {
   $enc = New-Object System.Text.UTF8Encoding($Bom)
-  $bytes = [byte[]]($enc.GetPreamble() + $enc.GetBytes($Text))
+  $pre = $enc.GetPreamble()
+  $body = $enc.GetBytes($Text)
+  $bytes = New-Object byte[] ($pre.Length + $body.Length)
+  [Buffer]::BlockCopy($pre, 0, $bytes, 0, $pre.Length)
+  [Buffer]::BlockCopy($body, 0, $bytes, $pre.Length, $body.Length)
   $fs = New-Object IO.FileStream -ArgumentList $Path, ([IO.FileMode]::CreateNew), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
   try { $fs.Write($bytes, 0, $bytes.Length) } finally { $fs.Dispose() }
 }
