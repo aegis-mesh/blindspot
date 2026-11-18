@@ -163,29 +163,6 @@ has    "the offline link has key counts, no run ID or rank" 'blindspot/card/#v=2
 nokeys "never prints a planted key" "$WORK/keys.txt" "$OUT"
 if LC_ALL=C grep -aq "$(printf '\033')" "$OUT"; then bad "plain output has no escape codes"; else ok "plain output has no escape codes"; fi
 
-echo "key patterns"
-# gird-check.ps1 matches every key type with one compiled .NET regex: compiled, it must find just
-# what the plain one finds, over the fixture home and a corpus of every key type in many contexts.
-KP=$WORK/kp; mkdir -p "$KP"
-python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
-grep -E '^\$ALL_KEYS = |^\$TR_KEYS = ' "$SCRIPT" > "$KP/keys.ps1"
-find "$KP/corpus" "$WORK/home" -type f | sort > "$KP/files.txt"
-cat > "$KP/cmp.ps1" <<'PSEOF'
-. $args[0]; $o = [Text.RegularExpressions.RegexOptions]::Multiline
-$plain = New-Object regex($TR_KEYS, $o); $comp = New-Object regex($TR_KEYS, ($o -bor [Text.RegularExpressions.RegexOptions]::Compiled))
-$latin = [Text.Encoding]::GetEncoding(28591); $n = 0; $m = 0; $diff = 0
-foreach ($f in [IO.File]::ReadAllLines($args[1])) {
-  $t = [IO.File]::ReadAllText($f, $latin); $n++
-  $a = @($plain.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" }); $b = @($comp.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" })
-  $m += $a.Count; if (($a -join "`n") -cne ($b -join "`n")) { $diff++ }
-}
-"$n $m $diff"
-PSEOF
-"$PWSH" -NoProfile -NonInteractive -File "$KP/cmp.ps1" "$KP/keys.ps1" "$KP/files.txt" > "$KP/net.txt" 2>&1
-read -r _n _m _d < "$KP/net.txt"
-if [ "${_n:-0}" -gt 400 ] && [ "${_m:-0}" -gt 0 ] && [ "${_d:-x}" = 0 ]; then ok "net: the session engine finds what one plain alternation of the key patterns finds" "$_n files, $_m matches"
-else bad "net: the session engine finds what one plain alternation of the key patterns finds" "$(head -c 300 "$KP/net.txt")"; fi
-
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
 # today means Codex is in use, not an agent to remove.
@@ -235,7 +212,7 @@ SKIPPING=""
 # A long-term key holds + and /, and a 1 MB read must not end just after one of them, inside the key.
 BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
 mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
-cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv data/public-values.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 # A real key's next 104 characters are fixed as well (the base64 of /?Action=CallWithBearerToken&...
 # &X-Amz-Credential=): quoted only that far, it is not a key.
@@ -3032,6 +3009,70 @@ mups "$WORK/mu-tmp" "$WORK/mu-tmp.txt"
 has    "a temp file alone: the incident's own advice, in section 5" 'Stop any process started from these files, then delete them\. Advisory: example\.com' "$WORK/mu-tmp.txt"
 has    "and in the fix"                               "Stop any process started from the files listed in section 5\. From another computer, rotate every key the machine could reach, then delete those files and follow Madepkg's advisory" "$WORK/mu-tmp.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mu-tmp.txt"
+
+echo "key patterns"
+# gird-check.ps1 matches every key type with one compiled .NET regex: compiled, it must find just
+# what the plain one finds, over the fixture home and a corpus of every key type in many contexts.
+KP=$WORK/kp; mkdir -p "$KP"
+python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
+grep -E '^\$ALL_KEYS = |^\$TR_KEYS = ' "$SCRIPT" > "$KP/keys.ps1"
+find "$KP/corpus" "$WORK/home" -type f | sort > "$KP/files.txt"
+cat > "$KP/cmp.ps1" <<'PSEOF'
+. $args[0]; $o = [Text.RegularExpressions.RegexOptions]::Multiline
+$plain = New-Object regex($TR_KEYS, $o); $comp = New-Object regex($TR_KEYS, ($o -bor [Text.RegularExpressions.RegexOptions]::Compiled))
+$latin = [Text.Encoding]::GetEncoding(28591); $n = 0; $m = 0; $diff = 0
+foreach ($f in [IO.File]::ReadAllLines($args[1])) {
+  $t = [IO.File]::ReadAllText($f, $latin); $n++
+  $a = @($plain.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" }); $b = @($comp.Matches($t) | ForEach-Object { "$($_.Index):$($_.Value)" })
+  $m += $a.Count; if (($a -join "`n") -cne ($b -join "`n")) { $diff++ }
+}
+"$n $m $diff"
+PSEOF
+"$PWSH" -NoProfile -NonInteractive -File "$KP/cmp.ps1" "$KP/keys.ps1" "$KP/files.txt" > "$KP/net.txt" 2>&1
+read -r _n _m _d < "$KP/net.txt"
+if [ "${_n:-0}" -gt 400 ] && [ "${_m:-0}" -gt 0 ] && [ "${_d:-x}" = 0 ]; then ok "net: the session engine finds what one plain alternation of the key patterns finds" "$_n files, $_m matches"
+else bad "net: the session engine finds what one plain alternation of the key patterns finds" "$(head -c 300 "$KP/net.txt")"; fi
+
+# The new key types, case by case through the script's own Providers-In: each found and named at a
+# line start, mid-line, after an escaped newline and in an escaped quote; and not a key one character
+# short or long, with a wrong marker, as a vendor's published example, inside base64 or glued to a
+# word, unless what makes it a key is its own text (a connection string, a signed address).
+PIDS=$(sed -n "s/^\$PROVIDER_IDS = '\(.*\)'\$/\1/p" "$SCRIPT")
+{ awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< public-values/ { on = 0 }' "$SCRIPT"
+  grep -E '^\$TR_KEYS = |^\$RxOpt = |^\$RxTimeout = |^\$RxKeyOpt = |^\$RxKeys = ' "$SCRIPT"
+  awk '/^\$KeyFns = / { on = 1 } on { print } on && /^\. \(\[scriptblock\]::Create\(\$KeyFns\)\)/ { exit }' "$SCRIPT"
+  grep -E '^function Key-Norm' "$SCRIPT"
+  awk '/^function Providers-In/ { on = 1 } on { print } on && /^}/ { exit }' "$SCRIPT"
+  cat <<'PSEOF'
+$SlowFiles = New-Object System.Collections.Generic.List[string]
+function Mark-Slow([string]$f) { }
+function Read-Text([string]$f) { [IO.File]::ReadAllText($f) }
+foreach ($l in [IO.File]::ReadAllLines($args[0])) {
+  $c = $l.Split("`t")[0]
+  "$c`t" + ((Providers-In (Join-Path $args[1] "code/$c/.env")) -join ', ')
+}
+PSEOF
+} > "$KP/fns.ps1"
+python3 -I tests/make-keys.py cases "$KP/nk" "$KP/nk-man.txt" "$KP/nk-keys.txt" "$PIDS" data/public-values.tsv
+"$PWSH" -NoProfile -NonInteractive -File "$KP/fns.ps1" "$KP/nk-man.txt" "$KP/nk" > "$KP/nk-found.txt" 2>&1
+if python3 -I tests/make-keys.py check "$KP/nk-man.txt" "$KP/nk-found.txt" > "$KP/nk-check.txt"; then ok "each new key type is found and named, and its near misses are not keys" "$(grep -c . < "$KP/nk-man.txt") cases"
+else bad "each new key type is found and named, and its near misses are not keys" "$(head -n 6 "$KP/nk-check.txt" | tr '\n' '|')"; fi
+# And through the whole script: one .env file for each new key type, and all of them in one Claude
+# Code session, read by each session engine.
+python3 -I tests/make-keys.py home "$KP/nh" "$KP/nh-keys.txt" "$PIDS" .claude/projects/p/s.jsonl > "$KP/nh-names.txt"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$KP/nh" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$KP/nh-$E.txt" 2>&1
+  _miss=""; while IFS= read -r _nm; do
+    _id=$(awk -F '\t' -v n="$_nm" '$2 == n { print $1 }' data/keys.tsv)
+    grep -aqE "^ +. +~[/\\\\]code[/\\\\]$_id[/\\\\]\\.env +$_nm\$" "$KP/nh-$E.txt" || _miss="$_miss $_nm(.env)"
+    sed -n '/Keys in agent sessions/,/^$/p' "$KP/nh-$E.txt" | tr -s ' \n' '  ' | grep -aqF "$_nm" || _miss="$_miss $_nm(session)"
+  done < "$KP/nh-names.txt"
+  if [ -s "$KP/nh-names.txt" ] && [ -z "$_miss" ]; then ok "$E: each new key type is found in a .env file and an agent session"
+  else bad "$E: each new key type is found in a .env file and an agent session" "missing:$_miss"; fi
+  if grep -aqF -f "$KP/nh-keys.txt" "$KP/nh-$E.txt"; then bad "$E: and no new key is printed"; else ok "$E: and no new key is printed"; fi
+done
+SKIPPING=""
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

@@ -92,7 +92,7 @@ KEYS_OK='function starts_ok(s,   i, c, inb, n) {
 # are keyed on it. The regexes spell out counts
 # ([0-9][0-9][0-9][0-9], not [0-9]{4}): Debian 12's mawk has no {n} intervals and would refuse every line.
 bad=$(rows data/keys.tsv | awk -F '\t' "$KEYS_OK"'
-        { if (!key_ok() || seen[$1]++) print "data/keys.tsv: " $0; n++ }
+        { if (!key_ok() || seen[$1]++ || ($5 == "start" && inl)) print "data/keys.tsv: " $0; n++; if ($5 == "in") inl = 1 }
         END { if (n > 40) print "data/keys.tsv: " n " key types, more than the 40 gird-fleet.sh takes from one account (fl_ids_ok)" }'
       rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF < 6 || NF > 8) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF >= 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0 || ($7 ~ /^First / && ($6 != "act" || $7 ~ /[Rr]otate|[Rr]evoke/)))) || (NF == 8 && ($6 != "update" || $8 == "" || $8 ~ /[\047"`$|\\]/ || length($8) > 49)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       # npm's placeholder for a removed package (0.0.1-security, or 0.0.1-security.0 for a few names) is never malware, and the scripts skip it.

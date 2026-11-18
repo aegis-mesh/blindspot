@@ -134,7 +134,7 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME
 # The tables gird-check.sh checks with, written here by tools/gen.sh: never edit them here.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])sv=[0-9]{4}-[0-9]{2}-[0-9]{2}&[A-Za-z0-9%&=:;._,-]{0,255}sig=[A-Za-z0-9%+/]{43,}|(^|[^A-Za-z0-9_])sig=[A-Za-z0-9%+/]{43,}=?&[A-Za-z0-9%&=:;._,-]{0,255}sv=[0-9]{4}-[0-9]{2}-[0-9]{2}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
 KEY_ALTS='sk-ant-[A-Za-z0-9_-]{90,}
 sk-or-v1-[a-f0-9]{64}
 sk-proj-[A-Za-z0-9_-]{120,}
@@ -159,9 +159,16 @@ gh[pour]_[A-Za-z0-9]{36}
 (^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)
 (^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}
 github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
-npm_[A-Za-z0-9]{36}'
-PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
-KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+npm_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_])sv=[0-9]{4}-[0-9]{2}-[0-9]{2}&[A-Za-z0-9%&=:;._,-]{0,255}sig=[A-Za-z0-9%+/]{43,}
+(^|[^A-Za-z0-9_])sig=[A-Za-z0-9%+/]{43,}=?&[A-Za-z0-9%&=:;._,-]{0,255}sv=[0-9]{4}-[0-9]{2}-[0-9]{2}
+(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm azuresas azureentra azuredevops azureai azurestorage"
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|sv=|sig=|7Q~|8Q~|AAAAAZDO|JQQJ99|[+]ASt|AccountKey='
 PROV_AWK='
 function prov(s) {
   sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s)
@@ -177,10 +184,15 @@ function prov(s) {
   if (s ~ /^(AKIA|ASIA|ABSK|bedrock-api-key)/) return "AWS"
   if (s ~ /^(gh[pousr]_|github_pat_)/) return "GitHub"
   if (s ~ /^(npm_)/) return "npm"
+  if (s ~ /^(sv=|sig=)/) return "Azure Storage SAS"
+  if (s ~ /(7Q~|8Q~)/) return "Microsoft Entra"
+  if (s ~ /(AAAAAZDO)/) return "Azure DevOps"
+  if (s ~ /(JQQJ99)/) return "Azure AI"
+  if (s ~ /([+]ASt|AccountKey=)/) return "Azure Storage"
   return ""
 }
-function pmax(p) { if (p == "GitHub") return 1024; return 300 }'
-prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
+function pmax(p) { if (p == "GitHub") return 1024; if (p == "Azure Storage SAS") return 600; return 300 }'
+prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; "Azure Storage SAS") printf azuresas ;; "Microsoft Entra") printf azureentra ;; "Azure DevOps") printf azuredevops ;; "Azure AI") printf azureai ;; "Azure Storage") printf azurestorage ;; esac; }
 # <<< keys
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"

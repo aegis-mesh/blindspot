@@ -248,9 +248,9 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
-$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
-$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])sv=[0-9]{4}-[0-9]{2}-[0-9]{2}&[A-Za-z0-9%&=:;._,-]{0,255}sig=[A-Za-z0-9%+/]{43,}|(^|[^A-Za-z0-9_])sig=[A-Za-z0-9%+/]{43,}=?&[A-Za-z0-9%&=:;._,-]{0,255}sv=[0-9]{4}-[0-9]{2}-[0-9]{2}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm azuresas azureentra azuredevops azureai azurestorage'
+$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|sv=|sig=|7Q~|8Q~|AAAAAZDO|JQQJ99|[+]ASt|AccountKey='
 $KeyProviderFn = @'
 function Key-Provider([string]$s) {
   $s = $s -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', ''
@@ -266,15 +266,20 @@ function Key-Provider([string]$s) {
   if ($s -cmatch '^(AKIA|ASIA|ABSK|bedrock-api-key)') { return 'AWS' }
   if ($s -cmatch '^(gh[pousr]_|github_pat_)') { return 'GitHub' }
   if ($s -cmatch '^(npm_)') { return 'npm' }
+  if ($s -cmatch '^(sv=|sig=)') { return 'Azure Storage SAS' }
+  if ($s -cmatch '(7Q~|8Q~)') { return 'Microsoft Entra' }
+  if ($s -cmatch '(AAAAAZDO)') { return 'Azure DevOps' }
+  if ($s -cmatch '(JQQJ99)') { return 'Azure AI' }
+  if ($s -cmatch '([+]ASt|AccountKey=)') { return 'Azure Storage' }
   $null
 }
-function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } default { 300 } } }
-function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } default { $null } } }
+function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } 'Azure Storage SAS' { 600 } default { 300 } } }
+function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } 'Azure Storage SAS' { 'azuresas' } 'Microsoft Entra' { 'azureentra' } 'Azure DevOps' { 'azuredevops' } 'Azure AI' { 'azureai' } 'Azure Storage' { 'azurestorage' } default { $null } } }
 '@
 # <<< keys
 # >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
 $PublicValuesFn = @'
-function Is-Public([string]$k) { $false }
+function Is-Public([string]$k) { $false -or $k.Contains('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u') -or $k.Contains('9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX') -or $k.Contains('iCvQmdZngZNW%2F4vw43j6%2BVz6fndHF5LI639QJ') }
 '@
 # <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape

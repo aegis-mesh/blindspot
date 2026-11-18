@@ -91,60 +91,6 @@ if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
 else bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "$(cat "$WORK/ow.txt")"; fi
 
-echo "key patterns"
-# fleet_ids in gird-check.sh keeps only ids of lowercase letters, digits and -, and the result link
-# and gird-fleet.sh carry the same ids: one it would drop is lost without a word.
-KP=$WORK/kp; mkdir -p "$KP"
-grep '^fleet_ids() ' gird-check.sh > "$KP/fids.sh"; . "$KP/fids.sh"
-_ids=$(sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' gird-check.sh)
-if [ -n "$_ids" ] && [ "$(printf '%s' "$_ids" | fleet_ids)" = "$_ids" ]; then ok "every key id passes the fleet id filter"
-else bad "every key id passes the fleet id filter" "$_ids"; fi
-# grep and perl get the key patterns one at a time (KEY_E, SESS_KEYS), and must find just what the
-# one alternation of them all finds (perl given it as its one pattern): grep -o the same matches in every file, and perl
-# the same matches. Over the fixture homes and a corpus of every key type in many contexts.
-python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
-{ awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< keys/ { on = 0 }' gird-check.sh
-  awk '/^TR_KEYS=/ { on = 1 } on { print } on && /^EOF$/ { exit }' gird-check.sh
-  awk '/^SESS_PERL=/ { on = 1 } on { print } on && /^1 while wait/ { exit }' gird-check.sh; } > "$KP/keys.sh"
-. "$KP/keys.sh"
-_n=0; _diff=""
-while IFS= read -r _f; do
-  _n=$((_n + 1))
-  if ! cmp -s <(grep -aoE "$TR_KEYS" "$_f" 2>/dev/null) <(grep -aoE "${KEY_E[@]}" "$_f" 2>/dev/null); then _diff="$_diff ${_f#"$WORK"/}"; fi
-done <<EOF
-$(find "$KP/corpus" "$WORK/home" -type f | sort)
-EOF
-if [ "$_n" -gt 400 ] && [ -z "$_diff" ]; then ok "grep finds with the split key patterns what one alternation finds" "$_n files"
-else bad "grep finds with the split key patterns what one alternation finds" "$_n files, differ:$_diff"; fi
-SESS_KEYS=$TR_ALTS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/split.txt"
-SESS_KEYS=$TR_KEYS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/one.txt"
-if [ -s "$KP/one.txt" ] && cmp -s "$KP/one.txt" "$KP/split.txt"; then ok "perl: the session engine finds what one plain alternation of the key patterns finds" "$(grep -c . < "$KP/one.txt") matches"
-else bad "perl: the session engine finds what one plain alternation of the key patterns finds" "$(diff "$KP/one.txt" "$KP/split.txt" | head -n 4 | tr '\n' '|')"; fi
-# What the split saves is the work of one long alternation: count it. Every pattern grep is given
-# holds at most one key pattern, and perl compiles one regex for each, whatever the run reads.
-mkdir -p "$KP/shim" "$KP/log"
-_rg=$(command -v grep); _rp=$(command -v perl)
-printf '#!/bin/bash\n_l=$(mktemp "%s/g.XXXXXX"); printf "%%s\\0" "$@" > "$_l"; exec %s "$@"\n' "$KP/log" "$_rg" > "$KP/shim/grep"
-printf '#!/bin/bash\n[ -n "${SESS_KEYS:-}" ] && printf "%%s" "$SESS_KEYS" > "$(mktemp "%s/p.XXXXXX")"\nexec %s "$@"\n' "$KP/log" "$_rp" > "$KP/shim/perl"
-chmod +x "$KP/shim/grep" "$KP/shim/perl"
-HOME="$WORK/home" PATH="$KP/shim:$PATH" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$KP/shim.txt" 2>&1
-printf '%s\n' "$TR_ALTS" > "$KP/alts.txt"
-_cnt=$(python3 -I -c 'import glob, sys
-alts = [a for a in open(sys.argv[1]).read().split("\n") if a]
-most, calls, perls, plines = 0, 0, 0, -1
-for f in glob.glob(sys.argv[2] + "/g.*"):
-    args = open(f, "rb").read().decode("latin-1").split("\0")
-    n = max([sum(1 for a in alts if a in x) for x in args] or [0])
-    calls += n > 0; most = max(most, n)
-for f in glob.glob(sys.argv[2] + "/p.*"):
-    ls = open(f).read().split("\n"); perls += 1
-    plines = len(ls) if all(l in alts for l in ls) and len(set(ls)) == len(alts) else -1
-print(most, calls, perls, plines, len(alts))' "$KP/alts.txt" "$KP/log")
-set -- $_cnt
-if [ "${1:-x}" = 1 ] && [ "${2:-0}" -gt 0 ] && [ "${3:-0}" = 1 ] && [ "${4:-x}" = "${5:-y}" ]; then ok "grep and perl get each key pattern on its own" "$2 grep calls, $5 patterns"
-else bad "grep and perl get each key pattern on its own" "most key patterns in one grep pattern: ${1:-?} (want 1), perl runs: ${3:-?}, perl patterns: ${4:-?} of ${5:-?}"; fi
-set --
-
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
 # today means Codex is in use, not an agent to remove.
@@ -192,7 +138,7 @@ SKIPPING=""
 # A long-term key holds + and /, and a 1 MB read must not end just after one of them, inside the key.
 BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
 mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
-cat gird-check.sh gird-check.ps1 gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+cat gird-check.sh gird-check.ps1 gird-fleet.sh data/keys.tsv data/public-values.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 # A real key's next 104 characters are fixed as well (the base64 of /?Action=CallWithBearerToken&...
 # &X-Amz-Credential=): quoted only that far, it is not a key.
@@ -3258,6 +3204,89 @@ gen_refuses "a published value shorter than 20"        public-values.tsv "groq${
 gen_refuses "a published value that is a whole key"    public-values.tsv "groq${T}g""sk_$(rnd 52)${T}https://example.com/doc"
 # gird-check.sh hands the bad npm versions to awk in four environment strings of 1,000 lines.
 gen_refuses "a list of bad npm versions longer than awk gets" bad-npm.tsv 'edit:{ print } !/^#/ && $3 == "keyvspread" { print $1, $2 "-x", $3 }'
+
+echo "key patterns"
+# fleet_ids in gird-check.sh keeps only ids of lowercase letters, digits and -, and the result link
+# and gird-fleet.sh carry the same ids: one it would drop is lost without a word.
+KP=$WORK/kp; mkdir -p "$KP"
+grep '^fleet_ids() ' gird-check.sh > "$KP/fids.sh"; . "$KP/fids.sh"
+_ids=$(sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' gird-check.sh)
+if [ -n "$_ids" ] && [ "$(printf '%s' "$_ids" | fleet_ids)" = "$_ids" ]; then ok "every key id passes the fleet id filter"
+else bad "every key id passes the fleet id filter" "$_ids"; fi
+# grep and perl get the key patterns one at a time (KEY_E, SESS_KEYS), and must find just what the
+# one alternation of them all finds (perl given it as its one pattern): grep -o the same matches in every file, and perl
+# the same matches. Over the fixture homes and a corpus of every key type in many contexts.
+python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
+{ awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< public-values/ { on = 0 }' gird-check.sh
+  awk '/^TR_KEYS=/ { on = 1 } on { print } on && /^EOF$/ { exit }' gird-check.sh
+  awk '/^SESS_PERL=/ { on = 1 } on { print } on && /^1 while wait/ { exit }' gird-check.sh; } > "$KP/keys.sh"
+. "$KP/keys.sh"
+_n=0; _diff=""
+while IFS= read -r _f; do
+  _n=$((_n + 1))
+  if ! cmp -s <(grep -aoE "$TR_KEYS" "$_f" 2>/dev/null) <(grep -aoE "${KEY_E[@]}" "$_f" 2>/dev/null); then _diff="$_diff ${_f#"$WORK"/}"; fi
+done <<EOF
+$(find "$KP/corpus" "$WORK/home" -type f | sort)
+EOF
+if [ "$_n" -gt 400 ] && [ -z "$_diff" ]; then ok "grep finds with the split key patterns what one alternation finds" "$_n files"
+else bad "grep finds with the split key patterns what one alternation finds" "$_n files, differ:$_diff"; fi
+SESS_KEYS=$TR_ALTS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/split.txt"
+SESS_KEYS=$TR_KEYS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/one.txt"
+if [ -s "$KP/one.txt" ] && cmp -s "$KP/one.txt" "$KP/split.txt"; then ok "perl: the session engine finds what one plain alternation of the key patterns finds" "$(grep -c . < "$KP/one.txt") matches"
+else bad "perl: the session engine finds what one plain alternation of the key patterns finds" "$(diff "$KP/one.txt" "$KP/split.txt" | head -n 4 | tr '\n' '|')"; fi
+# What the split saves is the work of one long alternation: count it. Every pattern grep is given
+# holds at most one key pattern, and perl compiles one regex for each, whatever the run reads.
+mkdir -p "$KP/shim" "$KP/log"
+_rg=$(command -v grep); _rp=$(command -v perl)
+printf '#!/bin/bash\n_l=$(mktemp "%s/g.XXXXXX"); printf "%%s\\0" "$@" > "$_l"; exec %s "$@"\n' "$KP/log" "$_rg" > "$KP/shim/grep"
+printf '#!/bin/bash\n[ -n "${SESS_KEYS:-}" ] && printf "%%s" "$SESS_KEYS" > "$(mktemp "%s/p.XXXXXX")"\nexec %s "$@"\n' "$KP/log" "$_rp" > "$KP/shim/perl"
+chmod +x "$KP/shim/grep" "$KP/shim/perl"
+HOME="$WORK/home" PATH="$KP/shim:$PATH" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$KP/shim.txt" 2>&1
+printf '%s\n' "$TR_ALTS" > "$KP/alts.txt"
+_cnt=$(python3 -I -c 'import glob, sys
+alts = [a for a in open(sys.argv[1]).read().split("\n") if a]
+most, calls, perls, plines = 0, 0, 0, -1
+for f in glob.glob(sys.argv[2] + "/g.*"):
+    args = open(f, "rb").read().decode("latin-1").split("\0")
+    n = max([sum(1 for a in alts if a in x) for x in args] or [0])
+    calls += n > 0; most = max(most, n)
+for f in glob.glob(sys.argv[2] + "/p.*"):
+    ls = open(f).read().split("\n"); perls += 1
+    plines = len(ls) if all(l in alts for l in ls) and len(set(ls)) == len(alts) else -1
+print(most, calls, perls, plines, len(alts))' "$KP/alts.txt" "$KP/log")
+read -r _c1 _c2 _c3 _c4 _c5 <<EOF
+$_cnt
+EOF
+if [ "${_c1:-x}" = 1 ] && [ "${_c2:-0}" -gt 0 ] && [ "${_c3:-0}" = 1 ] && [ "${_c4:-x}" = "${_c5:-y}" ]; then ok "grep and perl get each key pattern on its own" "$_c2 grep calls, $_c5 patterns"
+else bad "grep and perl get each key pattern on its own" "most key patterns in one grep pattern: ${_c1:-?} (want 1), perl runs: ${_c3:-?}, perl patterns: ${_c4:-?} of ${_c5:-?}"; fi
+
+# The new key types, case by case through the script's own providers_in: each found and named at a
+# line start, mid-line, after an escaped newline and in an escaped quote; and not a key one character
+# short or long, with a wrong marker, as a vendor's published example, inside base64 or glued to a
+# word, unless what makes it a key is its own text (a connection string, a signed address).
+{ awk '/^sess_filter\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' gird-check.sh
+  awk '/^providers_in\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' gird-check.sh; } > "$KP/fns.sh"
+. "$KP/fns.sh"
+python3 -I tests/make-keys.py cases "$KP/nk" "$KP/nk-man.txt" "$KP/nk-keys.txt" "$PROVIDER_IDS" data/public-values.tsv
+while IFS="$_tab" read -r _c _w; do printf '%s\t%s\n' "$_c" "$(providers_in "$KP/nk/code/$_c/.env")"; done < "$KP/nk-man.txt" > "$KP/nk-found.txt"
+if python3 -I tests/make-keys.py check "$KP/nk-man.txt" "$KP/nk-found.txt" > "$KP/nk-check.txt"; then ok "each new key type is found and named, and its near misses are not keys" "$(grep -c . < "$KP/nk-man.txt") cases"
+else bad "each new key type is found and named, and its near misses are not keys" "$(head -n 6 "$KP/nk-check.txt" | tr '\n' '|')"; fi
+# And through the whole script: one .env file for each new key type, and all of them in one Claude
+# Code session, read by each session engine.
+python3 -I tests/make-keys.py home "$KP/nh" "$KP/nh-keys.txt" "$PROVIDER_IDS" .claude/projects/p/s.jsonl > "$KP/nh-names.txt"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$KP/nh" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$KP/nh-$E.txt" 2>&1
+  _miss=""; while IFS= read -r _nm; do
+    _id=$(prov_id "$_nm")
+    grep -aqE "^ +. +~/code/$_id/\\.env +$_nm\$" "$KP/nh-$E.txt" || _miss="$_miss $_nm(.env)"
+    sed -n '/Keys in agent sessions/,/^$/p' "$KP/nh-$E.txt" | tr -s ' \n' '  ' | grep -aqF "$_nm" || _miss="$_miss $_nm(session)"
+  done < "$KP/nh-names.txt"
+  if [ -s "$KP/nh-names.txt" ] && [ -z "$_miss" ]; then ok "$E: each new key type is found in a .env file and an agent session"
+  else bad "$E: each new key type is found in a .env file and an agent session" "missing:$_miss"; fi
+  if grep -aqF -f "$KP/nh-keys.txt" "$KP/nh-$E.txt"; then bad "$E: and no new key is printed"; else ok "$E: and no new key is printed"; fi
+done
+SKIPPING=""
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
