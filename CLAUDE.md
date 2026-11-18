@@ -24,6 +24,9 @@ means both `gird-check.sh` in Git Bash and `gird-check.ps1` in PowerShell.
   not checked. Never let it read as clear.
 - When you review a change, check this. A feature for one platform, with no word on the other
   two, is a major finding.
+- The game that runs during a scan is the one exception. It is for a person running the check by
+  hand in `gird-check.sh`. It is not a feature the other platforms owe, and fleet mode never
+  starts it.
 
 ## One home for anything two files share
 
