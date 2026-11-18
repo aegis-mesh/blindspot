@@ -670,6 +670,8 @@ fl_worst() { # outcomes on stdin: the worst, in the order failed, act, not_check
     ($1 in r) && r[$1] > r[w] { w = $1 } END { print w }'
 }
 fl_name() { # the account as the result shows it: its name, or a keyed hash with --hash-accounts
+  # An account named machine, in any case, would read as the Mac's own row in the inventory value.
+  case "$1" in [Mm][Aa][Cc][Hh][Ii][Nn][Ee]) printf invalid-name; return ;; esac
   if [ -z "$HASHKEY" ] || [ "$1" = invalid-name ]; then printf '%s' "$1"; return; fi
   BS_K=$HASHKEY /usr/bin/perl -MDigest::SHA=hmac_sha256_hex -e 'print substr(hmac_sha256_hex($ARGV[0], $ENV{BS_K}), 0, 16)' -- "$1"
 }

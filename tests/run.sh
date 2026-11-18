@@ -4124,6 +4124,14 @@ users "bad name:$U:$FL/clean:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 fl_run badname
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash -p "$FLEETSH" --inventory > "$FL/badname-inv.out" 2>&1
 if grep -q '^invalid-name\.not_checked=name$' "$FL/badname.flat" && grep -qE '^v1 [a-z_]+ .*\| invalid-name: not_checked name' "$FL/badname-inv.out"; then ok "fleet: an account name it can't read is shown as invalid-name, and the inventory still reads"; else bad "fleet: an account name it can't read is shown as invalid-name, and the inventory still reads" "$(cat "$FL/badname-inv.out")"; fi
+# An account named machine would read as the Mac's own row in the inventory value: it is shown as
+# invalid-name, still checked, and the Mac's own row (a marker root owns) stays the only machine one.
+users "Machine:$U:$FL/itadmin:/bin/zsh"; : > "$FL/sharedtmp/.pc_once_x"
+fl_run machname
+rm -f "$FL/sharedtmp/.pc_once_x"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash -p "$FLEETSH" --inventory > "$FL/machname-inv.out" 2>&1
+if grep -q '^invalid-name\.outcome=review$' "$FL/machname.flat" && grep -q '^machine\.possible_signs=litellm$' "$FL/machname.flat" && [ "$(grep -o '| [A-Za-z-]*:' "$FL/machname-inv.out" | tr '\n' ' ')" = '| invalid-name: | machine: ' ]; then ok "fleet: an account named machine shows as invalid-name, apart from the PC's row"
+else bad "fleet: an account named machine shows as invalid-name, apart from the PC's row" "$(cat "$FL/machname-inv.out")"; fi
 mkdir -p "$FL/unread/Library/Safari" "$FL/unread/code/locked"; printf 'export OPENAI_API_KEY=x\n' > "$FL/unread/.zshrc"; chmod 000 "$FL/unread/.zshrc" "$FL/unread/code/locked"
 users "unread:$U:$FL/unread:/bin/zsh"
 fl_run unread
