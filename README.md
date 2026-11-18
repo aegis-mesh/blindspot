@@ -128,7 +128,11 @@ powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 
 ## For IT teams
 
-`gird-fleet.sh`, a separate script that runs as root from your MDM, checks every account on a Mac with `gird-check.sh`, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. All the root work is in `gird-fleet.sh`; `gird-check.sh` holds none. Root runs `gird-fleet.sh`, and copies `gird-check.sh` for each account, only from a folder root alone can change, such as `/Library/Application Support/Blindspot`. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
+Fleet mode lets your MDM run the check on every computer and keep a short result for you to read. It sends nothing anywhere and puts no path, file name or key in the result. [docs/fleet.md](docs/fleet.md) has the steps for each system, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
+
+- **macOS.** `gird-fleet.sh` runs as root from your MDM and checks every account on the Mac, each as that account, with `gird-check.sh`. It runs only from a folder that root alone can change, such as `/Library/Application Support/Blindspot`. All the root work is in `gird-fleet.sh`; `gird-check.sh` holds none.
+- **Windows.** `blindspot-fleet.ps1` is one file your MDM runs once a day as the person who is signed in. It checks that person's account only, with that person's own rights, and needs no administrator rights. Other people's profiles on the PC are counted, not read.
+- **Linux.** No fleet mode yet ([issue #39](https://github.com/aegis-mesh/blindspot/issues/39)).
 
 ## Limits
 
