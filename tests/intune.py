@@ -197,6 +197,70 @@ NOT_WRITTEN = [
 ]
 FORMS += [('not_checked', 'not written: ' + d, v) for d, v in NOT_WRITTEN]
 
+# A fleet for the MITRE references and the statements of what could get out: (name, detection state, output)
+MITRE_PCS = [
+    ('M-ALL', 'fail', _ps(' | anna: act incidents tanstack; run-without-asking claude-code; keys 2 anthropic,aws; history 1; sessions 1; mcp-tokens 1', 'act')),
+    ('M-MAC', 'fail', 'v1 act %s | asha: act incidents litellm; keys 1 openai | bo: review run-without-asking codex' % T0),
+    ('M-PARTIAL', 'fail', _ps(' | anna: not_checked ssh-open 1; partial')),
+    ('M-MORE', 'fail', _ps(' | anna: act wiper; incidents tanstack +more', 'act')),
+    ('M-CLEAR', 'success', _ps(' | anna: clear', 'clear', 2)),
+    ('M-EMPTY', 'pending', ''),
+    ('M-CUT', 'fail', (_ps(' | anna: act keys 1; ', 'act') + 'possible ' + ','.join(['tanstack'] * 400))[:2048]),
+    ('M-STALE', 'success', _ps(' | anna: act run-without-asking codex; keys 1 aws; sessions 1; mcp-tokens 1', 'act').replace(T0, at(days=-5))),
+    ('M-REVIEW', 'fail', _ps(' | anna: review run-without-asking cursor; update-tools amazonq; on-open 1', 'review')),
+    ('M-WIPER', 'fail', 'v1 act %s | asha: act wiper' % T0),
+    ('M-NOPROV', 'fail', _ps(' | anna: act run-without-asking claude-code; keys 1', 'act')),
+]
+
+# Exports an MDM gives for Macs, for -Report -FromFile. Jamf Pro stores the text between <result> and </result>;
+# the tags are kept here too, as a script's raw output would have them. (name, value, expected status)
+MAC = 'v1 act %s | asha: act wiper; keys 1 openai; sessions 1 | bo: review run-without-asking codex; tmp-marks mastra' % T0
+JAMF = [
+    ('MAC-ACT', '<result>%s</result>' % MAC, 'act'),
+    ('MAC-BOTH', 'v1 act %s | asha: act run-without-asking claude-code; keys 2 anthropic,github; mcp-tokens 1' % T0, 'act'),
+    ('MAC-CLEAR', 'v1 clear %s | asha: clear | itadmin: clear' % T0, 'clear'),
+    ('MAC-NONE', '<result>none</result>', 'no_result'),
+    ('MAC-STALE', 'stale: last run %s' % at(days=-5), 'stale'),
+    ('MAC-EMPTY', '', 'no_result'),
+    ('MAC-LONG', 'v1 act %s | asha: act incidents %s' % (T0, ','.join(['tanstack'] * 40)), 'not_checked'),
+    ('MAC-NEWLINE', 'v1 clear %s | asha: clear\nv1 act %s | asha: act keys 1' % (T0, T0), 'not_checked'),
+    ('MAC-SUMMARY', 'blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:12:00Z', 'not_checked'),
+    ('MAC-DUP', 'v1 clear %s | asha: clear' % T0, 'not_checked'),
+    ('mac-dup', 'v1 act %s | asha: act keys 1' % T0, 'not_checked'),
+    ('=cmd|calc', '=HYPERLINK("http://x","y")', 'not_checked'),
+    (HOSTILE_NAME, 'v1 review %s | asha: review "quoted" <b>' % T0, 'not_checked'),
+]
+def csv_cell(v): return '"' + v.replace('"', '""') + '"'
+def write_files(d):
+    os.makedirs(d, exist_ok=True)
+    rows = [['Computer Name', 'Serial Number', 'Blindspot', 'Last Inventory Update']]
+    for i, (n, v, _) in enumerate(JAMF): rows.append([n, ('S' * 100000) if n == 'MAC-ACT' else 'C02X%04d' % i, v, '2026-11-18 09:%02d:00' % i])
+    with open(os.path.join(d, 'jamf.csv'), 'w', encoding='utf-8-sig', newline='') as f:
+        f.write(''.join(','.join(csv_cell(c) for c in r) + '\r\n' for r in rows))
+    with open(os.path.join(d, 'plain.csv'), 'w', newline='') as f:
+        f.write('name,result\n' + ''.join('%s,%s\n' % (n, v) for n, v, st in JAMF if n in ('MAC-CLEAR', 'MAC-BOTH')) + 'MAC-PLAIN,none\n')
+    with open(os.path.join(d, 'twocols.csv'), 'w', newline='') as f:
+        f.write('Device name,Result,Previous result\nMAC-A,%s,%s\n' % (MAC, MAC))
+    with open(os.path.join(d, 'noname.csv'), 'w', newline='') as f:
+        f.write('Serial,Result\nC02X,%s\n' % MAC)
+    with open(os.path.join(d, 'open.csv'), 'w', newline='') as f:
+        f.write('Name,Result\nMAC-OPEN,"v1 clear %s | asha: clear\n' % T0)
+    two = [('MAC-1', MAC), ('MAC-2', 'v1 clear %s | asha: clear' % T0)]
+    with open(os.path.join(d, 'semicolon-utf16.csv'), 'w', encoding='utf-16', newline='') as f:
+        f.write('Computer Name;Blindspot\r\n' + ''.join('%s;"%s"\r\n' % r for r in two))
+    with open(os.path.join(d, 'tab-utf16-nobom.csv'), 'wb') as f:
+        f.write(('Device name\tResult\n' + ''.join('%s\t%s\n' % r for r in two)).encode('utf-16-le'))
+    with open(os.path.join(d, 'semicolon-utf8bom.csv'), 'w', encoding='utf-8-sig', newline='') as f:
+        f.write('Hostname;Serial;Blindspot\n' + ''.join('%s;C02X,1;"<result>%s</result>"\n' % r for r in two))
+    with open(os.path.join(d, 'noresult.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Serial Number,FileVault\nMAC-1,C02X1,On\nMAC-2,C02X2,none of it\n')
+    open(os.path.join(d, 'empty.csv'), 'w').close()
+    with open(os.path.join(d, 'headeronly.csv'), 'w', newline='') as f: f.write('Computer Name,Blindspot\n')
+    with open(os.path.join(d, 'workbook.csv'), 'wb') as f: f.write(b'PK\x03\x04' + bytes(range(256)) * 4)
+    with open(os.path.join(d, 'binary.csv'), 'wb') as f: f.write(b'Computer Name,Blindspot\n\x00\x00\x00MAC-1,\x01\x02\x00\n')
+    with open(os.path.join(d, 'big.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\n' + ''.join('MAC-%05d,%s\n' % (i, MAC if i % 3 else 'none') for i in range(20000)))
+
 def run_state(i, name, det, output, dev=None):
     s = {'@odata.type': '#microsoft.graph.deviceHealthScriptDeviceState', 'id': 'rs-%d' % i, 'lastStateUpdateDateTime': NOW.isoformat(),
          'expectedStateUpdateDateTime': None, 'lastSyncDateTime': NOW.isoformat(), 'preRemediationDetectionScriptOutput': output,
@@ -261,6 +325,11 @@ def tenant(name, forms=None):
         s['pageSize'] = 50
         s['runStates'] = {'ours-1': [run_state(i, 'FORM-%03d' % i, 'success' if st == 'clear' or ' clear ' in v[:12] else 'fail', v) for i, (st, _, v) in enumerate(form_rows(forms))]}
     if name == 'novalue': s['noValue'] = BASE + '/ours-1/deviceRunStates'
+    if name == 'mitre':
+        s['scripts'] = [OTHER, ours('ours-1')]
+        s['assignments'] = {'ours-1': [group_target('g-sales')]}
+        s['members'] = {'g-sales': []}
+        s['runStates'] = {'ours-1': [run_state(i, n, d, o) for i, (n, d, o) in enumerate(MITRE_PCS)]}
     if name in SILENT_TENANTS:
         s['scripts'] = [OTHER, ours('ours-1')]
         s['assignments'] = {'ours-1': list(ENG)}
@@ -545,6 +614,23 @@ def scripts(w):
 def refused(reqs): return [(r['method'], r['path'], r.get('code')) for r in reqs if r.get('code', 200) >= 400]
 def unquote_cell(c): return c[1:] if c.startswith("'") else c
 def formula(c): return bool(c) and c.lstrip(' ')[:1] in ('=', '+', '-', '@', '\t', '\r')
+MEANING = 'MITRE ATT&amp;CK and ATLAS references show which attack technique each finding relates to.'
+MEANING_CSV = 'MITRE ATT&CK and ATLAS references show which attack technique each finding relates to. Blindspot reads files on each computer. It does not watch for attacks and does not detect any technique in use.'
+def bad_links(html):
+    return [u for u in re.findall(r'href\s*=\s*["\']?([^"\' >]*)', html)
+            if not re.match(r'^https://(attack\.mitre\.org/techniques/T[0-9]{4}(/[0-9]{3})?/|atlas\.mitre\.org/techniques/AML\.T[0-9]{4}(\.[0-9]{3})?)$', u)]
+def first_ref(html):
+    at = [i for i in (html.find('attack.mitre.org'), html.find('atlas.mitre.org'), html.find('>T1'), html.find('>AML.')) if i >= 0]
+    return min(at) if at else len(html)
+def found_cell(html, label):
+    m = re.search(r'<tr><td>%s</td><td>([0-9]+)</td><td class="ref">(.*?)</td></tr>' % re.escape(label), html)
+    return (int(m.group(1)), m.group(2)) if m else (None, '')
+def tech_row(html, tid):
+    m = re.search(r'<tr><td>[^<]*<span class="muted"><a href="[^"]*"[^>]*>%s</a></span></td><td>([^<]*)</td><td>([0-9]+)</td><td>([0-9]+)</td><td>([0-9]+)</td><td>([0-9]+)</td></tr>' % re.escape(tid), html)
+    return tuple(int(x) for x in m.groups()[1:]) if m else None
+def path_line(html, text):
+    m = re.search(r'<li>%s: ([0-9]+) computers?\.(.*?) Not known for ([0-9]+) computers?\.</li>' % re.escape(text), html)
+    return (int(m.group(1)), m.group(2).strip(), int(m.group(3))) if m else None
 def load_out(w, t):
     csvs = glob.glob(os.path.join(w, 'out-' + t, '*.csv')); htmls = glob.glob(os.path.join(w, 'out-' + t, '*.html'))
     out = open(os.path.join(w, 'o-%s.txt' % t)).read()
@@ -565,6 +651,7 @@ def main():
         with open(sys.argv[3], 'w') as f: json.dump(tenant(sys.argv[2], sys.argv[4] if len(sys.argv) > 4 else None), f)
         return
     if sys.argv[1] == 'serve': return serve(*sys.argv[2:6])
+    if sys.argv[1] == 'files': return write_files(sys.argv[2])
     if sys.argv[1] == 'account': return account(sys.argv[2], sys.argv[3])
     mode, w = sys.argv[2], sys.argv[3]
     reqs = requests(w)
@@ -656,13 +743,95 @@ def main():
         check('no CSV cell starts with a formula character, spaces aside', not [c for r in csv.reader(raw.splitlines(True)) for c in r if formula(c)])
         check('the HTML escapes what a PC sent', '<img' not in html and '<script>alert' not in html and 'onerror=alert(1)&gt;' in html
               and '&lt;script&gt;alert(1)&lt;/script&gt;' in html)
-        check('the HTML loads nothing from outside', re.search(r'(src|href)\s*=\s*["\']?(https?:)?//', html) is None)
+        check('the HTML loads nothing from outside', re.search(r'src\s*=\s*["\']?(https?:)?//', html) is None and '<link' not in html)
+        check('the HTML links only to MITRE technique pages', bad_links(html) == [], bad_links(html))
+        n, cell = found_cell(html, 'Malware incident found')
+        check('a kind whose ATLAS reference fits only some incidents does not show it when none of them was found',
+              n == 2 and 'AML.T0010.001' not in cell and 'AML.T0011.001' not in cell and 'T1195.001' in cell and 'ATLAS: none applies to what these computers sent.' in cell, cell)
+        check('the MITRE sentence comes before the first MITRE reference', 0 <= html.find(MEANING) < first_ref(html), (html.find(MEANING), first_ref(html)))
         check('the HTML counts the PCs with each kind of finding', '<td>Keys in plain text</td><td>1</td>' in html
               and '<td>SSH keys without a passphrase</td><td>3</td>' in html and '<td>Malware incident found</td><td>2</td>' in html)
         first = html.find('Deal with these first'); none = html.find('<h2>No result'); ok_at = html.find('<h2>Nothing found')
         check('the HTML lists the PCs to deal with first, then no result, then nothing found', 0 < first < none < ok_at)
         order = [html.find(x) for x in ('PC-ACT', 'PC-PARTIAL', 'PC-FAILED', 'PC-STALE<')]
         check('the PCs to deal with first are act, then not checked, failed, stale', all(x > 0 for x in order) and order == sorted(order), order)
+    elif mode == 'mitre':
+        got, out = load_out(w, 'mitre')
+        check('-Report with the MITRE fleet saves its files', got is not None, out[-300:])
+        if got is None: print('\n'.join(R)); return
+        raw, rows, by, html = got
+        check('the HTML links only to MITRE technique pages, in the MITRE fleet too', bad_links(html) == [] and 'attack.mitre.org' in html and 'atlas.mitre.org' in html, bad_links(html))
+        check('the MITRE sentence comes before the first MITRE reference, in the MITRE fleet too', 0 <= html.find(MEANING) < first_ref(html), (html.find(MEANING), first_ref(html)))
+        check('a PC with three findings under one technique is counted once for it', tech_row(html, 'T1552.001') == (3, 3, 0, 0), tech_row(html, 'T1552.001'))
+        check('a technique that is an exposure on one PC and an indicator on others counts each PC once', tech_row(html, 'T1195.001') == (4, 1, 3, 0), tech_row(html, 'T1195.001'))
+        check('the wiper counts as armed for data destruction, and as a launch agent on a Mac only', tech_row(html, 'T1485') == (2, 0, 0, 2) and tech_row(html, 'T1543.001') == (1, 0, 1, 0),
+              (tech_row(html, 'T1485'), tech_row(html, 'T1543.001')))
+        check('a Windows-only technique counts Windows PCs only', tech_row(html, 'T1698') == (3, 3, 0, 0) and tech_row(html, 'AML.T0053') == (4, 4, 0, 0),
+              (tech_row(html, 'T1698'), tech_row(html, 'AML.T0053')))
+        n, cell = found_cell(html, 'Malware incident found')
+        check('an ATLAS reference that fits only some incidents is shown for those, with their count, not for the whole kind',
+              n == 3 and 'AML.T0010.001</a> Supply Chain Compromise: Software (only for the incidents LiteLLM 1.107.0: 1 computer)' in cell, cell)
+        check('the plain label leads and the reference follows it', n == 3 and cell.startswith('ATT&amp;CK: Indicator of <a href="https://attack.mitre.org/techniques/T1195/001/"'), cell[:200])
+        n, cell = found_cell(html, 'Tools with a security fix to install')
+        check('a kind mapped to no technique shows no reference, and says why', n == 1 and cell.startswith('No MITRE reference: ') and 'href' not in cell and 'T1' not in cell, cell)
+        check('a CSV row with no reference has none', by['M-REVIEW']['mitre'].count('T1') == 2 and 'amazonq' not in by['M-REVIEW']['mitre'] and by['M-CLEAR']['mitre'] == '', (by['M-REVIEW']['mitre'], by['M-CLEAR']['mitre']))
+        check('the agent with a key statement counts what the fleet holds, providers too',
+              path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account')
+              == (2, 'Providers of those keys: anthropic (1 computer), aws (1 computer), not named in the result (1 computer).', 5),
+              path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account'))
+        check('the agent and the key must be in the same account', by['M-MAC']['run_without_asking_and_key'] == 'no', by['M-MAC'])
+        check('the key in a session statement counts what the fleet holds', path_line(html, 'A key in an AI agent&#39;s saved session files') == (1, '', 5),
+              path_line(html, 'A key in an AI agent&#39;s saved session files'))
+        check('the token in an MCP config statement counts what the fleet holds', path_line(html, 'A token written in an MCP server&#39;s config') == (1, '', 5),
+              path_line(html, 'A token written in an MCP server&#39;s config'))
+        unk = sorted(n for n, r in by.items() if r['key_in_agent_sessions'] == 'unknown')
+        check('a partly checked, cut, stale, cut-to-fit or silent PC is not known, never no', unk == ['M-CUT', 'M-EMPTY', 'M-MORE', 'M-PARTIAL', 'M-STALE'], unk)
+        check('a fully read PC with nothing is no', all(by[n]['key_in_agent_sessions'] == 'no' and by[n]['token_in_mcp_config'] == 'no' for n in ('M-CLEAR', 'M-MAC', 'M-REVIEW', 'M-WIPER', 'M-NOPROV')))
+        check('the CSV keeps its first columns and adds the new ones after them', raw.splitlines()[0].lstrip('\ufeff') ==
+              '"pc","user","status","why","checked_at","details","intune_last_report","output","mitre","mitre_note","mitre_source","run_without_asking_and_key","run_without_asking_key_providers","key_in_agent_sessions","token_in_mcp_config","os","source","last_seen"',
+              raw.splitlines()[0])
+        check('every CSV row with a reference carries the MITRE sentence and the attribution, and only those',
+              all((r['mitre'] != '') == r['mitre_note'].startswith(MEANING_CSV) == ('The MITRE Corporation' in r['mitre_source']) for r in rows)
+              and sum(1 for r in rows if r['mitre']) == 7, [(unquote_cell(r['pc']), r['mitre'][:40], r['mitre_note'][:20]) for r in rows])
+        check('the footer names the versions, MITRE\'s notice and that the mapping is Blindspot\'s own',
+              'MITRE ATT&amp;CK Enterprise v20.1 and MITRE ATLAS 2026.10' in html and re.search(r'(\u00a9|&#169;|&copy;) 2026 The MITRE Corporation\. This work', html) is not None and ' 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.' in html
+              and 'Copyright 2021-2026 MITRE, licensed under the Apache License, Version 2.0' in html and 'is Blindspot&#39;s own, not MITRE&#39;s' in html)
+        check('the report says what it does not look at', all(x in html for x in ('The network:', 'The identity provider:', 'The cloud control plane:', 'lakehouse', 'What AI agents do while they run')))
+        check('the report says one account per Windows PC and counts the PCs with others', '1 computer had other accounts that were not checked.' in html)
+        check('the report lists the tactics the findings relate to', '<li>Credential Access: Unsecured Credentials: Credentials In Files (T1552.001)' in html and '<li>Collection: Data from AI Services: Conversation Context and Memory (AML.T0085.002)</li>' in html)
+    elif mode == 'files':
+        got, out = load_out(w, 'jamf')
+        check('gird-report.ps1 reads a Jamf Pro export and saves its files', got is not None, out[-300:])
+        if got is None: print('\n'.join(R)); return
+        raw, rows, by, html = got
+        check('gird-report.ps1 makes no network request and never signs in', open(os.path.join(w, 'requests-jamf.log')).read() == '' and open(os.path.join(w, 'stub-jamf.log')).read() == '')
+        for n, v, st in JAMF:
+            check('gird-report.ps1: %s reads as %s' % (n, st), by.get(n, {}).get('status') == st, (n, by.get(n)))
+        check('a Mac result is shown as macOS, from its file', by['MAC-ACT']['os'] == 'macOS' and by['MAC-ACT']['source'] == 'jamf.csv' and 'jamf.csv (13)' in html, by['MAC-ACT'])
+        check('the time the MDM last heard from it is kept', by['MAC-ACT']['last_seen'] == '2026-11-18 09:00:00' and by['MAC-ACT']['intune_last_report'] == '', by['MAC-ACT'])
+        check('a Mac summary line says it names no findings', 'summary line' in by['MAC-SUMMARY']['why'], by['MAC-SUMMARY'])
+        check('a name given twice is listed twice, as not checked, and says so', all('appears 2 times' in by[n]['why'] for n in ('MAC-DUP', 'mac-dup')), (by['MAC-DUP'], by['mac-dup']))
+        check('a Mac wiper relates to a launch agent and to data destruction', tech_row(html, 'T1543.001') == (1, 0, 1, 0) and tech_row(html, 'T1485') == (1, 0, 0, 1), (tech_row(html, 'T1543.001'), tech_row(html, 'T1485')))
+        check('a Mac agent set to run without asking relates to ATLAS only', tech_row(html, 'AML.T0053') == (2, 2, 0, 0) and tech_row(html, 'T1698') is None, tech_row(html, 'AML.T0053'))
+        n, cell = found_cell(html, 'Malware markers in a shared folder')
+        check('a Mac-only finding word shows its decision', n == 1 and cell.startswith('No MITRE reference: '), cell)
+        check('the path statements read Mac rows', path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account')
+              == (1, 'Providers of those keys: anthropic (1 computer), github (1 computer).', 10), path_line(html, 'An AI agent set to run commands without asking, with a key in plain text in the same account'))
+        check('the Windows one-account sentence is left out when no result is from Windows, and the Mac one is there',
+              'Each Windows result covers one account' not in html and 'Each Mac result covers every local account' in html)
+        check('hostile cells from the file are escaped in the HTML', '<script>alert' not in html and '"quoted" <b>' not in html and '&quot;quoted&quot; &lt;b&gt;' in html and '&lt;script&gt;alert(1)&lt;/script&gt;' in html)
+        check('no CSV cell from the file starts with a formula character', not [c for r in csv.reader(raw.splitlines(True)) for c in r if formula(c)] and '"\'=cmd|calc"' in raw)
+        check('the HTML from a file links only to MITRE technique pages', bad_links(html) == [], bad_links(html))
+        got, out = load_out(w, 'plain')
+        check('a plain two-column CSV is read, its columns found by header and values', got is not None and got[2].get('MAC-BOTH', {}).get('status') == 'act'
+              and got[2].get('MAC-PLAIN', {}).get('status') == 'no_result' and len(got[1]) == 3, out[-300:])
+        got, out = load_out(w, 'mixed')
+        check('one report reads Intune and a file together and says where each came from', got is not None
+              and got[2].get('PC-ACT', {}).get('source') == 'intune.csv' and got[2].get('PC-ACT', {}).get('os') == 'Windows'
+              and got[2].get('MAC-ACT', {}).get('source') == 'jamf.csv' and 'intune.csv (' in got[3] and 'jamf.csv (13)' in got[3]
+              and 'Each Windows result covers one account' in got[3] and 'Each Mac result covers every local account' in got[3], out[-300:])
+        got, out = load_out(w, 'big')
+        check('a file of 20,000 computers is read in full', got is not None and len(got[1]) == 20000 and sum(1 for r in got[1] if r['status'] == 'act') == 13333, out[-300:])
     elif mode == 'forms':
         rows = form_rows(os.path.join(w, 'forms.tsv'))
         got, out = load_out(w, 'forms')
@@ -684,7 +853,7 @@ def main():
             check('a Mac and a PC outside the group are not listed', 'MAC-SILENT' not in names and 'PC-NOTINGROUP' not in names, names)
             check('every PC is listed once', len(names) == len(set(names)) == 5, names)
             check('the PCs with no result are counted as not checked, never clear',
-                  re.search(r'<b>4</b>Not checked: no result', html) is not None and '4 not checked' in out and '1 with nothing found' in out, out)
+                  re.search(r'<b>4</b>Not checked: no result', html) is not None and 'Not checked: 4 ' in out and 'Nothing found: 1.' in out, out)
             check('the silent PCs are in the no result section, not under nothing found',
                   html.find('<h2>No result') < html.find('PC-SILENT-1') < html.find('<h2>Nothing found'))
             check('a hostile PC name with no result is escaped in the HTML and guarded in the CSV',

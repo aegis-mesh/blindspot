@@ -2,3 +2,14 @@ Blindspot
 Copyright 2026 GIRD AI Technologies Private Limited
 
 This product includes software developed by GIRD (https://gird.ai).
+
+gird-report.ps1 shows MITRE ATT&CK and MITRE ATLAS technique ids and names, from data/mitre.tsv.
+The mapping of Blindspot's findings to techniques is Blindspot's own, not MITRE's.
+
+MITRE ATT&CK Enterprise v20.1 (https://attack.mitre.org):
+© 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
+The MITRE Corporation (MITRE) hereby grants you a non-exclusive, royalty-free license to use ATT&CK® for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE's copyright designation and this license in any such copy.
+MITRE ATT&CK and ATT&CK are registered trademarks of The MITRE Corporation.
+
+MITRE ATLAS release 2026.10 (https://atlas.mitre.org):
+Copyright 2021-2026 MITRE. Licensed under the Apache License, Version 2.0.

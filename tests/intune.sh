@@ -22,18 +22,26 @@ fi
 IW=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot-intune)
 IW=$(cd "$IW" && pwd -P)
 TOOL=$PWD/gird-intune.ps1
+REPORT=$PWD/gird-report.ps1
 INTUNE_PID=""
 intune_cleanup() { [ -n "$INTUNE_PID" ] && { kill "$INTUNE_PID"; wait "$INTUNE_PID"; } 2>/dev/null; chmod -R u+w "$IW" 2>/dev/null; rm -rf "$IW"; INTUNE_PID=""; }
 [ "$INTUNE_ALONE" -eq 1 ] && trap intune_cleanup EXIT
 
-echo "gird-intune.ps1"
-if LC_ALL=C grep -q '[^ -~]' "$TOOL"; then bad "intune: the tool is plain ASCII"; else ok "intune: the tool is plain ASCII"; fi
+echo "gird-intune.ps1 and gird-report.ps1"
+for _f in "$TOOL" "$REPORT"; do
+  _b=$(basename "$_f")
+  if LC_ALL=C grep -q '[^ -~]' "$_f"; then bad "intune: $_b is plain ASCII"; else ok "intune: $_b is plain ASCII"; fi
+  sed -e 's/#.*$//' -e "s/'[^']*'//g" -e 's/"[^"]*"//g' "$_f" > "$IW/code.txt"
+  hasnot "intune: $_b has no PowerShell 7 only syntax" '\?\?|\?\.|&&|\|\||-Parallel|-AsHashtable|\$Is(Windows|MacOS|Linux)\b|-SkipHttpErrorCheck' "$IW/code.txt"
+  hasnot "intune: $_b defines no function that hides a PowerShell command" '^function (ConvertTo-Html|ConvertTo-Csv|Get-Content|Write-Host|Out-File|Get-Item|Test-Path)\b' "$_f"
+  if "$PWSH" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$_f', [ref]\$null, [ref]\$e); if (\$e.Count) { \$e | ForEach-Object { \$_.Message }; exit 1 }" > "$IW/parse.txt" 2>&1
+  then ok "intune: $_b parses"; else bad "intune: $_b parses" "$(head -n 3 "$IW/parse.txt")"; fi
+done
 sed -e 's/#.*$//' -e "s/'[^']*'//g" -e 's/"[^"]*"//g' "$TOOL" > "$IW/code.txt"
-hasnot "intune: no PowerShell 7 only syntax" '\?\?|\?\.|&&|\|\||-Parallel|-AsHashtable|\$Is(Windows|MacOS|Linux)\b|-SkipHttpErrorCheck' "$IW/code.txt"
-hasnot "intune: talks to nothing but Microsoft Graph" 'Invoke-WebRequest|Invoke-RestMethod|WebClient|HttpClient|WebRequest\]|Start-Process|Net\.Sockets' "$IW/code.txt"
-hasnot "intune: defines no function that hides a PowerShell command" '^function (ConvertTo-Html|ConvertTo-Csv|Get-Content|Write-Host|Out-File|Get-Item|Test-Path)\b' "$TOOL"
-if "$PWSH" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$TOOL', [ref]\$null, [ref]\$e); if (\$e.Count) { \$e | ForEach-Object { \$_.Message }; exit 1 }" > "$IW/parse.txt" 2>&1
-then ok "intune: parses"; else bad "intune: parses" "$(head -n 3 "$IW/parse.txt")"; fi
+hasnot "intune: gird-intune.ps1 talks to nothing but Microsoft Graph" 'Invoke-WebRequest|Invoke-RestMethod|WebClient|HttpClient|WebRequest\]|Start-Process|Net\.Sockets' "$IW/code.txt"
+grep -v 'System\.Net\.WebUtility\]::HtmlEncode' "$REPORT" > "$IW/report-code.txt"
+hasnot "intune: gird-report.ps1 holds no call that can reach the network or Microsoft Graph" 'Invoke-WebRequest|Invoke-RestMethod|WebClient|HttpClient|WebRequest|Net\.Sockets|TcpClient|UdpClient|System\.Net\.|Dns\]|Connect-MgGraph|Invoke-MgGraph|Import-Module|Install-Module|Start-Process|Invoke-Command|New-PSSession|Start-BitsTransfer|Send-MailMessage|DownloadString|DownloadFile|graph\.microsoft' "$IW/report-code.txt"
+hasnot "intune: gird-report.ps1 uses nothing only Windows has" 'HKLM:|HKCU:|Registry|\$env:(LOCALAPPDATA|APPDATA|USERPROFILE|ProgramData|TEMP|windir)|Get-WmiObject|Get-CimInstance|\[Microsoft\.Win32' "$REPORT"
 
 mkdir -p "$IW/mods/Microsoft.Graph.Authentication" "$IW/oldmods/Microsoft.Graph.Authentication" "$IW/nomods" "$IW/home" "$IW/out"
 cat > "$IW/mods/Microsoft.Graph.Authentication/Microsoft.Graph.Authentication.psm1" <<'PS'
@@ -82,13 +90,26 @@ intune_check() { # python checks print ok|name or bad|name|detail
     case "$_r" in ok) ok "$_n" ;; bad) bad "$_n" "$_d" ;; *) bad "intune: the check script printed something unexpected" "$_r $_n" ;; esac
   done
 }
-# report TENANT [env...]: runs -Report on a fresh tenant and keeps its output, files and requests by name
+# report_run [env...] -- args...: runs gird-report.ps1, with the stub Graph module on its path, which it must never touch
+report_run() {
+  _e=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
+  env -i PATH=/usr/bin:/bin HOME="$IW/home" PSModulePath="$IW/mods" STUB_GRAPH="http://127.0.0.1:$PORT" STUB_LOG="$IW/stub.log" \
+    ${_e[@]+"${_e[@]}"} "$PWSH" -NoProfile -NonInteractive -File "$REPORT" "$@"
+}
+# report TENANT [env...]: gird-intune.ps1 -Export from a fresh tenant, then gird-report.ps1 on that file, keeping the
+# report's output and files and the export's requests by name
 intune_report() {
   _t=$1; shift
   intune_state "$_t"
-  rm -rf "$IW/out"; mkdir -p "$IW/out"
-  intune_run "$@" -- -Report -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
-  if [ "$RC" -eq 0 ]; then ok "intune: -Report with the $_t tenant exits 0"; else bad "intune: -Report with the $_t tenant exits 0" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+  rm -rf "$IW/out" "$IW/exp-$_t"; mkdir -p "$IW/out" "$IW/exp-$_t"
+  intune_run "$@" -- -Export "$IW/exp-$_t/intune.csv" > "$IW/e-$_t.txt" 2>&1; RC=$?
+  if [ "$RC" -eq 0 ]; then ok "intune: -Export with the $_t tenant exits 0"; else bad "intune: -Export with the $_t tenant exits 0" "exit $RC: $(head -c 300 "$IW/e-$_t.txt")"; fi
+  _r=$(wc -l < "$IW/requests.log"); _s=$(wc -l < "$IW/stub.log")
+  report_run -- "$IW/exp-$_t/intune.csv" -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
+  if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 on the $_t export exits 0"; else bad "intune: gird-report.ps1 on the $_t export exits 0" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+  if [ "$(wc -l < "$IW/requests.log")" -eq "$_r" ] && [ "$(wc -l < "$IW/stub.log")" -eq "$_s" ]; then ok "intune: gird-report.ps1 on the $_t export makes no request and never signs in"
+  else bad "intune: gird-report.ps1 on the $_t export makes no request and never signs in" "$(tail -n 2 "$IW/stub.log")"; fi
   cp "$IW/o.txt" "$IW/o-$_t.txt"; rm -rf "$IW/out-$_t"; cp -R "$IW/out" "$IW/out-$_t"; cp "$IW/requests.log" "$IW/requests-$_t.log"
 }
 
@@ -103,12 +124,12 @@ intune_run PSModulePath="$IW/nomods" -- -Deploy -Group Engineering -FleetScript 
 if [ "$RC" -eq 3 ] && grep -q 'Install-Module Microsoft.Graph.Authentication -Scope CurrentUser' "$IW/o.txt" && [ ! -s "$IW/requests.log" ]; then
   ok "intune: without Microsoft's Graph module it says the line that installs it and stops"
 else bad "intune: without Microsoft's Graph module it says the line that installs it and stops" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
-intune_run PSModulePath="$IW/oldmods" -- -Report > "$IW/o.txt" 2>&1; RC=$?
+intune_run PSModulePath="$IW/oldmods" -- -Export "$IW/old.csv" > "$IW/o.txt" 2>&1; RC=$?
 if [ "$RC" -eq 3 ] && grep -q 'too old for this tool' "$IW/o.txt" && grep -q 'Update-Module Microsoft.Graph.Authentication' "$IW/o.txt" && [ ! -s "$IW/stub.log" ]; then
   ok "intune: a Graph module too old for its sign-in says so plainly and stops before signing in"
 else bad "intune: a Graph module too old for its sign-in says so plainly and stops before signing in" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
 
-intune_run -- -Report -Group x > "$IW/o.txt" 2>&1; RC=$?
+intune_run -- -Export "$IW/x.csv" -Group x > "$IW/o.txt" 2>&1; RC=$?
 if [ "$RC" -eq 2 ] && [ ! -s "$IW/stub.log" ]; then ok "intune: an option that does not go with the command exits 2"; else bad "intune: an option that does not go with the command exits 2" "exit $RC"; fi
 
 head -c 204800 /dev/zero | tr '\0' '#' > "$IW/big.ps1"
@@ -292,40 +313,130 @@ intune_report forms
 intune_check < <(python3 tests/intune.py check forms "$IW")
 
 intune_report report
-if [ "$(intune_writes)" -eq 0 ]; then ok "intune: -Report changes nothing in Intune"; else bad "intune: -Report changes nothing in Intune" "$(intune_writes) writes"; fi
+if [ "$(intune_writes)" -eq 0 ]; then ok "intune: -Export changes nothing in Intune"; else bad "intune: -Export changes nothing in Intune" "$(intune_writes) writes"; fi
+if grep -q "^Next: gird-report.ps1 \"$IW/exp-report/intune.csv\"$" "$IW/e-report.txt" && [ "$(head -c 3 "$IW/exp-report/intune.csv" | od -An -tx1 | tr -d ' \n')" = efbbbf ] \
+  && head -n 1 "$IW/exp-report/intune.csv" | grep -q '"Device name","Device id","User","OS","Result","Detection state","Last reported","Note"'; then
+  ok "intune: -Export writes the columns gird-report.ps1 reads and says the command to run next"
+else bad "intune: -Export writes the columns gird-report.ps1 reads and says the command to run next" "$(head -c 300 "$IW/e-report.txt")"; fi
 intune_check < <(python3 tests/intune.py check report "$IW")
+
+intune_report mitre
+intune_check < <(python3 tests/intune.py check mitre "$IW")
 
 for _tn in silent usergroup othertarget exclusion alldevices filter membererror exclerror exclhidden unassigned; do intune_report "$_tn"; done
 intune_report nodeviceid STUB_DENY=Device.Read.All
 intune_check < <(python3 tests/intune.py check silent "$IW")
 
-intune_state badnext
-rm -rf "$IW/out"; mkdir -p "$IW/out"
-intune_run -- -Report -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
-if [ "$RC" -eq 1 ] && ! grep -q '^refused' "$IW/stub.log" && [ -z "$(ls "$IW/out")" ]; then
-  ok "intune: -Report stops, saving nothing, at a next-page link to another address"
-else bad "intune: -Report stops, saving nothing, at a next-page link to another address" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+intune_state badnext; rm -rf "$IW/exp"; mkdir -p "$IW/exp"
+intune_run -- -Export "$IW/exp/intune.csv" > "$IW/o.txt" 2>&1; RC=$?
+if [ "$RC" -eq 1 ] && ! grep -q '^refused' "$IW/stub.log" && [ -z "$(ls "$IW/exp")" ]; then
+  ok "intune: -Export stops, saving nothing, at a next-page link to another address"
+else bad "intune: -Export stops, saving nothing, at a next-page link to another address" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+intune_state novalue; rm -rf "$IW/exp"; mkdir -p "$IW/exp"
+intune_run -- -Export "$IW/exp/intune.csv" > "$IW/o.txt" 2>&1; RC=$?
+if [ "$RC" -eq 1 ] && grep -q 'Stopped: Microsoft Graph sent a page of results with no list in it' "$IW/o.txt" && ! grep -q 'Stopped: Stopped' "$IW/o.txt" && [ -z "$(ls "$IW/exp")" ]; then
+  ok "intune: -Export stops, saving nothing, at a page with no list of results"
+else bad "intune: -Export stops, saving nothing, at a page with no list of results" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+intune_state report; : > "$IW/exp/taken.csv"
+intune_run -- -Export "$IW/exp/taken.csv" > "$IW/o.txt" 2>&1; RC=$?
+if [ "$RC" -eq 1 ] && grep -q 'is already there' "$IW/o.txt" && [ ! -s "$IW/stub.log" ] && [ ! -s "$IW/exp/taken.csv" ]; then
+  ok "intune: -Export refuses a file already there, before signing in"
+else bad "intune: -Export refuses a file already there, before signing in" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+intune_run -- -Export 'Env:/x.csv' > "$IW/o.txt" 2>&1; RC=$?
+if [ "$RC" -eq 1 ] && grep -q 'not a file name in a folder on disk' "$IW/o.txt" && [ ! -s "$IW/stub.log" ]; then
+  ok "intune: an -Export path that is not a folder on disk is refused before signing in"
+else bad "intune: an -Export path that is not a folder on disk is refused before signing in" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+intune_state report; rm -rf "$IW/exp"; mkdir -p "$IW/exp"
+intune_run -- -Export "$IW/exp/intune.csv" > /dev/null 2>&1
+fi
 
-intune_state novalue
+# gird-report.ps1 on its own: exports an MDM gives, read with no sign-in and no network request.
+python3 tests/intune.py files "$IW/files"
+report_file() { # NAME [env...] -- args...: one gird-report.ps1 run into a fresh folder, kept by name
+  _t=$1; shift
+  : > "$IW/requests.log"; : > "$IW/stub.log"; rm -rf "$IW/out"; mkdir -p "$IW/out"
+  _f=(); while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _f+=("$1"); shift; done; shift
+  report_run ${_f[@]+"${_f[@]}"} -- "$@" -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
+  cp "$IW/o.txt" "$IW/o-$_t.txt"; rm -rf "$IW/out-$_t"; cp -R "$IW/out" "$IW/out-$_t"; cp "$IW/requests.log" "$IW/requests-$_t.log"; cp "$IW/stub.log" "$IW/stub-$_t.log"
+}
+plain_fail() { # name text: exit 1 or 2, the text on screen, no PowerShell error record, nothing saved
+  if [ "$RC" -ge 1 ] && [ "$RC" -le 2 ] && ! grep -qE 'Exception|At line|CategoryInfo|FullyQualifiedErrorId|\+ +~|ParameterBinding|System\.' "$IW/o.txt" && [ -z "$(ls "$IW/out")" ] && grep -qF -- "$2" "$IW/o.txt"; then ok "$1"
+  else bad "$1" "exit $RC: $(head -c 400 "$IW/o.txt")"; fi
+}
+report_file jamf PSModulePath="$IW/nomods" -- "$IW/files/jamf.csv" -SeenColumn 'Last Inventory Update'
+if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads a Jamf Pro export with result tags, with no Graph module"; else bad "intune: gird-report.ps1 reads a Jamf Pro export with result tags, with no Graph module" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+if [ "$(wc -l < "$IW/o.txt" | tr -d ' ')" -eq 4 ] && grep -q '^Read 13 computers from jamf.csv\.$' "$IW/o.txt" && grep -q '^Need attention now: 2\. To review: 0\. Nothing found: 1\.$' "$IW/o.txt" \
+  && grep -q '^Not checked: 10 ' "$IW/o.txt" && grep -q "^Report: $IW/out/blindspot-report-[0-9-]*\.html " "$IW/o.txt"; then
+  ok "intune: gird-report.ps1 ends with four lines: computers read, attention now, not checked, and the report's path"
+else bad "intune: gird-report.ps1 ends with four lines: computers read, attention now, not checked, and the report's path" "$(cat "$IW/o.txt")"; fi
+report_file plain -- "$IW/files/plain.csv"
+if [ "$RC" -eq 0 ] && [ ! -s "$IW/stub.log" ] && [ ! -s "$IW/requests.log" ]; then ok "intune: gird-report.ps1 reads a plain two-column CSV and never calls the Graph module"
+else bad "intune: gird-report.ps1 reads a plain two-column CSV and never calls the Graph module" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+if [ -f "$IW/exp/intune.csv" ]; then
+  report_file mixed -- "$IW/exp/intune.csv" "$IW/files/jamf.csv"
+  if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads an Intune export and a Jamf Pro export into one report"; else bad "intune: gird-report.ps1 reads an Intune export and a Jamf Pro export into one report" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+else skip "intune: gird-report.ps1 reads an Intune export and a Jamf Pro export into one report" "the mock Microsoft Graph did not start, so there is no Intune export"; fi
+for _enc in semicolon-utf16 tab-utf16-nobom semicolon-utf8bom; do
+  report_file "$_enc" -- "$IW/files/$_enc.csv"
+  if [ "$RC" -eq 0 ] && grep -q '^Read 2 computers' "$IW/o.txt" && grep -q '^Need attention now: 1\.' "$IW/o.txt"; then ok "intune: gird-report.ps1 finds the delimiter and the encoding: $_enc"
+  else bad "intune: gird-report.ps1 finds the delimiter and the encoding: $_enc" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+done
+_s=$(date +%s); report_file big -- "$IW/files/big.csv"; _s=$(( $(date +%s) - _s ))
+if [ "$RC" -eq 0 ]; then ok "intune: gird-report.ps1 reads a file of 20,000 computers"; echo "        ($(wc -c < "$IW/files/big.csv" | tr -d ' ') bytes in ${_s}s)"
+else bad "intune: gird-report.ps1 reads a file of 20,000 computers" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+report_file twocols -- "$IW/files/twocols.csv"
+plain_fail "intune: gird-report.ps1 says plainly which columns look like the result, with a value from each, and the command to run next" 'Run it again naming the one to read:'
+if grep -q '^  Previous result: v1 act ' "$IW/o.txt" && grep -qF "  gird-report.ps1 \"$IW/files/twocols.csv\" -ResultColumn \"Result\"" "$IW/o.txt"; then ok "intune: the command it suggests names the file and the column"
+else bad "intune: the command it suggests names the file and the column" "$(cat "$IW/o.txt")"; fi
+report_file twocolsnamed -- "$IW/files/twocols.csv" -ResultColumn result
+if [ "$RC" -eq 0 ]; then ok "intune: -ResultColumn settles which column holds the result"; else bad "intune: -ResultColumn settles which column holds the result" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+report_file noname -- "$IW/files/noname.csv"
+plain_fail "intune: gird-report.ps1 says plainly when no column holds the computer's name" "holds the computer's name. Its columns, with a value from each:"
+report_file noresult -- "$IW/files/noresult.csv"
+plain_fail "intune: gird-report.ps1 says plainly when a file holds no Blindspot result, and where it looked" 'noresult.csv holds no Blindspot result. It looked in every column'
+report_file open -- "$IW/files/open.csv"
+plain_fail "intune: a quoted cell that is never closed stops the report in plain words, saving nothing" 'never closed'
+report_file missing -- "$IW/files/nothere.csv"
+plain_fail "intune: gird-report.ps1 says plainly when there is no file at the path" 'There is no file at'
+report_file folder -- "$IW/files"
+plain_fail "intune: gird-report.ps1 says plainly when it is given a folder" 'is a folder. Give the export file in it'
+report_file empty -- "$IW/files/empty.csv"
+plain_fail "intune: gird-report.ps1 says plainly when the file is empty" 'empty.csv is empty.'
+report_file headeronly -- "$IW/files/headeronly.csv"
+plain_fail "intune: gird-report.ps1 says plainly when the file lists no computers" 'lists no computers'
+report_file workbook -- "$IW/files/workbook.csv"
+plain_fail "intune: gird-report.ps1 says plainly when the file is an Excel workbook" 'is an Excel workbook, not a CSV file'
+report_file binary -- "$IW/files/binary.csv"
+plain_fail "intune: gird-report.ps1 says plainly when the file is not text" 'is not a text file'
+report_file badopt -- "$IW/files/jamf.csv" -Colour red
+plain_fail "intune: gird-report.ps1 says plainly when an option does not exist" 'There is no option -Colour'
+report_file baddays -- "$IW/files/jamf.csv" -StaleDays many
+plain_fail "intune: gird-report.ps1 says plainly when -StaleDays is not a number of days" 'StaleDays takes a number of days'
 rm -rf "$IW/out"; mkdir -p "$IW/out"
-intune_run -- -Report -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
-if [ "$RC" -eq 1 ] && grep -q 'Stopped: Microsoft Graph sent a page of results with no list in it' "$IW/o.txt" && ! grep -q 'Stopped: Stopped' "$IW/o.txt" && [ -z "$(ls "$IW/out")" ]; then
-  ok "intune: -Report stops, saving nothing, at a page with no list of results"
-else bad "intune: -Report stops, saving nothing, at a page with no list of results" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+report_run -- "$IW/files/jamf.csv" -NameColumn > "$IW/o.txt" 2>&1; RC=$?
+plain_fail "intune: gird-report.ps1 says plainly when an option has no value" '-NameColumn needs a value after it'
+if [ "$(id -u)" -ne 0 ]; then
+  rm -rf "$IW/out" "$IW/ro"; mkdir -p "$IW/out" "$IW/ro"; chmod 555 "$IW/ro"
+  report_run -- "$IW/files/plain.csv" -OutDir "$IW/ro" > "$IW/o.txt" 2>&1; RC=$?
+  plain_fail "intune: gird-report.ps1 says plainly when it may not write the report" 'No permission to save the report in'
+  chmod 755 "$IW/ro"
+else skip "intune: gird-report.ps1 says plainly when it may not write the report" "root can write to any folder"; fi
+report_run -- > "$IW/o.txt" 2>&1; RC=$?
+if [ "$RC" -eq 0 ] && grep -qF 'powershell -ExecutionPolicy Bypass -File .\gird-report.ps1 export.csv' "$IW/o.txt" && grep -qF 'pwsh ./gird-report.ps1 export.csv' "$IW/o.txt" && ! grep -qiE 'error|exception' "$IW/o.txt"; then
+  ok "intune: gird-report.ps1 with nothing after it prints a short usage with the line to run, not an error"
+else bad "intune: gird-report.ps1 with nothing after it prints a short usage with the line to run, not an error" "exit $RC: $(head -c 400 "$IW/o.txt")"; fi
+intune_check < <(python3 tests/intune.py check files "$IW")
 
 # -OutDir: one path, resolved once from PowerShell's location, which is not the process's folder.
-intune_state report
 mkdir -p "$IW/loc/rel" "$IW/cwd/rel"
-( cd "$IW/cwd" && env -i PATH=/usr/bin:/bin HOME="$IW/home" PSModulePath="$IW/mods" STUB_GRAPH="http://127.0.0.1:$PORT" STUB_LOG="$IW/stub.log" \
-    "$PWSH" -NoProfile -NonInteractive -Command "Set-Location -LiteralPath '$IW/loc'; & '$TOOL' -Report -OutDir rel; exit \$LASTEXITCODE" ) > "$IW/o.txt" 2>&1; RC=$?
-if [ "$RC" -eq 0 ] && [ "$(ls "$IW/loc/rel" | grep -c '^blindspot-intune-.*\.\(csv\|html\)$')" -eq 2 ] && [ -z "$(ls "$IW/cwd/rel")" ] && grep -q "^Saved: $IW/loc/rel/blindspot-intune-" "$IW/o.txt"; then
+( cd "$IW/cwd" && env -i PATH=/usr/bin:/bin HOME="$IW/home" PSModulePath="$IW/mods" STUB_LOG="$IW/stub.log" \
+    "$PWSH" -NoProfile -NonInteractive -Command "Set-Location -LiteralPath '$IW/loc'; & '$REPORT' '$IW/files/plain.csv' -OutDir rel; exit \$LASTEXITCODE" ) > "$IW/o.txt" 2>&1; RC=$?
+if [ "$RC" -eq 0 ] && [ "$(ls "$IW/loc/rel" | grep -c '^blindspot-report-.*\.\(csv\|html\)$')" -eq 2 ] && [ -z "$(ls "$IW/cwd/rel")" ] && grep -q "^Report: $IW/loc/rel/blindspot-report-" "$IW/o.txt"; then
   ok "intune: a relative -OutDir is the folder PowerShell is in, for the check and the files alike"
 else bad "intune: a relative -OutDir is the folder PowerShell is in, for the check and the files alike" "exit $RC; loc: $(ls "$IW/loc/rel" | tr '\n' ' '); cwd: $(ls "$IW/cwd/rel" | tr '\n' ' '); $(head -c 300 "$IW/o.txt")"; fi
-: > "$IW/requests.log"; : > "$IW/stub.log"
-intune_run -- -Report -OutDir 'Env:' > "$IW/o.txt" 2>&1; RC=$?
-if [ "$RC" -eq 1 ] && grep -q 'is not a folder on disk' "$IW/o.txt" && [ ! -s "$IW/stub.log" ]; then
-  ok "intune: an -OutDir that is not a folder on disk is refused before signing in"
-else bad "intune: an -OutDir that is not a folder on disk is refused before signing in" "exit $RC: $(head -c 300 "$IW/o.txt")"; fi
+rm -rf "$IW/out"; mkdir -p "$IW/out"
+report_run -- "$IW/files/plain.csv" -OutDir 'Env:' > "$IW/o.txt" 2>&1; RC=$?
+plain_fail "intune: an -OutDir that is not a folder on disk is refused in plain words" 'is not a folder on disk'
 rm -rf "$IW/out" "$IW/elsewhere"; mkdir -p "$IW/out" "$IW/elsewhere"
 python3 - "$IW/out" "$IW/elsewhere" <<'PY'
 import datetime, os, sys
@@ -333,13 +444,33 @@ now = datetime.datetime.now(datetime.timezone.utc)
 for m in (0, 1):
     stamp = (now + datetime.timedelta(minutes=m)).strftime('%Y%m%d-%H%M')
     for ext in ('csv', 'html'):
-        os.symlink(os.path.join(sys.argv[2], '%d.%s' % (m, ext)), os.path.join(sys.argv[1], 'blindspot-intune-%s.%s' % (stamp, ext)))
+        os.symlink(os.path.join(sys.argv[2], '%d.%s' % (m, ext)), os.path.join(sys.argv[1], 'blindspot-report-%s.%s' % (stamp, ext)))
 PY
-intune_run -- -Report -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
+report_run -- "$IW/files/plain.csv" -OutDir "$IW/out" > "$IW/o.txt" 2>&1; RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$(ls "$IW/elsewhere")" ] && [ "$(ls "$IW/out" | grep -c -- '-2\.\(csv\|html\)$')" -eq 2 ]; then
-  ok "intune: -Report writes only new files, never through a name already there"
-else bad "intune: -Report writes only new files, never through a name already there" "exit $RC; elsewhere: $(ls "$IW/elsewhere" | tr '\n' ' '); out: $(ls "$IW/out" | tr '\n' ' ')"; fi
-fi
+  ok "intune: gird-report.ps1 writes only new files, never through a name already there"
+else bad "intune: gird-report.ps1 writes only new files, never through a name already there" "exit $RC; elsewhere: $(ls "$IW/elsewhere" | tr '\n' ' '); out: $(ls "$IW/out" | tr '\n' ' ')"; fi
+
+# data/mitre.tsv: tools/gen.sh --check refuses a finding word with no line, and a line for no finding word.
+gen_copy() { rm -rf "$IW/gen"; mkdir -p "$IW/gen/tools"; cp -R data "$IW/gen/data"; cp tools/gen.sh "$IW/gen/tools/"; cp gird-check.sh gird-check.ps1 gird-fleet.sh gird-report.ps1 gird-intune.ps1 "$IW/gen/"; }
+gen_check() { bash "$IW/gen/tools/gen.sh" --check > "$IW/gen.txt" 2>&1; }
+gen_copy; gen_check; RC=$?
+if [ "$RC" -eq 0 ]; then ok "intune: gen.sh --check passes on a copy of the repository"; else bad "intune: gen.sh --check passes on a copy of the repository" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; awk -F '\t' '!($1 == "sessions" && $4 == "attack")' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q 'no attack line for the finding word sessions' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when a finding word has no ATT&CK line"
+else bad "intune: gen.sh --check fails when a finding word has no ATT&CK line" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; awk -F '\t' '!($1 == "update-tools" && $4 == "atlas")' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q 'no atlas line for the finding word update-tools' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when a finding word has no ATLAS decision, not even none"
+else bad "intune: gen.sh --check fails when a finding word has no ATLAS decision, not even none" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; sed "s/'tmp-marks', 'partial')\$/'tmp-marks', 'partial', 'exfil')/" gird-report.ps1 > "$IW/gen/gird-report.ps1"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q 'no attack line for the finding word exfil' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for"
+else bad "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; printf 'exfil\tall\tall\tattack\t-\t-\t-\tnone\t-\tA word no result carries.\n' >> "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q '^data/mitre.tsv: exfil' "$IW/gen.txt"; then ok "intune: gen.sh --check fails on a line for a finding word the tool does not know"
+else bad "intune: gen.sh --check fails on a line for a finding word the tool does not know" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+gen_copy; awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "keys" && $4 == "attack" { $9 = "https://example.com/techniques/T1552/001/" } { print }' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q '^data/mitre.tsv: keys' "$IW/gen.txt"; then ok "intune: gen.sh --check fails on a link that is not the technique's MITRE page"
+else bad "intune: gen.sh --check fails on a link that is not the technique's MITRE page" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
 
 # New-ReportFile, taken from the tool's own source and called directly: Test-Taken is not in the way.
 rm -rf "$IW/nrf"; mkdir -p "$IW/nrf/gone"
@@ -347,7 +478,7 @@ printf 'keep' > "$IW/nrf/existing.csv"
 ln -s "$IW/nrf/gone/target.csv" "$IW/nrf/dangling.csv"
 "$PWSH" -NoProfile -NonInteractive -Command "
 \$ErrorActionPreference = 'Stop'
-\$ast = [Management.Automation.Language.Parser]::ParseFile('$TOOL', [ref]\$null, [ref]\$null)
+\$ast = [Management.Automation.Language.Parser]::ParseFile('$REPORT', [ref]\$null, [ref]\$null)
 \$fn = \$ast.Find({ param(\$n) \$n -is [Management.Automation.Language.FunctionDefinitionAst] -and \$n.Name -eq 'New-ReportFile' }, \$true)
 . ([scriptblock]::Create(\$fn.Extent.Text))
 foreach (\$name in 'existing.csv', 'dangling.csv') {

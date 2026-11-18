@@ -7,7 +7,9 @@
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
 # versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check.
+# (data/bad-extensions.tsv), and the MITRE references gird-report.ps1 shows (data/mitre.tsv), with
+# gird-report.ps1's shared block copied into gird-intune.ps1.
+# The scripts stay single files people can download and check.
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -28,6 +30,8 @@ PY_IDS=" $( { rows data/bad-pypi.tsv | cut -f3; rows data/indicators.tsv | awk -
 # What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
+# The finding words gird-report.ps1 reads: every one needs an attack line and an atlas line in data/mitre.tsv.
+MITRE_WORDS=" $(awk '/^\$ItemOrder = @\(/ { on = 1 } on { print } on && /\)$/ { exit }' gird-report.ps1 | grep -o "'[a-z][a-z-]*'" | tr -d "'" | tr '\n' ' ')"
 # A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
 # first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {GOOSE_STATE}, {PROGRAMDATA}, or
 # {ENV:NAME:fallback} whose fallback is ~ or a path), at least one folder or file after it (an ENV
@@ -121,7 +125,29 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
-        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')
+        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }'
+      # A none line stands alone for its word and framework; a technique keeps one name and one set of
+      # tactics, and its url is the page its id names.
+      [ "$MITRE_WORDS" != " " ] || echo "gird-report.ps1: no \$ItemOrder list, so data/mitre.tsv cannot be checked"
+      for _v in attack atlas; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done
+      rows data/mitre.tsv | awk -F '\t' -v ids="$IDS" -v words="$MITRE_WORDS" '
+        function safe(s) { return s != "" && s !~ /[\047"`$|\\<>&]/ }
+        { ok = NF == 10 && index(words, " " $1 " ") > 0 && $2 ~ /^(all|mac|win)$/ && $4 ~ /^(attack|atlas)$/
+          if ($3 != "all") { ok = ok && $1 ~ /^(incidents|lockfile|update|remove)$/; n = split($3, a, ","); for (i = 1; i <= n; i++) if (index(ids, " " a[i] " ") == 0) ok = 0 }
+          if ($8 == "none") ok = ok && $2 == "all" && $3 == "all" && $5 == "-" && $6 == "-" && $7 == "-" && $9 == "-" && $10 != "-" && safe($10)
+          else {
+            ok = ok && $8 ~ /^(exposure|indicator|armed)$/ && $10 == "-" && safe($6) && $7 ~ /^[A-Z][A-Za-z ]*(,[A-Z][A-Za-z ]*)*$/
+            if ($4 == "attack") { u = $5; sub(/^T/, "", u); gsub(/\./, "/", u); ok = ok && $5 ~ /^T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://attack.mitre.org/techniques/T" u "/" }
+            else ok = ok && $5 ~ /^AML\.T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://atlas.mitre.org/techniques/" $5
+            k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7
+          }
+          wf = $1 " " $4
+          if ($8 == "none") { if (wf in has) ok = 0; nonewf[wf] = 1 } else if (wf in nonewf) ok = 0
+          has[wf] = 1
+          if (seen[$1 " " $2 " " $3 " " $4 " " $5]++) ok = 0
+          if (!ok) print "data/mitre.tsv: " $0 }
+        END { n = split(words, w, " "); for (i = 1; i <= n; i++) { if (!((w[i] " attack") in has)) print "data/mitre.tsv: no attack line for the finding word " w[i]
+                                                                   if (!((w[i] " atlas") in has)) print "data/mitre.tsv: no atlas line for the finding word " w[i] } }')
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
@@ -397,6 +423,25 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   { print $1 " " $2 " " $3 " " $4 " " $5 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
+# --- MITRE references, for gird-report.ps1 ------------------------------------------------
+# One hashtable per line, then the names of the incidents a scope names, so the report can say which.
+{ rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $2 }'; rows data/mitre.tsv | awk -F '\t' '{ print "M\t" $0 }'; } | awk -F '\t' \
+  -v av="$(sed -n 's/^# attack-version: //p' data/mitre.tsv)" -v lv="$(sed -n 's/^# atlas-version: //p' data/mitre.tsv)" '
+  function list(s, sep,   a, k, i, o) { if (s == "all" || s == "-") return "@()"; k = split(s, a, sep); for (i = 1; i <= k; i++) o = o (i > 1 ? ", " : "") "\047" a[i] "\047"; return "@(" o ")" }
+  function dash(s) { return s == "-" ? "" : s }
+  $1 == "I" { inc[$2] = $3; next }
+  { n++; ln[n] = sprintf("  @{ Word = \047%s\047; Os = \047%s\047; Scope = %s; Fw = \047%s\047; Id = \047%s\047; Name = \047%s\047; Tactics = %s; Rel = \047%s\047; Url = \047%s\047; Note = \047%s\047 }",
+      $2, $3, list($4, ","), $5, dash($6), dash($7), list($8, ","), $9, dash($10), dash($11))
+    if ($4 != "all") { k = split($4, a, ","); for (i = 1; i <= k; i++) if (!(a[i] in want)) { want[a[i]] = 1; wo[++m] = a[i] } } }
+  END {
+    print "# >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it."
+    print "$MitreAttackVersion = \047" av "\047"
+    print "$MitreAtlasVersion = \047" lv "\047"
+    print "$MitreRows = @("; for (i = 1; i <= n; i++) print ln[i]; print ")"
+    printf "$MitreIncidentNames = @{"; for (i = 1; i <= m; i++) printf "%s\047%s\047 = \047%s\047", (i > 1 ? "; " : " "), wo[i], inc[wo[i]]; print " }"
+    print "# <<< mitre"
+  }' > "$WORK/mitre.ps1"
+
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
   awk -v name="$2" -v gen="$3" '
@@ -410,13 +455,18 @@ splice() { # file block-name generated-file
 awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< agents$/ { exit }' gird-check.sh > "$WORK/agents.sh"
 grep -q '^# <<< agents$' "$WORK/agents.sh" || { echo "gird-check.sh has no agents block"; exit 1; }
+awk '/^# >>> shared[: ]/ { on = 1; print "# >>> shared: copied from gird-report.ps1 by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< shared$/ { exit }' gird-report.ps1 > "$WORK/shared.ps1"
+grep -q '^# <<< shared$' "$WORK/shared.ps1" || { echo "gird-report.ps1 has no shared block"; exit 1; }
 awk '/^# >>> owned-walk[: ]/ { on = 1; print "# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< owned-walk$/ { exit }' gird-check.sh > "$WORK/owned-walk.sh"
 grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has no owned-walk block"; exit 1; }
 
 RC=0
-for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
+for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-report.ps1 gird-intune.ps1; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
+  elif [ "$f" = gird-report.ps1 ]; then blocks="mitre"
+  elif [ "$f" = gird-intune.ps1 ]; then blocks="shared"
   else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
