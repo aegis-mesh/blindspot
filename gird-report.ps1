@@ -465,6 +465,22 @@ function Get-MitreRefs($Row) {
   }
 }
 
+# The CSF outcomes a computer's findings support, by the rule section 5 counts Functions with.
+function Get-CsfRefs($Row) {
+  if (-not $Row.Known) { return }
+  $os = 'mac'; if ($Row.Win) { $os = 'win' }
+  $ids = @()
+  foreach ($f in $CsfFunctions) {
+    foreach ($m in $MitreRows) {
+      if ($m.Fw -cne 'csf' -or $m.Rel -cne 'supports' -or @($m.Tactics)[0] -cne $f -or @($Row.Kinds) -cnotcontains $m.Word) { continue }
+      if ($m.Os -cne 'all' -and $m.Os -cne $os) { continue }
+      if ($ids -ccontains $m.Id) { continue }
+      $ids += $m.Id
+      $m
+    }
+  }
+}
+
 # The one home of the truth table in docs/designs/mitre.md, "What could get out". "no" (none found)
 # speaks for the accounts the result read: every one of them read in full, in a fresh, whole result
 # from a run that did not fail. Other profiles on a PC are not in the result and do not change the
@@ -573,7 +589,7 @@ function Set-Result($Row, [string]$Det, [bool]$HasDet, [DateTime]$Now) {
   if ($none -gt 0) { $why += 'no accounts to check' }
   if ($p.More) { $why += 'more on the computer than its result keeps' }
   if ($p.OtherProfiles -gt 0) { $why += "$($p.OtherProfiles) other account" + $(if ($p.OtherProfiles -eq 1) { '' } else { 's' }) + ' on this PC not checked' }
-  if ($p.OldInstall) { $why += 'an older install of Blindspot is still on this Mac: remove its daily item, then its folder' }
+  if ($p.OldInstall) { $why += 'not a finding: an older install of Blindspot is still on this Mac. Remove its daily item, then its folder.' }
   $row.Why = $why -join '; '
   return $row
 }
@@ -1491,6 +1507,7 @@ function Get-ReportPage($D) {
 
   # 05 Summary by technique and function
   [void]$h.Append('<section class="pad" aria-labelledby="s-sum"><div class="sec-head"><span class="num">05</span><h2 id="s-sum">Summary by technique and function</h2></div>')
+  [void]$h.Append('<p class="disclaim">' + (& $e $CsfMeaning) + '</p>')
   $csfOn = @($D.Csf.PSBase.Keys | Where-Object { $D.Csf[$_] -gt 0 })
   if ($D.Techniques.Count -eq 0 -and $csfOn.Count -eq 0) { [void]$h.Append('<p class="muted">No finding relates to a MITRE technique or a NIST CSF function.</p>') }
   else {
@@ -1518,7 +1535,7 @@ function Get-ReportPage($D) {
       }
       [void]$h.Append('</ul></div>')
     }
-    [void]$h.Append('<div class="chart csf"><h3>NIST CSF function</h3><p class="sub">Computers, CSF ' + (& $e $CsfVersion) + '</p><p class="sub">' + (& $e $CsfMeaning) + '</p><ul class="bars">')
+    [void]$h.Append('<div class="chart csf"><h3>NIST CSF function</h3><p class="sub">Computers, CSF ' + (& $e $CsfVersion) + '</p><ul class="bars">')
     foreach ($f in $D.Csf.PSBase.Keys) {
       $w = $D.Csf[$f] / $max * 100; if ($D.Csf[$f] -gt 0 -and $w -lt 1.5) { $w = 1.5 }
       [void]$h.Append('<li class="bar neu"><div class="lbl"><span>' + (& $e $f) + '</span></div><svg viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect width="100" height="8" class="track"/><rect width="' +
@@ -1620,10 +1637,10 @@ function Get-ReportPage($D) {
   foreach ($f in $CsfFunctions) { foreach ($m in $MitreRows) { if ($m.Fw -ceq 'csf' -and $m.Rel -cne 'none' -and @($m.Tactics)[0] -ceq $f -and -not $outcomes.Contains($m.Id)) { $outcomes[$m.Id] = $m } } }
   $fns = @(); foreach ($m in $outcomes.Values) { if ($fns -cnotcontains @($m.Tactics)[0]) { $fns += @($m.Tactics)[0] } }
   $untouched = @($CsfFunctions | Where-Object { $fns -cnotcontains $_ })
-  [void]$h.Append('<div class="blk nist"><h3>NIST Cybersecurity Framework ' + (& $e $CsfVersion) + '</h3><p>Blindspot''s findings help an organisation work toward these CSF outcomes, each quoted from NIST''s text:</p><ul>')
+  [void]$h.Append('<div class="blk nist"><h3>NIST Cybersecurity Framework ' + (& $e $CsfVersion) + '</h3><p>Blindspot''s findings help an organization work toward these CSF outcomes, each quoted from NIST''s text:</p><ul>')
   foreach ($m in $outcomes.Values) { [void]$h.Append('<li><b>' + (& $e $m.Id) + '</b> (' + (& $e (@($m.Tactics) -join ', ')) + '): &quot;' + (& $e $m.Name) + '&quot;</li>') }
   [void]$h.Append('</ul>')
-  if ($untouched.Count -gt 0) { [void]$h.Append('<p>The findings relate to nothing under ' + (& $e ((@($untouched | Select-Object -First ($untouched.Count - 1)) -join ', ') + $(if ($untouched.Count -gt 1) { ' or ' } else { '' }) + $untouched[$untouched.Count - 1])) + '.</p>') }
+  if ($untouched.Count -gt 0) { [void]$h.Append('<p>Blindspot''s findings relate to nothing under ' + (& $e ((@($untouched | Select-Object -First ($untouched.Count - 1)) -join ', ') + $(if ($untouched.Count -gt 1) { ' or ' } else { '' }) + $untouched[$untouched.Count - 1])) + '.</p>') }
   [void]$h.Append('</div>')
   [void]$h.Append('<div class="blk"><h3>How results are handled</h3><dl class="kv">' +
     '<dt>Source</dt><dd>Each computer''s own saved result, read from the MDM''s export. A result holds counts and names from fixed lists and the names of accounts, never a file path, a file''s contents or a key. The full result stays on the computer: to see which files, the person runs Blindspot on their own account.</dd>' +
@@ -1640,15 +1657,19 @@ function Get-ReportPage($D) {
 function Get-ReportCsv($Rows) {
   $csv = New-Object System.Text.StringBuilder
   [void]$csv.AppendLine((@('pc', 'user', 'status', 'why', 'checked_at', 'details', 'intune_last_report', 'output', 'mitre', 'mitre_note', 'mitre_source',
-    'run_without_asking_and_key', 'run_without_asking_key_providers', 'key_in_agent_sessions', 'token_in_mcp_config', 'os', 'source', 'last_seen') | ForEach-Object { ConvertTo-CsvCell $_ }) -join ',')
+    'run_without_asking_and_key', 'run_without_asking_key_providers', 'key_in_agent_sessions', 'token_in_mcp_config', 'os', 'source', 'last_seen',
+    'nist_csf', 'nist_csf_note', 'nist_csf_source') | ForEach-Object { ConvertTo-CsvCell $_ }) -join ',')
   foreach ($r in $Rows) {
     $refs = @()
     foreach ($m in @($r.Refs)) { $t = $FwName[$m.Fw] + ' ' + (Get-RefText $m); if ($refs -cnotcontains $t) { $refs += $t } }
     $note = ''; $src = ''
     if ($refs.Count -gt 0) { $note = $MitreMeaning; $src = $MitreSource }
+    $csf = @(Get-CsfRefs $r | ForEach-Object { $_.Id + ' (' + (@($_.Tactics) -join ', ') + '): ' + $_.Name })
+    $cnote = ''; $csrc = ''
+    if ($csf.Count -gt 0) { $cnote = $CsfMeaning; $csrc = $CsfOwn + ' ' + $CsfCredit }
     $prov = @($r.AgentKeyProviders | ForEach-Object { if ($_) { $_ } else { 'not named' } }) -join ','
     $cells = @($r.PC, $r.User, $r.Status, $r.Why, $r.CheckedAt, $r.Details, $r.LastReport, $r.Output, ($refs -join '; '), $note, $src,
-      $r.AgentKey, $prov, $r.Sessions, $r.McpTokens, $r.OS, $r.Source, $r.LastSeen)
+      $r.AgentKey, $prov, $r.Sessions, $r.McpTokens, $r.OS, $r.Source, $r.LastSeen, ($csf -join '; '), $cnote, $csrc)
     [void]$csv.AppendLine((@($cells | ForEach-Object { ConvertTo-CsvCell ([string]$_) })) -join ',')
   }
   return $csv.ToString()

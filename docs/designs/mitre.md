@@ -80,8 +80,10 @@ figure about the computers read is in sections 1 to 7. `Get-ReportData` works th
   findings use the short label.
 - Section 5, by technique and function: a bar for each technique a finding relates to, with the PCs
   counted once per technique in each relation; a bar for each NIST CSF 2.0 Function the findings
-  relate to, with each PC counted once per Function; then the tactics of those techniques. CSF ids
-  appear only here and in section 8, never on a finding's row.
+  relate to, with each PC counted once per Function; then the tactics of those techniques. On the
+  page, CSF ids appear only here and in section 8, never on a finding's row. The CSV gives each
+  computer's CSF outcomes in `nist_csf`, by the same rule, with the own-mapping sentence and NIST's
+  citation beside them.
 - What could get out: the PCs where an AI agent set to run commands without asking and a key in
   plain text are in the same account (with the providers the value names), the PCs with a key in an
   agent's session files, and the PCs with a token in an MCP config. Each counts what was found, never
@@ -124,10 +126,12 @@ figure about the computers read is in sections 1 to 7. `Get-ReportData` works th
 `data/mitre.tsv` also holds, for each finding word, a `csf` line: the CSF 2.0 Subcategory id, its
 outcome as NIST CSWP 29 Appendix A words it, and its Function and Category, or `none` with the
 reason (`platforms`, `on-open`, `partial`). `tools/gen.sh --check` refuses a word with no `csf` line,
-an id whose Function is not the one named, and a relation other than `supports`. The relation is
+an id whose Function or Category is not the one named, an outcome under Govern, Respond or Recover,
+and a relation other than `supports`. The relation is
 always that a finding helps an organization work toward the outcome on the computers where it was
 found. The report never says an organization meets, misses or complies with the framework, and puts
-NIST's own wording sentence above the first CSF reference. No finding kind shows an outcome is not
+the sentence that a reference does not say whether the organization meets the framework at the top
+of section 5, above the first CSF reference, on every page. No finding kind shows an outcome is not
 achieved: each Protect outcome turns on what the organization authorized or decided, which Blindspot
 cannot see.
 

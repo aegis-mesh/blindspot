@@ -534,6 +534,7 @@ report_file dupname -- "$IW/files/dupc.csv" "$IW/files/dupd.csv"
 report_file dupws -- "$IW/files/dupws.csv"
 report_file winfleet -- "$IW/files/winfleet.csv"
 report_file clearonly -- "$IW/files/clearonly.csv"
+report_file csf -- "$IW/files/csf.csv"
 report_file page -- "$IW/files/page.csv" -Organisation "$(cat "$IW/files/org.txt")"
 report_file pagebare -- "$IW/files/page.csv"
 report_file noname -- "$IW/files/noname.csv"
@@ -640,6 +641,15 @@ else bad "intune: gen.sh --check fails when a finding word has no NIST CSF decis
 gen_copy; awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "keys" && $4 == "csf" { $7 = "Protect,Risk Assessment" } { print }' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
 if [ "$RC" -eq 2 ] && grep -q '^data/mitre.tsv: keys	all	all	csf' "$IW/gen.txt"; then ok "intune: gen.sh --check fails on a CSF id filed under another Function"
 else bad "intune: gen.sh --check fails on a CSF id filed under another Function" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+for _cf in 'GV.OC-01|Govern,Organizational Context' 'RS.MA-01|Respond,Incident Management' 'RC.RP-01|Recover,Incident Recovery Plan Execution'; do
+  _dn="intune: gen.sh --check fails on a CSF outcome under ${_cf#*|}"; _dn=${_dn%%,*}
+  gen_copy; awk -F '\t' -v id="${_cf%%|*}" -v tc="${_cf#*|}" 'BEGIN { OFS = "\t" } $1 == "keys" && $4 == "csf" { $5 = id; $7 = tc } { print }' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+  if [ "$RC" -eq 2 ] && grep -q '^data/mitre.tsv: keys	all	all	csf' "$IW/gen.txt"; then ok "$_dn"; else bad "$_dn" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
+done
+# Every ID.RA-01 line renamed alike, so only the Category's name can refuse it.
+gen_copy; awk -F '\t' 'BEGIN { OFS = "\t" } $4 == "csf" && $5 == "ID.RA-01" { $7 = "Identify,Continuous Monitoring" } { print }' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?
+if [ "$RC" -eq 2 ] && grep -q '^data/mitre.tsv: keys	all	all	csf' "$IW/gen.txt"; then ok "intune: gen.sh --check fails on a CSF Category name that is not its id's"
+else bad "intune: gen.sh --check fails on a CSF Category name that is not its id's" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
 gen_copy; awk '{ print } /^  @\{ Word = .partial.;/ { print "  @{ Word = \047exfil\047; Arg = \047count\047; Level = \047review\047; Label = \047Data sent out\047 }" }' gird-report.ps1 > "$IW/gen/gird-report.ps1"; gen_check; RC=$?
 if [ "$RC" -eq 2 ] && grep -q 'no attack line for the finding word exfil' "$IW/gen.txt"; then ok "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for"
 else bad "intune: gen.sh --check fails when the tool learns a finding word data/mitre.tsv has no line for" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi

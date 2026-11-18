@@ -322,6 +322,20 @@ PAGE = [
     ('PG-NONE', 'hal@example.com', '', 'pending'),
 ]
 CLR = 'v1 clear %s | asha: clear' % T0
+# The NIST CSF column of the CSV: (name, value, the ids it carries). platforms, on-open and partial support
+# no outcome, and a result that was not read carries none.
+CSF = [
+    ('CSF-KEYS', 'v1 act %s | asha: act keys 1 openai' % T0, 'ID.RA-01'),
+    ('CSF-TOOLS', 'v1 review %s | asha: review update-tools amazonq' % T0, 'ID.RA-01 PR.PS-02'),
+    ('CSF-MIX', 'v1 act %s | asha: act incidents tanstack; keys 1 aws | bo: review update mistral' % T0, 'ID.RA-01 PR.PS-02 DE.CM-09'),
+    ('CSF-ONOPEN', 'v1 review %s | asha: review on-open 2' % T0, ''),
+    ('CSF-PLATFORMS', 'v1 review %s | asha: review platforms opencode' % T0, ''),
+    ('CSF-NEAR', 'v1 not_checked %s | asha: not_checked platforms railway; on-open 1; partial' % T0, ''),
+    ('CSF-PARTIAL', 'v1 not_checked %s | asha: not_checked partial' % T0, ''),
+    ('CSF-PARTIAL-KEYS', 'v1 act %s | asha: act keys 1 aws; partial' % T0, 'ID.RA-01'),
+    ('CSF-CLEAR', 'v1 clear %s | asha: clear' % T0, ''),
+    ('CSF-NEWER', 'v9 act %s | asha: act keys 1 openai' % T0, ''),
+]
 ACT = 'v1 act %s | asha: act keys 1' % T0
 OEM = 'To be filled by O.E.M.'
 DUPS = {
@@ -367,6 +381,8 @@ def write_files(d):
     with open(os.path.join(d, 'org.txt'), 'w') as f: f.write(HOSTILE_ORG)
     with open(os.path.join(d, 'clearonly.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
+    with open(os.path.join(d, 'csf.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\n' + ''.join('%s,%s\n' % (n, csv_cell(v)) for n, v, _ in CSF))
     with open(os.path.join(d, 'locked.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
     with open(os.path.join(d, 'semicolon-utf8bom.csv'), 'w', encoding='utf-8-sig', newline='') as f:
@@ -948,7 +964,7 @@ def main():
         check('a fully read PC with nothing is no, other profiles on it or not', all(by[n]['key_in_agent_sessions'] == 'no' and by[n]['token_in_mcp_config'] == 'no' for n in ('M-MAC', 'M-REVIEW', 'M-WIPER', 'M-NOPROV', 'M-CLEAR')))
         check('the wiper is labelled by what the result supports: its files or folders, not an install', 'Files or folders of the gh-token-monitor wiper' in html and 'installed' not in html)
         check('the CSV keeps its first columns and adds the new ones after them', raw.splitlines()[0].lstrip('\ufeff') ==
-              '"pc","user","status","why","checked_at","details","intune_last_report","output","mitre","mitre_note","mitre_source","run_without_asking_and_key","run_without_asking_key_providers","key_in_agent_sessions","token_in_mcp_config","os","source","last_seen"',
+              '"pc","user","status","why","checked_at","details","intune_last_report","output","mitre","mitre_note","mitre_source","run_without_asking_and_key","run_without_asking_key_providers","key_in_agent_sessions","token_in_mcp_config","os","source","last_seen","nist_csf","nist_csf_note","nist_csf_source"',
               raw.splitlines()[0])
         check('every CSV row with a reference carries the MITRE sentence and the attribution, and only those',
               all((r['mitre'] != '') == r['mitre_note'].startswith(MEANING_CSV) == ('The MITRE Corporation' in r['mitre_source']) for r in rows)
@@ -998,8 +1014,29 @@ def main():
               and got[2].get('MAC-ACT', {}).get('source') == 'jamf.csv' and 'intune.csv (' in got[3] and 'jamf.csv (13)' in got[3]
               and 'Each Windows result covers one account' in got[3] and 'Each Mac result covers every local account' in got[3], out[-300:])
         got, out = load_out(w, 'clearonly')
+        csfmean = 'These NIST Cybersecurity Framework (CSF) 2.0 references are Blindspot&#39;s own mapping, not NIST&#39;s.'
+        ch = got[3] if got else ''
+        check('a page with no finding still says, once and above every CSF reference, that it does not say whether the organization meets the framework',
+              ch.count(csfmean) == 1 and 'does not say whether the organization meets the framework' in ch and -1 < ch.find(csfmean) <= ch.find('CSF')
+              and ch.find(csfmean) < ch.find('<div class="blk nist">') and re.search(r'\bID\.RA-01\b', section(ch, '08')) is not None, out[-300:])
         check('a report with no finding lists no tactic as found', got is not None and '<li>' not in tactics(got[3]) and 'No finding in this report relates to a MITRE tactic.' in got[3], out[-300:])
         check('a report with no repeated name or device id has no line about repeats', got is not None and 'more than once across the rows' not in got[3] and 'Read 1 computer ' in out, out[-300:])
+        got, out = load_out(w, 'csf')
+        check('the CSF file is read', got is not None, out[-300:])
+        if got:
+            ids = lambda r: ' '.join(re.findall(r'(?:^|; )([A-Z]{2}\.[A-Z]{2}-[0-9]{2}) \(', r.get('nist_csf', '')))
+            for n, v, want in CSF:
+                r = got[2].get(n, {})
+                check('the CSV names the CSF outcomes the page counts for %s: %s' % (n, want or 'none'), ids(r) == want
+                      and (r.get('nist_csf_note', '') != '') == (r.get('nist_csf_source', '') != '') == (want != ''), (r.get('status'), r.get('nist_csf'), r.get('nist_csf_note', '')[:40]))
+            r = got[2].get('CSF-TOOLS', {})
+            check('a CSF cell gives the id, its Function and Category, and NIST\'s outcome, with Blindspot\'s own-mapping sentence and NIST\'s citation',
+                  r.get('nist_csf') == 'ID.RA-01 (Identify, Risk Assessment): Vulnerabilities in assets are identified, validated, and recorded; PR.PS-02 (Protect, Platform Security): Software is maintained, replaced, and removed commensurate with risk'
+                  and 'does not say whether the organization meets the framework' in r.get('nist_csf_note', '') and 'Republished courtesy of the National Institute of Standards and Technology.' in r.get('nist_csf_source', '')
+                  and 'not reviewed or endorsed by NIST' in r.get('nist_csf_source', ''), r)
+            fn = dict((a, int(b)) for a, b in re.findall(r'<li class="bar neu"><div class="lbl"><span>([A-Za-z]+)</span></div><svg[^>]*>(?:<rect[^>]*/>)+</svg><span class="val">([0-9]+)</span></li>', got[3]))
+            byfn = dict((f, sum(1 for _, _, x in CSF if p in x)) for f, p in (('Identify', 'ID.'), ('Protect', 'PR.'), ('Detect', 'DE.')))
+            check('the CSV and the page\'s CSF chart count the same computers per Function', fn == byfn, (fn, byfn))
         got, out = load_out(w, 'paths')
         check('the paths file is read', got is not None, out[-300:])
         if got:
@@ -1068,8 +1105,8 @@ def main():
         near = (nist.group(0) if nist else '') + (scope.group(0) if scope else '')
         check('every CSF reference helps work toward an outcome: none says comply, fail or gap, and NIST\'s sentence comes first, once',
               nist is not None and scope is not None and not re.search(r'(?i)\bcompl(?:y|ies|iance|iant)|\bfail|\bgap', near) and html.count(csfmean) == 1
-              and html.find(csfmean) < html.find('<li class="bar neu">') < html.find('<div class="blk nist">') and 'help an organisation work toward' in scope.group(0)
-              and 'The findings relate to nothing under Govern, Respond or Recover.' in scope.group(0)
+              and -1 < html.find(csfmean) <= html.find('CSF') and html.find(csfmean) < html.find('<li class="bar neu">') < html.find('<div class="blk nist">') and 'help an organization work toward' in scope.group(0)
+              and '<p>Blindspot\'s findings relate to nothing under Govern, Respond or Recover.</p>' in scope.group(0) and not re.search(r'(?i)organis', html + plain)
               and '<b>ID.RA-01</b> (Identify, Risk Assessment): &quot;Vulnerabilities in assets are identified, validated, and recorded&quot;' in scope.group(0), near[:300])
         check('the page carries NIST\'s citation and courtesy line, and says the CSF mapping is Blindspot\'s own',
               '<li>National Institute of Standards and Technology (2024) The NIST Cybersecurity Framework (CSF) 2.0. (National Institute of Standards and Technology, Gaithersburg, MD), NIST Cybersecurity White Paper (CSWP) NIST CSWP 29. https://doi.org/10.6028/NIST.CSWP.29 Republished courtesy of the National Institute of Standards and Technology.</li>' in section(html, '08')
@@ -1136,8 +1173,13 @@ def main():
                 r = by.get('FORM-%03d' % i, {})
                 check('writer form: %s' % label, r.get('status') == st, 'wanted %s, got %s (%s) for %s' % (st, r.get('status'), r.get('why'), value[:160]))
             old = [(label, by.get('FORM-%03d' % i, {}).get('why', '')) for i, (st, label, value) in enumerate(rows) if not label.startswith('not written') and ' | old-install' in value]
-            check('a result naming an older install says so in its reason, and none other does', old and all('older install of Blindspot is still on this Mac' in w for _, w in old)
+            tidy = 'not a finding: an older install of Blindspot is still on this Mac. Remove its daily item, then its folder.'
+            check('a result naming an older install says so in its reason, as a tidy-up and not a finding, and none other does', old and all(tidy in w for _, w in old)
                   and not [i for i, (st, label, value) in enumerate(rows) if ' | old-install' not in value and 'older install' in by.get('FORM-%03d' % i, {}).get('why', '')], old)
+            oc = [i for i, (st, label, value) in enumerate(rows) if not label.startswith('not written') and ' | old-install' in value and st == 'clear']
+            check('a clear Mac with an older install stays Clear and green, its line saying it is not a finding',
+                  oc and all(every_row(got[3], 'FORM-%03d' % i) == ('clear', 'Clear') and 'Not a finding: an older install' in section(got[3], '07') for i in oc),
+                  [(i, every_row(got[3], 'FORM-%03d' % i)) for i in oc])
     elif mode == 'silent':
         got, out = load_out(w, 'silent')
         check('the report with a silent group saves its files', got is not None, out[-300:])
