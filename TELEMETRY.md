@@ -6,7 +6,7 @@ When the script finishes, it sends one **report** to `https://gird.ai/api/check`
 
 Turn all of it off, the totals request included, with `--offline` or `DO_NOT_TRACK=1`. `gird-fleet.sh`, the check IT runs as root on every account ([docs/fleet.md](docs/fleet.md)), makes no request at all, and nor do the account checks it starts: its result stays on the Mac for the MDM to read.
 
-Everything is built in one place near the end of [`gird-check.sh`](gird-check.sh), so you can read exactly what goes. Every field is a number or comes from a fixed list or a strict pattern. The fixed lists of agents, MCP apps, well-known MCP servers and kinds of file are files in [`data/`](data/) (`agents.tsv`, `mcp-clients.tsv`, `mcp-servers.tsv`, `key-places.tsv`), which `tools/gen.sh` writes into both scripts. The server applies the same rules and drops anything else.
+Everything is built in one place near the end of [`gird-check.sh`](gird-check.sh), so you can read exactly what goes. Every field is a number or comes from a fixed list or a strict pattern. The fixed lists of agents, MCP apps, well-known MCP servers, kinds of file and the terminals named by `TERM_PROGRAM` are files in [`data/`](data/) (`agents.tsv`, `mcp-clients.tsv`, `mcp-servers.tsv`, `key-places.tsv`, `term-programs.tsv`), which `tools/gen.sh` writes into both scripts. The server applies the same rules and drops anything else.
 
 ## Never sent
 

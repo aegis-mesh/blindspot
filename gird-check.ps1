@@ -7481,9 +7481,17 @@ switch (([string]$archRaw).ToUpperInvariant()) { 'ARM64' { $ARCH_ID = 'arm64' } 
 $MODEL = ''
 if ($env:WT_SESSION) { $TERMAPP = 'windows-terminal' }
 else {
-  switch ($env:TERM_PROGRAM) {
-    'vscode' { $TERMAPP = 'vscode' } 'WezTerm' { $TERMAPP = 'wezterm' } 'Hyper' { $TERMAPP = 'hyper' } 'tmux' { $TERMAPP = 'tmux' }
-    'Apple_Terminal' { $TERMAPP = 'terminal' } 'iTerm.app' { $TERMAPP = 'iterm2' } 'WarpTerminal' { $TERMAPP = 'warp' } 'ghostty' { $TERMAPP = 'ghostty' }
+  switch -CaseSensitive ($env:TERM_PROGRAM) {
+# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it.
+    'Apple_Terminal' { $TERMAPP = 'terminal' }
+    'iTerm.app' { $TERMAPP = 'iterm2' }
+    'vscode' { $TERMAPP = 'vscode' }
+    'WarpTerminal' { $TERMAPP = 'warp' }
+    'ghostty' { $TERMAPP = 'ghostty' }
+    'WezTerm' { $TERMAPP = 'wezterm' }
+    'Hyper' { $TERMAPP = 'hyper' }
+    'tmux' { $TERMAPP = 'tmux' }
+# <<< term-programs
     default { if ($env:TERM_PROGRAM) { $TERMAPP = 'other' } elseif ($OnWindows) { $TERMAPP = 'conhost' } else { $TERMAPP = 'unknown' } }
   }
 }

@@ -1,0 +1,14 @@
+# The terminal ids the report sends (terminal, TELEMETRY.md) for what TERM_PROGRAM names, in
+# gird-check.sh where macOS gives no app id, and in gird-check.ps1 outside Windows Terminal. Any other
+# value is other. One line each, tab separated. After editing, run: bash tools/gen.sh
+#   value  TERM_PROGRAM as the terminal sets it, in its case
+#   id     the id sent: lowercase letters, digits and -
+# value	id
+Apple_Terminal	terminal
+iTerm.app	iterm2
+vscode	vscode
+WarpTerminal	warp
+ghostty	ghostty
+WezTerm	wezterm
+Hyper	hyper
+tmux	tmux

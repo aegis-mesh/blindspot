@@ -8275,8 +8275,16 @@ case "${__CFBundleIdentifier:-}" in
   net.kovidgoyal.kitty) TERMAPP=kitty ;; com.github.wez.wezterm) TERMAPP=wezterm ;; org.alacritty|io.alacritty) TERMAPP=alacritty ;;
   co.zeit.hyper) TERMAPP=hyper ;; com.jetbrains.*) TERMAPP=jetbrains ;;
   *) case "${TERM_PROGRAM:-}" in
-       Apple_Terminal) TERMAPP=terminal ;; iTerm.app) TERMAPP=iterm2 ;; vscode) TERMAPP=vscode ;; WarpTerminal) TERMAPP=warp ;;
-       ghostty) TERMAPP=ghostty ;; WezTerm) TERMAPP=wezterm ;; Hyper) TERMAPP=hyper ;; tmux) TERMAPP=tmux ;;
+# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it.
+       Apple_Terminal) TERMAPP=terminal ;;
+       iTerm.app) TERMAPP=iterm2 ;;
+       vscode) TERMAPP=vscode ;;
+       WarpTerminal) TERMAPP=warp ;;
+       ghostty) TERMAPP=ghostty ;;
+       WezTerm) TERMAPP=wezterm ;;
+       Hyper) TERMAPP=hyper ;;
+       tmux) TERMAPP=tmux ;;
+# <<< term-programs
        '') TERMAPP=unknown ;; *) TERMAPP=other ;;
      esac ;;
 esac

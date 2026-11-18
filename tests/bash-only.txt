@@ -311,3 +311,6 @@ an agent path from a place the scripts do not know	tools/gen.sh is one bash tool
 an MCP config of an app not in the list	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an MCP server alias that is another server's id	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an account-run line not in data/account-run.tsv fails gen.sh --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh --check finds the account-run lines at any indentation	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a tool's own script named by a path that is not plain	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a terminal id that is not lowercase	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

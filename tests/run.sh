@@ -99,6 +99,13 @@ sed 's/^    echo "moved=\$_moved"$/    echo "folders_moved=$_moved"/' gird-check
 if cmp -s gird-check.sh "$WORK/ar/gird-check.sh"; then bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ar" && bash tools/gen.sh --check > "$WORK/ar.txt" 2>&1) && grep -q 'gird-check.sh --account-run prints' "$WORK/ar.txt"; then ok "an account-run line not in data/account-run.tsv fails gen.sh --check"
 else bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "$(cat "$WORK/ar.txt")"; fi
+# The printers' lines are found at any indentation: printers moved one level in still match.
+mkdir -p "$WORK/ari"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ari/"
+sed 's/^    echo "\([a-z_]*\)=/      echo "\1=/' gird-check.sh > "$WORK/ari/gird-check.sh"; sed "s/^    \([\'\"]\)\([a-z_]*\)=/  \1\2=/" gird-check.ps1 > "$WORK/ari/gird-check.ps1"
+(cd "$WORK/ari" && PWSH=/nonexistent bash tools/gen.sh --check > "$WORK/ari.txt" 2>&1); _ari=$?
+if cmp -s gird-check.sh "$WORK/ari/gird-check.sh" || cmp -s gird-check.ps1 "$WORK/ari/gird-check.ps1"; then bad "gen.sh --check finds the account-run lines at any indentation" "the edit did not apply"
+elif [ "$_ari" -eq 3 ] && ! grep -q 'account-run prints\|-AccountRun prints' "$WORK/ari.txt"; then ok "gen.sh --check finds the account-run lines at any indentation"
+else bad "gen.sh --check finds the account-run lines at any indentation" "$(cat "$WORK/ari.txt")"; fi
 
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
@@ -3138,6 +3145,8 @@ gen_refuses "an MCP server alias that is another server's id" mcp-servers.tsv "m
 gen_refuses "a folder variable's folder outside the home" folder-vars.tsv "ZZ_DIR${T}tool${T}/opt/zz${T}-${T}-"
 gen_refuses "a folder variable's Windows folder with a \$" folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}{LOCALAPPDATA}/\$x${T}-"
 gen_refuses "a tool's own script outside its folder"     folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}-${T}../x.sh"
+gen_refuses "a tool's own script named by a path that is not plain" tool-scripts.tsv "opt/../nvm.sh${T}note"
+gen_refuses "a terminal id that is not lowercase"        term-programs.tsv "MadeTerm${T}Made"
 gen_refuses "a platform whose incident is not a leak"   platforms.tsv "axios${T}X${T}x${T}~/.x/${T}CLI found${T}advice${T}summary"
 gen_refuses "a leak that no platform names"           incidents.tsv "madeleak${T}Made Leak${T}October 2026${T}a made-up leak${T}https://example.com/leak${T}leak"
 gen_refuses "an npm package of a platform leak"       bad-npm.tsv "made-pkg${T}1.0.0${T}zeabur"
