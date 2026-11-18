@@ -1,14 +1,14 @@
 # Blindspot with Iru
 
-**Untested:** this page has not yet been run end to end on a real Mac. Steps and limits were checked
-on 2026-10-24 against
+**Untested:** this page has not yet been run end to end on a real Mac with Iru. Steps and limits were
+checked on 2026-10-24 against
 [Iru's Custom Scripts guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview).
 
 Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
 about a finding.
 
-You add two Custom Script library items: one installs the scripts once, the other runs it daily.
-Iru records the daily run's output, so its summary line is the result.
+You add one Custom Script library item that runs the file daily. Iru records its output, so its
+summary line is the result. There is nothing to install first.
 
 ## Full Disk Access
 
@@ -22,34 +22,30 @@ codesign -dr - "<path to the Iru agent app>"
 Never grant it to `/bin/bash`. Check the result either way: each account's `protected_folders` is
 `checked` once access works.
 
-## Install it once
-
-1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
-   starting the second line of `gird-fleet.sh` (`--deadline=1800` for Iru), each pasted between its
-   marker lines in the install script. This install step has not yet been run end to end on a real
-   Mac.
-   Optional: add the lines from "Install ripgrep (optional)" in [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm)
-   to its end, so large agent session stores take seconds per account rather than minutes.
-2. Add a Custom Script library item named `Blindspot install`
-   ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)),
-   and assign it to your Blueprints.
-3. In **Execution Frequency**, choose **Install once per device**.
-4. Paste the install script into the **Audit Script** field, and select **Save**.
-
 ## Run it daily
 
-1. Add a second Custom Script library item named `Blindspot check`, assigned to the same
-   Blueprints.
-2. In **Execution Frequency**, choose **Run daily**.
-3. Paste only these lines into the **Audit Script** field. Leave **Remediation Script** empty:
+1. Download `blindspot-fleet.sh` from a tagged release and check its SHA-256 against the release
+   notes ([docs/fleet.md](../fleet.md#1-try-it-on-your-own-mac)). Do not edit it.
+2. Add a Custom Script library item named `Blindspot`
+   ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)),
+   and assign it to your Blueprints.
+3. In **Execution Frequency**, choose **Run daily**.
+4. Paste the whole file into the **Audit Script** field. Leave **Remediation Script** empty.
+5. Select **Save**.
 
-   ```sh
-   #!/bin/bash
-   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
-   ```
+With no options, it runs `--all-users --exit-zero --summary-to-stdout --deadline=3000`. Iru's guide
+states no time limit for a script, and a Custom Script takes no parameters, so the file runs as it is.
 
-4. Select **Save**.
+Optional: to read agent sessions with ripgrep, add a second Custom Script, **Install once per
+device**, with the lines from "ripgrep (optional)" in
+[docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) as its audit script.
+
+## Moving from the two-file install
+
+If you set Blindspot up with `Blindspot install` and `Blindspot check` library items, first remove
+`Blindspot check` from your Blueprints, then add the item above, and remove `Blindspot install`.
+Then remove the old files as [docs/fleet.md](../fleet.md#moving-from-two-files) says. Until they are
+gone, the summary line ends `old_install=yes`.
 
 ## What you should see
 
@@ -61,11 +57,10 @@ blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:1
 
 The word after `blindspot` is the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
 [docs/fleet.md](../fleet.md#4-read-the-results)). The status reads **Pass** whenever the check
-finished. **Error** means it could not run safely (`failed`); a missing summary line also means
-not checked.
+finished. **Error** means it could not run safely or refused to start (`failed`, the reason in the
+output); a missing summary line also means not checked.
 
-To have every Mac that is not clear read **Error**, leave out `--exit-zero`: every outcome except
-`clear` then exits non-zero.
+A finding still reads **Pass**: the word after `blindspot` is what to filter on.
 
 ## Iru's limits
 
@@ -76,8 +71,9 @@ Checked 2026-10-24:
 - Standard output and standard error are kept in the script's audit information.
 - An audit script that exits 0 reads **Pass**; any other exit code reads **Error** and starts the
   remediation script.
-- Iru's guide does not state a time limit or a size limit for a script. `--deadline=1800` aims to finish the
-  check within 30 minutes; change it to suit you.
+- Iru's guide does not state a time limit or a size limit for a script, or where it writes the script
+  before running it. The file is about 590 KB. If the output says `must be owned by root and
+  writable by no one else`, it names the folder Iru wrote the script in; please report it.
 
 ## Seeing all your Macs, all the time
 
