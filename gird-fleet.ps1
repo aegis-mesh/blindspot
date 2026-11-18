@@ -29,7 +29,7 @@ param(
 # allows come before this check. A PC that can't be checked never reads clear.
 if ($ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') {
   $at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm')
-  Write-Output "v1 failed $($at)Z | reason=language_mode"
+  Write-Output "v1 failed $($at)Z reason=language_mode"
   if ($MacExitCodes -or ($Rest -contains '--mac-exit-codes')) { exit 13 }
   exit 1
 }
@@ -144,7 +144,7 @@ if ($OnWindows) {
     if ($k) { foreach ($n in $k.GetSubKeyNames()) { if ($n -cmatch '^S-1-(5-21|12-1)-[0-9-]+$' -and $n -ne $FlSid) { $FlOther++ } }; $k.Close() }
     $base.Close()
   } catch { }
-} elseif ($env:GIRD_CHECK_FLEET_PROFILES -match '^[0-9]{1,4}$') { $FlOther = [int]$env:GIRD_CHECK_FLEET_PROFILES }
+} elseif ($FlTest -and $env:GIRD_CHECK_FLEET_PROFILES -match '^[0-9]{1,4}$') { $FlOther = [int]$env:GIRD_CHECK_FLEET_PROFILES }
 
 $FlOs = 'other'
 if ($OnWindows) {
@@ -221,9 +221,15 @@ function Proc-Tree([int]$root) {
   if ($OnWindows) {
     try { foreach ($p in (Get-CimInstance -ClassName Win32_Process -Property ProcessId, ParentProcessId -ErrorAction Stop)) { $pp = [int]$p.ParentProcessId; if (-not $kids.ContainsKey($pp)) { $kids[$pp] = New-Object System.Collections.Generic.List[int] }; $kids[$pp].Add([int]$p.ProcessId) } } catch { }
   } else {
-    $psb = '/bin/ps'; if (-not [IO.File]::Exists($psb)) { $psb = '/usr/bin/ps' }
-    try { foreach ($l in (& $psb -A -o 'pid=' -o 'ppid=' 2>$null)) { $f = ([string]$l).Trim() -split '\s+'; if ($f.Count -eq 2) { $pp = [int]$f[1]; if (-not $kids.ContainsKey($pp)) { $kids[$pp] = New-Object System.Collections.Generic.List[int] }; $kids[$pp].Add([int]$f[0]) } } } catch { }
+    $pg = '/usr/bin/pgrep'; if (-not [IO.File]::Exists($pg)) { $pg = '/bin/pgrep' }
+    $q = New-Object System.Collections.Generic.List[int]; $q.Add($root); $i = 0
+    while ($i -lt $q.Count -and $i -lt 10000) {
+      $c = $q[$i]; $kids[$c] = New-Object System.Collections.Generic.List[int]
+      try { foreach ($l in (& $pg -P $c 2>$null)) { if ([string]$l -match '^\s*([0-9]+)\s*$') { $kids[$c].Add([int]$Matches[1]); $q.Add([int]$Matches[1]) } } } catch { }
+      $i++
+    }
   }
+
   $all = New-Object System.Collections.Generic.List[int]; $all.Add($root); $i = 0
   while ($i -lt $all.Count) { $c = $all[$i]; if ($kids.ContainsKey($c)) { foreach ($x in $kids[$c]) { if ($x -ne $c -and -not $all.Contains($x)) { $all.Add($x) } } }; $i++ }
   , $all
@@ -262,7 +268,7 @@ function Run-Account([int]$limit) {
   $r = @{ Bytes = (New-Object byte[] 0); Timeout = $false; Left = $false; Started = $false; Exited = $false; Why = 'start' }
   $exe = ''
   if ($OnWindows) { $exe = J $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe' }
-  elseif ($env:GIRD_CHECK_FLEET_POWERSHELL) { $exe = $env:GIRD_CHECK_FLEET_POWERSHELL }
+  elseif ($FlTest -and $env:GIRD_CHECK_FLEET_POWERSHELL) { $exe = $env:GIRD_CHECK_FLEET_POWERSHELL }
   $argv = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $script:FlCheck, '-AccountRun', "--account-seconds=$limit")
   $psi = New-Object Diagnostics.ProcessStartInfo
   if ($FlTest -and $env:GIRD_CHECK_FLEET_LAUNCH) { $psi.FileName = $env:GIRD_CHECK_FLEET_LAUNCH; $argv = @($exe) + $argv } else { $psi.FileName = $exe }
@@ -407,13 +413,13 @@ if ($FlNotChecked) {
   if ($ul.Count -gt 0) { $inv.Add("update $(Commas $ul)") }
   if ($FA['possible']) { $upd = $true; $inv.Add("possible $(Commas (Words $FA['possible']))") }
   # Markers this person owns in %ProgramData%: any account can leave a file there, so a possible sign.
-  if ($FA['tmp_marks']) { $upd = $true; $inv.Add("programdata-marks $(Commas (Words $FA['tmp_marks']))") }
+  if ($FA['tmp_marks']) { $upd = $true; $inv.Add("tmp-marks $(Commas (Words $FA['tmp_marks']))") }
   $complete = -not ($FA['sessions_partial'] -eq '1' -or [int]$FA['not_read'] -gt 0 -or $stopped)
   if ($act) { $AccOut = 'act' } elseif (-not $complete) { $AccOut = 'not_checked' } elseif ($upd) { $AccOut = 'review' } else { $AccOut = 'clear' }
   switch ($AccOut) { 'act' { $N_ACT = 1 } 'review' { $N_UPD = 1 } 'not_checked' { $N_NC = 1 } }
   if (-not $complete) { $inv.Add('partial') }
   $extra = ''; if ($stopped) { $extra += ',"stopped":"time_limit"' }; if ($FlLeft) { $extra += ',"processes_left":true' }
-  $Row = "{""account"":""$FlShown"",""complete"":$(Json-Bool $complete),""outcome"":""$AccOut"",""agents"":$(Json-List (Words $FA['agents'])),""agents_run_without_asking"":$(Json-List (Words $FA['yolo'])),""tools_to_update"":$(Json-List (Words $FA['tools'])),""mcp_servers"":$($FA['mcp_servers']),""mcp_token_files"":$($FA['mcp_token_files']),""key_files"":$($FA['key_files']),""key_providers"":$(Json-List (Words $FA['key_providers'])),""history_keys"":$($FA['history_keys']),""session_files_with_keys"":$($FA['session_files']),""allow_list_keys"":$($FA['allow_list_keys']),""ssh_keys_no_passphrase"":$($FA['ssh_open']),""authorized_keys_links"":$($FA['ak_links']),""planted_files"":$($FA['planted']),""possible_signs"":$(Json-List (Words $FA['possible'])),""project_settings_on_open"":$($FA['on_open']),""files_to_read"":$($FA['to_read']),""versions_to_update"":$(Json-List (Words $FA['updates'])),""wiper"":$(Json-Bool ($FA['wiper'] -eq '1')),""lockfile_only_incidents"":$(Json-List (Words $FA['lock_only'])),""extensions_to_remove"":$(Json-List (Words $FA['remove'])),""platforms_found"":$(Json-List (Words $FA['platforms'])),""files_not_checked"":$($FA['not_read']),""agent_folders_moved"":false,""programdata_markers"":$(Json-List (Words $FA['tmp_marks'])),""sessions_partly_checked"":$(Json-Bool ($FA['sessions_partial'] -eq '1')),""protected_folders"":""checked"",""session_engine"":""$($FA['engine'])""$extra,""incidents"":$(Json-Incidents (Words $FA['incidents']))}"
+  $Row = "{""account"":""$FlShown"",""complete"":$(Json-Bool $complete),""outcome"":""$AccOut"",""agents"":$(Json-List (Words $FA['agents'])),""agents_run_without_asking"":$(Json-List (Words $FA['yolo'])),""tools_to_update"":$(Json-List (Words $FA['tools'])),""mcp_servers"":$($FA['mcp_servers']),""mcp_token_files"":$($FA['mcp_token_files']),""key_files"":$($FA['key_files']),""key_providers"":$(Json-List (Words $FA['key_providers'])),""history_keys"":$($FA['history_keys']),""session_files_with_keys"":$($FA['session_files']),""allow_list_keys"":$($FA['allow_list_keys']),""ssh_keys_no_passphrase"":$($FA['ssh_open']),""authorized_keys_links"":$($FA['ak_links']),""planted_files"":$($FA['planted']),""possible_signs"":$(Json-List (Words $FA['possible'])),""project_settings_on_open"":$($FA['on_open']),""files_to_read"":$($FA['to_read']),""versions_to_update"":$(Json-List (Words $FA['updates'])),""wiper"":$(Json-Bool ($FA['wiper'] -eq '1')),""lockfile_only_incidents"":$(Json-List (Words $FA['lock_only'])),""extensions_to_remove"":$(Json-List (Words $FA['remove'])),""platforms_found"":$(Json-List (Words $FA['platforms'])),""files_not_checked"":$($FA['not_read']),""agent_folders_moved"":false,""shared_tmp_markers"":$(Json-List (Words $FA['tmp_marks'])),""shared_tmp_wiper_logs"":false,""sessions_partly_checked"":$(Json-Bool ($FA['sessions_partial'] -eq '1')),""protected_folders"":""checked"",""session_engine"":""$($FA['engine'])""$extra,""incidents"":$(Json-Incidents (Words $FA['incidents']))}"
   $AccInv = "$($FlShown): $AccOut"; if ($inv.Count -gt 0) { $AccInv += ' ' + ($inv -join '; ') }
 }
 
@@ -423,7 +429,7 @@ if ($FlNotChecked) {
 $MAgents = New-Object System.Collections.Generic.List[string]; $MInc = New-Object System.Collections.Generic.List[string]; $MPoss = New-Object System.Collections.Generic.List[string]
 $PF = @(); $PD = ''
 if ($OnWindows) { $PF = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }; $PD = $env:ProgramData }
-else { if ($env:GIRD_CHECK_FLEET_PROGRAMFILES) { $PF = @($env:GIRD_CHECK_FLEET_PROGRAMFILES) }; $PD = $env:GIRD_CHECK_FLEET_PROGRAMDATA }
+elseif ($FlTest -and ($env:GIRD_CHECK_FLEET_PROGRAMFILES -or $env:GIRD_CHECK_FLEET_PROGRAMDATA)) { $PF = @($env:GIRD_CHECK_FLEET_PROGRAMFILES) | Where-Object { $_ }; $PD = $env:GIRD_CHECK_FLEET_PROGRAMDATA }
 $perUser = (J $LocalAppData 'Programs') + $Sep
 foreach ($a in $Agents) {
   foreach ($p in $a[2]) {
@@ -478,13 +484,14 @@ function Build-Text {
   if ($script:FlReason) { $script:SummaryLine += " reason=$($script:FlReason)" }
   # The inventory value: one line, at most 2,048 characters (what Intune keeps of a script's output),
   # no path, file name or key. Too long, the account keeps its outcome, and an act account its
-  # gh-token-monitor and incidents, and the value ends with +more; the saved file has the rest.
+  # gh-token-monitor and incidents, and the value ends with +more; the saved file has the rest. The
+  # head is fixed: the outcome, the time, other_profiles, then reason on a failed result.
   $head = "v1 $($script:Outcome) $($FlAt.Substring(0, 16))Z other_profiles=$FlOther"
+  if ($script:FlReason) { $head += " reason=$($script:FlReason)" }
   $tail = ''
   if ($MOut -ne 'clear') {
     $tail = " | machine: $MOut"; if ($MInc.Count -gt 0) { $tail += " incidents $(Commas $MInc)" }; if ($MPoss.Count -gt 0) { $tail += "; possible $(Commas $MPoss)" }
   }
-  if ($script:FlReason) { $tail += " | reason=$($script:FlReason)" }
   $v = "$head | $script:AccInv$tail"
   if ($v.Length -gt 2048) {
     $key = "$($FlShown): $AccOut"

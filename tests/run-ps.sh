@@ -3516,6 +3516,298 @@ report_of "$WORK/report-winprof.json" winprof GIRD_CHECK_API="$API" --
 has    "Windows: key_places puts PowerShell's profiles in shell_rc" '"shell_rc":2' "$WORK/report-winprof.json"
 hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|winp|_netrc' "$WORK/report-win.json"
 
+echo "fleet mode on Windows (gird-fleet.ps1)"
+# The suites run off Windows. GIRD_CHECK_FLEET_TEST lets gird-fleet.ps1 run there, GIRD_CHECK_FLEET_POWERSHELL
+# stands in for Windows PowerShell, and GIRD_CHECK_FLEET_LAUNCH names tests/fleet-launch-ps.sh, which records
+# what gird-fleet.ps1 starts and can make the account run misbehave ($FW/mode). gird-fleet.ps1 reads them only
+# off Windows. The account is the person running the tests.
+FW=$WORK/fleetw; mkdir -p "$FW"
+FLEETPS=$PWD/gird-fleet.ps1; FWL=$PWD/tests/fleet-launch-ps.sh; FWFLAT=$PWD/tests/fleet-flat.py
+FA=$(id -un); printf '%s' "$FA" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' || FA=invalid-name
+WINONLY=""; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) WINONLY="needs Windows" ;; esac
+fw_home() { mkdir -p "$FW/$1/AppData/Local/Temp" "$FW/$1/AppData/Roaming"; }
+fw_run() { # out-prefix home [env...] -- args...: a run of gird-fleet.ps1; stdout, stderr, exit code, flat JSON
+  _p=$1; _h=$2; shift 2; _e=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
+  : > "$FW/argv.log"; : > "$FW/env.log"
+  env -i PATH="${FW_PATH:-$WORK/bin}" HOME="$WORK/pshome" USERPROFILE="$_h" APPDATA="$_h/AppData/Roaming" LOCALAPPDATA="$_h/AppData/Local" \
+    TEMP="$_h/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" \
+    GIRD_CHECK_FLEET_LAUNCH="$FWL" FWL_DIR="$FW" FWL_REPO="$PWD" ${_e[@]+"${_e[@]}"} \
+    "$PWSH" -NoProfile -NonInteractive -File "${FW_SCRIPT:-$FLEETPS}" "$@" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+  python3 "$FWFLAT" "$_h/AppData/Local/Blindspot/last.json" > "$FW/$_p.flat" 2>/dev/null || : > "$FW/$_p.flat"
+}
+INVRX='^v1 (failed|act|not_checked|review|clear) ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z)( other_profiles=([0-9]{1,4}))?( reason=([a-z0-9_]{1,40}))?(( \| [^|]+)*)$'
+cp -R "$WORK/home" "$FW/asha"; fw_home asha
+for h in clean upd; do fw_home "$h"; done
+mkdir -p "$FW/upd/.ssh"; printf -- '-----BEGIN OPENSSH ''PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH ''PRIVATE KEY-----\n' > "$FW/upd/.ssh/id_ed25519"
+
+# The same lines as gird-check.sh --account-run, key for key.
+env -i PATH=/usr/bin:/bin HOME="$WORK/home" bash "$BASH_SCRIPT" --account-run 2> /dev/null | cut -d= -f1 > "$FW/keys-sh.txt"
+psrun "$WORK/home" -- -AccountRun 2> /dev/null | cut -d= -f1 > "$FW/keys-ps.txt"
+if [ -s "$FW/keys-sh.txt" ] && cmp -s "$FW/keys-sh.txt" "$FW/keys-ps.txt"; then ok "fleet: -AccountRun prints the keys of --account-run, in the same order"
+else bad "fleet: -AccountRun prints the keys of --account-run, in the same order" "$(diff "$FW/keys-sh.txt" "$FW/keys-ps.txt" | head -n 4)"; fi
+
+fw_run two "$FW/asha" -- --json --mac-exit-codes
+# The Windows-shaped home holds one key file more than the Mac one: PowerShell's history.
+has    "fleet: each account's row holds its own findings" "^$FA\\.key_files=5\$" "$FW/two.flat"
+if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$FW/two.out" 2>/dev/null; then ok "fleet: --json prints one JSON document and nothing else"; else bad "fleet: --json prints one JSON document and nothing else" "$(head -c 300 "$FW/two.out")"; fi
+hasnot "fleet: the JSON holds no path or file name" '/(Users|home|private|tmp|var)/|~/|AppData|\.zshrc|zsh_history|\.env|settings(\.local)?\.json|mcp\.json' "$FW/two.out"
+nokeys "fleet: the JSON holds no planted key" "$WORK/keys.txt" "$FW/two.out"
+has    "fleet: act exits 10" '^10$' "$FW/two.rc"
+if diff -q <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FW/two.out") <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FW/asha/AppData/Local/Blindspot/last.json") > /dev/null 2>&1
+then ok "fleet: the saved file is the JSON printed"; else bad "fleet: the saved file is the JSON printed"; fi
+has    "fleet: the JSON names where to learn more" '^learn_more=https://gird.ai/argus$' "$FW/two.flat"
+has    "fleet: the JSON names the platforms found" "^$FA\\.platforms_found=opencode\$" "$FW/two.flat"
+has    "fleet: the JSON says how many other people have a profile on the PC" '^other_profiles=0$' "$FW/two.flat"
+if grep -qE "^/.* -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $FW/asha/AppData/Local/Blindspot/[0-9.]+/gird-check\\.ps1 -AccountRun --account-seconds=[0-9]+\$" "$FW/argv.log" && [ ! -s "$FW/env.log" ]
+then ok "fleet: the account run is PowerShell by full path, with -NoProfile and no GIRD_CHECK_ setting"; else bad "fleet: the account run is PowerShell by full path, with -NoProfile and no GIRD_CHECK_ setting" "$(cat "$FW/argv.log" "$FW/env.log")"; fi
+if cmp -s "$FW/asha/AppData/Local/Blindspot/$(sed -n 's/^script=//p' "$FW/two.flat")/gird-check.ps1" "$SCRIPT"; then ok "fleet: the check it unpacks is gird-check.ps1, byte for byte"; else bad "fleet: the check it unpacks is gird-check.ps1, byte for byte"; fi
+sed -n 's/^inventory=//p' "$FW/two.flat" > "$FW/two.inv"
+has    "fleet: the inventory value has the header the admin tool reads" "$INVRX" "$FW/two.inv"
+fw_run twoz "$FW/asha" -- --exit-zero --summary-to-stdout --mac-exit-codes
+has    "fleet: --exit-zero exits 0 on act" '^0$' "$FW/twoz.rc"
+if [ "$(grep -c '' "$FW/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=1 act=1 review=0 not_checked=0 other_profiles=[0-9]+ v=[0-9]+\.[0-9]+\.[0-9]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FW/twoz.out"
+then ok "fleet: --summary-to-stdout prints the one summary line"; else bad "fleet: --summary-to-stdout prints the one summary line" "$(cat "$FW/twoz.out")"; fi
+hasnot "fleet: the summary and the inventory value hold no path, file name or key" '/|~|AppData|\.zshrc|\.env|sk-|AKIA|ghp_' "$FW/twoz.out" "$FW/two.inv"
+
+# An account run cannot speak for anyone else: any line out of place refuses its whole output.
+fw_run clear "$FW/clean" -- --mac-exit-codes
+grep '^machine\.' "$FW/clear.flat" > "$FW/m-ok.txt"
+for M in other-row machine oversize malformed; do
+  printf '%s\n' "$M" > "$FW/mode"
+  fw_run "forge-$M" "$FW/upd"
+  grep '^machine\.' "$FW/forge-$M.flat" > "$FW/m-$M.txt"
+  has "fleet: $M output makes that account not checked" "^$FA\\.not_checked=bad_output\$" "$FW/forge-$M.flat"
+  if [ -s "$FW/m-ok.txt" ] && diff -q "$FW/m-ok.txt" "$FW/m-$M.txt" > /dev/null; then ok "fleet: $M output changes no other row"; else bad "fleet: $M output changes no other row" "$(diff "$FW/m-ok.txt" "$FW/m-$M.txt" | head -n 4)"; fi
+done
+hasnot "fleet: nothing an account run sent reaches the result" 'forged|99999' "$FW/forge-malformed.flat"
+has    "fleet: the default exit codes: 1 unless the outcome is clear" '^1$' "$FW/forge-malformed.rc"
+printf 'endless\n' > "$FW/mode"
+T0=$SECONDS; fw_run endless "$FW/upd" -- --deadline=60; T1=$((SECONDS - T0))
+if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/endless.flat" && [ "$T1" -lt 30 ]; then ok "fleet: root reads a set number of bytes, then stops the run" "${T1}s"; else bad "fleet: root reads a set number of bytes, then stops the run" "${T1}s $(grep "^$FA" "$FW/endless.flat")"; fi
+printf 'empty\n' > "$FW/mode"; fw_run empty "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/empty.flat" && grep -q '^reason=language_mode$' "$FW/empty.flat" && grep -q '^13$' "$FW/empty.rc" && grep -qE "$INVRX" "$FW/empty.out" && grep -q ' reason=language_mode |' "$FW/empty.out"
+then ok "fleet: an account run that stops before its first line is failed, reason=language_mode"; else bad "fleet: an account run that stops before its first line is failed, reason=language_mode" "$(cat "$FW/empty.rc" "$FW/empty.out")"; fi
+
+# A run that holds its output open past its limit, with a process of its own.
+printf 'hold\n' > "$FW/mode"; rm -f "$FW/hold.pid"
+T0=$SECONDS; fw_run hold "$FW/upd" -- --deadline=40 --summary-to-stdout --mac-exit-codes; T1=$((SECONDS - T0))
+if [ "$T1" -lt 40 ] && grep -q '^12$' "$FW/hold.rc" && grep -q '^blindspot not_checked ' "$FW/hold.out"; then ok "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s"; else bad "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s, $(cat "$FW/hold.rc" "$FW/hold.out")"; fi
+has    "fleet: that account is partly checked" "^$FA\\.not_checked=time_limit\$" "$FW/hold.flat"
+if [ -s "$FW/hold.pid" ] && ! kill -0 "$(cat "$FW/hold.pid")" 2>/dev/null; then ok "fleet: and every process it started is stopped too"; else bad "fleet: and every process it started is stopped too"; fi
+hasnot "fleet: and no process is reported left" 'processes_left' "$FW/hold.flat"
+# A process still running after the stop: GIRD_CHECK_FLEET_NOSTOP keeps gird-fleet.ps1 from stopping any.
+rm -f "$FW/hold.pid" "$FW/launcher.pid"
+fw_run holdleft "$FW/upd" GIRD_CHECK_FLEET_NOSTOP=1 -- --deadline=40
+kill "$(cat "$FW/hold.pid" 2>/dev/null)" "$(cat "$FW/launcher.pid" 2>/dev/null)" 2>/dev/null
+has    "fleet: a process that outlives the stop is reported" "^$FA\\.processes_left=true\$" "$FW/holdleft.flat"
+rm -f "$FW/mode"
+fw_run late "$FW/upd" -- --deadline=1 --mac-exit-codes
+if grep -q "^$FA\\.not_checked=deadline\$" "$FW/late.flat" && grep -q '^deadline_reached=true$' "$FW/late.flat" && grep -q '^12$' "$FW/late.rc"; then ok "fleet: a run stopped by its deadline is not_checked"; else bad "fleet: a run stopped by its deadline is not_checked" "$(head -n 5 "$FW/late.flat")"; fi
+has    "fleet: not_checked exits 12" '^12$' "$FW/late.rc"
+
+# What an account run reads.
+KEYX="AK""IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)"; printf '%s\n' "$KEYX" > "$FW/keys-x.txt"
+fw_home linker; mkdir -p "$FW/keeper/private"; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FW/keeper/private/zshrc"; chmod 000 "$FW/keeper/private"
+ln -s "$FW/keeper/private/zshrc" "$FW/linker/.zshrc"; ln -s /etc/hosts "$FW/linker/.bash_profile"; ln -s "$FW/keeper/private" "$FW/linker/.config"
+fw_run links "$FW/linker"
+chmod 755 "$FW/keeper/private"
+if grep -q "^$FA\\.key_files=0\$" "$FW/links.flat" && grep -q "^$FA\\.history_keys=0\$" "$FW/links.flat"; then ok "fleet: links to another home or a system file are read with the account's own rights"; else bad "fleet: links to another home or a system file are read with the account's own rights" "$(grep "^$FA" "$FW/links.flat" | tr '\n' ' ')"; fi
+nokeys "fleet: and the key behind them is never in the result" "$FW/keys-x.txt" "$FW/linker/AppData/Local/Blindspot/last.json"
+fw_home odd; mkfifo "$FW/odd/.zsh_history"; ln -s /dev/zero "$FW/odd/.bash_history"
+python3 -c "import sys; open(sys.argv[1], 'w').write('export OPENAI_API_KEY=x\n' + '#' * 17000000 + '\n')" "$FW/odd/.zshrc"
+T0=$SECONDS; fw_run odd "$FW/odd" -- --deadline=120; T1=$((SECONDS - T0)); rm -f "$FW/odd/.zshrc"
+if grep -q "^$FA\\.files_not_checked=3\$" "$FW/odd.flat" && grep -q "^$FA\\.key_files=0\$" "$FW/odd.flat" && [ "$T1" -lt 60 ]; then ok "fleet: a fifo, a link to a device and an oversized file are not read, and are counted"; else bad "fleet: a fifo, a link to a device and an oversized file are not read, and are counted" "${T1}s $(grep "^$FA" "$FW/odd.flat" | tr '\n' ' ')"; fi
+has    "fleet: so the account is not_checked, never clear" "^$FA\\.outcome=not_checked\$" "$FW/odd.flat"
+fw_home closed; mkdir -p "$FW/closed/.cursor"; printf '{"mcpServers":{}}\n' > "$FW/closed/.cursor/mcp.json"; chmod 000 "$FW/closed/.cursor"
+fw_run closedf "$FW/closed"; chmod 755 "$FW/closed/.cursor"
+has    "fleet: a config behind a folder the account can't enter counts as not read" "^$FA\\.files_not_checked=[1-9]" "$FW/closedf.flat"
+has    "fleet: so that account is never clear"        "^$FA\\.outcome=not_checked\$" "$FW/closedf.flat"
+fw_home devnull; ln -s /dev/null "$FW/devnull/.zsh_history"
+fw_run devnull "$FW/devnull"
+has    "fleet: a history file linked to /dev/null is not counted as not read" "^$FA\\.files_not_checked=0\$" "$FW/devnull.flat"
+fw_home unread; mkdir -p "$FW/unread/code/locked"; printf 'export OPENAI_API_KEY=x\n' > "$FW/unread/.zshrc"; chmod 000 "$FW/unread/.zshrc" "$FW/unread/code/locked"
+fw_run unread "$FW/unread"
+chmod 755 "$FW/unread/code/locked"; chmod 644 "$FW/unread/.zshrc"
+if grep -qE "^$FA\\.files_not_checked=([2-9]|[1-9][0-9]+)\$" "$FW/unread.flat" && grep -q "^$FA\\.outcome=not_checked\$" "$FW/unread.flat"; then ok "fleet: a file or folder the account can't read is not checked, never clear"; else bad "fleet: a file or folder the account can't read is not checked, never clear" "$(grep "^$FA" "$FW/unread.flat" | tr '\n' ' ')"; fi
+fw_home cut; mkdir -p "$FW/cut/code/evil/.codex"
+python3 -c "import sys; open(sys.argv[1], 'w').write('args = [' + '\"a\",' * 17000 + '\"\"\"x\"\"\"]\napproval_policy = \"never\"\nsandbox_mode = \"danger-full-access\"\n')" "$FW/cut/code/evil/.codex/config.toml"
+fw_run cut "$FW/cut" -- --json
+has    "fleet: a settings file read only in part leaves the account partly checked" "^$FA\\.complete=false\$" "$FW/cut.flat"
+has    "fleet: and counts as a file not checked" "^$FA\\.files_not_checked=[1-9]" "$FW/cut.flat"
+
+# Each outcome, its exit code, and the order between them.
+if grep -q '^outcome=clear$' "$FW/clear.flat" && grep -q '^0$' "$FW/clear.rc"; then ok "fleet: clear exits 0"; else bad "fleet: clear exits 0" "$(cat "$FW/clear.rc"; head -n 4 "$FW/clear.flat")"; fi
+fw_run upd "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=review$' "$FW/upd.flat" && grep -q '^11$' "$FW/upd.rc"; then ok "fleet: review exits 11"; else bad "fleet: review exits 11" "$(cat "$FW/upd.rc")"; fi
+cp -R "$FW/upd" "$FW/updnr"; printf 'x\n' > "$FW/updnr/.zshrc"; chmod 000 "$FW/updnr/.zshrc"
+fw_run order1 "$FW/updnr"; chmod 644 "$FW/updnr/.zshrc"
+has    "fleet: not_checked comes before review" '^outcome=not_checked$' "$FW/order1.flat"
+fw_home actnr; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FW/actnr/.bashrc"; printf 'x\n' > "$FW/actnr/.zshrc"; chmod 000 "$FW/actnr/.zshrc"
+fw_run order2 "$FW/actnr"; chmod 644 "$FW/actnr/.zshrc"
+has    "fleet: act comes before not_checked" '^outcome=act$' "$FW/order2.flat"
+fw_run clearz "$FW/clean"
+has    "fleet: and clear exits 0 with the default codes" '^0$' "$FW/clearz.rc"
+
+# Nothing it runs comes from PATH, and nothing reaches the network, a browser or a saved report.
+FAKE=$FW/fakebin; mkdir -p "$FAKE"
+# Not rg: the account run uses the person's own ripgrep, as a run by hand does (docs/designs/fleet-mode.md).
+for t in ps pgrep pwsh powershell powershell.exe taskkill taskkill.exe sh bash env open xdg-open; do
+  printf '#!/bin/sh\necho %s >> "%s/fake-ran"\nexit 1\n' "$t" "$FW" > "$FAKE/$t"; chmod +x "$FAKE/$t"
+done
+rm -f "$FW/fake-ran"; mkdir -p "$FW/cwd"; : > "$WORK/received.log"; : > "$WORK/gets.log"
+( cd "$FW/cwd" && FW_PATH="$FAKE:$WORK/bin" fw_run net "$FW/upd" FWL_API="$API" GIRD_CHECK_SESSIONS_ENGINE=none -- --mac-exit-codes )
+if [ ! -s "$WORK/received.log" ] && [ ! -s "$WORK/gets.log" ] && grep -q '^11$' "$FW/net.rc"; then ok "fleet: makes no network request"; else bad "fleet: makes no network request" "exit $(cat "$FW/net.rc")"; fi
+if [ ! -e "$FW/fake-ran" ] && [ -z "$(ls "$FW/cwd")" ] && [ -z "$(find "$FW/upd" -name 'gird-ai-key-check-*' 2>/dev/null)" ]; then ok "fleet: opens no browser and saves no report"; else bad "fleet: opens no browser and saves no report" "$(ls "$FW/cwd"; cat "$FW/fake-ran" 2>/dev/null)"; fi
+if [ ! -e "$FW/fake-ran" ]; then ok "fleet: runs no program it finds on PATH"; else bad "fleet: runs no program it finds on PATH" "$(cat "$FW/fake-ran")"; fi
+if [ ! -s "$FW/env.log" ] && grep -q "^$FA\\.session_engine=dotnet\$" "$FW/net.flat"; then ok "fleet: a test-only GIRD_CHECK_ setting in the person's environment changes nothing"; else bad "fleet: a test-only GIRD_CHECK_ setting in the person's environment changes nothing" "$(cat "$FW/env.log"; grep session_engine "$FW/net.flat")"; fi
+# An MDM-like run: no HOME, a minimal PATH, / as the working folder, no terminal.
+( cd / && env -i PATH=/usr/bin:/bin USERPROFILE="$FW/upd" APPDATA="$FW/upd/AppData/Roaming" LOCALAPPDATA="$FW/upd/AppData/Local" TEMP="$FW/upd/AppData/Local/Temp" \
+    GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" "$PWSH" -NoProfile -NonInteractive -File "$FLEETPS" --summary-to-stdout < /dev/null > "$FW/mdm.out" 2>&1 )
+has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspot review accounts=1 ' "$FW/mdm.out"
+# A PowerShell profile that would print or change something does not run, for the account run either.
+mkdir -p "$WORK/pshome/.config/powershell"
+printf '[Console]::Out.WriteLine("agents=from-a-profile"); Set-Content -LiteralPath "%s/profile-ran" -Value 1\n' "$FW" > "$WORK/pshome/.config/powershell/Microsoft.PowerShell_profile.ps1"
+fw_run prof "$FW/upd"
+rm -f "$WORK/pshome/.config/powershell/Microsoft.PowerShell_profile.ps1"
+if [ ! -e "$FW/profile-ran" ] && grep -q '^outcome=review$' "$FW/prof.flat"; then ok "fleet: a profile that would print or change something does not run"; else bad "fleet: a profile that would print or change something does not run" "$(head -n 3 "$FW/prof.flat")"; fi
+
+# The saved result's folder, in the person's own profile.
+fw_home slink; mkdir -p "$FW/elsewhere"; ln -s "$FW/elsewhere" "$FW/slink/AppData/Local/Blindspot"
+fw_run slink "$FW/slink"
+if [ -d "$FW/slink/AppData/Local/Blindspot" ] && [ ! -L "$FW/slink/AppData/Local/Blindspot" ] && [ -f "$FW/slink/AppData/Local/Blindspot/last.json" ] && [ -z "$(ls "$FW/elsewhere")" ]; then ok "fleet: a saved-result folder that is a link is made again"; else bad "fleet: a saved-result folder that is a link is made again" "$(ls -la "$FW/slink/AppData/Local" "$FW/elsewhere" 2>&1 | head -n 6)"; fi
+fw_home swrite; mkdir -p "$FW/swrite/AppData/Local/Blindspot"; printf 'keep\n' > "$FW/target"; ln -s "$FW/target" "$FW/swrite/AppData/Local/Blindspot/last.json"
+fw_run swrite "$FW/swrite"
+if [ "$(cat "$FW/target")" = keep ] && [ -f "$FW/swrite/AppData/Local/Blindspot/last.json" ] && [ ! -L "$FW/swrite/AppData/Local/Blindspot/last.json" ]; then ok "fleet: the result is written to a new file and renamed into place"; else bad "fleet: the result is written to a new file and renamed into place"; fi
+# An unpacked check that is not the one this run carries is written again before it runs.
+fw_home rehash; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/rehash/AppData/Local/Blindspot/$_v"
+printf 'Write-Output "v=1"\n' > "$FW/rehash/AppData/Local/Blindspot/$_v/gird-check.ps1"
+fw_run rehash "$FW/rehash"
+if cmp -s "$FW/rehash/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && grep -q '^outcome=clear$' "$FW/rehash.flat"; then ok "fleet: an unpacked check whose SHA-256 differs is written again before it runs"; else bad "fleet: an unpacked check whose SHA-256 differs is written again before it runs" "$(head -n 3 "$FW/rehash.flat")"; fi
+# Without gird-check.ps1 next to it or packed inside, nothing can run: failed, never clear.
+mkdir -p "$FW/alone"; cp "$FLEETPS" "$FW/alone/"
+FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone "$FW/clean" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/alone.flat" && grep -q '^reason=unpack$' "$FW/alone.flat" && grep -q '^13$' "$FW/alone.rc" && grep -qE "$INVRX" "$FW/alone.out"; then ok "fleet: without gird-check.ps1 next to it or packed inside, the run is failed"; else bad "fleet: without gird-check.ps1 next to it or packed inside, the run is failed" "$(cat "$FW/alone.rc" "$FW/alone.out")"; fi
+FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone1 "$FW/clean"
+has    "fleet: and failed exits 1 with the default codes" '^1$' "$FW/alone1.rc"
+
+# The inventory value, cut to what Intune keeps.
+printf 'maxed\n' > "$FW/mode"; fw_run maxed "$FW/clean"; rm -f "$FW/mode"
+sed -n 's/^inventory=//p' "$FW/maxed.flat" > "$FW/maxed.inv"
+has    "fleet: a long inventory value ends with +more" ' \+more$' "$FW/maxed.inv"
+if [ "$(tr -d '\n' < "$FW/maxed.inv" | wc -c)" -le 2048 ] && cmp -s "$FW/maxed.inv" "$FW/maxed.out"; then ok "fleet: and still fits"; else bad "fleet: and still fits" "$(wc -c < "$FW/maxed.inv")"; fi
+has    "fleet: and keeps the accounts that need attention" "\\| $FA: act" "$FW/maxed.inv"
+has    "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "\\| $FA: act wiper; incidents [a-z0-9,]+ \\+more\$" "$FW/maxed.inv"
+has    "fleet: and ends with +more, since details were cut" ' \+more$' "$FW/maxed.inv"
+has    "fleet: the cut value has the header the admin tool reads" "$INVRX" "$FW/maxed.inv"
+if [ "$(tr -d '\n' < "$FW/two.inv" | wc -c)" -le 2048 ] && ! grep -qE '/|AppData|\.zshrc|\.env' "$FW/two.inv"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
+
+# Possible signs and the account's own temp folder.
+fw_home gw; mkdir -p "$FW/gw/Library/LaunchAgents"; : > "$FW/gw/Library/LaunchAgents/com.user.nodestart.plist"
+fw_run gw "$FW/gw"
+has    "fleet: a startup file named like GlassWorm's, with no GlassWorm extension, is a possible sign" "^$FA\\.possible_signs=glassworm\$" "$FW/gw.flat"
+has    "fleet: and its account is to review, not act now" "^$FA\\.outcome=review\$" "$FW/gw.flat"
+fw_home tm; : > "$FW/tm/AppData/Local/Temp/remote_code_loader.lock"
+fw_run tm "$FW/tm"
+has    "fleet: a malware marker in the account's own temp folder counts for that account" "^$FA\\.incidents=litellm\$" "$FW/tm.flat"
+hasnot "fleet: and not for the Mac" '^machine\.incidents=.*litellm' "$FW/tm.flat"
+fw_home tmd; mkdir -p "$FW/tmd/AppData/Local/Temp/.pc_sq_abc123"
+fw_run tmd "$FW/tmd"
+has    "fleet: a marker folder in the account's own temp folder counts for that account" "^$FA\\.incidents=litellm\$" "$FW/tmd.flat"
+# %ProgramData%, which any account can write to: a marker the person owns is a possible sign on their row.
+# GIRD_CHECK_FLEET_PROGRAMDATA is the folder the PC's own check reads; the account run reads the person's ProgramData.
+fw_home pd; mkdir -p "$FW/progdata/NodePackages"; : > "$FW/progdata/NodePackages/protocal.cjs"
+fw_run pd "$FW/pd" ProgramData="$FW/progdata" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/progdata"
+rm -rf "$FW/progdata"
+if grep -q '^machine\.possible_signs=$' "$FW/pd.flat" && grep -q '^machine\.incidents=$' "$FW/pd.flat"; then ok "fleet: a marker the person owns in %ProgramData% is not the PC's"; else bad "fleet: a marker the person owns in %ProgramData% is not the PC's" "$(grep '^machine' "$FW/pd.flat" | tr '\n' ' ')"; fi
+# Ownership in %ProgramData%, the reduced language, a 32-bit host and SYSTEM need a Windows PC, and the
+# owner tests a second account or administrator rights there too.
+skip "fleet: a marker the person owns in %ProgramData% is a possible sign on their row, not a finding" "needs a file in the real %ProgramData% of a Windows PC, which the suite does not write: the only marker data/indicators.tsv lists there is for Windows, so an account run elsewhere never looks for it"
+skip "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "needs a file another account owns in %ProgramData% on a Windows PC: setting an owner takes administrator rights"
+skip "fleet: one Administrators or SYSTEM own is a finding for the PC" "needs a file Administrators own in %ProgramData% on a Windows PC: setting an owner takes administrator rights"
+skip "fleet: run as SYSTEM, it is failed, reason=system_account" "needs a PowerShell started as SYSTEM on a Windows PC, which takes administrator rights"
+if [ -n "$WINONLY" ]; then
+  skip "fleet: a session in Constrained Language Mode is failed, reason=language_mode" "$WINONLY: Windows PowerShell's reduced language"
+  skip "fleet: a 32-bit PowerShell is failed, reason=host_32bit" "$WINONLY: its 32-bit Windows PowerShell"
+  skip "fleet: run as root, the test settings are ignored" "$WINONLY: off Windows gird-fleet.ps1 runs for tests only, and reads them"
+else
+  _wps="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
+  __PSLockdownPolicy=4 "$_wps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" > "$FW/clm.out" 2>&1; RC=$?
+  if [ "$RC" -eq 1 ] && grep -qE '^v1 failed [0-9T:-]+Z reason=language_mode' "$FW/clm.out"; then ok "fleet: a session in Constrained Language Mode is failed, reason=language_mode"; else bad "fleet: a session in Constrained Language Mode is failed, reason=language_mode" "exit $RC $(head -c 200 "$FW/clm.out")"; fi
+  "$SYSTEMROOT/SysWOW64/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" --summary-to-stdout > "$FW/w32.out" 2>&1; RC=$?
+  if [ "$RC" -eq 1 ] && grep -qE '^blindspot failed .* reason=host_32bit$' "$FW/w32.out"; then ok "fleet: a 32-bit PowerShell is failed, reason=host_32bit"; else bad "fleet: a 32-bit PowerShell is failed, reason=host_32bit" "exit $RC $(head -c 200 "$FW/w32.out")"; fi
+  USERPROFILE="$(cygpath -w "$FW/clean")" LOCALAPPDATA="$(cygpath -w "$FW/clean/AppData/Local")" GIRD_CHECK_FLEET_PROFILES=9999 GIRD_CHECK_FLEET_POWERSHELL=nothing-here \
+    "$_wps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" --summary-to-stdout > "$FW/wtest.out" 2>&1
+  if grep -q '^blindspot clear ' "$FW/wtest.out" && ! grep -q 'other_profiles=9999' "$FW/wtest.out"; then ok "fleet: run as root, the test settings are ignored"; else bad "fleet: run as root, the test settings are ignored" "$(head -c 200 "$FW/wtest.out")"; fi
+fi
+fw_home pf; mkdir -p "$FW/progfiles/cursor"
+fw_run pf "$FW/pf" GIRD_CHECK_FLEET_PROGRAMFILES="$FW/progfiles" GIRD_CHECK_FLEET_PROFILES=2
+has    "fleet: an agent installed under %ProgramFiles% is the PC's" '^machine\.agents=cursor$' "$FW/pf.flat"
+if grep -q '^other_profiles=2$' "$FW/pf.flat" && grep -qE '^v1 clear [0-9T:-]+Z other_profiles=2 \| ' "$FW/pf.out"; then ok "fleet: the summary and the inventory value carry other_profiles"; else bad "fleet: the summary and the inventory value carry other_profiles" "$(cat "$FW/pf.out")"; fi
+
+# Findings reach the account's row as they reach the person's own report.
+for h in proj upd2 wip wip1 mrf mrn msx lk; do fw_home "$h"; done
+mkdir -p "$FW/proj/code/p/.claude" "$FW/proj/code/q/.claude" "$FW/upd2/code/venv/lib/site-packages/telnyx-4.87.1.dist-info" "$FW/wip/Library/LaunchAgents" \
+  "$FW/wip/AppData/Roaming/npm/node_modules/@tanstack/router-core" "$FW/wip1/.config/gh-token-monitor"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FW/proj/code/p/.claude/settings.json"
+: > "$FW/proj/code/q/.claude/setup.mjs"; : > "$FW/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
+printf '{"name":"@tanstack/router-core","version":"1.169.5"}\n' > "$FW/wip/AppData/Roaming/npm/node_modules/@tanstack/router-core/package.json"
+fw_run proj "$FW/proj"
+has    "fleet: project settings that act when a folder opens reach the account's row" "^$FA\\.project_settings_on_open=1\$" "$FW/proj.flat"
+has    "fleet: and a file named like the ones worms plant" "^$FA\\.files_to_read=1\$" "$FW/proj.flat"
+has    "fleet: so that account is to review" "^$FA\\.outcome=review\$" "$FW/proj.flat"
+fw_run upd2 "$FW/upd2"
+has    "fleet: a package version to update reaches the account's row" "^$FA\\.versions_to_update=telnyx\$" "$FW/upd2.flat"
+has    "fleet: and that account is to review too" "^$FA\\.outcome=review\$" "$FW/upd2.flat"
+fw_run wip "$FW/wip"
+has    "fleet: the gh-token-monitor wiper reaches the account's row" "^$FA\\.wiper=true\$" "$FW/wip.flat"
+fw_run wip1 "$FW/wip1"
+if grep -q "^$FA\\.wiper=true\$" "$FW/wip1.flat" && grep -q "^$FA\\.incidents=\$" "$FW/wip1.flat" && grep -q "^$FA\\.outcome=act\$" "$FW/wip1.flat"; then ok "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm"
+else bad "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm" "$(grep "^$FA\\." "$FW/wip1.flat" | tr '\n' ' ')"; fi
+for h in mrf mrn; do mkdir -p "$FW/$h/AppData/Roaming/npm/node_modules/mcp-remote"; done
+printf '{"name":"mcp-remote","version":"0.1.10"}\n' > "$FW/mrf/AppData/Roaming/npm/node_modules/mcp-remote/package.json"
+printf '{"name":"mcp-remote","version":"0.1.20"}\n' > "$FW/mrn/AppData/Roaming/npm/node_modules/mcp-remote/package.json"
+fw_run mrf "$FW/mrf"; fw_run mrn "$FW/mrn"
+has    "fleet: a tool with a fix to install reaches the account's tools" "^$FA\\.tools_to_update=mcpremote\$" "$FW/mrf.flat"
+has    "fleet: one with a published hole and no fixed version does not" "^$FA\\.tools_to_update=\$" "$FW/mrn.flat"
+mkdir -p "$FW/msx/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+fw_run msx "$FW/msx"
+has    "fleet: an extension whose malware runs only on another system is one to remove" "^$FA\\.extensions_to_remove=glasswormoct\$" "$FW/msx.flat"
+has    "fleet: so its account is to review, not act" "^$FA\\.outcome=review\$" "$FW/msx.flat"
+mkdir -p "$FW/lk/code/app"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$FW/lk/code/app/package-lock.json"
+fw_run lk "$FW/lk"
+has    "fleet: a bad npm version only in a lockfile is its own field" "^$FA\\.lockfile_only_incidents=axios\$" "$FW/lk.flat"
+has    "fleet: not one of the incidents" "^$FA\\.incidents=\$" "$FW/lk.flat"
+# A session check that would never end on its own is stopped in time, and what it found still counts.
+printf 'slowsess\n' > "$FW/mode"; fw_run slowsess "$FW/asha" -- --deadline=30; rm -f "$FW/mode" "$FW/sesshold"
+if grep -q "^$FA\\.outcome=act\$" "$FW/slowsess.flat" && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowsess.flat" && ! grep -q "^$FA\\.not_checked=" "$FW/slowsess.flat"; then ok "fleet: a session check that runs long is stopped in time, and the findings still count"
+else bad "fleet: a session check that runs long is stopped in time, and the findings still count" "$(grep -E "^$FA\\.(outcome|sessions|not_checked|stopped)" "$FW/slowsess.flat" | tr '\n' ' ')"; fi
+
+# blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
+mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf/"
+if (cd "$FW/bf" && bash tools/gen.sh > /dev/null 2>&1) && [ -f "$FW/bf/blindspot-fleet.ps1" ] && [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 204800 ]; then ok "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ') bytes"
+else bad "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" 2>/dev/null)"; fi
+fw_home bfh; mkdir -p "$FW/bfrun"; cp "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/"
+FW_SCRIPT="$FW/bfrun/blindspot-fleet.ps1" fw_run bfrun "$FW/bfh"
+_v=$(sed -n 's/^script=//p' "$FW/bfrun.flat")
+if [ -n "$_v" ] && cmp -s "$FW/bfh/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && grep -q '^outcome=clear$' "$FW/bfrun.flat"; then ok "fleet: and the check it unpacks and runs is gird-check.ps1, byte for byte"; else bad "fleet: and the check it unpacks and runs is gird-check.ps1, byte for byte" "$(head -n 3 "$FW/bfrun.flat")"; fi
+
+# Refusals, and the rules a reader checks in the file itself.
+fw_run all "$FW/clean" -- --all
+if grep -q '^13$' "$FW/all.rc" && grep -q -- '-All is refused' "$FW/all.err" && [ ! -s "$FW/argv.log" ]; then ok "fleet: --all with --all-users is refused"; else bad "fleet: --all with --all-users is refused" "exit $(cat "$FW/all.rc")"; fi
+env -i PATH=/usr/bin:/bin USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" "$PWSH" -NoProfile -NonInteractive -File "$FLEETPS" > "$FW/notwin.out" 2> "$FW/notwin.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FW/notwin.out" ] && grep -q 'run gird-fleet.sh' "$FW/notwin.err"; then ok "fleet: off Windows it exits 13 and points to gird-fleet.sh"; else bad "fleet: off Windows it exits 13 and points to gird-fleet.sh" "exit $RC"; fi
+_unguarded=$(awk '/^[[:space:]]*#/ { next } /GIRD_CHECK_FLEET_/ && !/\$FlTest -and/ && !/^  if \(\$env:GIRD_CHECK_FLEET_TEST -ne .1.\) \{ Fl-Usage / { print NR ": " $0 }' "$FLEETPS")
+if [ -z "$_unguarded" ]; then ok "fleet: every test setting is read only off Windows"; else bad "fleet: every test setting is read only off Windows" "$_unguarded"; fi
+if LC_ALL=C grep -q '[^ -~	]' "$FLEETPS"; then bad "fleet: gird-fleet.ps1 is plain ASCII"; else ok "fleet: gird-fleet.ps1 is plain ASCII"; fi
+sed -e 's/#.*$//' -e "s/'[^']*'//g" -e 's/"[^"]*"//g' "$FLEETPS" > "$WORK/fleet-code.txt"
+hasnot "fleet: gird-fleet.ps1 uses nothing PowerShell 7 alone has" '\?\?|\?\.|&&|\|\||-Parallel|-AsHashtable|\$Is(Windows|MacOS|Linux)\b| \? [^ ]+ : ' "$WORK/fleet-code.txt"
+# The reduced language allows only some statements: the check of it comes before any other.
+if awk '/LanguageMode -ne .FullLanguage./ { f = NR } /\[(Environment|IO\.|Security|Diagnostics|Convert|Text\.|Console\]::Out)/ && !c { c = NR } END { exit !(f && c && f < c) }' "$FLEETPS"; then ok "fleet: the language mode is checked before any .NET call"; else bad "fleet: the language mode is checked before any .NET call"; fi
+if psrun "$WORK/home" -- -Help | grep -q 'blindspot-fleet.ps1 checks the signed-in'; then ok "-Help names blindspot-fleet.ps1 for IT teams"; else bad "-Help names blindspot-fleet.ps1 for IT teams"; fi
+
 # The Worker's own validation. It must keep the Windows values as sent, not turn
 # them into 'other', and they must be the plan's values.
 WORKER=${GIRD_CHECK_WORKER:-}

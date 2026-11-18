@@ -85,7 +85,7 @@ if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match
 if grep -nE '\$([0-9]+|NF)(\+\+|--)' gird-check.sh gird-fleet.sh > "$WORK/inc.txt"; then bad "no ++ or -- on an awk field, which BusyBox refuses" "$(head -n 3 "$WORK/inc.txt" | tr '\n' '|')"
 else ok "no ++ or -- on an awk field, which BusyBox refuses"; fi
 # gird-fleet.sh's copy of the ownership walk has its home in gird-check.sh: a hand edit to the copy is drift.
-mkdir -p "$WORK/ow"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/ow/"
+mkdir -p "$WORK/ow"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ow/"
 sed 's/^    case "\${_oo_m#\* }" in ?\[2367\]?|??\[2367\]) return 1 ;; esac$/    :/' gird-fleet.sh > "$WORK/ow/gird-fleet.sh"
 if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"

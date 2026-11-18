@@ -124,116 +124,69 @@ every banner shows that version and date	reads the files of both scripts and the
 the newest CHANGELOG release is that version	reads the files of both scripts and the CHANGELOG at once, so one test covers gird-check.ps1 too
 the repo's folder is listed when its worktree is found first	forces find's order with a stand-in find; gird-check.ps1 lists files through .NET, whose order a test can't set
 and the worktree is not	forces find's order with a stand-in find; gird-check.ps1 lists files through .NET, whose order a test can't set
-fleet: system accounts are left out	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and are not in the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: each account's row holds its own findings	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and only its own	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: each account is checked through sudo -n as itself, with a clean environment	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --json prints one JSON document and nothing else	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the JSON holds no path or file name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the JSON holds no planted key	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: act exits 10	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the result is saved for its owner only	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the saved file is the JSON printed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the JSON names where to learn more	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --exit-zero exits 0 on act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --summary-to-stdout prints the one summary line	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the readable report lists each account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and where the result was saved	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: no Argus note without a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the Argus note once, with a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the readable report has no path or file name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --list says who will be checked, and checks nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a missing home is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a home that is a link is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a home owned by another account is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a home shared with an account above is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: an account with no login shell is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a system folder as a home is not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the one good account is checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and only it is started	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: accounts not checked make the run not_checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: not_checked exits 12	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: no accounts is not_checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: other-row output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: other-row output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: machine output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: machine output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: oversize output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: oversize output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: malformed output makes that account not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: malformed output changes no other row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: nothing an account run sent reaches the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: sudo failing means not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a script copy an account could write stops the run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a stuck account run is stopped and the MDM's output closes	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: that account is partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a process that outlives the stop is reported	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the other account is still checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a run stopped by its deadline is not_checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: links to another home or a system file are read with the account's own rights	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and the key behind them is never in the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a fifo, a link to a device and an oversized file are not read, and are counted	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: so the account is not_checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a refused protected folder is not checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: clear exits 0	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: review exits 11	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: not_checked comes before review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: act comes before not_checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a replaced jq, grep or sudo earlier in PATH is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: makes no network request	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: opens no browser and saves no report	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: runs with no HOME, a minimal PATH and / as its folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a saved-result folder that is a link is made again	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a saved-result folder anyone can read is made again	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a saved-result folder owned by someone else is never written to	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --inventory says none before the first run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --inventory prints the saved inventory value	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the inventory value fits and holds no path or file name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --inventory says stale when the last run is too old	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a long inventory value ends with +more	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and still fits	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --hash-accounts shows a keyed hash, never the name	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: not root exits 13	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --all with --all-users is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: run as root, the test settings are ignored	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --json without --all-users is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: on Linux --all-users exits 13 with a message	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: no colours, even on a terminal	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the result is written to a new file and renamed into place	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: root reads a set number of bytes, then stops the run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: an MDM item's options line works whatever arguments the MDM adds	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --result-tags puts the value between Jamf's result tags	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the copy each account runs leaves out the options line and its secret	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: runs by a relative path from the script's folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: from standard input it fails, and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: with no protected folder in the home, there is nothing protected to miss	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
---help shows the whole header, gird-fleet.sh included	gird-check.ps1 has no fleet mode, so its help has no --all-users line to check
-fleet: and removes nothing else	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a script in a folder others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a path with mode 002 is refused as writable by others	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a path with mode 020 is refused as writable by others	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: with the options line in the file, --inventory still only reads the result	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-gird-check.sh runs no sudo or dscl	gird-fleet.sh, the root side of fleet mode, is bash only; gird-check.ps1 has no fleet mode to keep apart
-gird-check.sh --all-users points to gird-fleet.sh	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a gird-check.sh others can write to is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: without gird-check.sh next to it, it stops and says why	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: an account name it can't read is shown as invalid-name, and the inventory still reads	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a file or folder the account can't read is not checked, never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: an agent in the account's own ~/.local/bin is found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a marker that must be its owner's never counts for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and counts for the account that owns it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a machine check that runs out of time leaves the Mac not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --inventory says failed when a later run did not finish by its deadline	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and the last result while that run still has time	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: --stale-days is at most 30	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a folder whose ACL lets anyone write is refused	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: but a link there never counts	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: installed as the guide says, run with env -i, it runs	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a startup file named like GlassWorm's, with no GlassWorm extension, is a possible sign	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and its account is to review, not act now	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a malware marker in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and not for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: system accounts are left out	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: and are not in the result	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: and only its own	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: each account is checked through sudo -n as itself, with a clean environment	Windows has no sudo and keeps the person's environment: run-ps.sh's 'fleet: the account run is PowerShell by full path, with -NoProfile and no GIRD_CHECK_ setting' checks how it starts
+fleet: the result is saved for its owner only	the saved result sits in the person's own profile, whose access Windows keeps to that person, administrators and SYSTEM: gird-fleet.ps1 sets no mode and checks no owner (docs/designs/fleet-mode.md, Windows, No install step)
+fleet: the readable report lists each account	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: and where the result was saved	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: no Argus note without a terminal	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: the Argus note once, with a terminal	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: the readable report has no path or file name	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: --list says who will be checked, and checks nothing	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a missing home is not checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a home that is a link is not checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a home owned by another account is not checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a home shared with an account above is not checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: an account with no login shell is not checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a system folder as a home is not checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: the one good account is checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: and only it is started	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: accounts not checked make the run not_checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: no accounts is not_checked, never clear	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: sudo failing means not checked	Windows starts the account run as the person, with no sudo: one that sends nothing is failed, tested as 'fleet: an account run that stops before its first line is failed, reason=language_mode'
+fleet: a script copy an account could write stops the run	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: the other account is still checked	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a refused protected folder is not checked, never clear	Windows has no folders that need a grant like Full Disk Access, so protected is always ok (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a replaced jq, grep or sudo earlier in PATH is never run	gird-fleet.ps1 runs no jq, grep or sudo; run-ps.sh's 'fleet: runs no program it finds on PATH' checks the programs it does run
+fleet: a saved-result folder anyone can read is made again	the saved result sits in the person's own profile, whose access Windows keeps to that person, administrators and SYSTEM: gird-fleet.ps1 sets no mode and checks no owner (docs/designs/fleet-mode.md, Windows, No install step)
+fleet: a saved-result folder owned by someone else is never written to	the saved result sits in the person's own profile, whose access Windows keeps to that person, administrators and SYSTEM: gird-fleet.ps1 sets no mode and checks no owner (docs/designs/fleet-mode.md, Windows, No install step)
+fleet: --inventory says none before the first run	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+fleet: --inventory prints the saved inventory value	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+fleet: --inventory says stale when the last run is too old	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+fleet: --hash-accounts shows a keyed hash, never the name	-HashAccounts is not offered on Windows: the person the script runs as could read the secret (docs/designs/fleet-mode.md, Windows, The result)
+fleet: not root exits 13	Windows runs as the signed-in person, never as an administrator; run as SYSTEM it is failed with reason=system_account, which takes a Windows PC (run-ps.sh's 'fleet: run as SYSTEM, it is failed, reason=system_account')
+fleet: --json without --all-users is refused	gird-fleet.ps1 has no --all-users: every run checks the signed-in account
+fleet: on Linux --all-users exits 13 with a message	gird-fleet.ps1 has no --all-users; off Windows it exits 13 and points to gird-fleet.sh, tested as 'fleet: off Windows it exits 13 and points to gird-fleet.sh'
+fleet: no colours, even on a terminal	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: an MDM item's options line works whatever arguments the MDM adds	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: --result-tags puts the value between Jamf's result tags	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+fleet: the copy each account runs leaves out the options line and its secret	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: runs by a relative path from the script's folder	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: from standard input it fails, and says why	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: with no protected folder in the home, there is nothing protected to miss	Windows has no folders that need a grant like Full Disk Access, so protected is always ok (docs/designs/fleet-mode.md, Windows, The files)
+--help shows the whole header, gird-fleet.sh included	gird-check.ps1's header names blindspot-fleet.ps1, not gird-fleet.sh: tested as '-Help names blindspot-fleet.ps1 for IT teams'
+fleet: and removes nothing else	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: a script in a folder others can write to is refused	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: a path with mode 002 is refused as writable by others	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: a path with mode 020 is refused as writable by others	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: with the options line in the file, --inventory still only reads the result	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+gird-check.sh runs no sudo or dscl	gird-check.ps1 has no root work to keep apart: on Windows the fleet check runs as the signed-in person
+gird-check.sh --all-users points to gird-fleet.sh	gird-check.ps1 has no --all-users: on Windows an MDM runs blindspot-fleet.ps1, which checks the signed-in account
+fleet: a gird-check.sh others can write to is refused	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: without gird-check.sh next to it, it stops and says why	names gird-check.sh; the Windows rule is tested as 'fleet: without gird-check.ps1 next to it or packed inside, the run is failed'
+fleet: an account name it can't read is shown as invalid-name, and the inventory still reads	the account is the one the test machine is signed in as, whose name the suite can't change
+fleet: an agent in the account's own ~/.local/bin is found	the Windows account run keeps the person's PATH, so an agent's command is found as in a run by hand; gird-check.sh's account run, with root's clean PATH, needs the path check this tests
+fleet: a marker that must be its owner's never counts for the Mac	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: and counts for the account that owns it	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: a machine check that runs out of time leaves the Mac not checked	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: --inventory says failed when a later run did not finish by its deadline	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+fleet: and the last result while that run still has time	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+fleet: --stale-days is at most 30	the saved-result reader (--inventory, --result-tags, --stale-days) is gird-fleet.sh's: on Windows Intune keeps each run's output, and reading it is the admin tool's job (docs/designs/fleet-mode.md, Windows, Microsoft Intune)
+fleet: a folder whose ACL lets anyone write is refused	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: but a link there never counts	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: installed as the guide says, run with env -i, it runs	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
 a planted file that is neither alone nor not	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a planted SHA-256 that is not one	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a SHA-256 on a file that counts alone	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
@@ -242,64 +195,46 @@ and the rows it feeds are not green	gird-check.sh's home scan reads find's outpu
 and the headline does not call that scan clean	gird-check.sh's home scan reads find's output a line at a time, so it can't enter such a folder; gird-check.ps1 lists folders through .NET and reads the files in it, which run-ps.sh checks
 on a Mac, the snapshot note does not say the malware took anything	gird-check.ps1 prints a one-line Argus note and has no Mac snapshot paragraph
 and on a Mac the closing note names both	gird-check.ps1 prints a one-line Argus note and has no Mac snapshot paragraph
-fleet: project settings that act when a folder opens reach the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and a file named like the ones worms plant	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: so that account is to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a package version to update reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a tool with a fix to install reaches the account's tools	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: one with a published hole and no fixed version does not	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and that account is to review too	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the gh-token-monitor wiper reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and stopping it comes before the incident's other advice	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: every test setting is read only behind the not-root guard	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and keeps the accounts that need attention	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a linked marker in the shared temp folder is not the Mac's finding	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the readable report names the Mac's finding under macOS's bash	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and prints no shell error	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a hard link to the script copy stops no account's check	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a bad npm version only in a lockfile is its own field	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: not one of the incidents	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and its line says to act if that project was installed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: an update-level incident with a fix of its own shows that fix	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and --list only lists	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: an extension whose malware runs only on another system is one to remove	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: so its account is to review, not act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and stopping it comes before the incident's other advice	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: every test setting is read only behind the not-root guard	gird-fleet.ps1 has no root guard: its test settings are read only off Windows, tested as 'fleet: every test setting is read only off Windows'
+fleet: a linked marker in the shared temp folder is not the Mac's finding	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: the readable report names the Mac's finding under macOS's bash	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: and prints no shell error	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: a hard link to the script copy stops no account's check	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: and its line says to act if that project was installed	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: an update-level incident with a fix of its own shows that fix	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: and --list only lists	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
 a TMPDIR that can't be written to still names the folder	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
 with no temp folder, the scan says it could not tell	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
 and the rows it feeds are not green either	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
-fleet: a platform found reads as its own summary	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: never that the account uses it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the JSON names the platforms found	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a home of / is not checked, and keeps its reason	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a temp folder find that runs out of time leaves the Mac not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and the report says what was not looked through	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: 20,000 marker names an account made cost root no time each	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a platform found reads as its own summary	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: never that the account uses it	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: a home of / is not checked, and keeps its reason	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a temp folder find that runs out of time leaves the Mac not checked	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: and the report says what was not looked through	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: 20,000 marker names an account made cost root no time each	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
 an extension with an OS listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension with all three OSes, which is all	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a list of bad npm versions longer than awk gets	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 on Linux, VS Code's settings in XDG_CONFIG_HOME are read	gird-check.ps1 takes the editors' folders from APPDATA, as on Windows, on every system
 no ++ or -- on an awk field, which BusyBox refuses	gird-check.ps1 has no awk
-fleet: with the wiper there, a platform's rotate waits for it too	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: with the wiper there, a platform's rotate waits for it too	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
 and its PowerShell does not end itself	only gird-check.sh's Git Bash stop starts a PowerShell whose own command line names gh-token-monitor; gird-check.ps1's is typed into the person's own session
 a not-set pattern in a .json file	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a not-set pattern that is not a key	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a line of not-set patterns only	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
-fleet: a marker root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: not a finding of the Mac's	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a marker an account owns in /tmp is a possible sign on its row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: not a finding of that account's	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a lock another account's process holds is only a possible sign	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a link left to root's copy is left empty	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and the next run reads it as a possible sign, never act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: SANDWORM_MODE's cleanup comes before any rotate	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and a platform's rotate waits for it and the wiper	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a profile that moves an agent's folders leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a session check that runs long is stopped in time, and the findings still count	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a marker root owns in the shared temp folder is a possible sign for the Mac	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: not a finding of the Mac's	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: a marker an account owns in /tmp is a possible sign on its row	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: not a finding of that account's	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: a lock another account's process holds is only a possible sign	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: a link left to root's copy is left empty	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: and the next run reads it as a possible sign, never act	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: SANDWORM_MODE's cleanup comes before any rotate	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: and a platform's rotate waits for it and the wiper	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: a profile that moves an agent's folders leaves the account partly checked	on Windows the account run keeps the person's own environment, so a variable that moves an agent's folders is followed and moved is always 0 (docs/designs/fleet-mode.md, Windows, The files)
 and the summary says so too	gird-check.ps1 lists folders through .NET, with no find to reject the scan
 and its rows are not green	gird-check.ps1 lists folders through .NET, with no find to reject the scan
-fleet: a value cut short keeps an act account's wiper and incidents, and every account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and ends with +more, since details were cut	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 a Python incident's startup file outside the home folder	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a Python incident's startup file that must be its owner's	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 on a Mac, Gemini CLI's sandbox sessions under GEMINI_CLI_HOME are found	the line is macOS-only, for Gemini CLI's sandbox on a Mac, and gird-check.ps1 reads the Windows folders
@@ -308,34 +243,28 @@ and one installed is named as that	the snapshot note with the Argus offer is pri
 a link at the loader lock's name is not the malware's lock	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
 and this person's own lock a process holds still counts	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
 nor is a hard link there, a second name of a file a process holds	gird-check.ps1 does not look for the LiteLLM loader lock, which only runs on macOS and Linux
-fleet: a startup file root owns in /tmp is only a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and not the Mac's finding	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and no row says the malware ran as root	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a link at that name in /tmp is nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a home whose path holds a character it does not read says so, not that it is a system folder	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a config behind a folder the account can't enter counts as not read	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: so that account is never clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a history file linked to /dev/null is not counted as not read	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a profile that sets a tool's folder to its default moves nothing	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: one that sets it elsewhere leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and so does one that moves pnpm's folder (PNPM_HOME)	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: so a bad package only there never reads clear	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a settings file read only in part leaves the account partly checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and counts as a file not checked	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a startup file root owns in /tmp is only a possible sign for the Mac	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: and not the Mac's finding	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: and no row says the malware ran as root	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: a link at that name in /tmp is nothing	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: a home whose path holds a character it does not read says so, not that it is a system folder	Windows checks only the signed-in account, so there is no account list to filter (docs/designs/fleet-mode.md, Windows, Why not every account at once)
+fleet: a profile that sets a tool's folder to its default moves nothing	on Windows the account run keeps the person's own environment, so a variable that moves an agent's folders is followed and moved is always 0 (docs/designs/fleet-mode.md, Windows, The files)
+fleet: one that sets it elsewhere leaves the account partly checked	on Windows the account run keeps the person's own environment, so a variable that moves an agent's folders is followed and moved is always 0 (docs/designs/fleet-mode.md, Windows, The files)
+fleet: and so does one that moves pnpm's folder (PNPM_HOME)	on Windows the account run keeps the person's own environment, so a variable that moves an agent's folders is followed and moved is always 0 (docs/designs/fleet-mode.md, Windows, The files)
+fleet: so a bad package only there never reads clear	on Windows the account run keeps the person's own environment, so a variable that moves an agent's folders is followed and moved is always 0 (docs/designs/fleet-mode.md, Windows, The files)
 and on a Mac the closing note says whether it was installed can't be told	the snapshot note with the Argus offer is printed on a Mac only, and gird-check.ps1 has none
-fleet: nor a hard link there	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: gird-fleet.sh tests a path for a link before it stats it	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a ripgrep in a folder others can write to is not used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a ripgrep whose ACL lets anyone write is not used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: with no ripgrep that qualifies, perl checks the sessions	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: nor a hard link there	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
+fleet: gird-fleet.sh tests a path for a link before it stats it	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
+fleet: a ripgrep in a folder others can write to is not used	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a ripgrep whose ACL lets anyone write is not used	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: with no ripgrep that qualifies, perl checks the sessions	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
 a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
-fleet: a ripgrep the account owns is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a ripgrep root alone can change is used	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a real ripgrep finds the same session keys as perl	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a link at the ripgrep path is never run, even to a root-owned program	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a ripgrep reached through a linked folder is never run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a Homebrew or /usr/local ripgrep is never looked at	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a link at the ripgrep path is never followed	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a marker folder in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a ripgrep the account owns is never run	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a ripgrep root alone can change is used	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a real ripgrep finds the same session keys as perl	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a link at the ripgrep path is never run, even to a root-owned program	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a ripgrep reached through a linked folder is never run	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a Homebrew or /usr/local ripgrep is never looked at	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a link at the ripgrep path is never followed	on Windows the account run uses the person's own ripgrep, as a run by hand does, since it has only the person's rights: there is no admin path to check (docs/designs/fleet-mode.md, Windows, The files)
+fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac	Windows has no shared /tmp, and the PC's own check looks up a few names in %ProgramData%, judged by owner, with no find or lsof: tested as 'fleet: a marker the person owns in %ProgramData% is not the PC's'
 a settings read whose awk fails names the file as not read	gird-check.ps1 reads settings with .NET, not awk
