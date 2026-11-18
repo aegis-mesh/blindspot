@@ -4019,6 +4019,30 @@ has    "fleet: and keeps the accounts that need attention" '^inventory=.*person1
 _inv=$(sed -n 's/^inventory=//p' "$FL/inv.flat")
 if [ "${#_inv}" -le 250 ] && printf '%s' "$_inv" | grep -qE 'asha: act wiper; incidents [a-z0-9,-]+( |;)' && printf '%s' "$_inv" | grep -q 'itadmin: '; then ok "fleet: a value cut short keeps an act account's wiper and incidents, and every account"; else bad "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "$_inv"; fi
 if printf '%s' "$_inv" | grep -qE ' \+more$'; then ok "fleet: and ends with +more, since details were cut"; else bad "fleet: and ends with +more, since details were cut" "$_inv"; fi
+# Every length around the limit, for a Mac with no accounts (its value closes with "| no accounts")
+# and for one with accounts: at most 250 characters, whole when it fits, else ending with +more, and
+# never without its no accounts part.
+sed -n '/^fl_value() {/,/^}$/p' "$FLEETSH" > "$FL/value.sh"; . "$FL/value.sh"
+_vh="v1 review 2026-10-25T09:12Z"; _vbad=""
+vcheck() { # length accounts parts: the value fl_value makes of head and parts, checked; problems go in _vbad
+  _vw="$_vh$3"; [ "$2" -eq 0 ] && _vw="$_vw | no accounts"
+  _vg=$(fl_value "$_vh" "$3" "$2")
+  [ "${#_vw}" -eq "$1" ] || _vbad="$_vbad $1/$2: built ${#_vw}"
+  [ "${#_vg}" -le 250 ] || _vbad="$_vbad $1/$2: ${#_vg} long"
+  if [ "$1" -le 250 ]; then [ "$_vg" = "$_vw" ] || _vbad="$_vbad $1/$2: cut"
+  else case "$_vg" in *" +more") ;; *) _vbad="$_vbad $1/$2: no +more" ;; esac; fi
+  if [ "$2" -eq 0 ]; then case "$_vg" in *" | no accounts"*) ;; *) _vbad="$_vbad $1/0: no accounts dropped" ;; esac; fi
+}
+L=230
+while [ "$L" -le 270 ]; do
+  _vm=" | machine: review; possible "; _va=" | asha: review ssh-open 1 | itadmin: clear | "
+  _vz=""; while [ "${#_vz}" -lt $((L - ${#_vh} - ${#_vm} - 14)) ]; do _vz="${_vz}a"; done
+  _vy=""; while [ "${#_vy}" -lt $((L - ${#_vh} - ${#_va} - 7)) ]; do _vy="${_vy}b"; done
+  vcheck "$L" 0 "$_vm$_vz"; vcheck "$L" 3 "$_va$_vy: clear"
+  L=$((L + 1))
+done
+if [ -z "$_vbad" ]; then ok "fleet: an inventory value of every length from 230 to 270 is at most 250, and one cut ends with +more and keeps no accounts"
+else bad "fleet: an inventory value of every length from 230 to 270 is at most 250, and one cut ends with +more and keeps no accounts" "$_vbad"; fi
 
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"

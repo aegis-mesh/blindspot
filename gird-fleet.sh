@@ -810,6 +810,37 @@ fl_inventory() {
   fl_inv_out "$_iv"
 }
 
+# The inventory value: one line for an MDM's inventory field, no path, file name or key, at most 250
+# characters. Too long, it keeps "no accounts" and the parts that need attention first, cuts details
+# before accounts (an act account keeps gh-token-monitor and its incidents), and ends with +more
+# whenever anything was cut; the saved file has the rest.
+fl_value() { # head parts accounts: parts each start with " | "; accounts 0 adds " | no accounts"
+  _vp=$2; [ "$3" -eq 0 ] && _vp="$_vp | no accounts"
+  _vv="$1$_vp"
+  if [ "${#_vv}" -le 250 ]; then printf '%s' "$_vv"; return; fi
+  # "no accounts" comes first, then the accounts that need attention, act, then not_checked, then
+  # review, then as many clear ones as fit. An account whose details don't fit
+  # keeps its outcome, and an act account its wiper and incidents too.
+  printf '%s' "$_vp" | /usr/bin/awk -v head="$1" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
+      { n = 0
+        for (i = 2; i <= NF; i++) {
+          split($i, p, " "); n++; full[n] = $i; base[n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5
+          if ($i == "no accounts") k[n] = 6
+          key[n] = base[n]
+          if (p[2] == "act") { m = split(substr($i, length(base[n]) + 2), d, "; ")
+            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key[n] = key[n] (key[n] == base[n] ? " " : "; ") d[x] }
+        }
+        out = head; cut = 0; stop = 0
+        for (lv = 6; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) {
+          if (length(out " | " full[j]) <= 243) { out = out " | " full[j]; continue }
+          cut = 1
+          if (key[j] != base[j] && length(out " | " key[j]) <= 243) out = out " | " key[j]
+          else if (length(out " | " base[j]) <= 243) out = out " | " base[j]
+          else stop = 1
+        }
+        print out (cut ? " +more" : "") }'
+}
+
 fleet_main() {
   trap 'fl_cleanup' EXIT
   trap 'fl_cleanup; exit 130' INT TERM HUP
@@ -989,35 +1020,7 @@ fleet_main() {
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
   _sx=""; [ "$FL_OLDINST" = true ] && _sx=" old_install=yes"
   SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT$_sx"
-  # The inventory value: one line for an MDM's inventory field, no path, file name or key. Too
-  # long, it keeps the accounts that need attention first, cuts details before accounts (an act account
-  # keeps gh-token-monitor and its incidents), and ends with +more when anything was cut; the saved
-  # file has the rest.
-  INVENTORY_V="v1 $OUTCOME $_short$INV"; [ "$N_ACC" -eq 0 ] && INVENTORY_V="$INVENTORY_V | no accounts"
-  if [ "${#INVENTORY_V}" -gt 250 ]; then
-    _iv="v1 $OUTCOME $_short"
-    # The accounts that need attention come first, act, then not_checked, then review, then as many
-    # clear ones as fit. An account whose details don't fit keeps its outcome, and an act account its
-    # wiper and incidents too.
-    _iv=$(printf '%s' "$INV" | /usr/bin/awk -v head="$_iv" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
-      { n = 0
-        for (i = 2; i <= NF; i++) {
-          split($i, p, " "); n++; full[n] = $i; base[n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5
-          key[n] = base[n]
-          if (p[2] == "act") { m = split(substr($i, length(base[n]) + 2), d, "; ")
-            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key[n] = key[n] (key[n] == base[n] ? " " : "; ") d[x] }
-        }
-        out = head; cut = 0; stop = 0
-        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) {
-          if (length(out " | " full[j]) <= 243) { out = out " | " full[j]; continue }
-          cut = 1
-          if (key[j] != base[j] && length(out " | " key[j]) <= 243) out = out " | " key[j]
-          else if (length(out " | " base[j]) <= 243) out = out " | " base[j]
-          else stop = 1
-        }
-        print out (cut ? " +more" : "") }')
-    INVENTORY_V=$_iv
-  fi
+  INVENTORY_V=$(fl_value "v1 $OUTCOME $_short" "$INV" "$N_ACC")
   JSON_DOC="{
   \"blindspot\": \"1\",
   \"script\": \"$FL_REL\",
