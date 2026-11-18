@@ -178,38 +178,46 @@ bad="$bad${bad:+${_ow:+
 }}$_ow"
 # owasp_kinds runs as root in gird-fleet.sh's copy, so its block calls only builtins, functions the
 # generated blocks define, and tools by their full path, as root's own code does: a bare name would
-# run whatever the MDM's PATH holds. Single-quoted text and the body of a quoted here-document (<<'X',
-# <<"X", <<\X) are skipped; an unquoted body is expanded by the shell, so the command after each $( or `
-# in it is checked. Each command word after ; & | ( { $( ` and the shell keywords is checked; a ) only
-# closes what is before it. The block writes no file, so a > outside single quotes is refused.
+# run whatever the MDM's PATH holds. The guard reads one line at a time, so it refuses what would carry
+# shell text past that line or past its reading: an unquoted or <<- here-document, a backtick, a quote
+# or a ( that does not close on its line, a line that ends in \, a here-document after a # or with no
+# end line. The body of a quoted here-document (<<'X', <<"X", <<\X) is skipped to the line that is
+# exactly X (docs/designs/owasp.md). Single-quoted text is skipped; each
+# command word after ; & | ( { $( and the shell keywords is checked; a ) only closes what is before it.
+# The block writes no file, so a > outside single quotes is refused.
 # bash 3.2 miscounts the parentheses of a program inside $( ), so the program is set apart first.
 OD_AWK='
   BEGIN { split("case esac for in do done while until if then else elif fi return printf read continue break [ test : true false local shift unset incident_level owasp_set owasp_kinds", a, " "); for (i in a) okw[a[i]] = 1 }
+  function no(n, why, src) { print "gird-check.sh line " base + n ", owasp-derive block, " why ": " src }
   function words(l, src,   m, j, w, x, seg, wd) {
     gsub(/\047[^\047]*\047/, "Q", l); gsub(/"/, " ", l)
     sub(/^[[:space:]]*[^[:space:]()]*\)/, ";", l)
-    gsub(/\)/, " ", l); gsub(/\$\(|&&|\|\||;;|[;|&{}(`]/, ";", l)
+    gsub(/\)/, " ", l); gsub(/\$\(|&&|\|\||;;|[;|&{}(]/, ";", l)
     m = split(l, seg, ";")
     for (j = 1; j <= m; j++) {
       w = split(seg[j], wd, " "); x = 1
       while (x <= w && (wd[x] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || wd[x] ~ /^(!|then|do|else|elif|if|while|until)$/)) x++
       if (x > w) continue
-      if (!(wd[x] in okw) && wd[x] !~ /^\//) print "gird-check.sh, owasp-derive block, runs a bare command (" wd[x] "): root runs this block, so call a builtin or a full path: " src
+      if (!(wd[x] in okw) && wd[x] !~ /^\//) no(NR, "runs a bare command (" wd[x] "): root runs this block, so call a builtin or a full path", src)
     } }
-  hd != "" { if ($0 == hd) { hd = ""; next }
-    if (hq) next
-    l = $0; gsub(/\$\(|`/, "\001", l); m = split(l, seg, "\001")
-    for (j = 2; j <= m; j++) words(seg[j], $0)
-    next }
+  hd != "" { if ($0 == hd) hd = ""; next }
   /^[[:space:]]*#/ { next }
   { l = $0
-    if (match(l, /<<-?[[:space:]]*(\047[A-Za-z_][A-Za-z0-9_]*\047|"[A-Za-z_][A-Za-z0-9_]*"|\\[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*)[[:space:]]*$/)) {
-      hd = substr(l, RSTART + 2); sub(/^-/, "", hd); gsub(/[[:space:]]/, "", hd)
-      hq = hd ~ /^[\047"\\]/; gsub(/[\047"\\]/, "", hd); l = substr(l, 1, RSTART - 1) }
-    t = l; gsub(/\047[^\047]*\047/, "Q", t)
-    if (t ~ />/) print "gird-check.sh, owasp-derive block, redirects output (>): root runs this block, so it writes no file: " $0
-    words(l, $0) }'
-_od=$(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive$/ { on = 0 } on' gird-check.sh | awk "$OD_AWK")
+    if (match(l, /(^|[^<])<<[[:space:]]*(\047[A-Za-z_][A-Za-z0-9_]*\047|"[A-Za-z_][A-Za-z0-9_]*"|\\[A-Za-z_][A-Za-z0-9_]*)[[:space:]]*$/)) {
+      k = RSTART + index(substr(l, RSTART), "<<") - 1
+      hd = substr(l, k + 2); gsub(/[[:space:]\047"\\]/, "", hd); hl = NR; l = substr(l, 1, k - 1) }
+    t = l; gsub(/\047[^\047]*\047/, "Q", t); u = t; gsub(/\\"/, "", u); gsub(/<<</, "", u)
+    if (u ~ /<</) no(NR, "has an unquoted or <<- here-document: root runs this block, so a here-document is quoted (<<\047X\047) and ends at a line that is exactly X", $0)
+    if (hd != "" && t ~ /#/) no(NR, "opens a here-document after a #: root runs this block, so a here-document opens on a line with no comment", $0)
+    if (t ~ /\047/ || gsub(/"/, "", u) % 2) no(NR, "has a quote that does not close on its line: root runs this block, so each quote closes on the line it opens", $0)
+    if (t ~ /`/) no(NR, "has a backtick: root runs this block, so write $( ) instead", $0)
+    if (t ~ /\\$/) no(NR, "continues onto the next line (\\): root runs this block, so each command is on one line", $0)
+    if (gsub(/\(/, "(", t) > gsub(/\)/, ")", t)) no(NR, "opens a ( that does not close on its line: root runs this block, so each ( closes on the line it opens", $0)
+    if (t ~ />/) no(NR, "redirects output (>): root runs this block, so it writes no file", $0)
+    words(l, $0) }
+  END { if (hd != "") no(hl, "has a here-document that never ends (" hd "): root runs this block, so each here-document ends at a line that is exactly its marker", "") }'
+OD_BASE=$(awk '/^# >>> owasp-derive[: ]/ { print NR; exit }' gird-check.sh)
+_od=$(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive$/ { on = 0 } on' gird-check.sh | awk -v base="${OD_BASE:-0}" "$OD_AWK")
 bad="$bad${bad:+${_od:+
 }}$_od"
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi

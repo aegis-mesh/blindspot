@@ -3236,21 +3236,62 @@ sed 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  _ov=$(printf "%s" "$_ov" | \
 (cd "$WORK/owb" && bash tools/gen.sh > "$WORK/owb.txt" 2>&1); RC=$?
 if [ "$RC" -eq 0 ] && grep -qF '_ov=$(printf "%s" "$_ov" | /usr/bin/tr -d " ")' "$WORK/owb/gird-fleet.sh"; then ok "gen.sh: the same command by its full path is written into gird-fleet.sh"
 else bad "gen.sh: the same command by its full path is written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/owb.txt")"; fi
-# An unquoted here-document's body is expanded, so a command in it runs; a redirection writes a file.
+# The guard reads one line at a time: what would carry shell text past a line, or past its reading, is
+# refused outright. od_put TEXT: gen.sh on a copy whose owasp_kinds has TEXT in place of its here-string
+# line; sets RC, and OD_SAME when the edit did not apply.
+od_put() {
+  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+  OD_TEXT=$1 awk '$0 == "  done <<< \"$OWASP_TABLE\"" { print ENVIRON["OD_TEXT"]; next } { print }' gird-check.sh > "$WORK/odr/gird-check.sh"
+  OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
+  (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
+}
+od_says() { # fixed-string...: 0 when the edit applied, gen.sh exited 2 and printed every string; else OD_WHY says why
+  OD_WHY="exit $RC"; [ "$OD_SAME" -eq 0 ] || OD_WHY="the edit did not apply"
+  [ "$RC" -eq 2 ] || OD_WHY="$OD_WHY, wanted exit 2"
+  for _s in "$@"; do grep -qF -- "$_s" "$WORK/odr.txt" || OD_WHY="$OD_WHY, no: $_s"; done
+  OD_WHY="$OD_WHY: $(head -n 3 "$WORK/odr.txt")"; [ "$OD_WHY" = "exit 2: $(head -n 3 "$WORK/odr.txt")" ]
+}
+OD_HD='has an unquoted or <<- here-document'; OD_DONE='  done <<< "$OWASP_TABLE"'
+OD_LN=$(awk '$0 == "  done <<< \"$OWASP_TABLE\"" { print NR; exit }' gird-check.sh)
+od_put "$(printf '  done <<EOF\n$OWASP_TABLE\nEOF')"
+if od_says "line $OD_LN, owasp-derive block, $OD_HD" "a line that is exactly X: "'  done <<EOF'; then ok "gen.sh: an unquoted here-document in the owasp-derive block is refused"; else bad "gen.sh: an unquoted here-document in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  done <<-EOF\n$OWASP_TABLE\n\tEOF')"
+if od_says "line $OD_LN, owasp-derive block, $OD_HD" "a line that is exactly X: "'  done <<-EOF'; then ok "gen.sh: a <<- here-document in the owasp-derive block is refused"; else bad "gen.sh: a <<- here-document in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  done <<EOF\n$OWASP_TABLE$(id)\nEOF')"
+if od_says "$OD_HD" 'runs a bare command (id)'; then ok "gen.sh: \$(id) in an unquoted here-document of the owasp-derive block is refused"; else bad "gen.sh: \$(id) in an unquoted here-document of the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "  done <<-'X'\n\$OWASP_TABLE\n\tX\n  id")"
+if od_says "$OD_HD" 'runs a bare command (id)'; then ok "gen.sh: a bare command after a quoted <<- here-document of the owasp-derive block is refused"; else bad "gen.sh: a bare command after a quoted <<- here-document of the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  done <<EOF\n$OWASP_TABLE$(printf x >/dev/null)\nEOF')"
+if od_says "$OD_HD" 'redirects output (>)'; then ok "gen.sh: a redirection inside \$( ) in an unquoted here-document of the owasp-derive block is refused"; else bad "gen.sh: a redirection inside \$( ) in an unquoted here-document of the owasp-derive block is refused" "$OD_WHY"; fi
+od_put '  done <<< "$OWASP_TABLE`:`"'
+if od_says 'has a backtick'; then ok "gen.sh: a backtick in the owasp-derive block is refused"; else bad "gen.sh: a backtick in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  _ox=$%s\nid)\n  done <<< "$OWASP_TABLE"' '(')"
+if od_says 'opens a ( that does not close on its line'; then ok "gen.sh: a ( that does not close on its line in the owasp-derive block is refused"; else bad "gen.sh: a ( that does not close on its line in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "  _ox='\n' ; id ; '\n'\n%s" "$OD_DONE")"
+if od_says 'has a quote that does not close on its line'; then ok "gen.sh: a quote that does not close on its line in the owasp-derive block is refused"; else bad "gen.sh: a quote that does not close on its line in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  _ox=a \\\n  done <<< "$OWASP_TABLE"')"
+if od_says 'continues onto the next line'; then ok "gen.sh: a line that ends in a backslash in the owasp-derive block is refused"; else bad "gen.sh: a line that ends in a backslash in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "%s # <<'X'\n  id\nX" "$OD_DONE")"
+if od_says 'opens a here-document after a #'; then ok "gen.sh: a here-document opened after a # in the owasp-derive block is refused"; else bad "gen.sh: a here-document opened after a # in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "%s\n  : <<'X'\n  id" "$OD_DONE")"
+if od_says 'has a here-document that never ends (X)'; then ok "gen.sh: a quoted here-document that never ends in the owasp-derive block is refused"; else bad "gen.sh: a quoted here-document that never ends in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "  done <<<'X'\n  id\nX")"
+if od_says 'runs a bare command (id)'; then ok "gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read"; else bad "gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read" "$OD_WHY"; fi
+OD_BODY='id $(id) > /tmp/ow `id` "'
+od_put "$(printf "%s\n  : <<'X'\n%s\n  X\nX" "$OD_DONE" "$OD_BODY")"
+if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 0 ] && grep -qxF -- "$OD_BODY" "$WORK/odr/gird-fleet.sh"; then ok "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh"
+else bad "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
+rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+(cd "$WORK/odr" && bash tools/gen.sh --check > "$WORK/odr.txt" 2>&1); RC=$?
+if [ "$RC" -eq 0 ] && ! grep -q 'owasp-derive block' "$WORK/odr.txt"; then ok "gen.sh: the committed owasp-derive block passes the guard"
+else bad "gen.sh: the committed owasp-derive block passes the guard" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
 od_edit() { # sed-program: gen.sh on a copy whose gird-check.sh has the edit; sets RC, and OD_SAME when the edit did not apply
   rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
   sed "$1" gird-check.sh > "$WORK/odr/gird-check.sh"; OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
   (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
 }
-od_edit '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE$(cat \/dev\/null)/'
-if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 2 ] && grep -qF 'runs a bare command (cat)' "$WORK/odr.txt"; then ok "gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused"
-else bad "gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
-od_edit '/^owasp_kinds() {$/,/^}$/s/^\$OWASP_TABLE$/$OWASP_TABLE\`cat \/dev\/null\`/'
-if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 2 ] && grep -qF 'runs a bare command (cat)' "$WORK/odr.txt"; then ok "gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused"
-else bad "gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
 od_edit 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  printf "%s" "$_ov" > \/tmp\/ow; [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/'
-if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 2 ] && grep -qF 'redirects output (>)' "$WORK/odr.txt"; then ok "gen.sh: an output redirection in the owasp-derive block is refused"
-else bad "gen.sh: an output redirection in the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
+if od_says 'redirects output (>)'; then ok "gen.sh: an output redirection in the owasp-derive block is refused"; else bad "gen.sh: an output redirection in the owasp-derive block is refused" "$OD_WHY"; fi
 # gird-check.ps1 tags by its own Owasp-Set: a source with a risk and no arm there would never be tagged.
 rm -rf "$WORK/opa"; mkdir -p "$WORK/opa"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/opa/"
 grep -v "^    'ak_links' { return" gird-check.ps1 > "$WORK/opa/gird-check.ps1"

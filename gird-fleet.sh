@@ -369,9 +369,7 @@ owasp_kinds() {
       ''|machine:*|report) continue ;;
     esac
     owasp_set "$_osrc" && printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"
-  done <<EOF
-$OWASP_TABLE
-EOF
+  done <<< "$OWASP_TABLE"
 }
 # <<< owasp-derive
 

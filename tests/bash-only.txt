@@ -356,8 +356,20 @@ gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check	too
 gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 gen.sh: a bare command in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 gen.sh: the same command by its full path is written into gird-fleet.sh	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
-gen.sh: a command substitution in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
-gen.sh: a backtick in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: an unquoted here-document in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a <<- here-document in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: $(id) in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a bare command after a quoted <<- here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a redirection inside $( ) in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a backtick in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a ( that does not close on its line in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a quote that does not close on its line in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a line that ends in a backslash in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a here-document opened after a # in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a quoted here-document that never ends in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: the committed owasp-derive block passes the guard	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 gen.sh: an output redirection in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 fleet: the account run prints exactly FL_KEYS, in order	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

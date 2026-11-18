@@ -201,12 +201,29 @@ which `gen.sh` copies into `gird-fleet.sh` the way it copies `owned-walk`. It ho
 
 Root runs this copy, so the block calls only builtins, the generated functions and tools by their
 full path, as `owned-walk` does. `gen.sh` refuses a bare external command in it: it reads each command
-word of the block (after `;`, `&&`, `||`, `|`, `(`, `{`, `$(`, a backtick and the shell keywords,
-with single-quoted text and the body of a quoted here-document (`<<'X'`, `<<"X"`, `<<\X`) skipped)
-and allows only a list of builtins and keywords, `incident_level`, `owasp_set`, `owasp_kinds`, or a
-word starting with `/`. The body of an unquoted here-document is expanded by the shell, so the command
-after each `$(` or backtick in it is checked the same way. The block writes no file: `gen.sh` refuses
+word of the block (after `;`, `&&`, `||`, `|`, `(`, `{`, `$(` and the shell keywords, with
+single-quoted text skipped) and allows only a list of builtins and keywords, `incident_level`,
+`owasp_set`, `owasp_kinds`, or a word starting with `/`. The block writes no file: `gen.sh` refuses
 any `>` outside single quotes.
+
+The guard reads the block one line at a time, so it refuses outright anything that would carry shell
+text past a line or past what it reads, rather than try to follow it:
+
+- a here-document that is not quoted (`<<X`), whose body the shell expands, and any `<<-`
+  here-document, whose end line may be indented;
+- a backtick (write `$( )`, which the guard reads);
+- a quote, single or double, that does not close on the line it opens;
+- a `(` that does not close on its line, such as a `$(` whose command starts on the next line;
+- a line that ends in `\`, which joins it to the next;
+- a here-document opened on a line with a `#`, where it may be part of a comment;
+- a here-document whose end line never comes.
+
+A quoted here-document (`<<'X'`, `<<"X"`, `<<\X`) is allowed: its body is text, and the guard skips
+it to the first line that is exactly `X`. A here-string (`<<<`) is allowed: its word is on its line,
+and the guard reads it like any other. `eval`, `exec`, `source`, `.`, `trap` and `command` are not on
+the list of allowed words, so a line that calls one is refused as a bare command. Each refusal names
+the line of `gird-check.sh` it found. `owasp_kinds` reads `OWASP_TABLE` through a here-string,
+`done <<< "$OWASP_TABLE"`.
 
 - In `gird-check.sh`, the values the account run computed inside the `ACCTRUN` block (`_yolo`, `_inc`,
   `_lock`, `_planted` and the rest) move into a function, `finding_fields`, that sets `FA_<key>` for
@@ -501,7 +518,12 @@ Person's report:
 | gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check | bash-only: `tools/gen.sh` |
 | gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check | bash-only: `tools/gen.sh` |
 | gen.sh: a bare command in the owasp-derive block is refused | bash-only: `tools/gen.sh` |
-| gen.sh: a command substitution, or a backtick, in an unquoted here-document of the owasp-derive block is refused (two tests) | bash-only: `tools/gen.sh` |
+| gen.sh: an unquoted here-document, and a <<- one, in the owasp-derive block is refused, with the line (two tests) | bash-only: `tools/gen.sh` |
+| gen.sh: $(id) in an unquoted here-document, a bare command after a quoted <<- here-document, and a redirection inside $( ) in an unquoted here-document of the owasp-derive block are refused (three tests) | bash-only: `tools/gen.sh` |
+| gen.sh: a backtick, a ( or a quote that does not close on its line, a line that ends in a backslash, a here-document opened after a #, and a quoted here-document that never ends in the owasp-derive block are refused (six tests) | bash-only: `tools/gen.sh` |
+| gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read | bash-only: `tools/gen.sh` |
+| gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh | bash-only: `tools/gen.sh` |
+| gen.sh: the committed owasp-derive block passes the guard | bash-only: `tools/gen.sh` |
 | gen.sh: an output redirection in the owasp-derive block is refused | bash-only: `tools/gen.sh` |
 | gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused | bash-only: `tools/gen.sh` |
 
