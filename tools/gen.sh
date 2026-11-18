@@ -185,12 +185,11 @@ bad="$bad${bad:+${_ow:+
 # (<<'X', <<"X", <<\X) is skipped to the line that is exactly X. Single-quoted text is skipped; each
 # command word after ; & | ( { $( and the shell keywords is checked; a ) only closes what is before it.
 # It reads text, not the shell's grammar, so it does not catch everything: a command between quotes it
-# pairs wrongly (: "'" ; id ; "'"), a command in the first arm of a case (case x in *) id ;; esac), and
-# a full-path tool that looks a command up by name (/usr/bin/env id, /bin/sh -c id) all pass it. What
-# stops a command being found by name is the run: gird-fleet.sh runs the block with a search path that
-# holds nothing (fl_owasp_kinds), so such a command is not found and the run reads failed. Neither
-# stops a full-path tool given a script to run, such as /bin/sh -c /usr/bin/id, or a builtin that
-# finds a tool without the search path, such as command -p id: code review does (docs/designs/owasp.md).
+# pairs wrongly (: "'" ; id ; "'"), a command in the first arm of a case (case x in *) id ;; esac), a
+# full-path tool (/usr/bin/env -i id) and a builtin such as command or hash all pass it. The run is
+# what refuses them: before it runs the block, gird-fleet.sh reads bash's own reprint of its functions
+# and refuses any line not on its list (fl_owasp_code_ok), and the run reads failed
+# (docs/designs/owasp.md).
 # bash 3.2 miscounts the parentheses of a program inside $( ), so the program is set apart first.
 OD_AWK='
   BEGIN { split("case esac for in do done while until if then else elif fi return printf read continue break [ test : true false local shift unset incident_level owasp_set owasp_kinds", a, " "); for (i in a) okw[a[i]] = 1 }

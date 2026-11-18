@@ -138,7 +138,7 @@ today, and no file paths, file names or key values:
   ],
   "machine": { "complete": true, "agents": [], "incidents": [], "owasp": [] },
   "owasp": {
-    "accounts_counted": 1, "accounts_not_checked": 0, "accounts_partly_checked": 0,
+    "accounts_counted": 1, "accounts_not_checked": 0, "accounts_partly_checked": 0, "failed_because": [],
     "risks": [
       {"id": "ASI02", "name": "Tool Misuse and Exploitation", "accounts": 1, "machine": false,
        "findings": ["agents_run_without_asking"]},
@@ -158,8 +158,9 @@ today, and no file paths, file names or key values:
 - The summary line is `blindspot <outcome> accounts=<n> act=<n> review=<n> not_checked=<n>
   v=<script version> at=<UTC time>`, then, when a finding is tagged with an OWASP Agentic Top 10
   risk, ` owasp=<risk>:<accounts>[+mac],...;counted:<n>` with `;not_counted:<n>` and `;partial:<n>`
-  when above 0. Each checked account's row and the `machine` object carry an `owasp` list, and the
-  top-level `owasp` object counts accounts counted, not checked and partly checked beside the risks.
+  when above 0, and ` owasp_failed=<causes>` when the tags could not be worked out. Each checked account's row and the `machine` object carry an `owasp` list, and the
+  top-level `owasp` object counts accounts counted, not checked and partly checked beside the risks,
+  and lists in `failed_because` each cause the tags could not be worked out for.
   The mapping and every surface are in [owasp.md](owasp.md).
 - The inventory value is a compact form of the whole result, one line, short enough for an MDM's
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:

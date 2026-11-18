@@ -199,23 +199,46 @@ which `gen.sh` copies into `gird-fleet.sh` the way it copies `owned-walk`. It ho
 - `owasp_kinds` walks `OWASP_TABLE` and prints `risk|kind|section|name|label` for each kind whose
   source is set, skipping `machine:` and `report` lines.
 
-Root runs this copy, so the block calls only builtins and the generated functions. Two things hold
-it to that: a guard in `gen.sh` at build time, and an empty search path at run time.
+Root runs this copy, so the block must call only builtins and the generated functions. Three layers
+hold it to that:
 
-**At run time.** Root runs the block through `fl_owasp_kinds` in `gird-fleet.sh`. It runs
-`owasp_kinds` in its own subshell with `PATH=/private/var/empty`, so neither the block nor a tool
-it starts by its full path can find a command by name. The rest of root keeps its own `PATH`. The
-folder is never an empty `PATH` value or an empty element, which would mean the current folder.
-macOS ships `/private/var/empty` empty, and it and every folder above it are root's alone, so root
-can check the whole path with `owned_only`. A folder root made under `/tmp` could not pass that
-check, as everyone can write to `/tmp`. Before each account's tags, root checks that the folder is
-a real folder, reached through no link, owned by root, writable by no one else and empty.
+1. **A text check at build time.** `gen.sh` reads the block as text and refuses a bare command in it.
+   It is an early warning for a maintainer, not a boundary: it reads text, not the shell's grammar.
+2. **A check of bash's own reprint at run time.** Before each account's tags, root reads
+   `declare -f owasp_kinds owasp_set incident_level`, which bash writes from what it parsed. No
+   quoting can hide text in it. Root compares each line, trimmed of its indent, with a list of the
+   lines the block needs (`fl_owasp_code_ok` in `gird-fleet.sh`). It is an allowlist, not a list of
+   refused words: the block is small, so the list names every line shape it uses, and anything else
+   is refused. That covers another command, a full path, a builtin such as `command`, `hash`, `eval`
+   or `set`, a redirection other than `done <<< "$OWASP_TABLE"`, a backtick, a `$(` other than
+   `$(incident_level "$_ow")`, an assignment other than `_ov=$FA_<name>`, and a call to any function
+   but the three.
+3. **An empty search path at run time.** Root runs `owasp_kinds` in its own subshell with
+   `PATH=/private/var/empty`, so a command the block names without a full path is not found. A full
+   path tool can still find one: `/usr/bin/env -i id` runs `id` from the system's default path. Layer
+   2 is what refuses that. The rest of root keeps its own `PATH`. The folder is never an empty `PATH`
+   value or an empty element, which would mean the current folder. macOS ships `/private/var/empty`
+   empty, and it and every folder above it are root's alone, so root can check the whole path with
+   `owned_only`. A folder root made under `/tmp` could not pass that check, as everyone can write to
+   `/tmp`. Before each account's tags, root checks that the folder is a real folder, reached through
+   no link, owned by root, writable by no one else and empty.
 
-The tags fail when that folder fails its check, or when the block exits non-zero, writes anything to
-standard error (such as a command not found) or prints a line that is not one `OWASP_TABLE` gives,
-once and in its order. That account is then partly checked ("its OWASP tags could not be worked
-out", `owasp_failed: true` in its row), so it never reads clear, and the run reads `failed` (exit
-13), with a line saying why. No tag is dropped without saying so.
+The tags fail when the reprint holds a line not on the list (cause `code`), when the folder fails its
+check (`nopath`), or when the block exits non-zero, writes anything to standard error or prints a line
+that is not one `OWASP_TABLE` gives, once and in its order (`rule`). That account is then partly
+checked ("its OWASP tags could not be worked out", `owasp_failed: true` in its row), so it never
+reads clear. The run reads `failed` (exit 13), even when it has findings to act on. The terminal view
+has a line for each cause, `last.json` lists them in `owasp.failed_because`, and the summary line
+ends with `owasp_failed=<causes>`.
+
+What is left to code review:
+
+- Anything a maintainer deliberately approves: a line added to the list in `fl_owasp_code_ok`, or a
+  change to root's own code outside the block.
+- Code in the block outside the three functions. It runs as root when `gird-fleet.sh` loads, with
+  root's own `PATH`, and layers 2 and 3 never see it. Only layer 1 reads it.
+- Lines on the list put in another order or nesting, such as a `while read` with no here-string,
+  which reads standard input, or a function that calls itself. They can call nothing off the list.
 
 **At build time.** `gen.sh` refuses a bare external command in the block, as an early warning. It
 reads each command word of the block (after `;`, `&&`, `||`, `|`, `(`, `{`, `$(` and the shell
@@ -246,12 +269,10 @@ The guard reads text, not the shell's grammar, so it does not catch everything. 
 
 - a command between quotes it pairs wrongly: `: "'" ; id ; "'"`;
 - a command in the first arm of a case: `case x in *) id ;; esac`;
-- a full-path tool that looks a command up by name: `/usr/bin/env id`, `/bin/sh -c id`.
+- a full-path tool: `/usr/bin/env -i id`, `/bin/sh -c id`;
+- a builtin hidden by the same quote trick, such as `command -p id` or `hash -p /usr/bin/true tt`.
 
-The empty search path is what stops each of these: the command is not found, and the run reads
-`failed`. Neither stops a full-path tool given a script to run, such as `/bin/sh -c /usr/bin/id`, or
-a builtin that finds a tool without the search path, such as `command -p id`. Those are left to code
-review.
+Layer 2 refuses each of these at run time, and the run reads `failed`.
 
 - In `gird-check.sh`, the values the account run computed inside the `ACCTRUN` block (`_yolo`, `_inc`,
   `_lock`, `_planted` and the rest) move into a function, `finding_fields`, that sets `FA_<key>` for
@@ -401,6 +422,7 @@ A top-level `owasp` object after `machine`, always present in a finished run:
   "accounts_counted": 3,
   "accounts_not_checked": 1,
   "accounts_partly_checked": 1,
+  "failed_because": [],
   "risks": [
     {"id": "ASI03", "name": "Identity and Privilege Abuse", "accounts": 2, "machine": false,
      "findings": ["key_files", "ssh_keys_no_passphrase"]},
@@ -433,7 +455,9 @@ blindspot act accounts=4 act=1 review=1 not_checked=2 v=1.3.0 at=2026-10-25T09:1
 ```
 
 A risk only the Mac has reads `ASI04:0+mac`. With nothing tagged there is no `owasp=` part, so it
-never reads as 0. When the save fails, `SUMMARY` is rewritten with `failed` and keeps the part.
+never reads as 0. When the tags could not be worked out, ` owasp_failed=` follows, with each cause
+comma separated (`code`, `nopath`, `rule`). When the save fails, `SUMMARY` is rewritten with `failed`
+and keeps both parts.
 
 ### Inventory value
 
@@ -573,8 +597,15 @@ Fleet (`tests/run.sh`'s "fleet mode (--all-users)" part, with the stand-ins it a
 - fleet: a run with no accounts has no owasp part, no token and an empty owasp object
 - fleet: --json and --hash-accounts carry the owasp object and each row's tags
 - fleet: the owasp-derive block, with an empty search path, gives each kind's line and runs no command by name
-- fleet: a command hidden by quotes, a command in a first case arm, and /usr/bin/env and /bin/sh -c in the
-  owasp-derive block find no command by name, and the run reads failed (three tests)
+  (each source with a risk, each source with none, and all at once)
+- fleet: a not-found hidden by quotes (with 2>/dev/null and with 2<&-), command -p, hash -p, /usr/bin/env -i
+  and /usr/bin/env -u PATH in the owasp-derive block are refused from bash's reprint, and the run reads
+  failed, never clear (six tests)
+- fleet: with the reprint check set aside, a command hidden by quotes, a command in a first case arm, and
+  /usr/bin/env and /bin/sh -c find no command by name, and the run reads failed (three tests)
+- fleet: with the reprint check set aside, a block that exits non-zero, and one that prints a line twice,
+  fail its tags (two tests)
+- fleet: tags that fail for two causes name both in --json and --summary-to-stdout
 - fleet: a search-path folder that is a link, not root's, writable by others or not empty makes the run
   failed (four tests), and an empty one only root's stand-in can change gives a clear run
 - fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back
@@ -670,7 +701,8 @@ Screenshots are not tests; remaking them is a step in the pull request.
   section lines and the summary line asserted in both suites, the order of two risks in one section,
   and a home of each kind alone but a key in shell history (see "One derivation, copied to root")
 - Root reads fixed `FA_<key>` names (no prefix argument, `eval` or `${!name}`), `gen.sh` refuses a
-  bare external command in the `owasp-derive` block, and root runs the block with an empty search path.
+  bare external command in the `owasp-derive` block, and root checks bash's reprint of the block
+  against a list of its lines and runs it with an empty search path.
 - The failed-save rewrite of `SUMMARY` keeps the OWASP part, with a test.
 - `incidents:update` is defined as "level is not act"; the Mac's incidents are act level by a `gen.sh`
   rule on `data/indicators.tsv`; `machine:<field>` is checked against the `machine` object's fields;

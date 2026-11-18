@@ -327,9 +327,10 @@ machine.incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|-|mac
 # >>> owasp-derive: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
 # The one rule from findings to risks, which the person's report and root in gird-fleet.sh both run:
 # each reads the finding fields the account run sends (FA_<key>, set by finding_fields in gird-check.sh
-# and by fl_parse in gird-fleet.sh). Root runs this copy with a search path that holds nothing
-# (fl_owasp_kinds in gird-fleet.sh), so it calls builtins and generated functions only: any other
-# command not given by its full path is not found, and fails the run.
+# and by fl_parse in gird-fleet.sh). Root runs this copy through fl_owasp_kinds in gird-fleet.sh. It
+# reads bash's own reprint of these functions and refuses any line not on its list of the lines they
+# need (fl_owasp_code_ok), then runs them with a search path that holds nothing. A line of a new shape
+# here needs adding to that list, or every fleet run reads failed.
 # owasp_set SOURCE: 0 when the field SOURCE names holds a finding: a number above 0, a list that is
 # not empty, or for incidents:act an act-level incident and for incidents:update one of any other level.
 owasp_set() {
@@ -600,15 +601,45 @@ fl_nopath_ok() { # FL_NOPATH: a folder, reached through no link, root's alone (o
   owned_only "$FL_OWNER" "$FL_NOPATH" || return 1
   _fne=$(/bin/ls -A "$FL_NOPATH" 2>/dev/null) && [ -z "$_fne" ]
 }
-# fl_owasp_kinds: owasp_kinds for the FA_ fields fl_parse set, into FL_OWK. The block runs in its own
-# subshell with PATH set to FL_NOPATH, so neither it nor a tool it starts by its full path finds a
-# command by name, and the rest of root keeps FL_PATH. 1, with FL_OWFAIL set, when FL_NOPATH is not
-# safe, or the block exits non-zero, writes an error (such as a command not found) or prints a line
-# that is not one OWASP_TABLE gives, once and in its order.
+# fl_owasp_code_ok: 0 when bash's own reprint of the three functions the owasp-derive block runs holds
+# only the lines below, each trimmed of spaces at both ends. It is an allowlist: bash writes the
+# reprint, so no quoting can hide text in it, and any other line (another command, a full path, a
+# redirection, a $( ) or a function the block would call) is refused. A change to the block that adds
+# a line of a new shape needs that line added here, which is code review (docs/designs/owasp.md).
+fl_owasp_code_ok() {
+  _fkc=$(declare -f owasp_kinds owasp_set incident_level) || return 1
+  _fkh=""
+  while IFS= read -r _fkl; do
+    _fkl=${_fkl#"${_fkl%%[! ]*}"}; _fkl=${_fkl%"${_fkl##*[! ]}"}
+    case "$_fkl" in
+      'owasp_kinds ()'|'owasp_set ()'|'incident_level ()') _fkh="$_fkh${_fkl% *} " ;;
+      '{'|'}'|'do'|'else'|'fi;'|'done;'|';;'|'esac'|'esac;'|'continue'|'return 1'|'*)') ;;
+      "while IFS='|' read -r _ok _or _on _ol _os _osrc; do"|'case "$_osrc" in'|"'' | machine:* | report)") ;;
+      'if owasp_set "$_osrc"; then'|"printf '%s|%s|%s|%s|%s\n' \"\$_or\" \"\$_ok\" \"\$_os\" \"\$_on\" \"\$_ol\";"|'done <<< "$OWASP_TABLE"') ;;
+      'case "$1" in'|'incidents:act | incidents:update)'|'for _ow in $FA_incidents;'|'if [ "$(incident_level "$_ow")" = act ]; then') ;;
+      '[ "$1" = incidents:act ] && return 0;'|'[ "$1" = incidents:update ] && return 0;'|'[ -n "$_ov" ] && [ "$_ov" != 0 ]') ;;
+      '_ov=$FA_'*) _fkr=${_fkl#'_ov=$FA_'}; case "$_fkr" in ''|*[!a-z_]*) return 1 ;; esac ;;
+      'printf '*) _fkr=${_fkl#printf }; case "$_fkr" in ''|*[!a-z]*) return 1 ;; esac ;;
+      *')') _fkr=${_fkl%')'}; case "$_fkr" in ''|*[!a-z0-9_]*) return 1 ;; esac ;;
+      *) return 1 ;;
+    esac
+  done <<< "$_fkc"
+  [ "$_fkh" = "owasp_kinds owasp_set incident_level " ]
+}
+fl_owfail() { # CAUSE: adds it to FL_OWFAIL once, so the result names every cause seen in the run
+  case " $FL_OWFAIL " in *" $1 "*) ;; *) FL_OWFAIL="${FL_OWFAIL:+$FL_OWFAIL }$1" ;; esac
+}
+# fl_owasp_kinds: owasp_kinds for the FA_ fields fl_parse set, into FL_OWK. 1, with each cause added to
+# FL_OWFAIL, when the block holds a line fl_owasp_code_ok does not allow (code), FL_NOPATH is not safe
+# (nopath), or the block exits non-zero, writes anything to standard error or prints a line that is not
+# one OWASP_TABLE gives, once and in its order (rule). The block runs in its own subshell with PATH set
+# to FL_NOPATH, so a command it names without a full path is not found. The rest of root keeps FL_PATH.
 fl_owasp_kinds() {
-  FL_OWK=""
-  fl_nopath_ok || { FL_OWFAIL=${FL_OWFAIL:-nopath}; return 1; }
-  _fko=$(PATH=$FL_NOPATH; owasp_kinds 2>&1) || { FL_OWFAIL=${FL_OWFAIL:-rule}; return 1; }
+  FL_OWK=""; _fkf=0
+  fl_owasp_code_ok || { fl_owfail code; _fkf=1; }
+  fl_nopath_ok || { fl_owfail nopath; _fkf=1; }
+  [ "$_fkf" -eq 0 ] || return 1
+  _fko=$(PATH=$FL_NOPATH; owasp_kinds 2>&1) || { fl_owfail rule; return 1; }
   _fkw=$NL
   while IFS='|' read -r _fkk _fkr _fkn _fkl _fks _fksrc; do
     case "$_fksrc" in ''|machine:*|report) continue ;; esac
@@ -616,7 +647,7 @@ fl_owasp_kinds() {
   done <<< "$OWASP_TABLE"
   if [ -n "$_fko" ]; then
     while IFS= read -r _fkx; do
-      case "$_fkw" in *"$NL$_fkx$NL"*) _fkw=$NL${_fkw#*"$NL$_fkx$NL"} ;; *) FL_OWFAIL=${FL_OWFAIL:-rule}; return 1 ;; esac
+      case "$_fkw" in *"$NL$_fkx$NL"*) _fkw=$NL${_fkw#*"$NL$_fkx$NL"} ;; *) fl_owfail rule; return 1 ;; esac
     done <<< "$_fko"
   fi
   FL_OWK=$_fko
@@ -1030,7 +1061,10 @@ EOF
     [ "$N_NC_RUN" -gt 0 ] && { _owsum="$_owsum;not_counted:$N_NC_RUN"; _owinv="$_owinv; not-counted $N_NC_RUN"; }
     [ "$N_PART" -gt 0 ] && { _owsum="$_owsum;partial:$N_PART"; _owinv="$_owinv; partial $N_PART"; }
   fi
-  OWASP_JSON="{\"accounts_counted\":$N_COUNTED,\"accounts_not_checked\":$N_NC_RUN,\"accounts_partly_checked\":$N_PART,\"risks\":[$_owrj]}"
+  # Every cause the tags failed for, in the JSON and the summary line as well as the terminal view.
+  _owfs=""; [ -n "$FL_OWFAIL" ] && _owfs=" owasp_failed=$(printf '%s' "$FL_OWFAIL" | /usr/bin/tr ' ' ',')"
+  _owsum="$_owsum$_owfs"
+  OWASP_JSON="{\"accounts_counted\":$N_COUNTED,\"accounts_not_checked\":$N_NC_RUN,\"accounts_partly_checked\":$N_PART,\"failed_because\":$(fl_json_list "$FL_OWFAIL"),\"risks\":[$_owrj]}"
   SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT$_owsum"
   # The inventory value: one line for an MDM's inventory field, no path, file name or key (fl_inv_fit);
   # the saved file has the rest.
@@ -1079,8 +1113,13 @@ EOF
       [ "$N_PART" -gt 0 ] && printf '    %s\n' "$(fl_plural "$N_PART" "account partly checked: its tags may be incomplete" "accounts partly checked: their tags may be incomplete")"
     fi
     [ -n "$FL_FAILED" ] && printf '\n  The run stopped: the script copy each account runs was changed.\n'
-    [ "$FL_OWFAIL" = nopath ] && printf '\n  The run failed: no OWASP tags were worked out, as %s is not an empty folder only root can change.\n' "$FL_NOPATH"
-    [ "$FL_OWFAIL" = rule ] && printf '\n  The run failed: the rule that works out the OWASP tags did not run cleanly.\n'
+    for _x in $FL_OWFAIL; do
+      case "$_x" in
+        code) printf '\n  The run failed: no OWASP tags were worked out, as the rule that works them out holds a line root does not run.\n' ;;
+        nopath) printf '\n  The run failed: no OWASP tags were worked out, as %s is not an empty folder only root can change.\n' "$FL_NOPATH" ;;
+        rule) printf '\n  The run failed: the rule that works out the OWASP tags did not run cleanly.\n' ;;
+      esac
+    done
     if [ "$FL_SAVED" -eq 1 ]; then printf '\n  Saved: %s/last.json\n' "$FL_STATE"; else printf '\n  Not saved: %s could not be written safely.\n' "$FL_STATE"; fi
     if [ "$TTY" -eq 1 ]; then
       if [ "$OUTCOME" = clear ]; then _a1="Nothing found on this Mac today."; else _a1="This is one Mac, checked once."; fi

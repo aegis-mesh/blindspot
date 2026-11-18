@@ -81,8 +81,10 @@ Mac, such as:
 v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear | owasp.ASI03:1 owasp.ASI04:1; counted 2
 ```
 
-It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
-[docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
+It starts with the Mac's outcome: `failed`, `act`, `review`, `not_checked` or `clear` (see
+[docs/fleet.md](../fleet.md#4-read-the-results)). A Mac whose OWASP tags could not be worked out reads
+`v1 failed` even when it has findings to act on, so a filter on `v1 act` misses it: filter for
+`v1 failed` too. `stale: last run <time>` means no check in 3 days,
 `none` means the check has not run yet, `failed` means the last run stopped part-way, and
 `unreadable` means the saved result could not be trusted. Treat each of those, and an empty result, as not checked.
 The `owasp.` part at the end names the OWASP risks found

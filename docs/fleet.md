@@ -266,7 +266,8 @@ when the saved file is not root's own. Treat each of those, and any outcome your
 as not checked. An account whose name Blindspot does not read shows as `invalid-name`, not checked.
 
 To find the Macs to deal with first, filter the inventory field for values starting `v1 act`, then
-`v1 not_checked`, `failed` and `stale`.
+`v1 failed`, `v1 not_checked`, `failed` and `stale`. A Mac whose OWASP tags could not be worked out
+reads `v1 failed` even when it has findings to act on, so a filter on `v1 act` alone misses it.
 
 ### OWASP Agentic Top 10 tags
 
@@ -279,16 +280,21 @@ accounts:
 - **Accounts counted** are those whose check ran. An account not checked (its check never ran, or was
   refused) has no tags and is in no count. An account partly checked is tagged with what was found,
   which can be less than is there.
-- The summary line ends with `owasp=`, each risk with how many counted accounts have it and `+mac`
+- The summary line has an `owasp=` part, each risk with how many counted accounts have it and `+mac`
   when the Mac's own check found it, then `counted:`, and `not_counted:` and `partial:` when either
-  is above 0. A risk only the Mac has reads `ASI04:0+mac`: no counted account had it, the Mac's own
-  check did. The inventory value ends with the same, each risk written `owasp.<risk>:<accounts>`, as
+  is above 0. Only an `owasp_failed=` part, below, comes after it. A risk only the Mac has reads
+  `ASI04:0+mac`: no counted account had it, the Mac's own check did. The inventory value ends with the same, each risk written `owasp.<risk>:<accounts>`, as
   `owasp.ASI03:1 owasp.ASI04:1; counted 2`, with `not-counted` and `partial` when above 0.
 - `last.json` has an `owasp` object: `accounts_counted`, `accounts_not_checked`,
-  `accounts_partly_checked`, and `risks`, each with its `id`, `name`, `accounts`, `machine` and the
-  `findings` (the JSON fields) that carry it. Each checked account's row, and the `machine` object,
-  has an `owasp` list of its risks. A row whose tags could not be worked out also has
-  `"owasp_failed": true`, is partly checked, and the run reads `failed`.
+  `accounts_partly_checked`, `failed_because`, and `risks`, each with its `id`, `name`, `accounts`,
+  `machine` and the `findings` (the JSON fields) that carry it. Each checked account's row, and the
+  `machine` object, has an `owasp` list of its risks.
+- When the tags could not be worked out, the account's row has `"owasp_failed": true` and is partly
+  checked, and the run reads `failed`, even when it has findings to act on. `failed_because` lists
+  each cause: `code` (the rule that works out the tags holds a line root does not run), `nopath` (the
+  empty folder root runs that rule with failed its check) or `rule` (the rule did not run cleanly). It
+  is empty otherwise. The summary line then ends with `owasp_failed=` and the same causes, comma
+  separated.
 - The inventory value gets the `owasp` part only when it fits in the value's 250 characters with
   every account's part whole: it never costs an account any of its content. So a long value often
   has none, and a value that was cut (it ends with `+more`) never has it. The summary line and

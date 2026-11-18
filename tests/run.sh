@@ -4598,16 +4598,17 @@ if chmod +a "everyone allow add_file,delete_child" "$FL/acl" 2>/dev/null; then
   chmod -N "$FL/acl"
   if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'writable by no one else' "$FL/acl.err"; then ok "fleet: a folder whose ACL lets anyone write is refused"; else bad "fleet: a folder whose ACL lets anyone write is refused" "exit $RC"; fi
 else skip "fleet: a folder whose ACL lets anyone write is refused" "chmod +a is not available here"; fi
-# Root runs the owasp-derive block with a search path that holds nothing (fl_owasp_kinds,
-# docs/designs/owasp.md). The tests call it through the functions cut from a gird-fleet.sh, with trap
-# programs named like common commands first on PATH: one that runs leaves its name in OWT/hit.
+# Root checks bash's own reprint of the owasp-derive block against a list of its lines, then runs it
+# with a search path that holds nothing (fl_owasp_kinds, docs/designs/owasp.md). The tests call it
+# through the functions cut from a gird-fleet.sh, with trap programs named like common commands first
+# on PATH: one that runs leaves its name in OWT/hit.
 OWT=$FL/owtrap; mkdir -p "$OWT/bin" "$OWT/hit"
-for _c in id tr sed awk grep cat cut head sort ls env sh bash printf test true; do
+for _c in id tr sed awk grep cat cut head sort ls env sh bash printf test true tt; do
   printf '#!/bin/sh\n: > "%s/hit/${0##*/}"\n' "$OWT" > "$OWT/bin/$_c"; chmod 755 "$OWT/bin/$_c"
 done
-ow_lib() { # gird-fleet.sh out-file: the generated blocks and the two functions root runs the block with
+ow_lib() { # gird-fleet.sh out-file: the generated blocks and the functions root runs the block with
   { awk '/^# >>> (owned-walk|incidents|owasp|owasp-derive)[: ]/ { on = 1 } on { print } /^# <<< (owned-walk|incidents|owasp|owasp-derive)$/ { on = 0 }' "$1"
-    sed -n '/^fl_nopath_ok() {/,/^}/p; /^fl_owasp_kinds() {/,/^}/p' "$1"; } > "$2"
+    sed -n '/^fl_nopath_ok() {/,/^}/p; /^fl_owasp_code_ok() {/,/^}/p; /^fl_owfail() {/,/^}/p; /^fl_owasp_kinds() {/,/^}/p' "$1"; } > "$2"
 }
 cat > "$OWT/run.sh" <<'EOF'
 # run.sh LIB NOPATH OWNER [FA_name=value...]: fl_owasp_kinds, then the block with root's own PATH
@@ -4622,14 +4623,15 @@ ow_call() { # LIB FA_name=value...: run.sh with the traps first on PATH; its out
   /usr/bin/env -i PATH="$OWT/bin:/usr/bin:/bin:/usr/sbin:/sbin" /bin/bash "$OWT/run.sh" "$1" /private/var/empty "$U" "${@:2}" > "$OWT/out" 2>&1
 }
 ow_lib "$FLEETSH" "$OWT/lib.sh"
-OW_WHY=""; OW_ALLSET=""; OW_ALLWANT=""; OW_NL='
+# Every account-run source in data/owasp.tsv alone, then all at once: a source with a risk gives its
+# line, one with none (such as possible, to_read, tmp_marks and tmp_wiper) gives nothing.
+OW_WHY=""; OW_ALLSET=""; OW_ALLWANT=""; OW_NONE=" "; OW_NL='
 '
 while IFS="$(printf '\t')" read -r _k _r _n _l _s _src _rest; do
   case "$_k" in '#'*|'') continue ;; esac
-  case "$_r$_src" in -*|*machine:*|*report) continue ;; esac
-  _want="$_r|$_k|$_s|$_n|$_l"
+  case "$_src" in machine:*|report) continue ;; esac
+  case "$_r" in -) _want=""; OW_NONE="$OW_NONE$_src " ;; *) _want="$_r|$_k|$_s|$_n|$_l"; OW_ALLWANT="$OW_ALLWANT$_want$OW_NL" ;; esac
   case "$_src" in incidents:act) _set=FA_incidents=axios ;; incidents:update) _set=FA_incidents=mistral ;; *) _set="FA_$_src=1"; OW_ALLSET="$OW_ALLSET $_set" ;; esac
-  OW_ALLWANT="$OW_ALLWANT$_want$OW_NL"
   ow_call "$OWT/lib.sh" "$_set"
   [ "$(cat "$OWT/out")" = "$(printf 'rc=0 fail=\n%s\n--\n%s' "$_want" "$_want")" ] || OW_WHY="$OW_WHY $_src: $(tr '\n' ' ' < "$OWT/out");"
   [ -z "$(ls "$OWT/hit")" ] || OW_WHY="$OW_WHY $_src ran $(ls "$OWT/hit" | tr '\n' ' ');"
@@ -4639,45 +4641,73 @@ ow_call "$OWT/lib.sh" $OW_ALLSET "FA_incidents=axios mistral"
 _want=${OW_ALLWANT%"$OW_NL"}
 [ "$(cat "$OWT/out")" = "$(printf 'rc=0 fail=\n%s\n--\n%s' "$_want" "$_want")" ] || OW_WHY="$OW_WHY all: $(tr '\n' ' ' < "$OWT/out");"
 [ -z "$(ls "$OWT/hit")" ] || OW_WHY="$OW_WHY all ran $(ls "$OWT/hit" | tr '\n' ' ');"
-[ -n "$OW_ALLSET" ] || OW_WHY="$OW_WHY no sources read from data/owasp.tsv;"
+[ -n "$OW_ALLWANT" ] || OW_WHY="$OW_WHY no sources with a risk read from data/owasp.tsv;"
+for _src in possible to_read tmp_marks tmp_wiper; do case "$OW_NONE" in *" $_src "*) ;; *) OW_WHY="$OW_WHY the source $_src with no risk was not read;" ;; esac; done
 if [ -z "$OW_WHY" ]; then ok "fleet: the owasp-derive block, with an empty search path, gives each kind's line and runs no command by name"
 else bad "fleet: the owasp-derive block, with an empty search path, gives each kind's line and runs no command by name" "$OW_WHY"; fi
-# Three inputs the build-time guard reads past, in a scratch copy of root's block: no trap runs, the
-# tags read failed, and a clear account's run reads failed, the account partly checked.
+# Inputs in a scratch copy of root's block: no trap runs, the tags read failed with CAUSE, and a clear
+# account's run reads failed, the account partly checked, with the cause in last.json and its summary.
+# AFTER names the line the input goes after; ASIDE=1 sets the reprint check aside, to test the rest.
 users "first:$U:$FL/clean:/bin/zsh"
-ow_inject() { # TEXT: 0 when no trap ran and the tags and the run read failed; else OW_WHY says why
+ow_inject() { # CAUSE AFTER TEXT [ASIDE]: 0 when all that holds; else OW_WHY says why
   rm -rf "$FL/owi"; mkdir -p "$FL/owi"; cp "$SCRIPT" "$FL/owi/"
-  OW_TEXT=$1 awk '{ print } /^owasp_kinds\(\) \{$/ { print "  " ENVIRON["OW_TEXT"] }' "$FLEETSH" > "$FL/owi/gird-fleet.sh"
+  OW_TEXT=$3 OW_AFTER=$2 OW_ASIDE=${4:-0} awk '
+    ENVIRON["OW_ASIDE"] == 1 && $0 == "  fl_owasp_code_ok || { fl_owfail code; _fkf=1; }" { print "  true || { fl_owfail code; _fkf=1; }"; next }
+    { print } $0 == ENVIRON["OW_AFTER"] { print "  " ENVIRON["OW_TEXT"] }' "$FLEETSH" > "$FL/owi/gird-fleet.sh"
   ow_lib "$FL/owi/gird-fleet.sh" "$OWT/lib-i.sh"
-  OW_WHY=""; grep -qxF -- "  $1" "$OWT/lib-i.sh" || OW_WHY="the edit did not apply;"
+  OW_WHY=""; grep -qxF -- "  $3" "$OWT/lib-i.sh" || OW_WHY="the edit did not apply;"
+  [ "${4:-0}" = 1 ] && { grep -qxF '  true || { fl_owfail code; _fkf=1; }' "$OWT/lib-i.sh" || OW_WHY="$OW_WHY the check was not set aside;"; }
   ow_call "$OWT/lib-i.sh" FA_key_files=1
-  [ "$(head -n 1 "$OWT/out")" = "rc=1 fail=rule" ] || OW_WHY="$OW_WHY tags: $(head -n 1 "$OWT/out");"
+  [ "$(head -n 1 "$OWT/out")" = "rc=1 fail=$1" ] || OW_WHY="$OW_WHY tags: $(head -n 1 "$OWT/out");"
   [ -z "$(ls "$OWT/hit")" ] || OW_WHY="$OW_WHY ran $(ls "$OWT/hit" | tr '\n' ' ');"
+  case "$1" in code) _l='no OWASP tags were worked out, as the rule that works them out holds a line root does not run' ;; *) _l='the rule that works out the OWASP tags did not run cleanly' ;; esac
   FLEETSH="$FL/owi/gird-fleet.sh" fl_run owi
   grep -q '^13$' "$FL/owi.rc" && grep -q '^outcome=failed$' "$FL/owi.flat" && grep -q '^first\.outcome=not_checked$' "$FL/owi.flat" \
-    && grep -q '^first\.owasp_failed=true$' "$FL/owi.flat" && grep -q '^  The run failed: the rule that works out the OWASP tags did not run cleanly\.$' "$FL/owi.out" \
-    || OW_WHY="$OW_WHY run: $(cat "$FL/owi.rc") $(grep -E '^(outcome|first\.(outcome|owasp_failed))=' "$FL/owi.flat" | tr '\n' ' ');"
+    && grep -q '^first\.owasp_failed=true$' "$FL/owi.flat" && grep -qxF "  The run failed: $_l." "$FL/owi.out" \
+    && grep -qx "owasp\.failed_because=$1" "$FL/owi.flat" && grep -q "^summary=blindspot failed .* owasp_failed=$1\$" "$FL/owi.flat" \
+    || OW_WHY="$OW_WHY run: $(cat "$FL/owi.rc") $(grep -E '^(outcome|summary|owasp\.failed_because|first\.(outcome|owasp_failed))=' "$FL/owi.flat" | tr '\n' ' ');"
   [ -z "$OW_WHY" ]
 }
-if ow_inject ": \"'\" ; id ; \"'\""; then ok "fleet: a command hidden by quotes in the owasp-derive block is not found, and the run reads failed"
-else bad "fleet: a command hidden by quotes in the owasp-derive block is not found, and the run reads failed" "$OW_WHY"; fi
-if ow_inject 'case x in *) id ;; esac'; then ok "fleet: a command in a first case arm of the owasp-derive block is not found, and the run reads failed"
-else bad "fleet: a command in a first case arm of the owasp-derive block is not found, and the run reads failed" "$OW_WHY"; fi
-if ow_inject '/usr/bin/env id; /bin/sh -c id'; then ok "fleet: /usr/bin/env and /bin/sh -c in the owasp-derive block find no command by name, and the run reads failed"
-else bad "fleet: /usr/bin/env and /bin/sh -c in the owasp-derive block find no command by name, and the run reads failed" "$OW_WHY"; fi
+OW_KF='owasp_kinds() {'; OW_SF='owasp_set() {'
+# A not-found the block hides, and a full-path tool or builtin that finds a command without the search
+# path: bash's reprint shows each, and root refuses it before the block runs.
+if ow_inject code "$OW_SF" ": \"'\" ; [ -z \"\$(id -u 2>/dev/null)\" ] && return 0 ; \"'\""; then ok "fleet: a not-found hidden by quotes and 2>/dev/null in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: a not-found hidden by quotes and 2>/dev/null in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" ": \"'\" ; [ -z \"\$(id -u 2<&-)\" ] && return 0 ; \"'\""; then ok "fleet: a not-found hidden by quotes and 2<&- in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: a not-found hidden by quotes and 2<&- in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" 'command -p id'; then ok "fleet: command -p in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: command -p in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" 'hash -p /usr/bin/true tt; tt'; then ok "fleet: hash -p in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: hash -p in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" '/usr/bin/env -i id'; then ok "fleet: /usr/bin/env -i in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: /usr/bin/env -i in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" '/usr/bin/env -u PATH id'; then ok "fleet: /usr/bin/env -u PATH in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: /usr/bin/env -u PATH in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+# With the reprint check set aside: the empty search path, and the checks on what the block does.
+if ow_inject rule "$OW_KF" ": \"'\" ; id ; \"'\"" 1; then ok "fleet: with the reprint check set aside, a command hidden by quotes in the owasp-derive block is not found, and the run reads failed"
+else bad "fleet: with the reprint check set aside, a command hidden by quotes in the owasp-derive block is not found, and the run reads failed" "$OW_WHY"; fi
+if ow_inject rule "$OW_KF" 'case x in *) id ;; esac' 1; then ok "fleet: with the reprint check set aside, a command in a first case arm of the owasp-derive block is not found, and the run reads failed"
+else bad "fleet: with the reprint check set aside, a command in a first case arm of the owasp-derive block is not found, and the run reads failed" "$OW_WHY"; fi
+if ow_inject rule "$OW_KF" '/usr/bin/env id; /bin/sh -c id' 1; then ok "fleet: with the reprint check set aside, /usr/bin/env and /bin/sh -c in the owasp-derive block find no command by name, and the run reads failed"
+else bad "fleet: with the reprint check set aside, /usr/bin/env and /bin/sh -c in the owasp-derive block find no command by name, and the run reads failed" "$OW_WHY"; fi
+if ow_inject rule "$OW_KF" 'return 3' 1; then ok "fleet: with the reprint check set aside, an owasp-derive block that exits non-zero and prints nothing fails its tags"
+else bad "fleet: with the reprint check set aside, an owasp-derive block that exits non-zero and prints nothing fails its tags" "$OW_WHY"; fi
+OW_KFL=$(awk -F '\t' '$1 == "key_files" { print $2 "|" $1 "|" $5 "|" $3 "|" $4 }' data/owasp.tsv)
+if ow_inject rule "$OW_KF" "printf '%s\\n' '$OW_KFL' '$OW_KFL'" 1; then ok "fleet: with the reprint check set aside, an owasp-derive block that prints a kind's line twice fails its tags"
+else bad "fleet: with the reprint check set aside, an owasp-derive block that prints a kind's line twice fails its tags" "$OW_WHY"; fi
 # The search-path folder must be a real folder, root's alone and empty, or the run reads failed. The
 # tests' stand-in for root owns its own folder, which is safe; each fault is then added to one.
 mkdir -p "$FL/nop/ok" "$FL/nop/w" "$FL/nop/full" "$FL/nop/real"; chmod 755 "$FL/nop/ok" "$FL/nop/full" "$FL/nop/real"; chmod 777 "$FL/nop/w"
 ln -s "$FL/nop/real" "$FL/nop/link"; : > "$FL/nop/full/id"; chmod 755 "$FL/nop/full/id"
 NOP=$(cd "$FL/nop" && pwd -P)
 GIRD_CHECK_FLEET_NOPATH="$NOP/ok" fl_run nopok
-if grep -q '^0$' "$FL/nopok.rc" && grep -q '^outcome=clear$' "$FL/nopok.flat" && grep -q '^first\.complete=true$' "$FL/nopok.flat"; then ok "fleet: an empty search-path folder only root's stand-in can change gives a clear run"
-else bad "fleet: an empty search-path folder only root's stand-in can change gives a clear run" "$(cat "$FL/nopok.rc") $(grep -E '^(outcome|first\.)' "$FL/nopok.flat" | tr '\n' ' ')"; fi
+if grep -q '^0$' "$FL/nopok.rc" && grep -q '^outcome=clear$' "$FL/nopok.flat" && grep -q '^first\.complete=true$' "$FL/nopok.flat" && grep -q '^owasp\.failed_because=$' "$FL/nopok.flat"; then ok "fleet: an empty search-path folder only root's stand-in can change gives a clear run"
+else bad "fleet: an empty search-path folder only root's stand-in can change gives a clear run" "$(cat "$FL/nopok.rc") $(grep -E '^(outcome|owasp\.failed_because|first\.)' "$FL/nopok.flat" | tr '\n' ' ')"; fi
 nop_fails() { # FOLDER: 0 when a run with it as the search-path folder reads failed and says why; else OW_WHY says why
   GIRD_CHECK_FLEET_NOPATH=$1 fl_run nop
-  OW_WHY="$(cat "$FL/nop.rc") $(grep -E '^(outcome|first\.(outcome|owasp_failed))=' "$FL/nop.flat" | tr '\n' ' ')"
+  OW_WHY="$(cat "$FL/nop.rc") $(grep -E '^(outcome|owasp\.failed_because|first\.(outcome|owasp_failed))=' "$FL/nop.flat" | tr '\n' ' ')"
   grep -q '^13$' "$FL/nop.rc" && grep -q '^outcome=failed$' "$FL/nop.flat" && grep -q '^first\.outcome=not_checked$' "$FL/nop.flat" && grep -q '^first\.owasp_failed=true$' "$FL/nop.flat" \
-    && grep -q '^  The run failed: no OWASP tags were worked out, as .* is not an empty folder only root can change\.$' "$FL/nop.out"
+    && grep -q '^owasp\.failed_because=nopath$' "$FL/nop.flat" && grep -q '^  The run failed: no OWASP tags were worked out, as .* is not an empty folder only root can change\.$' "$FL/nop.out"
 }
 if nop_fails "$NOP/link"; then ok "fleet: a search-path folder that is a link makes the run failed"; else bad "fleet: a search-path folder that is a link makes the run failed" "$OW_WHY"; fi
 if nop_fails "$NOP/w"; then ok "fleet: a search-path folder others can write to makes the run failed"; else bad "fleet: a search-path folder others can write to makes the run failed" "$OW_WHY"; fi
@@ -4687,6 +4717,15 @@ NOP_OTHER=$(find /private/var -maxdepth 3 -type d -empty ! -user root ! -user "$
 if [ -z "$NOP_OTHER" ]; then skip "fleet: a search-path folder that is not root's makes the run failed" "no empty folder of another account's on this machine"
 elif nop_fails "$NOP_OTHER"; then ok "fleet: a search-path folder that is not root's makes the run failed"
 else bad "fleet: a search-path folder that is not root's makes the run failed" "$OW_WHY"; fi
+# Two causes in one run: a refused line and a folder that is not empty. --json and --summary-to-stdout
+# name both, not only the first.
+ow_inject code "$OW_SF" 'command -p id' > /dev/null
+GIRD_CHECK_FLEET_NOPATH="$NOP/full" FLEETSH="$FL/owi/gird-fleet.sh" fl_run two2 --json
+GIRD_CHECK_FLEET_NOPATH="$NOP/full" FLEETSH="$FL/owi/gird-fleet.sh" fl_run two2s --summary-to-stdout
+OW_J=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(d["owasp"]["failed_because"]), d["outcome"])' "$FL/two2.out" 2>&1)
+if [ "$OW_J" = "code nopath failed" ] && grep -q ' owasp_failed=code,nopath$' "$FL/two2s.out" && [ "$(grep -c '' "$FL/two2s.out")" -eq 1 ]
+then ok "fleet: tags that fail for two causes name both in --json and --summary-to-stdout"
+else bad "fleet: tags that fail for two causes name both in --json and --summary-to-stdout" "json: $OW_J; summary: $(cat "$FL/two2s.out")"; fi
 }
 SKIPPING=""
 # Root tests a path anyone could make as a link before anything that would follow it.
