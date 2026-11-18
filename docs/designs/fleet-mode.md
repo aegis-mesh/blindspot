@@ -389,37 +389,50 @@ How `gird-intune.ps1` keeps to its own Remediation and reads results:
   never counts. A Remediation with the same name but no mark is never changed or deleted, and
   `-Deploy` stops rather than add a second one beside it. With two marked, it changes neither.
 - `-Deploy` refuses a script of 200 KB or more before it signs in, and a group name that matches
-  no group or more than one. Each `-Deploy` sets the Remediation's groups to the one it names.
+  no group or more than one. Each `-Deploy` sets the Remediation's groups to the one it names, and
+  says so before it asks. Before it changes a Remediation it made, it reads it again by its id, as
+  `-Remove` does before deleting, and stops if it is no longer the one with its mark.
 - `-Remove` shows the Remediation, then asks before deleting it (`-Force` skips the question).
   `-WhatIf` on `-Deploy` and `-Remove` reads but writes nothing.
-- It asks for the fewest Graph permissions each command needs: `-Deploy`
+- Before it signs in, it prints the permissions it will ask for. It stops, saying so, when the
+  Graph module is too old for the sign-in it uses. It asks for the fewest Graph permissions each
+  command needs: `-Deploy`
   DeviceManagementScripts.ReadWrite.All and Group.ReadBasic.All, `-Remove`
   DeviceManagementScripts.ReadWrite.All, `-Report` DeviceManagementScripts.Read.All and
   DeviceManagementManagedDevices.Read.All (for each PC's name), GroupMember.ReadBasic.All and
   Device.Read.All (to list the PCs of the assigned groups). It follows a next-page link only
-  to `https://graph.microsoft.com/`, and stops at any other.
+  to `https://graph.microsoft.com/`, and stops at any other. A page of results with no list in
+  it stops the run too: it is never read as an empty list.
 - `-Report` reads the inventory value as `gird-fleet.sh` writes it, plus two Windows fields right
   after the time: `other_profiles=<n>`, and `reason=<why>` on a `failed` result only. It also reads
   the `none`, `unreadable`, `stale: last run <time>` and `failed: ...` lines. Anything else, a
   second line, a finding word it does not know, an account outcome worse than the header, or a
-  `clear` that Intune says did not succeed, is not checked. So is a result dated more than an hour
-  ahead. A result older than `-StaleDays` (3 by default) is stale, whatever it says.
+  `clear` that Intune does not say succeeded, is not checked. So is a result dated more than an hour
+  ahead, and one of 2,048 characters or more that does not end in `+more`, which Intune may have
+  cut. A result older than `-StaleDays` (3 by default) is stale, whatever it says. A `failed` result
+  is listed as failed, with its reason.
 - A PC that never ran the check has no row in Intune's results, so `-Report` finds it another way.
   It reads the Remediation's assignments, then the Windows PCs in each assigned group (nested
   groups included) from `groups/{id}/transitiveMembers`, matches them to Intune's list of managed
   PCs by their Entra device id, and lists each one with no result row as "no result yet". Those
-  count as not checked, never as clear. This needs two more read-only permissions, besides the
-  three above: GroupMember.ReadBasic.All and Device.Read.All (without it Graph hides each PC's
-  id). Paging follows next-page links. An assignment to All devices lists every managed Windows PC.
+  count as not checked, never as clear. This is what two of the four `-Report` permissions above
+  are for: GroupMember.ReadBasic.All, and Device.Read.All, without which Graph hides each PC's id.
+  Paging follows next-page links. An assignment to All devices lists every managed Windows PC. A
+  PC in an exclusion group is left out; when an exclusion group's members cannot be read, the
+  report says a PC it lists may in fact be excluded. A Remediation assigned to no group is reported
+  as that, never as a fleet of 0 PCs.
 - Graph cannot say which PCs a group of people reaches, so for people in an assigned group, an
   assignment to all users, or any other kind of target, the report says it could not list the PCs
   with no result there. It never implies there are none. An assignment filter is not applied, so
   the list may then hold PCs that were not meant to run the check, and the report says so.
 - Needs a real tenant: that the Entra device id matches the managed PC's `azureADDeviceId`, that
   a run-result row names its PC by the same Intune id, and what Graph returns for a very large group.
-- The report is an HTML file and a CSV file in the folder it runs in. Every value a PC sent is
-  escaped in the HTML, and a CSV cell that starts with `=`, `+`, `-`, `@` or a tab gets a `'` first,
-  so a spreadsheet does not run it.
+- The report is an HTML file and a CSV file, saved in the folder `-OutDir` names, or else in the
+  folder PowerShell is in. That folder is resolved once to a folder on disk, and anything else is
+  refused before sign-in. Each file is made new: one already there under the name is never
+  written through or over. Every value a PC sent is escaped in the HTML, and a CSV cell that starts
+  with `=`, `+`, `-`, `@` or a tab, after any spaces, gets a `'` first, so a spreadsheet does not run
+  it. Names the tenant sends are shown in the console with control characters taken out.
 
 ### PCs that restrict PowerShell
 

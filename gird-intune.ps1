@@ -5,9 +5,9 @@ https://gird.ai/blindspot
 Run it on your own PC, signed in as an Intune admin. It signs in to Microsoft Graph with
 Microsoft's own PowerShell module and sends nothing anywhere else.
 
-  gird-intune.ps1 -Deploy -Group <name>   adds the check as an Intune Remediation for that group:
-                                          runs once a day as the signed-in person, 64-bit, no fix
-                                          script. Run again with a newer release to update it.
+  gird-intune.ps1 -Deploy -Group <name>   adds the check as an Intune Remediation for that group
+                                          only: runs once a day as the signed-in person, 64-bit, no
+                                          fix script. Run again with a newer release to update it.
   gird-intune.ps1 -Report                 reads each PC's latest result and saves a report (HTML
                                           and CSV) in this folder, or in -OutDir. A Windows PC in the
                                           assigned group with no result is listed as no result yet.
@@ -42,8 +42,12 @@ function Show-Usage {
   Write-Host '  gird-intune.ps1 -Report [-StaleDays <days>] [-OutDir <folder>]'
   Write-Host '  gird-intune.ps1 -Remove [-WhatIf] [-Force]'
 }
+function Get-Plain($S) {
+  if ($null -eq $S) { return '' }
+  return [regex]::Replace([string]$S, '[\p{Cc}\p{Cf}]', '')
+}
 function Stop-Tool([string]$Message, [int]$Code = 1) {
-  [Console]::Error.WriteLine($Message)
+  [Console]::Error.WriteLine((Get-Plain $Message))
   exit $Code
 }
 
@@ -76,6 +80,13 @@ function Connect-Graph([string[]]$Scopes) {
     exit 3
   }
   Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
+  $c = Get-Command Connect-MgGraph -ErrorAction SilentlyContinue
+  if (-not $c -or -not $c.Parameters.ContainsKey('NoWelcome') -or -not (Get-Command Invoke-MgGraphRequest -ErrorAction SilentlyContinue)) {
+    [Console]::Error.WriteLine("The Microsoft Graph sign-in module on this PC is too old for this tool. Update it with:")
+    [Console]::Error.WriteLine('  Update-Module Microsoft.Graph.Authentication')
+    exit 3
+  }
+  Write-Host ('Signs in to Microsoft Graph and asks for these permissions: ' + ($Scopes -join ', ') + '.')
   try { Connect-MgGraph -Scopes $Scopes -NoWelcome -ErrorAction Stop | Out-Null }
   catch { Stop-Tool ("Could not sign in to Microsoft Graph: " + $_.Exception.Message) }
 }
@@ -100,8 +111,11 @@ function Get-GraphAll([string]$Uri) {
     if ($seen.ContainsKey($next)) { throw 'Stopped: Microsoft Graph sent the same page twice.' }
     $seen[$next] = $true
     $r = Invoke-Graph 'GET' $next $null
-    $v = Get-Prop $r 'value'
-    if ($null -ne $v) { foreach ($x in $v) { [void]$items.Add($x) } }
+    $has = $false; $v = $null
+    if ($r -is [System.Collections.IDictionary]) { if ($r.Contains('value')) { $has = $true; $v = $r['value'] } }
+    elseif ($null -ne $r -and $r.PSObject.Properties['value']) { $has = $true; $v = $r.PSObject.Properties['value'].Value }
+    if (-not $has -or $null -eq $v) { throw 'Stopped: Microsoft Graph sent a page of results with no list in it, so nothing was read from it.' }
+    foreach ($x in $v) { [void]$items.Add($x) }
     $next = [string](Get-Prop $r '@odata.nextLink')
   }
   return $items.ToArray()
@@ -121,15 +135,25 @@ function Get-Ours {
 }
 
 function Show-Script($S, [string]$Lead) {
-  Write-Host ($Lead + ': ' + [string](Get-Prop $S 'displayName'))
-  Write-Host ('  id:            ' + [string](Get-Prop $S 'id'))
-  $c = Get-Prop $S 'createdDateTime'; if ($c) { Write-Host ('  created:       ' + [string]$c) }
-  $m = Get-Prop $S 'lastModifiedDateTime'; if ($m) { Write-Host ('  last changed:  ' + [string]$m) }
+  Write-Host ($Lead + ': ' + (Get-Plain (Get-Prop $S 'displayName')))
+  Write-Host ('  id:            ' + (Get-Plain (Get-Prop $S 'id')))
+  $c = Get-Prop $S 'createdDateTime'; if ($c) { Write-Host ('  created:       ' + (Get-Plain $c)) }
+  $m = Get-Prop $S 'lastModifiedDateTime'; if ($m) { Write-Host ('  last changed:  ' + (Get-Plain $m)) }
+}
+
+function Get-Checked([string]$Id, [string]$Lead, [string]$Mode) {
+  $s = Invoke-Graph 'GET' ($Beta + '/' + [Uri]::EscapeDataString($Id)) $null
+  if (-not (Test-Ours $s) -or [string](Get-Prop $s 'id') -ne $Id) { Stop-Tool "The Remediation changed while this ran, so nothing was changed. Run $Mode again." }
+  Show-Script $s $Lead
+  $assigned = @(Get-GraphAll ($Beta + '/' + [Uri]::EscapeDataString($Id) + '/assignments'))
+  if ($assigned.Count -eq 0) { Write-Host '  assigned to:   no group' }
+  else { Write-Host ('  assigned to:   ' + $assigned.Count + ' group' + $(if ($assigned.Count -eq 1) { '' } else { 's' })) }
+  return $s
 }
 
 function Stop-Several($Mine) {
   [Console]::Error.WriteLine('More than one Remediation carries this tool''s mark, so it changes none of them:')
-  foreach ($s in $Mine) { [Console]::Error.WriteLine('  ' + [string](Get-Prop $s 'id') + '  ' + [string](Get-Prop $s 'displayName')) }
+  foreach ($s in $Mine) { [Console]::Error.WriteLine('  ' + (Get-Plain (Get-Prop $s 'id')) + '  ' + (Get-Plain (Get-Prop $s 'displayName'))) }
   Stop-Tool 'Delete the extra ones in the Intune admin center (Devices > Scripts and remediations), then run this again.'
 }
 
@@ -149,7 +173,7 @@ function Invoke-Deploy {
   if ($groups.Count -eq 0) { Stop-Tool "No group is named '$Group'. Check the name in Microsoft Entra ID." }
   if ($groups.Count -gt 1) {
     [Console]::Error.WriteLine("$($groups.Count) groups are named '$Group', so this does not pick one:")
-    foreach ($g in $groups) { [Console]::Error.WriteLine('  ' + [string](Get-Prop $g 'id')) }
+    foreach ($g in $groups) { [Console]::Error.WriteLine('  ' + (Get-Plain (Get-Prop $g 'id'))) }
     Stop-Tool 'Rename one of them, or make a group for the check, and run this again.'
   }
   $groupId = [string](Get-Prop $groups[0] 'id')
@@ -165,6 +189,7 @@ function Invoke-Deploy {
 
   $mark = $null
   if ($existing) {
+    $existing = Get-Checked ([string](Get-Prop $existing 'id')) 'Updates' '-Deploy'
     $m = [regex]::Match([string](Get-Prop $existing 'description'), $MarkerRx)
     $mark = $m.Groups[1].Value
   } else {
@@ -191,25 +216,29 @@ function Invoke-Deploy {
     )
   }
 
+  $assignText = "Assign it to the group '$Group' only, daily, as the signed-in person. This replaces the groups it is assigned to now"
   $id = $null
   if ($existing) {
     $id = [string](Get-Prop $existing 'id')
-    Show-Script $existing 'Updates'
-    if (-not $PSCmdlet.ShouldProcess("$Name ($id)", 'Replace its script with ' + $path)) { return }
-    Invoke-Graph 'PATCH' ($Beta + '/' + $id) $body | Out-Null
+    $shown = Get-Plain "$Name ($id)"
+    $doScript = $PSCmdlet.ShouldProcess($shown, 'Replace its script with ' + $path)
+    $doAssign = $PSCmdlet.ShouldProcess($shown, $assignText)
+    if (-not ($doScript -and $doAssign)) { return }
+    Invoke-Graph 'PATCH' ($Beta + '/' + [Uri]::EscapeDataString($id)) $body | Out-Null
     Write-Host "Updated the script of '$Name'."
   } else {
     Write-Host "Creates: $Name"
-    if (-not $PSCmdlet.ShouldProcess($Name, 'Create a Remediation from ' + $path)) { return }
+    $doScript = $PSCmdlet.ShouldProcess($Name, 'Create a Remediation from ' + $path)
+    $doAssign = $PSCmdlet.ShouldProcess($Name, $assignText)
+    if (-not ($doScript -and $doAssign)) { return }
     $created = Invoke-Graph 'POST' $Beta $body
     $id = [string](Get-Prop $created 'id')
     if (-not $id) { Stop-Tool 'Intune did not say what id it gave the new Remediation. Run -Deploy again: it finds it by its mark.' }
-    Write-Host "Created '$Name' ($id)."
+    Write-Host (Get-Plain "Created '$Name' ($id).")
   }
-  if (-not $PSCmdlet.ShouldProcess("$Name ($id)", "Assign it to the group '$Group', daily, as the signed-in person")) { return }
-  try { Invoke-Graph 'POST' ($Beta + '/' + $id + '/assign') $assign | Out-Null }
+  try { Invoke-Graph 'POST' ($Beta + '/' + [Uri]::EscapeDataString($id) + '/assign') $assign | Out-Null }
   catch { Stop-Tool ("The Remediation is there but is not assigned yet: " + $_.Exception.Message + ' Run -Deploy again.') }
-  Write-Host "Assigned to '$Group': runs once a day, as the signed-in person, in 64-bit PowerShell, with no fix script."
+  Write-Host "Assigned to '$Group' only: runs once a day, as the signed-in person, in 64-bit PowerShell, with no fix script."
 }
 
 function Invoke-Remove {
@@ -218,15 +247,12 @@ function Invoke-Remove {
   if ($found.Mine.Count -eq 0) { Write-Host 'Nothing to remove: no Remediation carries this tool''s mark.'; return }
   if ($found.Mine.Count -gt 1) { Stop-Several $found.Mine }
   $id = [string](Get-Prop $found.Mine[0] 'id')
-  $s = Invoke-Graph 'GET' ($Beta + '/' + [Uri]::EscapeDataString($id)) $null
-  if (-not (Test-Ours $s) -or [string](Get-Prop $s 'id') -ne $id) { Stop-Tool 'The Remediation changed while this ran, so nothing was deleted. Run -Remove again.' }
-  Show-Script $s 'Deletes'
-  $assigned = @(Get-GraphAll ($Beta + '/' + [Uri]::EscapeDataString($id) + '/assignments'))
-  Write-Host ('  assigned to:   ' + $assigned.Count + ' group' + $(if ($assigned.Count -eq 1) { '' } else { 's' }))
-  if (-not $PSCmdlet.ShouldProcess("$Name ($id)", 'Delete')) { return }
-  if (-not $Force -and -not $PSCmdlet.ShouldContinue("Delete '$Name' ($id) from Intune?", 'Delete')) { Write-Host 'Nothing was deleted.'; return }
+  [void](Get-Checked $id 'Deletes' '-Remove')
+  $shown = Get-Plain "$Name ($id)"
+  if (-not $PSCmdlet.ShouldProcess($shown, 'Delete')) { return }
+  if (-not $Force -and -not $PSCmdlet.ShouldContinue("Delete $shown from Intune?", 'Delete')) { Write-Host 'Nothing was deleted.'; return }
   Invoke-Graph 'DELETE' ($Beta + '/' + [Uri]::EscapeDataString($id)) $null | Out-Null
-  Write-Host "Deleted '$Name' ($id). PCs stop running it at their next check-in with Intune."
+  Write-Host "Deleted $shown. PCs stop running it at their next check-in with Intune."
 }
 
 # The inventory value, as gird-fleet.sh writes it (docs/designs/fleet-mode.md, "The result"),
@@ -259,6 +285,8 @@ $Kinds = [ordered]@{
   'tmp-marks' = 'Malware markers in a shared folder'
   'partial' = 'Partly checked'
 }
+$ReasonRx = '^[a-z0-9_]{1,40}$'
+$IntuneKeeps = 2048
 $IdList = '^[a-z0-9][a-z0-9._-]{0,63}(,[a-z0-9][a-z0-9._-]{0,63}){0,63}$'
 
 function Test-Items([string]$Text, [System.Collections.ArrayList]$Into) {
@@ -282,7 +310,8 @@ function Read-Inventory([string]$Raw) {
   $r = @{ Ok = $false; Outcome = ''; Time = $null; Accounts = @(); Kinds = @(); More = $false; OtherProfiles = 0; Reason = ''; Special = '' }
   if ($null -eq $Raw) { return $r }
   $t = $Raw.TrimEnd(" `t`r`n".ToCharArray())
-  if ($t.Length -eq 0 -or $t.Length -gt 2048) { return $r }
+  if ($Raw.Length -ge $IntuneKeeps -and -not $t.EndsWith(' +more', [StringComparison]::Ordinal)) { $r.Ok = $true; $r.Special = 'cut'; return $r }
+  if ($t.Length -eq 0 -or $t.Length -gt $IntuneKeeps) { return $r }
   if ($t -cnotmatch '^[A-Za-z0-9 ._:;,|+=-]+$') { return $r }
   if ($t -ceq 'none') { $r.Ok = $true; $r.Special = 'none'; return $r }
   if ($t -ceq 'unreadable') { $r.Ok = $true; $r.Special = 'unreadable'; return $r }
@@ -325,7 +354,7 @@ function Read-Inventory([string]$Raw) {
     if ($semi -and $who -cne 'machine') { return $r }
     if ($sm.Groups[3].Success) {
       if ($so -ceq 'clear') { return $r }
-      $isReason = $so -ceq 'not_checked' -and $rest -cmatch '^[a-z_]{1,32}$' -and -not ($NoArg -ccontains $rest)
+      $isReason = $so -ceq 'not_checked' -and $rest -cmatch $ReasonRx -and -not ($NoArg -ccontains $rest)
       if (-not $isReason -and -not (Test-Items $rest $kinds)) { return $r }
     }
     $rank = $Outcomes[$so]
@@ -380,6 +409,7 @@ function Get-PcRow($State, [DateTime]$Now) {
     'unreadable' { $row.Status = 'not_checked'; $row.Why = 'the saved result could not be read'; return $row }
     'stale' { $row.Status = 'stale'; $row.Why = 'the last finished run is old'; $row.CheckedAt = $p.Time; return $row }
     'failed' { $row.Status = 'failed'; $row.Why = 'a run did not finish or could not save its result'; $row.CheckedAt = $p.Time; return $row }
+    'cut' { $row.Status = 'not_checked'; $row.Why = 'its result fills all the room Intune keeps and does not end in +more, so Intune may have cut it short'; return $row }
   }
   $row.CheckedAt = $p.Time
   $at = Get-UtcTime $p.Time
@@ -388,7 +418,7 @@ function Get-PcRow($State, [DateTime]$Now) {
   if ($age -gt $StaleDays * 86400) {
     $row.Status = 'stale'; $row.Why = "its result is older than $StaleDays days (it read " + $StatusText[$p.Outcome].ToLower() + ')'; return $row
   }
-  if ($p.Outcome -eq 'clear' -and $det -and $det -ne 'success') {
+  if ($p.Outcome -eq 'clear' -and $det -cne 'success') {
     $row.Status = 'not_checked'; $row.Why = 'it reads clear, but Intune says the check did not succeed'; return $row
   }
   $row.Status = $p.Outcome
@@ -411,14 +441,15 @@ function Get-PcRow($State, [DateTime]$Now) {
   return $row
 }
 
-function ConvertTo-Html([string]$S) {
+function ConvertTo-HtmlText([string]$S) {
   if ($null -eq $S) { return '' }
   return [System.Net.WebUtility]::HtmlEncode($S)
 }
 function ConvertTo-CsvCell([string]$S) {
   if ($null -eq $S) { $S = '' }
   $risky = '=+-@' + "`t`r`n" + [char]0xFF1D + [char]0xFF0B + [char]0xFF0D + [char]0xFF20
-  if ($S.Length -gt 0 -and $risky.IndexOf($S[0]) -ge 0) { $S = "'" + $S }
+  $first = $S.TrimStart(' ')
+  if ($first.Length -gt 0 -and $risky.IndexOf($first[0]) -ge 0) { $S = "'" + $S }
   return '"' + $S.Replace('"', '""') + '"'
 }
 
@@ -429,6 +460,7 @@ function Get-SilentPcs([string]$ScriptId, $States) {
   $exclude = @{}
   $everyPc = $false
   $assigned = @(Get-GraphAll ($Beta + '/' + [Uri]::EscapeDataString($ScriptId) + '/assignments'))
+  if ($assigned.Count -eq 0) { return @{ Rows = @(); Notes = @(); Unassigned = $true } }
   foreach ($a in $assigned) {
     $t = Get-Prop $a 'target'
     $type = ([string](Get-Prop $t '@odata.type')).TrimStart('#')
@@ -447,7 +479,11 @@ function Get-SilentPcs([string]$ScriptId, $States) {
     try { $members = @(Get-GraphAll ('https://graph.microsoft.com/v1.0/groups/' + [Uri]::EscapeDataString($gid) + '/transitiveMembers')) }
     catch {
       if ($_.Exception.Message.StartsWith('Stopped:')) { throw }
-      [void]$notes.Add("Could not list the PCs with no result for group $gid, because its members could not be read: " + $_.Exception.Message + ' PCs with no result there are not in this report, which does not mean they are clear.')
+      if ($excluding) {
+        [void]$notes.Add("Could not read the members of exclusion group $($gid): " + $_.Exception.Message + ' So a PC listed as no result yet may in fact be excluded from the check.')
+      } else {
+        [void]$notes.Add("Could not list the PCs with no result for group $gid, because its members could not be read: " + $_.Exception.Message + ' PCs with no result there are not in this report, which does not mean they are clear.')
+      }
       continue
     }
     $people = 0; $hidden = 0
@@ -467,11 +503,14 @@ function Get-SilentPcs([string]$ScriptId, $States) {
     elseif ($people -gt 0) {
       [void]$notes.Add("Could not list the PCs with no result for the people in group $gid ($people): Microsoft Graph does not say which of a person's PCs Intune runs the check on. PCs with no result there are not in this report, which does not mean they are clear.")
     }
-    if ($hidden -gt 0) {
+    if ($hidden -gt 0 -and $excluding) {
+      [void]$notes.Add("Could not read $hidden PC" + $(if ($hidden -eq 1) { '' } else { 's' }) + " in exclusion group $gid. Allow Device.Read.All for this tool and run -Report again. Until then a PC listed as no result yet may in fact be excluded from the check.")
+    }
+    elseif ($hidden -gt 0) {
       [void]$notes.Add("Could not read $hidden PC" + $(if ($hidden -eq 1) { '' } else { 's' }) + " in group $gid. Allow Device.Read.All for this tool and run -Report again. PCs with no result there are not in this report, which does not mean they are clear.")
     }
   }
-  if ($include.Count -eq 0 -and -not $everyPc) { return @{ Rows = @(); Notes = $notes.ToArray() } }
+  if ($include.Count -eq 0 -and -not $everyPc) { return @{ Rows = @(); Notes = $notes.ToArray(); Unassigned = $false } }
 
   $seen = @{}
   foreach ($st in $States) {
@@ -497,10 +536,50 @@ function Get-SilentPcs([string]$ScriptId, $States) {
       Why = 'no result yet: Intune has no result row for this PC'; CheckedAt = ''; Details = ''; Kinds = @(); LastReport = ''; Output = ''
     })
   }
-  return @{ Rows = $rows; Notes = $notes.ToArray() }
+  return @{ Rows = $rows; Notes = $notes.ToArray(); Unassigned = $false }
+}
+
+function Get-OutDir {
+  $d = $OutDir
+  if (-not $d) { $d = '.' }
+  try { $rp = @(Resolve-Path -LiteralPath $d -ErrorAction Stop) } catch { Stop-Tool "No folder at $d." }
+  if ($rp.Count -ne 1 -or $rp[0].Provider.Name -cne 'FileSystem') { Stop-Tool "$d is not a folder on disk. Give a folder with -OutDir." }
+  $full = $rp[0].ProviderPath
+  if (-not [IO.Directory]::Exists($full)) { Stop-Tool "No folder at $d." }
+  return $full
+}
+
+function Test-Taken([string]$Path) {
+  if ([IO.File]::Exists($Path) -or [IO.Directory]::Exists($Path)) { return $true }
+  return $null -ne (Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue)
+}
+
+function New-ReportFile([string]$Path, [string]$Text, [bool]$Bom) {
+  $enc = New-Object System.Text.UTF8Encoding($Bom)
+  $bytes = [byte[]]($enc.GetPreamble() + $enc.GetBytes($Text))
+  $fs = New-Object IO.FileStream -ArgumentList $Path, ([IO.FileMode]::CreateNew), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
+  try { $fs.Write($bytes, 0, $bytes.Length) } finally { $fs.Dispose() }
+}
+
+function Save-Report([string]$Dir, [string]$Stamp, [string]$Csv, [string]$Html) {
+  for ($n = 1; $n -le 100; $n++) {
+    $base = [IO.Path]::Combine($Dir, 'blindspot-intune-' + $Stamp + $(if ($n -gt 1) { '-' + $n } else { '' }))
+    if ((Test-Taken ($base + '.csv')) -or (Test-Taken ($base + '.html'))) { continue }
+    try { New-ReportFile ($base + '.csv') $Csv $true }
+    catch { if (Test-Taken ($base + '.csv')) { continue }; throw }
+    try { New-ReportFile ($base + '.html') $Html $false }
+    catch {
+      [IO.File]::Delete($base + '.csv')
+      if (Test-Taken ($base + '.html')) { continue }
+      throw
+    }
+    return $base
+  }
+  throw "Stopped: 100 reports from this minute are already in $Dir, so this one was not saved."
 }
 
 function Invoke-Report {
+  $dir = Get-OutDir
   Connect-Graph @('DeviceManagementScripts.Read.All', 'DeviceManagementManagedDevices.Read.All', 'GroupMember.ReadBasic.All', 'Device.Read.All')
   $found = Get-Ours
   if ($found.Mine.Count -eq 0) { Stop-Tool 'No Remediation made by this tool was found. Run -Deploy first.' }
@@ -512,17 +591,13 @@ function Invoke-Report {
   foreach ($st in $states) { $rows += New-Object PSObject -Property (Get-PcRow $st $now) }
   $silent = Get-SilentPcs $id $states
   $rows += $silent.Rows
-  $notes = @($silent.Notes | Select-Object -Unique)
+  $notes = @($silent.Notes | ForEach-Object { Get-Plain $_ } | Select-Object -Unique)
+  $unassigned = [bool]$silent.Unassigned
+  $noAssignment = 'The Remediation is assigned to no group, so no PC runs the check. Assign it to a group with -Deploy -Group <name>.'
   $order = @{ act = 0; not_checked = 1; failed = 2; stale = 3; no_result = 4; review = 5; clear = 6 }
   $rows = @($rows | Sort-Object @{ Expression = { $order[$_.Status] } }, @{ Expression = { $_.PC } })
 
-  $dir = $OutDir
-  if (-not $dir) { $dir = (Get-Location).ProviderPath }
-  if (-not (Test-Path -LiteralPath $dir -PathType Container)) { Stop-Tool "No folder at $dir." }
-  $stamp = $now.ToString('yyyyMMdd-HHmm')
-  $base = Join-Path $dir ('blindspot-intune-' + $stamp)
-  $n = 1
-  while ((Test-Path -LiteralPath ($base + '.html')) -or (Test-Path -LiteralPath ($base + '.csv'))) { $n++; $base = Join-Path $dir ('blindspot-intune-' + $stamp + '-' + $n) }
+  $stamp = $now.ToString('yyyyMMdd-HHmm', [Globalization.CultureInfo]::InvariantCulture)
 
   $count = @{}
   foreach ($k in $StatusText.Keys) { $count[$k] = @($rows | Where-Object { $_.Status -eq $k }).Count }
@@ -540,7 +615,6 @@ function Invoke-Report {
     $cells = @($r.PC, $r.User, $r.Status, $r.Why, $r.CheckedAt, $r.Details, $r.LastReport, $r.Output)
     [void]$csv.AppendLine((@($cells | ForEach-Object { ConvertTo-CsvCell ([string]$_) })) -join ',')
   }
-  [IO.File]::WriteAllText($base + '.csv', $csv.ToString(), (New-Object System.Text.UTF8Encoding($true)))
 
   $h = New-Object System.Text.StringBuilder
   [void]$h.Append(@'
@@ -566,26 +640,29 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
 </style></head><body><main>
 '@)
   [void]$h.Append('<h1>Blindspot fleet report</h1>')
-  [void]$h.Append('<p class="muted">From Microsoft Intune, read ' + (ConvertTo-Html ($now.ToString('yyyy-MM-dd HH:mm') + ' UTC')) + '. A result older than ' + $StaleDays + ' days counts as stale. Each result covers the person signed in when it ran.</p>')
-  [void]$h.Append('<div class="tiles">')
-  [void]$h.Append('<div class="tile"><b>' + $rows.Count + '</b>PCs</div>')
-  foreach ($k in @('act', 'not_checked', 'failed', 'stale', 'no_result', 'review', 'clear')) {
-    [void]$h.Append('<div class="tile"><b>' + $count[$k] + '</b>' + (ConvertTo-Html $StatusText[$k]) + '</div>')
+  [void]$h.Append('<p class="muted">From Microsoft Intune, read ' + (ConvertTo-HtmlText ($now.ToString('yyyy-MM-dd HH:mm') + ' UTC')) + '. A result older than ' + $StaleDays + ' days counts as stale. Each result covers the person signed in when it ran.</p>')
+  if ($unassigned) { [void]$h.Append('<p><b>' + (ConvertTo-HtmlText $noAssignment) + '</b></p>') }
+  if ($rows.Count -gt 0 -or -not $unassigned) {
+    [void]$h.Append('<div class="tiles">')
+    [void]$h.Append('<div class="tile"><b>' + $rows.Count + '</b>PCs</div>')
+    foreach ($k in @('act', 'not_checked', 'failed', 'stale', 'no_result', 'review', 'clear')) {
+      [void]$h.Append('<div class="tile"><b>' + $count[$k] + '</b>' + (ConvertTo-HtmlText $StatusText[$k]) + '</div>')
+    }
+    [void]$h.Append('</div>')
   }
-  [void]$h.Append('</div>')
   if ($notChecked -gt 0) {
     [void]$h.Append('<p>' + $notChecked + ' PC' + $(if ($notChecked -eq 1) { ' was' } else { 's were' }) + ' not checked: no result, a stale result, or a result that does not fit. None of them counts as clear.</p>')
   }
   if ($notes.Count -gt 0) {
     [void]$h.Append('<h2>Could not list every PC</h2><ul>')
-    foreach ($n in $notes) { [void]$h.Append('<li>' + (ConvertTo-Html $n) + '</li>') }
+    foreach ($n in $notes) { [void]$h.Append('<li>' + (ConvertTo-HtmlText $n) + '</li>') }
     [void]$h.Append('</ul>')
   }
   [void]$h.Append('<h2>What was found</h2>')
   if ($kindCount.Count -eq 0) { [void]$h.Append('<p class="muted">No finding in the results that were read.</p>') }
   else {
     [void]$h.Append('<div class="wrap"><table><tr><th>Finding</th><th>PCs</th></tr>')
-    foreach ($k in $kindCount.PSBase.Keys) { [void]$h.Append('<tr><td>' + (ConvertTo-Html $Kinds[$k]) + '</td><td>' + $kindCount[$k] + '</td></tr>') }
+    foreach ($k in $kindCount.PSBase.Keys) { [void]$h.Append('<tr><td>' + (ConvertTo-HtmlText $Kinds[$k]) + '</td><td>' + $kindCount[$k] + '</td></tr>') }
     [void]$h.Append('</table></div>')
   }
   $sections = @(
@@ -596,25 +673,28 @@ td.raw { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-b
   )
   foreach ($sec in $sections) {
     $list = @($rows | Where-Object { $sec.Keys -contains $_.Status })
-    [void]$h.Append('<h2>' + (ConvertTo-Html $sec.Title) + ' (' + $list.Count + ')</h2>')
+    [void]$h.Append('<h2>' + (ConvertTo-HtmlText $sec.Title) + ' (' + $list.Count + ')</h2>')
     if ($list.Count -eq 0) { [void]$h.Append('<p class="muted">None.</p>'); continue }
     [void]$h.Append('<div class="wrap"><table><tr><th>PC</th><th>Person</th><th>Status</th><th>Why</th><th>Checked</th><th>Details</th></tr>')
     foreach ($r in $list) {
-      $detail = '<td>' + (ConvertTo-Html $r.Details) + '</td>'
+      $detail = '<td>' + (ConvertTo-HtmlText $r.Details) + '</td>'
       if ($r.Status -eq 'not_checked' -and -not $r.Details) {
         $o = $r.Output; if ($o.Length -gt 200) { $o = $o.Substring(0, 200) + '...' }
-        $detail = '<td class="raw">' + (ConvertTo-Html $o) + '</td>'
+        $detail = '<td class="raw">' + (ConvertTo-HtmlText $o) + '</td>'
       }
-      [void]$h.Append('<tr><td>' + (ConvertTo-Html $r.PC) + '</td><td>' + (ConvertTo-Html $r.User) + '</td><td class="s-' + $r.Status + '">' +
-        (ConvertTo-Html $StatusText[$r.Status]) + '</td><td>' + (ConvertTo-Html $r.Why) + '</td><td>' + (ConvertTo-Html $r.CheckedAt) + '</td>' + $detail + '</tr>')
+      [void]$h.Append('<tr><td>' + (ConvertTo-HtmlText $r.PC) + '</td><td>' + (ConvertTo-HtmlText $r.User) + '</td><td class="s-' + $r.Status + '">' +
+        (ConvertTo-HtmlText $StatusText[$r.Status]) + '</td><td>' + (ConvertTo-HtmlText $r.Why) + '</td><td>' + (ConvertTo-HtmlText $r.CheckedAt) + '</td>' + $detail + '</tr>')
     }
     [void]$h.Append('</table></div>')
   }
   [void]$h.Append('<p class="muted">The full result of each PC stays on that PC. To see which files, the person runs Blindspot on their own account.</p>')
   [void]$h.Append('</main></body></html>')
-  [IO.File]::WriteAllText($base + '.html', $h.ToString(), (New-Object System.Text.UTF8Encoding($false)))
+  $base = Save-Report $dir $stamp $csv.ToString() $h.ToString()
 
-  Write-Host ("$($rows.Count) PCs: $($count.act) to act on, $notChecked not checked, $($count.failed) failed, $($count.review) to review, $($count.clear) with nothing found.")
+  if ($unassigned) { Write-Host $noAssignment }
+  if ($rows.Count -gt 0 -or -not $unassigned) {
+    Write-Host ("$($rows.Count) PCs: $($count.act) to act on, $notChecked not checked, $($count.failed) failed, $($count.review) to review, $($count.clear) with nothing found.")
+  }
   foreach ($n in $notes) { Write-Host ('Note: ' + $n) }
   Write-Host ('Saved: ' + $base + '.html')
   Write-Host ('Saved: ' + $base + '.csv')
@@ -625,6 +705,8 @@ try {
   elseif ($Report) { Invoke-Report }
   else { Invoke-Remove }
 } catch {
-  Stop-Tool ('Stopped: ' + $_.Exception.Message)
+  $msg = $_.Exception.Message
+  if (-not $msg.StartsWith('Stopped:')) { $msg = 'Stopped: ' + $msg }
+  Stop-Tool $msg
 }
 exit 0
