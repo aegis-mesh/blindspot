@@ -272,6 +272,11 @@ function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } de
 function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } default { $null } } }
 '@
 # <<< keys
+# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
+$PublicValuesFn = @'
+function Is-Public([string]$k) { $false }
+'@
+# <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
 $TR_KEYS = $ALL_KEYS -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])'
@@ -435,13 +440,13 @@ function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders, [switch]$Y
 }
 # The provider of a matched key (generated above) and whether a key looks made up. Text, so the
 # background session check can load the same functions.
-$KeyFns = $KeyProviderFn + @'
+$KeyFns = $KeyProviderFn + $PublicValuesFn + @'
 function Made-Up([string]$k) {
   # A match longer than its provider's max in data/keys.tsv (Key-Max, 300 unless the line says more,
   # as for GitHub's stateless ghs_ tokens of about 520) is a run of data, not a key.
   if ($k.Length -gt 1024 -or $k.Length -gt (Key-Max (Key-Provider $k))) { return $true }
   $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' -replace '[^A-Za-z0-9_.-]+$', ''
-  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
+  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}' -or (Is-Public $k)) { return $true }
   $set = New-Object 'System.Collections.Generic.HashSet[char]'
   foreach ($c in $k.ToCharArray()) { [void]$set.Add($c) }
   $min = 12; if ($k.Length -lt 30) { $min = 8 }

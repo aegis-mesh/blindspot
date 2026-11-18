@@ -118,6 +118,9 @@ a key max over 1024	tools/gen.sh is one bash tool that writes the data files int
 a key pattern that counts past 255	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a key pattern with a POSIX class	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a key start that is not fixed text	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a published value of an unknown key type	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a published value shorter than 20	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a published value that is a whole key	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 HUP leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 INT leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 HUP leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process

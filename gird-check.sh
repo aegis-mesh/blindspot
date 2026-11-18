@@ -797,6 +797,10 @@ function prov(s) {
 function pmax(p) { if (p == "GitHub") return 1024; return 300 }'
 prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
 # <<< keys
+# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
+PUBLIC_AWK='
+function public(k) { return 0 }'
+# <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
 TR_KEYS=$(printf '%s' "$ALL_KEYS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
@@ -1575,9 +1579,9 @@ while ($sel->count) {
 # key, and so is any match over 1024: madeup() would be slow on it. Always called in a subshell (a pipe or a
 # background job): exec makes awk that job's own process, the one sess_stop signals.
 sess_filter() { # [rg]
-  exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK"'
+  exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK$PUBLIC_AWK"'
     function madeup(k,   i, c, run, last, n, seen, len) {
-      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF/) return 1
+      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF/ || public(k)) return 1
       run = 0; last = ""; n = 0; len = length(k)
       for (i = 1; i <= len; i++) {
         c = substr(k, i, 1)

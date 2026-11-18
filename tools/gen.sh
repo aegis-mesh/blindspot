@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Writes the data files into gird-check.sh and gird-check.ps1 (and the tables root reads into
 # gird-fleet.sh, with gird-check.sh's agents table), between each block's "# >>> <name>"
-# and "# <<< <name>" markers: key types (data/keys.tsv), agent session locations
+# and "# <<< <name>" markers: key types (data/keys.tsv), published example and emulator values
+# that are not keys (data/public-values.tsv), agent session locations
 # (data/sessions.tsv), bad npm packages (data/bad-npm.tsv), incidents (data/incidents.tsv), bad
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
@@ -157,6 +158,16 @@ bad=$(rows data/keys.tsv | awk -F '\t' "$KEYS_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
         !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')
+# A published value names a key type of data/keys.tsv and holds only key characters. It is a part of
+# the value, never one its key pattern matches by itself: the list must not hold a whole key.
+KEY_IDS=" $(rows data/keys.tsv | cut -f1 | tr '\n' ' ')"
+_pv=$(rows data/public-values.tsv | awk -F '\t' -v ids="$KEY_IDS" 'NF != 3 || index(ids, " " $1 " ") == 0 || $2 !~ /^[A-Za-z0-9+\/=%._-]+$/ || length($2) < 20 || $3 !~ /^https:\/\/[^ \047"`$|\\]+$/ || seen[$2]++ { print "data/public-values.tsv: " $0 }'
+  rows data/public-values.tsv | while IFS="$(printf '\t')" read -r _i _v _s; do
+    _re=$(rows data/keys.tsv | awk -F '\t' -v i="$_i" '$1 == i { print $4 }')
+    [ -n "$_re" ] && printf '%s\n' "$_v" | grep -qE -- "$_re" && printf 'data/public-values.tsv: %s is a whole %s key\n' "$_v" "$_i"
+  done || :)
+bad="$bad${bad:+${_pv:+
+}}$_pv"
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
@@ -265,6 +276,27 @@ rows data/keys.tsv | awk -F '\t' "$KEYS_GEN"'
     print "\047@"
     print "# <<< keys"
   }' > "$WORK/keys.ps1"
+
+# --- published values -----------------------------------------------------------
+# public(k) in sess_filter's madeup and Is-Public in gird-check.ps1's Made-Up: a match that holds a
+# published value is not a key.
+rows data/public-values.tsv | awk -F '\t' '
+  { v[NR] = $2; n = NR }
+  END {
+    print "# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it."
+    print "PUBLIC_AWK=\047"
+    printf "function public(k) { return 0"
+    for (i = 1; i <= n; i++) printf " || index(k, \"%s\")", v[i]
+    print " }\047"
+    print "# <<< public-values"
+    print "# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it." > "/dev/stderr"
+    print "$PublicValuesFn = @\047" > "/dev/stderr"
+    printf "function Is-Public([string]$k) { $false" > "/dev/stderr"
+    for (i = 1; i <= n; i++) printf " -or $k.Contains(\047%s\047)", v[i] > "/dev/stderr"
+    print " }" > "/dev/stderr"
+    print "\047@" > "/dev/stderr"
+    print "# <<< public-values" > "/dev/stderr"
+  }' > "$WORK/public-values.sh" 2> "$WORK/public-values.ps1"
 
 # --- sessions ---------------------------------------------------------------
 rows data/sessions.tsv | awk -F '\t' "$PATH_SH"'
@@ -476,7 +508,7 @@ grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has 
 RC=0
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
-  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
+  else blocks="keys public-values sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }

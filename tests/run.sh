@@ -3252,6 +3252,10 @@ gen_refuses "a key max over 1024"                       keys.tsv "newkey${T}New$
 gen_refuses "a key pattern that counts past 255"       keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20,300}${T}start${T}-"
 gen_refuses "a key pattern with a POSIX class"         keys.tsv "newkey${T}New${T}nk-${T}nk-[[:alnum:]]{20}${T}start${T}-"
 gen_refuses "a key start that is not fixed text"       keys.tsv "newkey${T}New${T}[A-Z]*nk-${T}nk-[a-z]{20}${T}in${T}-"
+# A published value (data/public-values.tsv) is a part of a known key type's value, never a whole key.
+gen_refuses "a published value of an unknown key type" public-values.tsv "nosuch${T}abcdefghij0123456789xyz${T}https://example.com/doc"
+gen_refuses "a published value shorter than 20"        public-values.tsv "groq${T}short0123456789${T}https://example.com/doc"
+gen_refuses "a published value that is a whole key"    public-values.tsv "groq${T}g""sk_$(rnd 52)${T}https://example.com/doc"
 # gird-check.sh hands the bad npm versions to awk in four environment strings of 1,000 lines.
 gen_refuses "a list of bad npm versions longer than awk gets" bad-npm.tsv 'edit:{ print } !/^#/ && $3 == "keyvspread" { print $1, $2 "-x", $3 }'
 
