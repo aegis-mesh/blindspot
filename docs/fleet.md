@@ -395,7 +395,7 @@ Add `blindspot-fleet.ps1` as a script with these settings:
 - Run it once a day.
 - Run it as the signed-in user, not as SYSTEM. As SYSTEM the result is `failed`, reason `system_account`.
 - Run it in 64-bit PowerShell. In 32-bit PowerShell the result is `failed`, reason `host_32bit`.
-- Give it no arguments. It stops after 1,500 seconds, to finish inside Intune's 30 minutes.
+- Give it no arguments. It stops after 1,500 seconds (25 minutes).
   `-Deadline <seconds>` changes that.
 
 [docs/mdm/intune.md](mdm/intune.md#windows) has these steps for Microsoft Intune.
