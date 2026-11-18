@@ -3880,6 +3880,8 @@ FL=$WORK/fleet; mkdir -p "$FL"
 FSKIP=""; [ "$(uname -s)" = Darwin ] || FSKIP="fleet mode is built for macOS only so far: its root side reads dscl and BSD stat"
 U=$(id -u); FLL=$PWD/tests/fleet-launch.sh; FLEETSH=$PWD/gird-fleet.sh
 FLBASH=/bin/bash   # what an MDM runs it with: macOS's own bash, 3.2
+# Root counts a loader as the Mac's finding only when /bin/ps says root's own process holds its lock.
+FPSSKIP=$FSKIP; [ -n "$FPSSKIP" ] || [ "$(/usr/bin/env LC_ALL=C /bin/ps -o uid= -p $$ 2>/dev/null | tr -d ' ')" = "$U" ] || FPSSKIP="/bin/ps can't be run here, so whose process holds a lock can't be told"
 fl_home() { mkdir -p "$FL/$1/Library/Safari"; }
 for h in asha itadmin clean upd linker odd shared keeper; do fl_home "$h"; done
 bash tests/make-fixture.sh "$FL/asha" "$FL/keys-asha.txt" > /dev/null; mkdir -p "$FL/asha/Library/Safari"
@@ -4162,7 +4164,9 @@ hasnot "fleet: a link at that name in /tmp is nothing" '^machine\.(incidents|pos
 printf '#!/bin/sh\necho $PPID\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
 GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" fl_run macterm
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
+SKIPPING=$FPSSKIP
 has    "fleet: the readable report names the Mac's finding under macOS's bash" '^  This Mac +act now$' "$FL/macterm.out"
+SKIPPING=$FSKIP
 hasnot "fleet: and prints no shell error" 'syntax error|command substitution' "$FL/macterm.err"
 # Another account's process holding the root-owned lock (launchd, PID 1, stands in) is only a possible sign.
 printf '#!/bin/sh\necho 1\n' > "$FL/other-lsof"; chmod +x "$FL/other-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
@@ -4556,8 +4560,10 @@ users "first:$U:$FL/clean:/bin/zsh"
 GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_FIND="$FL/slow-find" fl_run owmac --json --deadline=60
 GIRD_CHECK_FLEET_LSOF="$FL/other-lsof" fl_run owposs --json
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
+SKIPPING=$FPSSKIP
 if grep -q '^machine\.complete=false$' "$FL/owmac.flat" && grep -q '^machine\.owasp=ASI04$' "$FL/owmac.flat" && grep -q '^owasp\.ASI04\.machine=true$' "$FL/owmac.flat" && grep -qE '^summary=.* owasp=ASI04:0\+mac;counted:1$' "$FL/owmac.flat"
 then ok "fleet: a partly checked Mac still counts its incidents as +mac"; else bad "fleet: a partly checked Mac still counts its incidents as +mac" "$(grep -E '^(machine\.(complete|owasp|incidents)|owasp|summary)' "$FL/owmac.flat" | tr '\n' ' ')"; fi
+SKIPPING=$FSKIP
 if grep -q '^machine\.possible_signs=litellm$' "$FL/owposs.flat" && grep -q '^machine\.owasp=$' "$FL/owposs.flat" && grep -q '^owasp\.risks=$' "$FL/owposs.flat"
 then ok "fleet: the Mac's possible signs carry no tag"; else bad "fleet: the Mac's possible signs carry no tag" "$(grep -E '^(machine\.(possible_signs|owasp)|owasp\.risks)' "$FL/owposs.flat" | tr '\n' ' ')"; fi
 # fl_inv_fit, cut out of gird-fleet.sh: a value of 244 to 250 characters without the token is kept
