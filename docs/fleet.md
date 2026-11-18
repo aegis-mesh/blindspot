@@ -267,6 +267,38 @@ as not checked. An account whose name Blindspot does not read shows as `invalid-
 To find the Macs to deal with first, filter the inventory field for values starting `v1 act`, then
 `v1 not_checked`, `failed` and `stale`.
 
+### One report for every computer
+
+`gird-report.ps1` turns your MDM's results into one report: what was found on how many computers,
+the computers to deal with first, the ones not checked, and how the findings relate to MITRE
+ATT&CK and ATLAS. It reads a file and nothing else. It does not sign in anywhere and makes no
+network request.
+
+1. In your MDM, export the computer list with the column that shows the Blindspot result, as a CSV
+   file. In Jamf Pro that is the `Blindspot` extension attribute; in Intune for Macs, the
+   custom attribute's **Result** column. Iru keeps the summary line, not the inventory value, so it
+   needs the inventory value shown first.
+2. Run the report on that file, from the folder that holds both:
+
+   ```sh
+   pwsh ./gird-report.ps1 export.csv
+   ```
+
+   On a Mac this needs PowerShell 7. Microsoft's guide,
+   [Install PowerShell 7 on macOS](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-macos),
+   gives the package to download and open; with the .NET SDK, the one line is
+   `dotnet tool install --global PowerShell`. On Windows, run
+   `powershell -ExecutionPolicy Bypass -File .\gird-report.ps1 export.csv`.
+
+It finds the name and result columns, the delimiter and the encoding itself, and saves an HTML and
+a CSV report in that folder. Several files go in one run, such as a Jamf Pro export and an Intune
+one. When it cannot tell which column to read, it shows each column with a value from it and the
+line to run next. A computer with no result, an old result or one it cannot read is listed as not
+checked, never as clear.
+
+For Microsoft Intune on Windows, `gird-intune.ps1 -Export intune.csv` writes that file for you. It
+is optional: an export from the Intune admin center works too.
+
 ## 5. Act on a finding
 
 Ask the person to run Blindspot on their own account, `bash gird-check.sh`, to see which files. If the

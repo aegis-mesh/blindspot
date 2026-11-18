@@ -280,8 +280,10 @@ PC, so an admin can see what one run left out.
   `gird-fleet.ps1` with `gird-check.ps1` packed inside it, compressed, and the SHA-256 of
   `gird-check.ps1` written next to it. It is under 200 KB, the largest script Intune accepts, and
   `tools/gen.sh --check` fails if it grows past that.
-- `gird-intune.ps1` is the admin's tool for Microsoft Intune. It runs on the admin's own PC, never
-  on the fleet.
+- `gird-report.ps1` builds the report from the results an MDM exports, for any MDM. It runs on the
+  admin's own computer, never on the fleet.
+- `gird-intune.ps1` is the admin's optional tool for Microsoft Intune: it sets up the check and
+  exports the results for `gird-report.ps1`. It also runs on the admin's own PC.
 
 `tools/gen.sh` writes the same tables from `data/` into `gird-fleet.ps1` as into `gird-fleet.sh`,
 and `--check` covers it.
@@ -358,29 +360,97 @@ account's result or check. Fleet mode shows an IT team where keys and agents sit
 machines. It is not a control against the person at the keyboard, and a `clear` from a PC that
 malware already runs on proves nothing.
 
+### The fleet report
+
+`gird-report.ps1` turns the results an MDM collected into one report, for any MDM and for Macs
+and Windows PCs alike. It reads files only. It never signs in, loads no Graph module and makes no
+network request. It runs on Windows PowerShell 5.1, and on PowerShell 7 on Windows, macOS and Linux.
+
+What an admin does, on any MDM:
+
+1. Run the fleet file from the MDM's own feature for running a script on a schedule:
+   `gird-fleet.sh` on Macs (docs/mdm has a page for Jamf Pro, Iru and Microsoft Intune) or
+   `blindspot-fleet.ps1` on Windows.
+2. Show the inventory value in the MDM and export the device list with that column as a CSV file.
+3. Run `gird-report.ps1 export.csv`. On Windows that is
+   `powershell -ExecutionPolicy Bypass -File .\gird-report.ps1 export.csv`; the bypass applies to
+   that one run.
+
+It finds the rest itself:
+
+- The delimiter: comma, semicolon or tab, from the header row.
+- The encoding: UTF-8 with or without a byte order mark, and UTF-16 with or without one.
+- The column with the result: the one whose values have the inventory value's shape (`v1 ...`,
+  `stale: ...`, `failed: ...`, `none`, `unreadable`). Jamf Pro's `<result>` tags are taken off.
+  When two columns look like one, it prefers one with a real result over one with only `none`.
+- The column with the computer's name, from its header (`Computer Name`, `Device name`, `Name`,
+  `Hostname` and the like), and an `OS` column if there is one.
+- The file `gird-intune.ps1 -Export` writes, by its exact header.
+
+When it cannot tell, it stops and says so in plain words: each column with a value from it, what
+it needs, and the command to run next with `-ResultColumn` or `-NameColumn`. A missing file, a
+folder, an empty file, a header with no rows, an Excel workbook, a file that is not text, a file
+another program holds open, a file with no result in any column, an option that does not exist and
+a folder it may not write to each get a sentence, never a PowerShell error. With nothing after it,
+it prints a short usage with the line to run.
+
+It reads each file twice as a stream, once for the header and the first 1,000 rows, then for all
+of them. A cell over 1 MB stops the run. A file of 20,000 computers, 1.9 MB, takes about a minute.
+
+The rules for each result are the same whatever the file:
+
+- A row with no result, `none`, `stale: ...`, `failed: ...`, `unreadable`, a value that does not
+  fit, a value dated more than an hour ahead, a value older than `-StaleDays` (3 by default), a Mac
+  value over 250 characters, and a value of 2,048 characters or more that does not end in `+more`
+  are not checked, never clear. So is a Mac's summary line (`blindspot act accounts=...`), which
+  names no findings: Iru keeps that line, so an Iru export needs the inventory value instead.
+- A name that appears more than once in the files read is listed each time, as not checked, with
+  where each came from. None of its results is counted.
+- Every value from a file is escaped in the HTML. A CSV cell that starts with `=`, `+`, `-`, `@` or
+  a tab, after any spaces, gets a `'` first, so a spreadsheet does not run it.
+- The OS comes from the value: a Windows value carries `other_profiles=`. An `OS` column, or
+  `-OsColumn`, names it for a row whose value has no shape.
+- The report says which file each computer's result came from.
+
+The report is an HTML file and a CSV file, made new in the folder it runs from, or in `-OutDir`.
+One already there under the name is never written through or over. `-Open` opens the HTML. It
+prints four lines at the end: how many computers it read, how many need attention now, how many
+were not checked, and where the report is.
+
+The report shows, for each kind of finding, how many computers had it and the MITRE ATT&CK and
+ATLAS techniques it relates to, a table by technique, what could get out, and what the report
+covers and does not cover. [mitre.md](mitre.md) says how the mapping is made and what it may claim.
+The page is built in one function from data worked out before it, so its design can change without
+touching what it says.
+
 ### Microsoft Intune
 
-The daily check is an Intune Remediation: a script Intune runs on a schedule and whose output it
-shows for each PC. Remediations need a Windows Enterprise or Education licence.
+`gird-intune.ps1` is optional. It sets the check up as an Intune Remediation and exports the
+results, so the admin clicks through nothing. A company that will not give a script sign-in rights
+to its Intune can leave it out: add `blindspot-fleet.ps1` by hand and export the results from the
+Intune admin center.
 
-`gird-intune.ps1` does the setup and the reading, so the admin clicks through nothing. It signs in
-to Microsoft Graph, the API behind the Intune admin center, as the admin, with Microsoft's own
+The Remediation is a script Intune runs on a schedule and whose output it shows for each PC.
+Remediations need a Windows Enterprise or Education licence. `gird-intune.ps1` signs in to
+Microsoft Graph, the API behind the Intune admin center, as the admin, with Microsoft's own
 PowerShell module. It sends nothing anywhere else.
 
 | Command | What it does |
 |---|---|
 | `gird-intune.ps1 -Deploy -Group <name>` | Creates the Remediation from `blindspot-fleet.ps1` and assigns it to that group: run as the signed-in person, 64-bit PowerShell, once a day, with no fix script. Run again with a newer release, it updates the one it made. |
-| `gird-intune.ps1 -Report` | Reads each PC's latest result from Intune and writes one report on the admin's PC: how many PCs had each kind of finding, the PCs to deal with first, and the PCs that were not checked or sent nothing. |
+| `gird-intune.ps1 -Export <file.csv>` | Writes each PC's latest result to a new CSV file, with a row for each PC in the assigned group that has no result yet, then says the `gird-report.ps1` line to run. It does not read the results or write a report. |
 | `gird-intune.ps1 -Remove` | Deletes the Remediation it made. |
 
 Intune keeps at most 2,048 characters of a script's output. The inventory value is cut to fit, as
 on a Mac. The script exits 1 unless the outcome is `clear`, which Intune lists as a PC with issues.
 
-The report never calls a PC clear that sent no result, sent one older than the stale age, or sent
-one that does not fit the inventory value's format. Those are listed as not checked.
-
-An admin who prefers the Intune admin center can add `blindspot-fleet.ps1` by hand as a
-Remediation's detection script with the same settings. `docs/mdm/` gets a page with the steps.
+The export's columns are `Device name`, `Device id`, `User`, `OS`, `Result`, `Detection state`,
+`Last reported` and `Note`. Their one home is `gird-report.ps1`'s shared block, which
+`tools/gen.sh` copies into `gird-intune.ps1` with the CSV quoting and the create-new file writing.
+From that file the report also applies Intune's own word on each run: an empty result Intune marks
+as an error is failed, and a `clear` that Intune does not say succeeded is not checked. A PC in the
+group with no result row is listed as no result yet. A `Note` row carries what the export could not
+list, and the report shows it.
 
 How `gird-intune.ps1` keeps to its own Remediation and reads results:
 
@@ -394,48 +464,32 @@ How `gird-intune.ps1` keeps to its own Remediation and reads results:
   `-Remove` does before deleting, and stops if it is no longer the one with its mark.
 - `-Remove` shows the Remediation, then asks before deleting it (`-Force` skips the question).
   `-WhatIf` on `-Deploy` and `-Remove` reads but writes nothing.
+- `-Export` refuses a file already there, and a path that is not in a folder on disk, before it
+  signs in. The file is made new.
 - Before it signs in, it prints the permissions it will ask for. It stops, saying so, when the
   Graph module is too old for the sign-in it uses. It asks for the fewest Graph permissions each
-  command needs: `-Deploy`
-  DeviceManagementScripts.ReadWrite.All and Group.ReadBasic.All, `-Remove`
-  DeviceManagementScripts.ReadWrite.All, `-Report` DeviceManagementScripts.Read.All and
+  command needs: `-Deploy` DeviceManagementScripts.ReadWrite.All and Group.ReadBasic.All, `-Remove`
+  DeviceManagementScripts.ReadWrite.All, `-Export` DeviceManagementScripts.Read.All and
   DeviceManagementManagedDevices.Read.All (for each PC's name), GroupMember.ReadBasic.All and
   Device.Read.All (to list the PCs of the assigned groups). It follows a next-page link only
   to `https://graph.microsoft.com/`, and stops at any other. A page of results with no list in
   it stops the run too: it is never read as an empty list.
-- `-Report` reads the inventory value as `gird-fleet.sh` writes it, plus two Windows fields right
-  after the time: `other_profiles=<n>`, and `reason=<why>` on a `failed` result only. It also reads
-  the `none`, `unreadable`, `stale: last run <time>` and `failed: ...` lines. Anything else, a
-  second line, a finding word it does not know, an account outcome worse than the header, or a
-  `clear` that Intune does not say succeeded, is not checked. So is a result dated more than an hour
-  ahead, and one of 2,048 characters or more that does not end in `+more`, which Intune may have
-  cut; the one line end the writer prints after the value is not counted. A result with a version
-  header other than `v1`, or a finding word the tool does not know in an otherwise well-formed
-  value, is also not checked, and says the PCs run a newer Blindspot than the tool reads, so the
-  admin should update the tool. A result older than `-StaleDays` (3 by default) is stale, whatever it says. A `failed` result
-  is listed as failed, with its reason.
-- A PC that never ran the check has no row in Intune's results, so `-Report` finds it another way.
+- A PC that never ran the check has no row in Intune's results, so `-Export` finds it another way.
   It reads the Remediation's assignments, then the Windows PCs in each assigned group (nested
   groups included) from `groups/{id}/transitiveMembers`, matches them to Intune's list of managed
-  PCs by their Entra device id, and lists each one with no result row as "no result yet". Those
-  count as not checked, never as clear. This is what two of the four `-Report` permissions above
-  are for: GroupMember.ReadBasic.All, and Device.Read.All, without which Graph hides each PC's id.
-  Paging follows next-page links. An assignment to All devices lists every managed Windows PC. A
-  PC in an exclusion group is left out; when an exclusion group's members cannot be read, the
-  report says a PC it lists may in fact be excluded. A Remediation assigned to no group is reported
-  as that, never as a fleet of 0 PCs.
+  PCs by their Entra device id, and writes each one with no result row. This is what two of the
+  four `-Export` permissions above are for: GroupMember.ReadBasic.All, and Device.Read.All, without
+  which Graph hides each PC's id. Paging follows next-page links. An assignment to All devices
+  lists every managed Windows PC. A PC in an exclusion group is left out; when an exclusion group's
+  members cannot be read, the note says a PC listed may in fact be excluded. A Remediation assigned
+  to no group is noted as that, and the report never shows it as a fleet of 0 PCs.
 - Graph cannot say which PCs a group of people reaches, so for people in an assigned group, an
-  assignment to all users, or any other kind of target, the report says it could not list the PCs
+  assignment to all users, or any other kind of target, the note says it could not list the PCs
   with no result there. It never implies there are none. An assignment filter is not applied, so
-  the list may then hold PCs that were not meant to run the check, and the report says so.
+  the list may then hold PCs that were not meant to run the check, and the note says so.
 - Needs a real tenant: that the Entra device id matches the managed PC's `azureADDeviceId`, that
   a run-result row names its PC by the same Intune id, and what Graph returns for a very large group.
-- The report is an HTML file and a CSV file, saved in the folder `-OutDir` names, or else in the
-  folder PowerShell is in. That folder is resolved once to a folder on disk, and anything else is
-  refused before sign-in. Each file is made new: one already there under the name is never
-  written through or over. Every value a PC sent is escaped in the HTML, and a CSV cell that starts
-  with `=`, `+`, `-`, `@` or a tab, after any spaces, gets a `'` first, so a spreadsheet does not run
-  it. Names the tenant sends are shown in the console with control characters taken out.
+- Names the tenant sends are shown in the console with control characters taken out.
 
 ### PCs that restrict PowerShell
 
@@ -451,7 +505,8 @@ a PC that could not be checked never reads `clear`.
 Each has a twin in `tests/run.sh` where the Mac check has the same rule. Tests of Windows
 permissions, the language mode and stopping a process need Windows. They run on a Windows PC and
 report as skipped elsewhere. `gird-intune.ps1` is tested against a local stand-in for Microsoft
-Graph, never a real tenant.
+Graph, never a real tenant, and `gird-report.ps1` with that stand-in's module on its path, which it
+must never touch.
 
 - `-AccountRun` prints the same keys, in the same order, as `--account-run` for the same fixture.
 - Output for another account, a forged machine section, oversized output or a malformed line:
@@ -469,8 +524,16 @@ Graph, never a real tenant.
 - A profile that would print or change something does not run.
 - A test-only `GIRD_CHECK_*` setting in the person's environment changes nothing.
 - `-Deploy` sends one Remediation with the settings above, and a second `-Deploy` updates it.
-- `-Report` lists a PC with no result, a stale result or a malformed result as not checked.
-- `-Report` lists a PC in the assigned group with no result row as no result yet, once, over several pages, with a hostile name escaped, and says plainly when it could not list the silent PCs of a group.
+- `gird-report.ps1` lists a PC with no result, a stale result or a malformed result as not checked.
+- `-Export` writes a PC in the assigned group with no result row once, over several pages, and the
+  report lists it as no result yet, with a hostile name escaped, and says plainly when the export
+  could not list the silent PCs of a group.
+- `gird-report.ps1` reads a Jamf Pro export with `<result>` tags, a plain two-column file, an
+  Intune export and a Jamf Pro export together, semicolon and tab files in UTF-8 and UTF-16, and
+  20,000 computers. It holds no call that can reach the network, and the stand-in sees nothing.
+- Each failure a person can reach prints plain words and no PowerShell error.
+- The MITRE references, the table by technique and what could get out count each computer once
+  and count a missing or partial result as not known (see [mitre.md](mitre.md)).
 
 ## Not covered
 
