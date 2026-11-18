@@ -32,6 +32,29 @@ has()    { if [ -n "$SKIPPING" ]; then skip "$1" "$SKIPPING"; elif grep -aqE -- 
 hasnot() { if [ -n "$SKIPPING" ]; then skip "$1" "$SKIPPING"; elif grep -aqE -- "$2" "$3"; then bad "$1" "found: $2"; else ok "$1"; fi; }
 hasi()   { if [ -n "$SKIPPING" ]; then skip "$1" "$SKIPPING"; elif grep -aqiE -- "$2" "$3"; then ok "$1"; else bad "$1" "wanted: $2"; fi; }
 nokeys() { if [ -n "$SKIPPING" ]; then skip "$1" "$SKIPPING"; elif grep -aqF -f "$2" "$3"; then bad "$1"; else ok "$1"; fi; }
+# Prints PATH with every folder that holds a hosted platform's CLI (data/platforms.tsv) swapped for a
+# folder under DIR of links to everything else in it, so a CLI installed on the tester's machine never
+# shows in a report. A test that wants one puts its own fake ahead of PATH.
+#   PATH=$(hide_platform_clis DIR)
+hide_platform_clis() {
+  _hc=" $(awk -F '\t' '!/^#/ && NF > 2 && $3 != "-" { printf "%s ", $3 }' data/platforms.tsv)"
+  _hp=""; _hn=0; _hifs=$IFS; IFS=:
+  for _hd in $PATH; do
+    IFS=$_hifs; _hhit=0
+    for _hx in $_hc; do [ -n "$_hd" ] && [ -e "$_hd/$_hx" ] && _hhit=1; done
+    if [ "$_hhit" -eq 1 ]; then
+      _hn=$((_hn + 1)); mkdir -p "$1/$_hn"
+      for _hf in "$_hd"/*; do
+        _hb=${_hf##*/}
+        case "$_hc" in *" $_hb "*) ;; *) [ -e "$_hf" ] && ln -s "$_hf" "$1/$_hn/$_hb" ;; esac
+      done
+      _hd=$1/$_hn
+    fi
+    _hp="$_hp${_hp:+:}$_hd"
+  done
+  IFS=$_hifs
+  printf '%s\n' "$_hp"
+}
 # The suite's last line. A result reported outside these helpers' shell (in a subshell or a pipe)
 # leaves the recorded names and the counts apart, and that fails too.
 finish() {

@@ -30,6 +30,7 @@ WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && { kill "$MOCK_PID"; wait "$MOCK_PID"; } 2>/dev/null; rm -rf "$WORK"' EXIT
 . tests/lib.sh
+PATH=$(hide_platform_clis "$WORK/hostpath")
 command -v python3 >/dev/null 2>&1 || { echo "tests/run-ps.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 # A Windows-shaped copy of tests/make-fixture.sh's home: the same planted keys, with
