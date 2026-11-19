@@ -4225,10 +4225,10 @@ for _m in quiet loud; do
   rm -f "$FW/rg.pid" "$FW/rg.end"; _t0=$(date +%s)
   psrun "$FW/rgstop" PATH="$FW/rg$_m:$WORK/bin" RGT_DIR="$FW" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_TEST_PAUSE_MS=20000 -- -AccountRun --account-seconds=8 > "$FW/rg$_m.out" 2> /dev/null; _rc=$?
   _t2=$(date +%s); for _i in $(seq 1 25); do [ -s "$FW/rg.end" ] && break; sleep 0.2; done   # safety ceiling for the watcher's last write
-  _e=$(cat "$FW/rg.end" 2>/dev/null); _e=${_e:-$((_t2 + 999))}
-  if [ "$_rc" -eq 0 ] && [ "$_e" -ge $((_t0 + 6)) ] && [ "$_e" -le $((_t2 - 6)) ] && grep -q '^sessions_partial=1$' "$FW/rg$_m.out" && grep -q '^engine=rg$' "$FW/rg$_m.out"
-  then ok "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "ended at $((_e - _t0))s of $((_t2 - _t0))s"
-  else bad "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "exit $_rc, ended at $((_e - _t0))s of $((_t2 - _t0))s, $(grep -E '^(sessions_partial|engine)=' "$FW/rg$_m.out" | tr '\n' ' ')"; fi
+  _rgend=$(cat "$FW/rg.end" 2>/dev/null); _rgend=${_rgend:-$((_t2 + 999))}
+  if [ "$_rc" -eq 0 ] && [ "$_rgend" -ge $((_t0 + 6)) ] && [ "$_rgend" -le $((_t2 - 6)) ] && grep -q '^sessions_partial=1$' "$FW/rg$_m.out" && grep -q '^engine=rg$' "$FW/rg$_m.out"
+  then ok "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "ended at $((_rgend - _t0))s of $((_t2 - _t0))s"
+  else bad "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "exit $_rc, ended at $((_rgend - _t0))s of $((_t2 - _t0))s, $(grep -E '^(sessions_partial|engine)=' "$FW/rg$_m.out" | tr '\n' ' ')"; fi
   kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
 done
 # A ripgrep that closes its output and never ends does not hold up a run by hand, even with
