@@ -4310,6 +4310,11 @@ if grep -v '^[[:space:]]*#' "$SCRIPT" | grep -qE '(^|[^A-Za-z0-9_.-])(sudo|dscl)
 bash "$SCRIPT" --all-users > "$FL/cs-all.out" 2> "$FL/cs-all.err"; RC=$?
 if [ "$RC" -eq 2 ] && [ ! -s "$FL/cs-all.out" ] && grep -q 'run gird-fleet.sh as root' "$FL/cs-all.err"; then ok "gird-check.sh --all-users points to gird-fleet.sh"; else bad "gird-check.sh --all-users points to gird-fleet.sh" "exit $RC"; fi
 
+echo "the release tool"
+# Its own suite, with its own list of results: PARITY_LOG is cleared so it records nothing here.
+if PARITY_LOG='' bash tests/release.sh > "$WORK/release.txt" 2>&1; then ok "tools/release.sh refuses what it must and signs what it releases"
+else bad "tools/release.sh refuses what it must and signs what it releases"; grep -E 'FAIL|^ {8}' "$WORK/release.txt" | head -n 20; fi
+
 echo "the text backstop to tests/parity.sh"
 # Each case is a copy of a suite with lines added through a heredoc, which the backstop skips here.
 pcase() { # run.sh-copy run-ps.sh-copy

@@ -1,0 +1,13 @@
+# The keys that may sign a Blindspot release (docs/designs/signed-releases.md).
+#
+# One line per maintainer's release key, every line with the same name, so a check never needs to
+# know which maintainer signed:
+#
+#   release@blindspot namespaces="git,blindspot-release" ssh-ed25519 AAAA... <maintainer>
+#
+# The last part is the public key, the whole of the key's .pub file. "git" lets `git tag -v` check a
+# release tag with this file; "blindspot-release" is the namespace SHA256SUMS.sig is signed in.
+#
+# To add or remove a key, change this file by pull request; a code owner reviews it like every file
+# here. Change gird.ai's own copy of the keys too: gird.ai serves a release signed by a new key
+# only once both have changed. tools/release.sh refuses to run while this file has no key line.
