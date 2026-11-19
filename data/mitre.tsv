@@ -85,10 +85,10 @@
 wiper	all	all	attack	T1485	Data Destruction	Impact	indicator	https://attack.mitre.org/techniques/T1485/	-
 wiper	all	all	atlas	-	-	-	none	-	No ATLAS technique fits: the wiper does not act through an AI system.
 incidents	all	all	attack	T1195.001	Supply Chain Compromise: Compromise Software Dependencies and Development Tools	Initial Access	indicator	https://attack.mitre.org/techniques/T1195/001/	-
-incidents	all	axios,tanstack,mistralpy,guardrails,opensearch,bitwarden,minishai,lightning,durabletask,telnyx,mastra,antv,redhat,keyv,keyvscope,keyvspread,sandworm,sandsleep,tensorlake,litellm,litellmmar,glasswormuni	attack	T1204.005	User Execution: Malicious Library	Execution	indicator	https://attack.mitre.org/techniques/T1204/005/	-
-incidents	all	glassworm,glasswormmar,glasswormvsix,glasswormapr,glasswormzig,glasswormdec,glasswormoct,glasswormuni,glasswasm,nxconsole	attack	T1176.002	Software Extensions: IDE Extensions	Persistence	indicator	https://attack.mitre.org/techniques/T1176/002/	-
-incidents	all	litellm,litellmmar,mistralpy,guardrails,lightning,mastra	atlas	AML.T0010.001	Supply Chain Compromise: Software	Initial Access	indicator	https://atlas.mitre.org/techniques/AML.T0010.001	-
-incidents	all	litellm,litellmmar,mistralpy,guardrails,lightning,mastra	atlas	AML.T0011.001	User Execution: Malicious Package	Execution	indicator	https://atlas.mitre.org/techniques/AML.T0011.001	-
+incidents	all	axios,tanstack,mistralpy,guardrails,opensearch,bitwarden,minishai,lightning,durabletask,telnyx,mastra,antv,redhat,keyv,keyvscope,keyvspread,sandworm,sandsleep,tensorlake,litellm,litellmmar,glasswormuni,agentfw	attack	T1204.005	User Execution: Malicious Library	Execution	indicator	https://attack.mitre.org/techniques/T1204/005/	-
+incidents	all	glassworm,glasswormmar,glasswormvsix,glasswormapr,glasswormzig,glasswormdec,glasswormoct,glasswormuni,glasswasm,nxconsole,claudeext	attack	T1176.002	Software Extensions: IDE Extensions	Persistence	indicator	https://attack.mitre.org/techniques/T1176/002/	-
+incidents	all	litellm,litellmmar,mistralpy,guardrails,lightning,mastra,agentfw	atlas	AML.T0010.001	Supply Chain Compromise: Software	Initial Access	indicator	https://atlas.mitre.org/techniques/AML.T0010.001	-
+incidents	all	litellm,litellmmar,mistralpy,guardrails,lightning,mastra,agentfw	atlas	AML.T0011.001	User Execution: Malicious Package	Execution	indicator	https://atlas.mitre.org/techniques/AML.T0011.001	-
 lockfile	all	all	attack	T1195.001	Supply Chain Compromise: Compromise Software Dependencies and Development Tools	Initial Access	indicator	https://attack.mitre.org/techniques/T1195/001/	-
 lockfile	all	mastra	atlas	AML.T0010.001	Supply Chain Compromise: Software	Initial Access	indicator	https://atlas.mitre.org/techniques/AML.T0010.001	-
 planted	all	all	attack	T1195.001	Supply Chain Compromise: Compromise Software Dependencies and Development Tools	Initial Access	indicator	https://attack.mitre.org/techniques/T1195/001/	-
