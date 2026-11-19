@@ -1863,6 +1863,29 @@ has    "on a Mac, durabletask 1.4.2 is a version to update" 'durabletask 1\.4\.1
 cp -R "$WORK/clean" "$WORK/dtkt"; mkdir -p "$WORK/dtkt/tmp"; : > "$WORK/dtkt/tmp/managed.pyz"
 HOME="$WORK/dtkt" TMPDIR="$WORK/dtkt/tmp" PATH="$WORK/linbin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dtkt.txt"
 has    "on Linux, managed.pyz in the temp folder is durabletask's sign" 'durabletask 1\.4\.1 to 1\.4\.3 +signs of the malware found ~/tmp/managed\.pyz Wiz lists this file as the payload it downloads' "$WORK/dtkt.txt"
+# agent-framework 1.26.1 and 1.26.2 (GitHub's malware advisory GHSA-764m-3ppc-5m73, Wiz, Aikido): a .pth file
+# starts a stealer at every Python start, on any OS. Each version's .pth file and 1.26.2's stealer count on
+# their own. 1.26.0, the version to pin, is not one of them, and its agent_framework_meta folder is no sign.
+AFS="$WORK/afw/code/venv/lib/site-packages"; AF1="$WORK/afw/code/v1/lib/site-packages"
+cp -R "$WORK/clean" "$WORK/afw"; mkdir -p "$AFS/agent_framework-1.26.2.dist-info" "$AF1/agent_framework-1.26.1.dist-info"
+printf 'import af_runtime_diag\n' > "$AFS/af_runtime_diag.pth"; printf 'def _start(): pass\n' > "$AFS/af_runtime_diag.py"
+printf 'import agent_framework_meta\n' > "$AF1/agent_framework_meta.pth"
+cp -R "$WORK/clean" "$WORK/afw0"; mkdir -p "$WORK/afw0/code/venv/lib/site-packages/agent_framework-1.26.0.dist-info" "$WORK/afw0/code/venv/lib/site-packages/agent_framework_meta"
+: > "$WORK/afw0/code/venv/lib/site-packages/agent_framework_meta/__init__.py"
+cp -R "$WORK/clean" "$WORK/afwp"; mkdir -p "$WORK/afwp/code/venv/lib/site-packages"
+printf 'import agent_framework_meta\n' > "$WORK/afwp/code/venv/lib/site-packages/agent_framework_meta.pth"
+HOME="$WORK/afw" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/afw.txt"
+HOME="$WORK/afw0" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/afw0.txt"
+HOME="$WORK/afwp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/afwp.txt"
+has    "agent-framework 1.26.2 is an act-now row of its own" 'agent-framework 1\.26\.1 and 1\.26\.2 +signs of the malware found .*~/code/venv/lib/site-packages: agent_framework 1\.26\.2' "$WORK/afw.txt"
+has    "and 1.26.1 is in it"                            '~/code/v1/lib/site-packages: agent_framework 1\.26\.1' "$WORK/afw.txt"
+has    "with the .pth file and the stealer 1.26.2 adds" 'site-packages: [^~]*af_runtime_diag\.pth' "$WORK/afw.txt"
+has    "and the stealer itself"                         'site-packages: [^~]*af_runtime_diag\.py' "$WORK/afw.txt"
+has    "and the .pth file 1.26.1 adds"                  '~/code/v1/lib/site-packages: [^~]*agent_framework_meta\.pth' "$WORK/afw.txt"
+has    "with GitHub's malware advisory"                 'Advisory: github\.com/advisories/GHSA-764m-3ppc-5m73' "$WORK/afw.txt"
+has    "and its fix, naming agent-framework"            "Treat this machine as compromised\. Don't run Python in the affected environments\. .*follow agent-framework's advisory" "$WORK/afw.txt"
+hasnot "agent-framework 1.26.0 and its agent_framework_meta folder are not flagged" 'agent-framework 1\.26\.1 and 1\.26\.2 +signs|agent_framework 1\.26\.0|agent_framework_meta' "$WORK/afw0.txt"
+has    "1.26.1's .pth file alone is a sign of it"       'agent-framework 1\.26\.1 and 1\.26\.2 +signs of the malware found .*site-packages: agent_framework_meta\.pth' "$WORK/afwp.txt"
 # litellm 1.82.7 and 1.82.8, March 2026 (OpenSSF's MAL-2026-2144, GitHub's GHSA-5mg7-485q-xm76), on any OS: a row
 # of their own beside LiteLLM 1.107.0's, with the litellm_init.pth 1.82.8 leaves (LiteLLM's post). 1.82.6, the
 # version LiteLLM says to pin, is not one of them. With both LiteLLM incidents found, row 05 says LiteLLM once.
@@ -2121,6 +2144,23 @@ mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
 rm -rf "$WP/.vscode-oss"
 has    "Windows: a January GlassWorm extension, whose malware runs on macOS only, is one to remove" 'Editor extensions a malicious extension to remove ~/\.vscode-oss/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed Its malware runs on macOS only, so it did not run here\. Uninstall it\.' "$WORK/win-jan.txt"
+# The trojanized Claude Code extension's files on Windows: sysmon.cmd in the Startup folder alone is a file
+# to check (Sysinternals' Sysmon shares the name); beside smt.cmd or smtk, names only that malware uses, it
+# is a sign too. Its macOS LaunchAgent and its .smt, the macOS and Linux name, are not looked for.
+WSU="${WP:?}/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+mkdir -p "${WP:?}/.config" "$WSU" "${WP:?}/Library/LaunchAgents"; : > "$WSU/sysmon.cmd"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-cx0.txt"
+: > "${WP:?}/.config/smt.cmd"; : > "${WP:?}/.config/smtk"; : > "${WP:?}/.config/.smt"; : > "${WP:?}/Library/LaunchAgents/com.apple.sysmond.plist"
+winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-cx.txt"
+rm -f "${WP:?}/.config/smt.cmd" "${WP:?}/.config/smtk" "${WP:?}/.config/.smt" "$WSU/sysmon.cmd" "${WP:?}/Library/LaunchAgents/com.apple.sysmond.plist"
+has    "Windows: sysmon.cmd alone is a file to check" 'Startup/sysmon\.cmd has the name of a file that starts the trojanized Claude Code extension.s tunnel at every login' "$WORK/win-cx0.txt"
+hasnot "Windows: and not a sign of the malware"        'Editor extensions signs of the malware found' "$WORK/win-cx0.txt"
+has    "Windows: the trojanized extension's smt.cmd is its sign" 'Editor extensions signs of the malware found .*~/\.config/smt\.cmd a script the trojanized Claude Code extension writes to keep its tunnel running' "$WORK/win-cx.txt"
+has    "Windows: and so is its smtk"                  '~/\.config/smtk a file the trojanized Claude Code extension writes beside smt\.cmd' "$WORK/win-cx.txt"
+hasnot "Windows: its macOS and Linux tunnel script is not looked for" '~/\.config/\.smt the trojanized' "$WORK/win-cx.txt"
+has    "Windows: beside them, sysmon.cmd is its sign too" 'Startup/sysmon\.cmd starts the trojanized Claude Code extension.s tunnel at every login' "$WORK/win-cx.txt"
+hasnot "Windows: and not a file to check"              'has the name of a file that starts the trojanized' "$WORK/win-cx.txt"
+hasnot "Windows: its macOS LaunchAgent is not looked for" 'com\.apple\.sysmond\.plist a LaunchAgent' "$WORK/win-cx.txt"
 # boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket): on Windows it is malware.
 mkdir -p "$WP/.vscode-oss/extensions/boulderzitunnel.vscode-buddies-1.35.3"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-mw.txt"
@@ -2220,11 +2260,11 @@ lp() { HOME="$1" PATH=/usr/bin:/bin GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offlin
 lpf() { HOME="$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  '; }
 cp -R "$WORK/clean" "$WORK/zb-none"; rm -rf "$WORK/zb-none/.config/opencode" "$WORK/zb-none/.local/share/opencode" "$WORK/zb-none/.railway"
 lp "$WORK/zb-none" > "$WORK/zb-none.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 12 recent leaks or malware it checks' "$WORK/zb-none.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 13 recent leaks or malware it checks' "$WORK/zb-none.txt"
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +12 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +13 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -2552,6 +2592,90 @@ has    "beside an AntV version only in a lockfile, they stay with the extension"
 has    "and the headline names only the extension's malware" 'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-nxkl.txt"
 has    "alone, the backdoor is the AntV wave's npm malware" 'npm malware signs of the malware found ~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor' "$WORK/dz-nxk0.txt"
 hasnot "and not a file to check as well"                'a startup file to check|Nx Console 18\.95\.0 installed' "$WORK/dz-nxk0.txt"
+# The trojanized Claude Code extension (Cursor's notice, StepSecurity, October 2026): anthropic.claude-code
+# 2.1.312 and 2.1.313 whose extension.js holds the loader (the attacker's address, or the comment of the
+# SSH key it adds), in any editor's folder. Open VSX's 2.1.312 is clean, so the same id and version without
+# the loader is not flagged, nor another version whose extension.js names the address.
+rm -rf "$WORK/dz-cx"; cp -R "$WORK/clean" "$WORK/dz-cx"
+CX_X="$WORK/dz-cx/.cursor/extensions/anthropic.claude-code-2.1.313-darwin-arm64"; CX_W="$WORK/dz-cx/.windsurf/extensions/anthropic.claude-code-2.1.312-win32-x64"
+mkdir -p "$CX_X" "$CX_W" "$WORK/dz-cx/.vscode/extensions/anthropic.claude-code-2.1.312" "$WORK/dz-cx/.cursor/extensions/anthropic.claude-code-2.1.314"
+printf 'void 0;const h="134.209.82.225";\nmodule.exports={};\n' > "$CX_X/extension.js"
+printf 'const c="svc-telemetry";\nmodule.exports={};\n' > "$CX_W/extension.js"
+printf 'module.exports={};\n' > "$WORK/dz-cx/.vscode/extensions/anthropic.claude-code-2.1.312/extension.js"
+printf 'const h="134.209.82.225";\n' > "$WORK/dz-cx/.cursor/extensions/anthropic.claude-code-2.1.314/extension.js"
+dzrun "$WORK/dz-cx" | tr -s ' \n' '  ' > "$WORK/dz-cx.txt"
+dzrun "$WORK/dz-cx" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-cx-sum.txt"
+has    "Claude Code 2.1.313 whose extension.js holds the attacker's address is the trojanized extension" 'Editor extensions signs of the malware found .*~/\.cursor/extensions/anthropic\.claude-code-2\.1\.313-darwin-arm64 anthropic\.claude-code 2\.1\.313 \(Trojanized Claude Code extension, October 2026\), installed' "$WORK/dz-cx.txt"
+has    "and 2.1.312 whose extension.js holds the key's comment, in another editor's folder" '~/\.windsurf/extensions/anthropic\.claude-code-2\.1\.312-win32-x64 anthropic\.claude-code 2\.1\.312 \(Trojanized Claude Code extension, October 2026\), installed' "$WORK/dz-cx.txt"
+has    "with the trojanized extension's sourced line" 'Trojanized Claude Code extension, October 2026: builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel\. cursor\.com' "$WORK/dz-cx.txt"
+hasnot "the same version without the loader is Anthropic's clean build" '\.vscode/extensions/anthropic\.claude-code' "$WORK/dz-cx.txt"
+hasnot "another version in Cursor's folder is not flagged" 'claude-code-2\.1\.314|claude-code 2\.1\.314' "$WORK/dz-cx.txt"
+hasnot "and the check is done in full"                 'not fully checked|could not be read' "$WORK/dz-cx.txt"
+has    "its fix to remove what it leaves comes first" ' 1\. First remove what the trojanized Claude Code extension leaves: the line in ~/\.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ \(its comment may read svc-telemetry\), ~/\.config/\.smt, ~/\.config/\.smtk and ~/\.config/smt\.cmd, ~/Library/LaunchAgents/com\.apple\.sysmond\.plist on a Mac, the @reboot line that runs \.smt in your crontab on Linux, the \.stk_ file in your temp folder, and on Windows ~/\.config/smtk, sysmon\.cmd in the Startup folder, the scheduled task SysMon and the same key line in administrators_authorized_keys in the ssh folder of ProgramData\. End any ssh or autossh process that keeps a tunnel open\. Then turn off Remote Login on a Mac .* 2\. Treat this machine as compromised\. Uninstall the extensions listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cx.txt"
+has    "the extension's summary row"                  'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cx-sum.txt"
+has    "the extension's first fix in the summary"     'First fix: First remove what the trojanized Claude Code extension leaves' "$WORK/dz-cx-sum.txt"
+has    "the result link names the extension's fix that comes first" '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cx.txt"
+# An extension.js of those versions that is missing or can't be read leaves the check not done in full,
+# and is never taken for the trojanized build.
+rm -rf "$WORK/dz-cxj"; cp -R "$WORK/clean" "$WORK/dz-cxj"
+CX_J="$WORK/dz-cxj/.cursor/extensions/anthropic.claude-code-2.1.313-darwin-arm64"
+mkdir -p "$WORK/dz-cxj/.cursor/extensions/anthropic.claude-code-2.1.312-darwin-arm64" "$CX_J"
+printf 'const h="134.209.82.225";\n' > "$CX_J/extension.js"; chmod 000 "$CX_J/extension.js"
+dzrun "$WORK/dz-cxj" | tr -s ' \n' '  ' > "$WORK/dz-cxj.txt"
+chmod 644 "$CX_J/extension.js"
+has    "a 2.1.312 without its extension.js, and a 2.1.313 whose extension.js can't be read, are not fully checked" 'Editor extensions not fully checked: 2 extension folders could not be read' "$WORK/dz-cxj.txt"
+hasnot "and neither is called the trojanized extension" 'Trojanized Claude Code extension, October 2026\), installed' "$WORK/dz-cxj.txt"
+# Every rotate in a section waits for that cleanup: only the full fix list, which puts it first, goes without.
+env HOME="$WORK/dz-cx" PATH="$WORK/dzbin:/usr/bin:/bin" bash "$SCRIPT" --offline --full --all-sessions 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-cx-full.txt"
+_u=$(python3 -I -c '
+import re, sys
+t = re.sub(r"\x1b\[[0-9;]*m", "", open(sys.argv[1], encoding="utf-8", errors="replace").read())
+t = t[:t.rfind("WHAT TO DO")] if "WHAT TO DO" in t else t
+s = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", t))
+for i, x in enumerate(s):
+    if re.search(r"[Rr]otate|[Rr]evoke", x) and not x.startswith("First") and not any(n.startswith("Only once") for n in s[i + 1:i + 3]): print(x)' "$WORK/dz-cx-full.txt")
+if [ -z "$_u" ] && grep -q 'Only once what the Trojanized Claude Code extension leaves is removed: What to do starts with it' "$WORK/dz-cx-full.txt"; then ok "with the trojanized extension, every section's rotate waits for its cleanup"
+else bad "with the trojanized extension, every section's rotate waits for its cleanup" "$(printf '%s' "${_u:-no wait in the report}" | head -n 3 | tr '\n' '|')"; fi
+# Its files alone, with the extension gone (Cursor removed the builds): their names are the malware's own,
+# so each is a sign of it, never a file to check.
+rm -rf "$WORK/dz-cxs"; cp -R "$WORK/clean" "$WORK/dz-cxs"; mkdir -p "$WORK/dz-cxs/.config" "$WORK/dz-cxs/Library/LaunchAgents"
+: > "$WORK/dz-cxs/.config/.smt"; : > "$WORK/dz-cxs/.config/.smtk"; : > "$WORK/dz-cxs/Library/LaunchAgents/com.apple.sysmond.plist"; : > "$WORK/dz-cxs/.config/smt.cmd"
+dzrun "$WORK/dz-cxs" | tr -s ' \n' '  ' > "$WORK/dz-cxs.txt"
+has    "the extension's tunnel script alone is its sign" 'Editor extensions signs of the malware found .*~/\.config/\.smt the trojanized Claude Code extension.s reverse SSH tunnel script' "$WORK/dz-cxs.txt"
+has    "so is the file beside it"                      '~/\.config/\.smtk a file the trojanized Claude Code extension writes beside \.smt' "$WORK/dz-cxs.txt"
+has    "so is its smt.cmd"                             '~/\.config/smt\.cmd a script the trojanized Claude Code extension writes to keep its tunnel running' "$WORK/dz-cxs.txt"
+has    "so is its LaunchAgent"                         '~/Library/LaunchAgents/com\.apple\.sysmond\.plist a LaunchAgent of the trojanized Claude Code extension, not Apple.s' "$WORK/dz-cxs.txt"
+hasnot "and none is a file to check"                   'a startup file to check|has the name of a file' "$WORK/dz-cxs.txt"
+has    "its files alone: its fix comes first, then the act-now fix for the files" ' 1\. First remove what the trojanized Claude Code extension leaves: .* 2\. Treat this machine as compromised\. Delete the startup files listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cxs.txt"
+has    "its files alone: the link names its fix"      '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxs.txt"
+env HOME="$WORK/dz-cxs" PATH="$WORK/linbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-cxs-linux.txt"
+has    "on Linux, the extension's tunnel script is its sign too" 'Editor extensions signs of the malware found .*~/\.config/\.smt the trojanized Claude Code extension.s reverse SSH tunnel script' "$WORK/dz-cxs-linux.txt"
+hasnot "and its macOS LaunchAgent is not looked for there" 'com\.apple\.sysmond\.plist a LaunchAgent' "$WORK/dz-cxs-linux.txt"
+# The key it adds to ~/.ssh/authorized_keys, found by the key itself: on its own line, after options with
+# another comment, but never a different key that carries its comment.
+CX_KEY='AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P'
+CX_OTHER="AAAAC3NzaC1lZDI1NTE5AAAAI$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 43)"
+for k in dz-cxk dz-cxko dz-cxkn dz-cxku; do rm -rf "${WORK:?}/$k"; cp -R "$WORK/clean" "$WORK/$k"; mkdir -p "$WORK/$k/.ssh"; done
+# Without OpenCode's files, whose platform row would outrank a partial check in row 05.
+rm -rf "$WORK/dz-cxku/.local/share/opencode"
+printf 'ssh-ed25519 %s me@laptop\nssh-ed25519 %s svc-telemetry\n' "$CX_OTHER" "$CX_KEY" > "$WORK/dz-cxk/.ssh/authorized_keys"
+printf 'from="10.0.0.1",no-pty ssh-ed25519 %s backup@host\r\n' "$CX_KEY" > "$WORK/dz-cxko/.ssh/authorized_keys"
+printf 'ssh-ed25519 %s svc-telemetry\n# ssh-ed25519 notes %s\n' "$CX_OTHER" "${CX_KEY}x" > "$WORK/dz-cxkn/.ssh/authorized_keys"
+printf 'ssh-ed25519 %s svc-telemetry\n' "$CX_KEY" > "$WORK/dz-cxku/.ssh/authorized_keys"; chmod 000 "$WORK/dz-cxku/.ssh/authorized_keys"
+for k in dz-cxk dz-cxko dz-cxkn dz-cxku; do dzrun "$WORK/$k" | tr -s ' \n' '  ' > "$WORK/$k.txt"; dzrun "$WORK/$k" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/$k-sum.txt"; done
+chmod 600 "$WORK/dz-cxku/.ssh/authorized_keys"
+has    "the attacker's key in authorized_keys is a sign of the trojanized extension" 'Editor extensions signs of the malware found ~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker Trojanized Claude Code extension, October 2026' "$WORK/dz-cxk.txt"
+has    "the key alone: its fix comes first, then removing the key and rotating" ' 1\. First remove what the trojanized Claude Code extension leaves: .* 2\. Treat this machine as compromised\. Remove the SSH key listed in section 5 from ~/\.ssh/authorized_keys and rotate every key this machine could reach\.' "$WORK/dz-cxk.txt"
+has    "the key alone: the summary row"               'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cxk-sum.txt"
+has    "the key alone: the link names its fix"        '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxk.txt"
+has    "the key after options, with another comment, still counts" '~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker' "$WORK/dz-cxko.txt"
+hasnot "another key with its comment is not flagged"  'trojanized Claude Code|Trojanized Claude Code' "$WORK/dz-cxkn.txt"
+has    "and leaves the extensions row green"          'Editor extensions +none of [0-9]+ bad versions' "$WORK/dz-cxkn.txt"
+has    "an authorized_keys it can't read is not fully checked" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxku.txt"
+has    "and row 05 says authorized_keys was not fully checked" 'Recent leaks +SSH logins not fully checked: file unreadable' "$WORK/dz-cxku-sum.txt"
+rm -rf "$WORK/dz-cxkd"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkd"; chmod 000 "$WORK/dz-cxkd/.ssh"
+dzrun "$WORK/dz-cxkd" | tr -s ' \n' '  ' > "$WORK/dz-cxkd.txt"; chmod 700 "$WORK/dz-cxkd/.ssh"
+has    "a .ssh folder it can't open is not fully checked either" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkd.txt"
 # GlassWorm's LaunchAgent next to another incident's extension (Nx Console) is a file to check, not
 # GlassWorm's sign: people name their own LaunchAgents that way.
 rm -rf "$WORK/dz-nxgw"; cp -R "$WORK/dz-nx" "$WORK/dz-nxgw"; mkdir -p "$WORK/dz-nxgw/Library/LaunchAgents"; : > "$WORK/dz-nxgw/Library/LaunchAgents/com.user.nodestart.plist"
@@ -2756,6 +2880,18 @@ done
 has    "Claude Code past 2.1.179 is told the newest fix, with its hole" '! Claude Code 2\.1\.259, update to 2\.1\.260 or later A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-cc2.1.259.txt"
 has    "below the newest fix's range the row still names it, not 2.1.179, which has a hole of its own" '! Claude Code 2\.0\.67, update to 2\.1\.260 or later A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-cc2.0.67.txt"
 hasnot "and it does not show the newest fix's hole, which that version does not have" 'A stored API key could start sessions' "$WORK/dz-cc2.0.67.txt"
+# GHSA-5xjx-9qx6-jcrv, below 2.1.251: the Edit tool race its advisory describes on macOS. On a Mac, 2.1.250 has
+# that hole beside the newest fix's; 2.1.251 does not; on Linux it is not listed.
+for V in 2.1.250 2.1.251; do
+  rm -rf "$WORK/dz-cc$V"; cp -R "$WORK/clean" "$WORK/dz-cc$V"; mkdir -p "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code"
+  printf '{\n  "name": "@anthropic-ai/claude-code",\n  "version": "%s"\n}\n' "$V" > "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code/package.json"
+  dzrun "$WORK/dz-cc$V" PATH="$WORK/macbin2:$WORK/dzbin:/usr/bin:/bin" | tr -s ' \n' '  ' > "$WORK/dz-cc$V-mac.txt"
+done
+dzrun "$WORK/dz-cc2.1.250" PATH="$WORK/linbin:$WORK/dzbin:/usr/bin:/bin" | tr -s ' \n' '  ' > "$WORK/dz-cc2.1.250-linux.txt"
+has    "on a Mac, Claude Code below 2.1.251 shows the Edit tool race" '! Claude Code 2\.1\.250, update to 2\.1\.260 or later A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-[a-z0-9]+ Code a malicious repository runs in its sandbox could make it write files outside the workspace\. github\.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv' "$WORK/dz-cc2.1.250-mac.txt"
+has    "2.1.251, its fix, shows only the newest fix's hole" '! Claude Code 2\.1\.251, update to 2\.1\.260 or later A stored API key' "$WORK/dz-cc2.1.251-mac.txt"
+hasnot "and not the Edit tool race"                    'write files outside the workspace' "$WORK/dz-cc2.1.251-mac.txt"
+hasnot "on Linux the Edit tool race is not listed"     'write files outside the workspace' "$WORK/dz-cc2.1.250-linux.txt"
 mkdir -p "$WORK/dz-os/.cursor/extensions/littensy-studio.magical-icons-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
 has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
@@ -3069,7 +3205,7 @@ mu() { env HOME="$1" TMPDIR="$1/tmp" PATH=/usr/bin:/bin ${3:+GIRD_CHECK_COMPACT=
 mu "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +14 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +15 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -3094,7 +3230,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.local/share/opencode" "$WORK/mu-plat/.railway"
 mu "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 14 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 15 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mu "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
@@ -3194,6 +3330,13 @@ gen_refuses "an extension listed twice, in another case" bad-extensions.tsv "OOR
 gen_refuses "an extension registry that is not openvsx or any" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}marketplace${T}all"
 gen_refuses "an extension os that is not all, mac, linux or win" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any${T}windows"
 gen_refuses "an extension line without its os"         bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any"
+gen_refuses "an extension marker with a space"        bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any${T}all${T}a b"
+gen_refuses "an extension marker with an empty string" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any${T}all${T}a;;b"
+gen_refuses "an extension registry of one marketplace" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}cursor${T}all"
+gen_refuses "a startup file alone of an incident with npm packages" indicators.tsv "sandworm${T}mac${T}startup${T}no${T}~/.config/.x${T}a note${T}alone"
+gen_refuses "an SSH key of an incident with no extension" ssh-keys.tsv "sandworm${T}ssh-ed25519${T}AAAAC3NzaC1lZDI1NTE5AAAAIOnly${T}a note"
+gen_refuses "an SSH key that is not base64"             ssh-keys.tsv "claudeext${T}ssh-ed25519${T}AAAA\$x${T}a note"
+gen_refuses "an SSH key of an unknown type"             ssh-keys.tsv "claudeext${T}ssh-dss${T}AAAAB3NzaC1kc3M${T}a note"
 gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
 gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
 gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
@@ -4001,7 +4144,7 @@ hasnot "fleet: no Argus note without a terminal" 'gird\.ai/argus|Argus' "$FL/ter
 has    "fleet: a platform found reads as its own summary" '^    !  OpenCode found: got its breach email\? Rotate keys(, once .*)?$' "$FL/term.out"
 # asha has SANDWORM_MODE's package and the wiper: its cleanup comes first, and the platform's rotate waits for both.
 has    "fleet: SANDWORM_MODE's cleanup comes before any rotate"  '^    x  Remove what the SANDWORM_MODE worm leaves \(git hooks, MCP servers\) before anyone rotates a key$' "$FL/term.out"
-has    "fleet: and a platform's rotate waits for it and the wiper" 'Rotate keys, once gh-token-monitor is stopped and the worm.s leftovers are removed$' "$FL/term.out"
+has    "fleet: and a platform's rotate waits for it and the wiper" 'Rotate keys, once gh-token-monitor is stopped and what the SANDWORM_MODE worm leaves is removed$' "$FL/term.out"
 hasnot "fleet: never that the account uses it"         'Uses a platform' "$FL/term.out"
 has    "fleet: the JSON names the platforms found"     '^asha\.platforms_found=opencode$' "$FL/two.flat"
 if command -v script > /dev/null 2>&1; then
@@ -4384,6 +4527,25 @@ users "msx:$U:$FL/msx:/bin/zsh"
 fl_run msx --json
 has    "fleet: an extension whose malware runs only on another system is one to remove" '^msx\.extensions_to_remove=glasswormoct$' "$FL/msx.flat"
 has    "fleet: so its account is to review, not act" '^msx\.outcome=review$' "$FL/msx.flat"
+# The trojanized Claude Code extension: its extension, its files alone and the SSH key it adds
+# each reach the account's incidents and make it act; the key has a field, a line and an inventory token too.
+for h in cxe cxs cxk; do fl_home "$h"; done
+mkdir -p "$FL/cxe/.cursor/extensions/anthropic.claude-code-2.1.313" "$FL/cxs/.config" "$FL/cxk/.ssh"; : > "$FL/cxs/.config/.smt"
+printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P svc-telemetry\n' > "$FL/cxk/.ssh/authorized_keys"
+printf 'const h="134.209.82.225";\n' > "$FL/cxe/.cursor/extensions/anthropic.claude-code-2.1.313/extension.js"
+users "cxe:$U:$FL/cxe:/bin/zsh" "cxs:$U:$FL/cxs:/bin/zsh" "cxk:$U:$FL/cxk:/bin/zsh"
+fl_run cx --json
+fl_run cxterm
+has    "fleet: the trojanized Claude Code extension is its account's incident" '^cxe\.incidents=claudeext$' "$FL/cx.flat"
+has    "fleet: so are its files alone"                  '^cxs\.incidents=claudeext$' "$FL/cx.flat"
+has    "fleet: and the SSH key it adds"                 '^cxk\.incidents=claudeext$' "$FL/cx.flat"
+if [ "$(grep -cE '^cx[esk]\.outcome=act$' "$FL/cx.flat")" -eq 3 ]; then ok "fleet: each of them makes its account act"; else bad "fleet: each of them makes its account act" "$(grep 'outcome' "$FL/cx.flat" | tr '\n' ' ')"; fi
+has    "fleet: the trojanized extension's accounts exit 10" '^10$' "$FL/cx.rc"
+has    "fleet: the SSH key has a field of its own"      '^cxk\.authorized_keys_planted_keys=1$' "$FL/cx.flat"
+has    "fleet: which is 0 without the key"              '^cxe\.authorized_keys_planted_keys=0$' "$FL/cx.flat"
+has    "fleet: and a line in the readable report"       '^    x  SSH keys malware adds, in authorized_keys: 1$' "$FL/cxterm.out"
+has    "fleet: the trojanized extension's cleanup comes before any rotate" '^    x  Remove what the Trojanized Claude Code extension leaves \(an SSH key, startup files\) before anyone rotates a key$' "$FL/cxterm.out"
+has    "fleet: and the key is in the inventory value"   '^inventory=.*cxk: act incidents claudeext; ssh-planted 1( |$)' "$FL/cx.flat"
 
 # Every test setting gird-fleet.sh reads is behind the not-root guard, so a real root run never reads
 # one. A test can't run as root, so the reads are checked where they are written.

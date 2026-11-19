@@ -70,10 +70,30 @@
 # the systemd unit that starts it (Linux), /tmp/.initd_state (Linux and macOS) and msbuild.exe in the
 # Startup folder (Windows, %APPDATA%; a Python incident's startup file is under ~, so its line takes
 # the usual ~/AppData/Roaming). Its msbuild.exe.lock has no line: the advisory gives no folder for it.
+# agent-framework 1.26.1 and 1.26.2: Wiz's and Aikido's posts. 1.26.1 adds agent_framework_meta.pth, which
+# imports the stealer in its agent_framework_meta folder; 1.26.2 adds af_runtime_diag.pth and the stealer
+# itself, af_runtime_diag.py. No line for 1.26.1's stealer, agent_framework_meta/_telemetry.py: a site
+# line is a name at the top of site-packages, and the agent_framework_meta folder it sits in ships in the
+# clean 1.26.0 wheel too. Its .pth file and 1.26.1's dist-info are the signs. Both posts say it leaves nothing outside site-packages.
 # GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
 # extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware,
 # and only when an extension that shipped malware is found: alone, it is a file to check.
-# incident	os	kind	owner	path	note
+# Trojanized Claude Code extension (claudeext): Cursor's security notice and StepSecurity's post. Cursor
+# names ~/.config/.smt (the script that keeps the reverse tunnel up) and ~/.config/.smtk on macOS and
+# Linux, the LaunchAgent com.apple.sysmond.plist on macOS (not an Apple component), and on Windows
+# %USERPROFILE%\.config\smt.cmd and smtk, and the sysmon.cmd the loader copies into the Startup folder
+# (%APPDATA%) when it can't create its scheduled task. StepSecurity also lists ~/.config/smt.cmd without
+# an OS, so that line is all. Those names but sysmon.cmd are the malware's own, so each is that
+# incident's sign without its extension (alone): Cursor removed the builds, and the files stay.
+# sysmon.cmd is not: Sysmon is also the name of Microsoft's Sysinternals tool, so alone it is a file to
+# check. No line for the scheduled task SysMon (no kind reads a scheduled task, and the same tool uses
+# that name), the Linux crontab line @reboot /bin/sh "<HOME>/.config/.smt" (no kind reads a crontab;
+# it runs nothing once .smt is gone) or the tunnel's key, .stk_<10 hex> in the temp folder (a temp line
+# is a Python incident's hit): the incident's fix names all three.
+# alone     optional, a startup line of an incident whose packages are only editor extensions: the file
+#           is that incident's sign even when none of its extensions is found, as its name is the
+#           malware's own. Without it, such a file alone is a file to check
+# incident	os	kind	owner	path	note	alone
 tanstack	all	wiper	no	~/Library/LaunchAgents/com.user.gh-token-monitor.plist	-
 tanstack	all	wiper	no	~/.config/systemd/user/gh-token-monitor.service	-
 tanstack	all	wiper	no	~/.local/bin/gh-token-monitor.sh	-
@@ -111,3 +131,14 @@ telnyx	linux	startup	no	~/.config/systemd/user/audiomon.service	starts the backd
 telnyx	win	startup	no	~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe	the telnyx malware, which Windows starts at every login from the Startup folder
 telnyx	mac	temp	yes	.initd_state	Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
 telnyx	linux	temp	yes	.initd_state	Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
+claudeext	mac	startup	no	~/.config/.smt	the trojanized Claude Code extension's reverse SSH tunnel script	alone
+claudeext	linux	startup	no	~/.config/.smt	the trojanized Claude Code extension's reverse SSH tunnel script	alone
+claudeext	mac	startup	no	~/.config/.smtk	a file the trojanized Claude Code extension writes beside .smt	alone
+claudeext	linux	startup	no	~/.config/.smtk	a file the trojanized Claude Code extension writes beside .smt	alone
+claudeext	all	startup	no	~/.config/smt.cmd	a script the trojanized Claude Code extension writes to keep its tunnel running	alone
+claudeext	win	startup	no	~/.config/smtk	a file the trojanized Claude Code extension writes beside smt.cmd	alone
+claudeext	mac	startup	no	~/Library/LaunchAgents/com.apple.sysmond.plist	a LaunchAgent of the trojanized Claude Code extension, not Apple's	alone
+claudeext	win	startup	no	~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sysmon.cmd	starts the trojanized Claude Code extension's tunnel at every login
+agentfw	all	site	no	agent_framework_meta.pth	-
+agentfw	all	site	no	af_runtime_diag.pth	-
+agentfw	all	site	no	af_runtime_diag.py	-

@@ -361,3 +361,20 @@ grep runs a later pass only on text that holds its fixed strings	it counts gird-
 an in line's start without its place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a start line's start with a place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a stopped ripgrep leaves the sessions partly checked and stops nothing else	it runs gird-check.sh's ripgrep job, its TERM to the run it started and the tr and awk pipes behind it, with a bash stand-in for ripgrep; gird-check.ps1 has none of these: it stops the rg.exe it started through the .NET Process object it holds, which its twin of "the script stops only processes it started" checks is its only stop
+fleet: the trojanized Claude Code extension is its account's incident	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: so are its files alone	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the SSH key it adds	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: each of them makes its account act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the trojanized extension's accounts exit 10	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the SSH key has a field of its own	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: which is 0 without the key	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and a line in the readable report	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the trojanized extension's cleanup comes before any rotate	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the key is in the inventory value	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a startup file alone of an incident with npm packages	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an SSH key of an incident with no extension	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an SSH key that is not base64	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an SSH key of an unknown type	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension marker with a space	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension marker with an empty string	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension registry of one marketplace	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

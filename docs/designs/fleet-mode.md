@@ -492,7 +492,7 @@ Graph, never a real tenant.
 - `review` means something to change or confirm, not urgent. It covers a tool with a security fix, an incident or a package version at the update level, project settings that act when a folder opens and files named like the ones worms plant, and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
   covers keys in shell history, MCP configs and Claude Code allow lists, links to
-  `authorized_keys`, files a worm plants and the gh-token-monitor wiper, whose stop-it-first line comes before any other. An account with a protected folder refused, a file not
+  `authorized_keys`, an SSH key malware adds in `authorized_keys`, files a worm plants and the gh-token-monitor wiper, whose stop-it-first line comes before any other. An account with a protected folder refused, a file not
   read or agent sessions not all checked is partly checked: `act` if it found something to act on,
   otherwise `not_checked`.
 - The size limit for a file an account run reads is 16 MB; session files are read in 1 MB pieces at

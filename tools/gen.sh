@@ -7,9 +7,10 @@
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
-# versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check. It also
-# writes the lists in docs/checks.md, between "<!-- >>> checks" and "<!-- <<< checks -->".
+# versions with a published fix (data/outdated.tsv), extensions that shipped malware
+# (data/bad-extensions.tsv) and SSH keys malware adds to authorized_keys (data/ssh-keys.tsv). The
+# scripts stay single files people can download and check. It also writes the lists in docs/checks.md,
+# between "<!-- >>> checks" and "<!-- <<< checks -->".
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -30,6 +31,9 @@ PY_IDS=" $( { rows data/bad-pypi.tsv | cut -f3; rows data/indicators.tsv | awk -
 # What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
+# The incidents whose packages are only editor extensions: their startup files and SSH keys are shown
+# with the extensions, as their signs.
+XONLY_IDS=" $(awk -F '\t' 'FNR == 1 { f++ } /^#/ || NF < 3 { next } f == 1 { n[$3] = 1 } f == 2 && !($3 in n) && !s[$3]++ { printf "%s ", $3 }' data/bad-npm.tsv data/bad-extensions.tsv)"
 # A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
 # first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {GOOSE_STATE}, {PROGRAMDATA}, or
 # {ENV:NAME:fallback} whose fallback is ~ or a path), at least one folder or file after it (an ENV
@@ -125,8 +129,8 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
       # temp lines); wiper and site lines carry -. PowerShell gets the note quoted, so it may hold a quote.
       # A Python incident's startup file is shown in its row in section 5, checked before the ownership
       # rules: it must be in the home folder, the person's own, with owner no.
-      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" -v leaks="$LEAK_IDS" -v py="$PY_IDS" "$PATH_OK"'
-        { ok = NF == 6 && index(ids, " " $1 " ") > 0 && index(leaks, " " $1 " ") == 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
+      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" -v leaks="$LEAK_IDS" -v py="$PY_IDS" -v xonly="$XONLY_IDS" "$PATH_OK"'
+        { ok = (NF == 6 || (NF == 7 && $7 == "alone" && $3 == "startup" && index(xonly, " " $1 " ") > 0)) && index(ids, " " $1 " ") > 0 && index(leaks, " " $1 " ") == 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
           if ($3 ~ /^(wiper|startup)$/) ok = ok && path_ok($5)
           if ($3 == "wiper") ok = ok && $5 ~ /gh-token-monitor/
           if ($3 == "startup" && index(py, " " $1 " ") > 0) ok = ok && $4 == "no" && $5 ~ /^~\//
@@ -171,7 +175,12 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
       rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" '
         function os_ok(s,   n, a, i, got) { if (s == "all") return 1; n = split(s, a, ","); if (n < 1 || n > 2) return 0
           for (i = 1; i <= n; i++) { if (a[i] !~ /^(mac|linux|win)$/ || (a[i] in got)) return 0; got[a[i]] = 1 }; return 1 }
-        NF != 5 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || !os_ok($5) || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+        # A marker is fixed strings separated by ;, each of characters both scripts carry as they are.
+        (NF != 5 && NF != 6) || (NF == 6 && $6 !~ /^[A-Za-z0-9._:@\/+=-]+(;[A-Za-z0-9._:@\/+=-]+)*$/) || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || !os_ok($5) || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+      # A planted SSH key: its type, and its base64 text, which a line of authorized_keys holds as one field.
+      rows data/ssh-keys.tsv | awk -F '\t' -v ids="$XONLY_IDS" '
+        NF != 4 || index(ids, " " $1 " ") == 0 || $2 !~ /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)$/ ||
+        $3 !~ /^AAAA[A-Za-z0-9+\/]+=*$/ || $4 == "" || $4 ~ /[\047"`$|\\]/ || seen[$3]++ { print "data/ssh-keys.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
@@ -470,13 +479,15 @@ rows data/bad-npm.tsv | awk -F '\t' '
 rows data/indicators.tsv | awk -F '\t' "$PATH_SH"'
   BEGIN { print "# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it."
           printf "IND_TABLE=\"" }
-  { printf "%s%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? $5 : sh($5)), $6 }
-  END { print "\""; print "# <<< indicators" }' > "$WORK/indicators.sh"
+  { printf "%s%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? $5 : sh($5)), $6
+    if ($7 == "alone") al = al (al == "" ? "" : "\n") $1 "|" sh($5) }
+  END { print "\""; print "IND_ALONE=\"" al "\""; print "# <<< indicators" }' > "$WORK/indicators.sh"
 rows data/indicators.tsv | awk -F '\t' "$PATH_PS"'
   BEGIN { print "# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it."
           print "$IndTable = @(" }
-  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, %s, %s)\n", $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? "\047" $5 "\047" : ps($5)), psq($6) }
-  END { print ")"; print "# <<< indicators" }' > "$WORK/indicators.ps1"
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, %s, %s)\n", $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? "\047" $5 "\047" : ps($5)), psq($6)
+    if ($7 == "alone") al = al (al == "" ? "" : ", ") "@(\047" $1 "\047, " ps($5) ")" }
+  END { print ")"; print "$IndAlone = @(" (al == "" ? "" : "," al) ")"; print "# <<< indicators" }' > "$WORK/indicators.ps1"
 
 # --- files planted in a project ----------------------------------------------
 # PLANTED_ERE matches the planted paths. WORM_RUN_ALONE matches, in either folder, the names only a
@@ -571,15 +582,15 @@ rows data/outdated.tsv | awk -F '\t' "$PATH_PS"'
   END { print ")"; print "# <<< outdated" }' > "$WORK/outdated.ps1"
 
 # --- extensions that shipped malware ------------------------------------------------
-# Rows are "id version incident registry os", registry openvsx or any and os where the malware could
-# run (see the data file).
+# Rows are "id version incident registry os [marker]", registry openvsx or any, os where the malware
+# could run and the optional marker (see the data file).
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; printf "BAD_EXT=\"" }
-  { printf "%s%s %s %s %s %s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, $5 }
+  { printf "%s%s %s %s %s %s%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, $5, (NF == 6 ? " " $6 : "") }
   END { print "\""; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.sh"
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; print "$BadExt = @\047" }
-  { print $1 " " $2 " " $3 " " $4 " " $5 }
+  { print $1 " " $2 " " $3 " " $4 " " $5 (NF == 6 ? " " $6 : "") }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
 # --- docs/checks.md: the lists, for people to read ------------------------------
@@ -587,7 +598,7 @@ rows data/bad-extensions.tsv | awk -F '\t' '
 # so the page never lists less or more than the scripts look for.
 awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
   on { sub(/^AGENTS="/, ""); sub(/"$/, ""); split($0, a, "|"); print a[1] "\t" a[2] }' gird-check.sh > "$WORK/agent-names.tsv"
-{ for f in incidents keys sessions auto-approve outdated planted bad-pypi indicators platforms bad-extensions bad-npm; do
+{ for f in incidents keys sessions auto-approve outdated planted bad-pypi indicators platforms bad-extensions ssh-keys bad-npm; do
     rows "data/$f.tsv" | awk -v f="$f" '{ print f "\t" $0 }'
   done; awk '{ print "agents\t" $0 }' "$WORK/agent-names.tsv"; } | awk -F '\t' '
   function esc(s) { gsub(/\\/, "\\\\", s); gsub(/[*_<>|`\[\]]/, "\\\\&", s); return s }
@@ -619,6 +630,7 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
   $1 == "bad-extensions" { k = $4; if (!(k in eg)) { eg[k] = 1 }; ev = $3 == "*" ? "every version" : $3
     e = code($2) " " ev " (" ($5 == "openvsx" ? "Open VSX editors only" : "every editor") (oss($6) == "" ? "" : "; its malware runs on " oss($6)) ")"
     el[k] = el[k] "- " e "\n"; cnt[k, "ext"]++; next }
+  $1 == "ssh-keys" { nsh++; shi[nsh] = $2; sht[nsh] = $3; shk[nsh] = $4; shn[nsh] = $5; cnt[$2, "ssh"]++; next }
   $1 == "bad-npm" { k = $4; v = $3 == "*" ? "every version" : $3
     if (!((k, $2) in nv)) { nq[k] = nq[k] (nq[k] == "" ? "" : "\t") $2; cnt[k, "pkg"]++ }
     nv[k, $2] = add(nv[k, $2], v); cnt[k, "npm"]++; next }
@@ -678,6 +690,7 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
       if (cnt[d, "py"]) l = add(l, "Python: " plural(cnt[d, "py"], "version"))
       if (cnt[d, "ext"]) l = add(l, plural(cnt[d, "ext"], "extension"))
       if (cnt[d, "files"]) l = add(l, plural(cnt[d, "files"], "file"))
+      if (cnt[d, "ssh"]) l = add(l, plural(cnt[d, "ssh"], "SSH key"))
       if (cnt[d, "plat"]) l = add(l, "its CLI or app")
       print "| " esc(inm[d]) " | " iwh[d] " | " esc(iim[d]) " | " ilv[d] " | " l " | [" host(isrc[d]) "](" isrc[d] ") |" }
     print ""
@@ -712,6 +725,12 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
     print ""
     for (j = 1; j <= ni; j++) { d = iid[j]; if (!cnt[d, "ext"]) continue
       print "<details><summary>" esc(inm[d]) ", " iwh[d] ": " plural(cnt[d, "ext"], "extension") "</summary>"; print ""; printf "%s", el[d]; print ""; print "</details>"; print "" }
+    print "### SSH keys malware adds to `~/.ssh/authorized_keys`"
+    print ""
+    print "A line counts when the key type and then the key are two of its fields, whatever options come before them."
+    print ""
+    for (i = 1; i <= nsh; i++) print "- " esc(inm[shi[i]]) ": `" sht[i] " " shk[i] "`, " esc(shn[i])
+    print ""
     print "### npm packages"
     print ""
     for (j = 1; j <= ni; j++) { d = iid[j]; if (!cnt[d, "npm"]) continue
@@ -720,6 +739,16 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
       print ""; print "</details>"; print "" }
     print "<!-- <<< checks -->"
   }' > "$WORK/checks.md"
+# --- SSH keys malware adds to authorized_keys -----------------------------------------
+# Rows are "incident|type|key|note".
+rows data/ssh-keys.tsv | awk -F '\t' '
+  BEGIN { print "# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it."; printf "SSH_PLANTED=\047" }
+  { printf "%s%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4 }
+  END { print "\047"; print "# <<< ssh-keys" }' > "$WORK/ssh-keys.sh"
+rows data/ssh-keys.tsv | awk -F '\t' '
+  BEGIN { print "# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it."; print "$SshPlanted = @(" }
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", $1, $2, $3, $4 }
+  END { print ")"; print "# <<< ssh-keys" }' > "$WORK/ssh-keys.ps1"
 
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
@@ -741,7 +770,7 @@ grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has 
 RC=0
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
-  else blocks="keys public-values sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
+  else blocks="keys public-values sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }

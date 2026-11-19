@@ -216,6 +216,7 @@ could not save.
 - files a worm plants in a project;
 - npm malware listed only in a lockfile (act if that project was installed);
 - a link to `~/.ssh/authorized_keys` outside `.ssh`;
+- an SSH key malware adds in `~/.ssh/authorized_keys`;
 - keys in plain text, shell history, agent sessions, MCP configs or allow lists.
 
 **`not_checked`** (exit 12): an account, or part of one, was not checked. Never read this as clear.
@@ -256,6 +257,10 @@ One line with each account's outcome and what was found, never a path, file name
 v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear
 ```
 
+An SSH key malware adds to `~/.ssh/authorized_keys` shows as `ssh-planted <n>` there, as an `x` line
+in the readable report, and in the JSON as the account's `authorized_keys_planted_keys`, a count; the
+incident that adds it is in the account's `incidents` too.
+
 If it would be too long, it keeps the accounts that need attention first (`act`, then
 `not_checked`, then `review`), then as many clear ones as fit. It cuts details before accounts: an
 account whose details don't fit keeps its outcome, and an `act` one its `wiper` and `incidents` too.
@@ -285,6 +290,8 @@ Two things come before anyone rotates or revokes any key:
   destructive command when a stolen token stops working.
 - If the row says to remove what SANDWORM_MODE leaves, have that done: its pre-push hook sends npm
   tokens out on every push.
+- If it names the trojanized Claude Code extension, have the SSH key and files it leaves removed, and
+  Remote Login turned off.
 
 Then:
 
@@ -297,6 +304,7 @@ Then:
 | Keys in Claude Code allow lists | Delete those saved commands and rotate the keys. |
 | Files a worm plants in a project | Treat the Mac as compromised, as for malware. |
 | A link to `~/.ssh/authorized_keys` outside `.ssh` | Delete the link: an agent that edits the linked file adds a login to the Mac. |
+| An SSH key malware adds, in `authorized_keys` | Treat the Mac as compromised, as for malware: remove that key's line first, as their report's first fix says. |
 | npm malware only in a lockfile | Ask whether they installed that project. If they did, treat the Mac as compromised; if not, update the lockfile to a version without it. |
 | An agent set to run without asking | Turn it off, unless the agent runs in a sandbox. |
 | A tool with a security fix, or a package version to update | Update it. |

@@ -77,6 +77,7 @@ Paths: `~` is your home folder, `{AS}` the app data folder (Application Support 
 | Claude Code | 2.1.38 to below 2.1.163 | a malicious repository could run code outside the sandbox | npm installs | [GHSA-7835-87q9-rgvv](https://github.com/advisories/GHSA-7835-87q9-rgvv) |
 | Claude Code | below 2.1.179 | a plugin repository could install code that bypasses its pinned hash | npm installs | [GHSA-pq7j-f95f-qfcv](https://github.com/advisories/GHSA-pq7j-f95f-qfcv) |
 | Claude Code | 2.0.68 to below 2.1.260 | a stored API key could start sessions without the managed settings of an Enterprise or Team organization | npm installs | [GHSA-gfvf-j8jh-jxxw](https://github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw) |
+| Claude Code (macOS) | below 2.1.251 | code a malicious repository runs in its sandbox could make it write files outside the workspace | npm installs | [GHSA-5xjx-9qx6-jcrv](https://github.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv) |
 | mcp-remote | 0.0.5 to below 0.1.16 | a hostile MCP server could run commands | npm installs, MCP configs | [GHSA-6xpm-ggf7-wc3p](https://github.com/advisories/GHSA-6xpm-ggf7-wc3p) |
 | mcp-remote | 0.1.16 to 0.1.38, no fixed version yet | a hostile server could open an internal address in your browser | npm installs, MCP configs | [GHSA-v65w-6crh-cp3h](https://github.com/advisories/GHSA-v65w-6crh-cp3h) |
 | mcp-remote | 0.1.16 to 0.1.38, no fixed version yet | a weak hash, MD5, keeps the saved tokens of each server apart | npm installs, MCP configs | [GHSA-mvq8-g2rm-4rhm](https://github.com/advisories/GHSA-mvq8-g2rm-4rhm) |
@@ -180,7 +181,7 @@ Level: **act** means treat the machine as compromised, **update** means update t
 | Red Hat Cloud Services packages | June 2026 | published by the worm with an install hook that steals cloud, GitHub and npm credentials | act | npm: 96 versions of 32 packages | [osv.dev](https://osv.dev/vulnerability/MAL-2026-5111) |
 | keyv worm | August 2026 | stole cloud, GitHub and npm credentials, and planted hooks that run when repos open | act | npm: 12 versions of 12 packages, 3 files | [socket.dev](https://socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain) |
 | keyv account takeover | August 2026 | GitHub malware advisories say to treat a computer that installed one as fully compromised | act | npm: 19 versions of 19 packages | [github.com](https://github.com/advisories/GHSA-q99r-cjmf-3xrf) |
-| keyv worm spread | August 2026 | republished by the worm with an install hook that steals GitHub, npm and cloud credentials | act | npm: 2224 versions of 432 packages | [osv.dev](https://osv.dev/vulnerability/MAL-2026-11952) |
+| keyv worm spread | August 2026 | republished by the worm with an install hook that steals GitHub, npm and cloud credentials | act | npm: 2225 versions of 432 packages | [osv.dev](https://osv.dev/vulnerability/MAL-2026-11952) |
 | SANDWORM\_MODE worm | February 2026 | stole credentials and AI provider keys, and added an MCP server to AI assistants | act | npm: 20 versions of 19 packages | [socket.dev](https://socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning) |
 | SANDWORM\_MODE sleeper packages | February 2026 | GitHub malware advisories say to treat a machine that installed one as compromised | act | npm: 4 versions of 4 packages | [github.com](https://github.com/advisories/GHSA-9w7p-hqx2-pjjx) |
 | tensorlake package | October 2026 | GitHub says any computer that installed it should be treated as fully compromised | act | npm: 7 versions of 7 packages | [github.com](https://github.com/advisories/GHSA-rqxj-g25x-4v9v) |
@@ -199,6 +200,8 @@ Level: **act** means treat the machine as compromised, **update** means update t
 | GlassWorm invisible code | March 2026 | hid code in characters that show as blank, which it then decodes and runs | act | npm: 6 versions of 2 packages, 1 extension | [aikido.dev](https://www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode) |
 | GlassWASM extensions | June 2026 | clones of Marketplace extensions on Open VSX, built to download and run a second stage | act | 2 extensions | [socket.dev](https://socket.dev/blog/glasswasm-malware-open-vsx-extensions) |
 | Injective SDK | July 2026 | sent out the seed phrases and hex private keys of wallets created or loaded with it | update | npm: 1 version of 1 package | [github.com](https://github.com/advisories/GHSA-5fc4-fm2x-6f4r) |
+| Trojanized Claude Code extension | October 2026 | builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel | act | 2 extensions, 6 files, 1 SSH key | [cursor.com](https://cursor.com/blog/claude-code-extension-security-notice) |
+| agent-framework 1.26.1 and 1.26.2 | November 2026 | a .pth file started a credential stealer every time Python started | act | Python: 2 versions, 3 files | [github.com](https://github.com/advisories/GHSA-764m-3ppc-5m73) |
 
 ### Python packages
 
@@ -216,6 +219,8 @@ Level: **act** means treat the machine as compromised, **update** means update t
 | `durabletask` | 1.4.3 | durabletask 1.4.1 to 1.4.3 | Linux |
 | `telnyx` | 4.87.1 | telnyx 4.87.1 and 4.87.2 | none: a version to update |
 | `telnyx` | 4.87.2 | telnyx 4.87.1 and 4.87.2 | any system |
+| `agent_framework` | 1.26.1 | agent-framework 1.26.1 and 1.26.2 | any system |
+| `agent_framework` | 1.26.2 | agent-framework 1.26.1 and 1.26.2 | any system |
 
 ### Files malware leaves on disk
 
@@ -296,6 +301,21 @@ LiteLLM 1.82.7 and 1.82.8, March 2026:
 GlassWorm extensions, January 2026:
 
 - `~/Library/LaunchAgents/com.user.nodestart.plist`: starts the GlassWorm malware at login
+
+Trojanized Claude Code extension, October 2026:
+
+- `~/.config/.smt`: the trojanized Claude Code extension's reverse SSH tunnel script (macOS and Linux only)
+- `~/.config/.smtk`: a file the trojanized Claude Code extension writes beside .smt (macOS and Linux only)
+- `~/.config/smt.cmd`: a script the trojanized Claude Code extension writes to keep its tunnel running
+- `~/.config/smtk`: a file the trojanized Claude Code extension writes beside smt.cmd (Windows only)
+- `~/Library/LaunchAgents/com.apple.sysmond.plist`: a LaunchAgent of the trojanized Claude Code extension, not Apple's (macOS only)
+- `~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sysmon.cmd`: starts the trojanized Claude Code extension's tunnel at every login (Windows only)
+
+agent-framework 1.26.1 and 1.26.2, November 2026:
+
+- `agent_framework_meta.pth`: in a Python environment's site-packages
+- `af_runtime_diag.pth`: in a Python environment's site-packages
+- `af_runtime_diag.py`: in a Python environment's site-packages
 
 ### Hosted platforms that leaked stored secrets
 
@@ -497,6 +517,19 @@ GlassWorm extensions, January 2026:
 - `noellee-doc.flint-debug` 0.1.1 (Open VSX editors only)
 
 </details>
+
+<details><summary>Trojanized Claude Code extension, October 2026: 2 extensions</summary>
+
+- `anthropic.claude-code` 2.1.312 (every editor)
+- `anthropic.claude-code` 2.1.313 (every editor)
+
+</details>
+
+### SSH keys malware adds to `~/.ssh/authorized_keys`
+
+A line counts when the key type and then the key are two of its fields, whatever options come before them.
+
+- Trojanized Claude Code extension: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P`, the SSH key the trojanized Claude Code extension adds for the attacker
 
 ### npm packages
 
@@ -1219,7 +1252,7 @@ GlassWorm extensions, January 2026:
 
 </details>
 
-<details><summary>keyv worm spread, August 2026: 2224 versions of 432 packages</summary>
+<details><summary>keyv worm spread, August 2026: 2225 versions of 432 packages</summary>
 
 - `@adminide-stack/clock-tik-browser` 12.0.24
 - `@adminide-stack/yantra-mobile` 12.0.33
@@ -1646,7 +1679,7 @@ GlassWorm extensions, January 2026:
 - `qlik-modifiers` 0.10.1
 - `qlik-object-conversion` 0.17.2
 - `rwc-client` 0.29.10, 0.29.11, 0.29.12, 0.29.13, 0.29.14, 0.29.15, 0.29.16, 0.29.17, 0.29.18, 0.29.19
-- `server-hemera-mongo` 0.0.12
+- `server-hemera-mongo` 0.0.12, 0.0.16
 - `sn-listbox` 0.3.3
 - `tslint-folder-schema` 1.0.6, 1.0.7, 1.0.8, 1.0.9, 1.0.10, 1.0.11, 1.0.12, 1.0.13, 1.0.14, 1.0.15, 1.0.16, 1.0.17, 1.0.18, 1.0.19, 1.0.20, 1.0.21
 - `umadev` 1.0.74
