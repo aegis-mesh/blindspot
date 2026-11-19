@@ -251,10 +251,17 @@ PY
 if [ "$(uname -s)" != Darwin ]; then
   skip "intune: gird-fleet.sh runs here to write its forms" "gird-fleet.sh is built for macOS only so far"
 else
-  wsh_users asha:act; form act "gird-fleet.sh run: every act item" "^v1 act $T \| asha: act wiper; incidents tanstack; lockfile axios; planted 2; keys 3 anthropic,aws" "$(wsh_run)"
+  wsh_users asha:act; form act "gird-fleet.sh run: every act item" "^v1 act $T \| asha: act wiper; incidents tanstack; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-planted 1; ssh-links 1; update mistral \| owasp\.ASI03:1 owasp\.ASI04:1; counted 1$" "$(wsh_run)"
   wsh_users bo:review; form review "gird-fleet.sh run: every review item" "^v1 review $T \| bo: review run-without-asking .*tmp-wiper; tmp-marks mastra$" "$(wsh_run)"
-  wsh_users asha:actpartial bo:clear; form act "gird-fleet.sh run: act and partly checked" "^v1 act $T \| asha: act keys 1; partial \| bo: clear$" "$(wsh_run)"
-  wsh_users cy:partial dee:clear; form not_checked "gird-fleet.sh run: partly checked and clear" "^v1 not_checked $T \| cy: not_checked ssh-open 1; partial \| dee: clear$" "$(wsh_run)"
+  wsh_users asha:actpartial bo:clear; form act "gird-fleet.sh run: act and partly checked" "^v1 act $T \| asha: act keys 1; partial \| bo: clear \| owasp\.ASI03:1; counted 2; partial 1$" "$(wsh_run)"
+  wsh_users cy:partial dee:clear; form not_checked "gird-fleet.sh run: partly checked and clear" "^v1 not_checked $T \| cy: not_checked ssh-open 1; partial \| dee: clear \| owasp\.ASI03:1; counted 2; partial 1$" "$(wsh_run)"
+  # The findings 1.3.0 added, and the OWASP part: added last when the whole value fits with it.
+  wsh_users asha:added
+  form act "gird-fleet.sh run: the findings 1.3.0 added, with the OWASP part" "^v1 act $T \| asha: act incidents claudeext; remote-commands claude-code,codex; ssh-planted 1; autostart 2 \| owasp\.ASI02:1 owasp\.ASI04:1 owasp\.ASI05:1; counted 1$" "$(wsh_run)"
+  wsh_users ann:actpartial bo:partial cy:fail
+  form act "gird-fleet.sh run: the OWASP part with accounts not counted and partly checked" "^v1 act $T \| ann: act keys 1; partial \| bo: not_checked ssh-open 1; partial \| cy: not_checked sudo \| owasp\.ASI03:2; counted 2; not-counted 1; partial 2$" "$(wsh_run)"
+  wsh_users asha:added bo:partial cy:fail
+  form act "gird-fleet.sh run: no room for the OWASP part, the value whole" "^v1 act $T \| asha: act incidents claudeext; remote-commands claude-code,codex; ssh-planted 1; autostart 2 \| bo: not_checked ssh-open 1; partial \| cy: not_checked sudo$" "$(wsh_run)"
   mkdir -p "$IW/linked"; ln -s "$IW/linked" "$IW/homelink"
   wsh_users asha:clear 'bad!name:clear' 'nosh:clear::/usr/bin/false' "gone:clear:$IW/nothere" 'sysh:clear:/usr' "lnk:clear:$IW/homelink"
   form not_checked "gird-fleet.sh run: accounts it does not check, first set" "^v1 not_checked $T \| asha: clear \| invalid-name: not_checked name \| nosh: not_checked no_login_shell \| gone: not_checked home_missing \| sysh: not_checked home_system \| lnk: not_checked home_link$" "$(wsh_run)"
@@ -268,7 +275,8 @@ else
   wsh_users asha:clear; : > "$WS/tmp/.pc_sq_1"; : > "$WS/tmp/gh-token-monitor.out.log"
   form review "gird-fleet.sh run: the Mac's own row" "^v1 review $T \| asha: clear \| machine: review; possible litellm; tmp-wiper$" "$(wsh_run)"
   wsh_users ann:act bob:act cat:act dan:act eve:review fay:partial gus:clear
-  form act "gird-fleet.sh run: cut to fit" "^v1 act $T \| .* \+more$" "$(wsh_run)"
+  _v=$(wsh_run); form act "gird-fleet.sh run: cut to fit" "^v1 act $T \| .* \+more$" "$_v"
+  case "$_v" in *owasp.*) bad "intune: gird-fleet.sh run: a value cut to fit has no OWASP part" "$_v" ;; *) ok "intune: gird-fleet.sh run: a value cut to fit has no OWASP part" ;; esac
   wsh_users; form no_result "gird-fleet.sh --inventory: before the first run" '^none$' "$(wsh_inv)"
   wsh_users asha:clear; wsh_run > /dev/null; chmod 644 "$WS/state/last.json"; form not_checked "gird-fleet.sh --inventory: a file not root's own" '^unreadable$' "$(wsh_inv)"
   wsh_users asha:clear; wsh_run > /dev/null; wsh_epoch 432000; form stale "gird-fleet.sh --inventory: an old run" "^stale: last run $T$" "$(wsh_inv)"
@@ -309,8 +317,9 @@ if [ ! -f "$FLEETPS" ]; then
 else
   P0="^v1 [a-z_]+ $T other_profiles=0"
   wps clear "clear, other profiles" "^v1 clear $T other_profiles=2 \| [A-Za-z0-9._-]+: clear$" clear GIRD_CHECK_FLEET_PROFILES=2
-  wps act "every act item" "$P0 \| [^ ]+: act wiper; incidents tanstack; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-links 1; update mistral$" act
-  wps review "every review item" "$P0 \| [^ ]+: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra$" review
+  wps act "every act item" "$P0 \| [^ ]+: act wiper; incidents tanstack; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-planted 1; ssh-links 1; update mistral$" act
+  wps review "every review item" "$P0 \| [^ ]+: review run-without-asking claude-code,codex; remote-commands claude-code; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; autostart 1; remove glassworm; update mistral; possible mastra$" review
+  wps act "the findings 1.3.0 added" "$P0 \| [^ ]+: act incidents claudeext; remote-commands claude-code,codex; ssh-planted 1; autostart 2$" added
   wps not_checked "partly checked" "$P0 \| [^ ]+: not_checked ssh-open 1; partial$" partial
   wps act "act and partly checked" "$P0 \| [^ ]+: act keys 1; partial$" actpartial
   wps act "cut to fit" "^v1 act $T other_profiles=0 \| [^ ]+: act wiper; incidents [a-z0-9,]+ \+more$" huge
@@ -412,11 +421,15 @@ else
       done
     done
   done
-  while IFS="$(printf '\t')" read -r _o _n _x _ps; do printf '%s\n' "$(fl_value "v1 $_o 2026-10-25T09:12Z" "$_ps" "$_n")"; done < "$DR/mac.in" > "$DR/mac.txt"
+  # Each value twice: as it was, and with an OWASP part, which fl_value adds only when the whole fits.
+  _dtok='owasp.ASI03:1 owasp.ASI04:0+mac; counted 1; not-counted 1; partial 1'
+  while IFS="$(printf '\t')" read -r _o _n _x _ps; do
+    printf '%s\n' "$(fl_value "v1 $_o 2026-10-25T09:12Z" "$_ps" "$_n")" "$(fl_value "v1 $_o 2026-10-25T09:12Z" "$_ps" "$_n" "$_dtok")"
+  done < "$DR/mac.in" > "$DR/mac.txt"
   # What the writer meant: the outcome, old-install, and each row's outcome as the parts give it.
   awk -F '\t' '{ printf "%s old=%s ", $1, ($3 == 1 ? "true" : "false"); n = split($4, s, / [|] /)
     for (i = 2; i <= n; i++) if (s[i] != "old-install") { split(s[i], p, "[ ;]"); k = p[1]; sub(/:$/, "", k); printf "%s=%s,", k, p[2] }
-    if ($2 == 0) printf "(no accounts)=not_checked,"; print "" }' "$DR/mac.in" > "$DR/mac.want"
+    if ($2 == 0) printf "(no accounts)=not_checked,"; print "" }' "$DR/mac.in" | awk '{ print; print }' > "$DR/mac.want"
   "$PWSH" -NoProfile -NonInteractive -File "$DR/read.ps1" mac "$DR/mac.txt" > "$DR/mac.got" 2>&1
   _drd=$(paste -d '\t' "$DR/mac.want" "$DR/mac.got" "$DR/mac.txt" | awk -F '\t' '
     { split($1, w, " "); split($2, g, " "); bad = 0
@@ -424,11 +437,13 @@ else
       n = split(w[3], a, ","); for (i = 1; i < n; i++) { split(a[i], kv, "="); want[kv[1]] = kv[2] }
       m = split(g[3], b, ","); for (i = 1; i < m; i++) { split(b[i], kv, "="); if (!(kv[1] in want) || want[kv[1]] != kv[2]) bad = 1 }
       if ($3 !~ / \+more$/ && m != n) bad = 1
+      if ($3 ~ / [|] owasp\./ && $3 ~ / \+more$/) bad = 1
       delete want
       if (bad) { nb++; if (nb <= 3) printf "%s => %s; ", $3, $2 } }
-    END { printf "%d of %d not read as meant, %d cut", nb, NR, cut }
-    $3 ~ / \+more$/ { cut++ }')
-  if [ "$(wc -l < "$DR/mac.txt" | tr -d ' ')" -eq "$(wc -l < "$DR/mac.got" | tr -d ' ')" ] && [ "${_drd#0 of }" != "$_drd" ] && [ "${_drd% 0 cut}" = "$_drd" ]; then ok "intune: $_dn" "$_drd"
+    END { printf "%d of %d not read as meant, %d cut, %d with the OWASP part", nb, NR, cut, tok }
+    $3 ~ / \+more$/ { cut++ }
+    $3 ~ / [|] owasp\./ { tok++ }')
+  if [ "$(wc -l < "$DR/mac.txt" | tr -d ' ')" -eq "$(wc -l < "$DR/mac.got" | tr -d ' ')" ] && [ "${_drd#0 of }" != "$_drd" ] && [ "${_drd%, 0 cut*}" = "$_drd" ] && [ "${_drd% 0 with the OWASP part}" = "$_drd" ]; then ok "intune: $_dn" "$_drd"
   else bad "intune: $_dn" "$_drd"; fi
 fi
 _dn="the report reads every value gird-fleet.ps1's own value code makes, of every shape and length, as the writer meant"
@@ -535,6 +550,7 @@ report_file dupws -- "$IW/files/dupws.csv"
 report_file winfleet -- "$IW/files/winfleet.csv"
 report_file clearonly -- "$IW/files/clearonly.csv"
 report_file csf -- "$IW/files/csf.csv"
+report_file added -- "$IW/files/added.csv"
 report_file page -- "$IW/files/page.csv" -Organisation "$(cat "$IW/files/org.txt")"
 report_file pagebare -- "$IW/files/page.csv"
 report_file noname -- "$IW/files/noname.csv"
@@ -625,8 +641,8 @@ if [ "$RC" -eq 0 ] && [ -z "$(ls "$IW/elsewhere")" ] && [ "$(find "$IW/out" -max
 else bad "intune: gird-report.ps1 writes only new files, never through a name already there" "exit $RC; elsewhere: $(ls "$IW/elsewhere" | tr '\n' ' '); out: $(ls "$IW/out" | tr '\n' ' ')"; fi
 
 # data/mitre.tsv: tools/gen.sh --check refuses a finding word with no line, and a line for no finding word.
-gen_copy() { rm -rf "$IW/gen"; mkdir -p "$IW/gen/tools"; cp -R data "$IW/gen/data"; cp tools/gen.sh "$IW/gen/tools/"; cp gird-check.sh gird-check.ps1 gird-fleet.sh gird-report.ps1 gird-intune.ps1 "$IW/gen/"; }
-gen_check() { bash "$IW/gen/tools/gen.sh" --check > "$IW/gen.txt" 2>&1; }
+gen_copy() { rm -rf "$IW/gen"; mkdir -p "$IW/gen"; cp -R data tools "$IW/gen/"; cp gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 "$IW/gen/"; }
+gen_check() { PWSH=$PWSH bash "$IW/gen/tools/gen.sh" --check > "$IW/gen.txt" 2>&1; }
 gen_copy; gen_check; RC=$?
 if [ "$RC" -eq 0 ]; then ok "intune: gen.sh --check passes on a copy of the repository"; else bad "intune: gen.sh --check passes on a copy of the repository" "exit $RC: $(head -c 300 "$IW/gen.txt")"; fi
 gen_copy; awk -F '\t' '!($1 == "sessions" && $4 == "attack")' data/mitre.tsv > "$IW/gen/data/mitre.tsv"; gen_check; RC=$?

@@ -499,6 +499,13 @@ holds the truncation `fleet_main` did inline. The value is at most 250 character
 So a missing OWASP part in the inventory value means nothing was tagged or there was no room for it.
 The summary line and `last.json` always carry the tags, and the docs send a complete search there.
 
+`gird-report.ps1` reads the part and sets it aside. It accepts it only last, on a Mac value that was
+not cut, in the shape above (risks in code order, none on more accounts than `counted`, `0` only with
+`+mac`), and reads any other value with it as one that does not fit. It does not show the tags or
+count computers by them: the part is missing wherever there was no room and on every Windows result,
+so such a count would leave computers out without saying so. Each tag comes from a finding word the
+same value names, and the report shows those findings with their MITRE and NIST CSF references.
+
 ### Windows
 
 Windows fleet mode (`gird-fleet.ps1`) came in the same release and does not work out OWASP risks

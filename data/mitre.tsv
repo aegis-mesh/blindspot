@@ -34,8 +34,10 @@
 # 18 November 2026. No finding kind shows that an outcome is not achieved: each Protect outcome depends on
 # what the organization authorized or decided, which Blindspot cannot see. So every csf line is supports.
 #   ID.RA-01: a weakness Blindspot identifies and records (a readable key, an SSH key with no passphrase,
-#   a link to authorized_keys, an agent set to run without asking, a tool with a published fix).
-#   DE.CM-09: reading software and files for published malware traces; the leads fit "potentially".
+#   a link to authorized_keys, an agent set to run without asking or allowed to run commands on other
+#   machines without asking, a tool with a published fix).
+#   DE.CM-09: reading software and files for published malware traces (an SSH key malware adds, settings
+#   wired the way worms start their script); the leads fit "potentially".
 #   PR.PS-02: software to update or to remove.
 #   Tested and not used: ID.AM-02, ID.AM-04, ID.RA-03, PR.AA-01, PR.AA-05, PR.DS-01, PR.PS-01, PR.PS-05
 #   and all of DE.AE (Blindspot does not analyze or correlate events).
@@ -43,6 +45,8 @@
 # since 13 October 2026), each technique's page; ATLAS release 2026.10 of 28 October 2026, from the data the
 # site renders (https://atlas.mitre.org/atlas-data/dist/v6/ATLAS-2026.10.yaml, listed in
 # https://atlas.mitre.org/atlas-data/dist/manifest.yaml). Terms and attribution: NOTICE.
+# The lines for remote-commands, ssh-planted and autostart, and the ids left out for them below, were read
+# on 20 November 2026 from the same ATT&CK, ATLAS and CSF versions.
 # Left out on purpose:
 #   wiper: T1543.001 Launch Agent. A Mac's wiper finding is any one of the wiper's files (data/indicators.tsv:
 #   its launch agent, its systemd service, its shell script or its config folder), and the result does not
@@ -62,8 +66,18 @@
 #   on-open: AML.T0081 Modify AI Agent Configuration. The count also takes in editor tasks that run when
 #   a folder opens (gird-check.sh, folderOpen tasks), which are editor settings, not an agent's, and the
 #   result gives only a count.
-#   ssh-links on Windows: T1098.004 lists ESXi, IaaS, Linux, network devices and macOS as its platforms.
+#   ssh-links and ssh-planted on Windows: T1098.004 lists ESXi, IaaS, Linux, network devices and macOS as
+#   its platforms.
+#   remote-commands: T1021.004 Remote Services: SSH, T1021.006 Windows Remote Management, T1651 Cloud
+#   Administration Command and T1609 Container Administration Command each fit some of the commands the
+#   saved rules allow (data/remote-commands.tsv). The result names the agents, not the commands.
+#   autostart: T1195.001, whose text names project task files that run when a project opens. That fits
+#   a project wired this way, but the count also takes in hooks in a person's own agent settings, which
+#   come with no project, and the result gives only a count. T1546 has no sub-technique for an agent's or
+#   an editor's settings; ATT&CK lists Mini Shai-Hulud (S9043) adding hooks and runOn conditions to the
+#   settings of AI coding agents under T1546 itself.
 # T1698 Indirect Prompt Injection lists SaaS and Windows as its platforms, so it is for Windows results only.
+# AML.T0081 lists Persistence and Defense Evasion as its tactics in ATLAS 2026.10.
 # AML.T0055 lists Credential Access as its only tactic in ATLAS 2026.10.
 # AML.T0010.001 names T1195.002 as its ATT&CK counterpart; ATT&CK itself places npm and Python packages
 # under T1195.001, which these lines follow.
@@ -81,6 +95,8 @@ planted	all	all	attack	T1195.001	Supply Chain Compromise: Compromise Software De
 planted	all	all	atlas	-	-	-	none	-	The one AI package among these incidents cannot be told apart: the result gives a count, not the incident.
 run-without-asking	win	all	attack	T1698	Indirect Prompt Injection	Execution	exposure	https://attack.mitre.org/techniques/T1698/	-
 run-without-asking	all	all	atlas	AML.T0053	AI Agent Tool Invocation	Execution,Privilege Escalation,Lateral Movement	exposure	https://atlas.mitre.org/techniques/AML.T0053	-
+remote-commands	win	all	attack	T1698	Indirect Prompt Injection	Execution	exposure	https://attack.mitre.org/techniques/T1698/	-
+remote-commands	all	all	atlas	AML.T0053	AI Agent Tool Invocation	Execution,Privilege Escalation,Lateral Movement	exposure	https://atlas.mitre.org/techniques/AML.T0053	-
 keys	all	all	attack	T1552.001	Unsecured Credentials: Credentials In Files	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/001/	-
 keys	all	all	atlas	AML.T0055	Unsecured Credentials	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0055	-
 history	all	all	attack	T1552.003	Unsecured Credentials: Shell History	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/003/	-
@@ -91,6 +107,8 @@ mcp-tokens	all	all	attack	T1552.001	Unsecured Credentials: Credentials In Files	
 mcp-tokens	all	all	atlas	AML.T0083	Credentials from AI Agent Configuration	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0083	-
 allow-lists	all	all	attack	T1552.001	Unsecured Credentials: Credentials In Files	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/001/	-
 allow-lists	all	all	atlas	AML.T0083	Credentials from AI Agent Configuration	Credential Access	exposure	https://atlas.mitre.org/techniques/AML.T0083	-
+ssh-planted	mac	all	attack	T1098.004	Account Manipulation: SSH Authorized Keys	Persistence,Privilege Escalation	indicator	https://attack.mitre.org/techniques/T1098/004/	-
+ssh-planted	all	all	atlas	-	-	-	none	-	No ATLAS technique fits an SSH key added to the file of allowed SSH login keys: it gives a login to the computer, not access through an AI system.
 ssh-links	mac	all	attack	T1098.004	Account Manipulation: SSH Authorized Keys	Persistence,Privilege Escalation	exposure	https://attack.mitre.org/techniques/T1098/004/	-
 ssh-links	all	all	atlas	-	-	-	none	-	No ATLAS technique fits a link to the file of allowed SSH login keys.
 ssh-open	all	all	attack	T1552.004	Unsecured Credentials: Private Keys	Credential Access	exposure	https://attack.mitre.org/techniques/T1552/004/	-
@@ -108,6 +126,8 @@ on-open	all	all	attack	-	-	-	none	-	Such settings can come in a cloned project, 
 on-open	all	all	atlas	-	-	-	none	-	The count takes in editor tasks that run when a folder opens, which are not AI agent settings, and the result does not say which was found.
 to-read	all	all	attack	-	-	-	none	-	Files to read by hand: a lead, not a finding.
 to-read	all	all	atlas	-	-	-	none	-	Files to read by hand: a lead, not a finding.
+autostart	all	all	attack	T1546	Event Triggered Execution	Privilege Escalation,Persistence	indicator	https://attack.mitre.org/techniques/T1546/	-
+autostart	all	all	atlas	AML.T0081	Modify AI Agent Configuration	Persistence,Defense Evasion	indicator	https://atlas.mitre.org/techniques/AML.T0081	-
 possible	all	all	attack	-	-	-	none	-	A lead to check by hand, not a finding.
 possible	all	all	atlas	-	-	-	none	-	A lead to check by hand, not a finding.
 tmp-wiper	all	all	attack	-	-	-	none	-	Logs in a folder every account can write to: a lead, not a finding.
@@ -121,11 +141,13 @@ incidents	all	all	csf	DE.CM-09	Computing hardware and software, runtime environm
 lockfile	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 planted	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 run-without-asking	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+remote-commands	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 keys	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 history	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 sessions	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 mcp-tokens	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 allow-lists	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+ssh-planted	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 ssh-links	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 ssh-open	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 update-tools	all	all	csf	ID.RA-01	Vulnerabilities in assets are identified, validated, and recorded	Identify,Risk Assessment	supports	https://doi.org/10.6028/NIST.CSWP.29	-
@@ -135,6 +157,7 @@ update	all	all	csf	PR.PS-02	Software is maintained, replaced, and removed commen
 remove	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 remove	all	all	csf	PR.PS-02	Software is maintained, replaced, and removed commensurate with risk	Protect,Platform Security	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 to-read	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
+autostart	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 possible	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 tmp-wiper	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-
 tmp-marks	all	all	csf	DE.CM-09	Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events	Detect,Continuous Monitoring	supports	https://doi.org/10.6028/NIST.CSWP.29	-

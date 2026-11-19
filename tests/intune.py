@@ -100,8 +100,8 @@ PCS = [
 # Every form gird-fleet.ps1 and gird-fleet.sh can write, as each writes it: an outcome, every reason
 # and every account and machine row, and the cut forms ending in +more. tests/intune.sh adds to these
 # the values each writer prints when it is run here. (expected status, what it is, value)
-ACT_PS = 'anna: act wiper; incidents tanstack,axios; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-links 1; update mistral'
-REVIEW_PS = 'anna: review run-without-asking claude-code,codex; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; remove glassworm; update mistral; possible mastra'
+ACT_PS = 'anna: act wiper; incidents tanstack,axios; lockfile axios; planted 2; keys 3 anthropic,aws; history 1; sessions 2; mcp-tokens 1; allow-lists 1; ssh-planted 1; ssh-links 1; update mistral'
+REVIEW_PS = 'anna: review run-without-asking claude-code,codex; remote-commands claude-code; ssh-open 1; update-tools amazonq; platforms opencode; on-open 1; to-read 1; autostart 1; remove glassworm; update mistral; possible mastra'
 FORMS = []
 for r in ('host_32bit', 'system_account', 'unpack', 'start', 'language_mode', 'no_output'):
     FORMS.append(('failed', 'gird-fleet.ps1 reason %s' % r, _ps(' reason=%s | anna: not_checked %s' % (r, r), 'failed')))
@@ -131,6 +131,11 @@ FORMS += [
     ('act', 'gird-fleet.ps1 act account and machine not checked', _ps(' | anna: act keys 1 | machine: not_checked; possible mastra', 'act')),
     ('failed', 'gird-fleet.ps1 failed with the machine not checked', _ps(' reason=host_32bit | anna: not_checked host_32bit | machine: not_checked; possible mastra', 'failed')),
     ('act', 'gird-fleet.ps1 cut with the machine not checked', _ps(' | anna: act | machine: not_checked; possible mastra +more', 'act')),
+    # Each finding 1.3.0 added, alone, so its level decides the outcome it must have.
+    ('review', 'gird-fleet.ps1 an agent allowed to run commands on other machines, alone', _ps(' | anna: review remote-commands codex', 'review')),
+    ('act', 'gird-fleet.ps1 an SSH key malware adds, alone', _ps(' | anna: act ssh-planted 1', 'act')),
+    ('review', 'gird-fleet.ps1 settings that start a script the way worms do, alone', _ps(' | anna: review autostart 3', 'review')),
+    ('act', 'gird-fleet.ps1 the findings 1.3.0 added', _ps(' | anna: act incidents claudeext; remote-commands claude-code,codex; ssh-planted 1; autostart 2', 'act')),
 ]
 for r in ('name', 'no_login_shell', 'home_missing', 'home_link', 'home_owner', 'home_shared', 'home_system', 'home_name',
           'home_no_answer', 'sudo', 'bad_output', 'time_limit', 'deadline', 'copy_changed'):
@@ -166,6 +171,16 @@ FORMS += [
     ('not_checked', 'gird-fleet.sh an account named machine, not checked', 'v1 not_checked %s | machine: not_checked home_missing' % T0),
     ('not_checked', 'gird-fleet.sh an account named machine, clear, beside the Mac row', 'v1 review %s | machine: clear | machine: review; possible litellm' % T0),
     ('not_checked', 'gird-fleet.sh an account named machine, review, beside the Mac row', 'v1 review %s | machine: review ssh-open 1 | machine: review; possible litellm' % T0),
+    ('act', 'gird-fleet.sh the findings 1.3.0 added', 'v1 act %s | asha: act incidents claudeext; ssh-planted 1 | bo: review remote-commands codex | cy: review autostart 1' % T0),
+    ('act', 'gird-fleet.sh cut, keeping the findings 1.3.0 added whole', 'v1 act %s | asha: act incidents claudeext; remote-commands codex; ssh-planted 1; autostart 1 | bo: review +more' % T0),
+    # The OWASP part a Mac's value ends with when it fits (docs/designs/owasp.md, "Inventory value").
+    ('act', 'gird-fleet.sh with its OWASP part', 'v1 act %s | asha: act incidents claudeext; remote-commands claude-code,codex; ssh-planted 1; autostart 2 | owasp.ASI02:1 owasp.ASI04:1 owasp.ASI05:1; counted 1' % T0),
+    ('act', 'gird-fleet.sh OWASP part with accounts not counted and partly checked',
+     'v1 act %s | asha: act keys 1; partial | bo: not_checked ssh-open 1; partial | cy: not_checked sudo | owasp.ASI03:2; counted 2; not-counted 1; partial 2' % T0),
+    ('act', 'gird-fleet.sh OWASP part with a risk only the Mac has', 'v1 act %s | asha: review autostart 1 | machine: act incidents litellm | owasp.ASI04:0+mac owasp.ASI05:1; counted 1' % T0),
+    ('review', 'gird-fleet.sh OWASP part after an older install', 'v1 review %s | asha: review remote-commands codex | old-install | owasp.ASI02:1; counted 1' % T0),
+    ('act', 'gird-fleet.sh OWASP part after no accounts', 'v1 act %s | machine: act incidents litellm | no accounts | owasp.ASI04:0+mac; counted 0' % T0),
+    ('clear', 'gird-fleet.sh an account named like the OWASP part', 'v1 clear %s | asha: clear | owasp.asi03: clear' % T0),
     ('no_result', 'gird-fleet.sh --inventory none', 'none'),
     ('not_checked', 'gird-fleet.sh --inventory unreadable', 'unreadable'),
     ('stale', 'gird-fleet.sh --inventory stale', 'stale: last run %s' % at(days=-5)),
@@ -217,6 +232,23 @@ NOT_WRITTEN = [
     ('a list with a character it does not write', _ps(' | anna: review possible Mastra', 'review')),
     ('a Windows result of 2,048 characters ending in +more', _long(2048)),
     ('a Mac result longer than the Mac writer writes', 'v1 act %s | asha: act wiper; incidents %s' % (T0, ','.join(['tanstack'] * 40))),
+    ('an act account whose one finding is review level: remote-commands', _ps(' | anna: act remote-commands codex', 'act')),
+    ('a review account whose one finding is act level: ssh-planted', _ps(' | anna: review ssh-planted 1', 'review')),
+    ('an act account whose one finding is review level: autostart', 'v1 act %s | asha: act autostart 1' % T0),
+    ('the findings 1.3.0 added out of order', 'v1 review %s | asha: review autostart 1; remote-commands codex' % T0),
+    ('ssh-planted with no count', _ps(' | anna: act ssh-planted', 'act')),
+    ('a finding word on the Mac row', 'v1 act %s | asha: clear | machine: act incidents litellm; ssh-planted 1' % T0),
+    ('the OWASP part on a Windows result', _ps(' | anna: review autostart 1 | owasp.ASI05:1; counted 1', 'review')),
+    ('the OWASP part on a value cut to fit', 'v1 act %s | asha: act wiper | owasp.ASI04:1; counted 1 +more' % T0),
+    ('the OWASP part before the Mac row', 'v1 act %s | asha: review autostart 1 | owasp.ASI04:0+mac owasp.ASI05:1; counted 1 | machine: act incidents litellm' % T0),
+    ('the OWASP part twice', 'v1 review %s | asha: review autostart 1 | owasp.ASI05:1; counted 1 | owasp.ASI05:1; counted 1' % T0),
+    ('the OWASP part alone', 'v1 review %s | owasp.ASI05:1; counted 1' % T0),
+    ('the OWASP part with no count of the accounts counted', 'v1 review %s | asha: review autostart 1 | owasp.ASI05:1' % T0),
+    ('OWASP risks out of order', 'v1 review %s | asha: review remote-commands codex; autostart 1 | owasp.ASI05:1 owasp.ASI02:1; counted 1' % T0),
+    ('an OWASP risk outside ASI01 to ASI10', 'v1 review %s | asha: review autostart 1 | owasp.ASI11:1; counted 1' % T0),
+    ('an OWASP risk on no account that the Mac does not have', 'v1 review %s | asha: review autostart 1 | owasp.ASI05:0; counted 1' % T0),
+    ('an OWASP risk on more accounts than were counted', 'v1 review %s | asha: review autostart 1 | owasp.ASI05:2; counted 1' % T0),
+    ('more accounts partly checked than were counted', 'v1 act %s | asha: act keys 1; partial | owasp.ASI03:1; counted 1; partial 2' % T0),
 ]
 FORMS += [('not_checked', 'not written: ' + d, v) for d, v in NOT_WRITTEN]
 
@@ -336,6 +368,15 @@ CSF = [
     ('CSF-CLEAR', 'v1 clear %s | asha: clear' % T0, ''),
     ('CSF-NEWER', 'v9 act %s | asha: act keys 1 openai' % T0, ''),
 ]
+# The findings 1.3.0 added, as each writer writes them, a Mac's with the OWASP part: (name, value, status)
+ADDED = [
+    ('A-MAC', 'v1 act %s | asha: act incidents claudeext; remote-commands claude-code,codex; ssh-planted 1; autostart 2 | owasp.ASI02:1 owasp.ASI04:1 owasp.ASI05:1; counted 1' % T0, 'act'),
+    ('A-WIN', _ps(' | anna: act incidents claudeext; remote-commands codex; ssh-planted 1; autostart 1', 'act'), 'act'),
+    ('A-WIN-REMOTE', _ps(' | anna: review remote-commands claude-code', 'review'), 'review'),
+    ('A-MAC-AUTOSTART', 'v1 review %s | asha: review autostart 1 | owasp.ASI05:1; counted 1' % T0, 'review'),
+    ('A-MAC-CUT', 'v1 act %s | asha: act incidents claudeext; ssh-planted 1 | bo: review +more' % T0, 'act'),
+    ('A-WIPER', 'v1 act %s | asha: act wiper; incidents claudeext; ssh-planted 1' % T0, 'act'),
+]
 ACT = 'v1 act %s | asha: act keys 1' % T0
 OEM = 'To be filled by O.E.M.'
 DUPS = {
@@ -383,6 +424,8 @@ def write_files(d):
         f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
     with open(os.path.join(d, 'csf.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\n' + ''.join('%s,%s\n' % (n, csv_cell(v)) for n, v, _ in CSF))
+    with open(os.path.join(d, 'added.csv'), 'w', newline='') as f:
+        f.write('Computer Name,Blindspot\n' + ''.join('%s,%s\n' % (n, csv_cell(v)) for n, v, _ in ADDED))
     with open(os.path.join(d, 'locked.csv'), 'w', newline='') as f:
         f.write('Computer Name,Blindspot\nMAC-OK,v1 clear %s | asha: clear\n' % T0)
     with open(os.path.join(d, 'semicolon-utf8bom.csv'), 'w', encoding='utf-8-sig', newline='') as f:
@@ -704,9 +747,8 @@ def serve(state_f, log_f, port_f, stub_log):
 
 # --- One account run's output, as gird-check.ps1 -AccountRun and gird-check.sh --account-run print it
 
-KEYS = ['v', 'agents', 'yolo', 'tools', 'mcp_servers', 'mcp_token_files', 'key_files', 'key_providers', 'history_keys', 'session_files',
-        'sessions_partial', 'allow_list_keys', 'ssh_open', 'ak_links', 'planted', 'possible', 'incidents', 'platforms', 'on_open', 'to_read',
-        'updates', 'wiper', 'lock_only', 'remove', 'not_read', 'moved', 'tmp_marks', 'tmp_wiper', 'protected', 'engine', 'end']
+# The keys, in order, from their one home: both fleet scripts refuse an output that leaves one out.
+KEYS = [l.strip() for l in open(os.path.join(HERE, '..', 'data', 'account-run.tsv')) if l.strip() and not l.startswith('#')]
 def incidents():
     out = []
     for l in open(os.path.join(HERE, '..', 'data', 'incidents.tsv')):
@@ -715,15 +757,20 @@ def incidents():
     return out
 def account(kind, flavour):
     a = {k: '0' for k in KEYS}
-    a.update(v='1', end='1', protected='ok', engine='none', agents='', yolo='', tools='', key_providers='', possible='', incidents='',
+    a.update(v='1', end='1', protected='ok', engine='none', agents='', yolo='', remote='', tools='', key_providers='', possible='', incidents='',
              platforms='', updates='', lock_only='', remove='', tmp_marks='')
     if kind == 'act':
         a.update(wiper='1', incidents='tanstack mistral', lock_only='axios', planted='2', key_files='3', key_providers='anthropic aws',
-                 history_keys='1', session_files='2', mcp_token_files='1', allow_list_keys='1', ak_links='1')
+                 history_keys='1', session_files='2', mcp_token_files='1', allow_list_keys='1', ssh_planted='1', ak_links='1')
     elif kind == 'review':
         a.update(yolo='claude-code codex', ssh_open='1', tools='amazonq', platforms='opencode', on_open='1', to_read='1', updates='mistral',
                  remove='glassworm', possible='mastra')
+        # A Mac's 250 characters have no room for these beside the shared-folder items: mode added has them there.
         if flavour == 'sh': a.update(tmp_wiper='1', tmp_marks='mastra')
+        else: a.update(remote='claude-code', autostart='1')
+    elif kind == 'added':
+        # The three findings fleet mode added in 1.3.0, with the incident a planted SSH key comes with.
+        a.update(incidents='claudeext', remote='claude-code codex', ssh_planted='1', autostart='2')
     elif kind == 'tmpmarks':
         a.update(possible='mastra', tmp_marks='mastra')
     elif kind == 'partial':
@@ -794,6 +841,20 @@ def tactics(html):
 def section(html, num): # the markup of one numbered section
     i = html.find('<span class="num">%s</span>' % num)
     return html[i:html.find('</section>', i)] if i >= 0 else ''
+def kind_row(html, label): # (level group, computers, relations, ATT&CK cell, ATLAS cell) of a finding's row in section 4
+    s = section(html, '04'); m = re.search(r'<tr><th scope="row">%s</th><td class="num">([0-9]+)</td><td>(.*?)</td><td>(.*?)</td><td>(.*?)</td></tr>' % re.escape(label), s)
+    if not m: return None
+    grp = re.findall(r'<tr class="grp"><th scope="rowgroup"[^>]*><span class="oc"><svg[^>]*>.*?</svg>([^<]+)</span>', s[:m.start()])
+    return (grp[-1] if grp else None, int(m.group(1)), m.group(2), m.group(3), m.group(4))
+def prio_row(html, pc): # (why, first step) of a computer in section 3
+    m = re.search(r'<th scope="row" class="host">%s</th><td class="acct">.*?</td><td class="sys">[^<]*</td><td>([^<]*)</td><td>([^<]*)</td></tr>' % re.escape(pc), section(html, '03'))
+    return (m.group(1), m.group(2)) if m else None
+def found_text(html, pc): # what section 7 says was found on a computer
+    m = re.search(r'<tr><th scope="row" class="host">%s</th><td class="acct">.*?</td><td class="sys">[^<]*</td><td><span class="oc">.*?</span></td><td>(.*?)</td>' % re.escape(pc), section(html, '07'))
+    return m.group(1) if m else None
+REMOTE = 'Agent allowed to run commands on other machines without asking'
+PLANTED_KEY = 'SSH keys malware adds, in authorized_keys'
+AUTOSTART = 'Projects or agent settings that start a script the way worms do'
 def every_row(html, pc): # the outcome a computer is shown with in section 7
     m = re.search(r'<tr><th scope="row" class="host">%s</th><td class="acct">.*?</td><td class="sys">[^<]*</td><td><span class="oc"><svg class="mk c-([a-z]+)"[^>]*><use href="#o-[a-z]+"/></svg>([^<]*)</span>' % re.escape(pc), section(html, '07'))
     return (m.group(1), m.group(2)) if m else None
@@ -1037,6 +1098,44 @@ def main():
             fn = dict((a, int(b)) for a, b in re.findall(r'<li class="bar neu"><div class="lbl"><span>([A-Za-z]+)</span></div><svg[^>]*>(?:<rect[^>]*/>)+</svg><span class="val">([0-9]+)</span></li>', got[3]))
             byfn = dict((f, sum(1 for _, _, x in CSF if p in x)) for f, p in (('Identify', 'ID.'), ('Protect', 'PR.'), ('Detect', 'DE.')))
             check('the CSV and the page\'s CSF chart count the same computers per Function', fn == byfn, (fn, byfn))
+        got, out = load_out(w, 'added')
+        check('the file of the findings 1.3.0 added is read', got is not None, out[-300:])
+        if got:
+            raw, rows, by, html = got
+            for n, v, st in ADDED:
+                check('the findings 1.3.0 added: %s reads as %s' % (n, st), by.get(n, {}).get('status') == st, (n, by.get(n, {}).get('status'), by.get(n, {}).get('why')))
+            k = kind_row(html, REMOTE)
+            check('an agent allowed to run commands on other machines is a Review row, an exposure for T1698 on Windows only and for AML.T0053',
+                  k is not None and k[:3] == ('Review', 3, '<span class="rel">Exposure</span>') and 'href="https://attack.mitre.org/techniques/T1698/"' in k[3]
+                  and 'Only for Windows PCs: 2 computers' in k[3] and 'href="https://atlas.mitre.org/techniques/AML.T0053"' in k[4], k)
+            k = kind_row(html, PLANTED_KEY)
+            check('an SSH key malware adds is an Act now row, an indicator of T1098.004 on Macs only, with no ATLAS technique and why',
+                  k is not None and k[:3] == ('Act now', 4, '<span class="rel ind">Indicator</span>') and 'href="https://attack.mitre.org/techniques/T1098/004/"' in k[3]
+                  and 'Only for Macs: 3 computers' in k[3] and 'href' not in k[4] and 'not access through an AI system' in k[4], k)
+            k = kind_row(html, AUTOSTART)
+            check('settings that start a script the way worms do are a Review row, an indicator of T1546 and AML.T0081',
+                  k is not None and k[:3] == ('Review', 3, '<span class="rel ind">Indicator</span>') and 'href="https://attack.mitre.org/techniques/T1546/"' in k[3]
+                  and 'Event Triggered Execution' in k[3] and 'href="https://atlas.mitre.org/techniques/AML.T0081"' in k[4] and 'Modify AI Agent Configuration' in k[4], k)
+            check('section 5 counts the computers for each technique the findings 1.3.0 added relate to',
+                  [tech_row(html, t) for t in ('T1698', 'AML.T0053', 'T1098.004', 'T1546', 'AML.T0081')] == [(2, 0), (3, 0), (0, 3), (0, 3), (0, 3)],
+                  [tech_row(html, t) for t in ('T1698', 'AML.T0053', 'T1098.004', 'T1546', 'AML.T0081')])
+            ids = lambda r: ' '.join(re.findall(r'(?:^|; )([A-Z]{2}\.[A-Z]{2}-[0-9]{2}) \(', r.get('nist_csf', '')))
+            check('the CSV names ID.RA-01 for remote commands, and DE.CM-09 for a planted SSH key and worm-style startup',
+                  [ids(by.get(n, {})) for n in ('A-WIN-REMOTE', 'A-MAC-AUTOSTART', 'A-MAC-CUT', 'A-MAC')] == ['ID.RA-01', 'DE.CM-09', 'DE.CM-09', 'ID.RA-01 DE.CM-09'],
+                  [by.get(n, {}).get('nist_csf') for n in ('A-WIN-REMOTE', 'A-MAC-AUTOSTART', 'A-MAC-CUT', 'A-MAC')])
+            ssh = 'Before anyone rotates a key, remove the SSH keys malware added to authorized_keys: they let the attacker log in. To see them, the person runs Blindspot on their own account.'
+            rot = 'From another computer, rotate every key this computer could reach.'
+            wip = 'Do not revoke any GitHub token yet. First stop and remove gh-token-monitor: it runs a destructive command when the token it uses stops working.'
+            check('a planted SSH key comes before every rotate in the first steps, and after stopping the wiper',
+                  prio_row(html, 'A-MAC') == ('Malware incident found; ' + PLANTED_KEY, ssh + ' ' + rot) and prio_row(html, 'A-WIPER') == (
+                      'Files or folders of the gh-token-monitor wiper; Malware incident found; ' + PLANTED_KEY, wip + ' ' + ssh), (prio_row(html, 'A-MAC'), prio_row(html, 'A-WIPER')))
+            check('each computer lists the findings 1.3.0 added by their labels',
+                  found_text(html, 'A-MAC') == 'Malware incident found: claudeext; %s: claude-code, codex; %s; %s' % (REMOTE, PLANTED_KEY, AUTOSTART)
+                  and found_text(html, 'A-WIN-REMOTE') == REMOTE + ': claude-code', (found_text(html, 'A-MAC'), found_text(html, 'A-WIN-REMOTE')))
+            check('the OWASP part is read and not shown: not on the page, and not in a row\'s details',
+                  'owasp.ASI' not in html and 'ASI0' not in html and not [r for r in rows if 'owasp' in r['details'] or 'ASI0' in r['mitre'] + r['nist_csf']]
+                  and by.get('A-MAC', {}).get('details') == 'asha: act (incidents claudeext; remote-commands claude-code,codex; ssh-planted 1; autostart 2)',
+                  (by.get('A-MAC', {}).get('details'), re.findall(r'.{40}ASI0.{20}', html)[:2]))
         got, out = load_out(w, 'paths')
         check('the paths file is read', got is not None, out[-300:])
         if got:

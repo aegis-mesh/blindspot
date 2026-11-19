@@ -111,6 +111,14 @@ if (-not [int]::TryParse($Opt.StaleDays, [ref]$StaleDays) -or $StaleDays -lt 1 -
 # gird-fleet.ps1 on Windows, which adds other_profiles= and reason= to the header. Anything a writer
 # does not write does not fit.
 $Outcomes = @{ clear = 1; review = 2; not_checked = 3; act = 4; failed = 5 }
+# The OWASP part gird-fleet.sh puts last in a Mac's value, only when the whole value fits with it, so
+# never in one cut to fit (docs/designs/owasp.md, "Inventory value"): each risk as owasp.<code>:<accounts>,
+# with +mac when the Mac's own row has it, in code order, then "; counted N", then "; not-counted N" and
+# "; partial N" when above 0. Windows results never carry it. The report reads it and does not show it:
+# it is left out whenever it does not fit, so a count of computers from it would leave some out without
+# saying so, and its risks come from the finding words the same value names, which the report shows.
+$OwaspRisk = 'owasp\.ASI(0[1-9]|10):(0|[1-9][0-9]{0,5})(\+mac)?'
+$OwaspPart = '^' + $OwaspRisk + '( ' + $OwaspRisk + ')*; counted (0|[1-9][0-9]{0,5})(; not-counted [1-9][0-9]{0,5})?(; partial ([1-9][0-9]{0,5}))?$'
 # Every finding word, in the order a result lists them, and the one home of each word's form, level and
 # label. tools/gen.sh reads this table and refuses a line it cannot read.
 #   Arg: none, count (a number), list (incident or tool ids) or keys (a number, then provider ids)
@@ -121,17 +129,20 @@ $Items = @(
   @{ Word = 'lockfile'; Arg = 'list'; Level = 'act'; Label = 'Malware versions in a lockfile' }
   @{ Word = 'planted'; Arg = 'count'; Level = 'act'; Label = 'Files a worm plants in a project' }
   @{ Word = 'run-without-asking'; Arg = 'list'; Level = 'review'; Label = 'Agent set to run commands without asking (excessive agency, OWASP LLM06:2025)' }
+  @{ Word = 'remote-commands'; Arg = 'list'; Level = 'review'; Label = 'Agent allowed to run commands on other machines without asking' }
   @{ Word = 'keys'; Arg = 'keys'; Level = 'act'; Label = 'Keys in plain text (unsecured credentials, MITRE ATT&CK T1552)' }
   @{ Word = 'history'; Arg = 'count'; Level = 'act'; Label = 'Keys in shell history' }
   @{ Word = 'sessions'; Arg = 'count'; Level = 'act'; Label = 'Keys in agent sessions' }
   @{ Word = 'mcp-tokens'; Arg = 'count'; Level = 'act'; Label = 'Tokens in MCP configs' }
   @{ Word = 'allow-lists'; Arg = 'count'; Level = 'act'; Label = 'Keys in Claude Code allow lists' }
+  @{ Word = 'ssh-planted'; Arg = 'count'; Level = 'act'; Label = 'SSH keys malware adds, in authorized_keys' }
   @{ Word = 'ssh-links'; Arg = 'count'; Level = 'act'; Label = 'Links to authorized_keys' }
   @{ Word = 'ssh-open'; Arg = 'count'; Level = 'review'; Label = 'SSH keys without a passphrase' }
   @{ Word = 'update-tools'; Arg = 'list'; Level = 'review'; Label = 'Tools with a security fix to install' }
   @{ Word = 'platforms'; Arg = 'list'; Level = 'review'; Label = 'Hosted platform that leaked secrets' }
   @{ Word = 'on-open'; Arg = 'count'; Level = 'review'; Label = 'Project settings that act when a folder opens' }
   @{ Word = 'to-read'; Arg = 'count'; Level = 'review'; Label = 'Files named like worm files, to read' }
+  @{ Word = 'autostart'; Arg = 'count'; Level = 'review'; Label = 'Projects or agent settings that start a script the way worms do' }
   @{ Word = 'remove'; Arg = 'list'; Level = 'review'; Label = 'Extensions to remove' }
   @{ Word = 'update'; Arg = 'list'; Level = 'review'; Label = 'Package versions from known software supply chain attacks' }
   @{ Word = 'possible'; Arg = 'list'; Level = 'review'; Label = 'Possible signs of malware' }
@@ -172,6 +183,8 @@ $MitreRows = @(
   @{ Word = 'planted'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'The one AI package among these incidents cannot be told apart: the result gives a count, not the incident.' }
   @{ Word = 'run-without-asking'; Os = 'win'; Scope = @(); Fw = 'attack'; Id = 'T1698'; Name = 'Indirect Prompt Injection'; Tactics = @('Execution'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1698/'; Note = '' }
   @{ Word = 'run-without-asking'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0053'; Name = 'AI Agent Tool Invocation'; Tactics = @('Execution', 'Privilege Escalation', 'Lateral Movement'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0053'; Note = '' }
+  @{ Word = 'remote-commands'; Os = 'win'; Scope = @(); Fw = 'attack'; Id = 'T1698'; Name = 'Indirect Prompt Injection'; Tactics = @('Execution'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1698/'; Note = '' }
+  @{ Word = 'remote-commands'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0053'; Name = 'AI Agent Tool Invocation'; Tactics = @('Execution', 'Privilege Escalation', 'Lateral Movement'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0053'; Note = '' }
   @{ Word = 'keys'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.001'; Name = 'Unsecured Credentials: Credentials In Files'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/001/'; Note = '' }
   @{ Word = 'keys'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0055'; Name = 'Unsecured Credentials'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0055'; Note = '' }
   @{ Word = 'history'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.003'; Name = 'Unsecured Credentials: Shell History'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/003/'; Note = '' }
@@ -182,6 +195,8 @@ $MitreRows = @(
   @{ Word = 'mcp-tokens'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0083'; Name = 'Credentials from AI Agent Configuration'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0083'; Note = '' }
   @{ Word = 'allow-lists'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.001'; Name = 'Unsecured Credentials: Credentials In Files'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/001/'; Note = '' }
   @{ Word = 'allow-lists'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0083'; Name = 'Credentials from AI Agent Configuration'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://atlas.mitre.org/techniques/AML.T0083'; Note = '' }
+  @{ Word = 'ssh-planted'; Os = 'mac'; Scope = @(); Fw = 'attack'; Id = 'T1098.004'; Name = 'Account Manipulation: SSH Authorized Keys'; Tactics = @('Persistence', 'Privilege Escalation'); Rel = 'indicator'; Url = 'https://attack.mitre.org/techniques/T1098/004/'; Note = '' }
+  @{ Word = 'ssh-planted'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'No ATLAS technique fits an SSH key added to the file of allowed SSH login keys: it gives a login to the computer, not access through an AI system.' }
   @{ Word = 'ssh-links'; Os = 'mac'; Scope = @(); Fw = 'attack'; Id = 'T1098.004'; Name = 'Account Manipulation: SSH Authorized Keys'; Tactics = @('Persistence', 'Privilege Escalation'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1098/004/'; Note = '' }
   @{ Word = 'ssh-links'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'No ATLAS technique fits a link to the file of allowed SSH login keys.' }
   @{ Word = 'ssh-open'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1552.004'; Name = 'Unsecured Credentials: Private Keys'; Tactics = @('Credential Access'); Rel = 'exposure'; Url = 'https://attack.mitre.org/techniques/T1552/004/'; Note = '' }
@@ -199,6 +214,8 @@ $MitreRows = @(
   @{ Word = 'on-open'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'The count takes in editor tasks that run when a folder opens, which are not AI agent settings, and the result does not say which was found.' }
   @{ Word = 'to-read'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Files to read by hand: a lead, not a finding.' }
   @{ Word = 'to-read'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Files to read by hand: a lead, not a finding.' }
+  @{ Word = 'autostart'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = 'T1546'; Name = 'Event Triggered Execution'; Tactics = @('Privilege Escalation', 'Persistence'); Rel = 'indicator'; Url = 'https://attack.mitre.org/techniques/T1546/'; Note = '' }
+  @{ Word = 'autostart'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = 'AML.T0081'; Name = 'Modify AI Agent Configuration'; Tactics = @('Persistence', 'Defense Evasion'); Rel = 'indicator'; Url = 'https://atlas.mitre.org/techniques/AML.T0081'; Note = '' }
   @{ Word = 'possible'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'A lead to check by hand, not a finding.' }
   @{ Word = 'possible'; Os = 'all'; Scope = @(); Fw = 'atlas'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'A lead to check by hand, not a finding.' }
   @{ Word = 'tmp-wiper'; Os = 'all'; Scope = @(); Fw = 'attack'; Id = ''; Name = ''; Tactics = @(); Rel = 'none'; Url = ''; Note = 'Logs in a folder every account can write to: a lead, not a finding.' }
@@ -212,11 +229,13 @@ $MitreRows = @(
   @{ Word = 'lockfile'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'planted'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'run-without-asking'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'remote-commands'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'keys'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'history'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'sessions'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'mcp-tokens'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'allow-lists'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'ssh-planted'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'ssh-links'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'ssh-open'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'update-tools'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'ID.RA-01'; Name = 'Vulnerabilities in assets are identified, validated, and recorded'; Tactics = @('Identify', 'Risk Assessment'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
@@ -226,6 +245,7 @@ $MitreRows = @(
   @{ Word = 'remove'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'remove'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'PR.PS-02'; Name = 'Software is maintained, replaced, and removed commensurate with risk'; Tactics = @('Protect', 'Platform Security'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'to-read'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
+  @{ Word = 'autostart'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'possible'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'tmp-wiper'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
   @{ Word = 'tmp-marks'; Os = 'all'; Scope = @(); Fw = 'csf'; Id = 'DE.CM-09'; Name = 'Computing hardware and software, runtime environments, and their data are monitored to find potentially adverse events'; Tactics = @('Detect', 'Continuous Monitoring'); Rel = 'supports'; Url = 'https://doi.org/10.6028/NIST.CSWP.29'; Note = '' }
@@ -269,6 +289,23 @@ function Test-Items([string]$Text, [bool]$Win, [System.Collections.ArrayList]$In
   return $r
 }
 
+# True when S is the OWASP part as gird-fleet.sh writes it: risks in code order, each on no more accounts
+# than were counted, one on no account only when the Mac has it, and no more partly checked than counted.
+function Test-OwaspPart([string]$S) {
+  if ($S -cnotmatch $OwaspPart) { return $false }
+  $parts = $S.Split([string[]]@('; '), [StringSplitOptions]::None)
+  $counted = [int]$parts[1].Substring(8)
+  $prev = 0
+  foreach ($x in $parts[0].Split(' ')) {
+    $m = [regex]::Match($x, '^' + $OwaspRisk + '$')
+    $code = [int]$m.Groups[1].Value; $n = [int]$m.Groups[2].Value
+    if ($code -le $prev -or $n -gt $counted -or ($n -eq 0 -and -not $m.Groups[3].Success)) { return $false }
+    $prev = $code
+  }
+  foreach ($p in $parts) { if ($p.StartsWith('partial ', [StringComparison]::Ordinal) -and [int]$p.Substring(8) -gt $counted) { return $false } }
+  return $true
+}
+
 function Read-Inventory([string]$Raw) {
   $r = @{ Ok = $false; Newer = ''; Outcome = ''; Time = $null; Accounts = @(); Kinds = @(); More = $false; OtherProfiles = 0; Reason = ''; Special = ''; Win = $false; OldInstall = $false }
   if ($null -eq $Raw) { return $r }
@@ -304,6 +341,13 @@ function Read-Inventory([string]$Raw) {
   if ($win) { $r.OtherProfiles = [int]$m.Groups[4].Value }
   $r.Reason = $reason
   $segs = $m.Groups[7].Value.Substring(3).Split([string[]]@(' | '), [StringSplitOptions]::None)
+  # The OWASP part, last after every row, old-install and no accounts: read, then set aside. A Windows
+  # value or one cut to fit never has it. A last part of another shape is read as a row, as before.
+  $ol = $segs.Count - 1
+  if ($ol -ge 1 -and (Test-OwaspPart $segs[$ol])) {
+    if ($win -or $r.More) { return $r }
+    $segs = @($segs[0..($ol - 1)])
+  }
   $more = $r.More
   $kinds = New-Object System.Collections.ArrayList
   $accounts = New-Object System.Collections.ArrayList
@@ -873,14 +917,18 @@ $ActSteps = [ordered]@{
   sessions = 'Treat the keys in agent sessions as exposed and rotate them.'
   'mcp-tokens' = 'Replace tokens in MCP configs with environment variable references, then rotate them.'
   'allow-lists' = 'Delete the saved Claude Code commands that contain keys, and rotate those keys.'
+  'ssh-planted' = 'Before anyone rotates a key, remove the SSH keys malware added to authorized_keys: they let the attacker log in. To see them, the person runs Blindspot on their own account.'
   'ssh-links' = 'Delete the links to authorized_keys.'
 }
+# Steps that must come before any rotate, in this order, ahead of the rest: a rotate that tells the
+# wiper its token stopped working, or one an attacker with a login still sees, makes things worse.
+$FirstSteps = @('wiper', 'ssh-planted')
 $PrioShown = 8
 
 function Get-Priority($Row) {
   $k = @($Row.Kinds)
   if ($k -ccontains 'wiper') { return 0 }
-  if ($k -ccontains 'incidents' -or $k -ccontains 'planted') { return 1 }
+  if ($k -ccontains 'incidents' -or $k -ccontains 'planted' -or $k -ccontains 'ssh-planted') { return 1 }
   if ($Row.Sessions -ceq 'yes') { return 2 }
   if ($Row.AgentKey -ceq 'yes') { return 3 }
   return 4
@@ -1032,6 +1080,9 @@ function Get-ReportData($Rows, $Notes, $Sources, [DateTime]$Now, [int]$Repeats, 
     foreach ($k in $ItemOrder) {
       if (@($r.Kinds) -cnotcontains $k -or $ActItems -cnotcontains $k) { continue }
       $why += Get-ShortLabel $k
+    }
+    foreach ($k in @($FirstSteps + @($ItemOrder | Where-Object { $FirstSteps -cnotcontains $_ }))) {
+      if (@($r.Kinds) -cnotcontains $k -or $ActItems -cnotcontains $k) { continue }
       if ($ActSteps.Contains($k) -and $steps.Count -lt 2) { $steps += $ActSteps[$k] }
     }
     if ($steps.Count -eq 0) { $steps += 'To see what was found, the person runs Blindspot on their own account.' }

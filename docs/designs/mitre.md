@@ -51,7 +51,7 @@ A line can be narrower than its word:
 
 - `os` `win` or `mac`: T1698 Indirect Prompt Injection lists SaaS and Windows as its platforms, so it
   is shown for Windows results only. T1098.004 SSH Authorized Keys does not list Windows, so it is
-  shown for Mac results only.
+  shown for Mac results only (`ssh-links` and `ssh-planted`).
 - `scope`: a list of incidents. The ATLAS supply chain techniques fit only the AI packages among
   the incidents (LiteLLM, mistralai, guardrails-ai, lightning, Mastra). The inventory value names the
   incidents for `incidents`, `lockfile`, `update` and `remove`, so the report shows such a reference
@@ -62,6 +62,30 @@ does not say which file was found, a reference that fits only one of them is lef
 Launch Agent for the wiper. Where the count takes in things the technique is not about, the word
 gets no reference: `on-open` counts editor tasks as well as agent settings, and a person's own
 settings as well as ones that came in a cloned project.
+
+The three findings fleet mode added in 1.3.0 follow their nearest neighbours:
+
+- `remote-commands`, an agent with a saved rule that lets it run commands on other machines without
+  asking, is an exposure, as `run-without-asking` is: T1698 Indirect Prompt Injection on Windows
+  results, and AML.T0053 AI Agent Tool Invocation, whose tactics include Lateral Movement. The
+  commands such a rule allows fit different ATT&CK techniques (T1021.004 SSH, T1021.006 Windows Remote
+  Management, T1651 Cloud Administration Command, T1609 Container Administration Command), and the
+  result names the agents, not the commands, so none of them is shown. NIST CSF: ID.RA-01, a weakness
+  identified and recorded.
+- `ssh-planted`, an SSH key a published incident adds to `authorized_keys`, is an indicator of
+  T1098.004 SSH Authorized Keys, on Mac results only, as `ssh-links` is. No ATLAS technique fits: the
+  key gives a login to the computer, not access through an AI system. NIST CSF: DE.CM-09, a published
+  malware trace, as `planted`. Its first step in section 3 comes before any rotate, after stopping the
+  wiper: a key rotated while the attacker can still log in is a key the attacker can read again.
+- `autostart` counts projects whose agent session-start hook and folder-open task both run the same
+  file, named as a worm plants it, and session-start hooks in the person's own Claude Code or Codex
+  settings that run a script from `.claude/package` or `.codex/package`, where a worm copies itself.
+  Each is an indicator of T1546 Event Triggered Execution: ATT&CK lists Mini Shai-Hulud (S9043) adding
+  hooks and runOn conditions to the settings of AI coding agents under T1546 itself, as no
+  sub-technique covers them. In ATLAS it is an indicator of AML.T0081 Modify AI Agent Configuration:
+  unlike `on-open`, everything it counts includes an agent's own settings. T1195.001 is left out: its
+  text names project task files, which fits a project, but the count also takes in a person's own
+  settings, which come with no project. NIST CSF: DE.CM-09, as `planted`.
 
 ## What the report shows
 
