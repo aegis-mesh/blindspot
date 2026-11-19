@@ -6073,6 +6073,10 @@ if [ -n "$_rmc" ] && printf '%s' "$_rmc" | grep -q -- '-user 0' && [ -z "$_sel1"
 else bad "fleet one file: the guide's removal command picks only root's folders named exactly so, never a link" "[$_rmc] selected as written: [$_sel1]; left: $_left"; fi
 }
 SKIPPING=""
+echo "the release tool"
+# Its own suite, with its own list of results: PARITY_LOG is cleared so it records nothing here.
+if PARITY_LOG='' bash tests/release.sh > "$WORK/release.txt" 2>&1; then ok "tools/release.sh refuses what it must and signs what it releases"
+else bad "tools/release.sh refuses what it must and signs what it releases"; grep -E 'FAIL|^ {8}' "$WORK/release.txt" | head -n 20; fi
 
 echo "the text backstop to tests/parity.sh"
 # Each case is a copy of a suite with lines added through a heredoc, which the backstop skips here.

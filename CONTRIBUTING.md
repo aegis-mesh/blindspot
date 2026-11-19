@@ -110,7 +110,7 @@ A required check, the review guard, applies the mechanical part of this review t
 ```sh
 bash tests/run.sh            # builds a fake home folder and checks what the script finds and never prints
 bash tests/interactive.sh    # macOS: drives the game and the menu with expect
-shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh
+shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tools/release.sh tests/*.sh
 PWSH=/path/to/pwsh bash tests/run-ps.sh   # the same checks for gird-check.ps1, under PowerShell 7
 PWSH=/path/to/pwsh bash tests/parity-run.sh   # both suites, then checks every bash test has a twin
 ```
@@ -127,6 +127,34 @@ Add a Developer Certificate of Origin sign-off to each commit with `git commit -
 
 ## Releases
 
-Every week, and before a merge to `main`, a maintainer runs `bash tools/check-advisories.sh`. It compares `data/bad-npm.tsv` with OSV.dev (which includes GitHub's malware advisories and the OpenSSF Malicious Packages list) and lists withdrawn entries, versions we flag that nothing names any more, and malicious versions we miss. Treat a MISSING line as a lead: confirm it against a primary source before adding it. It also lists each incident's source to re-read, since a vendor can change what it says an incident did.
+People download only what a maintainer released and signed, never whatever was last merged. A merge to `main` reaches no one until the next release, so when a merge adds an incident or a malware version, cut a release soon after. How releases are signed and checked, and why: [docs/designs/signed-releases.md](docs/designs/signed-releases.md).
 
-Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh`, `gird-fleet.sh` and `blindspot-fleet.sh` (which `bash tools/gen.sh` builds) in the release notes. gird.ai/blindspot serves `gird-check.sh` and `gird-check.ps1` from `main`, so a merge to `main` is a release to everyone who downloads from gird.ai.
+Every week, and before every release, a maintainer runs `bash tools/check-advisories.sh`. It compares `data/bad-npm.tsv` with OSV.dev (which includes GitHub's malware advisories and the OpenSSF Malicious Packages list) and lists withdrawn entries, versions we flag that nothing names any more, and malicious versions we miss. Treat a MISSING line as a lead: confirm it against a primary source before adding it. It also lists each incident's source to re-read, since a vendor can change what it says an incident did.
+
+To cut a release, merge a `## X.Y.Z, <date>` section in `CHANGELOG.md`. Then, before you run anything from the checkout, read what changed since the last release in the files that release and check, since `tools/release.sh` itself comes from the checkout it releases (replace `vA.B.C` with the last release):
+
+```sh
+git fetch origin --tags && git diff vA.B.C origin/main -- tools/ .github/ .gitattributes .gitmodules
+git checkout --detach origin/main   # straight after, with no fetch in between, so what runs is what you read
+```
+
+Then run:
+
+```sh
+BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh --dry-run X.Y.Z   # every check, no tag or release
+BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh X.Y.Z
+```
+
+It needs git, `gh` signed in, OpenSSH 8.1 or later, and PowerShell (`pwsh` on PATH, or `PWSH=/path/to/pwsh`), which `bash tools/gen.sh` needs to build the Windows one-file fleet script. It stops, publishing nothing, unless the checkout is clean and at `origin/main`, the version is higher than every release, `CHANGELOG.md` has its section and `.github/release-files` names every file people run. It then lists every commit and file changed since the previous release, with the changes to `tools/`, `.github/` and `.gitattributes` in full: review them against the [security review](#security-review) and type the version to go on. Nothing else from the checkout runs before you do. Then, in a copy of the reviewed commit, it runs `bash tools/gen.sh --check` and `bash tools/gen.sh`, and stops if either fails or if a listed file is missing or empty. It refuses a repository whose own git config sets anything `git clone` and `git worktree add` do not write: the repository format and file system settings, `origin`'s URL and fetch line and the remote `gh` records, each branch's remote and merge, and `extensions.worktreeConfig` are allowed, and it names any other setting. If it names one your own tools wrote (an editor, or a clone made with `--no-tags` or `--filter`), release from a fresh `git clone` instead. It also refuses a non-empty `.git/info/attributes`, ignores replace refs, and stops before `gen.sh` runs if any file in its copy of the reviewed commit differs from the commit, or is missing or extra. It signs `SHA256SUMS`, with a line for every listed file, checks that signature against `.github/allowed_signers`, then pushes the signed tag and creates the GitHub release. `ssh-keygen` asks for your key's passphrase itself, once for `SHA256SUMS` and once for the tag.
+
+A release signs exactly the files `.github/release-files` names, each `committed` or `built` by `bash tools/gen.sh`. A pull request that adds a file people run, on any system, a fleet or admin script included, adds its line in the same pull request. `bash tools/release.sh --check-list` fails when a root-level `.sh`, `.ps1`, `.psm1`, `.bat`, `.cmd` or `.command`, or a file `gen.sh` builds, is missing, and the tests run it.
+
+Your release key is your own, made once with a passphrase:
+
+```sh
+ssh-keygen -t ed25519 -C blindspot-release -f ~/.ssh/blindspot-release
+```
+
+It is not your login or git key. Keep it on your own computer: never in this repository, CI, a shared drive or a chat. Add its public half as a line in `.github/allowed_signers` by pull request (the file's header shows the line), and ask for it to be added to gird.ai's copy of the keys: gird.ai serves a release signed by a new key only once both have it. If a key is lost or stolen, remove its line in both places and cut a new release with another key.
+
+Until gird.ai serves signed releases ([docs/designs/signed-releases.md](docs/designs/signed-releases.md)), it serves `gird-check.sh`, `gird-check.ps1` and `gird-fleet.sh` from `main`, so a merge to `main` reaches everyone who downloads from gird.ai.

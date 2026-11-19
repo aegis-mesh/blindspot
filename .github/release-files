@@ -1,0 +1,18 @@
+# The files a Blindspot release signs and attaches (docs/designs/signed-releases.md), one per line:
+# the file name, a space, then how the release gets it.
+#
+#   committed   the file as committed in the reviewed commit
+#   built       made by bash tools/gen.sh from the reviewed commit, at release
+#
+# Every root-level .sh, .ps1, .psm1, .bat, .cmd and .command file, and every file tools/gen.sh
+# builds, is named here: a pull
+# request that adds one adds its line too. bash tools/release.sh --check-list checks this, and
+# tests/release.sh runs that check. A name is letters, digits, ".", "_" and "-".
+gird-check.ps1 committed
+gird-check.sh committed
+gird-fleet.sh committed
+gird-fleet.ps1 committed
+gird-intune.ps1 committed
+gird-report.ps1 committed
+blindspot-fleet.sh built
+blindspot-fleet.ps1 built
