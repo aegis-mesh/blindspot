@@ -907,6 +907,9 @@ function public(k) { return 0 || index(k, "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT
 # <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
+# TR_KEYS, the keys as one alternation, is not used to search: tests/run.sh checks that the passes
+# below find what it finds.
+# shellcheck disable=SC2034
 TR_KEYS=$(printf '%s' "$ALL_KEYS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
 TR_ALTS=$(printf '%s\n' "$KEY_ALTS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
 TR_PASSES=$(printf '%s\n' "$KEY_PASSES" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')

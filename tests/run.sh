@@ -3443,7 +3443,7 @@ while :; do /bin/sleep 0.2; done
 ' "$RGS" > "$RGS/bin/rg"; chmod +x "$RGS/bin/rg"
 _rgstand() { # term|ignore
   rm -f "$RGS/rg.pid" "$RGS/child.pid" "$RGS/rg.term" "$RGS/ignore"; [ "$1" = ignore ] && : > "$RGS/ignore"
-  /bin/sleep 300 < /dev/null > /dev/null 2>&1 & _dp=$!
+  /bin/sleep 300 > /dev/null 2>&1 & _dp=$!   # a background job's input is /dev/null already
   HOME="$RGS/home" PATH="$RGS/bin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$RGS/$1.txt"
   _rp=$(cat "$RGS/rg.pid" 2>/dev/null); _cp=$(cat "$RGS/child.pid" 2>/dev/null)
   _st="$1: report[$(grep -c 'Agent sessions were partly checked' "$RGS/$1.txt")] signal[$(cat "$RGS/rg.term" 2>/dev/null)]"

@@ -3082,7 +3082,7 @@ for E in net rg; do
   psrun "$KP/nh" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$KP/nh-$E.txt" 2>&1
   _miss=""; while IFS= read -r _nm; do
     _id=$(awk -F '\t' -v n="$_nm" '$2 == n { print $1 }' data/keys.tsv)
-    grep -aqE "^ +. +~[/\\\\]code[/\\\\]$_id[/\\\\]\\.env +$_nm\$" "$KP/nh-$E.txt" || _miss="$_miss $_nm(.env)"
+    grep -aqE "^ +. +~[/\\\\]code[/\\\\]${_id}[/\\\\]\\.env +$_nm\$" "$KP/nh-$E.txt" || _miss="$_miss $_nm(.env)"
     sed -n '/Keys in agent sessions/,/^$/p' "$KP/nh-$E.txt" | tr -s ' \n' '  ' | grep -aqF "$_nm" || _miss="$_miss $_nm(session)"
   done < "$KP/nh-names.txt"
   if [ -s "$KP/nh-names.txt" ] && [ -z "$_miss" ]; then ok "$E: each new key type is found in a .env file and an agent session"
