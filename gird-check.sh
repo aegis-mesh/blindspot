@@ -8784,6 +8784,7 @@ if [ "$EXT_UNREAD" -gt 0 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [
   wrap "$_xm could not be read, so this is not the full list." 8 "        " "        " "$YEL"
 fi
 if [ "$SSHK_UNREAD" -eq 1 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [ -n "$EXT_UPD" ] || [ "$EXT_UNREAD" -gt 0 ]; }; then
+  # shellcheck disable=SC2088  # a literal ~ for home paths, as short() prints
   wrap "~/.ssh/authorized_keys could not be read, so whether it holds an SSH key such malware adds is not known." 8 "        " "        " "$YEL"
 fi
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
