@@ -125,6 +125,7 @@ today, and no file paths, file names or key values:
       "complete": true,
       "agents": ["claude-code", "codex"],
       "agents_run_without_asking": ["claude-code"],
+      "agents_run_remote_commands": ["codex"],
       "tools_to_update": ["mcp-remote"],
       "mcp_servers": 4,
       "mcp_token_files": 1,
@@ -142,6 +143,9 @@ today, and no file paths, file names or key values:
 
 - `account` is the local account name, which the MDM already knows. `--hash-accounts=<secret>`
   replaces it with a keyed hash; a plain hash of a name is easy to reverse.
+- `agents_run_remote_commands` lists the agents with a saved rule that lets them run commands on
+  other machines without asking (`data/remote-commands.tsv`), in the inventory value as
+  `remote-commands <ids>`.
 - `outcome` is the worst of `failed`, `act`, `not_checked`, `review`, `clear`, in that order, so a
   finding to act on is never hidden by a partial check, and a partial check never reads as clear.
 - The summary line is `blindspot <outcome> accounts=<n> act=<n> review=<n> not_checked=<n>
@@ -489,7 +493,7 @@ Graph, never a real tenant.
   secret is never on a command line: the options line sets it inside the script, and the hash is
   computed with the secret in perl's environment, which only root can read. The install step is untested on a
   real Mac.
-- `review` means something to change or confirm, not urgent. It covers a tool with a security fix, an incident or a package version at the update level, project settings that act when a folder opens, files named like the ones worms plant and projects or agent settings that start a script the way worms do (`autostart`), and also an agent set to run without asking, an SSH key without a passphrase, a
+- `review` means something to change or confirm, not urgent. It covers a tool with a security fix, an incident or a package version at the update level, project settings that act when a folder opens, files named like the ones worms plant and projects or agent settings that start a script the way worms do (`autostart`), and also an agent set to run without asking, an agent allowed to run commands on other machines without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
   covers keys in shell history, MCP configs and Claude Code allow lists, links to
   `authorized_keys`, an SSH key malware adds in `authorized_keys`, files a worm plants and the gh-token-monitor wiper, whose stop-it-first line comes before any other. An account with a protected folder refused, a file not
@@ -544,7 +548,7 @@ Graph, never a real tenant.
   `gird-check.sh`, the script each person runs, holds no root code: it keeps `--account-run`, the
   fixed lines one account's check sends back, and given `--all-users` it points to `gird-fleet.sh`.
   Root never sources `gird-check.sh`: `tools/gen.sh` writes the tables root reads (keys, agents set
-  to run without asking, incidents, indicators, outdated tools, platforms) into `gird-fleet.sh` from
+  to run without asking, the agent files whose rules can run commands on other machines, incidents, indicators, outdated tools, platforms) into `gird-fleet.sh` from
   `data/`, and copies `gird-check.sh`'s agents table, which has no data file; `--check` covers both.
 - `gird-fleet.sh` needs to run from a file, since it copies `gird-check.sh` from its own folder for
   each account; from standard input it stops with a message. Root refuses to start (exit 13) unless

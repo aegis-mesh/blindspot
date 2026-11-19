@@ -234,6 +234,7 @@ An account is `not_checked` when:
 
 - a tool with a security fix, or a package version to update;
 - an agent set to run without asking;
+- an agent allowed to run commands on other machines without asking;
 - an SSH key without a passphrase;
 - a platform that leaked stored secrets;
 - project settings that act when an agent or editor opens the folder;
@@ -303,6 +304,7 @@ Then:
 | Keys in shell history or agent sessions | Rotate them: they were typed into a command or read by an agent. |
 | Tokens in MCP configs | Replace them with environment variable references, then rotate them. |
 | Keys in Claude Code allow lists | Delete those saved commands and rotate the keys. |
+| An agent allowed to run commands on other machines without asking | Remove the rule, or change it to ask first. |
 | Files a worm plants in a project | Treat the Mac as compromised, as for malware. |
 | A link to `~/.ssh/authorized_keys` outside `.ssh` | Delete the link: an agent that edits the linked file adds a login to the Mac. |
 | An SSH key malware adds, in `authorized_keys` | Treat the Mac as compromised, as for malware: remove that key's line first, as their report's first fix says. |

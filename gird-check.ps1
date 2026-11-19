@@ -824,6 +824,38 @@ $AaTable = @(
 )
 $AaProject = @('.codex/config.toml')
 # <<< auto-approve
+# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
+$RcSigs = @(
+  ,@('ssh', 'exact', 'on other machines over SSH')
+  ,@('aws ssm send-command', 'exact', 'on AWS servers')
+  ,@('aws ssm start-session', 'exact', 'on AWS servers')
+  ,@('aws ecs execute-command', 'exact', 'in AWS containers')
+  ,@('gcloud compute ssh', 'exact', 'on Google Cloud servers')
+  ,@('az vm run-command invoke', 'exact', 'on Azure servers')
+  ,@('az ssh vm', 'exact', 'on Azure servers')
+  ,@('kubectl exec', 'exact', 'in Kubernetes containers')
+  ,@('Invoke-Command', 'any', 'on other machines with PowerShell')
+  ,@('Enter-PSSession', 'any', 'on other machines with PowerShell')
+)
+$RcFiles = @(
+  ,@('Claude Code', 'all', 'claude', 'agent', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), '-')
+  ,@('Claude Code', 'all', 'claude', 'agent', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.local.json'), '-')
+  ,@('Codex', 'all', 'codex', 'agent', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'rules/*.rules'), '-')
+  ,@('Gemini CLI', 'all', 'gemini-toml', 'agent', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/policies/*.toml'), '-')
+  ,@('Gemini CLI', 'all', 'gemini-json', 'agent', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code/User/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code/User/profiles/*/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code - Insiders/User/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), '-')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code/User/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code/User/profiles/*/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code - Insiders/User/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Cursor/User/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Cursor/User/profiles/*/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Amazon Q', 'all', 'amazonq', 'file', (J $HomeDir '.aws/amazonq/cli-agents/*.json'), 'when you use that agent')
+)
+# <<< remote-commands
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
 # Whether a link ends at a regular file. Off Windows a repo can link a settings file to /dev/zero or
 # /dev/tty, which .NET would read for ever; Unix-Kind is - for a regular file and l for a link, which
@@ -1876,6 +1908,388 @@ function Toml-Ml([string]$s, [string]$st) {
   }
   $st
 }
+# --- Saved rules that run commands on other machines (data/remote-commands.tsv) ---------------
+# Every scalar of a .json file, as path<TAB>value: the path is each key the value sits under, each
+# after a [char]28 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
+# The same as gird-check.sh's json_leaves.
+$RxLeafTok = New-Object regex('"(?:[^"\\]|\\.)*("?)|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
+function Json-Leaves([string]$f) {
+  $out = New-Object System.Collections.Generic.List[string]
+  $text = Flat-Text $f; if ($null -eq $text) { return ,$out }
+  try { $ms = $RxLeafTok.Matches($text); [void]$ms.Count } catch { Mark-Slow $f; return ,$out }
+  $fs = [string][char]28
+  $P = @{}; $T = @{}; $dep = 0; $ek = $false; $sc = ''; $key = ''
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') {
+      if ($m.Groups[1].Value -ne '"') { continue }
+      $sv = $x.Substring(1, $x.Length - 2)
+      if ($dep -gt 0 -and $T[$dep] -eq 'o' -and $ek) { $key = $sv; $ek = $false }
+      elseif ($dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $x) }
+      continue
+    }
+    if ($c -eq '{' -or $c -eq '[') {
+      if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+      $np = ''; if ($dep -ge 1) { $np = $P[$dep]; if ($T[$dep] -eq 'o') { $np += $fs + $key } else { $np += '[]' } }
+      $dep++; $P[$dep] = $np; if ($c -eq '{') { $T[$dep] = 'o'; $ek = $true } else { $T[$dep] = 'a'; $ek = $false }
+      continue
+    }
+    if ($c -eq '}' -or $c -eq ']') {
+      if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+      if ($dep -gt 0) { $dep-- }; $ek = $false
+      continue
+    }
+    $parts = $x.Split(',')
+    for ($i = 0; $i -lt $parts.Count; $i++) {
+      $a = $parts[$i]
+      if ($i -gt 0) {
+        if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+        if ($dep -gt 0 -and $T[$dep] -eq 'o') { $ek = $true }
+      }
+      $k = $a.IndexOf([char]':')
+      if ($k -ge 0) {
+        if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+        $ek = $false; $a = $a.Substring($k + 1)
+      }
+      $sc += ($a -replace '\s', '')
+    }
+  }
+  if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }
+  ,$out
+}
+# A rule as the words it fixes before its first wildcard, as gird-check.sh's RC_FN reads it.
+function Rc-Unq([string]$v) { $v.Substring(1, $v.Length - 2).Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\') }
+function Rc-Words([string]$s) { (@($s -split '[ \t\n]+') | Where-Object { $_ -ne '' }) -join ' ' }
+function Rc-Opn([string]$w) { if ($w -eq '') { '*' } else { $w + ' *' } }
+# $RcTail is $true when text after the wildcard narrows the rule (Bash(ssh * rm)): such a deny or ask
+# rule does not cover every use of a command, so it never drops a hit.
+$RcTail = $false; $RcNc = $false; $RcRaw = ''; $RcNote = ''
+function Rc-Fixed([string]$s, [string]$sty) {
+  $script:RcTail = $false
+  $cut = $false; if ($s.Length -gt 256) { $s = $s.Substring(0, 256); $cut = $true }
+  if ($cut -and $sty -ne 'rx' -and $sty -ne 'rxfull') { $s = $s -replace '[^ \t]*$', '' }
+  if ($sty -eq 'claude') {
+    if ($s.EndsWith(':*')) { $s = $s.Substring(0, $s.Length - 2) + ' *' }
+    $k = $s.IndexOf([char]'*')
+    if ($k -lt 0) { $w = Rc-Words $s }
+    else {
+      $pre = $s.Substring(0, $k); $w = Rc-Words $pre; if ($pre -eq '' -or $pre -match '[ \t]$') { $w = Rc-Opn $w } else { $w = $w + '*' }
+      if ($s.Substring($k + 1) -match '[^ \t*]') { $script:RcTail = $true }
+    }
+  } elseif ($sty -eq 'prefix') { $w = Rc-Opn (Rc-Words $s) }
+  elseif ($sty -eq 'str') {
+    if ($s -match '^[ \t]*\*[ \t]*$') { $w = '*' } elseif ($s -match '[ \t]$') { $w = Rc-Opn (Rc-Words $s) } else { $w = Rc-Words $s; if ($w -ne '') { $w += '*' } }
+  } else { $w = Rc-Rx $s ($sty -eq 'rx') }
+  if ($cut) { $script:RcTail = $true }
+  if ($cut -and $w -ne '' -and -not $w.EndsWith('*')) { if ($sty -eq 'rx' -or $sty -eq 'rxfull') { $w += '*' } else { $w = Rc-Opn $w } }
+  $w
+}
+function Rc-Rx([string]$r, [bool]$open) {
+  if ($r.StartsWith('^')) { $r = $r.Substring(1) }
+  $lit = ''; $stop = ''; $n = $r.Length; $i = 0
+  for (; $i -lt $n; $i++) {
+    $c = [string]$r[$i]
+    if ($c -eq '\') {
+      $d = ''; if ($i + 1 -lt $n) { $d = [string]$r[$i + 1] }
+      if ($d -ceq 's' -or $d -eq ' ') { $lit += ' '; $i++; if ($d -ceq 's' -and $i + 1 -lt $n -and $r[$i + 1] -eq '+') { $i++ }; continue }
+      if ($d -ceq 'b') { $lit += ' '; $stop = 'w'; break }
+      if ($d -eq '' -or $d -cmatch '^[A-Za-z0-9]$') { $stop = 'm'; break }
+      $lit += $d; $i++; continue
+    }
+    if ('.^$|?*+()[]{}'.Contains($c)) { $stop = $c; break }
+    $lit += $c
+  }
+  if ($stop -eq '') { if ($open) { return (Rc-Opn (Rc-Words $lit)) } else { return (Rc-Words $lit) } }
+  if ($stop -eq '$' -and $i -eq $n - 1) { return (Rc-Words $lit) }
+  if ($stop -eq 'w') { if ($r.Substring([Math]::Min($i + 2, $n)) -notmatch '^\+?(\.[*+])?\$?$') { $script:RcTail = $true } }
+  elseif ($r.Substring($i) -notmatch '^\.[*+]\$?$') { $script:RcTail = $true }
+  if ($stop -eq '?' -or $stop -eq '*' -or $stop -eq '{') { $lit = $lit.Substring(0, $lit.Length - 1) }
+  $w = Rc-Words $lit
+  if ($lit -eq '' -or $lit -match '[ \t]$') { return (Rc-Opn $w) }
+  $w + '*'
+}
+# A regex split at each | outside a group or a class.
+function Rc-Alts([string]$r) {
+  if ($r.Length -gt 256) { $r = $r.Substring(0, 256) }
+  $out = New-Object System.Collections.Generic.List[string]; $s = New-Object System.Text.StringBuilder; $dp = 0; $cl = $false
+  for ($i = 0; $i -lt $r.Length; $i++) {
+    $c = $r[$i]
+    if ($c -eq '\') { [void]$s.Append($c); if ($i + 1 -lt $r.Length) { [void]$s.Append($r[$i + 1]) }; $i++; continue }
+    if ($cl) { if ($c -eq ']') { $cl = $false } }
+    elseif ($c -eq '[') { $cl = $true }
+    elseif ($c -eq '(') { $dp++ }
+    elseif ($c -eq ')') { $dp-- }
+    elseif ($c -eq '|' -and $dp -eq 0) { $out.Add($s.ToString()); [void]$s.Clear(); continue }
+    [void]$s.Append($c)
+  }
+  $out.Add($s.ToString()); ,$out
+}
+# An entry: @(fid, rep, decision, rank, case, kind, words), as gird-check.sh's rc_read prints them.
+# An entry also carries whether it covers no whole command ($RcTail, or $RcNc for the rule), the regex
+# as written ($RcRaw) and when it applies ($RcNote). $RcTail and $RcRaw are reset for the next entry.
+function Rc-Out($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$kd, [string]$w) {
+  if ($w -ne '') { $list.Add(@($fid, $rep, $d, [Math]::Round($r, 4), $ci, $kd, $w, ($script:RcTail -or $script:RcNc), $script:RcRaw, $script:RcNote)) }
+  $script:RcTail = $false; $script:RcRaw = ''
+}
+function Rc-OutRx($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$v, [string]$sty, [string]$raw) {
+  $raw = $raw -replace '[\t\r\n]', ' '; if ($raw.Length -gt 256) { $raw = $raw.Substring(0, 256) }
+  foreach ($a in (Rc-Alts $v)) { $w = Rc-Fixed $a $sty; $script:RcRaw = $raw; Rc-Out $list $fid $rep $d $r $ci '' $w }
+}
+function Rc-Trail([string]$s) { $n = 0; for ($i = $s.Length - 1; $i -ge 0 -and $s[$i] -eq '\'; $i--) { $n++ }; $n }
+function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
+  $L = New-Object System.Collections.Generic.List[object]
+  $script:RcCt = $false
+  $cutf = { if (-not $script:RcCt) { $L.Add(@($fid, $rep, 'cut', 0.0, $false, '', '*')) }; $script:RcCt = $true }
+  if ($fmt -eq 'codex') {
+    $t = Read-Text $f; if ($null -eq $t) { return ,$L }
+    $st = @{ on = $false; dp = 0; bd = 0; kw = ''; id = ''; nt = 0; na = 0; fa = $false; stop = $false; dec = 'allow'; cmt = $false; T = @{}; A = @{} }
+    $done = {
+      $d = switch ($st.dec) { 'prompt' { 'ask' } 'forbidden' { 'deny' } 'allow' { 'allow' } default { '' } }
+      if ($d -eq '') { return }
+      $w = ''
+      for ($k = 1; $k -le $st.nt; $k++) {
+        if ($st.T[$k] -eq [string][char]2) { for ($j = 1; $j -le $st.na; $j++) { $x = $w; if ($x -ne '') { $x += ' ' }; Rc-Out $L $fid $rep $d 0 $false '' (Rc-Opn ($x + $st.A[$j])) }; return }
+        if ($w -ne '') { $w += ' ' }; $w += $st.T[$k]
+      }
+      if ($w -ne '') { Rc-Out $L $fid $rep $d 0 $false '' (Rc-Opn $w) }
+    }
+    $codep = $null
+    $codep = {
+      param([string]$s)
+      while (-not $st.on) {
+        $k = $s.IndexOf('prefix_rule(', [StringComparison]::Ordinal); $h = $s.IndexOf([char]'#')
+        if ($h -ge 0 -and ($k -lt 0 -or $h -lt $k)) { $st.cmt = $true; return }
+        if ($k -lt 0) { return }
+        $s = $s.Substring($k + 12); $st.on = $true; $st.dp = 1; $st.bd = 0; $st.kw = ''; $st.id = ''; $st.nt = 0; $st.na = 0; $st.fa = $false; $st.stop = $false; $st.dec = 'allow'; $st.T = @{}; $st.A = @{}
+      }
+      if ($s.Length -gt 1024) { & $cutf; $st.on = $false; return }
+      for ($i = 0; $i -lt $s.Length; $i++) {
+        $c = [string]$s[$i]
+        if ($c -cmatch '^[A-Za-z0-9_]$') { $st.id += $c; continue }
+        if ($c -eq ' ' -or $c -eq "`t") { continue }
+        if ($c -eq '=') { $st.kw = $st.id }
+        elseif ($c -eq '[') { $st.bd++ }
+        elseif ($c -eq ']') { if ($st.kw -ceq 'pattern' -and $st.bd -eq 2) { if ($st.fa) { $st.stop = $true } else { $st.nt++; $st.T[$st.nt] = [string][char]2; $st.fa = $true } }; $st.bd-- }
+        elseif ($c -eq '(') { $st.dp++ }
+        elseif ($c -eq ')') { $st.dp--; if ($st.dp -eq 0) { & $done; $st.on = $false; & $codep $s.Substring($i + 1); return } }
+        elseif ($c -eq ',' -and $st.bd -eq 0) { $st.kw = '' }
+        elseif ($c -eq '#') { $st.cmt = $true; return }
+        elseif ($c -eq "'") { & $cutf; $st.on = $false; return }
+        $st.id = ''
+      }
+    }
+    foreach ($line in $t.Replace("`r", '').Split("`n")) {
+      if (-not $st.on -and $line -match '^[ \t]*#') { continue }
+      if ($line -eq '') { continue }
+      $q = $line.Split('"'); $sq = 0; $st.cmt = $false; $sv = ''
+      for ($i = 0; $i -lt $q.Count -and -not $st.cmt; $i++) {
+        if ($sq -eq 0) { & $codep $q[$i]; if ($i -lt $q.Count - 1 -and -not $st.cmt) { $sq = 1; $sv = '' }; continue }
+        $sv += $q[$i]
+        if ($i -lt $q.Count - 1 -and (Rc-Trail $q[$i]) % 2 -eq 1) { $sv += '"'; continue }
+        $sq = 0
+        if ($st.on) {
+          $v = $sv.Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\') -replace '[ \t]', [string][char]1
+          if ($st.kw -ceq 'pattern' -and $st.bd -eq 1 -and -not $st.stop) { $st.nt++; $st.T[$st.nt] = $v }
+          elseif ($st.kw -ceq 'pattern' -and $st.bd -eq 2 -and -not $st.fa) { $st.na++; $st.A[$st.na] = $v }
+          elseif ($st.kw -ceq 'decision' -and $st.bd -eq 0) { $st.dec = $v }
+        }
+      }
+      if ($sq -eq 1 -and $st.on) { & $cutf; $st.on = $false }
+    }
+    if ($st.on) { & $cutf }
+    return ,$L
+  }
+  if ($fmt -eq 'gemini-toml') {
+    $t = Read-Text $f; if ($null -eq $t) { return ,$L }
+    $g = @{ inr = $false }
+    $strs = {
+      param([string]$v)
+      $vals = New-Object System.Collections.Generic.List[string]; $n = $v.Length; $dp = 0; $i = 0
+      while ($i -lt $n) {
+        $c = $v[$i]
+        if ($c -eq '"') {
+          $s = New-Object System.Text.StringBuilder; $i++
+          while ($i -lt $n) {
+            $c = $v[$i]
+            if ($c -eq '\') { $d = ''; if ($i + 1 -lt $n) { $d = [string]$v[$i + 1] }; if ($d -eq '\' -or $d -eq '"') { [void]$s.Append($d) } else { [void]$s.Append('\').Append($d) }; $i += 2; continue }
+            if ($c -eq '"') { break }
+            [void]$s.Append($c); $i++
+          }
+          $vals.Add($s.ToString()); $i++; continue
+        }
+        if ($c -eq "'") { $s = New-Object System.Text.StringBuilder; $i++; while ($i -lt $n -and $v[$i] -ne "'") { [void]$s.Append($v[$i]); $i++ }; $vals.Add($s.ToString()); $i++; continue }
+        if ($c -eq '[') { $dp++ } elseif ($c -eq ']') { $dp-- } elseif ($c -eq '#') { break }
+        $i++
+      }
+      $g.bal = ($dp -le 0); ,$vals
+    }
+    $endrule = {
+      if (-not $g.inr) { return }; $g.inr = $false
+      if ($g.args -or $g.mcp -or -not $g.shell) { return }
+      $d = switch -CaseSensitive ($g.dec) { 'allow' { 'allow' } 'deny' { 'deny' } 'ask_user' { 'ask' } default { '' } }
+      if ($d -eq '') { return }
+      # A rule with modes applies only in them, as gird-check.sh reads them.
+      $md = @($g.modes); $df = $md -ccontains 'default'; $ml = ''
+      for ($k = 0; $k -lt $md.Count; $k++) { if ($k -eq 0) { } elseif ($k -eq $md.Count - 1) { $ml += ' and ' } else { $ml += ', ' }; $ml += $md[$k] }
+      if ($md.Count -gt 0 -and -not $df) {
+        if ($d -ne 'allow') { $script:RcNc = $true }
+        elseif ($md.Count -eq 1 -and $md[0] -ceq 'yolo') { return }
+        else { $script:RcNote = 'only in ' + $ml + $(if ($md.Count -gt 1) { ' modes' } else { ' mode' }) }
+      }
+      $r = 4 + $g.pri / 1000
+      if ($g.px.Count -gt 0) { foreach ($x in $g.px) { Rc-Out $L $fid $rep $d $r $false '' (Rc-Fixed $x 'prefix') } }
+      elseif ($g.rgx -ne '') { Rc-OutRx $L $fid $rep $d $r $false $g.rgx 'rx' $g.rgx }
+      else { Rc-Out $L $fid $rep $d $r $false '' '*' }
+      $script:RcNc = $false; $script:RcNote = ''
+    }
+    $val = {
+      param([string]$k, [string]$v)
+      if ($v.Length -gt 4096) { & $cutf; return }
+      $vals = & $strs $v
+      if ($k -ceq 'toolName') { foreach ($x in $vals) { if ($x -ceq 'run_shell_command' -or $x -ceq 'ShellTool') { $g.shell = $true } } }
+      elseif ($k -ceq 'commandPrefix') { $g.px = @($vals) }
+      elseif ($k -ceq 'commandRegex') { $g.rgx = ''; if ($vals.Count -gt 0) { $g.rgx = $vals[0] } }
+      elseif ($k -ceq 'decision') { $g.dec = ''; if ($vals.Count -gt 0) { $g.dec = $vals[0] } }
+      elseif ($k -ceq 'priority') { $mm = [regex]::Match($v, '^[ \t]*([0-9]+)'); if ($mm.Success) { $g.pri = [double]$mm.Groups[1].Value } }
+      elseif ($k -ceq 'argsPattern') { $g.args = $true }
+      elseif ($k -ceq 'mcpName') { $g.mcp = $true }
+      elseif ($k -ceq 'modes') { $g.modes = @($vals | Where-Object { $_ -ne '' }) }
+    }
+    $acc = ''; $ak = ''
+    foreach ($line in $t.Replace("`r", '').Split("`n")) {
+      if ($acc -ne '') { $acc += ' ' + $line; [void](& $strs $acc); if ($g.bal -or $acc.Length -gt 4096) { & $val $ak $acc; $acc = '' }; continue }
+      if ($line -cmatch '^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$') { & $endrule; $g.inr = $true; $g.shell = $false; $g.px = @(); $g.rgx = ''; $g.dec = ''; $g.pri = 0; $g.args = $false; $g.mcp = $false; $g.modes = @(); continue }
+      if ($line -match '^[ \t]*\[') { & $endrule; continue }
+      if ($g.inr) {
+        $mm = [regex]::Match($line, '^[ \t]*([A-Za-z_]+)[ \t]*=[ \t]*')
+        if ($mm.Success) {
+          $k = $mm.Groups[1].Value; $v = $line.Substring($mm.Length)
+          if ($v.StartsWith('[')) { [void](& $strs $v); if (-not $g.bal) { $acc = $v; $ak = $k; continue } }
+          & $val $k $v
+        }
+      }
+    }
+    if ($acc -ne '') { & $val $ak $acc }
+    & $endrule
+    return ,$L
+  }
+  $fs = [string][char]28
+  $exe = 'execute_bash'; if ($OnWindows) { $exe = 'execute_cmd' }
+  $qk = $fs + 'toolsSettings' + $fs + $exe + $fs
+  $nar = $false; $core = $false
+  foreach ($ln in (Json-Leaves $f)) {
+    $k = $ln.IndexOf([char]9); $p = $ln.Substring(0, $k); $v = $ln.Substring($k + 1)
+    $str = $v.StartsWith('"') -and $v.Length -ge 2
+    if ($fmt -eq 'claude' -and $str) {
+      $mm = [regex]::Match($p, '^\x1cpermissions\x1c(allow|ask|deny)\[\]$')
+      if (-not $mm.Success) { continue }
+      $d = $mm.Groups[1].Value; $v = Rc-Unq $v
+      if ($v -ceq 'Bash' -or $v -ceq 'PowerShell') { Rc-Out $L $fid $rep $d 0 $false $v '*' }
+      else { $mm = [regex]::Match($v, '^(Bash|PowerShell)\('); if ($mm.Success -and $v.EndsWith(')')) { Rc-Out $L $fid $rep $d 0 $false $mm.Groups[1].Value (Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - 1) 'claude') } }
+    } elseif ($fmt -eq 'gemini-json' -and $str) {
+      $v = Rc-Unq $v; $sh = ($v -ceq 'run_shell_command' -or $v -ceq 'ShellTool')
+      if ($p -ceq ($fs + 'tools' + $fs + 'core[]')) { $core = $true }
+      if ($p -ceq ($fs + 'tools' + $fs + 'allowed[]') -or $p -ceq ($fs + 'tools' + $fs + 'core[]')) {
+        $r = 4.3; if ($p -ceq ($fs + 'tools' + $fs + 'core[]')) { $r = 4.25 }
+        if ($sh) { Rc-Out $L $fid $rep 'allow' $r $false '' '*' }
+        else { $mm = [regex]::Match($v, '^(run_shell_command|ShellTool)\('); if ($mm.Success -and $v.EndsWith(')')) { Rc-Out $L $fid $rep 'allow' $r $false '' (Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - 1) 'prefix'); if ($r -eq 4.3) { $nar = $true } } }
+      }
+      if ($p -ceq ($fs + 'tools' + $fs + 'confirmationRequired[]') -and $sh) { Rc-Out $L $fid $rep 'ask' 4.35 $false '' '*' }
+      if ($p -ceq ($fs + 'tools' + $fs + 'exclude[]') -and $sh) { Rc-Out $L $fid $rep 'deny' 4.4 $false '' '*' }
+    } elseif ($fmt -eq 'vscode' -and $p.StartsWith($fs + 'chat.tools.terminal.autoApprove' + $fs, [StringComparison]::Ordinal) -and ($v -ceq 'true' -or $v -ceq 'false')) {
+      $k = $p.Substring(33); $m = $k.IndexOf([char]28)
+      if ($m -ge 0) { if ($k.Substring($m + 1) -cne 'approve') { continue }; $k = $k.Substring(0, $m) }
+      $k = $k.Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\')
+      $d = 'deny'; if ($v -ceq 'true') { $d = 'allow' }
+      if ($k -cmatch '^/.+/[dgimsuvy]*$') { $fl = $k.Substring($k.LastIndexOf('/') + 1); Rc-OutRx $L $fid $rep $d 0 ($fl.Contains('i')) $k.Substring(1, $k.Length - $fl.Length - 2) 'rx' $k }
+      else { Rc-Out $L $fid $rep $d 0 $false '' (Rc-Fixed $k 'prefix') }
+    } elseif ($fmt -eq 'roo' -and $str -and ($p -ceq ($fs + 'roo-cline.allowedCommands[]') -or $p -ceq ($fs + 'roo-cline.deniedCommands[]'))) {
+      $v = Rc-Unq $v; $d = 'deny'; if ($p.Contains('allowed')) { $d = 'allow' }
+      Rc-Out $L $fid $rep $d $v.Length $true '' (Rc-Fixed $v 'str')
+    } elseif ($fmt -eq 'amazonq' -and $str -and ($p -ceq ($qk + 'allowedCommands[]') -or $p -ceq ($qk + 'deniedCommands[]'))) {
+      $v = Rc-Unq $v; $d = 'deny'; if ($p.EndsWith('allowedCommands[]')) { $d = 'allow' }
+      Rc-OutRx $L $fid $rep $d 0 $false $v 'rxfull' $v
+    }
+  }
+  if ($nar) { Rc-Out $L $fid $rep 'deny' 4.29 $false '' '*' }
+  if ($core) { Rc-Out $L $fid $rep 'deny' 4.24 $false '' '*' }
+  ,$L
+}
+# The hits of a set of an agent's files whose rules apply together: @(fid, rule as shown, what it
+# allows), or @(fid, '!cut') for a file not read in full. The same as gird-check.sh's RC_MATCH.
+$RcSigWords = @(foreach ($s in $RcSigs) { ,@($s[0].Split(' ')) })
+function Rc-Agree([string]$a, [string]$b, [bool]$ci) {
+  if ($ci) { $a = $a.ToLowerInvariant(); $b = $b.ToLowerInvariant() }
+  if ($a.EndsWith('*')) { $a = $a.Substring(0, $a.Length - 1); return ($b.Length -ge $a.Length -and $b.Substring(0, $a.Length) -ceq $a) }
+  $a -ceq $b
+}
+function Rc-Agrees($W, [int]$wn, [int]$j, [bool]$ci) {
+  $S = $RcSigWords[$j]; $m = [Math]::Min($wn, $S.Count)
+  for ($k = 0; $k -lt $m; $k++) { if (-not (Rc-Agree $W[$k] $S[$k] $ci)) { return $false } }
+  $true
+}
+function Rc-Safe([string]$s) {
+  $m = [regex]::Match($s, '[A-Za-z0-9_-]{16}'); if ($m.Success) { $s = $s.Substring(0, $m.Index) + '...' }
+  if ($s.Length -gt 64) { $s = $s.Substring(0, 64) + '...' }
+  $s
+}
+function Rc-Match($entries) {
+  $res = New-Object System.Collections.Generic.List[object]; $cuts = @{}
+  $ov = @{}; $ns = $RcSigs.Count
+  foreach ($e in $entries) {
+    if ($e[2] -eq 'cut') { if (-not $cuts.ContainsKey($e[0])) { $cuts[$e[0]] = 1; $res.Add(@($e[0], '!cut')) }; continue }
+    if ($e[2] -ne 'deny' -and $e[2] -ne 'ask') { continue }
+    $W = @($e[6].Split(' ')); $open = $false
+    if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
+    if (-not $open -or $e[7]) { continue }
+    for ($j = 0; $j -lt $ns; $j++) {
+      $ci = $e[4] -or $RcSigs[$j][1] -eq 'any'
+      if ($W.Count -le $RcSigWords[$j].Count -and (Rc-Agrees $W $W.Count $j $ci) -and (-not $ov.ContainsKey($j) -or $e[3] -gt $ov[$j])) { $ov[$j] = $e[3] }
+    }
+  }
+  $seen = @{}
+  foreach ($e in $entries) {
+    if ($e[2] -ne 'allow' -or "$($e[1])" -ne '1') { continue }
+    $W = @($e[6].Split(' ')); $open = $false
+    if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
+    # A rule that matches one exact command is never reported, as in gird-check.sh.
+    $wn = $W.Count; if ($wn -eq 0 -or -not $open) { continue }
+    $locs = New-Object System.Collections.Generic.List[string]; $sn = 0; $br = $false
+    for ($j = 0; $j -lt $ns; $j++) {
+      $sl = $RcSigWords[$j].Count
+      if (-not (Rc-Agrees $W $wn $j ($e[4] -or $RcSigs[$j][1] -eq 'any'))) { continue }
+      if ($ov.ContainsKey($j) -and $ov[$j] -ge $e[3]) { continue }
+      if (-not $locs.Contains($RcSigs[$j][2])) { $locs.Add($RcSigs[$j][2]) }
+      $m = [Math]::Min($wn, $sl); if ($m -gt $sn) { $sn = $m }
+      if ($wn -lt $sl) { $br = $true }
+    }
+    if ($locs.Count -eq 0) { continue }
+    $lb = $locs[0]; for ($k = 1; $k -lt $locs.Count; $k++) { if ($k -eq $locs.Count - 1) { $lb += ' and ' } else { $lb += ', ' }; $lb += $locs[$k] }
+    if ($br) { $tx = 'allows every ' + ($W -join ' ') + ' command, including ones that run commands ' + $lb } else { $tx = 'runs commands ' + $lb }
+    if ($e[9] -ne '') { $tx += ', ' + $e[9] }
+    if ($e[8] -ne '') { $sh = Rc-Safe $e[8] }
+    else {
+      $sh = ($W[0..($sn - 1)]) -join ' '
+      if ($wn -gt $sn) { $sh += ' ...' } elseif ($open -and -not $W[$wn - 1].EndsWith('*')) { $sh += ' *' }
+      if ($e[5] -ne '') { $sh = $e[5] + '(' + $sh + ')' }
+    }
+    $key = "$($e[0])`t$sh"
+    if (-not $seen.ContainsKey($key)) { $seen[$key] = 1; $res.Add(@($e[0], $sh, $tx)) }
+  }
+  ,$res
+}
+# Sets of @(rep, format, file): @(file, rule, labels) for each hit, @(file, '!cut') for each file not
+# read in full.
+function Rc-Run($set) {
+  $entries = New-Object System.Collections.Generic.List[object]
+  for ($i = 0; $i -lt $set.Count; $i++) { foreach ($e in (Rc-Read $set[$i][2] $set[$i][1] ($i + 1) $set[$i][0])) { $entries.Add($e) } }
+  $out = New-Object System.Collections.Generic.List[object]
+  foreach ($h in (Rc-Match $entries)) { $f = $set[$h[0] - 1][2]; if ($h[1] -eq '!cut') { $out.Add(@($f, '!cut')) } else { $out.Add(@($f, $h[1], $h[2])) } }
+  ,$out
+}
+# The person's own Claude Code settings files: their deny and ask rules apply in every project.
+$RcCcUser = @(foreach ($r in $RcFiles) { if ($r[2] -eq 'claude' -and (Is-File $r[4]) -and (Is-RegularFile $r[4]) -and -not (Too-Big $r[4]) -and $null -ne (Read-Text $r[4])) { ,@('0', 'claude', $r[4]) } })
+$RcProj = New-Object System.Collections.Generic.List[object]
 $AaCut = New-Object System.Collections.Generic.List[string]
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
@@ -2044,12 +2458,30 @@ foreach ($f in $AllowFiles) {
   # asking. It applies a project's settings.json allow rules once you trust the folder, and a
   # settings.local.json's (normally your own file) without that step. A rule for some commands
   # (Bash(npm *)) is not one. The test spares the files that never name them.
+  $ab = $null
   if ($t.Contains('"Bash"') -or $t.Contains('"Bash(*)"')) {
-    $ab = $null
     if (Aa-Hit $f @('"permissions": {"allow": ["Bash"')) { $ab = 'Bash' } elseif (Aa-Hit $f @('"permissions": {"allow": ["Bash(*)"')) { $ab = 'Bash(*)' }
     $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
     if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '' }
     if ($ab) { $w.Add("run every Bash command without asking, with permissions.allow: $ab$tr") }
+  }
+  # Allow rules for commands that run commands on other machines (data/remote-commands.tsv), with the
+  # person's own deny and ask rules and both of the project's files. A settings.local.json's apply
+  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here.
+  if ($t.Contains('"Bash') -or $t.Contains('"PowerShell')) {
+    $set = New-Object System.Collections.Generic.List[object]
+    foreach ($u in $RcCcUser) { $set.Add($u) }
+    foreach ($s in @((J $dir 'settings.json'), (J $dir 'settings.local.json'))) {
+      if ($s -eq $f) { $set.Add(@('1', 'claude', $s)) } elseif ((Is-File $s) -and (Is-RegularFile $s) -and -not (Too-Big $s) -and $null -ne (Read-Text $s)) { $set.Add(@('0', 'claude', $s)) }
+    }
+    $rh = @(foreach ($h in (Rc-Run $set)) { if ($h[0] -eq $f -and $h[1] -ne '!cut') { ,$h } })
+    if ($rh.Count -gt 0) {
+      if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { foreach ($h in $rh) { $RcProj.Add(@($f, 'Claude Code', "$($h[1]): $($h[2])")) } }
+      else {
+        $tr = '. Claude Code applies a project''s allow rules once you trust the folder'; if ($ab) { $tr = '' }
+        $w.Add("run commands on other machines without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')$tr")
+      }
+    }
   }
   Auto-Row $f ($w -join ', ') $t $note
 }
@@ -6694,6 +7126,57 @@ $N_YOLO_AG = $yoloAg.Count
 foreach ($f in (Unread-Files $aaTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 foreach ($f in $AaCut) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 if ($N_YOLO -gt 0) { Progress "Agents set to run commands without asking: $($AaList[0].Agent)" }
+# Saved rules that let an agent run commands on other machines without asking (data/remote-commands.tsv):
+# the person's own files of each agent, read together or each file alone as the data file's group
+# says, then the projects' Claude Code settings.local.json files section 2 read. The same as
+# gird-check.sh.
+function Rc-Expand([string]$p) {
+  $pp = $p -replace '\\', '/'
+  if ($pp.Contains('/*/')) { return @(Aa-Glob $p) }
+  $leaf = $pp.Substring($pp.LastIndexOf('/') + 1)
+  if ($leaf.StartsWith('*.')) {
+    $ext = $leaf.Substring(1)
+    try { return @(([IO.DirectoryInfo]$pp.Substring(0, $pp.LastIndexOf('/'))).GetFiles() | Where-Object { -not $_.Name.StartsWith('.') -and $_.Name.EndsWith($ext, [StringComparison]::Ordinal) } | Sort-Object -Property Name -CaseSensitive | ForEach-Object { $_.FullName }) } catch { return @() }
+  }
+  if (Exists $p) { return @($p) }
+  @()
+}
+$RemoteList = New-Object System.Collections.Generic.List[object]; $rcTried = New-Object System.Collections.Generic.List[string]
+$rcSeen = @{}; $rcCuts = New-Object System.Collections.Generic.List[string]
+$rcAgents = New-Object System.Collections.Generic.List[string]
+foreach ($r in $RcFiles) { if (-not $rcAgents.Contains($r[0])) { $rcAgents.Add($r[0]) } }
+foreach ($ag in $rcAgents) {
+  $sets = New-Object System.Collections.Generic.List[object]; $one = New-Object System.Collections.Generic.List[object]
+  $note = ''
+  foreach ($r in $RcFiles) {
+    if ($r[0] -ne $ag) { continue }
+    if ($note -eq '' -and $r[5] -ne '-') { $note = $r[5] }
+    if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
+    foreach ($f in (Rc-Expand $r[4])) {
+      if (-not $rcTried.Contains($f)) { $rcTried.Add($f) }
+      if (-not (Is-File $f) -or -not (Is-RegularFile $f) -or (Too-Big $f) -or $null -eq (Read-Text $f)) { continue }
+      if ($r[3] -eq 'file') { $sets.Add(@(,@('1', $r[2], $f))) } else { $one.Add(@('1', $r[2], $f)) }
+    }
+  }
+  if ($one.Count -gt 0) { $sets.Insert(0, $one.ToArray()) }
+  foreach ($set in $sets) {
+    foreach ($h in (Rc-Run $set)) {
+      if ($h[1] -eq '!cut') { $rcCuts.Add($h[0]); continue }
+      $st = "$($h[1]): $($h[2])"; if ($note) { $st += ", $note" }
+      $k = "$($h[0])`t$ag`t$st"
+      if (-not $rcSeen.ContainsKey($k)) { $rcSeen[$k] = 1; $RemoteList.Add(@{ File = $h[0]; Agent = $ag; Rule = $st }) }
+    }
+  }
+}
+foreach ($h in $RcProj) { $k = "$($h[0])`t$($h[1])`t$($h[2])"; if (-not $rcSeen.ContainsKey($k)) { $rcSeen[$k] = 1; $RemoteList.Add(@{ File = $h[0]; Agent = $h[1]; Rule = $h[2] }) } }
+# A file there but not read, too big to, or not read in full is named in section 2 with the others.
+foreach ($f in @(@(Unread-Files $rcTried $true) + @($rcCuts))) { if ($f -and -not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+$N_REMOTE = $RemoteList.Count
+# Row 01 counts agents.
+$remoteAg = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($r in $RemoteList) { [void]$remoteAg.Add($r.Agent) }
+$N_REMOTE_AG = $remoteAg.Count
+if ($N_REMOTE -gt 0) { Progress "Allowed to run commands on other machines: $($RemoteList[0].Agent)" }
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
 function Ver-Ok([string]$v) { $v -cmatch '^[0-9]+(\.[0-9]+)*$' }
@@ -7430,6 +7913,7 @@ if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs wi
 if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys.' }
 if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
 if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox.' }
+if ($N_REMOTE -gt 0) { Add-Todo 1 'Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first.' }
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
 if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
@@ -7618,6 +8102,18 @@ if ($N_YOLO -gt 0) {
   Emit "     ${cBold}Agents set to run commands without asking$cRst"
   foreach ($r in $AaList) { Pair "$cYel!$cRst" ('{0,-16} {1}' -f $r.Agent, (Short $r.File)) 46 $r.Setting }
   Wrap 'A prompt injection in anything the agent reads can then run commands on this computer. Turn it off unless the agent runs in a sandbox.' 8 '        ' '        ' $cDim
+}
+if ($N_REMOTE -gt 0) {
+  Blank
+  Emit "     ${cBold}Allowed to run commands on other machines without asking$cRst"
+  # A line for each file, then its rules under it.
+  $pf = ''
+  foreach ($r in $RemoteList) {
+    if ("$($r.Agent)`t$($r.File)" -ne $pf) { Pair "$cYel!$cRst" $r.Agent 16 (Short $r.File) }
+    $pf = "$($r.Agent)`t$($r.File)"
+    Wrap $r.Rule 8 '        ' '        '
+  }
+  Wrap 'A prompt injection in anything the agent reads can then run commands on those machines.' 8 '        ' '        ' $cDim
 }
 if ($N_OLD -gt 0) {
   Blank
@@ -8021,6 +8517,7 @@ $UpdSum = ''
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
+elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_REMOTE_AG allowed to run commands on other machines" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }

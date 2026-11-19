@@ -64,6 +64,30 @@ Paths: `~` is your home folder, `{AS}` the app data folder (Application Support 
 - VS Code Copilot, chat.defaultConfiguration: autoApprove: `{AS}/Code/User/settings.json`, `{AS}/Code/User/profiles/*/settings.json`, `{AS}/Code - Insiders/User/settings.json`, `{AS}/Code - Insiders/User/profiles/*/settings.json`
 - Claude Code, claudeCode.initialPermissionMode: bypassPermissions: `{AS}/Code/User/settings.json`, `{AS}/Cursor/User/settings.json`, `{AS}/Code/User/profiles/*/settings.json`, `{AS}/Code - Insiders/User/settings.json`, `{AS}/Code - Insiders/User/profiles/*/settings.json`, `{AS}/Cursor/User/profiles/*/settings.json`
 
+### Rules that run commands on other machines
+
+A saved rule that lets an agent run one of these commands without asking:
+
+- `ssh`: runs commands on other machines over SSH ([source](https://man.openbsd.org/ssh))
+- `aws ssm send-command`: runs commands on AWS servers ([source](https://docs.aws.amazon.com/cli/latest/reference/ssm/send-command.html))
+- `aws ssm start-session`: runs commands on AWS servers ([source](https://docs.aws.amazon.com/cli/latest/reference/ssm/start-session.html))
+- `aws ecs execute-command`: runs commands in AWS containers ([source](https://docs.aws.amazon.com/cli/latest/reference/ecs/execute-command.html))
+- `gcloud compute ssh`: runs commands on Google Cloud servers ([source](https://docs.cloud.google.com/sdk/gcloud/reference/compute/ssh))
+- `az vm run-command invoke`: runs commands on Azure servers ([source](https://learn.microsoft.com/en-us/cli/azure/vm/run-command))
+- `az ssh vm`: runs commands on Azure servers ([source](https://learn.microsoft.com/en-us/cli/azure/ssh))
+- `kubectl exec`: runs commands in Kubernetes containers ([source](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/))
+- `Invoke-Command`: runs commands on other machines with PowerShell ([source](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command))
+- `Enter-PSSession`: runs commands on other machines with PowerShell ([source](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/enter-pssession))
+
+Read in these files:
+
+- Claude Code: `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json`, `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.local.json`
+- Codex: `{ENV:CODEX_HOME:~/.codex}/rules/*.rules`
+- Gemini CLI: `{ENV:GEMINI_CLI_HOME:~}/.gemini/policies/*.toml`, `{ENV:GEMINI_CLI_HOME:~}/.gemini/settings.json`
+- VS Code Copilot: `{AS}/Code/User/settings.json`, `{AS}/Code/User/profiles/*/settings.json`, `{AS}/Code - Insiders/User/settings.json`, `{AS}/Code - Insiders/User/profiles/*/settings.json`
+- Roo Code: `{AS}/Code/User/settings.json`, `{AS}/Code/User/profiles/*/settings.json`, `{AS}/Code - Insiders/User/settings.json`, `{AS}/Code - Insiders/User/profiles/*/settings.json`, `{AS}/Cursor/User/settings.json`, `{AS}/Cursor/User/profiles/*/settings.json` (while its auto-approve for commands is on)
+- Amazon Q: `~/.aws/amazonq/cli-agents/*.json` (when you use that agent)
+
 ### Versions with a published security fix
 
 | Tool | Versions | What the hole allows | Read from | Advisory |
@@ -1785,6 +1809,12 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
   0.8.0 to 0.14.3) is listed apart, as a tool with a published hole and no fixed version yet: each
   hole with its advisory, and no version named to update to. The `mcp-remote` row for an older
   version also says no version fixes the later advisory.
+- Saved rules that let an agent run commands on other machines without asking (`ssh`,
+  `aws ssm send-command`, `kubectl exec` and the others listed above) are listed, in Claude Code,
+  Codex, Gemini CLI, VS Code Copilot, Roo Code and Amazon Q Developer CLI. A project's shared Claude
+  Code settings with one are listed in section 2. A rule that matches one exact command is never
+  listed: it cannot run a command of an attacker's choosing. A deny or ask rule drops a hit only when
+  it covers every use of the command. `data/remote-commands.tsv`'s header has the full reading rules.
 
 ### 2. MCP servers and project settings
 

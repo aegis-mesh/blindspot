@@ -336,6 +336,34 @@ Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.ini
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
+# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
+RC_SIGS='ssh|exact|on other machines over SSH
+aws ssm send-command|exact|on AWS servers
+aws ssm start-session|exact|on AWS servers
+aws ecs execute-command|exact|in AWS containers
+gcloud compute ssh|exact|on Google Cloud servers
+az vm run-command invoke|exact|on Azure servers
+az ssh vm|exact|on Azure servers
+kubectl exec|exact|in Kubernetes containers
+Invoke-Command|any|on other machines with PowerShell
+Enter-PSSession|any|on other machines with PowerShell'
+RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
+Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|-
+Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-
+Gemini CLI|all|gemini-toml|agent|${GEMINI_CLI_HOME:-$H}/.gemini/policies/*.toml|-
+Gemini CLI|all|gemini-json|agent|${GEMINI_CLI_HOME:-$H}/.gemini/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/profiles/*/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/profiles/*/settings.json|-
+Roo Code|all|roo|file|$AS/Code/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/profiles/*/settings.json|while its auto-approve for commands is on
+Amazon Q|all|amazonq|file|$H/.aws/amazonq/cli-agents/*.json|when you use that agent"
+# <<< remote-commands
 # >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
@@ -600,9 +628,10 @@ fl_reason_text() {
 # The ids an account run may send, from the tables above.
 FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\n' ' ')
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
+FL_REMOTE_IDS="$FL_AGENT_IDS $(printf '%s\n' "$RC_FILES" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links ssh_planted planted possible incidents platforms on_open to_read autostart updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected engine end"
+FL_KEYS="v agents yolo remote tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links ssh_planted planted possible incidents platforms on_open to_read autostart updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected engine end"
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -636,6 +665,7 @@ fl_parse() {
       v|end) [ "$_v" = 1 ] || return 1 ;;
       agents) fl_ids_ok "$_v" "$FL_AGENT_IDS" || return 1 ;;
       yolo) fl_ids_ok "$_v" "$FL_YOLO_IDS" || return 1 ;;
+      remote) fl_ids_ok "$_v" "$FL_REMOTE_IDS" || return 1 ;;
       tools) fl_ids_ok "$_v" "$FL_OUT_IDS" || return 1 ;;
       key_providers) fl_ids_ok "$_v" "$PROVIDER_IDS" || return 1 ;;
       platforms) fl_ids_ok "$_v" "$FL_PLAT_IDS" || return 1 ;;
@@ -647,7 +677,7 @@ fl_parse() {
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
     case "$_k" in
-      agents) FA_agents=$_v ;; yolo) FA_yolo=$_v ;; tools) FA_update=$_v ;; mcp_servers) FA_mcp_servers=$_v ;;
+      agents) FA_agents=$_v ;; yolo) FA_yolo=$_v ;; remote) FA_remote=$_v ;; tools) FA_update=$_v ;; mcp_servers) FA_mcp_servers=$_v ;;
       mcp_token_files) FA_mcp_token_files=$_v ;; key_files) FA_key_files=$_v ;; key_providers) FA_key_providers=$_v ;;
       history_keys) FA_history_keys=$_v ;; session_files) FA_session_files=$_v ;; sessions_partial) FA_sessions_partial=$_v ;;
       allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;; ssh_planted) FA_ssh_planted=$_v ;;
@@ -679,7 +709,7 @@ fl_name() { # the account as the result shows it: its name, or a keyed hash with
 }
 fl_agent_name() { # an id: the agent's name for the report
   _a=$(printf '%s\n' "$AGENTS" | /usr/bin/awk -F '|' -v i="$1" '$5 == i { print $1; exit }')
-  [ -n "$_a" ] || _a=$(printf '%s\n' "$AA_TABLE" | /usr/bin/awk -F '|' -v i="$1" '{ n = tolower($1); gsub(/ /, "-", n); gsub(/[^a-z0-9-]/, "", n) } n == i { print $1; exit }')
+  [ -n "$_a" ] || _a=$(printf '%s\n%s\n' "$AA_TABLE" "$RC_FILES" | /usr/bin/awk -F '|' -v i="$1" '{ n = tolower($1); gsub(/ /, "-", n); gsub(/[^a-z0-9-]/, "", n) } n == i { print $1; exit }')
   printf '%s' "${_a:-$1}"
 }
 fl_prov_name() { # a provider id: its name
@@ -924,6 +954,7 @@ fleet_main() {
       done
       if [ "$FA_planted" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Files a worm plants in a project, or settings that run one: $FA_planted"; _inv="$_inv; planted $FA_planted"; fi
       if [ -n "$FA_yolo" ]; then _upd=1; for _x in $FA_yolo; do _lines="$_lines$NL    !  $(fl_agent_name "$_x") set to run commands without asking"; done; _inv="$_inv; run-without-asking $(printf '%s' "$FA_yolo" | /usr/bin/tr ' ' ',')"; fi
+      if [ -n "$FA_remote" ]; then _upd=1; for _x in $FA_remote; do _lines="$_lines$NL    !  $(fl_agent_name "$_x") allowed to run commands on other machines without asking"; done; _inv="$_inv; remote-commands $(printf '%s' "$FA_remote" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_key_files" -gt 0 ]; then
         _act=1; _pn=""; for _x in $FA_key_providers; do _pn="${_pn:+$_pn, }$(fl_prov_name "$_x")"; done
         _lines="$_lines$NL    x  Keys in plain text: $(fl_plural "$FA_key_files" file files)${_pn:+ ($_pn)}"
@@ -974,7 +1005,7 @@ fleet_main() {
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"authorized_keys_planted_keys\":$FA_ssh_planted,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"scripts_started_like_worms\":$FA_autostart,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"agents_run_remote_commands\":$(fl_json_list "$FA_remote"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"authorized_keys_planted_keys\":$FA_ssh_planted,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"scripts_started_like_worms\":$FA_autostart,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
