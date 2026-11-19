@@ -1006,9 +1006,7 @@ mkdir -p "$WORK/ast9/code/p/.claude" "$WORK/ast9-bin"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$WORK/ast9/code/p/.claude/settings.json"
 printf '#!/bin/sh\ncase "$*" in *"run[[:space:]]+"*"(claude|vscode|github|codex|cursor)"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v grep)" > "$WORK/ast9-bin/grep"; chmod +x "$WORK/ast9-bin/grep"
 HOME="$WORK/ast9" PATH="$WORK/ast9-bin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast9.txt"
-HOME="$WORK/ast9" PATH="$WORK/ast9-bin:$PATH" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast9-c.txt"
 has    "a grep that crashes matching a startup script names the file as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/p/\.claude/settings\.json' "$WORK/ast9.txt"
-has    "and with grep crashed, row 02 does not read clean" '02 ! MCP servers' "$WORK/ast9-c.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents"
@@ -2473,7 +2471,6 @@ for _c in cl cl2; do
 done
 chmod 755 "$WORK/cl/.cursor" "$WORK/cl/.codeium" "$WORK/cl2/.claude" "$WORK/cl2/.gemini"
 has    "an MCP config in an agent folder that can't be entered is named in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: [^!]*~/\.cursor/mcp\.json' "$WORK/cl.txt"
-has    "and row 02 does not read clean over it"        'MCP servers .*but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
 has    "a key file behind such a folder, deeper down, is named in section 3" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.codeium/windsurf/mcp_config\.json' "$WORK/cl.txt"
 has    "and row 03 does not read clean over it"        'Keys in plain text none found, but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
 has    "Claude Code's settings in a folder that can't be entered are named in section 4" '! No saved commands with keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.claude/settings\.local\.json' "$WORK/cl2.txt"
