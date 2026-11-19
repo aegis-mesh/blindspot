@@ -97,7 +97,7 @@ case "$KGDIR/" in "$TOP/"*) die "ssh-keygen on PATH is inside the repository ($K
 
 CFG=$(git config --list --show-scope) || die "git config --show-scope failed: this needs git 2.26 or later"
 BAD=$(printf '%s\n' "$CFG" | awk -F '\t' '$1 == "local" || $1 == "worktree" { k = $2; sub(/=.*/, "", k); print k }' |
-  grep -vE '^(core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode)|remote\.origin\.(url|fetch)|branch\..+\.(remote|merge)|extensions\.worktreeconfig)$' | LC_ALL=C sort -u)
+  grep -vE '^(core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode)|remote\.origin\.(url|fetch|gh-resolved)|branch\..+\.(remote|merge)|extensions\.worktreeconfig)$' | LC_ALL=C sort -u)
 [ -z "$BAD" ] || die "this repository's own git config sets $(printf '%s\n' "$BAD" | tr '\n' ' ')which git clone and git worktree add do not write: remove each, or release from a fresh clone"
 IA=$(git rev-parse --git-path info/attributes) || die "can't find .git/info/attributes"
 [ ! -s "$IA" ] || die "$IA is not empty: it changes how git copies files out; empty it, or release from a fresh clone"

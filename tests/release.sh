@@ -118,6 +118,9 @@ if refused "own git config sets credential.helper which" cred; then ok "refuses 
 fresh wt; git -C "$W/wt" worktree add -q --detach "$W/wt2" origin/main; rel wt2 1.3.0 --dry-run 1.3.0
 if [ "$RC" -eq 0 ]; then ok "releases from a git worktree add checkout, whose config git wrote"; else bad "releases from a git worktree add checkout, whose config git wrote" "exit $RC: $(tail -n 2 "$W/wt2.out")"; fi
 D=$(sed -n 's/^Files: //p' "$W/wt2.out"); [ -z "$D" ] || rm -rf "$D"
+fresh ghres; git -C "$W/ghres" config remote.origin.gh-resolved base; rel ghres 1.3.0 --dry-run 1.3.0
+if [ "$RC" -eq 0 ]; then ok "releases from a checkout where gh recorded its resolved remote"; else bad "releases from a checkout where gh recorded its resolved remote" "exit $RC: $(tail -n 2 "$W/ghres.out")"; fi
+D=$(sed -n 's/^Files: //p' "$W/ghres.out"); [ -z "$D" ] || rm -rf "$D"
 fresh iattr; printf '* export-subst\n' > "$W/iattr/.git/info/attributes"; rel iattr 1.3.0 1.3.0
 if refused 'info/attributes is not empty' iattr; then ok "refuses a repository with a non-empty .git/info/attributes"; else bad "refuses a repository with a non-empty .git/info/attributes" "exit $RC: $(tail -n 2 "$W/iattr.out")"; fi
 fresh subst; printf '$Format:%%H$\n' > "$W/subst/stamp.txt"; printf 'stamp.txt export-subst\n' >> "$W/subst/.gitattributes"; git -C "$W/subst" add stamp.txt; recommit subst "A file git archive rewrites"
