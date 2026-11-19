@@ -30,6 +30,7 @@ WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && { kill "$MOCK_PID"; wait "$MOCK_PID"; } 2>/dev/null; rm -rf "$WORK"' EXIT
 . tests/lib.sh
+PATH=$(hide_platform_clis "$WORK/hostpath")
 command -v python3 >/dev/null 2>&1 || { echo "tests/run-ps.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 # A Windows-shaped copy of tests/make-fixture.sh's home: the same planted keys, with
@@ -3057,10 +3058,15 @@ hasnot "no file is skipped"                    'skipped: took too long' "$WORK/s
 has    "the real key next to them is found"    '~/code/s/\.env +Groq' "$WORK/slow.txt"
 # With a limit too short for a large file, the file is listed, not taken as clean.
 python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/slow/code/s/.env.big"
+# The limit is per search for the next match, so each file is a long run of near misses with no match
+# (.env.big's keys are a few characters short): one search reads the whole file.
 mkdir -p "$WORK/slow/.npm/_cacache/index-v5/aa"
-python3 -c "import sys; open(sys.argv[1], 'w').write('pkg-name@1.2.3 /pkg-name/-/pkg-name-1.2.3.tgz ' * 200000)" "$WORK/slow/.npm/_cacache/index-v5/aa/big"
+python3 -c "import sys; open(sys.argv[1], 'w').write('pkg-name@x /pkg-name/-/pkg-name-1.2.3.tgx ' * 200000)" "$WORK/slow/.npm/_cacache/index-v5/aa/big"
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 -- -Offline > "$WORK/slow-to.txt" 2>&1
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_COMPACT=1 -- -Offline > "$WORK/slow-to-c.txt" 2>&1
+hasnot "a search that hits the time limit never stops the run" 'Regex engine has timed out' "$WORK/slow-to.txt"
+# Matches finds its results only as they are read, so a time limit is caught only where they are read.
+hasnot "every regex's matches are read inside the try that catches its time limit" '\$[A-Za-z]+ = \$[A-Za-z]+\.Matches\(' "$SCRIPT"
 has    "a file that hits the time limit is listed" '[0-9]+ files? skipped: took too long to check' "$WORK/slow-to.txt"
 has    "with its path"                         '^ +~/code/s/\.env\.big$' "$WORK/slow-to.txt"
 has    "and the summary says so"               'skipped: took too long to check, like' "$WORK/slow-to-c.txt"

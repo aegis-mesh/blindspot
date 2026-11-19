@@ -605,7 +605,7 @@ function Ignores-Claude([string]$t, [string]$file) {
 # Whether a .json file's top-level object has this key, its text read as Json-Top reads it.
 function Json-Has([string]$f, [string]$t, [string]$key) {
   $l = $t -replace '[ \t\n\v\f\r]', ''
-  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $false }
+  try { $ms = @($RxJsonTok.Matches($l)) } catch { Mark-Slow $f; return $false }
   $dep = 0; $pend = $null
   foreach ($m in $ms) {
     $x = $m.Value; $c = [string]$x[0]
@@ -1567,11 +1567,13 @@ function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) 
 # rest only directly inside that object, as Claude Code reads defaultMode only inside permissions. Under
 # the key, a tab and an array's key (each with its quotes), the strings directly inside that array, for
 # a pattern written "key": {"sub": ["text" (Claude Code's permissions.allow). A token is a string, a
-# bracket or the text between them, so one regex pass reads the file.
+# bracket or the text between them, so one regex pass reads the file. Matches finds them only as they are
+# read, so each caller reads them all with @() inside its try: one that hit the time limit in a later loop
+# would stop the script.
 $RxJsonTok = New-Object regex('"(?:[^"\\]|\\.)*"?|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
 function Aa-Keys([string]$f, [string]$l, $keys) {
   $objs = @{}
-  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $objs }
+  try { $ms = @($RxJsonTok.Matches($l)) } catch { Mark-Slow $f; return $objs }
   $dep = 0; $cur = $null; $key = $null; $pend = $null; $sb = $null; $key2 = $null; $pend2 = $null; $ak = $null
   foreach ($m in $ms) {
     $t = $m.Value; $c = [string]$t[0]
@@ -1613,7 +1615,7 @@ function Aa-Keys([string]$f, [string]$l, $keys) {
 # as in JSON.parse. The same as gird-check.sh's json_top.
 function Json-Top([string]$f, [string]$t, [string]$key) {
   $l = $t -replace '[ \t\n\v\f\r]', ''
-  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  try { $ms = @($RxJsonTok.Matches($l)) } catch { Mark-Slow $f; return '' }
   $dep = 0; $pend = $null; $v = ''
   foreach ($m in $ms) {
     $x = $m.Value; $c = [string]$x[0]
@@ -1631,7 +1633,7 @@ function Json-Top([string]$f, [string]$t, [string]$key) {
 # kept, so a command's words stay apart. The same as gird-check.sh's cc_rules.
 function Cc-Rules([string]$f) {
   $t = Flat-Text $f; if ($null -eq $t) { return '' }
-  try { $ms = $RxJsonTok.Matches($t); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  try { $ms = @($RxJsonTok.Matches($t)) } catch { Mark-Slow $f; return '' }
   $sb = New-Object System.Text.StringBuilder
   $dep = 0; $key = $null; $pend = $null; $key2 = $null; $pend2 = $null; $perm = $false; $on = $false
   foreach ($m in $ms) {

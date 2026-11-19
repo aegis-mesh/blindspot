@@ -11,6 +11,7 @@ WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null; rm -rf "$WORK"' EXIT
 . tests/lib.sh
+PATH=$(hide_platform_clis "$WORK/hostpath")
 # The fixture homes decide every place the script looks: variables that move an agent's folders
 # elsewhere are cleared (GitHub's Ubuntu runners set XDG_CONFIG_HOME, for one).
 unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME CLAUDE_CONFIG_DIR CODEX_HOME CODEX_SQLITE_HOME GEMINI_CLI_HOME \
