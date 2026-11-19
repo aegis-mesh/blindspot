@@ -962,12 +962,15 @@ printf '[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js
 HOME="$WORK/ast2" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast2.txt"
 has    "a SessionStart array over several lines in Codex's config.toml is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast2.txt"
 mkdir -p "$WORK/ast3/.codex" "$WORK/ast4/.codex"
+# Root reads a file with no read permission, so this case can only be checked as another user.
+SKIPPING=""; [ "${EUID:-$(id -u)}" -eq 0 ] && SKIPPING="running as root, which reads a file with no read permission"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast3/.codex/hooks.json"; chmod 000 "$WORK/ast3/.codex/hooks.json"
 HOME="$WORK/ast3" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3.txt"
 has    "a Codex hooks.json that can't be read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast3.txt"
 HOME="$WORK/ast3" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3-c.txt"
 has    "and the summary row says a file could not be read" '02 . MCP servers .*but 1 file could not be read' "$WORK/ast3-c.txt"
 chmod 644 "$WORK/ast3/.codex/hooks.json"
+SKIPPING=""
 printf '[hooks]\nSessionStart = [\n  { command = "echo ]" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast4/.codex/config.toml"
 HOME="$WORK/ast4" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast4.txt"
 has    "a bracket inside a quoted string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast4.txt"
@@ -980,6 +983,32 @@ HOME="$WORK/ast5" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast5
 has    "a folder-open task that runs the planted script as a later argument is joined to the hook" '! ~/a A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
 has    "and one that depends on a task that runs it is joined too" '! ~/d A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
 hasnot "a task that depends on a task with another label is not" '! ~/e A session-start hook' "$WORK/ast5.txt"
+# A hooks file too big to read, Codex's or the settings.json in CLAUDE_CONFIG_DIR, is named as not read, never clean.
+mkdir -p "$WORK/ast6/.codex" "$WORK/ast6/cc" "$WORK/ast7/.codex" "$WORK/ast8/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' | tee "$WORK/ast6/.codex/hooks.json" > "$WORK/ast6/cc/settings.json"
+for _f in "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"; do dd if=/dev/zero of="$_f" bs=1 count=0 seek=17000000 2>/dev/null; done
+HOME="$WORK/ast6" CLAUDE_CONFIG_DIR="$WORK/ast6/cc" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast6.txt"
+rm -f "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"
+has    "a Codex hooks.json too big to read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast6.txt"
+has    "and so is a settings.json in CLAUDE_CONFIG_DIR too big to read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/cc/settings\.json' "$WORK/ast6.txt"
+# A TOML multi-line string goes on over lines: a ] in it does not end the SessionStart array, and a table
+# header in it is not one.
+printf '[hooks]\nSessionStart = [\n  { command = """echo ]\n# [\n""" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast7/.codex/config.toml"
+printf "notes = '''\n[[hooks.SessionStart]]\ncommand = \"node ~/.codex/package/index.js\"\n'''\n" > "$WORK/ast8/.codex/config.toml"
+HOME="$WORK/ast7" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast7.txt"
+HOME="$WORK/ast8" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast8.txt"
+has    "a ] inside a multi-line string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast7.txt"
+hasnot "a table header inside a multi-line string in config.toml is not a SessionStart hook" '~/\.codex/config\.toml' "$WORK/ast8.txt"
+# grep can fail or crash while it matches a startup script (macOS's grep has crashed on long expressions):
+# the file is then named as not read, never as one that runs no script. A grep put first on PATH crashes
+# on one of the expressions start_scripts gives it.
+mkdir -p "$WORK/ast9/code/p/.claude" "$WORK/ast9-bin"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$WORK/ast9/code/p/.claude/settings.json"
+printf '#!/bin/sh\ncase "$*" in *"run[[:space:]]+"*"(claude|vscode|github|codex|cursor)"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v grep)" > "$WORK/ast9-bin/grep"; chmod +x "$WORK/ast9-bin/grep"
+HOME="$WORK/ast9" PATH="$WORK/ast9-bin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast9.txt"
+HOME="$WORK/ast9" PATH="$WORK/ast9-bin:$PATH" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast9-c.txt"
+has    "a grep that crashes matching a startup script names the file as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/p/\.claude/settings\.json' "$WORK/ast9.txt"
+has    "and with grep crashed, row 02 does not read clean" '02 ! MCP servers' "$WORK/ast9-c.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents"

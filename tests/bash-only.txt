@@ -343,3 +343,5 @@ fleet: a project that starts a script the way worms do reaches the account's row
 fleet: and so does an account with none	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a session hook in the account's own settings counts alone	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and makes that account one to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a grep that crashes matching a startup script names the file as not read, never clean	gird-check.ps1 matches with .NET regular expressions and runs no grep, so there is no grep to crash
+and with grep crashed, row 02 does not read clean	gird-check.ps1 runs no grep, so there is no grep to crash

@@ -995,12 +995,15 @@ printf '[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js
 psrun "$WORK/ast2" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast2.txt"
 has    "a SessionStart array over several lines in Codex's config.toml is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast2.txt"
 mkdir -p "$WORK/ast3/.codex" "$WORK/ast4/.codex"
+# Root reads a file with no read permission, so this case can only be checked as another user.
+SKIPPING=""; [ "${EUID:-$(id -u)}" -eq 0 ] && SKIPPING="running as root, which reads a file with no read permission"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast3/.codex/hooks.json"; chmod 000 "$WORK/ast3/.codex/hooks.json"
 psrun "$WORK/ast3" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3.txt"
 has    "a Codex hooks.json that can't be read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast3.txt"
 psrun "$WORK/ast3" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3-c.txt"
 has    "and the summary row says a file could not be read" '02 . MCP servers .*but 1 file could not be read' "$WORK/ast3-c.txt"
 chmod 644 "$WORK/ast3/.codex/hooks.json"
+SKIPPING=""
 printf '[hooks]\nSessionStart = [\n  { command = "echo ]" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast4/.codex/config.toml"
 psrun "$WORK/ast4" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast4.txt"
 has    "a bracket inside a quoted string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast4.txt"
@@ -1013,6 +1016,22 @@ psrun "$WORK/ast5" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast5.txt"
 has    "a folder-open task that runs the planted script as a later argument is joined to the hook" '! ~/a A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
 has    "and one that depends on a task that runs it is joined too" '! ~/d A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
 hasnot "a task that depends on a task with another label is not" '! ~/e A session-start hook' "$WORK/ast5.txt"
+# A hooks file too big to read, Codex's or the settings.json in CLAUDE_CONFIG_DIR, is named as not read, never clean.
+mkdir -p "$WORK/ast6/.codex" "$WORK/ast6/cc" "$WORK/ast7/.codex" "$WORK/ast8/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' | tee "$WORK/ast6/.codex/hooks.json" > "$WORK/ast6/cc/settings.json"
+for _f in "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"; do dd if=/dev/zero of="$_f" bs=1 count=0 seek=17000000 2>/dev/null; done
+psrun "$WORK/ast6" CLAUDE_CONFIG_DIR="$WORK/ast6/cc" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast6.txt"
+rm -f "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"
+has    "a Codex hooks.json too big to read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast6.txt"
+has    "and so is a settings.json in CLAUDE_CONFIG_DIR too big to read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/cc/settings\.json' "$WORK/ast6.txt"
+# A TOML multi-line string goes on over lines: a ] in it does not end the SessionStart array, and a table
+# header in it is not one.
+printf '[hooks]\nSessionStart = [\n  { command = """echo ]\n# [\n""" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast7/.codex/config.toml"
+printf "notes = '''\n[[hooks.SessionStart]]\ncommand = \"node ~/.codex/package/index.js\"\n'''\n" > "$WORK/ast8/.codex/config.toml"
+psrun "$WORK/ast7" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast7.txt"
+psrun "$WORK/ast8" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast8.txt"
+has    "a ] inside a multi-line string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast7.txt"
+hasnot "a table header inside a multi-line string in config.toml is not a SessionStart hook" '~/\.codex/config\.toml' "$WORK/ast8.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents" "$WORK/mst/AppData/Roaming" "$WORK/mst/AppData/Local/Temp"

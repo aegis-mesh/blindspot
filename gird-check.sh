@@ -1969,8 +1969,9 @@ start_cmd() {
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$START_PATH"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s' "$_ws$_wp$_wn[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
+  printf '%s\n%s\n%s\n%s' "$_ws$_wp$_wn[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
 }
+# One expression per line, each given to grep alone: macOS's grep can crash on all four joined by |.
 START_CMD=$(start_cmd)
 # The elements of every array that is the value of the key K, one line each, from flat's one-line
 # text: a session-start hook's entries, or each task of a tasks.json. Strings are copied whole and
@@ -2045,8 +2046,16 @@ start_scripts() { # flattened-text key [element-ERE]: the scripts those elements
     fi
   fi
   [ -n "$_el" ] || return 0
-  { printf '%s\n' "$_el"; printf '%s\n' "$_el" | cmd_parts; } | grep -oE "$START_CMD" |
-    while IFS= read -r _m; do printf '%s\n' "$_m" | grep -oE "$START_PATH" | tail -n 1; done | sed -E 's#[/\\]+#/#g' | sort -u
+  _in=$(printf '%s\n' "$_el"; printf '%s\n' "$_el" | cmd_parts); _mt=""
+  # grep exits 0 on a match, 1 on none, and above 1 when it failed or crashed: then nothing is printed
+  # and the caller names the file as not read, never as one that runs no script.
+  while IFS= read -r _rx; do
+    _o=$(printf '%s\n' "$_in" | grep -oE "$_rx"); [ $? -le 1 ] || return 2
+    _mt="$_mt$_o$NL"
+  done <<EOF
+$START_CMD
+EOF
+  printf '%s' "$_mt" | while IFS= read -r _m; do [ -n "$_m" ] && printf '%s\n' "$_m" | grep -oE "$START_PATH" | tail -n 1; done | sed -E 's#[/\\]+#/#g' | sort -u
 }
 in_words() { # lines: them as "a", "a and b" or "a, b and c"
   printf '%s\n' "$1" | awk 'NF { a[++n] = $0 } END { for (i = 1; i <= n; i++) printf "%s%s", (i == 1 ? "" : (i == n ? " and " : ", ")), a[i] }'
@@ -2291,6 +2300,8 @@ cc_rules() { # file
 # tried once per line: linear on every awk, where a gsub on the joined text, or an index() of the rest
 # of the line at every near miss, is quadratic on macOS's awk for a large file.
 AA_CUT=""
+# A file not read in full: section 2 names it as not read, and an account run counts it as not checked.
+cut_file() { AA_CUT="$AA_CUT$1$NL"; [ -n "$FLEET_NR" ] && printf '%s\n' "$1" >> "$FLEET_NR"; }
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
   { if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1"; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
@@ -2392,7 +2403,7 @@ aa_hit() { # file pattern|pattern...
   # file not checked: it is never a file with no match.
   _ah=$?
   [ "$_ah" -le 1 ] && return "$_ah"
-  AA_CUT="$AA_CUT$1$NL"; [ -n "$FLEET_NR" ] && printf '%s\n' "$1" >> "$FLEET_NR"; return 2
+  cut_file "$1"; return 2
 }
 # The value of a top-level key of a .json file, from its text as one line with the spaces removed:
 # true, false, or nothing. Strings and brackets are read as aa_keys reads them, so the same key inside
@@ -2482,7 +2493,7 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE "$_rx"; then
     _w="run commands while the agent works"
     if [ "$_dah" != true ]; then
-      _ss=$(start_scripts "$_t" SessionStart)
+      _ss=$(start_scripts "$_t" SessionStart) || cut_file "$f"
       if [ -n "$_ss" ]; then
         _note="Each agent session starts by running this project's $(in_words "$_ss")"
         START_HOOKS="$START_HOOKS$(_p=$(rowsafe "${f%/.claude/*}"); printf '%s\n' "$_ss" | while IFS= read -r _x; do printf '%s\t%s\n' "$_p" "$_x"; done)
@@ -2530,7 +2541,7 @@ while IFS= read -r f; do
   _note=""
   if printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; then
     _w="run a task when the folder opens in VS Code or Cursor"
-    _ss=$(start_scripts "$_t" tasks "$FOLDER_OPEN")
+    _ss=$(start_scripts "$_t" tasks "$FOLDER_OPEN") || cut_file "$f"
     if [ -n "$_ss" ]; then
       _note="That task runs this project's $(in_words "$_ss")"
       START_TASKS="$START_TASKS$(_p=$(rowsafe "${f%/.vscode/*}"); printf '%s\n' "$_ss" | while IFS= read -r _x; do printf '%s\t%s\n' "$_p" "$_x"; done)
@@ -2607,27 +2618,41 @@ N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
 # with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
 # under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it.
 toml_session_start() { # file: the lines of its SessionStart hook tables, comments removed
+  # The first awk prints each line, then a tab, its count of [ less ] outside strings, a tab, and 1 when
+  # the line starts inside a multi-line string (""" or '''), which goes on over lines, # and brackets too.
   { awk '
-    { n = split($0, c, ""); q = ""
+    { n = split($0, c, ""); q = ""; b = 0; m = (ml != "")
       for (i = 1; i <= n; i++) {
         ch = c[i]
-        if (q == "") { if (ch == "#") break; if (ch == "\"" || ch == "'"'"'") q = ch }
+        if (ml != "") {
+          if (ml == "\"\"\"" && ch == "\\" && i < n) { printf "%s%s", ch, c[i + 1]; i++; continue }
+          if (substr($0, i, 3) == ml) { k = i + 3; while (k <= n && k < i + 5 && c[k] == ch) k++; printf "%s", substr($0, i, k - i); i = k - 1; ml = ""; continue }
+        } else if (q == "") {
+          if (ch == "#") break
+          if ((ch == "\"" || ch == "'"'"'") && substr($0, i, 3) == ch ch ch) { ml = ch ch ch; printf "%s", ml; i += 2; continue }
+          if (ch == "\"" || ch == "'"'"'") q = ch
+          else if (ch == "[") b++
+          else if (ch == "]") b--
+        }
         else if (ch == "\\" && q == "\"" && i < n) { printf "%s%s", ch, c[i + 1]; i++; continue }
         else if (ch == q) q = ""
         printf "%s", ch
       }
-      printf "\n" }' < "$1"; } 2>/dev/null | awk '
+      printf "\t%d\t%d\n", b, m }' < "$1"; } 2>/dev/null | awk '
     BEGIN { top = 1 }
-    function nb(s) { gsub(/"([^"\\]|\\.)*"/, "", s); gsub(/'"'"'[^'"'"']*'"'"'/, "", s); return gsub(/\[/, "[", s) - gsub(/\]/, "]", s) }
-    d > 0 { print; d += nb($0); next }
-    /^[[:space:]]*\[/ { t = $0; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); top = 0; next }
-    s { print; next }
-    (h && /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print; d = nb($0) }'
+    { match($0, /\t-?[0-9]+\t[01]$/); l = substr($0, 1, RSTART - 1); split(substr($0, RSTART + 1), x, "\t"); b = x[1] + 0 }
+    d > 0 { print l; d += b; next }
+    x[2] == 1 { if (s) print l; next }
+    l ~ /^[[:space:]]*\[/ { t = l; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); top = 0; next }
+    s { print l; next }
+    (h && l ~ /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && l ~ /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print l; d = b }'
 }
 USER_HOOKS=""
-_cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; UHOOK_FILES="$_cxd/hooks.json
+_cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
+UHOOK_FILES="$_ccd/settings.json
+$_cxd/hooks.json
 $_cxd/settings.json
-$_cxd/config.toml"; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
+$_cxd/config.toml"
 for _uf in "$_ccd/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "$_cxd/settings.json" "$_cxd/config.toml"; do
   [ -f "$_uf" ] && ! too_big "$_uf" || continue
   case "$USER_HOOKS" in "$(rowsafe "$_uf")$TAB"*|*"
