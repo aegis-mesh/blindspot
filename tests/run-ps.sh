@@ -3167,6 +3167,59 @@ dz_blocks() { grep -aoE 'Agents set to run commands without asking.*02 MCP SERVE
 if [ -n "$(dz_blocks "$WORK/dz-hit-flat.txt")" ] && [ "$(dz_blocks "$WORK/dz-hit-flat.txt")" = "$(dz_blocks "$WORK/dz-b-flat.txt")" ]; then ok "sections 1 and 2 read the same as gird-check.sh's"
 else bad "sections 1 and 2 read the same as gird-check.sh's"; diff <(dz_blocks "$WORK/dz-b-flat.txt" | tr '!' '\n') <(dz_blocks "$WORK/dz-hit-flat.txt" | tr '!' '\n') | head -n 6; fi
 
+echo "GitHub Actions that were compromised"
+# Workflows in a home of their own (tests/make-fixture.sh has none), built as harmless YAML: a use of a
+# listed action by a tag the source names, by a tag it does not, pinned to a malicious commit, pinned to
+# another commit, and pinned where the source says pins ran it too.
+GA=$WORK/ga; rm -rf "$GA"; mkdir -p "$GA/code/hit/.github/workflows" "$GA/code/pin/.github/workflows" "$GA/code/rd/.github/workflows" "$GA/code/ok/.github/workflows/old" "$GA/AppData/Roaming" "$GA/AppData/Local/Temp"
+GA_BAD=a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d; GA_OTHER=$(printf '%040d' 7)
+printf 'jobs:\n  close:\n    steps:\n      - uses: actions/checkout@v4\n      - name: close\n        uses: actions-cool/issues-helper@v3   # close inactive\n      # - uses: xygeni/xygeni-action@v5\n      - uses: "tj-actions/changed-files@v44.5.1"\n      - uses: tj-actions/changed-files@v46\n      - uses: '"'"'Aquasecurity/trivy-action@0.28.0'"'"'\n      - uses: aquasecurity/trivy-action@0.35.0\n      - uses: actions-cool/issues-helper-next@v3\n' > "$GA/code/hit/.github/workflows/issues.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: actions-cool/issues-helper@%s # v2.2.1\n      - uses: actions-cool/maintain-one-comment@%s\n' "$GA_BAD" "$GA_OTHER" > "$GA/code/pin/.github/workflows/ci.yaml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: reviewdog/action-shellcheck@%s\n' "$GA_OTHER" > "$GA/code/rd/.github/workflows/lint.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4\n' > "$GA/code/ok/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: xygeni/xygeni-action@v5\n' > "$GA/code/ok/.github/workflows/old/kept.yml"
+# A CRLF workflow, a commit written in capitals twice (one row), a reusable workflow, the pin the trivy-action
+# advisory names safe, and a kics-github-action tag published after the attack.
+mkdir -p "$GA/code/crlf/.github/workflows" "$GA/code/more/.github/workflows"
+printf 'jobs:\r\n  a:\r\n    steps:\r\n      - uses: aquasecurity/setup-trivy@v0.2.3\r\n' > "$GA/code/crlf/.github/workflows/w.yml"
+GA_UP=$(printf '%s' "$GA_BAD" | tr 'a-f' 'A-F')
+printf 'jobs:\n  a:\n    uses: tj-actions/changed-files/.github/workflows/x.yml@v45\n  b:\n    steps:\n      - uses: actions-cool/issues-helper@%s\n      - uses: actions-cool/issues-helper@%s\n      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1\n      - uses: Checkmarx/kics-github-action@v2.2.1\n' "$GA_UP" "$GA_BAD" > "$GA/code/more/.github/workflows/w.yml"
+GA_N=$(grep -v '^#' data/actions.tsv | grep -c .)
+GA_RUN() { if [ -n "${3:-}" ]; then psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline; else psrun "$1" -- -Offline; fi 2>&1 | tr -s ' \n' '  ' > "$2"; }
+GA_RUN "$GA" "$GA/out.txt"; GA_RUN "$GA" "$GA/sum.txt" compact
+has    "a listed action used by a tag the source names is a project to check" 'GitHub Actions +5 projects use an action that was compromised ~/code/crlf/\.github/workflows/w\.yml Uses aquasecurity/setup-trivy@v0\.2\.3, .* ~/code/hit/\.github/workflows/issues\.yml Uses actions-cool/issues-helper@v3, compromised from 18 May 2026\.' "$GA/out.txt"
+has    "a quoted use is read"                           'Uses tj-actions/changed-files@v44\.5\.1, compromised on 14 and 15 March 2025\.' "$GA/out.txt"
+has    "the owner and name are compared without case"   'Uses aquasecurity/trivy-action@0\.28\.0, compromised on 19 and 20 March 2026\.' "$GA/out.txt"
+hasnot "a tag the source does not name is not flagged"  'changed-files@v46|trivy-action@0\.35\.0' "$GA/out.txt"
+hasnot "a longer name that starts with a listed one is not flagged" 'issues-helper-next' "$GA/out.txt"
+hasnot "a commented-out use is not read"                'xygeni' "$GA/out.txt"
+has    "a CRLF workflow is read"                         '~/code/crlf/\.github/workflows/w\.yml Uses aquasecurity/setup-trivy@v0\.2\.3, compromised on 19 March 2026, about 17:43 to 21:44 UTC\.' "$GA/out.txt"
+has    "a reusable workflow of a listed repository is read" 'Uses tj-actions/changed-files@v45, compromised on 14 and 15 March 2025' "$GA/out.txt"
+# One row in ~/code/pin and one in ~/code/more, where the commit is written twice.
+if [ "$(grep -o 'Uses actions-cool/issues-helper pinned to a commit the source lists' "$GA/out.txt" | grep -c .)" -eq 2 ]; then ok "the same commit written in capitals and in lowercase is one row"
+else bad "the same commit written in capitals and in lowercase is one row"; fi
+hasnot "a pin to the release the source names safe is not flagged" 'trivy-action pinned' "$GA/out.txt"
+hasnot "a tag published after the attack is not flagged" 'kics-github-action' "$GA/out.txt"
+has    "a pin to a commit the source lists is flagged"  '~/code/pin/\.github/workflows/ci\.yaml Uses actions-cool/issues-helper pinned to a commit the source lists as malicious' "$GA/out.txt"
+hasnot "a pin to any other commit is not flagged"       'maintain-one-comment' "$GA/out.txt"
+has    "a pin is flagged where the source says pins ran it too" '~/code/rd/\.github/workflows/lint\.yml Uses reviewdog/action-shellcheck pinned to a commit, compromised on 11 March 2025' "$GA/out.txt"
+has    "it says what to check if the workflows ran then" "If these workflows ran in the window shown for each, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions\[bot\] that you didn't make\." "$GA/out.txt"
+has    "and adds a fix to What to do"                   'If the workflows section 5 lists ran while their GitHub Action was compromised, check their run logs from then, rotate the secrets' "$GA/out.txt"
+hasnot "it never calls the machine compromised"         'ACT NOW|Treat this machine as compromised|signs of' "$GA/out.txt"
+has    "row 05 names the projects"                      'Recent leaks +5 projects use a compromised GitHub Action' "$GA/sum.txt"
+rm -rf "$GA/code/hit" "$GA/code/pin" "$GA/code/rd" "$GA/code/crlf" "$GA/code/more"
+GA_RUN "$GA" "$GA/clean.txt"
+has    "workflows with no listed action read clean, a subfolder's workflow not read" "GitHub Actions +none of $GA_N compromised actions in 1 workflow file" "$GA/clean.txt"
+chmod 000 "$GA/code/ok/.github/workflows/ci.yml"
+GA_RUN "$GA" "$GA/unread.txt"; GA_RUN "$GA" "$GA/unread-sum.txt" compact
+chmod 644 "$GA/code/ok/.github/workflows/ci.yml"
+has    "a workflow file that cannot be read is not called clean" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$GA/unread.txt"
+has    "and row 05 says so"                             'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
+mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
+GA_RUN "$GA" "$GA/partial.txt"
+chmod 755 "$GA/code/locked"
+has    "a folder the scan cannot read leaves the row not fully checked" 'GitHub Actions +not fully checked: some folders were not read' "$GA/partial.txt"
+
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
 # package to a copy's data files and runs gen.sh there; it fails if any code changed.
@@ -3223,6 +3276,7 @@ has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagen
 has    "made-up agent setting in a folder for each profile" '! Made Agent ~/\.madeagent/profiles/p1/config\.json madeMode profile' "$WORK/mu.txt"
 has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 3\.0\.0 or later A made-up hole for the tests\. example\.com/madetool A second made-up hole\. example\.com/madetool2' "$WORK/mu.txt"
 has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
+has    "made-up compromised GitHub Action"           '~/code/made/\.github/workflows/made\.yml Uses Made-Org/made-action@v1\.2, compromised in October 2026\. Remove it\. \(example\.com\)' "$WORK/mu.txt"
 has    "a made-up extension whose malware runs on Windows only is one to remove here" '~/\.cursor/extensions/made\.winext-2\.0\.0 made\.winext 2\.0\.0 \(Made extension, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/mu.txt"
 # A Python incident's temp file alone: stop and delete, not "don't run Python".
 rm -rf "$WORK/mu-tmp"; cp -R "$WORK/clean" "$WORK/mu-tmp"; mkdir -p "$WORK/mu-tmp/AppData/Local/Temp"; : > "$WORK/mu-tmp/AppData/Local/Temp/.madepy_1"

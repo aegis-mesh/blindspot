@@ -8,9 +8,10 @@
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
 # versions with a published fix (data/outdated.tsv), extensions that shipped malware
-# (data/bad-extensions.tsv) and SSH keys malware adds to authorized_keys (data/ssh-keys.tsv). The
-# scripts stay single files people can download and check. It also writes the lists in docs/checks.md,
-# between "<!-- >>> checks" and "<!-- <<< checks -->".
+# (data/bad-extensions.tsv), SSH keys malware adds to authorized_keys (data/ssh-keys.tsv) and GitHub
+# Actions that were compromised (data/actions.tsv). The scripts stay single files people can download
+# and check. It also writes the lists in docs/checks.md, between "<!-- >>> checks" and
+# "<!-- <<< checks -->".
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -181,6 +182,15 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
       rows data/ssh-keys.tsv | awk -F '\t' -v ids="$XONLY_IDS" '
         NF != 4 || index(ids, " " $1 " ") == 0 || $2 !~ /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)$/ ||
         $3 !~ /^AAAA[A-Za-z0-9+\/]+=*$/ || $4 == "" || $4 ~ /[\047"`$|\\]/ || seen[$3]++ { print "data/ssh-keys.tsv: " $0 }'
+      # A compromised action: owner/repo once (GitHub ignores case), refs as shell patterns of the
+      # characters a tag or branch name uses, full 40-character SHAs, and plain text the scripts quote.
+      rows data/actions.tsv | awk -F '\t' '
+        function refs_ok(s,   n, a, i) { n = split(s, a, " "); if (n < 1) return 0; for (i = 1; i <= n; i++) if (a[i] !~ /^!?[]A-Za-z0-9_.*?\/[-]+$/ || a[i] ~ /^!?\*$/ && n > 1) return 0; return 1 }
+        function shas_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ","); for (i = 1; i <= n; i++) if (a[i] !~ /^[0-9a-f]+$/ || length(a[i]) != 40) return 0; return 1 }
+        function text_ok(s) { return s != "" && s !~ /[\047"`$|\\]/ }
+        function apart(b, g,   n, a, i) { if (g == "-") return 1; n = split(g, a, ","); for (i = 1; i <= n; i++) if (index("," b ",", "," a[i] ",")) return 0; return 1 }
+        NF != 8 || $1 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || seen[tolower($1)]++ || !refs_ok($2) || !shas_ok($3) || !shas_ok($4) || !apart($3, $4) || $5 !~ /^(safe|unsafe)$/ ||
+        !text_ok($6) || $7 !~ /^https:\/\/[^ \047"`$|\\]+$/ || !text_ok($8) { print "data/actions.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
@@ -598,7 +608,7 @@ rows data/bad-extensions.tsv | awk -F '\t' '
 # so the page never lists less or more than the scripts look for.
 awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
   on { sub(/^AGENTS="/, ""); sub(/"$/, ""); split($0, a, "|"); print a[1] "\t" a[2] }' gird-check.sh > "$WORK/agent-names.tsv"
-{ for f in incidents keys sessions auto-approve outdated planted bad-pypi indicators platforms bad-extensions ssh-keys bad-npm; do
+{ for f in incidents keys sessions auto-approve outdated planted bad-pypi indicators platforms bad-extensions ssh-keys actions bad-npm; do
     rows "data/$f.tsv" | awk -v f="$f" '{ print f "\t" $0 }'
   done; awk '{ print "agents\t" $0 }' "$WORK/agent-names.tsv"; } | awk -F '\t' '
   function esc(s) { gsub(/\\/, "\\\\", s); gsub(/[*_<>|`\[\]]/, "\\\\&", s); return s }
@@ -630,6 +640,7 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
   $1 == "bad-extensions" { k = $4; if (!(k in eg)) { eg[k] = 1 }; ev = $3 == "*" ? "every version" : $3
     e = code($2) " " ev " (" ($5 == "openvsx" ? "Open VSX editors only" : "every editor") (oss($6) == "" ? "" : "; its malware runs on " oss($6)) ")"
     el[k] = el[k] "- " e "\n"; cnt[k, "ext"]++; next }
+  $1 == "actions" { nac++; aca[nac] = $2; acr[nac] = $3; acs[nac] = $4; acg[nac] = $5; acp[nac] = $6; acw[nac] = $7; acu[nac] = $8; next }
   $1 == "ssh-keys" { nsh++; shi[nsh] = $2; sht[nsh] = $3; shk[nsh] = $4; shn[nsh] = $5; cnt[$2, "ssh"]++; next }
   $1 == "bad-npm" { k = $4; v = $3 == "*" ? "every version" : $3
     if (!((k, $2) in nv)) { nq[k] = nq[k] (nq[k] == "" ? "" : "\t") $2; cnt[k, "pkg"]++ }
@@ -731,6 +742,19 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
     print ""
     for (i = 1; i <= nsh; i++) print "- " esc(inm[shi[i]]) ": `" sht[i] " " shk[i] "`, " esc(shn[i])
     print ""
+    print "### GitHub Actions that were compromised"
+    print ""
+    print "A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of these in a `uses:` line is listed as a project to check, never as a compromised machine: whether it was hit depends on whether its workflows ran in the window, which no file shows."
+    print ""
+    print "| Action | Compromised | Refs that ran it | A pin to a commit | Source |"
+    print "|---|---|---|---|---|"
+    for (i = 1; i <= nac; i++) { zn = split(acr[i], zrr, " "); zr = ""; zx = ""; zm = 0
+      for (j = 1; j <= zn; j++) if (zrr[j] ~ /^!/) zx = add(zx, code(substr(zrr[j], 2))); else { zm++; zr = add(zr, code(zrr[j])) }
+      if (acr[i] == "*") zr = "every ref"; else if (zm > 6) zr = plural(zm, "tag") " the source lists"
+      if (zx != "") zr = zr ", except " zx
+      zq = acp[i] == "unsafe" ? "flagged" (acg[i] == "-" ? "" : ", except the releases the source names safe") : acs[i] == "-" ? "not flagged" : "flagged only at a commit the source lists"
+      print "| " code(aca[i]) " | " esc(acw[i]) " | " zr " | " zq " | [" host(acu[i]) "](" acu[i] ") |" }
+    print ""
     print "### npm packages"
     print ""
     for (j = 1; j <= ni; j++) { d = iid[j]; if (!cnt[d, "npm"]) continue
@@ -749,6 +773,18 @@ rows data/ssh-keys.tsv | awk -F '\t' '
   BEGIN { print "# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it."; print "$SshPlanted = @(" }
   { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", $1, $2, $3, $4 }
   END { print ")"; print "# <<< ssh-keys" }' > "$WORK/ssh-keys.ps1"
+# --- GitHub Actions that were compromised --------------------------------------------
+# Rows are "owner/repo in lowercase|owner/repo|refs|shas|good|pin|window|source's site|fix".
+rows data/actions.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; printf "ACT_TABLE=\"" }
+  { printf "%s%s|%s|%s|%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
+  END { print "\""; print "# <<< actions" }' > "$WORK/actions.sh"
+rows data/actions.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; print "$ActTable = @(" }
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
+  END { print ")"; print "# <<< actions" }' > "$WORK/actions.ps1"
 
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
@@ -770,7 +806,7 @@ grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has 
 RC=0
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
-  else blocks="keys public-values sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms"; fi
+  else blocks="keys public-values sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms actions"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }

@@ -1369,7 +1369,8 @@ EOF
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock -o -name bun.lockb -o -name deno.lock \
-       -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
+       -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \
+       -o -path '*/.github/workflows/*.yml' -o -path '*/.github/workflows/*.yaml' \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.vscode/settings.json' "${_pf[@]}" -o -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' \) "${_ls[@]}" \) -o \
@@ -2024,6 +2025,9 @@ FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|deno\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
+# A project's GitHub Actions workflows (section 5): GitHub runs those directly in .github/workflows.
+WORKFLOWS=$(printf '%s\n' "$FOUND" | grep -E '/\.github/workflows/[^/]+\.ya?ml$' | LC_ALL=C sort)
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.github/workflows/.*\.ya?ml$')
 ENV_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -8120,6 +8124,82 @@ PLAT_FIX=$(printf '%s' "$PLAT_FIX" | awk -F '\t' '{ for (i = 1; i <= NF; i++) pr
 plat_hit() { case "$PLAT_FOUND" in *" $1 "*) printf 1 ;; *) printf 0 ;; esac; }
 # The report's fixed fields opencode and railway.
 OC=$(plat_hit opencode); RW=$(plat_hit railway)
+# Workflows that name a GitHub Action whose code was replaced by malware for a time (data/actions.tsv).
+# A uses: line names owner/repo[/path]@ref. A ref of 40 hex digits is a pin to a commit: it matches
+# a malicious commit the source lists, or any pin but a known-good one when the source says pins ran
+# it too. Any other ref
+# matches the line's patterns, as a shell case does. Whether a project was hit depends on whether its
+# workflows ran in the window, so a match is a project to check, never a sign on this machine.
+# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it.
+ACT_TABLE="tj-actions/changed-files|tj-actions/changed-files|v[1-9] v[1-9].* v[1-3][0-9] v[1-3][0-9].* v4[0-5] v4[0-5].*|0e58ed8671d6b60d0890c21b07f8835ace038e67|-|safe|on 14 and 15 March 2025|github.com|Its tags were restored after the attack. Pin it to a full commit SHA.
+reviewdog/action-shellcheck|reviewdog/action-shellcheck|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-composite-template|reviewdog/action-composite-template|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-staticcheck|reviewdog/action-staticcheck|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-ast-grep|reviewdog/action-ast-grep|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-typos|reviewdog/action-typos|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-setup|reviewdog/action-setup|v1|f0d342d24037bb11d26b9bd8496e0808ba32e9ec|-|safe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Its v1 tag was restored after the attack. Pin it to a full commit SHA.
+xygeni/xygeni-action|xygeni/xygeni-action|v5|4bf1d4e19ad81a3e8d4063755ae0f482dd3baf12|-|safe|from about 3 to 10 March 2026|github.com|Pin it to 13c6ed2797df7d85749864e2cbcf09c893f43b23, its v6.4.0, as Xygeni advises.
+aquasecurity/trivy-action|aquasecurity/trivy-action|0.* !0.35.0|-|57a97c7e7821a5776cebc9bb87c984fa69cba8f1,ed142fd0673e97e23eac54620cfb913e5ce36c25|unsafe|on 19 and 20 March 2026|github.com|Pin it to the full commit SHA of v0.35.0 or v0.36.0. A pin to a commit from before 9 April 2025 ran the compromised setup-trivy then too.
+aquasecurity/setup-trivy|aquasecurity/setup-trivy|v0.2.*|-|-|safe|on 19 March 2026, about 17:43 to 21:44 UTC|github.com|Pin it to the full commit SHA of v0.2.6 or later, published again with safe code.
+checkmarx/kics-github-action|Checkmarx/kics-github-action|v1 v1.0 v1.1 v1.2 v1.3 v1.4 v1.5 v1.6 v1.6.1 v1.6.2 v1.6.3 v1.7.0 v2 v2.0.0 v2.1.0 v2.1.1 v2.1.2 v2.1.3 v2.1.4 v2.1.5 v2.1.6 v2.1.7 v2.1.8 v2.1.9 v2.1.10 v2.1.11 v2.1.12 v2.1.13 v2.1.14 v2.1.15 v2.1.16 v2.1.17 v2.1.18 v2.1.19 v2.1.20|0e22ec8d1e0dda3c62bf4beffcd4a8a5db1abda1,45f3749467a6017cb4fb749054b498d149dd5924,8e20c7a67bb95632e2040327a355fb97e6014d29,93de85c910d859b759cf9185aa78d5a23a4b7000,0e7343ba084735863db92b6f8ba2fa9dee604f7c,2dc0fa613f6f4c15f26ad98225ad253475681616,f00191dd3352c0cd83c6cce4e6bf04b628214dd0,e0359b1a253ee66c8018586c3225e6e9cd2d8a4f,dc6dbf358998c0c64da83edc8fcd581c12656b19,08b9ea97eb292d5e1f9ac2d8e21c0ba32f0fdff0,005fb0837553de722f8bf11d98e905dbdde19861,a5471d37c656ecd4560e8e0b3977910f27025618,3d49875ed47c6b8b4c8b50e0421418cf6b9f35f4,121c38fb49c9fc82160245fb6e2a9119db636e4d,1e9eeaba37fe0032deba133f598e74dab0ceb3b7,c5c07508527fc6a125855eebfb533e64f675bd8e,c999dbb9cc904e23675f9929f7e0e51d132879cf,4ebf62dd8ff318412b38d19841fc3c8650e294bf,3ae9f0d6f8139964635d411149f9b3e0a6eb935e,96a0e8eb31c3cce6c495c9a49dd49c881cd17934,31fbf5831a2e52429738fdc0cbaa20e57872b6fc,fca3a20afcb8ec7f9932c060a236d2a9021fdd2b,0f81f132f9f09bb4976d403914a44a1a1eb6158d,c0e23718a5074f3b8ad286f37b532e02057af35f,d66f0657133bc42f8264458063999bf1910490db,e35c9d6a5faffc1c5b3450d0bf09006aa9b9e906,2eee333d70fb6e14ce1d4aa73f12058bc5d70193,f9641eb512f5c6530d13275903e8a97baf0925f1,e8754eebc822b5122e96a6142b28dbc0e179c91c,69b3f020390222a9fcb6029ba56533b2fb12f103,db942a0dd7e9d1aeac72bc675bdb67f39a688b63,208813bf5feca5df9a935363cd426bc914614d0b,3fdeadb81fbeddc1453163cc87bc173911fd47e2,310734c0ffd29438f6195a24e2cbbacfdc33c9ab,b974e53df1e3a2cd22ea90f0ec01882394feede4|-|safe|on 23 March 2026, 12:58 to 16:50 UTC|wiz.io|Pin it to the full commit SHA of a release published after the attack.
+actions-cool/issues-helper|actions-cool/issues-helper|v3.8.0 v3.7.6 v3.7.5 v3.7.4 v3.7.3 v3.7.2 v3.7.1 v3.7.0 v3.6.3 v3.6.2 v3.6.1 v3.6.0 v3.5.2 v3.5.1 v3.5.0 v3.4.0 v3.3.3 v3.3.2 v3.3.1 v3.3.0 v3.2.1 v3.2.0 v3.1.0 v3.0.1 v3.0.0 v3 v2.5.0 v2.4.3 v2.4.2 v2.4.1 v2.4.0 v2.3.1 v2.3.0 v2.2.1 v2.2.0 v2.1.2 v2.1.1 v2.1.0 v2.0.0 v2 v1.12 v1.11 v1.10 v1.9 v1.8 v1.7 v1.6 v1.5 v1.4 v1.3 v1.2 v1.1 v1|1c9e803c80cc7fed000022d4c94f4b5bc2e90062,f0448c62fc57b8a5ce23d8acd6e795cdd76a3b6c,abc4310e6b8520aff6af79a4880217917cd1436b,aea87833045e38098e64310e962b897ae8aaba33,aeb05195dbd618afce6f22ca4937e46940d86be1,4b10341e231301a86c66f6c09e3e4de76d8719fe,8a3a7c2960ff3a4e3fd1481cfd1eb31301e16337,aa44b5492c787fbc4c51edb8d98d88b668fe89d1,03bbf452b52fb318196d9c193fd178a79a6d7f9b,257849272e291fb74ff4bee4d3be4796dd35fbbb,4bb72d31eaee87562b70a0cf1b93579bb2b14c23,e0585c10366288eeec3117d65ed24240ccbf1f47,419b34c603623ea8749a98b7153df20e389dd0ec,8cc2629c5681d794c494b79283d23aa3ce78749c,4b69521f9829a1114b94d74fdc1a38f2291d8c34,dc5687b71897e8b57bc9743e325ac72cee763c9c,3846bd4230da36f68a4cc1527298ca9ab2652fb9,459b0cfc4dd708b6218b72a7a01dda6c6a7ab0c0,fa6a4ca487f2dc699d428126ea2b18e9d0d15c9d,15c89f718cd325833aad8000d3ec72e2660f6584,a7d3c46a35564fa85321f3557700f6ea0c0616a9,85c9d842e1c0f41f8805f17600c25237e08a0224,64ed6d61b6eee8744417e1d1cc651665a8bce236,d9b1764cbe78ec9b12f01a66b2d2c902b15981b6,b9c83f01929e190cda300e76f688bf7ea7e37a7a,147337a919d92f4bf42f02843682d694650f1e22,e9631d2e615d95a19111c272049444fb073a99be,91b26b99c50ad890f98c2184d251bd3a16f5b1b1,3f4d6804812734dfe945bbe8ef619f151e4b27f6,46eff1378ad0faee27c017ebd97f605548777098,071e169dfb36005b3262b3853c9894698b8b303b,55253d49c68133ae52e791a3f1f8242b191f5e91,edf8cf78d6feeb5a73cda9317af5ddfc4da6c5fd,a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d,896379edfaac994ff214a3097c6c82e21be16066,9bd6ce03e0c279f347b519548b87d26699ad31c9,d2877f69bae9d8dcbadb06b3214ebf0789ed566e,601e1296a5a0853b5e109f9820151c72619e11e4,75fb02043af24e6f3eaf534464de338173993629,3480e51eec2be03a70d6fe17507413a96fe5b57d,67716d94ad07d7fe793cabc6f6d1ffe24f77bdf7,cd96d6518c6338f8510638bce764c7abd7194983,6a538e928b8856062de61103ed5a08f0ea0faee9,9793761b1bc3dde7ad1ccb9be6211919e20a3f01,8a64710bb8fee9f5c92eb1a816e016ed00fbcce0,710ff89debb143f6859cf8d54c0e8739224ff6c1,3904fe935f1a18fee5dbad6db46a66c9dcffde01,cfbd14ccc97afd3baa822bd231df8460e4f02f29,15dc537110a44b0625622e82b7d6ca95583f276a,e778a401e233bf0a416f3fe2a52d9039949b30a6,203671479d663755cb5bf8ffbeca6d2b685af7ae,a7156495f3403674cafe3796382bded1d9af8931,5c267592a87e92c2b005b338bd0d2724c2f64acb|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit, and in September 2026 the tags still ran it.
+actions-cool/maintain-one-comment|actions-cool/maintain-one-comment|v3.3.0 v3.2.1 v3.2.0 v3.1.1 v3.1.0 v3 v2.0.2 v2.0.1 v2.0.0 v2 v1.2.1 v1.2.0 v1.1.0 v1.0.0 v0.0.1-wip|7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit."
+# <<< actions
+act_uses() { # workflow: "owner/repo<TAB>ref" for each uses: line, owner/repo in lowercase
+  awk '{ sub(/\r$/, "") }
+    match($0, /^[ \t]*(-[ \t]+)?["\047]?uses["\047]?[ \t]*:[ \t]*/) {
+      v = substr($0, RSTART + RLENGTH); q = substr(v, 1, 1)
+      if (q == "\"" || q == "\047") { v = substr(v, 2); i = index(v, q); if (i == 0) next; v = substr(v, 1, i - 1) }
+      else { sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v) }
+      at = index(v, "@"); if (at == 0) next
+      a = substr(v, 1, at - 1); r = substr(v, at + 1)
+      if (a !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/ || r == "" || r ~ /[ \t]/) next
+      n = split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r }' "$1" 2>/dev/null
+}
+ACT_HITS=""; ACT_UNREAD=0; N_WF=0
+while IFS= read -r _wf; do
+  [ -n "$_wf" ] || continue
+  if [ ! -r "$_wf" ] || too_big "$_wf"; then ACT_UNREAD=$((ACT_UNREAD + 1)); continue; fi
+  N_WF=$((N_WF + 1))
+  while IFS="$TAB" read -r _ua _ur; do
+    [ -n "$_ua" ] || continue
+    _sha=""; case "$_ur" in *[!0-9a-fA-F]*) ;; *) [ "${#_ur}" -eq 40 ] && _sha=$(printf '%s' "$_ur" | tr 'A-F' 'a-f') ;; esac
+    while IFS='|' read -r _al _an _arefs _ashas _agood _apin _awin _ahost _afix; do
+      [ "$_al" = "$_ua" ] || continue
+      _kind=""
+      if [ -n "$_sha" ]; then
+        case ",$_ashas," in *",$_sha,"*) _kind=commit ;; *) case ",$_agood," in *",$_sha,"*) ;; *) [ "$_apin" = unsafe ] && _kind=pin ;; esac ;; esac
+      else
+        _in=0; _out=0; read -r -a _pats <<< "$_arefs"
+        for _p in "${_pats[@]}"; do
+          case "$_p" in
+            !*) case "$_ur" in ${_p#!}) _out=1 ;; esac ;;
+            *) case "$_ur" in $_p) _in=1 ;; esac ;;
+          esac
+        done
+        [ "$_in" -eq 1 ] && [ "$_out" -eq 0 ] && _kind=ref
+      fi
+      [ -n "$_kind" ] || continue
+      _row="$(rowsafe "$_wf")$TAB$_an$TAB$(rowsafe "${_sha:-$_ur}")$TAB$_kind$TAB$_awin$TAB$_ahost$TAB$_afix"
+      case "
+$ACT_HITS" in *"
+$_row
+"*) ;; *) ACT_HITS="$ACT_HITS$_row
+" ;; esac
+    done <<EOF
+$ACT_TABLE
+EOF
+  done <<EOF
+$(act_uses "$_wf")
+EOF
+done <<EOF
+$WORKFLOWS
+EOF
+N_ACT=$(count_lines "$ACT_HITS")
+N_ACT_PROJ=$(printf '%s' "$ACT_HITS" | cut -f1 | sed 's#/\.github/workflows/[^/]*$##' | sort -u | grep -c .)
+if [ "$N_ACT" -gt 0 ]; then progress w "A project's workflows use a GitHub Action that was compromised"
+elif [ "$ACT_UNREAD" -gt 0 ] || [ "$HOME_PARTIAL" -eq 1 ]; then progress w "GitHub Actions workflows not fully checked"
+elif [ "$N_WF" -gt 0 ]; then progress o "No compromised GitHub Actions in $(plural "$N_WF" "workflow file" "workflow files")"; fi
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless --all-sessions asked to wait.
@@ -8235,6 +8315,7 @@ if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -
 # paths checked.
 PARTIAL=0
 if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$SSHK_UNREAD" -eq 1 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+[ "$ACT_UNREAD" -gt 0 ] && PARTIAL=1
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -8401,6 +8482,7 @@ _upd_fix=0; for _t in $NPM_TAGS; do [ "$(incident_level "$_t")" = update ] || co
 [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 [ "$EXT_HIT" -eq 0 ] && [ -n "$EXT_UPD" ] && todo 5 "Uninstall the editor extensions listed in section 5. Their malware could not run on this system."
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
+[ "$N_ACT" -gt 0 ] && todo 5 "If the workflows section 5 lists ran while their GitHub Action was compromised, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions[bot] that you didn't make. Then pin or remove each action as section 5 says."
 
 SCORE=100
 [ "$PY_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
@@ -8998,7 +9080,7 @@ EOF
 [ "$N_ALLOW" -gt 0 ] && [ "$N_ALLOW_UNREAD" -gt 0 ] && wrap "$(plural "$N_ALLOW_UNREAD" "file" "files") could not be read, so this is not the full list." 8 "     ${YEL}!${RST}  " "        "
 
 SEC4=$CAP; CAP=""
-N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 2 + N_PLAT))   # the Python incidents, npm, editor extensions and each platform
+N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 3 + N_PLAT))   # the Python incidents, npm, editor extensions, GitHub Actions and each platform
 section 05 "RECENT KEY LEAKS" "$N_LEAKS checked"
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
 # advice under a hit: for a bad package in an environment, don't run Python there; for its temp
@@ -9277,6 +9359,33 @@ while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
 done <<EOF
 $PLATFORMS
 EOF
+# Projects whose workflows use a compromised GitHub Action, each use under its workflow file.
+if [ "$N_ACT" -gt 0 ]; then
+  pair "${YEL}!${RST}" "GitHub Actions" 16 "${YEL}$(plural "$N_ACT_PROJ" "project uses" "projects use") an action that was compromised${RST}"
+  _lw=""
+  while IFS="$TAB" read -r _wf _an _ur _kind _awin _ahost _afix; do
+    [ -n "$_wf" ] || continue
+    [ "$_wf" = "$_lw" ] || emit "        $(short "$_wf")"; _lw=$_wf
+    case "$_kind" in
+      commit) _t="Uses $_an pinned to a commit the source lists as malicious, compromised $_awin." ;;
+      pin) _t="Uses $_an pinned to a commit, compromised $_awin." ;;
+      *) _t="Uses $_an@$_ur, compromised $_awin." ;;
+    esac
+    wrap "$_t $_afix ($_ahost)" 10 "          " "          " "$DIM"
+  done <<EOF
+$ACT_HITS
+EOF
+  wrap "$(rotate_wait "If these workflows ran in the window shown for each, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions[bot] that you didn't make.")" 8 "        " "        "
+  [ "$ACT_UNREAD" -gt 0 ] && wrap "$(plural "$ACT_UNREAD" "workflow file" "workflow files") could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+elif [ "$ACT_UNREAD" -gt 0 ]; then
+  pair "${YEL}!${RST}" "GitHub Actions" 16 "${YEL}not fully checked: $(plural "$ACT_UNREAD" "workflow file" "workflow files") could not be read${RST}"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then
+  pair "${YEL}!${RST}" "GitHub Actions" 16 "${YEL}not fully checked: some folders were not read${RST}"
+elif [ "$N_WF" -eq 0 ]; then
+  pair "${DIM}·${RST}" "GitHub Actions" 16 "${DIM}no workflow files found${RST}"
+else
+  pair "${GRN}✓${RST}" "GitHub Actions" 16 "none of $(count_lines "$ACT_TABLE") compromised actions in $(plural "$N_WF" "workflow file" "workflow files")"
+fi
 
 SEC5=$CAP; CAP=""
 # Every fix, numbered: the full report's list and the summary's.
@@ -9428,6 +9537,7 @@ elif [ -n "$EXT_UPD" ]; then G5="${YEL}!${RST}"; D5="an editor extension to remo
 elif [ "$NPM_UPD" -eq 1 ] && [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="npm and Python packages to update, see section 5"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
 elif [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="a Python package to update, see section 5"
+elif [ "$N_ACT" -gt 0 ]; then G5="${YEL}!${RST}"; D5="$(plural "$N_ACT_PROJ" "project uses" "projects use") a compromised GitHub Action"
 elif [ "$N_PLAT_FOUND" -ge 2 ]; then
   G5="${YEL}!${RST}"; _l=""; _i=0
   while IFS='|' read -r _pid _pnm _rest; do
@@ -9448,6 +9558,7 @@ elif [ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm
 elif [ "$NPM_GUNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: folder unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
 elif [ "$SSHK_UNREAD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="SSH logins not fully checked: file unreadable"
+elif [ "$ACT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="workflows not fully checked: files unreadable"
 elif [ "$PY_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="Python not fully checked: folder unreadable"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi

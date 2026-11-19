@@ -531,6 +531,26 @@ A line counts when the key type and then the key are two of its fields, whatever
 
 - Trojanized Claude Code extension: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P`, the SSH key the trojanized Claude Code extension adds for the attacker
 
+### GitHub Actions that were compromised
+
+A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of these in a `uses:` line is listed as a project to check, never as a compromised machine: whether it was hit depends on whether its workflows ran in the window, which no file shows.
+
+| Action | Compromised | Refs that ran it | A pin to a commit | Source |
+|---|---|---|---|---|
+| `tj-actions/changed-files` | on 14 and 15 March 2025 | `v[1-9]`, `v[1-9].*`, `v[1-3][0-9]`, `v[1-3][0-9].*`, `v4[0-5]`, `v4[0-5].*` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3) |
+| `reviewdog/action-shellcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
+| `reviewdog/action-composite-template` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
+| `reviewdog/action-staticcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
+| `reviewdog/action-ast-grep` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
+| `reviewdog/action-typos` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
+| `reviewdog/action-setup` | on 11 March 2025, 18:42 to 20:31 UTC | `v1` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
+| `xygeni/xygeni-action` | from about 3 to 10 March 2026 | `v5` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-f8q5-h5qh-33mh) |
+| `aquasecurity/trivy-action` | on 19 and 20 March 2026 | `0.*`, except `0.35.0` | flagged, except the releases the source names safe | [github.com](https://github.com/advisories/GHSA-69fq-xp46-6x23) |
+| `aquasecurity/setup-trivy` | on 19 March 2026, about 17:43 to 21:44 UTC | `v0.2.*` | not flagged | [github.com](https://github.com/advisories/GHSA-69fq-xp46-6x23) |
+| `Checkmarx/kics-github-action` | on 23 March 2026, 12:58 to 16:50 UTC | 35 tags the source lists | flagged only at a commit the source lists | [wiz.io](https://www.wiz.io/blog/teampcp-attack-kics-github-action) |
+| `actions-cool/issues-helper` | from 18 May 2026 | 53 tags the source lists | flagged only at a commit the source lists | [stepsecurity.io](https://www.stepsecurity.io/blog/actions-cool-issues-helper-github-action-compromised-all-tags-point-to-imposter-commit-that-exfiltrates-ci-cd-credentials) |
+| `actions-cool/maintain-one-comment` | from 18 May 2026 | 15 tags the source lists | flagged only at a commit the source lists | [stepsecurity.io](https://www.stepsecurity.io/blog/actions-cool-issues-helper-github-action-compromised-all-tags-point-to-imposter-commit-that-exfiltrates-ci-cd-credentials) |
+
 ### npm packages
 
 <details><summary>Axios takeover, March 2026: 3 versions of 2 packages</summary>
@@ -1914,6 +1934,21 @@ What is not on the lists, and why:
   `floktokbok.autoimport` into every editor, and both are listed.
 - `oorzc.ssh-tools` before 0.5.1. Open VSX removed every version, but the earlier ones are its
   developer's own.
+
+GitHub Actions workflows:
+
+- It reads the workflows of the projects it finds (`.github/workflows/*.yml` and `*.yaml`) for an
+  action whose code was replaced by malware for a time, from its GitHub advisory or a named research
+  firm's post. A use matches on a tag or a malicious commit its source names. A pin to any other
+  commit does not, except for the five reviewdog actions, whose advisory says every pin ran the
+  malware, and `trivy-action`, where a pin to a commit from before 9 April 2025 did: a pin to its safe
+  release, 0.35.0, or to 0.36.0 is not flagged.
+- Whether a project was hit depends on whether its workflows ran in that window, which no file shows,
+  so a match is a project to check, never a compromised machine: check the workflows' run logs from
+  then, rotate the secrets they could read, look in the project's history for commits by
+  `github-actions[bot]` you didn't make, and pin or remove the action.
+- Composite actions a project keeps in its own folders, and workflows in folders below
+  `.github/workflows`, which GitHub does not run, are not read.
 
 Each data file's header gives the sources and reasons for every line.
 
