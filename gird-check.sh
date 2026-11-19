@@ -1106,6 +1106,34 @@ Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.ini
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
+# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
+RC_SIGS='ssh|exact|runs commands on other machines over SSH
+aws ssm send-command|exact|runs commands on AWS servers
+aws ssm start-session|exact|runs commands on AWS servers
+aws ecs execute-command|exact|runs commands in AWS containers
+gcloud compute ssh|exact|runs commands on Google Cloud servers
+az vm run-command invoke|exact|runs commands on Azure servers
+az ssh vm|exact|runs commands on Azure servers
+kubectl exec|exact|runs commands in Kubernetes containers
+Invoke-Command|any|runs commands on other machines with PowerShell
+Enter-PSSession|any|runs commands on other machines with PowerShell'
+RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
+Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|-
+Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-
+Gemini CLI|all|gemini-toml|agent|${GEMINI_CLI_HOME:-$H}/.gemini/policies/*.toml|-
+Gemini CLI|all|gemini-json|agent|${GEMINI_CLI_HOME:-$H}/.gemini/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/profiles/*/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/profiles/*/settings.json|-
+Roo Code|all|roo|file|$AS/Code/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/profiles/*/settings.json|while its auto-approve for commands is on
+Amazon Q|all|amazonq|file|$H/.aws/amazonq/cli-agents/*.json|when you use that agent"
+# <<< remote-commands
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
 # dependency caches, build output, model and VM images, cloud sync folders.
 scan_home() {
@@ -2321,6 +2349,326 @@ json_top() { # key
       print v; exit
     }'
 }
+# --- Saved rules that run commands on other machines (data/remote-commands.tsv) ---------------
+# Every scalar of a .json file, as path<TAB>value: the path is each key the value sits under, each
+# after a \034 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
+# The file is read as flat reads it and split as aa_keys splits it, one quote and one bracket at a
+# time, the text between on its commas: printed as it is read, linear on every awk.
+json_leaves() { # file
+  flat "$1" | awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    function emit(v) { if (dep > 0) printf "%s%s\t%s\n", P[dep], (T[dep] == "o" ? "\034" key : "[]"), v }
+    function flush() { if (sc != "") emit(sc); sc = "" }
+    function ob(c,   np) { flush(); np = dep < 1 ? "" : P[dep] (T[dep] == "o" ? "\034" key : "[]"); dep++; P[dep] = np; T[dep] = (c == "{" ? "o" : "a"); ek = (c == "{") }
+    function cb() { flush(); if (dep > 0) dep--; ek = 0 }
+    function text(t,   a, n, i, m) {
+      n = split(t, a, ",")
+      for (i = 1; i <= n; i++) {
+        if (i > 1) { flush(); if (dep > 0 && T[dep] == "o") ek = 1 }
+        m = index(a[i], ":"); if (m) { flush(); ek = 0; a[i] = substr(a[i], m + 1) }
+        gsub(/[[:space:]]/, "", a[i]); sc = sc a[i]
+      }
+    }
+    function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
+      na = split(s, a, "{")
+      for (i = 1; i <= na; i++) {
+        nb = split(a[i], b, "}")
+        for (j = 1; j <= nb; j++) {
+          nc = split(b[j], c, "[")
+          for (k = 1; k <= nc; k++) {
+            nd = split(c[k], d, "]")
+            for (l = 1; l <= nd; l++) { text(d[l]); if (l < nd) cb() }
+            if (k < nc) ob("[")
+          }
+          if (j < nb) cb()
+        }
+        if (i < na) ob("{")
+      }
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; ek = 0; sc = ""; key = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) { code(q[i]); if (i < nq) { st = 1; sv = "" }; continue }
+        sv = sv q[i]
+        if (i < nq && trail(q[i]) % 2 == 1) { sv = sv "\""; continue }
+        st = 0
+        if (dep > 0 && T[dep] == "o" && ek) { key = sv; ek = 0 } else emit("\"" sv "\"")
+      }
+      flush()
+    }'
+}
+# A rule as the words it fixes before its first wildcard (data/remote-commands.tsv), as each agent
+# reads it: a last word * when more may follow, a word ending in * that any word it starts matches,
+# * alone for every command, nothing for a rule that is not read. Only the first 256 characters are
+# read, so the time stays linear in the file: a longer rule is read as having more after them.
+RC_FN='
+function unq(v) { v = substr(v, 2, length(v) - 2); gsub(/\\\\/, "\001", v); gsub(/\\"/, "\"", v); gsub(/\001/, "\\", v); return v }
+function wsplit(s,   a, n, i, o) { n = split(s, a, " "); o = ""; for (i = 1; i <= n; i++) if (a[i] != "") o = o (o == "" ? "" : " ") a[i]; return o }
+function opn(w) { return w == "" ? "*" : w " *" }
+function cap(s) { RC_T = 0; if (length(s) > 256) { s = substr(s, 1, 256); RC_T = 1 }; return s }
+function fixed(s, sty,   k, pre, w) {
+  s = cap(s)
+  if (RC_T && sty != "rx" && sty != "rxfull") sub(/[^ \t]*$/, "", s)
+  if (sty == "claude") {
+    if (s ~ /:\*$/) s = substr(s, 1, length(s) - 2) " *"
+    k = index(s, "*")
+    if (k == 0) w = wsplit(s)
+    else { pre = substr(s, 1, k - 1); w = wsplit(pre); w = (pre == "" || pre ~ /[ \t]$/) ? opn(w) : w "*" }
+  } else if (sty == "prefix") w = opn(wsplit(s))
+  else if (sty == "str") { if (s ~ /^[ \t]*\*[ \t]*$/) w = "*"; else if (s ~ /[ \t]$/) w = opn(wsplit(s)); else { w = wsplit(s); if (w != "") w = w "*" } }
+  else w = rx(s, sty == "rx")
+  if (RC_T && w != "" && w !~ /\*$/) w = (sty == "rx" || sty == "rxfull") ? w "*" : opn(w)
+  return w
+}
+# A regex: the literal text it starts with. An escaped space, \s or \b ends a word; a quantifier
+# after a character makes it optional; a regex matched to the end of the command (rxfull) and literal
+# throughout is an exact command.
+function rx(r, open,   i, n, c, d, lit, stop, w) {
+  if (substr(r, 1, 1) == "^") r = substr(r, 2)
+  lit = ""; stop = ""; n = length(r)
+  for (i = 1; i <= n; i++) {
+    c = substr(r, i, 1)
+    if (c == "\\") {
+      d = substr(r, i + 1, 1)
+      if (d == "s" || d == "b" || d == " ") { lit = lit " "; stop = "w"; break }
+      if (d == "" || d ~ /[A-Za-z0-9]/) { stop = "m"; break }
+      lit = lit d; i++; continue
+    }
+    if (index(".^$|?*+()[]{}", c)) { stop = c; break }
+    lit = lit c
+  }
+  if (stop == "") return open ? opn(wsplit(lit)) : wsplit(lit)
+  if (stop == "$" && i == n) return wsplit(lit)
+  if (stop == "?" || stop == "*" || stop == "{") lit = substr(lit, 1, length(lit) - 1)
+  w = wsplit(lit)
+  if (lit == "" || lit ~ /[ \t]$/) return opn(w)
+  return w "*"
+}
+# A regex split at each | outside a group or a class, into A[1..n].
+function alts(r, A,   i, n, c, dp, cl, s, k) {
+  r = substr(r, 1, 256); n = length(r); k = 0; s = ""; dp = 0; cl = 0
+  for (i = 1; i <= n; i++) {
+    c = substr(r, i, 1)
+    if (c == "\\") { s = s c substr(r, i + 1, 1); i++; continue }
+    if (cl) { if (c == "]") cl = 0 }
+    else if (c == "[") cl = 1
+    else if (c == "(") dp++
+    else if (c == ")") dp--
+    else if (c == "|" && dp == 0) { A[++k] = s; s = ""; continue }
+    s = s c
+  }
+  A[++k] = s; return k
+}
+function out(d, r, ci, kd, w) { if (w != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", FID, REP, d, r, ci, kd, w }
+function outrx(d, r, ci, kd, v, sty,   A, n, k) { n = alts(v, A); for (k = 1; k <= n; k++) out(d, r, ci, kd, fixed(A[k], sty)) }
+'
+# The rules of one agent file, as fid<TAB>rep<TAB>decision<TAB>rank<TAB>case<TAB>kind<TAB>words lines
+# for rc_run (decision allow, ask, deny, or cut for a file not read in full). A deny or ask rule
+# overrides an allow rule of no higher rank (data/remote-commands.tsv says how each agent ranks them).
+rc_read() { # file format fid rep
+  case "$2" in
+    codex) { tr -d '\r' < "$1"; } 2>/dev/null | FID=$3 REP=$4 awk "$RC_FN"'
+      BEGIN { FID = ENVIRON["FID"]; REP = ENVIRON["REP"] }
+      function trail(s) {
+        if (s !~ /\\$/) return 0
+        if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+        return length(s)
+      }
+      function cut() { if (!ct) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; ct = 1 }
+      # A rule ends: its words up to its first list, then each of that list, then any words.
+      function done(   w, k, j, d) {
+        d = dec == "prompt" ? "ask" : dec == "forbidden" ? "deny" : dec == "allow" ? "allow" : ""
+        if (d == "") return
+        w = ""
+        for (k = 1; k <= nt; k++) {
+          if (T[k] == "\002") { for (j = 1; j <= na; j++) out(d, 0, 0, "", opn(w (w == "" ? "" : " ") A[j])); return }
+          w = w (w == "" ? "" : " ") T[k]
+        }
+        if (w != "") out(d, 0, 0, "", opn(w))
+      }
+      function str(s) {
+        gsub(/\\\\/, "\001", s); gsub(/\\"/, "\"", s); gsub(/\001/, "\\", s); gsub(/[ \t]/, "\001", s)
+        if (kw == "pattern" && bd == 1 && !stop) T[++nt] = s
+        else if (kw == "pattern" && bd == 2 && !fa) A[++na] = s
+        else if (kw == "decision" && bd == 0) dec = s
+      }
+      # The code between strings, a character at a time (at most 1,024 between two quotes).
+      function codep(s,   i, n, c, k) {
+        while (!on) { k = index(s, "prefix_rule("); h = index(s, "#"); if (h && (!k || h < k)) { cmt = 1; return }; if (!k) return
+          s = substr(s, k + 12); on = 1; dp = 1; bd = 0; kw = ""; id = ""; nt = 0; na = 0; fa = 0; stop = 0; dec = "allow" }
+        if (length(s) > 1024) { cut(); on = 0; return }
+        n = length(s)
+        for (i = 1; i <= n; i++) {
+          c = substr(s, i, 1)
+          if (c ~ /[A-Za-z0-9_]/) { id = id c; continue }
+          if (c == "=") kw = id
+          else if (c == "[") { bd++ }
+          else if (c == "]") { if (kw == "pattern" && bd == 2) { if (fa) stop = 1; else { T[++nt] = "\002"; fa = 1 } }; bd-- }
+          else if (c == "(") dp++
+          else if (c == ")") { dp--; if (dp == 0) { done(); on = 0; codep(substr(s, i + 1)); return } }
+          else if (c == "," && bd == 0) kw = ""
+          else if (c == "#") { cmt = 1; return }
+          else if (c == "\047") { cut(); on = 0; return }
+          id = ""
+        }
+      }
+      { if (!on && $0 ~ /^[ \t]*#/) next
+        nq = split($0, q, "\""); st = 0; cmt = 0
+        for (i = 1; i <= nq && !cmt; i++) {
+          if (st == 0) { codep(q[i]); if (i < nq && !cmt) { st = 1; sv = "" }; continue }
+          sv = sv q[i]
+          if (i < nq && trail(q[i]) % 2 == 1) { sv = sv "\""; continue }
+          st = 0; if (on) str(sv)
+        }
+        if (st == 1 && on) { cut(); on = 0 }
+      }
+      END { if (on) cut() }' ;;
+    gemini-toml) { tr -d '\r' < "$1"; } 2>/dev/null | FID=$3 REP=$4 awk "$RC_FN"'
+      BEGIN { FID = ENVIRON["FID"]; REP = ENVIRON["REP"] }
+      # The strings in a TOML value, in V[1..n]: basic ones with their \\ and \" read, literal ones as
+      # they are. BAL is 0 while a list is still open.
+      function strs(v,   i, n, c, d, s, k, dp) {
+        n = length(v); k = 0; dp = 0; i = 1
+        while (i <= n) {
+          c = substr(v, i, 1)
+          if (c == "\"") { s = ""; i++
+            while (i <= n) { c = substr(v, i, 1)
+              if (c == "\\") { d = substr(v, i + 1, 1); if (d == "\\" || d == "\"") s = s d; else s = s c d; i += 2; continue }
+              if (c == "\"") break
+              s = s c; i++ }
+            V[++k] = s; i++; continue }
+          if (c == "\047") { s = ""; i++; while (i <= n && substr(v, i, 1) != "\047") { s = s substr(v, i, 1); i++ }; V[++k] = s; i++; continue }
+          if (c == "[") dp++; else if (c == "]") dp--; else if (c == "#") break
+          i++
+        }
+        BAL = dp <= 0; return k
+      }
+      function endrule(   d, r, k) {
+        if (!inr) return; inr = 0
+        if (args || mcp || !shell) return
+        d = dec == "allow" ? "allow" : dec == "deny" ? "deny" : dec == "ask_user" ? "ask" : ""
+        if (d == "") return
+        r = 4 + pri / 1000
+        if (np > 0) for (k = 1; k <= np; k++) out(d, r, 0, "", fixed(PX[k], "prefix"))
+        else if (rgx != "") outrx(d, r, 0, "", rgx, "rx")
+        else out(d, r, 0, "", "*")
+      }
+      function val(k, v,   n, j) {
+        if (length(v) > 4096) { if (!ct) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; ct = 1; return }
+        n = strs(v)
+        if (k == "toolName") { for (j = 1; j <= n; j++) if (V[j] == "run_shell_command" || V[j] == "ShellTool") shell = 1 }
+        else if (k == "commandPrefix") { np = 0; for (j = 1; j <= n; j++) PX[++np] = V[j] }
+        else if (k == "commandRegex") rgx = n ? V[1] : ""
+        else if (k == "decision") dec = n ? V[1] : ""
+        else if (k == "priority" && match(v, /^[ \t]*[0-9]+/)) pri = substr(v, RSTART, RLENGTH) + 0
+        else if (k == "argsPattern") args = 1
+        else if (k == "mcpName") mcp = 1
+      }
+      acc != "" { acc = acc " " $0; strs(acc); if (BAL || length(acc) > 4096) { val(ak, acc); acc = "" }; next }
+      /^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$/ { endrule(); inr = 1; shell = 0; np = 0; rgx = ""; dec = ""; pri = 0; args = 0; mcp = 0; next }
+      /^[ \t]*\[/ { endrule(); next }
+      inr && match($0, /^[ \t]*[A-Za-z_]+[ \t]*=[ \t]*/) {
+        k = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", k); sub(/[ \t]*=.*$/, "", k)
+        v = substr($0, RSTART + RLENGTH)
+        if (v ~ /^\[/) { strs(v); if (!BAL) { acc = v; ak = k; next } }
+        val(k, v)
+      }
+      END { if (acc != "") val(ak, acc); endrule() }' ;;
+    *) json_leaves "$1" | FID=$3 REP=$4 FMT=$2 WIN=$([ "$_os" = win ] && echo 1 || echo 0) awk -F '\t' "$RC_FN"'
+      BEGIN { FID = ENVIRON["FID"]; REP = ENVIRON["REP"]; FMT = ENVIRON["FMT"]; S = "\034"
+              QK = S "toolsSettings" S (ENVIRON["WIN"] == "1" ? "execute_cmd" : "execute_bash") S }
+      { p = $1; v = substr($0, length($1) + 2) }
+      FMT == "claude" && p ~ ("^" S "permissions" S "(allow|ask|deny)\\[\\]$") && v ~ /^"/ {
+        d = substr(p, 14, length(p) - 15); v = unq(v)
+        if (v == "Bash" || v == "PowerShell") out(d, 0, 0, v, "*")
+        else if (match(v, /^(Bash|PowerShell)\(/) && v ~ /\)$/) out(d, 0, 0, substr(v, 1, RLENGTH - 1), fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - 1), "claude"))
+      }
+      FMT == "gemini-json" && v ~ /^"/ {
+        v = unq(v); sh = (v == "run_shell_command" || v == "ShellTool")
+        if (p == S "tools" S "core[]") core = 1
+        if (p == S "tools" S "allowed[]" || p == S "tools" S "core[]") {
+          r = p == S "tools" S "core[]" ? 4.25 : 4.3
+          if (sh) out("allow", r, 0, "", "*")
+          else if (match(v, /^(run_shell_command|ShellTool)\(/) && v ~ /\)$/) { out("allow", r, 0, "", fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - 1), "prefix")); if (r == 4.3) nar = 1 }
+        }
+        if (p == S "tools" S "confirmationRequired[]" && sh) out("ask", 4.35, 0, "", "*")
+        if (p == S "tools" S "exclude[]" && sh) out("deny", 4.4, 0, "", "*")
+      }
+      FMT == "vscode" && index(p, S "chat.tools.terminal.autoApprove" S) == 1 && (v == "true" || v == "false") {
+        k = substr(p, 34); m = index(k, S)
+        if (m) { if (substr(k, m + 1) != "approve") next; k = substr(k, 1, m - 1) }
+        gsub(/\\\\/, "\001", k); gsub(/\\"/, "\"", k); gsub(/\001/, "\\", k)
+        d = v == "true" ? "allow" : "deny"
+        if (match(k, /^\/.+\/[dgimsuvy]*$/)) { f = k; sub(/^.*\//, "", f); k = substr(k, 2, length(k) - length(f) - 2); outrx(d, 0, index(f, "i") > 0, "", k, "rx") }
+        else out(d, 0, 0, "", fixed(k, "prefix"))
+      }
+      FMT == "roo" && (p == S "roo-cline.allowedCommands[]" || p == S "roo-cline.deniedCommands[]") && v ~ /^"/ {
+        v = unq(v); out(p ~ /allowed/ ? "allow" : "deny", length(v), 1, "", fixed(v, "str"))
+      }
+      FMT == "amazonq" && (p == QK "allowedCommands[]" || p == QK "deniedCommands[]") && v ~ /^"/ {
+        v = unq(v); outrx(p ~ /allowed/ ? "allow" : "deny", 0, 0, "", v, "rxfull")
+      }
+      END { if (nar) out("deny", 4.29, 0, "", "*"); if (core) out("deny", 4.24, 0, "", "*") }' ;;
+  esac
+}
+# The hits of a set of an agent's files whose rules apply together (data/remote-commands.tsv): an
+# allow rule of a file marked to report whose words hit a cmd line that no deny or ask rule of the set
+# covers at its rank or higher. Prints fid<TAB>rule as shown<TAB>labels; fid<TAB>!cut for a file not
+# read in full. The rule is shown only as far as the words it shares with the command it allows, so
+# a key later in it is never printed.
+RC_MATCH='
+function agree(a, b, ci) {
+  if (ci) { a = tolower(a); b = tolower(b) }
+  if (a ~ /\*$/) { a = substr(a, 1, length(a) - 1); return substr(b, 1, length(a)) == a }
+  return a == b
+}
+function words(w,   n) { n = split(w, W, " "); OPEN = 0; if (n > 0 && W[n] == "*") { OPEN = 1; n-- } else if (n > 0 && W[n] ~ /\*$/) OPEN = 1; return n }
+function agrees(wn, j, ci,   k, m) { m = wn < SN[j] ? wn : SN[j]; for (k = 1; k <= m; k++) if (!agree(W[k], S[j, k], ci)) return 0; return 1 }
+BEGIN { ns = split(ENVIRON["RC_SIGS"], L, "\n")
+  for (j = 1; j <= ns; j++) { split(L[j], f, "|"); SN[j] = split(f[1], t, " "); for (k = 1; k <= SN[j]; k++) S[j, k] = t[k]; SC[j] = f[2] == "any"; SL[j] = f[3] } }
+$3 == "cut" { if (!($1 in CUT)) { CUT[$1] = 1; print $1 "\t!cut" }; next }
+{ n++; F[n] = $1; R[n] = $2; D[n] = $3; K[n] = $4 + 0; C[n] = $5; KD[n] = $6; WS[n] = $7 }
+END {
+  for (i = 1; i <= n; i++) {
+    if (D[i] != "deny" && D[i] != "ask") continue
+    wn = words(WS[i]); if (!OPEN) continue
+    for (j = 1; j <= ns; j++) if (wn <= SN[j] && agrees(wn, j, C[i] || SC[j]) && (!(j in OV) || K[i] > OV[j])) OV[j] = K[i]
+  }
+  for (i = 1; i <= n; i++) {
+    if (D[i] != "allow" || R[i] != 1) continue
+    wn = words(WS[i]); if (wn == 0) continue
+    lb = ""; sn = 0
+    for (j = 1; j <= ns; j++) {
+      if (wn < SN[j] && !OPEN) continue
+      if (!agrees(wn, j, C[i] || SC[j])) continue
+      if ((j in OV) && OV[j] >= K[i]) continue
+      if (index(", " lb ", ", ", " SL[j] ", ") == 0) lb = lb (lb == "" ? "" : ", ") SL[j]
+      m = wn < SN[j] ? wn : SN[j]; if (m > sn) sn = m
+    }
+    if (lb == "") continue
+    sh = W[1]; for (k = 2; k <= sn; k++) sh = sh " " W[k]
+    if (wn > sn) sh = sh " ..."; else if (OPEN && W[wn] !~ /\*$/) sh = sh " *"
+    if (KD[i] != "") sh = KD[i] "(" sh ")"
+    if (!((F[i] SUBSEP sh) in SEEN)) { SEEN[F[i], sh] = 1; print F[i] "\t" sh "\t" lb }
+  }
+}'
+# rep|format|file lines, one set: file<TAB>rule<TAB>labels for each hit, file<TAB>!cut for each file
+# not read in full.
+rc_run() { # lines
+  printf '%s\n' "$1" | awk 'NF' | { _n=0; while IFS='|' read -r _rp _rfm _rf; do _n=$((_n + 1)); rc_read "$_rf" "$_rfm" "$_n" "$_rp"; done; } |
+    RC_SIGS=$RC_SIGS awk -F '\t' "$RC_MATCH" | while IFS="$TAB" read -r _id _rs _rlb; do
+      printf '%s\t%s\t%s\n' "$(printf '%s\n' "$1" | awk 'NF' | sed -n "${_id}p" | cut -d'|' -f3-)" "$_rs" "$_rlb"
+    done
+}
+# The person's own Claude Code settings files (data/remote-commands.tsv): their deny and ask rules
+# apply in every project.
+RC_CC_USER=$(printf '%s\n' "$RC_FILES" | while IFS='|' read -r _a _o _fm _g _p _nt; do
+  case "$_o" in (all|"$_os") ;; (*) continue ;; esac
+  [ "$_fm" = claude ] && [ -f "$_p" ] && fleet_ok "$_p" && [ -r "$_p" ] && ! too_big "$_p" && printf '0|claude|%s\n' "$_p"
+done)
 # Claude Code's endpoint variables, and each one's provider's own API host (its env-vars page and each
 # provider's page): ANTHROPIC_BASE_URL at api.anthropic.com; Amazon Bedrock at bedrock-runtime in an AWS
 # region, and its Mantle endpoint at bedrock-mantle (AWS's Bedrock endpoints page, as Claude Code builds
@@ -2407,6 +2755,24 @@ while IFS= read -r f; do
     case "$f" in */settings.local.json) _tr="" ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
     _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab$_tr"
   fi
+  # Allow rules for commands that run commands on other machines (data/remote-commands.tsv), with the
+  # person's own deny and ask rules and both of the project's files. A settings.local.json's apply
+  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here.
+  case "$_t" in *'"Bash'*|*'"PowerShell'*)
+    _rs=""; for _s in "${f%/*}/settings.json" "${f%/*}/settings.local.json"; do
+      if [ "$_s" = "$f" ]; then _rs="$_rs${NL}1|claude|$_s"; elif [ -f "$_s" ] && [ -r "$_s" ] && ! too_big "$_s"; then _rs="$_rs${NL}0|claude|$_s"; fi
+    done
+    _rh=$(rc_run "$RC_CC_USER$_rs" | awk -F "$TAB" -v f="$f" '$1 == f && $2 != "!cut"')
+    if [ -n "$_rh" ]; then
+      case "$f" in
+        */settings.local.json) RC_PROJ="$RC_PROJ$(printf '%s
+' "$_rh" | awk -F "$TAB" -v OFS="$TAB" '{ print $1, "Claude Code", $2 ": " $3 }')$NL" ;;
+        *) [ -n "$_ab" ] && _tr="" || _tr=". Claude Code applies a project's allow rules once you trust the folder"
+           _w="${_w:+$_w, }run commands on other machines without asking, with permissions.allow: $(printf '%s
+' "$_rh" | cut -f2 | paste -sd ',' - | sed 's/,/, /g')$_tr" ;;
+      esac
+    fi ;;
+  esac
   auto_row "$f" "$_w" "$_t"
 done <<EOF
 $ALLOW_FILES
@@ -7080,6 +7446,57 @@ N_YOLO=$(count_lines "$AA_LIST")
 # Row 01 counts agents: one can be set so in several files.
 N_YOLO_AG=$(printf '%s\n' "$AA_LIST" | cut -f2 | sort -u | grep -c .)
 [ "$N_YOLO" -gt 0 ] && progress w "Agents set to run commands without asking: $(printf '%s\n' "$AA_LIST" | head -n 1 | cut -f2)"
+# Saved rules that let an agent run commands on other machines without asking (data/remote-commands.tsv):
+# the person's own files of each agent, read together or each file alone as the data file's group
+# says, then the projects' Claude Code settings.local.json files section 2 read. A row each:
+# file<TAB>agent<TAB>rule: what it allows.
+rc_expand() { # path: the files it names; a *.ext file name is every such file in that folder
+  case "$1" in
+    */\*/*) aa_glob "$1" ;;
+    */\*.*) for _rg in "${1%/*}"/*."${1##*.}"; do [ -f "$_rg" ] && printf '%s\n' "$_rg"; done ;;
+    *) [ -e "$1" ] && printf '%s\n' "$1" ;;
+  esac
+}
+RC_ROWS=""; RC_TRIED=""; RC_CUTS=""
+while IFS= read -r _ra; do
+  [ -n "$_ra" ] || continue
+  # T|file for each file named, then the sets: rep|format|file lines, a blank line between sets.
+  _rsets=$(printf '%s\n' "$RC_FILES" | while IFS='|' read -r _a _o _fm _g _p _nt; do
+    [ "$_a" = "$_ra" ] || continue
+    case "$_o" in (all|"$_os") ;; (*) continue ;; esac
+    rc_expand "$_p" | while IFS= read -r _f; do
+      printf 'T|%s\n' "$_f"
+      [ -f "$_f" ] && fleet_ok "$_f" && [ -r "$_f" ] && ! too_big "$_f" || continue
+      if [ "$_g" = file ]; then printf '\n1|%s|%s\n\n' "$_fm" "$_f"; else printf '1|%s|%s\n' "$_fm" "$_f"; fi
+    done
+  done)
+  RC_TRIED="$RC_TRIED$(printf '%s\n' "$_rsets" | sed -n 's/^T|//p')$NL"
+  _rnote=$(printf '%s\n' "$RC_FILES" | awk -F '|' -v a="$_ra" '$1 == a && $6 != "-" { print $6; exit }')
+  _rset=""
+  while :; do
+    IFS= read -r _rl; _eof=$?
+    if [ -n "$_rl" ]; then _rset="$_rset$_rl$NL"; [ "$_eof" -eq 0 ] && continue; fi
+    if [ -n "$_rset" ]; then
+      _rh=$(rc_run "$_rset")
+      RC_CUTS="$RC_CUTS$(printf '%s\n' "$_rh" | awk -F "$TAB" '$2 == "!cut" { print $1 }')$NL"
+      RC_ROWS="$RC_ROWS$(printf '%s\n' "$_rh" | awk -F "$TAB" -v OFS="$TAB" -v a="$_ra" -v nt="$_rnote" '$2 != "!cut" && NF >= 3 { print $1, a, $2 ": " $3 (nt == "" ? "" : ", " nt) }')$NL"
+      _rset=""
+    fi
+    [ "$_eof" -eq 0 ] || break
+  done <<EOF
+$(printf '%s\n' "$_rsets" | grep -v '^T|')
+EOF
+done <<EOF
+$(printf '%s\n' "$RC_FILES" | cut -d'|' -f1 | awk 'length && !s[$0]++')
+EOF
+# A file there but not read, too big to, or not read in full is named in section 2 with the others.
+_rcu=$({ printf '%s\n' "$RC_TRIED" | unread_files big; printf '%s\n' "$RC_CUTS"; } | awk 'length && !s[$0]++')
+if [ -n "$_rcu" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_rcu" | awk 'length && !s[$0]++'); N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD"); fi
+REMOTE_LIST=$(printf '%s%s' "$RC_ROWS" "$RC_PROJ" | awk 'length && !s[$0]++' | while IFS="$TAB" read -r _f _a _r; do printf '%s\t%s\t%s\n' "$(rowsafe "$_f")" "$_a" "$_r"; done)
+N_REMOTE=$(count_lines "$REMOTE_LIST")
+# Row 01 counts agents.
+N_REMOTE_AG=$(printf '%s\n' "$REMOTE_LIST" | cut -f2 | sort -u | grep -c .)
+[ "$N_REMOTE" -gt 0 ] && progress w "Allowed to run commands on other machines: $(printf '%s\n' "$REMOTE_LIST" | head -n 1 | cut -f2)"
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
 ver_ok() { case "$1" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac; return 0; }
@@ -7840,6 +8257,7 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
 [ "$N_YOLO" -gt 0 ] && todo 1 "Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox."
+[ "$N_REMOTE" -gt 0 ] && todo 1 "Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first."
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
@@ -7879,13 +8297,14 @@ else progress o "Scan done: no findings"; fi
 # An account run ends here: the fixed lines root reads, on the pipe root gave it, and nothing else.
 # Only numbers and ids from the fixed lists; root checks every line again and builds the row itself.
 fleet_ids() { tr ' ' '\n' | grep -E '^[a-z0-9-]+$' | awk '!s[$0]++' | paste -sd ' ' -; }
-fleet_agent_id() { # an agent's name in data/auto-approve.tsv: its id in AGENTS, or the name made an id
+fleet_agent_id() { # an agent's name in data/auto-approve.tsv or data/remote-commands.tsv: its id in AGENTS, or the name made an id
   _fa=$(printf '%s\n' "$AGENTS" | awk -F '|' -v n="$1" '$1 == n { print $5; exit }')
   [ -n "$_fa" ] || _fa=$(printf '%s' "$1" | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9-')
   printf '%s' "$_fa"
 }
 if [ "$ACCTRUN" -eq 1 ]; then
   _yolo=$(printf '%s\n' "$AA_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
+  _remote=$(printf '%s\n' "$REMOTE_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
   # A bad npm version found only in a lockfile, nothing installed (MAL_LOCKONLY), is act-if-installed:
   # its act-level incidents go in lock_only, worded as the person's report words them.
   _npm_inc=$NPM_TAGS; _lock=""
@@ -7952,6 +8371,7 @@ EOF
     echo "v=1"
     echo "agents=$(printf '%s' "$AGENT_IDS" | fleet_ids)"
     echo "yolo=$_yolo"
+    echo "remote=$_remote"
     echo "tools=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '$4 != "-"' | cut -f1 | fleet_ids)"
     echo "mcp_servers=$N_MCP"
     echo "mcp_token_files=$N_MCP_TOKEN"
@@ -8198,6 +8618,21 @@ if [ "$N_YOLO" -gt 0 ]; then
 $AA_LIST
 EOF
   wrap "A prompt injection in anything the agent reads can then run commands on this computer. Turn it off unless the agent runs in a sandbox." 8 "        " "        " "$DIM"
+fi
+if [ "$N_REMOTE" -gt 0 ]; then
+  blank
+  emit "     ${B}Allowed to run commands on other machines without asking${RST}"
+  # A line for each file, then its rules under it.
+  _pf=""
+  while IFS="$TAB" read -r f a st; do
+    [ -n "$f" ] || continue
+    [ "$a$TAB$f" = "$_pf" ] || pair "${YEL}!${RST}" "$a" 16 "$(short "$f")"
+    _pf="$a$TAB$f"
+    wrap "$st" 8 "        " "        "
+  done <<EOF
+$REMOTE_LIST
+EOF
+  wrap "A prompt injection in anything the agent reads can then run commands on those machines." 8 "        " "        " "$DIM"
 fi
 if [ "$N_OLD" -gt 0 ]; then
   blank
@@ -8805,6 +9240,7 @@ for _t in $NPM_TAGS; do
 done
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
+elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_REMOTE_AG allowed to run commands on other machines"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi

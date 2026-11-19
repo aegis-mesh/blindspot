@@ -6,8 +6,10 @@
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
-# versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check.
+# versions with a published fix (data/outdated.tsv), extensions that shipped malware
+# (data/bad-extensions.tsv) and commands that run commands on other machines, with the agent files
+# whose saved rules can allow them (data/remote-commands.tsv). The scripts stay single files people
+# can download and check.
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -121,7 +123,17 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
-        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')
+        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }'
+      # A cmd line's words are plain words, one space apart; a file line's path may hold one * folder or
+      # end in a *.ext file name, which the scripts expand, and a * anywhere else is refused.
+      rows data/remote-commands.tsv | awk -F '\t' "$PATH_OK"'
+        function txt(s) { return s != "" && s !~ /[\047"`$|\\]/ }
+        { if ($1 == "cmd") ok = NF == 5 && $2 ~ /^[A-Za-z0-9][A-Za-z0-9.-]*( [A-Za-z0-9][A-Za-z0-9.-]*)*$/ && $3 ~ /^(exact|any)$/ && txt($4) && $5 ~ /^https:\/\/[^ \047"`$|\\]+$/ && !seen[tolower($2)]++
+          else if ($1 == "file") {
+            ok = NF == 7 && txt($2) && $3 ~ /^(all|mac|linux|win)$/ && $4 ~ /^(claude|codex|gemini-toml|gemini-json|vscode|roo|amazonq)$/ && $5 ~ /^(agent|file)$/ && txt($7)
+            p = $6; g = gsub(/\/\*\//, "/x/", p); g += sub(/\/\*\.[A-Za-z0-9]+$/, "/x.y", p); ok = ok && g <= 1 && path_ok(p)
+          } else ok = 0
+          if (!ok) print "data/remote-commands.tsv: " $0 }')
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
@@ -369,6 +381,19 @@ rows data/auto-approve.tsv | awk -F '\t' "$PATH_PS"'
     if ($3 ~ /^\{PROJECT\}\//) { q = substr($3, 11); if (!(q in pj)) { pj[q] = 1; po = po (po == "" ? "" : ", ") "\047" q "\047" } } }
   END { print ")"; print "$AaProject = @(" po ")"; print "# <<< auto-approve" }' > "$WORK/auto-approve.ps1"
 
+# --- saved rules that run commands on other machines ---------------------------------
+# RC_SIGS rows are words|case|label; RC_FILES rows agent|os|format|group|path|note.
+rows data/remote-commands.tsv | awk -F '\t' "$PATH_SH"'
+  $1 == "cmd" { sg = sg (sg == "" ? "" : "\n") $2 "|" $3 "|" $4 }
+  $1 == "file" { fl = fl (fl == "" ? "" : "\n") $2 "|" $3 "|" $4 "|" $5 "|" sh($6) "|" $7 }
+  END { print "# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it."
+        print "RC_SIGS=\047" sg "\047"; print "RC_FILES=\"" fl "\""; print "# <<< remote-commands" }' > "$WORK/remote-commands.sh"
+rows data/remote-commands.tsv | awk -F '\t' "$PATH_PS"'
+  $1 == "cmd" { sg = sg "  ,@(\047" $2 "\047, \047" $3 "\047, \047" $4 "\047)\n" }
+  $1 == "file" { fl = fl "  ,@(\047" $2 "\047, \047" $3 "\047, \047" $4 "\047, \047" $5 "\047, " ps($6) ", \047" $7 "\047)\n" }
+  END { print "# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it."
+        printf "$RcSigs = @(\n%s)\n", sg; printf "$RcFiles = @(\n%s)\n", fl; print "# <<< remote-commands" }' > "$WORK/remote-commands.ps1"
+
 # --- agent versions with a published fix -----------------------------------------
 # Rows are id|name|os|kind|where|first|fixed|hole|advisory, first - when the range has none, fixed !last
 # for an advisory that no version fixes (>=first <=last), and the advisory without https://.
@@ -416,8 +441,8 @@ grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has 
 
 RC=0
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
-  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
-  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
+  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve remote-commands agents incidents indicators outdated platforms"
+  else blocks="keys sessions planted auto-approve remote-commands incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }

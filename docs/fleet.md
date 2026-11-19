@@ -233,7 +233,7 @@ Each run has one outcome, the worst of these, in this order:
 | `failed` | The run could not finish safely, such as a changed script copy or a result it could not save. | 13 |
 | `act` | Something to act on now: malware signs (the gh-token-monitor wiper is named first), files a worm plants in a project, npm malware listed only in a lockfile (act if that project was installed), a link to `~/.ssh/authorized_keys` outside `.ssh`, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
-| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, an editor extension to remove whose malware was made for another system, a file named like the ones worms plant, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
+| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an agent allowed to run commands on other machines without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, an editor extension to remove whose malware was made for another system, a file named like the ones worms plant, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
 | `clear` | Every account was checked in full and nothing was found. | 0 |
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
@@ -286,6 +286,7 @@ hook sends npm tokens out on every push. Then:
 | A link to `~/.ssh/authorized_keys` outside `.ssh` | Delete the link: an agent that edits the linked file adds a login to the Mac. |
 | npm malware only in a lockfile | Ask whether they installed that project. If they did, treat the Mac as compromised; if not, update the lockfile to a version without it. |
 | An agent set to run without asking | Turn it off, unless the agent runs in a sandbox. |
+| An agent allowed to run commands on other machines without asking | Remove the rule, or change it to ask first. |
 | A tool with a security fix, or a package version to update | Update it. |
 | An extension to remove | Uninstall it. Its malware was made for another system, so it did not run on this Mac. |
 | Project settings that act when a folder opens | Have them read those settings in each project section 2 of their report lists. |
