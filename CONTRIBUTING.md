@@ -101,6 +101,23 @@ Add a Developer Certificate of Origin sign-off to each commit with `git commit -
 
 ## Releases
 
-Every week, and before a merge to `main`, a maintainer runs `bash tools/check-advisories.sh`. It compares `data/bad-npm.tsv` with OSV.dev (which includes GitHub's malware advisories and the OpenSSF Malicious Packages list) and lists withdrawn entries, versions we flag that nothing names any more, and malicious versions we miss. Treat a MISSING line as a lead: confirm it against a primary source before adding it. It also lists each incident's source to re-read, since a vendor can change what it says an incident did.
+People download only what a maintainer released and signed, never whatever was last merged. A merge to `main` reaches no one until the next release, so when a merge adds an incident or a malware version, cut a release soon after. How releases are signed and checked, and why: [docs/designs/signed-releases.md](docs/designs/signed-releases.md).
 
-Maintainers cut tagged releases and publish the SHA-256 of `gird-check.sh` and of `gird-fleet.sh` in the release notes. gird.ai/blindspot serves `gird-check.sh` and `gird-check.ps1` from `main`, so a merge to `main` is a release to everyone who downloads from gird.ai.
+Every week, and before every release, a maintainer runs `bash tools/check-advisories.sh`. It compares `data/bad-npm.tsv` with OSV.dev (which includes GitHub's malware advisories and the OpenSSF Malicious Packages list) and lists withdrawn entries, versions we flag that nothing names any more, and malicious versions we miss. Treat a MISSING line as a lead: confirm it against a primary source before adding it. It also lists each incident's source to re-read, since a vendor can change what it says an incident did.
+
+To cut a release, merge a `## X.Y.Z, <date>` section in `CHANGELOG.md`, check out the tip of `main`, and run:
+
+```sh
+BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh --dry-run X.Y.Z   # every check, no tag or release
+BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh X.Y.Z
+```
+
+It needs git, `gh` signed in, and OpenSSH 8.1 or later. It stops, publishing nothing, unless the checkout is clean and at `origin/main`, the version is higher than every release, `CHANGELOG.md` has its section and `bash tools/gen.sh --check` passes. It then lists every commit and file changed since the previous release: review them against the [security review](#security-review) and type the version to go on. It signs `SHA256SUMS`, checks that signature against `.github/allowed_signers`, then pushes the signed tag and creates the GitHub release. `ssh-keygen` asks for your key's passphrase itself, once for `SHA256SUMS` and once for the tag.
+
+Your release key is your own, made once with a passphrase:
+
+```sh
+ssh-keygen -t ed25519 -C blindspot-release -f ~/.ssh/blindspot-release
+```
+
+It is not your login or git key. Keep it on your own computer: never in this repository, CI, a shared drive or a chat. Add its public half as a line in `.github/allowed_signers` by pull request (the file's header shows the line), and ask for it to be added to gird.ai's copy of the keys: gird.ai serves a release signed by a new key only once both have it. If a key is lost or stolen, remove its line in both places and cut a new release with another key.

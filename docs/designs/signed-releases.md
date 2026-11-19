@@ -1,6 +1,8 @@
 # Signed releases
 
-Status: designed, not built.
+Status: the release side is built: `tools/release.sh`, tested by `tests/release.sh`. `.github/allowed_signers`
+holds no key yet, so no release has been signed. How gird.ai serves releases is not part of this
+repository.
 
 For maintainers who cut releases, and for IT teams and others who want to check that the copy of
 Blindspot they downloaded is one the maintainers published.
