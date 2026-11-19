@@ -5,8 +5,8 @@ checked on 2026-10-28 against ManageEngine's documentation, linked at each step.
 documentation leaves several things out, such as which account a Mac script runs as and its time
 limit; [Endpoint Central's limits](#endpoint-centrals-limits) lists them.
 
-Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
-about a finding.
+Read [docs/fleet.md](../fleet.md) first: what the check does and what each outcome means.
+[docs/fleet-reference.md](../fleet-reference.md#act-on-a-finding) says what to do about a finding.
 
 Using Mobile Device Manager Plus without Endpoint Central? Read
 [its page](manageengine-mdm-plus.md) instead.
@@ -26,18 +26,19 @@ account's `protected_folders` is `checked` once access works.
 
 ## Install it once
 
-1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, each pasted between its
-   marker lines in the install script. For Endpoint Central, the options line that starts the
-   second line of `gird-fleet.sh` leaves out `--exit-zero`, so the exit code carries the outcome:
+1. Prepare `blindspot-install.sh` as [docs/fleet.md](../fleet.md#1-install-it-once) says, from a
+   tagged release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked. For Endpoint
+   Central, the options line (`opts=` in its first line) leaves out `--exit-zero`, so the exit code
+   carries the outcome:
 
    ```sh
-   case " $* " in *" --inventory "*|*" --list "*|*" --help "*|*" -h "*) ;; *) set -- --all-users --summary-to-stdout --deadline=3000 ;; esac
+   opts='case " $* " in *" --inventory "*|*" --list "*|*" --help "*|*" -h "*) ;; *) set -- --all-users --summary-to-stdout --deadline=3000 ;; esac'
    ```
 
-   Optional: add the lines from "Install ripgrep (optional)" in [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm)
+   Optional: add the lines from [Install ripgrep (optional)](../fleet-reference.md#install-ripgrep-optional)
    to its end, so large agent session stores take seconds per account rather than minutes.
-2. Save the install script as a file, `blindspot-install.sh`.
+2. Read `blindspot-install.sh` before you upload it: it is both files, unchanged, inside a few
+   install lines.
 3. Click **Configurations** > **Script Repository** > **Add Script**, and add
    `blindspot-install.sh`
    ([Custom Scripts](https://www.manageengine.com/products/desktop-central/help/configuring_desktop_central/managing_custom_scripts.html)).
@@ -94,7 +95,7 @@ prints the saved result and exits with its outcome's code.
 Under **Configurations** > **All Configurations** > `Blindspot check` > **Execution Status**, a Mac
 whose outcome is `clear` should read as successful, and any other outcome as failed. The exit code
 is 10 for `act`, 11 for `review`, 12 for `not_checked` and 13 for `failed` (see
-[docs/fleet.md](../fleet.md#4-read-the-results)); ManageEngine's documentation does not say whether
+[docs/fleet.md](../fleet.md#what-you-get)); ManageEngine's documentation does not say whether
 Execution Status shows it. Treat a Mac with no status as not checked.
 
 If logging is available for the configuration, the **Remarks** column shows the script's output.

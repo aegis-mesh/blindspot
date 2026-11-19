@@ -130,7 +130,7 @@ fi
 # file is not read and is counted, one line each in FLEET_NR, as not checked. Agents installed in
 # /Applications and the shared temp folder are the Mac's, checked once by root, never as an account's.
 # Shared install folders it reads (npm's global folders outside the home, shared Python, Cursor's
-# version) count on every account's row, as docs/fleet.md says.
+# version) count on every account's row, as docs/fleet-reference.md says.
 FLEET_NR=""; FLEET_MAX=16777216; FLEET_PROT=ok
 if [ "$ACCTRUN" -eq 1 ]; then
   APP_CLAUDE=""; APP_CURSOR=""; APP_WINDSURF=""; APP_DEVIN=""; APP_ANTIGRAVITY=""

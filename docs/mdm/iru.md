@@ -4,8 +4,8 @@
 on 2026-10-24 against
 [Iru's Custom Scripts guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview).
 
-Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
-about a finding.
+Read [docs/fleet.md](../fleet.md) first: what the check does and what each outcome means.
+[docs/fleet-reference.md](../fleet-reference.md#act-on-a-finding) says what to do about a finding.
 
 You add two Custom Script library items: one installs the scripts once, the other runs it daily.
 Iru records the daily run's output, so its summary line is the result.
@@ -24,12 +24,11 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
 
 ## Install it once
 
-1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
-   starting the second line of `gird-fleet.sh` (`--deadline=1800` for Iru), each pasted between its
-   marker lines in the install script. This install step has not yet been run end to end on a real
-   Mac.
-   Optional: add the lines from "Install ripgrep (optional)" in [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm)
+1. Prepare `blindspot-install.sh` as [docs/fleet.md](../fleet.md#1-install-it-once) says, from a
+   tagged release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked. Use
+   `--deadline=1800` for Iru in the options line. This install step has not yet been run end to end
+   on a real Mac.
+   Optional: add the lines from [Install ripgrep (optional)](../fleet-reference.md#install-ripgrep-optional)
    to its end, so large agent session stores take seconds per account rather than minutes.
 2. Add a Custom Script library item named `Blindspot install`
    ([Iru's guide](https://docs.iru.com/en/endpoint/library/library-items-profiles/custom-scripts-overview)),
@@ -60,7 +59,7 @@ blindspot act accounts=2 act=1 review=0 not_checked=1 v=1.2.0 at=2026-10-25T09:1
 ```
 
 The word after `blindspot` is the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
-[docs/fleet.md](../fleet.md#4-read-the-results)). The status reads **Pass** whenever the check
+[docs/fleet.md](../fleet.md#what-you-get)). The status reads **Pass** whenever the check
 finished. **Error** means it could not run safely (`failed`); a missing summary line also means
 not checked.
 

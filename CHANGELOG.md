@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fleet mode: a page for ManageEngine Endpoint Central, `docs/mdm/manageengine-endpoint-central.md`, marked untested until run on a real Mac. Endpoint Central has no daily schedule, so its check script runs at every refresh cycle and starts a full check only when the saved result is more than a day old or the last run failed. A page for ManageEngine Mobile Device Manager Plus, `docs/mdm/manageengine-mdm-plus.md`, says it runs no scripts on a Mac and what to do instead.
+- Docs: a shorter README, `docs/checks.md` listing everything Blindspot checks (written by `tools/gen.sh` from `data/`, and checked by `gen.sh --check`), and `docs/fleet.md` as a one-screen quick start for IT, with the rest in `docs/fleet-reference.md`.
 
 ## 1.2.0, 25 October 2026
 

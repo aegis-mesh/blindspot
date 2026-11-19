@@ -3,8 +3,8 @@
 **Untested:** this page has not yet been run end to end on a real Mac. Menu paths and limits were
 checked on 2026-10-24 against Jamf's documentation, linked at each step.
 
-Read [docs/fleet.md](../fleet.md) first: what the check does, what each outcome means and what to do
-about a finding.
+Read [docs/fleet.md](../fleet.md) first: what the check does and what each outcome means.
+[docs/fleet-reference.md](../fleet-reference.md#act-on-a-finding) says what to do about a finding.
 
 You add three things: a policy that installs the scripts once, a policy that runs it daily, and an
 extension attribute that shows the result in each computer's inventory.
@@ -24,12 +24,11 @@ the result either way: each account's `protected_folders` is `checked` once acce
 
 ## Install it once
 
-1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
-   starting the second line of `gird-fleet.sh` (`--deadline=3000` for Jamf), each pasted between its
-   marker lines in the install script. This install step has not yet been run end to end on a real
-   Mac.
-   Optional: add the lines from "Install ripgrep (optional)" in [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm)
+1. Prepare `blindspot-install.sh` as [docs/fleet.md](../fleet.md#1-install-it-once) says, from a
+   tagged release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked. Use
+   `--deadline=3000` for Jamf in the options line. This install step has not yet been run end to end
+   on a real Mac.
+   Optional: add the lines from [Install ripgrep (optional)](../fleet-reference.md#install-ripgrep-optional)
    to its end, so large agent session stores take seconds per account rather than minutes.
 2. In Jamf Pro, click **Settings**, then in **Computer management** click **Scripts**, then **New**
    ([Jamf's guide](https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/Adding_a_Script_to_Jamf_Pro)).
@@ -82,7 +81,7 @@ v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | 
 ```
 
 It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
-[docs/fleet.md](../fleet.md#4-read-the-results)). `stale: last run <time>` means no check in 3 days,
+[docs/fleet.md](../fleet.md#what-you-get)). `stale: last run <time>` means no check in 3 days,
 `none` means the check has not run yet, `failed` means the last run stopped part-way, and
 `unreadable` means the saved result could not be trusted. Treat each of those, and an empty value, as not checked. The extension attribute can be used
 as smart group criteria, for example values that start with `v1 act`.
