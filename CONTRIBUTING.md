@@ -79,6 +79,25 @@ A reviewer starts from the person who acts on the report, not from the diff:
 - **What a list leaves out.** For any list taken from advisories, check what the same campaign published that the list misses, and that the report's wording doesn't claim more than the list covers.
 - **Both scripts.** Every change lands in `gird-check.sh` and `gird-check.ps1`, each with a test that fails without it.
 
+## Security review
+
+Blindspot runs on other people's computers, and in fleet mode as root on every Mac a company manages. A merge to `main` reaches everyone who downloads from gird.ai (see [Releases](#releases)). So every pull request also gets this review, from a maintainer who didn't write it, and doesn't merge until each point holds:
+
+- **Read every line, tests and tools included.** Maintainers run the suites on their own machines, so code in `tests/` and `tools/` runs there too. For a pull request from someone who isn't a maintainer, read the whole diff before running anything, and run it first in a container or a throwaway virtual machine.
+- **Nothing hidden.** No encoded blobs, minified code, binaries or downloaded code. Account for every non-ASCII or control character the change adds: invisible and right-to-left characters can make code read differently from how it runs. This lists them:
+
+  ```sh
+  git diff origin/main... | LC_ALL=C grep -n '^+.*[^[:print:][:space:]]'
+  ```
+
+- **Runs nothing it reads.** No `eval`, `Invoke-Expression`, or `source` of a file it finds, and no command built from a file's name or contents. A found name reaches `sh -c` only as an argument (`"$1"`), never inside the command text.
+- **Nothing new on the network.** No new host and no new call. A reply from gird.ai is data: limited in size and time, never run, and never used in a path or a command.
+- **No trap for root.** In `gird-fleet.sh`, look for anything one account can plant to change what root reads, follows or reports for another: a link, a file swapped between check and use, a name with a newline.
+- **A list shrinks only with a source.** Removing or narrowing a line in `data/` hides a known threat from everyone who runs the check. Link the primary source that shows the entry was wrong.
+- **CI stays powerless.** A change under `.github/` keeps `permissions: contents: read`, pins every action to a full commit SHA, uses no secrets, never runs on `pull_request_target`, and publishes nothing.
+- **Review what merges.** A new push removes an approval. Review the whole diff again, not only the new commits.
+- **Nothing private.** This repository is public. Code, comments, commits and pull request text name no private repository, server, token or customer.
+
 ## Test
 
 ```sh
