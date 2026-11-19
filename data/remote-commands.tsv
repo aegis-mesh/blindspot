@@ -4,7 +4,7 @@
 #   cmd   words  case  label  source
 #     words   a command that runs commands on another machine, as the words it starts with
 #     case    exact, or any for a command its shell reads without case (PowerShell's cmdlets)
-#     label   what a rule that allows it lets the agent do, as the report shows it
+#     label   where the commands it runs run, as the report shows it after "runs commands"
 #     source  the vendor's page that says the command runs commands on another machine
 #
 #   file  agent  os  format  group  path  note
@@ -21,9 +21,14 @@
 # A rule is read as the words it fixes before its first wildcard. It hits a cmd line when those words
 # and the line's words agree as far as the shorter goes: aws, ssh prod-1 and aws ssm send-command all
 # hit; aws s3, ssh-keygen and git do not. A wildcard glued to a word (ssh*) covers any word it starts.
-# A rule with no wildcard (an exact command) hits only when it has at least the line's words. A deny
-# or ask rule drops the hit when it covers every use of the line's command (its words, then any
-# text), and the agent would apply it over the allow rule. Limits: a rule that puts other words first
+# A rule with no wildcard is that exact command, and hits only when it has more words than the line:
+# Bash(ssh prod-1 uptime) runs uptime on prod-1, while Bash(ssh) or Bash(kubectl exec) alone runs no
+# command elsewhere. Whether the words past the command name a host and a command is not checked, so
+# Bash(ssh prod-1), a login with no command, also hits. A rule shorter than the line (Bash(aws *)) is
+# reported as allowing every such command. A deny or ask rule drops the hit only when it covers every
+# use of the line's command (its words, then any text, with nothing after its wildcard: Bash(ssh * rm)
+# or Bash(* --force) covers none) and the agent would apply it over the allow rule. A regex rule is
+# shown as written, up to a run of 16 letters or digits and to 64 characters. Limits: a rule that puts other words first
 # (aws --region x ssm send-command) is not caught, and neither is a regex that starts with a group or a
 # class ((ssh|scp) .*). A rule that allows every command (Bash, or a tool allowed whole) is not
 # reported here: section 1 reports Claude Code's above this list.
@@ -48,7 +53,10 @@
 #           packages/core/src/policy/toml-loader.ts and utils.ts). A prefix ends at a space or the
 #           command's end; a regex is matched from the command's start. The highest priority wins:
 #           a user file's rule counts as 4 plus its priority over 1000 (config.ts); a deny or ask of
-#           the same priority is read as winning. A rule with argsPattern is not read.
+#           the same priority is read as winning. A rule with argsPattern is not read. A rule with
+#           modes applies only in them: one without default is reported with its modes, a deny or ask
+#           one covers nothing, and an allow for yolo alone is not reported, as yolo mode runs every
+#           command without asking anyway.
 #   gemini-json  Gemini CLI settings.json tools.allowed (run_shell_command(prefix), at 4.3, and with
 #           one a deny of every other command at 4.29), tools.core (allows at 4.25, a deny of every
 #           other tool at 4.24), tools.confirmationRequired (ask, 4.35) and tools.exclude (deny, 4.4)
@@ -68,16 +76,16 @@
 #           docs/built-in-tools.md, crates/chat-cli/src/cli/chat/tools/execute/mod.rs): each is a regex
 #           of the whole command, and a denied match wins. Global agents are in ~/.aws/amazonq/cli-agents
 #           (crates/chat-cli/src/util/paths.rs).
-cmd	ssh	exact	runs commands on other machines over SSH	https://man.openbsd.org/ssh
-cmd	aws ssm send-command	exact	runs commands on AWS servers	https://docs.aws.amazon.com/cli/latest/reference/ssm/send-command.html
-cmd	aws ssm start-session	exact	runs commands on AWS servers	https://docs.aws.amazon.com/cli/latest/reference/ssm/start-session.html
-cmd	aws ecs execute-command	exact	runs commands in AWS containers	https://docs.aws.amazon.com/cli/latest/reference/ecs/execute-command.html
-cmd	gcloud compute ssh	exact	runs commands on Google Cloud servers	https://docs.cloud.google.com/sdk/gcloud/reference/compute/ssh
-cmd	az vm run-command invoke	exact	runs commands on Azure servers	https://learn.microsoft.com/en-us/cli/azure/vm/run-command
-cmd	az ssh vm	exact	runs commands on Azure servers	https://learn.microsoft.com/en-us/cli/azure/ssh
-cmd	kubectl exec	exact	runs commands in Kubernetes containers	https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/
-cmd	Invoke-Command	any	runs commands on other machines with PowerShell	https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command
-cmd	Enter-PSSession	any	runs commands on other machines with PowerShell	https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/enter-pssession
+cmd	ssh	exact	on other machines over SSH	https://man.openbsd.org/ssh
+cmd	aws ssm send-command	exact	on AWS servers	https://docs.aws.amazon.com/cli/latest/reference/ssm/send-command.html
+cmd	aws ssm start-session	exact	on AWS servers	https://docs.aws.amazon.com/cli/latest/reference/ssm/start-session.html
+cmd	aws ecs execute-command	exact	in AWS containers	https://docs.aws.amazon.com/cli/latest/reference/ecs/execute-command.html
+cmd	gcloud compute ssh	exact	on Google Cloud servers	https://docs.cloud.google.com/sdk/gcloud/reference/compute/ssh
+cmd	az vm run-command invoke	exact	on Azure servers	https://learn.microsoft.com/en-us/cli/azure/vm/run-command
+cmd	az ssh vm	exact	on Azure servers	https://learn.microsoft.com/en-us/cli/azure/ssh
+cmd	kubectl exec	exact	in Kubernetes containers	https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/
+cmd	Invoke-Command	any	on other machines with PowerShell	https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command
+cmd	Enter-PSSession	any	on other machines with PowerShell	https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/enter-pssession
 file	Claude Code	all	claude	agent	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	-
 file	Claude Code	all	claude	agent	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.local.json	-
 file	Codex	all	codex	agent	{ENV:CODEX_HOME:~/.codex}/rules/*.rules	-

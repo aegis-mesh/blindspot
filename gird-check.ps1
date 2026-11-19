@@ -788,16 +788,16 @@ $AaProject = @('.codex/config.toml')
 # <<< auto-approve
 # >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
 $RcSigs = @(
-  ,@('ssh', 'exact', 'runs commands on other machines over SSH')
-  ,@('aws ssm send-command', 'exact', 'runs commands on AWS servers')
-  ,@('aws ssm start-session', 'exact', 'runs commands on AWS servers')
-  ,@('aws ecs execute-command', 'exact', 'runs commands in AWS containers')
-  ,@('gcloud compute ssh', 'exact', 'runs commands on Google Cloud servers')
-  ,@('az vm run-command invoke', 'exact', 'runs commands on Azure servers')
-  ,@('az ssh vm', 'exact', 'runs commands on Azure servers')
-  ,@('kubectl exec', 'exact', 'runs commands in Kubernetes containers')
-  ,@('Invoke-Command', 'any', 'runs commands on other machines with PowerShell')
-  ,@('Enter-PSSession', 'any', 'runs commands on other machines with PowerShell')
+  ,@('ssh', 'exact', 'on other machines over SSH')
+  ,@('aws ssm send-command', 'exact', 'on AWS servers')
+  ,@('aws ssm start-session', 'exact', 'on AWS servers')
+  ,@('aws ecs execute-command', 'exact', 'in AWS containers')
+  ,@('gcloud compute ssh', 'exact', 'on Google Cloud servers')
+  ,@('az vm run-command invoke', 'exact', 'on Azure servers')
+  ,@('az ssh vm', 'exact', 'on Azure servers')
+  ,@('kubectl exec', 'exact', 'in Kubernetes containers')
+  ,@('Invoke-Command', 'any', 'on other machines with PowerShell')
+  ,@('Enter-PSSession', 'any', 'on other machines with PowerShell')
 )
 $RcFiles = @(
   ,@('Claude Code', 'all', 'claude', 'agent', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), '-')
@@ -1799,18 +1799,26 @@ function Json-Leaves([string]$f) {
 function Rc-Unq([string]$v) { $v.Substring(1, $v.Length - 2).Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\') }
 function Rc-Words([string]$s) { (@($s -split '[ \t\n]+') | Where-Object { $_ -ne '' }) -join ' ' }
 function Rc-Opn([string]$w) { if ($w -eq '') { '*' } else { $w + ' *' } }
+# $RcTail is $true when text after the wildcard narrows the rule (Bash(ssh * rm)): such a deny or ask
+# rule does not cover every use of a command, so it never drops a hit.
+$RcTail = $false; $RcNc = $false; $RcRaw = ''; $RcNote = ''
 function Rc-Fixed([string]$s, [string]$sty) {
+  $script:RcTail = $false
   $cut = $false; if ($s.Length -gt 256) { $s = $s.Substring(0, 256); $cut = $true }
   if ($cut -and $sty -ne 'rx' -and $sty -ne 'rxfull') { $s = $s -replace '[^ \t]*$', '' }
   if ($sty -eq 'claude') {
     if ($s.EndsWith(':*')) { $s = $s.Substring(0, $s.Length - 2) + ' *' }
     $k = $s.IndexOf([char]'*')
     if ($k -lt 0) { $w = Rc-Words $s }
-    else { $pre = $s.Substring(0, $k); $w = Rc-Words $pre; if ($pre -eq '' -or $pre -match '[ \t]$') { $w = Rc-Opn $w } else { $w = $w + '*' } }
+    else {
+      $pre = $s.Substring(0, $k); $w = Rc-Words $pre; if ($pre -eq '' -or $pre -match '[ \t]$') { $w = Rc-Opn $w } else { $w = $w + '*' }
+      if ($s.Substring($k + 1) -match '[^ \t*]') { $script:RcTail = $true }
+    }
   } elseif ($sty -eq 'prefix') { $w = Rc-Opn (Rc-Words $s) }
   elseif ($sty -eq 'str') {
     if ($s -match '^[ \t]*\*[ \t]*$') { $w = '*' } elseif ($s -match '[ \t]$') { $w = Rc-Opn (Rc-Words $s) } else { $w = Rc-Words $s; if ($w -ne '') { $w += '*' } }
   } else { $w = Rc-Rx $s ($sty -eq 'rx') }
+  if ($cut) { $script:RcTail = $true }
   if ($cut -and $w -ne '' -and -not $w.EndsWith('*')) { if ($sty -eq 'rx' -or $sty -eq 'rxfull') { $w += '*' } else { $w = Rc-Opn $w } }
   $w
 }
@@ -1830,6 +1838,8 @@ function Rc-Rx([string]$r, [bool]$open) {
   }
   if ($stop -eq '') { if ($open) { return (Rc-Opn (Rc-Words $lit)) } else { return (Rc-Words $lit) } }
   if ($stop -eq '$' -and $i -eq $n - 1) { return (Rc-Words $lit) }
+  if ($stop -eq 'w') { if ($r.Substring([Math]::Min($i + 2, $n)) -notmatch '^\+?(\.[*+])?\$?$') { $script:RcTail = $true } }
+  elseif ($r.Substring($i) -notmatch '^\.[*+]\$?$') { $script:RcTail = $true }
   if ($stop -eq '?' -or $stop -eq '*' -or $stop -eq '{') { $lit = $lit.Substring(0, $lit.Length - 1) }
   $w = Rc-Words $lit
   if ($lit -eq '' -or $lit -match '[ \t]$') { return (Rc-Opn $w) }
@@ -1852,8 +1862,16 @@ function Rc-Alts([string]$r) {
   $out.Add($s.ToString()); ,$out
 }
 # An entry: @(fid, rep, decision, rank, case, kind, words), as gird-check.sh's rc_read prints them.
-function Rc-Out($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$kd, [string]$w) { if ($w -ne '') { $list.Add(@($fid, $rep, $d, [Math]::Round($r, 4), $ci, $kd, $w)) } }
-function Rc-OutRx($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$v, [string]$sty) { foreach ($a in (Rc-Alts $v)) { Rc-Out $list $fid $rep $d $r $ci '' (Rc-Fixed $a $sty) } }
+# An entry also carries whether it covers no whole command ($RcTail, or $RcNc for the rule), the regex
+# as written ($RcRaw) and when it applies ($RcNote). $RcTail and $RcRaw are reset for the next entry.
+function Rc-Out($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$kd, [string]$w) {
+  if ($w -ne '') { $list.Add(@($fid, $rep, $d, [Math]::Round($r, 4), $ci, $kd, $w, ($script:RcTail -or $script:RcNc), $script:RcRaw, $script:RcNote)) }
+  $script:RcTail = $false; $script:RcRaw = ''
+}
+function Rc-OutRx($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$v, [string]$sty, [string]$raw) {
+  $raw = $raw -replace '[\t\r\n]', ' '; if ($raw.Length -gt 256) { $raw = $raw.Substring(0, 256) }
+  foreach ($a in (Rc-Alts $v)) { $w = Rc-Fixed $a $sty; $script:RcRaw = $raw; Rc-Out $list $fid $rep $d $r $ci '' $w }
+}
 function Rc-Trail([string]$s) { $n = 0; for ($i = $s.Length - 1; $i -ge 0 -and $s[$i] -eq '\'; $i--) { $n++ }; $n }
 function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
   $L = New-Object System.Collections.Generic.List[object]
@@ -1885,6 +1903,7 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
       for ($i = 0; $i -lt $s.Length; $i++) {
         $c = [string]$s[$i]
         if ($c -cmatch '^[A-Za-z0-9_]$') { $st.id += $c; continue }
+        if ($c -eq ' ' -or $c -eq "`t") { continue }
         if ($c -eq '=') { $st.kw = $st.id }
         elseif ($c -eq '[') { $st.bd++ }
         elseif ($c -eq ']') { if ($st.kw -ceq 'pattern' -and $st.bd -eq 2) { if ($st.fa) { $st.stop = $true } else { $st.nt++; $st.T[$st.nt] = [string][char]2; $st.fa = $true } }; $st.bd-- }
@@ -1946,10 +1965,19 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
       if ($g.args -or $g.mcp -or -not $g.shell) { return }
       $d = switch -CaseSensitive ($g.dec) { 'allow' { 'allow' } 'deny' { 'deny' } 'ask_user' { 'ask' } default { '' } }
       if ($d -eq '') { return }
+      # A rule with modes applies only in them, as gird-check.sh reads them.
+      $md = @($g.modes); $df = $md -ccontains 'default'; $ml = ''
+      for ($k = 0; $k -lt $md.Count; $k++) { if ($k -eq 0) { } elseif ($k -eq $md.Count - 1) { $ml += ' and ' } else { $ml += ', ' }; $ml += $md[$k] }
+      if ($md.Count -gt 0 -and -not $df) {
+        if ($d -ne 'allow') { $script:RcNc = $true }
+        elseif ($md.Count -eq 1 -and $md[0] -ceq 'yolo') { return }
+        else { $script:RcNote = 'only in ' + $ml + $(if ($md.Count -gt 1) { ' modes' } else { ' mode' }) }
+      }
       $r = 4 + $g.pri / 1000
       if ($g.px.Count -gt 0) { foreach ($x in $g.px) { Rc-Out $L $fid $rep $d $r $false '' (Rc-Fixed $x 'prefix') } }
-      elseif ($g.rgx -ne '') { Rc-OutRx $L $fid $rep $d $r $false $g.rgx 'rx' }
+      elseif ($g.rgx -ne '') { Rc-OutRx $L $fid $rep $d $r $false $g.rgx 'rx' $g.rgx }
       else { Rc-Out $L $fid $rep $d $r $false '' '*' }
+      $script:RcNc = $false; $script:RcNote = ''
     }
     $val = {
       param([string]$k, [string]$v)
@@ -1962,11 +1990,12 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
       elseif ($k -ceq 'priority') { $mm = [regex]::Match($v, '^[ \t]*([0-9]+)'); if ($mm.Success) { $g.pri = [double]$mm.Groups[1].Value } }
       elseif ($k -ceq 'argsPattern') { $g.args = $true }
       elseif ($k -ceq 'mcpName') { $g.mcp = $true }
+      elseif ($k -ceq 'modes') { $g.modes = @($vals | Where-Object { $_ -ne '' }) }
     }
     $acc = ''; $ak = ''
     foreach ($line in $t.Replace("`r", '').Split("`n")) {
       if ($acc -ne '') { $acc += ' ' + $line; [void](& $strs $acc); if ($g.bal -or $acc.Length -gt 4096) { & $val $ak $acc; $acc = '' }; continue }
-      if ($line -cmatch '^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$') { & $endrule; $g.inr = $true; $g.shell = $false; $g.px = @(); $g.rgx = ''; $g.dec = ''; $g.pri = 0; $g.args = $false; $g.mcp = $false; continue }
+      if ($line -cmatch '^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$') { & $endrule; $g.inr = $true; $g.shell = $false; $g.px = @(); $g.rgx = ''; $g.dec = ''; $g.pri = 0; $g.args = $false; $g.mcp = $false; $g.modes = @(); continue }
       if ($line -match '^[ \t]*\[') { & $endrule; continue }
       if ($g.inr) {
         $mm = [regex]::Match($line, '^[ \t]*([A-Za-z_]+)[ \t]*=[ \t]*')
@@ -2009,22 +2038,22 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
       if ($m -ge 0) { if ($k.Substring($m + 1) -cne 'approve') { continue }; $k = $k.Substring(0, $m) }
       $k = $k.Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\')
       $d = 'deny'; if ($v -ceq 'true') { $d = 'allow' }
-      if ($k -cmatch '^/.+/[dgimsuvy]*$') { $fl = $k.Substring($k.LastIndexOf('/') + 1); $k = $k.Substring(1, $k.Length - $fl.Length - 2); Rc-OutRx $L $fid $rep $d 0 ($fl.Contains('i')) $k 'rx' }
+      if ($k -cmatch '^/.+/[dgimsuvy]*$') { $fl = $k.Substring($k.LastIndexOf('/') + 1); Rc-OutRx $L $fid $rep $d 0 ($fl.Contains('i')) $k.Substring(1, $k.Length - $fl.Length - 2) 'rx' $k }
       else { Rc-Out $L $fid $rep $d 0 $false '' (Rc-Fixed $k 'prefix') }
     } elseif ($fmt -eq 'roo' -and $str -and ($p -ceq ($fs + 'roo-cline.allowedCommands[]') -or $p -ceq ($fs + 'roo-cline.deniedCommands[]'))) {
       $v = Rc-Unq $v; $d = 'deny'; if ($p.Contains('allowed')) { $d = 'allow' }
       Rc-Out $L $fid $rep $d $v.Length $true '' (Rc-Fixed $v 'str')
     } elseif ($fmt -eq 'amazonq' -and $str -and ($p -ceq ($qk + 'allowedCommands[]') -or $p -ceq ($qk + 'deniedCommands[]'))) {
       $v = Rc-Unq $v; $d = 'deny'; if ($p.EndsWith('allowedCommands[]')) { $d = 'allow' }
-      Rc-OutRx $L $fid $rep $d 0 $false $v 'rxfull'
+      Rc-OutRx $L $fid $rep $d 0 $false $v 'rxfull' $v
     }
   }
   if ($nar) { Rc-Out $L $fid $rep 'deny' 4.29 $false '' '*' }
   if ($core) { Rc-Out $L $fid $rep 'deny' 4.24 $false '' '*' }
   ,$L
 }
-# The hits of a set of an agent's files whose rules apply together: @(fid, rule as shown, labels), or
-# @(fid, '!cut') for a file not read in full. The same as gird-check.sh's RC_MATCH.
+# The hits of a set of an agent's files whose rules apply together: @(fid, rule as shown, what it
+# allows), or @(fid, '!cut') for a file not read in full. The same as gird-check.sh's RC_MATCH.
 $RcSigWords = @(foreach ($s in $RcSigs) { ,@($s[0].Split(' ')) })
 function Rc-Agree([string]$a, [string]$b, [bool]$ci) {
   if ($ci) { $a = $a.ToLowerInvariant(); $b = $b.ToLowerInvariant() }
@@ -2036,6 +2065,11 @@ function Rc-Agrees($W, [int]$wn, [int]$j, [bool]$ci) {
   for ($k = 0; $k -lt $m; $k++) { if (-not (Rc-Agree $W[$k] $S[$k] $ci)) { return $false } }
   $true
 }
+function Rc-Safe([string]$s) {
+  $m = [regex]::Match($s, '[A-Za-z0-9_-]{16}'); if ($m.Success) { $s = $s.Substring(0, $m.Index) + '...' }
+  if ($s.Length -gt 64) { $s = $s.Substring(0, 64) + '...' }
+  $s
+}
 function Rc-Match($entries) {
   $res = New-Object System.Collections.Generic.List[object]; $cuts = @{}
   $ov = @{}; $ns = $RcSigs.Count
@@ -2044,7 +2078,7 @@ function Rc-Match($entries) {
     if ($e[2] -ne 'deny' -and $e[2] -ne 'ask') { continue }
     $W = @($e[6].Split(' ')); $open = $false
     if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
-    if (-not $open) { continue }
+    if (-not $open -or $e[7]) { continue }
     for ($j = 0; $j -lt $ns; $j++) {
       $ci = $e[4] -or $RcSigs[$j][1] -eq 'any'
       if ($W.Count -le $RcSigWords[$j].Count -and (Rc-Agrees $W $W.Count $j $ci) -and (-not $ov.ContainsKey($j) -or $e[3] -gt $ov[$j])) { $ov[$j] = $e[3] }
@@ -2056,21 +2090,29 @@ function Rc-Match($entries) {
     $W = @($e[6].Split(' ')); $open = $false
     if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
     $wn = $W.Count; if ($wn -eq 0) { continue }
-    $lb = ''; $sn = 0
+    $locs = New-Object System.Collections.Generic.List[string]; $sn = 0; $br = $false
     for ($j = 0; $j -lt $ns; $j++) {
       $sl = $RcSigWords[$j].Count
-      if ($wn -lt $sl -and -not $open) { continue }
+      # A rule with no wildcard is that exact command: it counts only when it is longer, as in gird-check.sh.
+      if ($wn -le $sl -and -not $open) { continue }
       if (-not (Rc-Agrees $W $wn $j ($e[4] -or $RcSigs[$j][1] -eq 'any'))) { continue }
       if ($ov.ContainsKey($j) -and $ov[$j] -ge $e[3]) { continue }
-      if (-not (', ' + $lb + ', ').Contains(', ' + $RcSigs[$j][2] + ', ')) { if ($lb -ne '') { $lb += ', ' }; $lb += $RcSigs[$j][2] }
+      if (-not $locs.Contains($RcSigs[$j][2])) { $locs.Add($RcSigs[$j][2]) }
       $m = [Math]::Min($wn, $sl); if ($m -gt $sn) { $sn = $m }
+      if ($wn -lt $sl) { $br = $true }
     }
-    if ($lb -eq '') { continue }
-    $sh = ($W[0..($sn - 1)]) -join ' '
-    if ($wn -gt $sn) { $sh += ' ...' } elseif ($open -and -not $W[$wn - 1].EndsWith('*')) { $sh += ' *' }
-    if ($e[5] -ne '') { $sh = $e[5] + '(' + $sh + ')' }
+    if ($locs.Count -eq 0) { continue }
+    $lb = $locs[0]; for ($k = 1; $k -lt $locs.Count; $k++) { if ($k -eq $locs.Count - 1) { $lb += ' and ' } else { $lb += ', ' }; $lb += $locs[$k] }
+    if ($br) { $tx = 'allows every ' + ($W -join ' ') + ' command, including ones that run commands ' + $lb } else { $tx = 'runs commands ' + $lb }
+    if ($e[9] -ne '') { $tx += ', ' + $e[9] }
+    if ($e[8] -ne '') { $sh = Rc-Safe $e[8] }
+    else {
+      $sh = ($W[0..($sn - 1)]) -join ' '
+      if ($wn -gt $sn) { $sh += ' ...' } elseif ($open -and -not $W[$wn - 1].EndsWith('*')) { $sh += ' *' }
+      if ($e[5] -ne '') { $sh = $e[5] + '(' + $sh + ')' }
+    }
     $key = "$($e[0])`t$sh"
-    if (-not $seen.ContainsKey($key)) { $seen[$key] = 1; $res.Add(@($e[0], $sh, $lb)) }
+    if (-not $seen.ContainsKey($key)) { $seen[$key] = 1; $res.Add(@($e[0], $sh, $tx)) }
   }
   ,$res
 }

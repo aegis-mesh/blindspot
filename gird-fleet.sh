@@ -207,16 +207,16 @@ Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermi
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
 # >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
-RC_SIGS='ssh|exact|runs commands on other machines over SSH
-aws ssm send-command|exact|runs commands on AWS servers
-aws ssm start-session|exact|runs commands on AWS servers
-aws ecs execute-command|exact|runs commands in AWS containers
-gcloud compute ssh|exact|runs commands on Google Cloud servers
-az vm run-command invoke|exact|runs commands on Azure servers
-az ssh vm|exact|runs commands on Azure servers
-kubectl exec|exact|runs commands in Kubernetes containers
-Invoke-Command|any|runs commands on other machines with PowerShell
-Enter-PSSession|any|runs commands on other machines with PowerShell'
+RC_SIGS='ssh|exact|on other machines over SSH
+aws ssm send-command|exact|on AWS servers
+aws ssm start-session|exact|on AWS servers
+aws ecs execute-command|exact|in AWS containers
+gcloud compute ssh|exact|on Google Cloud servers
+az vm run-command invoke|exact|on Azure servers
+az ssh vm|exact|on Azure servers
+kubectl exec|exact|in Kubernetes containers
+Invoke-Command|any|on other machines with PowerShell
+Enter-PSSession|any|on other machines with PowerShell'
 RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
 Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|-
 Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-

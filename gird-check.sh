@@ -1107,16 +1107,16 @@ Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermi
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
 # >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
-RC_SIGS='ssh|exact|runs commands on other machines over SSH
-aws ssm send-command|exact|runs commands on AWS servers
-aws ssm start-session|exact|runs commands on AWS servers
-aws ecs execute-command|exact|runs commands in AWS containers
-gcloud compute ssh|exact|runs commands on Google Cloud servers
-az vm run-command invoke|exact|runs commands on Azure servers
-az ssh vm|exact|runs commands on Azure servers
-kubectl exec|exact|runs commands in Kubernetes containers
-Invoke-Command|any|runs commands on other machines with PowerShell
-Enter-PSSession|any|runs commands on other machines with PowerShell'
+RC_SIGS='ssh|exact|on other machines over SSH
+aws ssm send-command|exact|on AWS servers
+aws ssm start-session|exact|on AWS servers
+aws ecs execute-command|exact|in AWS containers
+gcloud compute ssh|exact|on Google Cloud servers
+az vm run-command invoke|exact|on Azure servers
+az ssh vm|exact|on Azure servers
+kubectl exec|exact|in Kubernetes containers
+Invoke-Command|any|on other machines with PowerShell
+Enter-PSSession|any|on other machines with PowerShell'
 RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
 Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|-
 Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-
@@ -2409,24 +2409,27 @@ function unq(v) { v = substr(v, 2, length(v) - 2); gsub(/\\\\/, "\001", v); gsub
 function wsplit(s,   a, n, i, o) { n = split(s, a, " "); o = ""; for (i = 1; i <= n; i++) if (a[i] != "") o = o (o == "" ? "" : " ") a[i]; return o }
 function opn(w) { return w == "" ? "*" : w " *" }
 function cap(s) { RC_T = 0; if (length(s) > 256) { s = substr(s, 1, 256); RC_T = 1 }; return s }
+# RC_TAIL is 1 when text after the wildcard narrows the rule (Bash(ssh * rm)): such a deny or ask rule
+# does not cover every use of a command, so it never drops a hit.
 function fixed(s, sty,   k, pre, w) {
-  s = cap(s)
+  s = cap(s); RC_TAIL = 0
   if (RC_T && sty != "rx" && sty != "rxfull") sub(/[^ \t]*$/, "", s)
   if (sty == "claude") {
     if (s ~ /:\*$/) s = substr(s, 1, length(s) - 2) " *"
     k = index(s, "*")
     if (k == 0) w = wsplit(s)
-    else { pre = substr(s, 1, k - 1); w = wsplit(pre); w = (pre == "" || pre ~ /[ \t]$/) ? opn(w) : w "*" }
+    else { pre = substr(s, 1, k - 1); w = wsplit(pre); w = (pre == "" || pre ~ /[ \t]$/) ? opn(w) : w "*"; if (substr(s, k + 1) ~ /[^ \t*]/) RC_TAIL = 1 }
   } else if (sty == "prefix") w = opn(wsplit(s))
   else if (sty == "str") { if (s ~ /^[ \t]*\*[ \t]*$/) w = "*"; else if (s ~ /[ \t]$/) w = opn(wsplit(s)); else { w = wsplit(s); if (w != "") w = w "*" } }
   else w = rx(s, sty == "rx")
+  if (RC_T) RC_TAIL = 1
   if (RC_T && w != "" && w !~ /\*$/) w = (sty == "rx" || sty == "rxfull") ? w "*" : opn(w)
   return w
 }
 # A regex: the literal text it starts with. An escaped space, \s or \b ends a word; a quantifier
 # after a character makes it optional; a regex matched to the end of the command (rxfull) and literal
-# throughout is an exact command.
-function rx(r, open,   i, n, c, d, lit, stop, w) {
+# throughout is an exact command. Anything after the literal text but .* (or .+) narrows it (RC_TAIL).
+function rx(r, open,   i, n, c, d, lit, stop, w, rest) {
   if (substr(r, 1, 1) == "^") r = substr(r, 2)
   lit = ""; stop = ""; n = length(r)
   for (i = 1; i <= n; i++) {
@@ -2442,6 +2445,8 @@ function rx(r, open,   i, n, c, d, lit, stop, w) {
   }
   if (stop == "") return open ? opn(wsplit(lit)) : wsplit(lit)
   if (stop == "$" && i == n) return wsplit(lit)
+  if (stop == "w") { rest = substr(r, i + 2); if (rest !~ /^\+?(\.[*+])?\$?$/) RC_TAIL = 1 }
+  else if (substr(r, i) !~ /^\.[*+]\$?$/) RC_TAIL = 1
   if (stop == "?" || stop == "*" || stop == "{") lit = substr(lit, 1, length(lit) - 1)
   w = wsplit(lit)
   if (lit == "" || lit ~ /[ \t]$/) return opn(w)
@@ -2462,8 +2467,14 @@ function alts(r, A,   i, n, c, dp, cl, s, k) {
   }
   A[++k] = s; return k
 }
-function out(d, r, ci, kd, w) { if (w != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", FID, REP, d, r, ci, kd, w }
-function outrx(d, r, ci, kd, v, sty,   A, n, k) { n = alts(v, A); for (k = 1; k <= n; k++) out(d, r, ci, kd, fixed(A[k], sty)) }
+# An entry, with RC_TAIL or RC_NC (a rule that covers no whole command), RC_RAW (a regex, shown as
+# written) and RC_NOTE (when the rule applies). RC_TAIL and RC_RAW are reset for the next entry.
+function out(d, r, ci, kd, w,   t) {
+  t = (RC_TAIL || RC_NC) ? 1 : 0
+  if (w != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", FID, REP, d, r, ci, kd, w, t, RC_RAW, RC_NOTE
+  RC_TAIL = 0; RC_RAW = ""
+}
+function outrx(d, r, ci, kd, v, sty, raw,   A, n, k, w) { n = alts(v, A); gsub(/[\t\r\n]/, " ", raw); for (k = 1; k <= n; k++) { w = fixed(A[k], sty); RC_RAW = substr(raw, 1, 256); out(d, r, ci, kd, w) } }
 '
 # The rules of one agent file, as fid<TAB>rep<TAB>decision<TAB>rank<TAB>case<TAB>kind<TAB>words lines
 # for rc_run (decision allow, ask, deny, or cut for a file not read in full). A deny or ask rule
@@ -2504,6 +2515,7 @@ rc_read() { # file format fid rep
         for (i = 1; i <= n; i++) {
           c = substr(s, i, 1)
           if (c ~ /[A-Za-z0-9_]/) { id = id c; continue }
+          if (c == " " || c == "\t") continue
           if (c == "=") kw = id
           else if (c == "[") { bd++ }
           else if (c == "]") { if (kw == "pattern" && bd == 2) { if (fa) stop = 1; else { T[++nt] = "\002"; fa = 1 } }; bd-- }
@@ -2546,15 +2558,25 @@ rc_read() { # file format fid rep
         }
         BAL = dp <= 0; return k
       }
-      function endrule(   d, r, k) {
+      function endrule(   d, r, k, df, ml) {
         if (!inr) return; inr = 0
         if (args || mcp || !shell) return
         d = dec == "allow" ? "allow" : dec == "deny" ? "deny" : dec == "ask_user" ? "ask" : ""
         if (d == "") return
+        # A rule with modes applies only in them. Without default among them, a deny or ask covers no
+        # command in default mode, and an allow is said with its modes, or skipped for yolo alone, where
+        # Gemini CLI runs every command without asking anyway.
+        df = 0; ml = ""; for (k = 1; k <= nm; k++) { if (MD[k] == "default") df = 1; ml = ml (k == 1 ? "" : k == nm ? " and " : ", ") MD[k] }
+        if (nm > 0 && !df) {
+          if (d != "allow") RC_NC = 1
+          else if (nm == 1 && MD[1] == "yolo") return
+          else RC_NOTE = "only in " ml (nm > 1 ? " modes" : " mode")
+        }
         r = 4 + pri / 1000
         if (np > 0) for (k = 1; k <= np; k++) out(d, r, 0, "", fixed(PX[k], "prefix"))
-        else if (rgx != "") outrx(d, r, 0, "", rgx, "rx")
+        else if (rgx != "") outrx(d, r, 0, "", rgx, "rx", rgx)
         else out(d, r, 0, "", "*")
+        RC_NC = 0; RC_NOTE = ""
       }
       function val(k, v,   n, j) {
         if (length(v) > 4096) { if (!ct) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; ct = 1; return }
@@ -2566,9 +2588,10 @@ rc_read() { # file format fid rep
         else if (k == "priority" && match(v, /^[ \t]*[0-9]+/)) pri = substr(v, RSTART, RLENGTH) + 0
         else if (k == "argsPattern") args = 1
         else if (k == "mcpName") mcp = 1
+        else if (k == "modes") { nm = 0; for (j = 1; j <= n; j++) if (V[j] != "") MD[++nm] = V[j] }
       }
       acc != "" { acc = acc " " $0; strs(acc); if (BAL || length(acc) > 4096) { val(ak, acc); acc = "" }; next }
-      /^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$/ { endrule(); inr = 1; shell = 0; np = 0; rgx = ""; dec = ""; pri = 0; args = 0; mcp = 0; next }
+      /^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$/ { endrule(); inr = 1; shell = 0; np = 0; rgx = ""; dec = ""; pri = 0; args = 0; mcp = 0; nm = 0; next }
       /^[ \t]*\[/ { endrule(); next }
       inr && match($0, /^[ \t]*[A-Za-z_]+[ \t]*=[ \t]*/) {
         k = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", k); sub(/[ \t]*=.*$/, "", k)
@@ -2602,23 +2625,24 @@ rc_read() { # file format fid rep
         if (m) { if (substr(k, m + 1) != "approve") next; k = substr(k, 1, m - 1) }
         gsub(/\\\\/, "\001", k); gsub(/\\"/, "\"", k); gsub(/\001/, "\\", k)
         d = v == "true" ? "allow" : "deny"
-        if (match(k, /^\/.+\/[dgimsuvy]*$/)) { f = k; sub(/^.*\//, "", f); k = substr(k, 2, length(k) - length(f) - 2); outrx(d, 0, index(f, "i") > 0, "", k, "rx") }
+        if (match(k, /^\/.+\/[dgimsuvy]*$/)) { f = k; sub(/^.*\//, "", f); outrx(d, 0, index(f, "i") > 0, "", substr(k, 2, length(k) - length(f) - 2), "rx", k) }
         else out(d, 0, 0, "", fixed(k, "prefix"))
       }
       FMT == "roo" && (p == S "roo-cline.allowedCommands[]" || p == S "roo-cline.deniedCommands[]") && v ~ /^"/ {
         v = unq(v); out(p ~ /allowed/ ? "allow" : "deny", length(v), 1, "", fixed(v, "str"))
       }
       FMT == "amazonq" && (p == QK "allowedCommands[]" || p == QK "deniedCommands[]") && v ~ /^"/ {
-        v = unq(v); outrx(p ~ /allowed/ ? "allow" : "deny", 0, 0, "", v, "rxfull")
+        v = unq(v); outrx(p ~ /allowed/ ? "allow" : "deny", 0, 0, "", v, "rxfull", v)
       }
       END { if (nar) out("deny", 4.29, 0, "", "*"); if (core) out("deny", 4.24, 0, "", "*") }' ;;
   esac
 }
 # The hits of a set of an agent's files whose rules apply together (data/remote-commands.tsv): an
 # allow rule of a file marked to report whose words hit a cmd line that no deny or ask rule of the set
-# covers at its rank or higher. Prints fid<TAB>rule as shown<TAB>labels; fid<TAB>!cut for a file not
-# read in full. The rule is shown only as far as the words it shares with the command it allows, so
-# a key later in it is never printed.
+# covers at its rank or higher. Prints fid<TAB>rule as shown<TAB>what it allows; fid<TAB>!cut for a
+# file not read in full. A rule is shown only as far as the words it shares with the command, and a
+# regex as written up to any run of 16 letters and digits and to 64 characters, so a key in a rule
+# is never printed.
 RC_MATCH='
 function agree(a, b, ci) {
   if (ci) { a = tolower(a); b = tolower(b) }
@@ -2627,32 +2651,44 @@ function agree(a, b, ci) {
 }
 function words(w,   n) { n = split(w, W, " "); OPEN = 0; if (n > 0 && W[n] == "*") { OPEN = 1; n-- } else if (n > 0 && W[n] ~ /\*$/) OPEN = 1; return n }
 function agrees(wn, j, ci,   k, m) { m = wn < SN[j] ? wn : SN[j]; for (k = 1; k <= m; k++) if (!agree(W[k], S[j, k], ci)) return 0; return 1 }
+function safe(s) { if (match(s, RUN)) s = substr(s, 1, RSTART - 1) "..."; if (length(s) > 64) s = substr(s, 1, 64) "..."; return s }
 BEGIN { ns = split(ENVIRON["RC_SIGS"], L, "\n")
-  for (j = 1; j <= ns; j++) { split(L[j], f, "|"); SN[j] = split(f[1], t, " "); for (k = 1; k <= SN[j]; k++) S[j, k] = t[k]; SC[j] = f[2] == "any"; SL[j] = f[3] } }
+  for (j = 1; j <= ns; j++) { split(L[j], f, "|"); SN[j] = split(f[1], t, " "); for (k = 1; k <= SN[j]; k++) S[j, k] = t[k]; SC[j] = f[2] == "any"; SL[j] = f[3] }
+  RUN = ""; for (k = 1; k <= 16; k++) RUN = RUN "[A-Za-z0-9_-]" }
 $3 == "cut" { if (!($1 in CUT)) { CUT[$1] = 1; print $1 "\t!cut" }; next }
-{ n++; F[n] = $1; R[n] = $2; D[n] = $3; K[n] = $4 + 0; C[n] = $5; KD[n] = $6; WS[n] = $7 }
+{ n++; F[n] = $1; R[n] = $2; D[n] = $3; K[n] = $4 + 0; C[n] = $5; KD[n] = $6; WS[n] = $7; TL[n] = $8; RW[n] = $9; NT[n] = $10 }
 END {
   for (i = 1; i <= n; i++) {
     if (D[i] != "deny" && D[i] != "ask") continue
-    wn = words(WS[i]); if (!OPEN) continue
+    wn = words(WS[i]); if (!OPEN || TL[i] == 1) continue
     for (j = 1; j <= ns; j++) if (wn <= SN[j] && agrees(wn, j, C[i] || SC[j]) && (!(j in OV) || K[i] > OV[j])) OV[j] = K[i]
   }
   for (i = 1; i <= n; i++) {
     if (D[i] != "allow" || R[i] != 1) continue
     wn = words(WS[i]); if (wn == 0) continue
-    lb = ""; sn = 0
+    nl = 0; sn = 0; br = 0; seen = "\001"
     for (j = 1; j <= ns; j++) {
-      if (wn < SN[j] && !OPEN) continue
+      # A rule with no wildcard is that exact command: it runs a command elsewhere only with words past
+      # the command (a host and what to run there), so it counts only when it is longer.
+      if (wn <= SN[j] && !OPEN) continue
       if (!agrees(wn, j, C[i] || SC[j])) continue
       if ((j in OV) && OV[j] >= K[i]) continue
-      if (index(", " lb ", ", ", " SL[j] ", ") == 0) lb = lb (lb == "" ? "" : ", ") SL[j]
+      if (!index(seen, "\001" SL[j] "\001")) { seen = seen SL[j] "\001"; LB[++nl] = SL[j] }
       m = wn < SN[j] ? wn : SN[j]; if (m > sn) sn = m
+      if (wn < SN[j]) br = 1
     }
-    if (lb == "") continue
-    sh = W[1]; for (k = 2; k <= sn; k++) sh = sh " " W[k]
-    if (wn > sn) sh = sh " ..."; else if (OPEN && W[wn] !~ /\*$/) sh = sh " *"
-    if (KD[i] != "") sh = KD[i] "(" sh ")"
-    if (!((F[i] SUBSEP sh) in SEEN)) { SEEN[F[i], sh] = 1; print F[i] "\t" sh "\t" lb }
+    if (nl == 0) continue
+    lb = LB[1]; for (k = 2; k <= nl; k++) lb = lb (k == nl ? " and " : ", ") LB[k]
+    if (br) { tx = W[1]; for (k = 2; k <= wn; k++) tx = tx " " W[k]; tx = "allows every " tx " command, including ones that run commands " lb }
+    else tx = "runs commands " lb
+    if (NT[i] != "") tx = tx ", " NT[i]
+    if (RW[i] != "") sh = safe(RW[i])
+    else {
+      sh = W[1]; for (k = 2; k <= sn; k++) sh = sh " " W[k]
+      if (wn > sn) sh = sh " ..."; else if (OPEN && W[wn] !~ /\*$/) sh = sh " *"
+      if (KD[i] != "") sh = KD[i] "(" sh ")"
+    }
+    if (!((F[i] SUBSEP sh) in SEEN)) { SEEN[F[i], sh] = 1; print F[i] "\t" sh "\t" tx }
   }
 }'
 # rep|format|file lines, one set: file<TAB>rule<TAB>labels for each hit, file<TAB>!cut for each file
