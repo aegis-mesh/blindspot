@@ -3,9 +3,13 @@
 # first and publishes nothing until every check has passed.
 #
 #   BLINDSPOT_SIGNING_KEY=~/.ssh/blindspot-release bash tools/release.sh [--dry-run] X.Y.Z
+#   bash tools/release.sh --check-list
 #
 # --dry-run does every step up to and including checking its own signature, then stops before the
 # tag, the push and the GitHub release, and keeps the files it made for you to look at.
+# --check-list only checks that .github/release-files names every file people run, and exits.
+# The release signs the files .github/release-files names, taken from the reviewed commit or built
+# from it by bash tools/gen.sh.
 # ssh-keygen asks for the key's passphrase itself, once for SHA256SUMS and once for the tag; this
 # script never reads, stores or passes it.
 # This script comes from the checkout it releases: review changes to tools/ since the last release
@@ -13,7 +17,7 @@
 # confirm the review.
 set -u
 
-FILES="gird-check.ps1 gird-check.sh gird-fleet.sh"
+RLIST=.github/release-files
 SIGNERS=.github/allowed_signers
 PRINCIPAL=release@blindspot
 NS=blindspot-release
@@ -21,24 +25,59 @@ NS=blindspot-release
 die() { printf 'release: %s\n' "$*" >&2; exit 1; }
 say() { printf '%s\n' "$*"; }
 
-DRY=0; V=""
+# Reads the release list on stdin and prints its entries as "name kind", or says what is wrong.
+read_list() {
+  awk -v f="$RLIST" '
+    function no(m) { print "release: " f ", line " NR ": " m > "/dev/stderr"; bad = 1; exit 1 }
+    /^[[:space:]]*(#|$)/ { next }
+    NF != 2 || ($2 != "committed" && $2 != "built") { no("not a file name, a space, then committed or built") }
+    $1 !~ /^[A-Za-z0-9_][A-Za-z0-9._-]*$/ || $1 == "SHA256SUMS" || $1 == "SHA256SUMS.sig" || $1 == "allowed_signers" { no($1 " is not a name a release can carry") }
+    seen[$1]++ { no($1 " is listed twice") }
+    { print $1, $2; n++ }
+    END { if (!bad && !n) { print "release: " f " names no file" > "/dev/stderr"; exit 1 } }'
+}
+# Prints each file people would run that the entries in $1 do not name: a root-level .sh or .ps1
+# (tracked paths on stdin), one the .gitignore at $2 says bash tools/gen.sh builds, or one the
+# tools/gen.sh at $3 writes by name.
+unlisted() {
+  { grep -E '^[^/]+\.(sh|ps1)$'
+    awk '/^#.*built by bash tools\/gen\.sh/ { b = 1; next } b && /^[^#[:space:]]/ { sub(/^\//, ""); print } { b = 0 }' "$2"
+    grep -oE '>[[:space:]]*[A-Za-z0-9._-]+\.(sh|ps1)([^A-Za-z0-9._-]|$)' "$3" | sed -E 's/^>[[:space:]]*//; s/[^A-Za-z0-9._-]$//'
+  } | LC_ALL=C sort -u | while IFS= read -r n; do
+    printf '%s\n' "$1" | awk -v n="$n" '$1 == n { f = 1 } END { exit !f }' || printf '%s\n' "$n"
+  done
+}
+
+DRY=0; CL=0; V=""
 for a in "$@"; do
   case $a in
     --dry-run) DRY=1 ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --check-list) CL=1 ;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option: $a" ;;
     *) [ -z "$V" ] || die "give one version"; V=$a ;;
   esac
 done
-[ -n "$V" ] || die "usage: bash tools/release.sh [--dry-run] X.Y.Z"
-printf '%s\n' "$V" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' ||
-  die "the version must be X.Y.Z, numbers only, without a leading v: got '$V'"
-TAG=v$V
 
 cd "$(dirname "$0")/.." || die "can't find the repository"
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git repository"
 cd "$TOP" || die "can't enter $TOP"
 TOP=$(pwd -P)
+# Hooks and the file system monitor are programs a checkout could name; no git call here runs them.
+G() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+
+if [ "$CL" -eq 1 ]; then
+  [ -f "$RLIST" ] || die "$RLIST is missing"
+  E=$(read_list < "$RLIST") || exit 1
+  M=$(G ls-files | unlisted "$E" .gitignore tools/gen.sh 2>/dev/null)
+  [ -z "$M" ] || die "$RLIST does not name $(printf '%s' "$M" | tr '\n' ' ')which people would run: add each, as committed or built, in the pull request that adds it"
+  say "$RLIST names every file people run."; exit 0
+fi
+
+[ -n "$V" ] || die "usage: bash tools/release.sh [--dry-run] X.Y.Z"
+printf '%s\n' "$V" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' ||
+  die "the version must be X.Y.Z, numbers only, without a leading v: got '$V'"
+TAG=v$V
 
 for t in git ssh-keygen awk; do command -v "$t" >/dev/null 2>&1 || die "needs $t"; done
 [ "$DRY" -eq 1 ] || command -v gh >/dev/null 2>&1 || die "needs gh, signed in, to create the GitHub release"
@@ -50,11 +89,9 @@ case $KEYGEN in /*) ;; *) die "ssh-keygen must be a program on PATH, not $KEYGEN
 KGDIR=$(cd "$(dirname "$KEYGEN")" && pwd -P) || die "can't resolve the folder of $KEYGEN"
 case "$KGDIR/" in "$TOP/"*) die "ssh-keygen on PATH is inside the repository ($KEYGEN): put the system's first" ;; esac
 
-# Hooks and the file system monitor are programs a checkout could name; no git call here runs them.
-G() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
 CFG=$(git config --list --show-scope) || die "git config --show-scope failed: this needs git 2.26 or later"
 BAD=$(printf '%s\n' "$CFG" | awk '$1 == "local" || $1 == "worktree" { print $2 }' |
-  grep -iE '^(gpg\.|core\.hookspath=|core\.fsmonitor=|core\.sshcommand=|alias\.|include\.|includeif\.|user\.signingkey=|tag\.)' | cut -d= -f1)
+  grep -iE '^(gpg\.|core\.hookspath=|core\.fsmonitor=|core\.sshcommand=|alias\.|include\.|includeif\.|user\.signingkey=|tag\.|filter\.)' | cut -d= -f1)
 [ -z "$BAD" ] || die "this repository's own git config sets $(printf '%s' "$BAD" | tr '\n' ' ')which can change what signs or runs: remove it, or release from a fresh clone"
 
 K=${BLINDSPOT_SIGNING_KEY:-}
@@ -102,6 +139,15 @@ awk -v h="## $V," 'index($0, h) == 1 { f = 1; next } f && /^## / { exit } f { pr
 awk -v h="## $V," 'index($0, h) == 1 { f = 1 } END { exit !f }' "$W/CHANGELOG.md" || die "CHANGELOG.md has no '## $V, <date>' section"
 [ -s "$W/notes.md" ] || die "CHANGELOG.md's $V section is empty"
 
+# The files to release come from the reviewed commit's list, never the working tree's.
+G cat-file blob "$SHA:$RLIST" > "$W/release-files" 2>/dev/null || die "$RLIST is not committed at $SHA"
+ENTRIES=$(read_list < "$W/release-files") || die "$RLIST can't be used: fix it by pull request"
+printf '%s\n' "$ENTRIES" | LC_ALL=C sort > "$W/entries"
+G cat-file blob "$SHA:.gitignore" > "$W/gitignore" 2>/dev/null || : > "$W/gitignore"
+G cat-file blob "$SHA:tools/gen.sh" > "$W/gen.sh" 2>/dev/null || : > "$W/gen.sh"
+MISS=$(G ls-tree --name-only "$SHA" | unlisted "$ENTRIES" "$W/gitignore" "$W/gen.sh")
+[ -z "$MISS" ] || die "$RLIST does not name $(printf '%s' "$MISS" | tr '\n' ' ')which people would run: add each by pull request first"
+
 if [ -n "$PREV" ]; then
   FROM=$PREV; RANGE="$PREV..$SHA"; say "Changes since $PREV:"
 else
@@ -120,17 +166,41 @@ printf 'Type %s to confirm you reviewed them: ' "$V"
 read -r ANSWER || ANSWER=""
 [ "$ANSWER" = "$V" ] || die "confirmation did not match $V: nothing was run, signed or published"
 
-bash tools/gen.sh --check > "$W/gen.txt" 2>&1 || { cat "$W/gen.txt" >&2; die "bash tools/gen.sh --check failed: nothing was signed or published"; }
+# Everything from here runs on a copy of the reviewed commit, not on the checkout.
+S=$W/src
+mkdir "$S" && G archive --format=tar -o "$W/src.tar" "$SHA" && tar -xf "$W/src.tar" -C "$S" || die "could not copy $SHA out to build it"
+gen() {
+  (cd "$S" && bash tools/gen.sh "$@") > "$W/gen.txt" 2>&1 && return
+  _r=$?; cat "$W/gen.txt" >&2
+  [ "$_r" -ne 3 ] || die "bash tools/gen.sh${1:+ $1} exited 3: it needs PowerShell to build the Windows files. Install PowerShell (pwsh), or set PWSH=/path/to/pwsh, and run this again. Nothing was signed or published"
+  die "bash tools/gen.sh${1:+ $1} failed (exit $_r): nothing was signed or published"
+}
+ls -A "$S" | LC_ALL=C sort > "$W/before"
+gen --check
+gen
+ls -A "$S" | LC_ALL=C sort | LC_ALL=C comm -13 "$W/before" - > "$W/made"
+while IFS= read -r n; do
+  awk -v n="$n" '$1 == n && $2 == "built" { f = 1 } END { exit !f }' "$W/entries" ||
+    die "bash tools/gen.sh made $n, which $RLIST does not name as built: nothing was signed or published"
+done < "$W/made"
+while read -r n kind; do
+  [ -f "$S/$n" ] && [ ! -L "$S/$n" ] && [ -s "$S/$n" ] ||
+    die "$n, listed in $RLIST, is missing or empty after bash tools/gen.sh: nothing was signed or published"
+  if G cat-file -e "$SHA:$n" 2>/dev/null; then
+    [ "$kind" = committed ] || die "$n is listed as built but is committed at $SHA: fix $RLIST"
+    G cat-file blob "$SHA:$n" > "$W/blob" && cmp -s "$W/blob" "$S/$n" ||
+      die "$n is not its committed copy after bash tools/gen.sh: nothing was signed or published"
+  else
+    [ "$kind" = built ] || die "$n is listed as committed but is not committed at $SHA"
+  fi
+done < "$W/entries"
 
-for f in $FILES; do
-  G cat-file blob "$SHA:$f" > "$W/$f" 2>/dev/null || die "$f is not committed at $SHA"
-done
 G cat-file blob "$SHA:$SIGNERS" > "$W/allowed_signers" 2>/dev/null || die "$SIGNERS is not committed at $SHA"
 {
   printf 'version %s\n' "$TAG"
-  for f in $FILES; do printf '%s  %s\n' "$(sha256 "$W/$f")" "$f"; done
+  while read -r n _; do printf '%s  %s\n' "$(sha256 "$S/$n")" "$n"; done < "$W/entries"
 } > "$W/SHA256SUMS"
-if sed 1d "$W/SHA256SUMS" | grep -Evq '^[0-9a-f]{64}  [a-z0-9.-]+$'; then die "a line of SHA256SUMS is not a SHA-256 and a file name"; fi
+if sed 1d "$W/SHA256SUMS" | grep -Evq '^[0-9a-f]{64}  [A-Za-z0-9._-]+$'; then die "a line of SHA256SUMS is not a SHA-256 and a file name"; fi
 
 say "Signing SHA256SUMS with $K"
 "$KEYGEN" -Y sign -n "$NS" -f "$K" "$W/SHA256SUMS" || die "ssh-keygen could not sign SHA256SUMS"
@@ -153,7 +223,8 @@ G push origin "refs/tags/$TAG" || {
   G tag -d "$TAG" >/dev/null 2>&1; die "git push of $TAG failed; the local tag was deleted and nothing was published"
 }
 set --
-for f in $FILES SHA256SUMS SHA256SUMS.sig; do set -- "$@" "$W/$f"; done
+while read -r n _; do set -- "$@" "$S/$n"; done < "$W/entries"
+set -- "$@" "$W/SHA256SUMS" "$W/SHA256SUMS.sig"
 gh release create "$TAG" "$@" -R "$REPO" --title "Blindspot $V" --notes-file "$W/notes.md" --verify-tag || {
   KEEP=1
   if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
