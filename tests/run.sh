@@ -3178,6 +3178,8 @@ gen_refuses "an action pin that is neither safe nor unsafe" actions.tsv "a/b${T}
 gen_refuses "an action with * and other patterns"         actions.tsv "a/b${T}* v1${T}-${T}-${T}safe${T}in 2026${T}https://example.com/a${T}fix"
 gen_refuses "an action listed twice in another case"      actions.tsv "TJ-Actions/Changed-Files${T}v1${T}-${T}-${T}safe${T}in 2026${T}https://example.com/a${T}fix"
 gen_refuses "an action fix with a quote"                  actions.tsv "a/b${T}v1${T}-${T}-${T}safe${T}in 2026${T}https://example.com/a${T}don't"
+gen_refuses "an action good commit that is not 40 hex digits" actions.tsv "a/b${T}v1${T}-${T}abc${T}safe${T}in 2026${T}https://example.com/a${T}fix"
+gen_refuses "an action commit listed as malicious and good" actions.tsv "a/b${T}v1${T}0e58ed8671d6b60d0890c21b07f8835ace038e67${T}0e58ed8671d6b60d0890c21b07f8835ace038e67${T}safe${T}in 2026${T}https://example.com/a${T}fix"
 gen_refuses "an action fix with a |"                      actions.tsv "a/b${T}v1${T}-${T}-${T}safe${T}in 2026${T}https://example.com/a${T}a | b"
 gen_refuses "a platform with an unknown incident"       platforms.tsv "nosuch${T}X${T}x${T}~/.x/${T}CLI found${T}advice${T}summary"
 gen_refuses "a platform advice with a \$"               platforms.tsv "railway${T}X${T}x${T}~/.x/${T}CLI found${T}costs \$5${T}summary"
