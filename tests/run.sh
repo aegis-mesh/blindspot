@@ -5591,25 +5591,26 @@ then ok "fleet: a partly checked Mac still counts its incidents as +mac"; else b
 SKIPPING=$FSKIP
 if grep -q '^machine\.possible_signs=litellm$' "$FL/owposs.flat" && grep -q '^machine\.owasp=$' "$FL/owposs.flat" && grep -q '^owasp\.risks=$' "$FL/owposs.flat"
 then ok "fleet: the Mac's possible signs carry no tag"; else bad "fleet: the Mac's possible signs carry no tag" "$(grep -E '^(machine\.(possible_signs|owasp)|owasp\.risks)' "$FL/owposs.flat" | tr '\n' ' ')"; fi
-# fl_inv_fit, cut out of gird-fleet.sh: a value of 244 to 250 characters without the token is kept
-# whole, with no token and no +more, since the token never costs an account its content; a short one
-# gets the token.
-sed -n '/^fl_inv_fit() {/,/^}/p' "$FLEETSH" > "$FL/invfit.sh"
+# fl_value, cut out of gird-fleet.sh, given one account and the OWASP token: a value of 244 to 250
+# characters without the token is kept whole, with no token and no +more, since the token never costs
+# an account its content; a short one gets the token.
+sed -n '/^fl_value() {/,/^}/p' "$FLEETSH" > "$FL/invfit.sh"
+grep -q '^fl_value() {' "$FL/invfit.sh" || bad "fleet: fl_value is found in gird-fleet.sh" "the inventory-fit tests below read nothing"
 IV_HEAD="v1 review 2026-10-25T09:12Z"; IV_P=" | person: review "; IV_TOK="owasp.ASI03:1; counted 1"
 IV_BAD=""
 for IV_N in 244 245 246 247 248 249 250; do
   IV_B="$IV_P$(printf 'x%.0s' $(seq 1 $((IV_N - ${#IV_HEAD} - ${#IV_P}))))"
-  IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_B" "$IV_TOK")
+  IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 1 "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_B" "$IV_TOK")
   { [ $(( ${#IV_HEAD} + ${#IV_B} )) -eq "$IV_N" ] && [ "$IV_OUT" = "$IV_HEAD$IV_B" ]; } || IV_BAD="$IV_BAD $IV_N:$IV_OUT"
 done
 if [ -z "$IV_BAD" ]; then ok "fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp token"
 else bad "fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp token" "$IV_BAD"; fi
 IV_S="$IV_P$(printf 'x%.0s' $(seq 1 $((250 - ${#IV_HEAD} - ${#IV_P} - ${#IV_TOK} - 3))))"
-IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_S" "$IV_TOK")
+IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 1 "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_S" "$IV_TOK")
 if [ "$IV_OUT" = "$IV_HEAD$IV_S | $IV_TOK" ] && [ "${#IV_OUT}" -eq 250 ]; then ok "fleet: an inventory value with room for the owasp token gets it, at 250 characters"
 else bad "fleet: an inventory value with room for the owasp token gets it, at 250 characters" "${#IV_OUT} $IV_OUT"; fi
 IV_250="$IV_P$(printf 'x%.0s' $(seq 1 $((250 - ${#IV_HEAD} - ${#IV_P}))))"
-IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_250" "")
+IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 1 "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_250" "")
 if [ "$IV_OUT" = "$IV_HEAD$IV_250" ]; then ok "fleet: an inventory value of 250 characters with no token is kept whole"
 else bad "fleet: an inventory value of 250 characters with no token is kept whole" "$IV_OUT"; fi
 # Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
