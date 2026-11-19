@@ -1829,7 +1829,8 @@ function Rc-Rx([string]$r, [bool]$open) {
     $c = [string]$r[$i]
     if ($c -eq '\') {
       $d = ''; if ($i + 1 -lt $n) { $d = [string]$r[$i + 1] }
-      if ($d -ceq 's' -or $d -ceq 'b' -or $d -eq ' ') { $lit += ' '; $stop = 'w'; break }
+      if ($d -ceq 's' -or $d -eq ' ') { $lit += ' '; $i++; if ($d -ceq 's' -and $i + 1 -lt $n -and $r[$i + 1] -eq '+') { $i++ }; continue }
+      if ($d -ceq 'b') { $lit += ' '; $stop = 'w'; break }
       if ($d -eq '' -or $d -cmatch '^[A-Za-z0-9]$') { $stop = 'm'; break }
       $lit += $d; $i++; continue
     }

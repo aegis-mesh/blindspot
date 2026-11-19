@@ -3005,6 +3005,12 @@ printf 'prefix_rule(pattern=["ssh", "prod"])\n' > "$WORK/rce/.codex/rules/defaul
 dzrun "$WORK/rce" | tr -s ' \n' '  ' > "$WORK/rce.txt"
 hasnot "remote commands: a Claude Code rule for one exact command is not listed" 'Bash\((ssh|kubectl|az)' "$WORK/rce.txt"
 has    "remote commands: a Codex prefix rule with a host is listed" '! Codex ~/\.codex/rules/default\.rules ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rce.txt"
+# An Amazon Q regex literal to its end is one exact command, its words apart by a space, \s or an escaped space.
+rm -rf "$WORK/rcr"; cp -R "$WORK/clean" "$WORK/rcr"; mkdir -p "$WORK/rcr/.aws/amazonq/cli-agents"
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["^ssh prod$", "^ssh\\\\sprod$", "^ssh\\\\ -T\\\\ git@github\\\\.com$", "^ssh\\\\s.*"]}}}\n' > "$WORK/rcr/.aws/amazonq/cli-agents/a.json"
+dzrun "$WORK/rcr" | tr -s ' \n' '  ' > "$WORK/rcr.txt"
+hasnot "remote commands: an Amazon Q regex for one exact command is not listed" '\^ssh( prod|\\sprod|\\ -T)' "$WORK/rcr.txt"
+has    "remote commands: an Amazon Q regex with a space class then .* is listed" '\^ssh\\s\.\*: runs commands on other machines over SSH' "$WORK/rcr.txt"
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/AppData/Roaming/Code/User" "$WORK/dz-unr/AppData/Roaming/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/AppData/Roaming/Code/User/settings.json" > "$WORK/dz-unr/AppData/Roaming/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.

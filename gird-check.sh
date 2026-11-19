@@ -2426,7 +2426,7 @@ function fixed(s, sty,   k, pre, w) {
   if (RC_T && w != "" && w !~ /\*$/) w = (sty == "rx" || sty == "rxfull") ? w "*" : opn(w)
   return w
 }
-# A regex: the literal text it starts with. An escaped space, \s or \b ends a word; a quantifier
+# A regex: the literal text it starts with. An escaped space, \s or \s+ is a space in it, and \b ends it; a quantifier
 # after a character makes it optional; a regex matched to the end of the command (rxfull) and literal
 # throughout is an exact command. Anything after the literal text but .* (or .+) narrows it (RC_TAIL).
 function rx(r, open,   i, n, c, d, lit, stop, w, rest) {
@@ -2436,7 +2436,8 @@ function rx(r, open,   i, n, c, d, lit, stop, w, rest) {
     c = substr(r, i, 1)
     if (c == "\\") {
       d = substr(r, i + 1, 1)
-      if (d == "s" || d == "b" || d == " ") { lit = lit " "; stop = "w"; break }
+      if (d == "s" || d == " ") { lit = lit " "; i++; if (d == "s" && substr(r, i + 1, 1) == "+") i++; continue }
+      if (d == "b") { lit = lit " "; stop = "w"; break }
       if (d == "" || d ~ /[A-Za-z0-9]/) { stop = "m"; break }
       lit = lit d; i++; continue
     }
