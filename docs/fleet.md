@@ -60,22 +60,27 @@ changes (list them), or not safe, and why.
 ## 1. Try it on your own Mac
 
 Download one release's files by version from GitHub and check that the maintainers signed them.
-Set `V` to the version on the [releases page](https://github.com/aegis-mesh/blindspot/releases).
-Every file comes from that one release, so a new release in between can't mix versions:
+Every file a release ships, fleet files included, has a line in its signed `SHA256SUMS`, so you
+verify the signature once, then check each file you deploy against its line. Set `V` to the version
+on the [releases page](https://github.com/aegis-mesh/blindspot/releases), and `FILES` to the files
+you deploy. Every file comes from that one release, so a new release in between can't mix versions:
 
 ```sh
 V=vX.Y.Z
-for f in gird-check.sh gird-fleet.sh SHA256SUMS SHA256SUMS.sig; do
+FILES="gird-check.sh gird-fleet.sh"
+for f in $FILES SHA256SUMS SHA256SUMS.sig; do
   curl -fsSLO "https://github.com/aegis-mesh/blindspot/releases/download/$V/$f"
 done
 curl -fsSLO https://gird.ai/blindspot/allowed_signers   # compare its keys with .github/allowed_signers on GitHub
 ssh-keygen -Y verify -f allowed_signers -I release@blindspot -n blindspot-release -s SHA256SUMS.sig < SHA256SUMS
 head -n 1 SHA256SUMS                                     # must say: version $V
-grep -E ' gird-(check|fleet)\.sh$' SHA256SUMS | shasum -a 256 -c
+for f in $FILES; do awk -v f="$f" '$2 == f' SHA256SUMS | shasum -a 256 -c; done
 ```
 
-Go on only if `ssh-keygen` says `Good "blindspot-release" signature` and both files say `OK`. These
-are the files you deploy: verify once here, then upload these same files to your MDM.
+Go on only if `ssh-keygen` says `Good "blindspot-release" signature` and every file says `OK`. These
+are the files you deploy: verify once here, then upload these same files to your MDM. To prepare
+them on a Windows PC, use the PowerShell steps in the
+[README](../README.md#check-the-signature) with the same files.
 [docs/designs/signed-releases.md](designs/signed-releases.md) says what each step proves.
 
 Root runs only files that root alone can change, so put both where only root can:
