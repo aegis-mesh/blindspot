@@ -22,9 +22,38 @@ less gird-check.sh
 bash gird-check.sh
 ```
 
-[gird.ai/blindspot](https://gird.ai/blindspot) has the same steps with the hash check built into the download command, for macOS, Linux, Windows PowerShell and Git Bash. gird.ai serves the script from this repo's `main` branch, so its hash changes with each update. It takes under a minute. While it scans, press space to play GIRD Runner and watch what it finds.
+[gird.ai/blindspot](https://gird.ai/blindspot) has the same steps with the hash check built into the download command, for macOS, Linux, Windows PowerShell and Git Bash. gird.ai serves the newest release the maintainers signed, so its hash changes with each release. It takes under a minute. While it scans, press space to play GIRD Runner and watch what it finds.
 
 Please don't pipe it straight into a shell. Reading it first is the point.
+
+### Check the signature
+
+The hash shows the file arrived as gird.ai served it. To check that the maintainers released it, check the signature on one release's files, downloaded by version from GitHub. It needs OpenSSH 8.1 or later. Set `V` to the version on the [releases page](https://github.com/aegis-mesh/blindspot/releases). [docs/designs/signed-releases.md](docs/designs/signed-releases.md) says what each step proves.
+
+On macOS or Linux:
+
+```sh
+V=vX.Y.Z
+for f in gird-check.sh SHA256SUMS SHA256SUMS.sig; do curl -fsSLO "https://github.com/aegis-mesh/blindspot/releases/download/$V/$f"; done
+curl -fsSLO https://gird.ai/blindspot/allowed_signers   # compare its keys with .github/allowed_signers here
+ssh-keygen -Y verify -f allowed_signers -I release@blindspot -n blindspot-release -s SHA256SUMS.sig < SHA256SUMS
+head -n 1 SHA256SUMS                                     # must say: version $V
+grep ' gird-check.sh$' SHA256SUMS | shasum -a 256 -c     # on Linux without shasum: sha256sum -c
+```
+
+In Windows PowerShell, run `ssh-keygen` through `cmd /c`, which has the `<` PowerShell lacks:
+
+```powershell
+$V = "vX.Y.Z"
+foreach ($f in "gird-check.ps1", "SHA256SUMS", "SHA256SUMS.sig") { irm "https://github.com/aegis-mesh/blindspot/releases/download/$V/$f" -OutFile $f }
+irm https://gird.ai/blindspot/allowed_signers -OutFile allowed_signers
+cmd /c "ssh-keygen -Y verify -f allowed_signers -I release@blindspot -n blindspot-release -s SHA256SUMS.sig < SHA256SUMS"
+Get-Content SHA256SUMS -TotalCount 1          # must say: version $V
+Select-String ' gird-check.ps1$' SHA256SUMS   # the hash on this line
+(Get-FileHash .\gird-check.ps1).Hash         # must match it, ignoring case
+```
+
+`ssh-keygen` prints `Good "blindspot-release" signature for release@blindspot` only when a listed key signed that exact `SHA256SUMS`.
 
 ### Have your coding agent review it
 
