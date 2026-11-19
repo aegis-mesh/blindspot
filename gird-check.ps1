@@ -8566,7 +8566,7 @@ function Owasp-Set([string]$src) {
     'incidents:act' { return (($NpmActN -gt 0 -and $MAL_LOCKONLY -eq 0) -or $EXT_HIT -eq 1 -or $PY_HIT -eq 1 -or $IndHits.Count -gt 0) }
     'incidents:update' { return ($NpmOtherN -gt 0) }
     'yolo' { return ($N_YOLO -gt 0) }
-    'remote' { return (@($RemoteList).Count -gt 0) }
+    'remote' { return ($N_REMOTE -gt 0) }
     'tools' { return ($N_OLD -gt 0) }
     'mcp_token_files' { return ($N_MCP_TOKEN -gt 0) }
     'ak_links' { return ($N_AK -gt 0) }
