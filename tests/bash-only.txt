@@ -341,3 +341,5 @@ fleet: a marker folder root owns in the shared temp folder is a possible sign fo
 a settings read whose awk fails names the file as not read	gird-check.ps1 reads settings with .NET, not awk
 fleet: a project that starts a script the way worms do reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: and so does an account with none	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a session hook in the account's own settings counts alone	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and makes that account one to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)

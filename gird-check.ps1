@@ -1556,12 +1556,31 @@ function Json-Elems([string]$t, [string]$key) {
   if ($cap) { $e = $t.Substring($st).Trim(); if ($e) { $out.Add($e) } }
   ,$out
 }
+# Each part of a command, as "command": "part": the command is split at ;, &, | outside shell quotes
+# ('...' and \"...\"), so each script a chain runs is matched, not only the last. As gird-check.sh's
+# cmd_parts.
+$RxCmdValue = New-Object regex('"command"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+$CmdStops = [char[]]@(';', '&', '|', '\', "'")
+function Cmd-Parts([string]$el) {
+  foreach ($m in $RxCmdValue.Matches($el)) {
+    $v = $m.Groups[1].Value; $sq = $false; $dq = $false; $st = 0; $i = 0; $pp = New-Object System.Collections.Generic.List[string]
+    while ($true) {
+      $k = $v.IndexOfAny($CmdStops, $i); if ($k -lt 0) { break }
+      $c = $v[$k]; $i = $k + 1
+      if ($c -eq '\') { if ($k + 1 -lt $v.Length) { if (-not $sq -and $v[$k + 1] -eq '"') { $dq = -not $dq }; $i = $k + 2 }; continue }
+      if ($c -eq "'") { if (-not $dq) { $sq = -not $sq }; continue }
+      if (-not $sq -and -not $dq) { $pp.Add($v.Substring($st, $k - $st)); $st = $k + 1 }
+    }
+    $pp.Add($v.Substring($st))
+    foreach ($x in $pp) { $x = $x.TrimStart(' '); if ($x) { '"command": "' + $x + '"' } }
+  }
+}
 function Start-Scripts([string]$f, [string]$t, [string]$key, [regex]$filter) {
   $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
   foreach ($el in (Json-Elems $t $key)) {
     if ($filter -and -not (Flat-Match $f $el $filter)) { continue }
     try {
-      foreach ($m in $RxStartCmd.Matches($el)) {
+      foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $RxStartCmd.Matches($_) })) {
         $ps = $RxStartPath.Matches($m.Value)
         if ($ps.Count -gt 0) { [void]$set.Add(($ps[$ps.Count - 1].Value -replace '[/\\]+', '/')) }
       }
@@ -2019,28 +2038,45 @@ $AutoProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComp
 foreach ($r in $AutoRows) { [void]$AutoProj.Add([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($r.File))) }
 $N_AUTO_PROJ = $AutoProj.Count
 # The worms' own wiring (Wiz on Mini Shai-Hulud, SafeDep on the AntV wave): a session-start hook and a
-# folder-open task in one project that both run a script named like a planted file (data/planted.tsv),
-# so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
+# folder-open task in one project that both run a planted file (data/planted.tsv: its folder and name)
+# of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
 # compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
 # A worktree is left out when its repo is listed. As gird-check.sh's WIRED.
-$RxPlantedName = New-Object regex(('^(' + $WormNameAlone.Substring($WormNameAlone.LastIndexOf('+') + 1) + '|' + $WormNameWeak.Substring($WormNameWeak.LastIndexOf('+') + 1) + ')$'), $RxOpt, $RxTimeout)
 $TaskSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
-foreach ($x in $StartTasks) { [void]$TaskSet.Add($x.Proj + [char]0 + [IO.Path]::GetFileName($x.Script)) }
+foreach ($x in $StartTasks) { if ($null -ne (Planted-Note $x.Script)) { [void]$TaskSet.Add($x.Proj + [char]0 + [IO.Path]::GetFileName($x.Script)) } }
 $Wired = New-Object System.Collections.Generic.List[object]
 $WiredSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 $WiredProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($x in $StartHooks) {
   $b = [IO.Path]::GetFileName($x.Script); $k = $x.Proj + [char]0 + $b
-  if ($RxPlantedName.IsMatch($b) -and $TaskSet.Contains($k) -and $WiredSeen.Add($k)) { $Wired.Add(@{ Proj = $x.Proj; Name = $b }); [void]$WiredProj.Add($x.Proj) }
+  if ($null -ne (Planted-Note $x.Script) -and $TaskSet.Contains($k) -and $WiredSeen.Add($k)) { $Wired.Add(@{ Proj = $x.Proj; Name = $b }); [void]$WiredProj.Add($x.Proj) }
 }
 $Wired = @($Wired | Where-Object { $r = $_.Proj -replace '[/\\]\.claude[/\\]worktrees[/\\].*$', ''; -not ($r -ne $_.Proj -and $WiredProj.Contains($r)) })
 $WiredP = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($x in $Wired) { [void]$WiredP.Add($x.Proj) }
 $N_WIRED = $WiredP.Count
 # The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
-# SessionStart hook that runs it to Claude Code's and Codex's settings (SafeDep). The copy is an
-# indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex reads hooks
-# from hooks.json and config.toml, and the worm writes every settings.json it finds.
+# SessionStart hook that runs it to the Claude Code and Codex settings files it finds (SafeDep). The
+# copy is an indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex
+# reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
+# there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
+# with # comments outside strings removed. As gird-check.sh's toml_session_start.
+function Toml-SessionStart([string]$t) {
+  $out = New-Object System.Collections.Generic.List[string]; $in = $false; $hk = $false
+  foreach ($line in ($t -split "`n")) {
+    $q = ''; $i = 0; $cut = $line.Length
+    while ($i -lt $line.Length) {
+      if ($q -eq '') { $k = $line.IndexOfAny([char[]]@('#', '"', "'"), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '#') { $cut = $k; break }; $q = [string]$line[$k]; $i = $k + 1 }
+      elseif ($q -eq "'") { $k = $line.IndexOf("'", $i); if ($k -lt 0) { break }; $q = ''; $i = $k + 1 }
+      else { $k = $line.IndexOfAny([char[]]@('"', '\'), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '\') { $i = $k + 2 } else { $q = ''; $i = $k + 1 } }
+    }
+    $l = $line.Substring(0, $cut)
+    if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); continue }
+    if ($in) { $out.Add($l); continue }
+    if ($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') { $out.Add($l) }
+  }
+  $out -join "`n"
+}
 $UserHooks = New-Object System.Collections.Generic.List[object]
 $cxd = Env-Or 'CODEX_HOME' (J $HomeDir '.codex')
 $RxPkg = New-Object regex('\.(claude|codex)[/\\]+package[/\\]', $RxOpt, $RxTimeout)
@@ -2048,8 +2084,7 @@ foreach ($uf in @((J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settin
   if (-not (Is-File $uf) -or (Too-Big $uf) -or @($UserHooks | Where-Object { $_.File -eq $uf }).Count -gt 0) { continue }
   if ($uf.EndsWith('.toml')) {
     $ut = Read-Text $uf; if ($null -eq $ut) { continue }
-    $ut = (@($ut -split "`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n")
-    if (-not $ut.Contains('SessionStart')) { continue }
+    $ut = Toml-SessionStart ($ut -replace "`r", '')
   } else {
     $ft = Flat-Text $uf; if ($null -eq $ft) { continue }
     $ut = (Json-Elems $ft 'SessionStart') -join "`n"

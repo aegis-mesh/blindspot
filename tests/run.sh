@@ -918,7 +918,13 @@ hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
 # SHA-256 no source publishes. A hook the AntV wave adds to the person's own Claude Code or Codex settings
 # that runs a file from .claude/package or .codex/package is listed too, with or without the file.
 mkdir -p "$WORK/ast/code/w/.claude" "$WORK/ast/code/w/.vscode" "$WORK/ast/code/g/.claude/hooks" "$WORK/ast/code/h/.claude" \
-  "$WORK/ast/code/t/.claude" "$WORK/ast/code/t/.vscode" "$WORK/ast/code/n/.claude" "$WORK/ast/.claude" "$WORK/ast/.codex"
+  "$WORK/ast/code/t/.claude" "$WORK/ast/code/t/.vscode" "$WORK/ast/code/n/.claude" "$WORK/ast/.claude" "$WORK/ast/.codex" \
+  "$WORK/ast/code/c/.claude" "$WORK/ast/code/c/.vscode" "$WORK/ast/code/x/.claude" "$WORK/ast/code/x/.vscode"
+# c runs the planted file first in a chain; x runs an index.js from .github, a name planted only in .claude.
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs && node .claude/other.js; echo %s | grep %s"}]}]}}\n' '\"a;b\"' "'x|y'" > "$WORK/ast/code/c/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/c/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .github/scripts/index.js"}]}]}}\n' > "$WORK/ast/code/x/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .github/scripts/index.js","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/x/.vscode/tasks.json"
 : > "$WORK/ast/code/w/.claude/setup.mjs"; : > "$WORK/ast/code/w/.vscode/setup.mjs"; : > "$WORK/ast/code/g/.claude/hooks/nvm-path.sh"
 printf '{\n  "hooks": {\n    "SessionStart": [\n      { "matcher": "*", "hooks": [ { "type": "command", "command": "node .claude/setup.mjs" } ] }\n    ]\n  }\n}\n' > "$WORK/ast/code/w/.claude/settings.json"
 printf '{"version":"2.0.0","tasks":[{"label":"lint","command":"npm run lint"},{"label":"env","type":"shell","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/w/.vscode/tasks.json"
@@ -928,20 +934,23 @@ printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup
 printf '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"node .github/check.js"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$WORK/ast/code/n/.claude/settings.json"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node %s/.claude/package/index.js"}]}]}}\n' "$WORK/ast" > "$WORK/ast/.claude/settings.json"
 printf '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"bun run ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast/.codex/hooks.json"
-printf '# [[hooks.SessionStart]]\n# command = "node ~/.codex/package/index.js"\nmodel = "x"\n' > "$WORK/ast/.codex/config.toml"
+printf '# [[hooks.SessionStart]]\n# command = "node ~/.codex/package/index.js"\nmodel = "x"\n[[hooks.Stop]]\ncommand = "node ~/.codex/package/index.js"\n[[hooks.SessionStart]]\ncommand = "echo hi" # node ~/.codex/package/index.js\n' > "$WORK/ast/.codex/config.toml"
 HOME="$WORK/ast" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast.txt"
 has    "a session-start hook and a folder-open task that run a planted name are listed as worm-shaped" '! ~/code/w A session-start hook and a folder-open task both run setup\.mjs from this project, the way recent npm worms start themselves\.' "$WORK/ast.txt"
 hasnot "and a worm-shaped project is a check, not malware" 'ACT NOW|Treat this machine as compromised|runs a file a worm plants' "$WORK/ast.txt"
 has    "a project's session-start hook names the script it runs" '~/code/g/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/hooks/nvm-path\.sh\.' "$WORK/ast.txt"
 has    "a folder-open task names the script it runs" '~/code/w/\.vscode/tasks\.json Set to run a task when the folder opens in VS Code or Cursor\. That task runs this project.s \.claude/setup\.mjs\.' "$WORK/ast.txt"
 hasnot "a hook alone, or with a task that does not run on open, is not worm-shaped" '~/code/(g|h|t|n) A session-start hook' "$WORK/ast.txt"
+has    "a planted file a chain runs first counts as well" '! ~/code/c A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast.txt"
+has    "and the row names every script in the chain" '~/code/c/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/other\.js and \.claude/setup\.mjs\.' "$WORK/ast.txt"
+hasnot "a planted name in another folder is not worm-shaped" '~/code/x A session-start hook' "$WORK/ast.txt"
 hasnot "a hook on another event names no startup script" '~/code/n/\.claude/settings\.json Set to run commands while the agent works\. Each' "$WORK/ast.txt"
 HOME="$WORK/ast" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast-c.txt"
-has    "the summary row counts the worm-shaped project" '02 . MCP servers .*worm-style startup in 1 project' "$WORK/ast-c.txt"
+has    "the summary row counts the worm-shaped project" '02 . MCP servers .*worm-style startup in 2 projects' "$WORK/ast-c.txt"
 has    "what to do says to read that script" 'Read the script each project in section 2 starts the way worms do' "$WORK/ast.txt"
 has    "a session hook in your own Claude Code settings that runs a file from .claude/package is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts\. The AntV wave copies its payload there' "$WORK/ast.txt"
 has    "and one in Codex's hooks.json that runs a file from .codex/package" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast.txt"
-hasnot "a commented-out hook in Codex's config.toml is not" '~/\.codex/config\.toml' "$WORK/ast.txt"
+hasnot "a commented-out hook in Codex's config.toml, or one on another event, is not" '~/\.codex/config\.toml' "$WORK/ast.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents"
@@ -4095,7 +4104,9 @@ has    "fleet: a marker folder root owns in the shared temp folder is a possible
 
 # Project settings that act when a folder opens, a file named like a worm's, a version to update and
 # the gh-token-monitor wiper reach the account's row, as they reach the one-person report.
-for h in proj upd2 wip wip1 ast; do fl_home "$h"; done
+for h in proj upd2 wip wip1 ast uhk; do fl_home "$h"; done
+mkdir -p "$FL/uhk/.claude"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.claude/package/index.js"}]}]}}\n' > "$FL/uhk/.claude/settings.json"
 mkdir -p "$FL/ast/code/w/.claude" "$FL/ast/code/w/.vscode"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$FL/ast/code/w/.claude/settings.json"
 printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$FL/ast/code/w/.vscode/tasks.json"
@@ -4104,12 +4115,14 @@ mkdir -p "$FL/proj/code/p/.claude" "$FL/proj/code/q/.claude" "$FL/upd2/Library/P
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FL/proj/code/p/.claude/settings.json"
 : > "$FL/proj/code/q/.claude/setup.mjs"; : > "$FL/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
 printf '{"name":"@tanstack/router-core","version":"1.169.5"}\n' > "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core/package.json"
-users "proj:$U:$FL/proj:/bin/zsh" "upd2:$U:$FL/upd2:/bin/zsh" "wip:$U:$FL/wip:/bin/zsh" "wip1:$U:$FL/wip1:/bin/zsh" "ast:$U:$FL/ast:/bin/zsh"
+users "proj:$U:$FL/proj:/bin/zsh" "upd2:$U:$FL/upd2:/bin/zsh" "wip:$U:$FL/wip:/bin/zsh" "wip1:$U:$FL/wip1:/bin/zsh" "ast:$U:$FL/ast:/bin/zsh" "uhk:$U:$FL/uhk:/bin/zsh"
 fl_run rows --json
 has    "fleet: project settings that act when a folder opens reach the account's row" '^proj\.project_settings_on_open=1$' "$FL/rows.flat"
 has    "fleet: and a file named like the ones worms plant" '^proj\.files_to_read=1$' "$FL/rows.flat"
 has    "fleet: a project that starts a script the way worms do reaches the account's row" '^ast\.scripts_started_like_worms=1$' "$FL/rows.flat"
 has    "fleet: and so does an account with none" '^proj\.scripts_started_like_worms=0$' "$FL/rows.flat"
+has    "fleet: a session hook in the account's own settings counts alone" '^uhk\.scripts_started_like_worms=1$' "$FL/rows.flat"
+has    "fleet: and makes that account one to review" '^uhk\.outcome=review$' "$FL/rows.flat"
 has    "fleet: so that account is to review" '^proj\.outcome=review$' "$FL/rows.flat"
 has    "fleet: a package version to update reaches the account's row" '^upd2\.versions_to_update=mistralpy$' "$FL/rows.flat"
 has    "fleet: and that account is to review too" '^upd2\.outcome=review$' "$FL/rows.flat"

@@ -7,9 +7,9 @@
 #             files is shown with "runs" before the note (or a general line, if the notes differ)
 #   alone     yes: only a worm uses this name, so the file counts wherever it is found. no: projects
 #             use the name too, so the file counts only in a project that holds a yes file, or when
-#             its SHA-256 is one in sha256; anywhere else section 2 lists it as a file to read
-#             A project whose session-start hook and folder-open task both run a file of one of these
-#             names is listed in section 2 as starting a script the way worms do, a script to read
+#             its SHA-256 is one in sha256; anywhere else section 2 lists it as a file to read.
+#             A project whose session-start hook and folder-open task both run one of these files, of
+#             one name, is listed in section 2 as starting a script the way worms do, a script to read
 #   sha256    for a no file, the SHA-256 values the sources publish for it, separated by commas, or -.
 #             A yes file counts on its name and carries - (gen.sh refuses a value): its published
 #             values are given below

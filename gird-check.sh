@@ -2012,8 +2012,28 @@ json_elems() { # key
       if (cap && e) printf "\n"
     }'
 }
+# Each part of a command, as "command": "part": the command is split at ;, &, | outside shell quotes
+# ('...' and \"...\"), so each script a chain runs is matched, not only the last. Characters are printed
+# as they are read, so the time grows with the command's length.
+cmd_parts() {
+  grep -oE '"command"[[:space:]]*:[[:space:]]*"([^"\\]|\\.)*"' | awk '
+    { sub(/^"command"[[:space:]]*:[[:space:]]*"/, ""); sub(/"$/, "")
+      n = split($0, c, ""); sq = 0; dq = 0; on = 0
+      for (i = 1; i <= n; i++) {
+        ch = c[i]
+        if (!sq && !dq && (ch == ";" || ch == "&" || ch == "|")) { if (on) printf "\"\n"; on = 0; continue }
+        if (!on) { if (ch == " ") continue; printf "\"command\": \""; on = 1 }
+        if (ch == "\\" && i < n) { if (!sq && c[i + 1] == "\"") dq = !dq; printf "%s%s", ch, c[i + 1]; i++; continue }
+        if (!dq && ch == "'"'"'") sq = !sq
+        printf "%s", ch
+      }
+      if (on) printf "\"\n"
+    }'
+}
 start_scripts() { # flattened-text key [element-ERE]: the scripts those elements run, one per line
-  printf '%s' "$1" | json_elems "$2" | { if [ -n "${3:-}" ]; then grep -E "$3"; else cat; fi; } | grep -oE "$START_CMD" |
+  _el=$(printf '%s' "$1" | json_elems "$2" | { if [ -n "${3:-}" ]; then grep -E "$3"; else cat; fi; })
+  [ -n "$_el" ] || return 0
+  { printf '%s\n' "$_el"; printf '%s\n' "$_el" | cmd_parts; } | grep -oE "$START_CMD" |
     while IFS= read -r _m; do printf '%s\n' "$_m" | grep -oE "$START_PATH" | tail -n 1; done | sed -E 's#[/\\]+#/#g' | sort -u
 }
 in_words() { # lines: them as "a", "a and b" or "a, b and c"
@@ -2555,30 +2575,47 @@ EOF
 # Row 02 counts projects: the folders holding these settings.
 N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/[^/]*$##' | sort -u | grep -c .)
 # The worms' own wiring (Wiz on Mini Shai-Hulud, SafeDep on the AntV wave): a session-start hook and a
-# folder-open task in one project that both run a script named like a planted file (data/planted.tsv),
-# so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
+# folder-open task in one project that both run a planted file (data/planted.tsv: its folder and name)
+# of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
 # compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
 # A worktree is left out when its repo is listed.
 WIRED=$(printf '%s\n%s\n' "$PLANTED" "-" "$START_TASKS" "-" "$START_HOOKS" | awk -F "$TAB" '
   function base(s) { sub(/.*\//, "", s); return s }
   $0 == "-" { part++; next }
-  part == 0 { if (NF) P[base($0)] = 1; next }
-  part == 1 { if (NF == 2) T[$1 FS base($2)] = 1; next }
-  NF == 2 && (base($2) in P) && (($1 FS base($2)) in T) && !seen[$1 FS base($2)]++ { r[++n] = $1 FS base($2); p[$1] = 1 }
+  part == 0 { if (NF) P[$0] = 1; next }
+  part == 1 { if (NF == 2 && ($2 in P)) T[$1 FS base($2)] = 1; next }
+  NF == 2 && ($2 in P) && (($1 FS base($2)) in T) && !seen[$1 FS base($2)]++ { r[++n] = $1 FS base($2); p[$1] = 1 }
   END { for (i = 1; i <= n; i++) { split(r[i], x, FS); w = x[1]; sub(/\/\.claude\/worktrees\/.*/, "", w); if (w != x[1] && (w in p)) continue; print r[i] } }')
 N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
 # The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
-# SessionStart hook that runs it to Claude Code's and Codex's settings (SafeDep). The copy is an
-# indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex reads hooks
-# from hooks.json and config.toml, and the worm writes every settings.json it finds.
+# SessionStart hook that runs it to the Claude Code and Codex settings files it finds (SafeDep). The
+# copy is an indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex
+# reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
+# there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
+# with # comments outside strings removed.
+toml_session_start() { # file: the lines of its SessionStart hook tables, comments removed
+  { awk '
+    { n = split($0, c, ""); q = ""
+      for (i = 1; i <= n; i++) {
+        ch = c[i]
+        if (q == "") { if (ch == "#") break; if (ch == "\"" || ch == "'"'"'") q = ch }
+        else if (ch == "\\" && q == "\"" && i < n) { printf "%s%s", ch, c[i + 1]; i++; continue }
+        else if (ch == q) q = ""
+        printf "%s", ch
+      }
+      printf "\n" }' < "$1"; } 2>/dev/null | awk '
+    /^[[:space:]]*\[/ { t = $0; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); next }
+    s { print; next }
+    h && /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/ { print }'
+}
 USER_HOOKS=""
-_cxd=${CODEX_HOME:-$H/.codex}
-for _uf in "${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "$_cxd/settings.json" "$_cxd/config.toml"; do
+_cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
+for _uf in "$_ccd/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "$_cxd/settings.json" "$_cxd/config.toml"; do
   [ -f "$_uf" ] && ! too_big "$_uf" || continue
   case "$USER_HOOKS" in "$(rowsafe "$_uf")$TAB"*|*"
 $(rowsafe "$_uf")$TAB"*) continue ;; esac
   case "$_uf" in
-    *.toml) _ut=$({ grep -vE '^[[:space:]]*#' "$_uf"; } 2>/dev/null); printf '%s' "$_ut" | grep -q SessionStart || _ut="" ;;
+    *.toml) _ut=$(toml_session_start "$_uf") ;;
     *) _ut=$(flat "$_uf" | json_elems SessionStart) ;;
   esac
   _us=$(printf '%s\n' "$_ut" | grep -oE '\.(claude|codex)[/\\]+package[/\\]' | head -n 1 | sed -E 's#^\.(claude|codex).*#.\1/package#')
