@@ -8171,6 +8171,8 @@ while IFS= read -r _wf; do
         case ",$_ashas," in *",$_sha,"*) _kind=commit ;; *) case ",$_agood," in *",$_sha,"*) ;; *) [ "$_apin" = unsafe ] && _kind=pin ;; esac ;; esac
       else
         _in=0; _out=0; read -r -a _pats <<< "$_arefs"
+        # The refs are shell patterns (data/actions.tsv), so each is matched as a glob on purpose.
+        # shellcheck disable=SC2254
         for _p in "${_pats[@]}"; do
           case "$_p" in
             !*) case "$_ur" in ${_p#!}) _out=1 ;; esac ;;
