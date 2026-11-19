@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # Blindspot for IT teams: checks every account on a Mac, run as root by an MDM (macOS).
 # https://gird.ai/blindspot, docs/fleet.md
 #
@@ -7,19 +7,208 @@
 # --account-run through sudo -n -u, with a clean environment, and sends back a fixed set of lines.
 # Root checks every line and builds the account's row itself. The result is saved in
 # /var/db/blindspot/last.json, readable by root only. Nothing is sent anywhere.
-# gird-check.sh must sit next to this file; both, and every folder above them, must be root's alone.
+# blindspot-fleet.sh carries gird-check.sh inside it; gird-fleet.sh needs gird-check.sh next to it.
+# Run it from a file, by a path that holds a slash, with /bin/bash -p as its first line says. The file
+# and every folder above it must be root's alone (a folder root owns with the sticky bit, as
+# /private/tmp, is accepted).
 #
-#   sudo bash gird-fleet.sh --all-users             a report per account
-#   sudo bash gird-fleet.sh --all-users --list      who would be checked, and why anyone is not
-#   sudo bash gird-fleet.sh --all-users --json      the result as JSON (--summary-to-stdout: one line)
-#     --exit-zero  --deadline=<seconds>  --hash-accounts=<secret>
-#   sudo bash gird-fleet.sh --inventory             the saved inventory value (--stale-days=<days>,
-#                                                    --result-tags)
+#   sudo /bin/bash -p ./blindspot-fleet.sh               what an MDM runs: with no options it is
+#                                                        --all-users --exit-zero --summary-to-stdout
+#                                                        --deadline=3000
+#   sudo /bin/bash -p ./blindspot-fleet.sh --all-users   a report per account
+#     --all-users --list     who would be checked, and why anyone is not
+#     --all-users --json     the result as JSON (--summary-to-stdout: one line)
+#     --exit-zero  --deadline=<seconds>
+#   sudo /bin/bash -p ./blindspot-fleet.sh --inventory   the saved inventory value
+#                                                        (--stale-days=<days>, --result-tags)
+#   Jamf Pro's three first arguments (/, the computer's name, the user's name) are dropped.
+#   Accounts are shown as a keyed hash of their names when /var/db/blindspot/hash-key holds a secret.
 
 # shellcheck disable=SC2034  # the generated tables carry fields only gird-check.sh reads
-export LC_ALL=C
+
+# The start (docs/designs/fleet-mode.md, How a run starts), before anything else: bash started with -p;
+# a fixed PATH; the file's own path, which must hold a slash; that file and every folder above it
+# root's alone; a copy of it in a new folder only root can open, checked by SHA-256; then that copy,
+# started again with an empty environment. Everything after the start runs from the copy.
+# Until -p is proven, a function from the environment may stand in for any builtin but the special
+# ones, which posix mode finds first: so only an assignment, case and special builtins run here, and
+# printf only after unset -f. SHELLOPTS=privileged puts p in $- yet imports functions, so both count.
+POSIXLY_CORRECT=1; FL_O=$-; set +xvkaeufCET -B; unset -f declare; FL_FN=$(declare -F)
+case $FL_O in *x*) FL_O= ;; esac
+case $FL_O in *p*) case $FL_FN in '') FL_O=ok ;; esac ;; esac
+case $FL_O in
+  ok) unset POSIXLY_CORRECT FL_O FL_FN ;;
+  *) unset -f printf; printf '%s\n' "blindspot: start it as its first line says, with /bin/bash -p, and without -x: without -p, bash takes functions and settings from its environment before the file can check anything. It stopped before doing anything." >&2; exit 13 ;;
+esac
+PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
+unset BASH_ENV ENV CDPATH GLOBIGNORE TMPDIR
+IFS=$' \t\n'; umask 077; export LC_ALL=C
+NL=$'\n'
+FLEET_REAL=0
+# Every read of a GIRD_CHECK_* test setting below also needs FLEET_REAL=0 and EUID not 0, and the
+# copy starts with env -i, so as root no test setting is read or passed on.
+if [ "$EUID" -eq 0 ] || [ "${GIRD_CHECK_FLEET_REAL_ROOT:-}" = 1 ]; then FLEET_REAL=1; fi
+FL_PATH=/usr/bin:/bin:/usr/sbin:/sbin
+FL_STATE=/var/db/blindspot; FL_OWNER=0; FL_TMPROOT=/private/tmp; FL_OLD="/Library/Application Support/Blindspot"
+FL_OSNAME=$(/usr/bin/uname -s 2>/dev/null)
+if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
+  FL_STATE=${GIRD_CHECK_FLEET_STATE:-$FL_STATE}; FL_OWNER=$EUID; FL_OLD=${GIRD_CHECK_FLEET_OLD:-$FL_OLD}
+  FL_OSNAME=${GIRD_CHECK_FLEET_OS:-$FL_OSNAME}
+fi
+# >>> packed-sha: written into blindspot-fleet.sh by tools/gen.sh; empty here, where gird-check.sh sits next to this file.
+FL_PACKED_SHA=''
+# <<< packed-sha
+
+# What differs by OS, one small function each (macOS here; Linux has no fleet mode yet).
+fl_um() { /usr/bin/stat -f '%u %Lp' "$1" 2>/dev/null; }   # owner and mode
+fl_ul() { /usr/bin/stat -f '%u %l' "$1" 2>/dev/null; }    # owner and number of links
+fl_size() { /usr/bin/stat -f %z "$1" 2>/dev/null; }
+fl_sha256() { /usr/bin/env -i /usr/bin/shasum -a 256 2>/dev/null < "$1" | /usr/bin/cut -c1-64; }
+# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# owned_only UID PATH [sticky]: 0 when PATH and every folder above it are owned by root or UID and
+# writable by no one else: the full mode read with four digits (so 002 is not read as 2), and no ACL
+# entry that lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be
+# resolved. With sticky, a folder that root owns with mode 1777, as /private/tmp, passes:
+# there no other account can rename, unlink or replace a file root owns. Only gird-fleet.sh's start
+# asks for it, and it then runs a copy of the file in a folder of its own (docs/designs/fleet-mode.md).
+# The two calls that differ by OS: owner and mode, and whether an ACL entry lets anyone write (macOS).
+oo_mode() { /usr/bin/stat -f '%u %Mp%03Lp' "$1" 2>/dev/null; }
+oo_acl_open() { # 0: an entry lets someone write; 1: none does; 2: the ACL could not be read
+  _oo_a=$(/bin/ls -lde "$1" 2>/dev/null) || return 2
+  printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }'
+}
+owned_only() {
+  _oo_p=$2
+  while :; do
+    _oo_m=$(oo_mode "$_oo_p")
+    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in [0-7][0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    if [ "${3:-}" = sticky ] && [ "$_oo_m" = "0 1777" ] && [ -d "$_oo_p" ]; then :
+    else case "${_oo_m#* }" in ??[2367]?|???[2367]) return 1 ;; esac; fi
+    oo_acl_open "$_oo_p"; [ $? -eq 1 ] || return 1
+    [ "$_oo_p" = / ] && return 0
+    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
+  done
+}
+# <<< owned-walk
+
+# The saved result's folder: root's, mode 0700. One that is a link, not a folder, or not root's with
+# mode 0700 is moved aside and made again.
+fl_state_ok() { [ ! -L "$FL_STATE" ] && [ -d "$FL_STATE" ] && [ "$(fl_um "$FL_STATE")" = "$FL_OWNER 700" ]; }
+fl_state_prep() {
+  if ! fl_state_ok; then
+    if [ -L "$FL_STATE" ] || [ -e "$FL_STATE" ]; then
+      /bin/mv -f -- "$FL_STATE" "$FL_STATE.replaced-$(/bin/date -u +%Y%m%d%H%M%S)-$$" 2>/dev/null || return 1
+    fi
+    /bin/mkdir -m 700 -- "$FL_STATE" 2>/dev/null || return 1
+    fl_state_ok || return 1
+  fi
+}
+fl_write() { # name text: written to a new file, then renamed into place, root's only
+  fl_state_prep || return 1
+  _sf=$(/usr/bin/mktemp "$FL_STATE/.$1.XXXXXX") || return 1
+  printf '%s\n' "$2" > "$_sf" && /bin/chmod 600 "$_sf" && /bin/mv -f -- "$_sf" "$FL_STATE/$1" || { /bin/rm -f -- "$_sf"; return 1; }
+}
+# A run refused before it checks anything says why in the saved-result folder, so the inventory reads
+# failed with that reason, not an older result or none. A run that only reads (--inventory, --list,
+# --help) records nothing.
+fl_record_args() { FL_RECORD=1; case " $* " in *" --inventory "*|*" --list "*|*" --help "*|*" -h "*) FL_RECORD=0 ;; esac; }
+fl_refuse() { # exit-code reason message: the reason is a fixed phrase, never a path
+  printf 'blindspot: %s\n' "$3" >&2
+  [ "$FL_RECORD" -eq 1 ] && fl_write refused "refused $(/bin/date -u +%Y-%m-%dT%H:%MZ): $2$NL$(/bin/date -u +%s)" 2>/dev/null
+  exit "$1"
+}
+fl_first_bad() { # PATH: the first folder from / down, or PATH itself, that fails the ownership walk
+  _fb=""; _fr=${1#/}
+  while :; do
+    _fb="$_fb/${_fr%%/*}"; [ "$_fr" = "${_fr#*/}" ] && _fr="" || _fr=${_fr#*/}
+    owned_only "$FL_OWNER" "$_fb" sticky || { printf '%s' "$_fb"; return; }
+    [ -n "$_fr" ] || break
+  done
+  printf '%s' "$1"
+}
+
+if [ -z "${BLINDSPOT_STAGE:-}" ]; then
+  # Jamf Pro passes three arguments first: the mount point, /, the computer's name and the user's
+  # name, which may be empty. An MDM's unused parameters arrive empty and are dropped. With no options
+  # at all it runs as the MDM runs it. The copy gets the options as they stand after this.
+  if [ $# -ge 3 ] && [ "$1" = / ]; then shift 3; fi
+  _args=(); for arg in "$@"; do [ -n "$arg" ] && _args+=("$arg"); done
+  if [ "${#_args[@]}" -eq 0 ]; then set -- --all-users --exit-zero --summary-to-stdout --deadline=3000; else set -- "${_args[@]}"; fi
+  fl_record_args "$@"
+  if [ "$FL_OSNAME" != Darwin ]; then
+    FL_RECORD=0
+    case "$FL_OSNAME" in
+      Linux) fl_refuse 13 "" "checking every account is built for macOS only so far; Linux comes next" ;;
+      *) fl_refuse 13 "" "checking every account is built for macOS only" ;;
+    esac
+  fi
+  [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 1 ] && fl_refuse 13 "not run as root" "it needs root: run it with sudo, or from your MDM"
+  # bash names the file it reads in BASH_SOURCE. Empty, it read standard input or bash -c; with no
+  # slash, bash may have found the name in the current folder or on PATH.
+  FL_SELF=${BASH_SOURCE[0]:-}
+  case "$FL_SELF" in
+    */*) ;;
+    *) fl_refuse 13 "not run from a file by its path" "run it from a file, by a path that holds a slash, such as /bin/bash -p ./blindspot-fleet.sh: before anything else it checks who can change that file, then copies it. Standard input, bash -c and a bare file name are refused" ;;
+  esac
+  _d=$(cd -P -- "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
+  FL_SELF="${_d%/}/${FL_SELF##*/}"
+  # What root runs, and copies for every account, must be root's alone: this file (and, for
+  # gird-fleet.sh, gird-check.sh next to it) and every folder above them, owned by root (the tests'
+  # stand-in owns them in a test run) and writable by nobody else.
+  _bad=""; _chk=""
+  if [ -z "$_d" ] || [ -L "$FL_SELF" ] || [ ! -f "$FL_SELF" ]; then _bad=$FL_SELF
+  elif ! owned_only "$FL_OWNER" "$FL_SELF" sticky; then _bad=$(fl_first_bad "$FL_SELF"); fi
+  if [ -z "$FL_PACKED_SHA" ] && [ "$FL_RECORD" -eq 1 ] && [ -z "$_bad" ]; then
+    _chk="${_d%/}/gird-check.sh"
+    [ ! -L "$_chk" ] && [ -f "$_chk" ] || fl_refuse 13 "gird-check.sh is not next to gird-fleet.sh" "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link"
+    owned_only "$FL_OWNER" "$_chk" sticky || _bad=$(fl_first_bad "$_chk")
+  fi
+  # tests only: a path whose mode a test run can't give the script or a folder it must reach
+  [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && { owned_only "$FL_OWNER" "$GIRD_CHECK_FLEET_CHECK_ALSO" || _bad=$GIRD_CHECK_FLEET_CHECK_ALSO; }
+  [ -z "$_bad" ] || fl_refuse 13 "the file or a folder above it can be changed by an account other than root" "the file it runs from, and every folder above it, must be owned by root and writable by no one else ($_bad is not): install it in such a folder and run it from there"
+  # The copy: root's alone in a folder only root can open, so the file bash goes on reading can't
+  # be swapped, and compared with the file just checked.
+  FL_STAGE=$(/usr/bin/mktemp -d "$FL_TMPROOT/blindspot-run.XXXXXXXX" 2>/dev/null) || fl_refuse 13 "could not copy itself" "could not make a folder for its copy in $FL_TMPROOT"
+  _ok=1
+  [ ! -L "$FL_STAGE" ] && [ "$(fl_um "$FL_STAGE")" = "$FL_OWNER 700" ] || _ok=0
+  for _p in "$FL_SELF:blindspot-fleet.sh" "$_chk:gird-check.sh"; do
+    _src=${_p%:*}; [ -n "$_src" ] && [ "$_ok" -eq 1 ] || continue
+    _h=$(fl_sha256 "$_src")
+    /bin/cp -- "$_src" "$FL_STAGE/${_p##*:}" 2>/dev/null && /bin/chmod 600 "$FL_STAGE/${_p##*:}" && [ -n "$_h" ] || _ok=0
+    # tests only: a copy that no longer matches the file
+    [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_STAGE_EDIT:-}" ] && printf '#\n' >> "$FL_STAGE/${_p##*:}"
+    [ "$_ok" -eq 1 ] && [ "$(fl_sha256 "$FL_STAGE/${_p##*:}")" = "$_h" ] || _ok=0
+  done
+  [ "$_ok" -eq 1 ] || { /bin/rm -rf -- "$FL_STAGE"; fl_refuse 13 "its copy did not match the file" "its copy in $FL_STAGE did not match the file it was made from"; }
+  set -- "PATH=$FL_PATH" "BLINDSPOT_STAGE=$FL_STAGE" /bin/bash -p "$FL_STAGE/blindspot-fleet.sh" "$@"
+  if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
+    for _v in $(compgen -e); do case "$_v" in GIRD_CHECK_*|FLL_*) set -- "$_v=${!_v}" "$@" ;; esac; done   # tests only
+  fi
+  exec /usr/bin/env -i "$@"
+fi
+
+# From here on this is the copy. It runs only from a folder the start made: its name, root's with mode
+# 0700, the copy root's with mode 0600; never from a BLINDSPOT_STAGE an environment carried in.
+fl_record_args "$@"
+FL_STAGE=$BLINDSPOT_STAGE; unset BLINDSPOT_STAGE
+FL_SELF=${BASH_SOURCE[0]:-}
+case "$FL_STAGE" in "$FL_TMPROOT"/blindspot-run.????????) ;; *) FL_STAGE="" ;; esac
+if [ -z "$FL_STAGE" ] || [ "$FL_SELF" != "$FL_STAGE/blindspot-fleet.sh" ] || [ -L "$FL_STAGE" ] || [ "$(fl_um "$FL_STAGE")" != "$FL_OWNER 700" ]; then
+  fl_refuse 13 "its copy was not where its start put it" "its copy is not in a folder its start made: run the file itself, never with BLINDSPOT_STAGE set"
+fi
+# The folder is root's, named as the start names it, and bash is reading this file from it: from here
+# a refusal removes it too.
+trap '/bin/rm -rf -- "$FL_STAGE"' EXIT
+if [ -L "$FL_SELF" ] || [ ! -f "$FL_SELF" ] || [ "$(fl_um "$FL_SELF")" != "$FL_OWNER 600" ] || ! owned_only "$FL_OWNER" "$FL_SELF" sticky; then
+  fl_refuse 13 "its copy was not where its start put it" "its copy is not in a folder its start made: run the file itself, never with BLINDSPOT_STAGE set"
+fi
+FL_CHECK="$FL_STAGE/gird-check.sh"
+cd / || exit 13
+
 ALL=0; ALLUSERS=0; JSON=0; SUMOUT=0; EXITZERO=0; LISTONLY=0; HASHKEY=""; INVENTORY=0; RESULTTAGS=0
 DEADLINE=""; STALE_DAYS=""
+fleet_usage() { fl_refuse "${2:-2}" "${3:-it was started with options it does not take together}" "$1"; }
 for arg in "$@"; do
   case "$arg" in
     --all-users) ALLUSERS=1 ;;
@@ -27,48 +216,20 @@ for arg in "$@"; do
     --summary-to-stdout) SUMOUT=1 ;;
     --exit-zero) EXITZERO=1 ;;
     --list) LISTONLY=1 ;;
-    --hash-accounts=?*) HASHKEY=${arg#*=} ;;
+    --hash-accounts|--hash-accounts=*) fleet_usage "--hash-accounts is not taken as an argument: every account can read root's arguments while it runs, and the MDM keeps them in its logs. Put the secret in $FL_STATE/hash-key instead (docs/fleet.md)" 2 "--hash-accounts was given as an argument" ;;
     --deadline=*) DEADLINE=${arg#*=} ;;
     --inventory) INVENTORY=1 ;;
     --stale-days=*) STALE_DAYS=${arg#*=} ;;
     --result-tags) RESULTTAGS=1 ;;
     --all) ALL=1 ;;
-    -h|--help) /usr/bin/sed -n '2,/^$/p' "$0" | /usr/bin/sed -n 's/^# \{0,1\}//p'; exit 0 ;;
-    *) printf 'Unknown option: %s (try --help)\n' "$arg"; exit 2 ;;
+    -h|--help) /usr/bin/sed -n '2,/^$/p' "$FL_SELF" | /usr/bin/sed -n 's/^# \{0,1\}//p'; exit 0 ;;
+    *) fleet_usage "it does not take ${arg%%=*} (try --help)" 2 "it was given a word it does not take" ;;
   esac
 done
-# Root never obeys a test setting, a function from its environment or a tool on the MDM's PATH.
-while read -r _ _ _f; do [ -n "$_f" ] && unset -f "$_f"; done <<EOF
-$(declare -F)
-EOF
-FLEET_REAL=0
-# Every read of a GIRD_CHECK_* test setting below also needs FLEET_REAL=0 and EUID not 0, and each
-# account's run starts with env -i, so as root no test setting is read or passed on.
-if [ "$EUID" -eq 0 ] || [ "${GIRD_CHECK_FLEET_REAL_ROOT:-}" = 1 ]; then FLEET_REAL=1; fi
-fleet_usage() { printf 'blindspot: %s\n' "$1" >&2; exit "${2:-2}"; }
-# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
-# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
-# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
-# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
-owned_only() {
-  _oo_p=$2
-  while :; do
-    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
-    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
-    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
-    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
-    [ "$_oo_p" = / ] && return 0
-    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
-  done
-}
-# <<< owned-walk
 case "$DEADLINE" in ''|[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;; *) fleet_usage "--deadline takes a number of seconds, up to 99999" ;; esac
 case "$STALE_DAYS" in ''|[1-9]|[12][0-9]|30) ;; *) fleet_usage "--stale-days takes a number of days, from 1 to 30" ;; esac
-case "$HASHKEY" in *[!A-Za-z0-9._~+/=-]*) fleet_usage "--hash-accounts takes letters, digits and . _ ~ + / = - only" ;; esac
 if [ "$ALLUSERS" -eq 0 ]; then
-  for _o in "$JSON:--json" "$SUMOUT:--summary-to-stdout" "$EXITZERO:--exit-zero" "$LISTONLY:--list" "${HASHKEY:+1}:--hash-accounts" "${DEADLINE:+1}:--deadline"; do
+  for _o in "$JSON:--json" "$SUMOUT:--summary-to-stdout" "$EXITZERO:--exit-zero" "$LISTONLY:--list" "${DEADLINE:+1}:--deadline"; do
     [ "${_o%%:*}" = 1 ] && fleet_usage "${_o#*:} works with --all-users only"
   done
 fi
@@ -77,51 +238,22 @@ fi
 [ "$ALLUSERS" -eq 1 ] && [ "$INVENTORY" -eq 1 ] && fleet_usage "--inventory reads the saved result: run it without --all-users"
 [ "$ALLUSERS" -eq 1 ] || [ "$INVENTORY" -eq 1 ] || fleet_usage "give --all-users to check every account, or --inventory to read the saved result (try --help)"
 [ "$JSON" -eq 1 ] && [ "$SUMOUT" -eq 1 ] && fleet_usage "choose --json or --summary-to-stdout, not both"
-{
-  PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
-  unset BASH_ENV ENV CDPATH GLOBIGNORE TMPDIR
-  IFS=$' \t\n'; umask 077
-  # Each account runs a copy of gird-check.sh from this file's folder, found before cd /.
-  FL_SELF=${BASH_SOURCE[0]:-}
-  case "$FL_SELF" in ''|/*) ;; *) FL_SELF="$PWD/$FL_SELF" ;; esac
-  cd / || exit 13
-  _fos=$(/usr/bin/uname -s 2>/dev/null)
-  [ "$FLEET_REAL" -eq 0 ] && [ -n "${GIRD_CHECK_FLEET_OS:-}" ] && _fos=$GIRD_CHECK_FLEET_OS   # tests only
-  case "$_fos" in
-    Darwin) ;;
-    Linux) fleet_usage "checking every account is built for macOS only so far; Linux comes next" 13 ;;
-    *) fleet_usage "checking every account is built for macOS only" 13 ;;
-  esac
-  [ "$ALL" -eq 1 ] && fleet_usage "--all is refused with --all-users: Desktop and Documents can hold cloud files that download when read" 13
-  if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
-    fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13
+[ "$ALL" -eq 1 ] && fleet_usage "--all is refused with --all-users: Desktop and Documents can hold cloud files that download when read" 13 "--all was given"
+if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
+  fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13 "not run as root"
+fi
+# --hash-accounts: the secret lives only in a file root placed, root's alone, never in an argument.
+if [ "$ALLUSERS" -eq 1 ] && { [ -L "$FL_STATE/hash-key" ] || [ -e "$FL_STATE/hash-key" ]; }; then
+  _hk="$FL_STATE/hash-key"; _hd=$(cd -P -- "$FL_STATE" 2>/dev/null && /bin/pwd -P)
+  if fl_state_ok && [ -n "$_hd" ] && [ ! -L "$_hk" ] && [ -f "$_hk" ] && [ "$(fl_um "$_hk")" = "$FL_OWNER 600" ] && owned_only "$FL_OWNER" "$_hd/hash-key" &&
+     [ "$(fl_size "$_hk")" -le 200 ]; then
+    HASHKEY=$(/bin/cat -- "$_hk"; printf x); HASHKEY=${HASHKEY%x}; HASHKEY=${HASHKEY%"$NL"}
   fi
-  # Each path an account or admin could make is tested as a link first and never followed.
-  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || { [ ! -L "$FL_SELF" ] && [ ! -f "$FL_SELF" ]; }; }; then
-    fleet_usage "run it from a file: it copies gird-check.sh from its own folder for each account" 13
-  fi
-  # What root runs, and copies for every account, must be root's alone: gird-fleet.sh, gird-check.sh
-  # next to it and every folder above them owned by root (the tests' stand-in owns them in a test
-  # run) and writable by nobody else (owned_only). Root then copies the path it checked.
-  if [ "$ALLUSERS" -eq 1 ]; then
-    _own=0; [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && _own=$EUID
-    _d=$(cd "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
-    _bad=""; [ -n "$_d" ] && [ ! -L "$FL_SELF" ] || _bad=1
-    if [ -z "$_bad" ]; then
-      FL_SELF="${_d%/}/${FL_SELF##*/}"; FL_CHECK="${_d%/}/gird-check.sh"
-      [ ! -L "$FL_CHECK" ] && [ -f "$FL_CHECK" ] || fleet_usage "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link" 13
-      owned_only "$_own" "$FL_SELF" && owned_only "$_own" "$FL_CHECK" || _bad=1
-      # tests only: a path whose mode a test run can't give the script or a folder it must reach
-      [ "$_own" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && { owned_only "$_own" "$GIRD_CHECK_FLEET_CHECK_ALSO" || _bad=1; }
-    fi
-    [ -z "$_bad" ] || fleet_usage "gird-fleet.sh, gird-check.sh and every folder above them must be owned by root and writable by no one else: install them in such a folder and run them from there" 13
-    [ -r "$FL_CHECK" ] || fleet_usage "gird-check.sh next to gird-fleet.sh could not be read" 13
-  fi
-  HOME=/var/empty
-}
+  case "$HASHKEY" in ''|*[!A-Za-z0-9._~+/=-]*) fl_refuse 13 "the hash-key file is not root's alone, or not one line of letters and digits" "$_hk must be root's, mode 0600, in a folder that is root's with mode 0700, and hold one line of letters, digits and . _ ~ + / = - only" ;; esac
+fi
+HOME=/var/empty
 
 TTY=0; [ -t 1 ] && TTY=1
-NL=$'\n'
 # The places the tables below name, for an account that is not there: root reads none of them.
 H=/var/empty; AS="$H/Library/Application Support"; WIN=0; _os=mac; _pd=""; WLAPP=""
 APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
@@ -488,14 +620,13 @@ zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that
 # The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof and find. They
 # are read only when the script is not running as root.
 # ===========================================================================
-FL_STATE=/var/db/blindspot; FL_USERS=""; FL_LAUNCH=""; FL_OWNER=0; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
+FL_USERS=""; FL_LAUNCH=""; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
 FL_FIND=/usr/bin/find; FL_PS=/bin/ps
 if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
-  FL_STATE=${GIRD_CHECK_FLEET_STATE:-$FL_STATE}; FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
+  FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
   FL_SHARED_TMP=${GIRD_CHECK_FLEET_SHARED_TMP:-$FL_SHARED_TMP}; FL_LSOF=${GIRD_CHECK_FLEET_LSOF:-$FL_LSOF}
-  FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}; FL_OWNER=$EUID
+  FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}
 fi
-FL_PATH=/usr/bin:/bin:/usr/sbin:/sbin
 FL_OUT_MAX=4096                 # bytes root reads from one account run
 FL_US=$(printf '\037'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
 fl_cleanup() {
@@ -506,7 +637,8 @@ fl_cleanup() {
   fi
   [ -n "$FL_TMP" ] && /bin/rm -rf -- "$FL_TMP"
   [ -n "$FL_COPYDIR" ] && /bin/rm -rf -- "$FL_COPYDIR"
-  FL_TMP=""; FL_COPYDIR=""
+  [ -n "$FL_STAGE" ] && /bin/rm -rf -- "$FL_STAGE"
+  FL_TMP=""; FL_COPYDIR=""; FL_STAGE=""
 }
 # fl_timed LIMIT OUT -- COMMAND...: runs COMMAND in its own process group with no terminal, its
 # output into a pipe root made and read up to FL_OUT_MAX + 1 bytes into OUT. At LIMIT seconds a
@@ -529,7 +661,7 @@ fl_timed() {
   _tt=$!
   set +m
   { wait "$_tr"; } 2>/dev/null
-  _ts=$(/usr/bin/stat -f %z "$_to" 2>/dev/null)
+  _ts=$(fl_size "$_to" 2>/dev/null)
   # More than root reads: stop the run now, its output is refused anyway.
   [ "${_ts:-0}" -gt "$FL_OUT_MAX" ] && kill -KILL -- "-$_tj" 2>/dev/null
   { wait "$_tj"; } 2>/dev/null
@@ -652,7 +784,7 @@ fl_incidents_ok() { # every id is an incident in data/incidents.tsv
 # Sets FA_<key> for each.
 fl_parse() {
   _f=$1
-  _sz=$(/usr/bin/stat -f %z "$_f" 2>/dev/null); case "$_sz" in ''|*[!0-9]*) return 1 ;; esac
+  _sz=$(fl_size "$_f" 2>/dev/null); case "$_sz" in ''|*[!0-9]*) return 1 ;; esac
   [ "$_sz" -gt 0 ] && [ "$_sz" -le "$FL_OUT_MAX" ] || return 1
   [ "$(LC_ALL=C /usr/bin/tr -d '\n a-z0-9=_-' < "$_f" | /usr/bin/wc -c | /usr/bin/tr -d ' ')" = 0 ] || return 1
   [ "$(/usr/bin/tail -c 1 "$_f" | /usr/bin/od -An -tx1 | /usr/bin/tr -d ' \n')" = 0a ] || return 1
@@ -690,12 +822,26 @@ fl_parse() {
   done < "$_f"
   [ $# -eq 0 ]
 }
-fl_copy_ok() { # the copy each account runs: owned by root, nobody else can change it
+fl_copy_ok() { # the copy each account runs: owned by root, nobody else can change it, as made
   [ ! -L "$FL_COPYDIR" ] && [ -d "$FL_COPYDIR" ] && [ ! -L "$FL_COPY" ] && [ -f "$FL_COPY" ] || return 1
-  [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPYDIR" 2>/dev/null)" = "$FL_OWNER 755" ] || return 1
+  [ "$(fl_um "$FL_COPYDIR" 2>/dev/null)" = "$FL_OWNER 755" ] || return 1
   # Not its link count: any account can hard-link a file in /tmp, and a link can't change a file
   # root owns at 0644, so counting links would let one account stop every later account's check.
-  [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644" ]
+  [ "$(fl_um "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644" ] && [ "$(fl_sha256 "$FL_COPY")" = "$FL_CHECK_SHA" ]
+}
+# blindspot-fleet.sh carries gird-check.sh without its game after its last line, which bash never
+# reaches: written from this file's copy into the start's folder, which only root can open, and
+# checked against the SHA-256 tools/gen.sh wrote in. The SHA-256 proves the copy was written as built,
+# not that the file is authentic; that is the published SHA-256 the admin checks before uploading it.
+fl_unpack() {
+  /usr/bin/awk '/^# >>> packed-check[: ]/ && !s { s = 1; next } s { if (n) print p; p = $0; n = 1 } END { exit !(s && p == "# <<< packed-check") }' "$FL_SELF" > "$FL_CHECK" &&
+    [ "$(fl_sha256 "$FL_CHECK")" = "$FL_PACKED_SHA" ]
+}
+# The file this run came from, kept for the MDM's inventory reader: root's, 0700, in root's folder.
+fl_keep() {
+  /usr/bin/cmp -s "$FL_SELF" "$FL_STATE/blindspot-fleet.sh" 2>/dev/null && return 0
+  _kf=$(/usr/bin/mktemp "$FL_STATE/.blindspot-fleet.sh.XXXXXX") || return 1
+  /bin/cp -- "$FL_SELF" "$_kf" && /bin/chmod 700 "$_kf" && /usr/bin/cmp -s "$FL_SELF" "$_kf" && /bin/mv -f -- "$_kf" "$FL_STATE/blindspot-fleet.sh" || { /bin/rm -f -- "$_kf"; return 1; }
 }
 fl_json_list() { _o=""; for _x in $1; do _o="${_o:+$_o,}\"$_x\""; done; printf '[%s]' "$_o"; }
 fl_json_incidents() { _o=""; for _x in $1; do _o="${_o:+$_o,}{\"id\":\"$_x\",\"level\":\"$(incident_level "$_x")\"}"; done; printf '[%s]' "$_o"; }
@@ -758,7 +904,7 @@ EOF
         # one root owns under one name is a possible sign for the Mac, as above (gh-token-monitor's logs).
         if [ "$_iown" = yes ]; then
           case "$_ip" in /tmp/*) _ip="$FL_SHARED_TMP/${_ip#/tmp/}" ;; *) continue ;; esac
-          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(fl_ul "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
             if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
           fi
           continue
@@ -768,7 +914,7 @@ EOF
         # not a link, and then only as a possible sign, as the markers above.
         case "$_ip" in /tmp/*)
           _ip="$FL_SHARED_TMP/${_ip#/tmp/}"
-          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(fl_ul "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
             if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
           fi
           continue ;;
@@ -782,7 +928,7 @@ EOF
   # The LiteLLM loader holds its lock file open while it runs.
   _lk="$FL_SHARED_TMP/remote_code_loader.lock"
   # Only a lock file root made: one an account owns is that account's marker, found by its own run.
-  if [ ! -L "$_lk" ] && [ -f "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+  if [ ! -L "$_lk" ] && [ -f "$_lk" ] && [ "$(fl_ul "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
     fl_timed "${FM_LSOF_S:-10}" "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
     # A running loader is a sign only when root's own process holds the lock: any account can open a
     # root-owned file it can read, and keep it open.
@@ -798,23 +944,7 @@ EOF
   FM_POSS=$(printf '%s\n' $FM_POSS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
 }
 
-# The saved result: /var/db/blindspot/last.json, readable by root only. A folder that is a link,
-# not a folder, or not root's with mode 0700 is moved aside and made again.
-fl_state_ok() { [ ! -L "$FL_STATE" ] && [ -d "$FL_STATE" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$FL_STATE" 2>/dev/null)" = "$FL_OWNER 700" ]; }
-fl_state_prep() {
-  if ! fl_state_ok; then
-    if [ -L "$FL_STATE" ] || [ -e "$FL_STATE" ]; then
-      /bin/mv -f -- "$FL_STATE" "$FL_STATE.replaced-$(/bin/date -u +%Y%m%d%H%M%S)-$$" 2>/dev/null || return 1
-    fi
-    /bin/mkdir -m 700 -- "$FL_STATE" 2>/dev/null || return 1
-    fl_state_ok || return 1
-  fi
-}
-fl_write() { # name text: written to a new file, then renamed into place, root's only
-  fl_state_prep || return 1
-  _sf=$(/usr/bin/mktemp "$FL_STATE/.$1.XXXXXX") || return 1
-  printf '%s\n' "$2" > "$_sf" && /bin/chmod 600 "$_sf" && /bin/mv -f -- "$_sf" "$FL_STATE/$1" || { /bin/rm -f -- "$_sf"; return 1; }
-}
+# The saved result: /var/db/blindspot/last.json, readable by root only (fl_write).
 fl_save() { fl_write last.json "$1"; }
 # Each run first saves when it started and its deadline, so a run the MDM stopped part-way is not
 # hidden behind the last finished result.
@@ -828,19 +958,28 @@ fl_attempt() { fl_write attempt "$FL_EPOCH ${DEADLINE:-3000}"; }
 fl_inv_out() { if [ "$RESULTTAGS" -eq 1 ]; then printf '<result>%s</result>\n' "$1"; else printf '%s\n' "$1"; fi; }
 fl_unfinished() { # epoch of the last finished run, 0 for none: prints "failed" when a later run stopped part-way
   _a="$FL_STATE/attempt"
-  [ ! -L "$_a" ] && [ -f "$_a" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
+  [ ! -L "$_a" ] && [ -f "$_a" ] && [ "$(fl_um "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
   _at=$(/usr/bin/head -c 64 "$_a" | /usr/bin/sed -n '1s/^\([0-9]\{1,12\}\) \([0-9]\{1,5\}\)$/\1 \2/p')
-  [ -n "$_at" ] && [ "${_at% *}" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - ${_at% *} )) -gt "${_at#* }" ] || return 1
-  fl_inv_out "failed: the run started $(/bin/date -u -r "${_at% *}" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
+  [ -n "$_at" ] && _ae=$((10#${_at% *})) && [ "$_ae" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - _ae )) -gt "${_at#* }" ] || return 1
+  fl_inv_out "failed: the run started $(/bin/date -u -r "$_ae" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
+}
+fl_refused() { # epoch of the last finished run, 0 for none: prints "failed" and why when a later run was refused
+  _rf="$FL_STATE/refused"
+  [ ! -L "$_rf" ] && [ -f "$_rf" ] && [ "$(fl_um "$_rf")" = "$FL_OWNER 600" ] || return 1
+  _rl=$(/usr/bin/head -c 400 "$_rf" | /usr/bin/sed -n '1s/^\(refused [0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}Z: [A-Za-z0-9 ,._'"'"'-]\{1,160\}\)$/\1/p')
+  _re=$(/usr/bin/head -c 400 "$_rf" | /usr/bin/sed -n '2s/^\([0-9]\{1,12\}\)$/\1/p')
+  [ -n "$_rl" ] && [ -n "$_re" ] && [ "$_re" -gt "$1" ] || return 1
+  fl_inv_out "failed: $_rl"
 }
 fl_inventory() {
   _f="$FL_STATE/last.json"
-  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then fl_state_ok && fl_unfinished 0 && return 0; fl_inv_out none; return 0; fi
-  if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(/usr/bin/stat -f '%u %Lp' "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
+  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then fl_state_ok && { fl_refused 0 || fl_unfinished 0; } && return 0; fl_inv_out none; return 0; fi
+  if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(fl_um "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
   _ep=$(/usr/bin/sed -n 's/^  "checked_epoch": \([0-9]\{1,12\}\),$/\1/p' "$_f" | /usr/bin/head -n 1)
   _iv=$(/usr/bin/sed -n 's/^  "inventory": "\([A-Za-z0-9 ._:;,|+-]*\)",$/\1/p' "$_f" | /usr/bin/head -n 1)
   [ "${#_iv}" -le 300 ] || _iv=""
   if [ -z "$_ep" ] || [ -z "$_iv" ]; then fl_inv_out unreadable; return 0; fi
+  fl_refused "$_ep" && return 0
   fl_unfinished "$_ep" && return 0
   _age=$(( $(/bin/date -u +%s) - _ep ))
   if [ "$_age" -gt $(( ${STALE_DAYS:-3} * 86400 )) ] || [ "$_age" -lt -3600 ]; then
@@ -870,8 +1009,11 @@ fleet_main() {
   _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 40 ] && _rs=40
   FM_FIND_S=$((_rs / 2)); [ "$FM_FIND_S" -gt 20 ] && FM_FIND_S=20; [ "$FM_FIND_S" -lt 1 ] && FM_FIND_S=1
   FM_LSOF_S=$((_rs / 4)); [ "$FM_LSOF_S" -gt 10 ] && FM_LSOF_S=10; [ "$FM_LSOF_S" -lt 1 ] && FM_LSOF_S=1
-  FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""
-  # One version for both files: gird-check.sh's release, from its header.
+  FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0
+  # The check each account runs, then one version for both files: gird-check.sh's release, from its header.
+  FL_FAILED=""
+  if [ -n "$FL_PACKED_SHA" ]; then FL_CHECK_SHA=$FL_PACKED_SHA; fl_unpack || FL_FAILED=copy
+  else FL_CHECK_SHA=$(fl_sha256 "$FL_CHECK"); fi
   FL_REL=$(/usr/bin/sed -n '1,5{s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p;}' "$FL_CHECK" | /usr/bin/head -n 1)
   [ -n "$FL_REL" ] || FL_REL=unknown
   # An account run may name only the key types this file knows, so a gird-check.sh with other key
@@ -886,7 +1028,7 @@ fleet_main() {
   FL_OS="macOS $(/usr/bin/sw_vers -productVersion 2>/dev/null | /usr/bin/tr -cd '0-9.' | /usr/bin/cut -d. -f1-2)"; FL_OS=${FL_OS% }
   # The copy each account runs: gird-check.sh, made once, in a new folder only root can change.
   _src=$FL_CHECK
-  if [ -f "$_src" ] && [ -r "$_src" ] && FL_COPYDIR=$(/usr/bin/mktemp -d /tmp/blindspot-copy.XXXXXXXX); then
+  if [ -z "$FL_FAILED" ] && [ -f "$_src" ] && [ -r "$_src" ] && FL_COPYDIR=$(/usr/bin/mktemp -d /tmp/blindspot-copy.XXXXXXXX); then
     FL_COPY="$FL_COPYDIR/gird-check.sh"
     { /bin/cp -- "$_src" "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
   else FL_FAILED=copy; fi
@@ -1034,8 +1176,13 @@ fleet_main() {
   [ "$N_ACC" -eq 0 ] && OUTS="${OUTS}not_checked$NL"
   [ -n "$FL_FAILED" ] && OUTS="${OUTS}failed$NL"
   OUTCOME=$(printf '%s' "$OUTS" | fl_worst)
+  # The two-file install the one file replaces: its daily item would still run beside this one.
+  FL_OLDINST=false
+  for _x in gird-fleet.sh gird-check.sh; do { [ -L "$FL_OLD/$_x" ] || [ -e "$FL_OLD/$_x" ]; } && FL_OLDINST=true; done
+  [ "$FL_OLDINST" = true ] && INV="$INV | old-install"
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
-  SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
+  _sx=""; [ "$FL_OLDINST" = true ] && _sx=" old_install=yes"
+  SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT$_sx"
   # The inventory value: one line for an MDM's inventory field, no path, file name or key. Too
   # long, it keeps the accounts that need attention first, cuts details before accounts (an act account
   # keeps gh-token-monitor and its incidents), and ends with +more when anything was cut; the saved
@@ -1073,6 +1220,7 @@ fleet_main() {
   \"os\": \"$FL_OS\",
   \"outcome\": \"$OUTCOME\",
   \"deadline_reached\": $( [ "$FL_DEADLINE_HIT" -eq 1 ] && echo true || echo false),
+  \"old_install\": $FL_OLDINST,
   \"accounts\": [$ROWS],
   \"machine\": $MACHINE,
   \"summary\": \"$SUMMARY\",
@@ -1080,8 +1228,9 @@ fleet_main() {
   \"learn_more\": \"https://gird.ai/argus\"
 }"
   FL_SAVED=1; fl_save "$JSON_DOC" || { FL_SAVED=0; OUTCOME=failed; }
+  [ "$FL_SAVED" -eq 1 ] && { /bin/rm -f -- "$FL_STATE/refused"; fl_keep; }
   if [ "$FL_SAVED" -eq 0 ]; then
-    SUMMARY="blindspot failed accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
+    SUMMARY="blindspot failed accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT$_sx"
     JSON_DOC=$(printf '%s\n' "$JSON_DOC" | /usr/bin/sed 's/^  "outcome": "[a-z_]*",$/  "outcome": "failed",/')
   fi
   if [ "$JSON" -eq 1 ]; then printf '%s\n' "$JSON_DOC"
@@ -1095,6 +1244,7 @@ fleet_main() {
     case "$FM_OUT" in act) _mw="act now" ;; not_checked) _mw="partly checked" ;; *) _mw=review ;; esac
     if [ -n "$_ml" ]; then printf '\n  %-44s%s%s\n' "This Mac" "$_mw" "$_ml"; fi
     [ -n "$FL_FAILED" ] && printf '\n  The run stopped: the script copy each account runs was changed.\n'
+    [ "$FL_OLDINST" = true ] && printf '\n  An older install of Blindspot, two files and a daily MDM item, is still on this Mac.\n  Remove its daily item first, then its folder: the guide says how (Moving from two files).\n'
     if [ "$FL_SAVED" -eq 1 ]; then printf '\n  Saved: %s/last.json\n' "$FL_STATE"; else printf '\n  Not saved: %s could not be written safely.\n' "$FL_STATE"; fi
     if [ "$TTY" -eq 1 ]; then
       if [ "$OUTCOME" = clear ]; then _a1="Nothing found on this Mac today."; else _a1="This is one Mac, checked once."; fi
@@ -1107,3 +1257,5 @@ fleet_main() {
 }
 fleet_main
 exit $?
+# >>> packed-check: gird-check.sh without its game, written into blindspot-fleet.sh by tools/gen.sh; empty here.
+# <<< packed-check

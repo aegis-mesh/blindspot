@@ -41,9 +41,10 @@ printf 'made.ext\t1.0.0\tmadeext\tany\tall\nmade.winext\t2.0.0\tmadeext\tany\twi
 printf 'Made-Org/made-action\tv1*\t-\t-\tsafe\tin October 2026\thttps://example.com/madeaction\tRemove it.\n' >> "$R/data/actions.tsv"
 # Exit code 3: the blocks were written, and blindspot-fleet.ps1 was not built for want of PowerShell.
 bash "$R/tools/gen.sh" > /dev/null 2> "$R/gen-err.txt" || { _r=$?; [ "$_r" -eq 3 ] || { cat "$R/gen-err.txt" >&2; exit 1; }; }
-# Outside the generated blocks, both scripts are unchanged.
+# Outside the generated blocks, both scripts are unchanged. The game block is code, not generated, so
+# it is compared too.
 for s in gird-check.sh gird-check.ps1; do
-  if ! cmp -s <(awk '/^# >>> /{skip=1} !skip{print} /^# <<< /{skip=0}' "$s") <(awk '/^# >>> /{skip=1} !skip{print} /^# <<< /{skip=0}' "$R/$s"); then
+  if ! cmp -s <(awk '/^# >>> / && !/^# >>> game$/{skip=1} !skip{print} /^# <<< / && !/^# <<< game$/{skip=0}' "$s") <(awk '/^# >>> / && !/^# >>> game$/{skip=1} !skip{print} /^# <<< / && !/^# <<< game$/{skip=0}' "$R/$s"); then
     echo "made-up.sh: $s changed outside its generated blocks" >&2; exit 1
   fi
   if cmp -s "$s" "$R/$s"; then echo "made-up.sh: gen.sh did not change $s" >&2; exit 1; fi
