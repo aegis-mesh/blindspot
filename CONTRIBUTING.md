@@ -108,17 +108,18 @@ Every week, and before every release, a maintainer runs `bash tools/check-adviso
 To cut a release, merge a `## X.Y.Z, <date>` section in `CHANGELOG.md`. Then, before you run anything from the checkout, read what changed since the last release in the files that release and check, since `tools/release.sh` itself comes from the checkout it releases (replace `vA.B.C` with the last release):
 
 ```sh
-git fetch origin --tags && git diff vA.B.C origin/main -- tools/ .github/ .gitattributes
+git fetch origin --tags && git diff vA.B.C origin/main -- tools/ .github/ .gitattributes .gitmodules
+git checkout --detach origin/main   # straight after, with no fetch in between, so what runs is what you read
 ```
 
-Check out the tip of `main`, and run:
+Then run:
 
 ```sh
 BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh --dry-run X.Y.Z   # every check, no tag or release
 BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh X.Y.Z
 ```
 
-It needs git, `gh` signed in, and OpenSSH 8.1 or later. It stops, publishing nothing, unless the checkout is clean and at `origin/main`, the version is higher than every release, `CHANGELOG.md` has its section and `bash tools/gen.sh --check` passes. It then lists every commit and file changed since the previous release, with the changes to `tools/`, `.github/` and `.gitattributes` in full: review them against the [security review](#security-review) and type the version to go on. Nothing else from the checkout runs before you do. It refuses a repository whose own git config sets anything that changes what signs or runs (`gpg.*`, hooks, aliases). It signs `SHA256SUMS`, checks that signature against `.github/allowed_signers`, then pushes the signed tag and creates the GitHub release. `ssh-keygen` asks for your key's passphrase itself, once for `SHA256SUMS` and once for the tag.
+It needs git, `gh` signed in, and OpenSSH 8.1 or later. It stops, publishing nothing, unless the checkout is clean and at `origin/main`, the version is higher than every release, `CHANGELOG.md` has its section and `bash tools/gen.sh --check` passes. It then lists every commit and file changed since the previous release, with the changes to `tools/`, `.github/` and `.gitattributes` in full: review them against the [security review](#security-review) and type the version to go on. Nothing else from the checkout runs before you do. It refuses a repository whose own git config sets signing, hooks, fsmonitor, `core.sshCommand`, aliases, includes or tag settings; it does not check every setting, so keep your checkout's `.git/config` to what git wrote. It signs `SHA256SUMS`, checks that signature against `.github/allowed_signers`, then pushes the signed tag and creates the GitHub release. `ssh-keygen` asks for your key's passphrase itself, once for `SHA256SUMS` and once for the tag.
 
 Your release key is your own, made once with a passphrase:
 

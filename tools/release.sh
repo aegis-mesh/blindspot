@@ -125,6 +125,7 @@ bash tools/gen.sh --check > "$W/gen.txt" 2>&1 || { cat "$W/gen.txt" >&2; die "ba
 for f in $FILES; do
   G cat-file blob "$SHA:$f" > "$W/$f" 2>/dev/null || die "$f is not committed at $SHA"
 done
+G cat-file blob "$SHA:$SIGNERS" > "$W/allowed_signers" 2>/dev/null || die "$SIGNERS is not committed at $SHA"
 {
   printf 'version %s\n' "$TAG"
   for f in $FILES; do printf '%s  %s\n' "$(sha256 "$W/$f")" "$f"; done
@@ -133,7 +134,7 @@ if sed 1d "$W/SHA256SUMS" | grep -Evq '^[0-9a-f]{64}  [a-z0-9.-]+$'; then die "a
 
 say "Signing SHA256SUMS with $K"
 "$KEYGEN" -Y sign -n "$NS" -f "$K" "$W/SHA256SUMS" || die "ssh-keygen could not sign SHA256SUMS"
-"$KEYGEN" -Y verify -f "$SIGNERS" -I "$PRINCIPAL" -n "$NS" -s "$W/SHA256SUMS.sig" < "$W/SHA256SUMS" ||
+"$KEYGEN" -Y verify -f "$W/allowed_signers" -I "$PRINCIPAL" -n "$NS" -s "$W/SHA256SUMS.sig" < "$W/SHA256SUMS" ||
   die "the signature does not verify against $SIGNERS: is your key's line there? Nothing was published"
 
 if [ "$DRY" -eq 1 ]; then
@@ -143,7 +144,7 @@ if [ "$DRY" -eq 1 ]; then
   exit 0
 fi
 
-GS() { G -c gpg.format=ssh -c gpg.ssh.program="$KEYGEN" -c gpg.ssh.allowedSignersFile="$SIGNERS" "$@"; }
+GS() { G -c gpg.format=ssh -c gpg.ssh.program="$KEYGEN" -c gpg.ssh.allowedSignersFile="$W/allowed_signers" "$@"; }
 GS -c user.signingkey="$K" tag -s "$TAG" -m "Blindspot $V" "$SHA" || die "git could not create the signed tag $TAG"
 if ! GS tag -v "$TAG" || [ "$(G rev-parse "$TAG^{commit}")" != "$SHA" ]; then
   G tag -d "$TAG" >/dev/null 2>&1; die "the tag $TAG does not verify against $SIGNERS; it was deleted and nothing was published"
