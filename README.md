@@ -128,7 +128,7 @@ powershell -ExecutionPolicy Bypass -File .\gird-check.ps1
 
 ## For IT teams
 
-`gird-fleet.sh`, a separate script that runs as root from your MDM, checks every account on a Mac with `gird-check.sh`, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. All the root work is in `gird-fleet.sh`; `gird-check.sh` holds none. Root runs `gird-fleet.sh`, and copies `gird-check.sh` for each account, only from a folder root alone can change, such as `/Library/Application Support/Blindspot`. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru and Microsoft Intune.
+`gird-fleet.sh`, a separate script that runs as root from your MDM, checks every account on a Mac with `gird-check.sh`, each as that account, and saves a short result for your MDM: no paths, file names or keys, and nothing sent anywhere. All the root work is in `gird-fleet.sh`; `gird-check.sh` holds none. Root runs `gird-fleet.sh`, and copies `gird-check.sh` for each account, only from a folder root alone can change, such as `/Library/Application Support/Blindspot`. macOS only for now. [docs/fleet.md](docs/fleet.md) has the steps, and [docs/mdm/](docs/mdm/) a page each for Jamf Pro, Iru, Microsoft Intune and ManageEngine Endpoint Central (Mobile Device Manager Plus alone runs no scripts on a Mac; [its page](docs/mdm/manageengine-mdm-plus.md) says what to do instead).
 
 ## Limits
 
