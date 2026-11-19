@@ -16,7 +16,9 @@
 # (data/mcp-clients.tsv, data/mcp-servers.tsv, data/key-places.tsv), the terminal ids TERM_PROGRAM
 # names (data/term-programs.tsv), MCP configs (data/mcp-files.tsv), the lines an account run prints
 # (data/account-run.tsv, written into the fleet scripts, and checked against what gird-check.sh and
-# gird-check.ps1 print) and the OWASP Agentic Top 10 risk of each kind of finding (data/owasp.tsv). The
+# gird-check.ps1 print), the OWASP Agentic Top 10 risk of each kind of finding (data/owasp.tsv), and the
+# MITRE references and NIST CSF outcomes gird-report.ps1 shows (data/mitre.tsv), with gird-report.ps1's
+# shared block copied into gird-intune.ps1. The
 # scripts stay single files people can download and check. It also writes the lists in
 # docs/checks.md, between "<!-- >>> checks" and "<!-- <<< checks -->".
 #
@@ -46,6 +48,10 @@ PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | gre
 # The incidents whose packages are only editor extensions: their startup files and SSH keys are shown
 # with the extensions, as their signs.
 XONLY_IDS=" $(awk -F '\t' 'FNR == 1 { f++ } /^#/ || NF < 3 { next } f == 1 { n[$3] = 1 } f == 2 && !($3 in n) && !s[$3]++ { printf "%s ", $3 }' data/bad-npm.tsv data/bad-extensions.tsv)"
+# The finding words gird-report.ps1 reads, from its $Items table, their one home: every one needs an attack
+# line, an atlas line and a csf line in data/mitre.tsv.
+ITEM_LINES=$(awk '/^\$Items = @\($/ { on = 1; next } on && /^\)$/ { exit } on { print }' gird-report.ps1)
+MITRE_WORDS=" $(printf '%s\n' "$ITEM_LINES" | sed -n "s/^  @{ Word = '\([a-z][a-z-]*\)'.*/\1/p" | tr '\n' ' ')"
 # A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
 # first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {GOOSE_STATE}, {PROGRAMDATA}, or
 # {ENV:NAME:fallback} whose fallback is ~ or a path), at least one folder or file after it (an ENV
@@ -256,7 +262,48 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
           return r ~ /^(\/[A-Za-z0-9 ._-]+)+$/ }
         NF != 4 || $1 == "" || $1 ~ /[\047"`$|\\;]/ || $2 == "other" || index(cl, " " $2 " ") == 0 || !path_ok($3, "AS GOOSE_CFG") || !path_ok($4, "APPDATA LOCALAPPDATA") { print "data/mcp-files.tsv: " $0 }'
       rows data/account-run.tsv | awk -F '\t' 'NF != 1 || $1 !~ /^[a-z_]+$/ || seen[$1]++ { print "data/account-run.tsv: " $0 }
-        NR == 1 { first = $1 } { last = $1 } END { if (first != "v" || last != "end") print "data/account-run.tsv: the first key is not v or the last not end" }')
+        NR == 1 { first = $1 } { last = $1 } END { if (first != "v" || last != "end") print "data/account-run.tsv: the first key is not v or the last not end" }'
+      # A none line stands alone for its word and framework; a technique keeps one name and one set of
+      # tactics, and its url is the page its id names.
+      [ "$MITRE_WORDS" != " " ] || echo "gird-report.ps1: no \$Items table, so data/mitre.tsv cannot be checked"
+      # Each $Items line has exactly this form, so a word with a mistyped argument form or level is refused
+      # here rather than read by nothing.
+      printf '%s\n' "$ITEM_LINES" | awk '
+        { ok = $0 ~ /^  @\{ Word = \047[a-z][a-z-]*\047; Arg = \047(none|count|list|keys)\047; Level = \047(act|review|partial)\047; Label = \047[A-Za-z][A-Za-z0-9 ,_():.&-]*\047 \}$/
+          w = $0; sub(/^  @\{ Word = \047/, "", w); sub(/\047.*/, "", w)
+          if (!ok || seen[w]++) print "gird-report.ps1: an $Items line it cannot read, or a word twice: " $0 }'
+      for _v in attack atlas csf; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done
+      # A csf line names a CSF 2.0 Subcategory, its Function (the one its id starts with) and Category, and
+      # NIST's publication; its relation is only ever supports, for every computer with the finding. A file
+      # finding supports nothing under Govern, Respond or Recover, which are what an organization decides and
+      # does. cat holds the Categories data/mitre.tsv uses, named as CSWP 29 names them: add one here first.
+      rows data/mitre.tsv | awk -F '\t' -v ids="$IDS" -v words="$MITRE_WORDS" '
+        function safe(s) { return s != "" && s !~ /[\047"`$|\\<>&]/ }
+        BEGIN { fn["ID"] = "Identify"; fn["PR"] = "Protect"; fn["DE"] = "Detect"
+                cat["ID.RA"] = "Risk Assessment"; cat["PR.PS"] = "Platform Security"; cat["DE.CM"] = "Continuous Monitoring" }
+        { ok = NF == 10 && index(words, " " $1 " ") > 0 && $2 ~ /^(all|mac|win)$/ && $4 ~ /^(attack|atlas|csf)$/
+          if ($3 != "all") { ok = ok && $1 ~ /^(incidents|lockfile|update|remove)$/ && $4 != "csf"; n = split($3, a, ","); for (i = 1; i <= n; i++) if (index(ids, " " a[i] " ") == 0) ok = 0 }
+          if ($8 == "none") ok = ok && $2 == "all" && $3 == "all" && $5 == "-" && $6 == "-" && $7 == "-" && $9 == "-" && $10 != "-" && safe($10)
+          else if ($4 == "csf") {
+            n = split($7, t, ",")
+            ok = ok && $2 == "all" && $8 == "supports" && $10 == "-" && safe($6) && $5 ~ /^(ID|PR|DE)\.[A-Z][A-Z]-[0-9][0-9]$/ && n == 2 &&
+              t[1] == fn[substr($5, 1, 2)] && (substr($5, 1, 5) in cat) && t[2] == cat[substr($5, 1, 5)] && $9 == "https://doi.org/10.6028/NIST.CSWP.29"
+            k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7
+          }
+          else {
+            ok = ok && $8 ~ /^(exposure|indicator)$/ && $10 == "-" && safe($6) && $7 ~ /^[A-Z][A-Za-z ]*(,[A-Z][A-Za-z ]*)*$/
+            if ($4 == "attack") { u = $5; sub(/^T/, "", u); gsub(/\./, "/", u); ok = ok && $5 ~ /^T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://attack.mitre.org/techniques/T" u "/" }
+            else ok = ok && $5 ~ /^AML\.T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://atlas.mitre.org/techniques/" $5
+            k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7
+          }
+          wf = $1 " " $4
+          if ($8 == "none") { if (wf in has) ok = 0; nonewf[wf] = 1 } else if (wf in nonewf) ok = 0
+          has[wf] = 1
+          if (seen[$1 " " $2 " " $3 " " $4 " " $5]++) ok = 0
+          if (!ok) print "data/mitre.tsv: " $0 }
+        END { n = split(words, w, " "); for (i = 1; i <= n; i++) { if (!((w[i] " attack") in has)) print "data/mitre.tsv: no attack line for the finding word " w[i]
+                                                                   if (!((w[i] " atlas") in has)) print "data/mitre.tsv: no atlas line for the finding word " w[i]
+                                                                   if (!((w[i] " csf") in has)) print "data/mitre.tsv: no csf line for the finding word " w[i] } }')
 # A published value names a key type of data/keys.tsv and holds only key characters. It is a part of
 # the value, never one its key pattern matches by itself: the list must not hold a whole key.
 KEY_IDS=" $(rows data/keys.tsv | cut -f1 | tr '\n' ' ')"
@@ -1102,6 +1149,26 @@ rows data/owasp.tsv | awk -F '\t' '
   BEGIN { print "# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it."; print "$OwaspTable = @(" }
   $2 != "-" { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", $1, $2, $3, $4, $5, $6 }
   END { print ")"; print "# <<< owasp" }' > "$WORK/owasp.ps1"
+# --- MITRE references, for gird-report.ps1 ------------------------------------------------
+# One hashtable per line, then the names of the incidents a scope names, so the report can say which.
+{ rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $2 }'; rows data/mitre.tsv | awk -F '\t' '{ print "M\t" $0 }'; } | awk -F '\t' \
+  -v av="$(sed -n 's/^# attack-version: //p' data/mitre.tsv)" -v lv="$(sed -n 's/^# atlas-version: //p' data/mitre.tsv)" \
+  -v cv="$(sed -n 's/^# csf-version: //p' data/mitre.tsv)" '
+  function list(s, sep,   a, k, i, o) { if (s == "all" || s == "-") return "@()"; k = split(s, a, sep); for (i = 1; i <= k; i++) o = o (i > 1 ? ", " : "") "\047" a[i] "\047"; return "@(" o ")" }
+  function dash(s) { return s == "-" ? "" : s }
+  $1 == "I" { inc[$2] = $3; next }
+  { n++; ln[n] = sprintf("  @{ Word = \047%s\047; Os = \047%s\047; Scope = %s; Fw = \047%s\047; Id = \047%s\047; Name = \047%s\047; Tactics = %s; Rel = \047%s\047; Url = \047%s\047; Note = \047%s\047 }",
+      $2, $3, list($4, ","), $5, dash($6), dash($7), list($8, ","), $9, dash($10), dash($11))
+    if ($4 != "all") { k = split($4, a, ","); for (i = 1; i <= k; i++) if (!(a[i] in want)) { want[a[i]] = 1; wo[++m] = a[i] } } }
+  END {
+    print "# >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it."
+    print "$MitreAttackVersion = \047" av "\047"
+    print "$MitreAtlasVersion = \047" lv "\047"
+    print "$CsfVersion = \047" cv "\047"
+    print "$MitreRows = @("; for (i = 1; i <= n; i++) print ln[i]; print ")"
+    printf "$MitreIncidentNames = @{"; for (i = 1; i <= m; i++) printf "%s\047%s\047 = \047%s\047", (i > 1 ? "; " : " "), wo[i], inc[wo[i]]; print " }"
+    print "# <<< mitre"
+  }' > "$WORK/mitre.ps1"
 
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
@@ -1114,6 +1181,9 @@ splice() { # file block-name generated-file
 # --- the ownership walk and the OWASP tagging, for gird-fleet.sh ---------------------
 # Their home is gird-check.sh; root in gird-fleet.sh runs the same copies. The agents table both fleet
 # scripts read is written into them from data/agents.tsv, as into the checks.
+awk '/^# >>> shared[: ]/ { on = 1; print "# >>> shared: copied from gird-report.ps1 by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< shared$/ { exit }' gird-report.ps1 > "$WORK/shared.ps1"
+grep -q '^# <<< shared$' "$WORK/shared.ps1" || { echo "gird-report.ps1 has no shared block"; exit 1; }
 awk '/^# >>> owned-walk[: ]/ { on = 1; print "# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< owned-walk$/ { exit }' gird-check.sh > "$WORK/owned-walk.sh"
 grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has no owned-walk block"; exit 1; }
@@ -1122,9 +1192,11 @@ awk '/^# >>> owasp-derive[: ]/ { on = 1; print "# >>> owasp-derive: copied from 
 grep -q '^# <<< owasp-derive$' "$WORK/owasp-derive.sh" || { echo "gird-check.sh has no owasp-derive block"; exit 1; }
 
 RC=$AR_RC
-for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1; do
+for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve remote-commands agents incidents indicators outdated platforms account-run-keys owasp owasp-derive"
   elif [ "$f" = gird-fleet.ps1 ]; then blocks="agents fleet-tables"
+  elif [ "$f" = gird-report.ps1 ]; then blocks="mitre"
+  elif [ "$f" = gird-intune.ps1 ]; then blocks="shared"
   else blocks="keys public-values sessions planted auto-approve remote-commands incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms actions folder-vars agents report-lists mcp-files term-programs owasp"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do

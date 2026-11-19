@@ -5237,4 +5237,7 @@ else
   skip "the Worker accepts the report and keeps every field" "needs GIRD_CHECK_WORKER pointing at the site's report validation (worker/check-stats.js), and node"
 fi
 
+# gird-intune.ps1, against a local stand-in for Microsoft Graph.
+. tests/intune.sh
+
 finish

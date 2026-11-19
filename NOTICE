@@ -2,3 +2,29 @@ Blindspot
 Copyright 2026 GIRD AI Technologies Private Limited
 
 This product includes software developed by GIRD (https://gird.ai).
+
+gird-report.ps1 shows MITRE ATT&CK and MITRE ATLAS technique ids and names, from data/mitre.tsv.
+The mapping of Blindspot's findings to techniques is Blindspot's own, not MITRE's.
+
+MITRE ATT&CK Enterprise v20.1 (https://attack.mitre.org):
+© 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
+The MITRE Corporation (MITRE) hereby grants you a non-exclusive, royalty-free license to use ATT&CK® for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE's copyright designation and this license in any such copy.
+MITRE ATT&CK and ATT&CK are registered trademarks of The MITRE Corporation.
+
+MITRE ATLAS release 2026.10 (https://atlas.mitre.org):
+Copyright 2021-2026 MITRE. Licensed under the Apache License, Version 2.0; the text of that licence is
+in LICENSE (http://www.apache.org/licenses/LICENSE-2.0).
+Changed by Blindspot: data/mitre.tsv, and the table tools/gen.sh writes from it into gird-report.ps1,
+hold only the technique ids, names and tactics of the ATLAS techniques Blindspot maps, one line per
+kind of finding, with Blindspot's own mapping added. Nothing else from ATLAS is included.
+ATLAS's terms of use (https://atlas.mitre.org/terms) add: This project makes use of MITRE ATT&CK®.
+ATT&CK® Terms of Use - https://attack.mitre.org/resources/terms-of-use/
+
+NIST Cybersecurity Framework (CSF) 2.0:
+gird-report.ps1 shows CSF 2.0 Function, Category and Subcategory ids and the outcome text of three
+Subcategories, from data/mitre.tsv. The mapping of findings to NIST CSF 2.0 outcomes is Blindspot's own,
+not reviewed or endorsed by NIST.
+National Institute of Standards and Technology (2024) The NIST Cybersecurity Framework (CSF) 2.0. (National Institute of Standards and Technology, Gaithersburg, MD), NIST Cybersecurity White Paper (CSWP) NIST CSWP 29. https://doi.org/10.6028/NIST.CSWP.29 Republished courtesy of the National Institute of Standards and Technology.
+
+gird-report.ps1 labels one kind of finding with "excessive agency, OWASP LLM06:2025". The OWASP Top 10 for
+LLM Applications is referenced by name only: nothing from it is reproduced.
