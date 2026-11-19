@@ -944,6 +944,37 @@ has    "and the backdoor they start"                   '~/\.local/share/kitty/ca
 has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
 has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
 hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
+# A project can run its own script when an agent session starts or the folder opens, as popular projects
+# do: the report names the script, to check, never as malware. A session-start hook and a folder-open task
+# that both run a script named like a planted one is how the worms start themselves (SafeDep on the AntV
+# wave, Wiz on Mini Shai-Hulud), listed on its own, still as a check: the files here are empty markers whose
+# SHA-256 no source publishes. A hook the AntV wave adds to the person's own Claude Code or Codex settings
+# that runs a file from .claude/package or .codex/package is listed too, with or without the file.
+mkdir -p "$WORK/ast/code/w/.claude" "$WORK/ast/code/w/.vscode" "$WORK/ast/code/g/.claude/hooks" "$WORK/ast/code/h/.claude" \
+  "$WORK/ast/code/t/.claude" "$WORK/ast/code/t/.vscode" "$WORK/ast/code/n/.claude" "$WORK/ast/.claude" "$WORK/ast/.codex"
+: > "$WORK/ast/code/w/.claude/setup.mjs"; : > "$WORK/ast/code/w/.vscode/setup.mjs"; : > "$WORK/ast/code/g/.claude/hooks/nvm-path.sh"
+printf '{\n  "hooks": {\n    "SessionStart": [\n      { "matcher": "*", "hooks": [ { "type": "command", "command": "node .claude/setup.mjs" } ] }\n    ]\n  }\n}\n' > "$WORK/ast/code/w/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"lint","command":"npm run lint"},{"label":"env","type":"shell","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/w/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash .claude/hooks/nvm-path.sh"}]}]}}\n' > "$WORK/ast/code/g/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' | tee "$WORK/ast/code/h/.claude/settings.json" > "$WORK/ast/code/t/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup.mjs"},{"label":"open","command":"echo hi","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/t/.vscode/tasks.json"
+printf '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"node .github/check.js"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$WORK/ast/code/n/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node %s/.claude/package/index.js"}]}]}}\n' "$WORK/ast" > "$WORK/ast/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"bun run ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast/.codex/hooks.json"
+printf '# [[hooks.SessionStart]]\n# command = "node ~/.codex/package/index.js"\nmodel = "x"\n' > "$WORK/ast/.codex/config.toml"
+psrun "$WORK/ast" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast.txt"
+has    "a session-start hook and a folder-open task that run a planted name are listed as worm-shaped" '! ~/code/w A session-start hook and a folder-open task both run setup\.mjs from this project, the way recent npm worms start themselves\.' "$WORK/ast.txt"
+hasnot "and a worm-shaped project is a check, not malware" 'ACT NOW|Treat this machine as compromised|runs a file a worm plants' "$WORK/ast.txt"
+has    "a project's session-start hook names the script it runs" '~/code/g/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/hooks/nvm-path\.sh\.' "$WORK/ast.txt"
+has    "a folder-open task names the script it runs" '~/code/w/\.vscode/tasks\.json Set to run a task when the folder opens in VS Code or Cursor\. That task runs this project.s \.claude/setup\.mjs\.' "$WORK/ast.txt"
+hasnot "a hook alone, or with a task that does not run on open, is not worm-shaped" '~/code/(g|h|t|n) A session-start hook' "$WORK/ast.txt"
+hasnot "a hook on another event names no startup script" '~/code/n/\.claude/settings\.json Set to run commands while the agent works\. Each' "$WORK/ast.txt"
+psrun "$WORK/ast" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast-c.txt"
+has    "the summary row counts the worm-shaped project" '02 . MCP servers .*worm-style startup in 1 project' "$WORK/ast-c.txt"
+has    "what to do says to read that script" 'Read the script each project in section 2 starts the way worms do' "$WORK/ast.txt"
+has    "a session hook in your own Claude Code settings that runs a file from .claude/package is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts\. The AntV wave copies its payload there' "$WORK/ast.txt"
+has    "and one in Codex's hooks.json that runs a file from .codex/package" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast.txt"
+hasnot "a commented-out hook in Codex's config.toml is not" '~/\.codex/config\.toml' "$WORK/ast.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents" "$WORK/mst/AppData/Roaming" "$WORK/mst/AppData/Local/Temp"

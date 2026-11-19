@@ -1953,6 +1953,74 @@ worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these fi
 }
 WORM_CMD_ALONE=""; [ -n "$WORM_RUN_ALONE" ] && WORM_CMD_ALONE=$(worm_cmd "$WORM_RUN_ALONE")
 WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN_WEAK")
+# A script a session-start hook or a folder-open task runs from the project itself, from one of the
+# folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
+# path), so it is named for the person to check, never counted as malware. A command runs one as
+# worm_cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
+# command itself. START_PATH is the script; START_CMD a command that runs one.
+START_PATH='\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
+start_cmd() {
+  _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$START_PATH"'(\\"|["'"'"'[:space:];&|)])'
+  _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
+  _wo='(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^[:space:]"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)[[:space:]]+'
+  _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
+  _wn='(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
+  _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
+  _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$START_PATH"'"'
+  _wb='([^{}]|\{[^{}]*\})*'
+  printf '%s' "$_ws$_wp$_wn[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
+}
+START_CMD=$(start_cmd)
+# The elements of every array that is the value of the key K, one line each, from flat's one-line
+# text: a session-start hook's entries, or each task of a tasks.json. Strings are copied whole and
+# brackets counted outside them only, each piece split once, so the time grows with the file's size.
+json_elems() { # key
+  K=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    { nq = split($0, q, "\""); st = 0; w = 0; cap = 0; d = 0; e = 0; s = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 1) {            # in a string: a key is compared whole; inside an element it is copied
+          if (cap) printf "%s", q[i]; else s = s q[i]
+          if (i < nq) {
+            if (cap) printf "\""
+            if (trail(q[i]) % 2 == 1) { if (!cap) s = s "\""; continue }
+          }
+          st = 0
+          if (!cap) { w = (s == ENVIRON["K"]); s = "" }
+          continue
+        }
+        n = split(q[i], c, "")
+        for (j = 1; j <= n; j++) {
+          ch = c[j]
+          if (!cap) {
+            if (w == 1) { if (ch == ":") w = 2; else if (ch != " ") w = 0 }
+            else if (w == 2) { if (ch == "[") { cap = 1; d = 0; e = 0 } else if (ch != " ") w = 0 }
+            continue
+          }
+          if (ch == "[" || ch == "{") d++
+          else if (ch == "]" || ch == "}") { if (d == 0) { if (e) printf "\n"; cap = 0; w = 0; e = 0; continue }; d-- }
+          else if (ch == "," && d == 0) { if (e) printf "\n"; e = 0; continue }
+          if (ch != " " || e) { printf "%s", ch; e = 1 }
+        }
+        if (i < nq) { st = 1; if (cap) { printf "\""; e = 1 } }
+      }
+      if (cap && e) printf "\n"
+    }'
+}
+start_scripts() { # flattened-text key [element-ERE]: the scripts those elements run, one per line
+  printf '%s' "$1" | json_elems "$2" | { if [ -n "${3:-}" ]; then grep -E "$3"; else cat; fi; } | grep -oE "$START_CMD" |
+    while IFS= read -r _m; do printf '%s\n' "$_m" | grep -oE "$START_PATH" | tail -n 1; done | sed -E 's#[/\\]+#/#g' | sort -u
+}
+in_words() { # lines: them as "a", "a and b" or "a, b and c"
+  printf '%s\n' "$1" | awk 'NF { a[++n] = $0 } END { for (i = 1; i <= n; i++) printf "%s%s", (i == 1 ? "" : (i == n ? " and " : ", ")), a[i] }'
+}
+START_HOOKS=""; START_TASKS=""
+FOLDER_OPEN='"runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo][Ll][Dd][Ee][Rr][Oo][Pp][Ee][Nn]"'
 TAB=$(printf '\t')
 # One line of text, with comments removed first: // to the end of the line and /* */, outside
 # strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
@@ -2030,7 +2098,7 @@ flat() {
       printf " "
     }'
 }
-auto_row() { # file what flattened-text
+auto_row() { # file what flattened-text [script-note]
   # A worm file counts only when a command runs it (worm_cmd), and a file projects use too only in a
   # project that counts (WORM_PROJ).
   if { [ -n "$WORM_CMD_ALONE" ] && printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; } ||
@@ -2051,7 +2119,7 @@ auto_row() { # file what flattened-text
   AUTO_SEEN="$AUTO_SEEN$_sum$TAB"
   N_AUTO=$((N_AUTO + 1))
   progress w "Project settings that $2: $(short "$1")"
-  AUTO_ROWS="$AUTO_ROWS$_rp$TAB$2$TAB$_sum${TAB}0
+  AUTO_ROWS="$AUTO_ROWS$_rp$TAB$2${4:+. $4}$TAB$_sum${TAB}0
 "
 }
 # For aa_hit, a .json file's text (one line, spaces removed), then a line for each object that is the
@@ -2378,8 +2446,17 @@ while IFS= read -r f; do
     [ -n "$_v" ] && { _dah=$_v; break; }
   done
   if [ "$_dah" = true ]; then _rx="\"($CMD_ALWAYS)\"[[:space:]]*:"; else _rx="$HOOK_RUN|\"($CMD_KEYS)\"[[:space:]]*:"; fi
+  _note=""
   if printf '%s' "$_t" | grep -qE "$_rx"; then
     _w="run commands while the agent works"
+    if [ "$_dah" != true ]; then
+      _ss=$(start_scripts "$_t" SessionStart)
+      if [ -n "$_ss" ]; then
+        _note="Each agent session starts by running this project's $(in_words "$_ss")"
+        START_HOOKS="$START_HOOKS$(_p=$(rowsafe "${f%/.claude/*}"); printf '%s\n' "$_ss" | while IFS= read -r _x; do printf '%s\t%s\n' "$_p" "$_x"; done)
+"
+      fi
+    fi
   fi
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
@@ -2407,7 +2484,7 @@ while IFS= read -r f; do
     case "$f" in */settings.local.json) _tr="" ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
     _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab$_tr"
   fi
-  auto_row "$f" "$_w" "$_t"
+  auto_row "$f" "$_w" "$_t" "$_note"
 done <<EOF
 $ALLOW_FILES
 EOF
@@ -2418,9 +2495,18 @@ while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
   _t=$(flat "$f"); _w=""
-  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo][Ll][Dd][Ee][Rr][Oo][Pp][Ee][Nn]"' && _w="run a task when the folder opens in VS Code or Cursor"
+  _note=""
+  if printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; then
+    _w="run a task when the folder opens in VS Code or Cursor"
+    _ss=$(start_scripts "$_t" tasks "$FOLDER_OPEN")
+    if [ -n "$_ss" ]; then
+      _note="That task runs this project's $(in_words "$_ss")"
+      START_TASKS="$START_TASKS$(_p=$(rowsafe "${f%/.vscode/*}"); printf '%s\n' "$_ss" | while IFS= read -r _x; do printf '%s\t%s\n' "$_p" "$_x"; done)
+"
+    fi
+  fi
   printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ww][Oo][Rr][Kk][Tt][Rr][Ee][Ee][Cc][Rr][Ee][Aa][Tt][Ee][Dd]"' && _w="${_w:+$_w, }run a task when VS Code creates a worktree of the project"
-  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
+  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t" "$_note"
 done <<EOF
 $TASK_FILES
 EOF
@@ -2468,6 +2554,38 @@ $VSC_SETTINGS
 EOF
 # Row 02 counts projects: the folders holding these settings.
 N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/[^/]*$##' | sort -u | grep -c .)
+# The worms' own wiring (Wiz on Mini Shai-Hulud, SafeDep on the AntV wave): a session-start hook and a
+# folder-open task in one project that both run a script named like a planted file (data/planted.tsv),
+# so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
+# compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
+# A worktree is left out when its repo is listed.
+WIRED=$(printf '%s\n%s\n' "$PLANTED" "-" "$START_TASKS" "-" "$START_HOOKS" | awk -F "$TAB" '
+  function base(s) { sub(/.*\//, "", s); return s }
+  $0 == "-" { part++; next }
+  part == 0 { if (NF) P[base($0)] = 1; next }
+  part == 1 { if (NF == 2) T[$1 FS base($2)] = 1; next }
+  NF == 2 && (base($2) in P) && (($1 FS base($2)) in T) && !seen[$1 FS base($2)]++ { r[++n] = $1 FS base($2); p[$1] = 1 }
+  END { for (i = 1; i <= n; i++) { split(r[i], x, FS); w = x[1]; sub(/\/\.claude\/worktrees\/.*/, "", w); if (w != x[1] && (w in p)) continue; print r[i] } }')
+N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
+# The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
+# SessionStart hook that runs it to Claude Code's and Codex's settings (SafeDep). The copy is an
+# indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex reads hooks
+# from hooks.json and config.toml, and the worm writes every settings.json it finds.
+USER_HOOKS=""
+_cxd=${CODEX_HOME:-$H/.codex}
+for _uf in "${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "$_cxd/settings.json" "$_cxd/config.toml"; do
+  [ -f "$_uf" ] && ! too_big "$_uf" || continue
+  case "$USER_HOOKS" in "$(rowsafe "$_uf")$TAB"*|*"
+$(rowsafe "$_uf")$TAB"*) continue ;; esac
+  case "$_uf" in
+    *.toml) _ut=$({ grep -vE '^[[:space:]]*#' "$_uf"; } 2>/dev/null); printf '%s' "$_ut" | grep -q SessionStart || _ut="" ;;
+    *) _ut=$(flat "$_uf" | json_elems SessionStart) ;;
+  esac
+  _us=$(printf '%s\n' "$_ut" | grep -oE '\.(claude|codex)[/\\]+package[/\\]' | head -n 1 | sed -E 's#^\.(claude|codex).*#.\1/package#')
+  [ -n "$_us" ] && USER_HOOKS="$USER_HOOKS$(rowsafe "$_uf")$TAB$_us
+"
+done
+N_UHOOK=$(printf '%s' "$USER_HOOKS" | grep -c .)
 if [ "$N_MCP_TOKEN" -eq 0 ]; then
   if [ "$N_MCP" -gt 0 ]; then progress o "Found $(plural "$N_MCP" "MCP server" "MCP servers")$MCP_CACHE_NOTE, no tokens written in their configs"
   else progress i "No MCP servers configured$MCP_CACHE_NOTE"; fi
@@ -7842,6 +7960,8 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_YOLO" -gt 0 ] && todo 1 "Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox."
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
+[ "$N_WIRED" -gt 0 ] && todo 2 "Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn't put it there, delete it, the hook and the task."
+[ "$N_UHOOK" -gt 0 ] && todo 2 "Check the session hooks section 2 lists in your own agent settings. If you didn't add them, delete them and read what is in the folder they run from."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a
@@ -7969,6 +8089,7 @@ EOF
     echo "platforms=$(printf '%s' "$PLAT_FOUND" | fleet_ids)"
     echo "on_open=$N_AUTO"
     echo "to_read=$N_LOOK"
+    echo "autostart=$((N_WIRED + N_UHOOK))"
     echo "updates=$(printf '%s\n' "$PY_UPD" | cut -f1 | fleet_ids)"
     echo "wiper=$WIPER_HIT"
     echo "lock_only=$_lock"
@@ -8252,6 +8373,28 @@ $MCP_ROWS
 EOF
 if [ "$N_MCP_CACHE" -gt 0 ]; then
   pair "${DIM}·${RST}" "Plugin folders" 46 "${DIM}$(plural "$N_MCP_CACHE" server servers) in $(plural "$N_MCP_CACHEF" file files), not counted above${RST}"
+fi
+if [ "$N_WIRED" -gt 0 ]; then
+  blank
+  emit "     ${B}Projects that start a script the way worms do${RST}"
+  while IFS="$TAB" read -r p b; do
+    [ -n "$p" ] || continue
+    emit "     ${YEL}!${RST}  $(short "$p")"
+    wrap "A session-start hook and a folder-open task both run $b from this project, the way recent npm worms start themselves. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 "        " "        " "$DIM"
+  done <<EOF
+$WIRED
+EOF
+fi
+if [ "$N_UHOOK" -gt 0 ]; then
+  blank
+  emit "     ${B}Session hooks in your own agent settings${RST}"
+  while IFS="$TAB" read -r f d; do
+    [ -n "$f" ] || continue
+    emit "     ${YEL}!${RST}  $(short "$f")"
+    wrap "Set to run a file from $d each time a session starts. The AntV wave copies its payload there and adds a hook like this one. If you didn't add it, delete the hook and read what is in that folder." 8 "        " "        " "$DIM"
+  done <<EOF
+$USER_HOOKS
+EOF
 fi
 if [ "$N_AUTO" -gt 0 ]; then
   blank
@@ -8811,6 +8954,8 @@ else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi
 if [ "$N_AK" -gt 0 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, $(plural "$N_AK" "file links" "files link") to your SSH logins"
 elif [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
+elif [ "$N_WIRED" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, worm-style startup in $(plural "$N_WIRED" project projects)"
+elif [ "$N_UHOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_UHOOK" "session hook" "session hooks") to check"
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
 elif [ "$N_LOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_LOOK" "project file" "project files") to read"
 elif [ "$N_SEC2_UNREAD" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, but $(plural "$N_SEC2_UNREAD" "file" "files") could not be read"

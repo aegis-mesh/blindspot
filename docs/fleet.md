@@ -233,7 +233,7 @@ Each run has one outcome, the worst of these, in this order:
 | `failed` | The run could not finish safely, such as a changed script copy or a result it could not save. | 13 |
 | `act` | Something to act on now: malware signs (the gh-token-monitor wiper is named first), files a worm plants in a project, npm malware listed only in a lockfile (act if that project was installed), a link to `~/.ssh/authorized_keys` outside `.ssh`, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
-| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, an editor extension to remove whose malware was made for another system, a file named like the ones worms plant, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
+| `review` | Something to change or confirm, not urgent: a tool with a security fix, an agent set to run without asking, an SSH key without a passphrase, a platform that leaked stored secrets, project settings that act when an agent or editor opens the folder, a package version to update, an editor extension to remove whose malware was made for another system, a file named like the ones worms plant, a project or the person's own agent settings that start a script the way worms do, a leftover file that can come from malware, or a startup file named like one malware installs. | 11 |
 | `clear` | Every account was checked in full and nothing was found. | 0 |
 
 An account is `not_checked` when its home folder is missing, a link, shared or not its own, it has
@@ -290,6 +290,7 @@ hook sends npm tokens out on every push. Then:
 | An extension to remove | Uninstall it. Its malware was made for another system, so it did not run on this Mac. |
 | Project settings that act when a folder opens | Have them read those settings in each project section 2 of their report lists. |
 | Files named like the ones worms plant | Have them read the files section 2 lists, and delete any they didn't put there. |
+| Projects or agent settings that start a script the way worms do | Have them read the script each one section 2 lists runs. If they didn't put it there, delete it with the hook and the task, or the hook in their own settings. |
 | An SSH key without a passphrase | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets | If they used it, rotate the keys stored there. |
 | A finding under "This Mac" | A file malware leaves outside every home folder, or a LiteLLM loader that root's own process runs (the row then says the malware ran as root). Treat the Mac as compromised. |
