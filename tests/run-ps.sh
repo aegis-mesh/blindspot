@@ -2957,23 +2957,36 @@ printf 'jobs:\n  a:\n    steps:\n      - uses: actions-cool/issues-helper@%s # v
 printf 'jobs:\n  a:\n    steps:\n      - uses: reviewdog/action-shellcheck@%s\n' "$GA_OTHER" > "$GA/code/rd/.github/workflows/lint.yml"
 printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4\n' > "$GA/code/ok/.github/workflows/ci.yml"
 printf 'jobs:\n  a:\n    steps:\n      - uses: xygeni/xygeni-action@v5\n' > "$GA/code/ok/.github/workflows/old/kept.yml"
+# A CRLF workflow, a commit written in capitals twice (one row), a reusable workflow, the pin the trivy-action
+# advisory names safe, and a kics-github-action tag published after the attack.
+mkdir -p "$GA/code/crlf/.github/workflows" "$GA/code/more/.github/workflows"
+printf 'jobs:\r\n  a:\r\n    steps:\r\n      - uses: aquasecurity/setup-trivy@v0.2.3\r\n' > "$GA/code/crlf/.github/workflows/w.yml"
+GA_UP=$(printf '%s' "$GA_BAD" | tr 'a-f' 'A-F')
+printf 'jobs:\n  a:\n    uses: tj-actions/changed-files/.github/workflows/x.yml@v45\n  b:\n    steps:\n      - uses: actions-cool/issues-helper@%s\n      - uses: actions-cool/issues-helper@%s\n      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1\n      - uses: Checkmarx/kics-github-action@v2.2.1\n' "$GA_UP" "$GA_BAD" > "$GA/code/more/.github/workflows/w.yml"
 GA_N=$(grep -v '^#' data/actions.tsv | grep -c .)
 GA_RUN() { if [ -n "${3:-}" ]; then psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline; else psrun "$1" -- -Offline; fi 2>&1 | tr -s ' \n' '  ' > "$2"; }
 GA_RUN "$GA" "$GA/out.txt"; GA_RUN "$GA" "$GA/sum.txt" compact
-has    "a listed action used by a tag the source names is a project to check" 'GitHub Actions +3 projects use an action that was compromised ~/code/hit/\.github/workflows/issues\.yml Uses actions-cool/issues-helper@v3, compromised from 18 May 2026\.' "$GA/out.txt"
+has    "a listed action used by a tag the source names is a project to check" 'GitHub Actions +5 projects use an action that was compromised ~/code/crlf/\.github/workflows/w\.yml Uses aquasecurity/setup-trivy@v0\.2\.3, .* ~/code/hit/\.github/workflows/issues\.yml Uses actions-cool/issues-helper@v3, compromised from 18 May 2026\.' "$GA/out.txt"
 has    "a quoted use is read"                           'Uses tj-actions/changed-files@v44\.5\.1, compromised on 14 and 15 March 2025\.' "$GA/out.txt"
 has    "the owner and name are compared without case"   'Uses aquasecurity/trivy-action@0\.28\.0, compromised on 19 and 20 March 2026\.' "$GA/out.txt"
 hasnot "a tag the source does not name is not flagged"  'changed-files@v46|trivy-action@0\.35\.0' "$GA/out.txt"
 hasnot "a longer name that starts with a listed one is not flagged" 'issues-helper-next' "$GA/out.txt"
 hasnot "a commented-out use is not read"                'xygeni' "$GA/out.txt"
+has    "a CRLF workflow is read"                         '~/code/crlf/\.github/workflows/w\.yml Uses aquasecurity/setup-trivy@v0\.2\.3, compromised on 19 March 2026, about 17:43 to 21:44 UTC\.' "$GA/out.txt"
+has    "a reusable workflow of a listed repository is read" 'Uses tj-actions/changed-files@v45, compromised on 14 and 15 March 2025' "$GA/out.txt"
+# One row in ~/code/pin and one in ~/code/more, where the commit is written twice.
+if [ "$(grep -o 'Uses actions-cool/issues-helper pinned to a commit the source lists' "$GA/out.txt" | grep -c .)" -eq 2 ]; then ok "the same commit written in capitals and in lowercase is one row"
+else bad "the same commit written in capitals and in lowercase is one row"; fi
+hasnot "a pin to the release the source names safe is not flagged" 'trivy-action pinned' "$GA/out.txt"
+hasnot "a tag published after the attack is not flagged" 'kics-github-action' "$GA/out.txt"
 has    "a pin to a commit the source lists is flagged"  '~/code/pin/\.github/workflows/ci\.yaml Uses actions-cool/issues-helper pinned to a commit the source lists as malicious' "$GA/out.txt"
 hasnot "a pin to any other commit is not flagged"       'maintain-one-comment' "$GA/out.txt"
 has    "a pin is flagged where the source says pins ran it too" '~/code/rd/\.github/workflows/lint\.yml Uses reviewdog/action-shellcheck pinned to a commit, compromised on 11 March 2025' "$GA/out.txt"
-has    "it says what to check if the workflows ran then" "If these workflows ran in that window, rotate the secrets they could read and check the repository's history for commits by github-actions\[bot\] that you didn't make\." "$GA/out.txt"
-has    "and adds a fix to What to do"                   'If the workflows section 5 lists ran while their GitHub Action was compromised, rotate the secrets' "$GA/out.txt"
+has    "it says what to check if the workflows ran then" "If these workflows ran in the window shown for each, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions\[bot\] that you didn't make\." "$GA/out.txt"
+has    "and adds a fix to What to do"                   'If the workflows section 5 lists ran while their GitHub Action was compromised, check their run logs from then, rotate the secrets' "$GA/out.txt"
 hasnot "it never calls the machine compromised"         'ACT NOW|Treat this machine as compromised|signs of' "$GA/out.txt"
-has    "row 05 names the projects"                      'Recent leaks +3 projects use a compromised GitHub Action' "$GA/sum.txt"
-rm -rf "$GA/code/hit" "$GA/code/pin" "$GA/code/rd"
+has    "row 05 names the projects"                      'Recent leaks +5 projects use a compromised GitHub Action' "$GA/sum.txt"
+rm -rf "$GA/code/hit" "$GA/code/pin" "$GA/code/rd" "$GA/code/crlf" "$GA/code/more"
 GA_RUN "$GA" "$GA/clean.txt"
 has    "workflows with no listed action read clean, a subfolder's workflow not read" "GitHub Actions +none of $GA_N compromised actions in 1 workflow file" "$GA/clean.txt"
 chmod 000 "$GA/code/ok/.github/workflows/ci.yml"
@@ -2981,6 +2994,10 @@ GA_RUN "$GA" "$GA/unread.txt"; GA_RUN "$GA" "$GA/unread-sum.txt" compact
 chmod 644 "$GA/code/ok/.github/workflows/ci.yml"
 has    "a workflow file that cannot be read is not called clean" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$GA/unread.txt"
 has    "and row 05 says so"                             'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
+mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
+GA_RUN "$GA" "$GA/partial.txt"
+chmod 755 "$GA/code/locked"
+has    "a folder the scan cannot read leaves the row not fully checked" 'GitHub Actions +not fully checked: some folders were not read' "$GA/partial.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python

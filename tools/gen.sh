@@ -125,8 +125,8 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
         function refs_ok(s,   n, a, i) { n = split(s, a, " "); if (n < 1) return 0; for (i = 1; i <= n; i++) if (a[i] !~ /^!?[]A-Za-z0-9_.*?\/[-]+$/ || a[i] ~ /^!?\*$/ && n > 1) return 0; return 1 }
         function shas_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ","); for (i = 1; i <= n; i++) if (a[i] !~ /^[0-9a-f]+$/ || length(a[i]) != 40) return 0; return 1 }
         function text_ok(s) { return s != "" && s !~ /[\047"`$|\\]/ }
-        NF != 7 || $1 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || seen[tolower($1)]++ || !refs_ok($2) || !shas_ok($3) || $4 !~ /^(safe|unsafe)$/ ||
-        !text_ok($5) || $6 !~ /^https:\/\/[^ \047"`$|\\]+$/ || !text_ok($7) { print "data/actions.tsv: " $0 }'
+        NF != 8 || $1 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || seen[tolower($1)]++ || !refs_ok($2) || !shas_ok($3) || !shas_ok($4) || $5 !~ /^(safe|unsafe)$/ ||
+        !text_ok($6) || $7 !~ /^https:\/\/[^ \047"`$|\\]+$/ || !text_ok($8) { print "data/actions.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
@@ -407,16 +407,16 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
 # --- GitHub Actions that were compromised --------------------------------------------
-# Rows are "owner/repo in lowercase|owner/repo|refs|shas|pin|window|source's site|fix".
+# Rows are "owner/repo in lowercase|owner/repo|refs|shas|good|pin|window|source's site|fix".
 rows data/actions.tsv | awk -F '\t' '
   function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
   BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; printf "ACT_TABLE=\"" }
-  { printf "%s%s|%s|%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), tolower($1), $1, $2, $3, $4, $5, host($6), $7 }
+  { printf "%s%s|%s|%s|%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
   END { print "\""; print "# <<< actions" }' > "$WORK/actions.sh"
 rows data/actions.tsv | awk -F '\t' '
   function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
   BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; print "$ActTable = @(" }
-  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", tolower($1), $1, $2, $3, $4, $5, host($6), $7 }
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
   END { print ")"; print "# <<< actions" }' > "$WORK/actions.ps1"
 
 # --- splice -----------------------------------------------------------------

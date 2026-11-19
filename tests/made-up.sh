@@ -38,7 +38,7 @@ printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >
 printf 'Made Agent\tall\t~/.madeagent/profiles/*/config.json\tmadeMode profile\t"made": "profile"\n' >> "$R/data/auto-approve.tsv"
 printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\nmadetool\tMade Tool\tall\tnpm\tmade-tool\t<3.0.0\ta second made-up hole\thttps://example.com/madetool2\n' >> "$R/data/outdated.tsv"
 printf 'made.ext\t1.0.0\tmadeext\tany\tall\nmade.winext\t2.0.0\tmadeext\tany\twin\n' >> "$R/data/bad-extensions.tsv"
-printf 'Made-Org/made-action\tv1*\t-\tsafe\tin October 2026\thttps://example.com/madeaction\tRemove it.\n' >> "$R/data/actions.tsv"
+printf 'Made-Org/made-action\tv1*\t-\t-\tsafe\tin October 2026\thttps://example.com/madeaction\tRemove it.\n' >> "$R/data/actions.tsv"
 bash "$R/tools/gen.sh" > /dev/null
 # Outside the generated blocks, both scripts are unchanged.
 for s in gird-check.sh gird-check.ps1; do
