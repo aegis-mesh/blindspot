@@ -4698,6 +4698,35 @@ mkdir -p "$FW/msx/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
 fw_run msx "$FW/msx"
 has    "fleet: an extension whose malware runs only on another system is one to remove" "^$FA\\.extensions_to_remove=glasswormoct\$" "$FW/msx.flat"
 has    "fleet: so its account is to review, not act" "^$FA\\.outcome=review\$" "$FW/msx.flat"
+# Worm-style startup: a project whose session-start hook and folder-open task run one file worms plant,
+# and a session hook in the person's own settings that runs the AntV wave's copied payload.
+for h in ast uhk rmt cxe cxs cxk; do fw_home "$h"; done
+mkdir -p "$FW/ast/code/w/.claude" "$FW/ast/code/w/.vscode" "$FW/uhk/.claude"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$FW/ast/code/w/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$FW/ast/code/w/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.claude/package/index.js"}]}]}}\n' > "$FW/uhk/.claude/settings.json"
+fw_run ast "$FW/ast"; fw_run uhk "$FW/uhk"
+has    "fleet: a project that starts a script the way worms do reaches the account's row" "^$FA\\.scripts_started_like_worms=1\$" "$FW/ast.flat"
+has    "fleet: and so does an account with none" "^$FA\\.scripts_started_like_worms=0\$" "$FW/proj.flat"
+has    "fleet: a session hook in the account's own settings counts alone" "^$FA\\.scripts_started_like_worms=1\$" "$FW/uhk.flat"
+has    "fleet: and makes that account one to review" "^$FA\\.outcome=review\$" "$FW/uhk.flat"
+# A saved rule that lets an agent run commands on other machines without asking.
+mkdir -p "$FW/rmt/.codex/rules"; printf 'prefix_rule(pattern=["kubectl", "exec"])\n' > "$FW/rmt/.codex/rules/default.rules"
+fw_run rmt "$FW/rmt"
+has    "fleet: an agent allowed to run commands on other machines reaches the account's row" "^$FA\\.agents_run_remote_commands=codex\$" "$FW/rmt.flat"
+# The trojanized Claude Code extension: its extension, its files alone and the SSH key it adds.
+mkdir -p "$FW/cxe/.cursor/extensions/anthropic.claude-code-2.1.313" "$FW/cxs/.config" "$FW/cxk/.ssh"; : > "$FW/cxs/.config/smt.cmd"
+printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P svc-telemetry\n' > "$FW/cxk/.ssh/authorized_keys"
+printf 'const h="134.209.82.225";\n' > "$FW/cxe/.cursor/extensions/anthropic.claude-code-2.1.313/extension.js"
+for h in cxe cxs; do fw_run "$h" "$FW/$h"; done; fw_run cxk "$FW/cxk" -- --mac-exit-codes
+has    "fleet: the trojanized Claude Code extension is its account's incident" "^$FA\\.incidents=claudeext\$" "$FW/cxe.flat"
+has    "fleet: so are its files alone" "^$FA\\.incidents=claudeext\$" "$FW/cxs.flat"
+has    "fleet: and the SSH key it adds" "^$FA\\.incidents=claudeext\$" "$FW/cxk.flat"
+if [ "$(cat "$FW/cxe.flat" "$FW/cxs.flat" "$FW/cxk.flat" | grep -cE "^$FA\\.outcome=act\$")" -eq 3 ]; then ok "fleet: each of them makes its account act"; else bad "fleet: each of them makes its account act" "$(grep -h 'outcome' "$FW/cxe.flat" "$FW/cxs.flat" "$FW/cxk.flat" | tr '\n' ' ')"; fi
+has    "fleet: the trojanized extension's accounts exit 10" '^10$' "$FW/cxk.rc"
+has    "fleet: the SSH key has a field of its own" "^$FA\\.authorized_keys_planted_keys=1\$" "$FW/cxk.flat"
+has    "fleet: which is 0 without the key" "^$FA\\.authorized_keys_planted_keys=0\$" "$FW/cxe.flat"
+has    "fleet: and the key is in the inventory value" "^inventory=.*$FA: act incidents claudeext; ssh-planted 1( |\$)" "$FW/cxk.flat"
 mkdir -p "$FW/lk/code/app"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$FW/lk/code/app/package-lock.json"
 fw_run lk "$FW/lk"

@@ -223,7 +223,6 @@ fleet: and prints no shell error	gird-fleet.ps1 prints the inventory value for t
 fleet: a hard link to the script copy stops no account's check	root's ownership checks of the installed scripts and their copy: on Windows nothing runs as an administrator, and the check is unpacked into the person's own profile and checked by SHA-256 before it starts, tested as 'fleet: an unpacked check whose SHA-256 differs is written again before it runs'
 fleet: and its line says to act if that project was installed	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
 fleet: an update-level incident with a fix of its own shows that fix	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
-fleet: an agent allowed to run commands on other machines reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 a TMPDIR that can't be written to still names the folder	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
 with no temp folder, the scan says it could not tell	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
 and the rows it feeds are not green either	gird-check.ps1 keeps the home scan's errors in memory, not in a temp file
@@ -287,22 +286,14 @@ a hand edit to the lists in docs/checks.md fails gen.sh --check	tools/gen.sh is 
 every key id passes the fleet id filter	fleet mode (fleet_ids, gird-fleet.sh) is gird-check.sh's alone: gird-check.ps1 has no account run
 grep finds with the split key patterns what one alternation finds	it checks gird-check.sh's grep calls; gird-check.ps1 runs no grep
 grep and perl get each key pattern on its own	it counts the patterns gird-check.sh hands to grep and perl; gird-check.ps1 runs neither
-fleet: a gird-check.sh from another release is named, and no account is run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and the summary says to install both from one release	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a gird-check.sh from another release is named, and no account is run	blindspot-fleet.ps1 carries gird-check.ps1 inside it, checked by its SHA-256, so the check and the fleet script can't come from two releases
+fleet: and the summary says to install both from one release	blindspot-fleet.ps1 carries gird-check.ps1 inside it, checked by its SHA-256, so the check and the fleet script can't come from two releases
 grep runs a later pass only on text that holds its fixed strings	it counts gird-check.sh grep calls; gird-check.ps1 runs no grep, and its .NET passes are compiled regexes
 an in line's start without its place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a start line's start with a place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a stopped ripgrep leaves the sessions partly checked and stops nothing else	it runs gird-check.sh's ripgrep job, its TERM to the run it started and the tr and awk pipes behind it, with a bash stand-in for ripgrep; gird-check.ps1 has none of these: it stops the rg.exe it started through the .NET Process object it holds, which its twin of "the script stops only processes it started" checks is its only stop
-fleet: the trojanized Claude Code extension is its account's incident	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: so are its files alone	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and the SSH key it adds	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: each of them makes its account act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the trojanized extension's accounts exit 10	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the SSH key has a field of its own	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: which is 0 without the key	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and a line in the readable report	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: the trojanized extension's cleanup comes before any rotate	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and the key is in the inventory value	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and a line in the readable report	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
+fleet: the trojanized extension's cleanup comes before any rotate	gird-fleet.ps1 prints the inventory value for the MDM, not a readable report (docs/designs/fleet-mode.md, Windows, How a run goes, step 7)
 a startup file alone of an incident with npm packages	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an SSH key of an incident with no extension	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an SSH key that is not base64	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
@@ -310,10 +301,6 @@ an SSH key of an unknown type	tools/gen.sh is one bash tool that writes the data
 an extension marker with a space	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension marker with an empty string	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension registry of one marketplace	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
-fleet: a project that starts a script the way worms do reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and so does an account with none	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: a session hook in the account's own settings counts alone	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
-fleet: and makes that account one to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 a grep that crashes matching a startup script names the file as not read, never clean	gird-check.ps1 matches with .NET regular expressions and runs no grep, so there is no grep to crash
 fleet one file: tools/gen.sh builds it under 1,000,000 bytes, starting #!/bin/bash -p	blindspot-fleet.sh carries gird-check.sh as plain text, built by tools/gen.sh's bash-only part; blindspot-fleet.ps1's build has its own tests in run-ps.sh (under 200 KB, its SHA-256, the 80% warning)
 fleet one file: it carries gird-check.sh without the game block, byte for byte, and that SHA-256	the game, and the copy without it, are gird-check.sh's alone: gird-check.ps1 has no game

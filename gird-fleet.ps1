@@ -137,6 +137,7 @@ $Agents = @(
 $FlIncidents = @{ 'axios' = 'act'; 'tanstack' = 'act'; 'mistral' = 'update'; 'uipath' = 'update'; 'mistralpy' = 'act'; 'guardrails' = 'act'; 'opensearch' = 'act'; 'bitwarden' = 'act'; 'minishai' = 'act'; 'lightning' = 'act'; 'durabletask' = 'act'; 'telnyx' = 'act'; 'mastra' = 'act'; 'antv' = 'act'; 'nxconsole' = 'act'; 'redhat' = 'act'; 'keyv' = 'act'; 'keyvscope' = 'act'; 'keyvspread' = 'act'; 'sandworm' = 'act'; 'sandsleep' = 'act'; 'tensorlake' = 'act'; 'litellm' = 'act'; 'litellmmar' = 'act'; 'opencode' = 'leak'; 'railway' = 'leak'; 'zeabur' = 'leak'; 'glassworm' = 'act'; 'glasswormmar' = 'act'; 'glasswormvsix' = 'act'; 'glasswormapr' = 'act'; 'glasswormzig' = 'act'; 'glasswormdec' = 'act'; 'glasswormoct' = 'act'; 'glasswormuni' = 'act'; 'glasswasm' = 'act'; 'injective' = 'update'; 'claudeext' = 'act'; 'agentfw' = 'act' }
 $FlProviders = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage'
 $FlYoloNames = @('Claude Code', 'Codex', 'VS Code Copilot')
+$FlRemoteNames = @('Claude Code', 'Codex', 'Gemini CLI', 'VS Code Copilot', 'Roo Code', 'Amazon Q')
 $FlTools = @('amazonq', 'claudecode', 'mcpremote')
 $FlPlatforms = @('opencode', 'railway', 'zeabur')
 $FlProgramData = @(
@@ -363,6 +364,7 @@ function Yolo-Id([string]$n) {
   ($n.ToLowerInvariant() -replace ' ', '-') -replace '[^a-z0-9-]', ''
 }
 $IdYolo = @($IdAgents) + @($FlYoloNames | ForEach-Object { Yolo-Id $_ })
+$IdRemote = @($IdAgents) + @($FlRemoteNames | ForEach-Object { Yolo-Id $_ })
 $IdProviders = @($FlProviders -split ' ')
 $IdIncidents = @($FlIncidents.Keys)
 function Ids-Ok([string]$v, $allowed) { # every id allowed, none twice, at most 40, one space apart
@@ -392,6 +394,7 @@ function Parse-Account([byte[]]$b) {
       { $_ -eq 'v' -or $_ -eq 'end' } { if ($v -cne '1') { return $null } }
       'agents' { if (-not (Ids-Ok $v $IdAgents)) { return $null } }
       'yolo' { if (-not (Ids-Ok $v $IdYolo)) { return $null } }
+      'remote' { if (-not (Ids-Ok $v $IdRemote)) { return $null } }
       'tools' { if (-not (Ids-Ok $v $FlTools)) { return $null } }
       'key_providers' { if (-not (Ids-Ok $v $IdProviders)) { return $null } }
       'platforms' { if (-not (Ids-Ok $v $FlPlatforms)) { return $null } }
@@ -401,7 +404,7 @@ function Parse-Account([byte[]]$b) {
       'tmp_wiper' { if ($v -cne '0') { return $null } }
       'protected' { if ($v -cne 'ok') { return $null } }
       'engine' { if (@('rg', 'dotnet', 'none') -cnotcontains $v) { return $null } }
-      { @('mcp_servers', 'mcp_token_files', 'key_files', 'history_keys', 'session_files', 'allow_list_keys', 'ssh_open', 'ak_links', 'planted', 'on_open', 'to_read', 'not_read') -ccontains $_ } { if ($v -cnotmatch '^(0|[1-9][0-9]{0,5})$') { return $null } }
+      { @('mcp_servers', 'mcp_token_files', 'key_files', 'history_keys', 'session_files', 'allow_list_keys', 'ssh_open', 'ak_links', 'ssh_planted', 'planted', 'on_open', 'to_read', 'autostart', 'not_read') -ccontains $_ } { if ($v -cnotmatch '^(0|[1-9][0-9]{0,5})$') { return $null } }
     }
     $fa[$k] = $v
   }
@@ -449,17 +452,21 @@ if ($FlNotChecked) {
   if ($iu.Count -gt 0) { $upd = $true }
   if ([int]$FA['planted'] -gt 0) { $act = $true; $inv.Add("planted $($FA['planted'])") }
   if ($FA['yolo']) { $upd = $true; $inv.Add("run-without-asking $(Commas (Words $FA['yolo']))") }
+  if ($FA['remote']) { $upd = $true; $inv.Add("remote-commands $(Commas (Words $FA['remote']))") }
   if ([int]$FA['key_files'] -gt 0) { $act = $true; $kp = ''; if ($FA['key_providers']) { $kp = ' ' + (Commas (Words $FA['key_providers'])) }; $inv.Add("keys $($FA['key_files'])$kp") }
   if ([int]$FA['history_keys'] -gt 0) { $act = $true; $inv.Add("history $($FA['history_keys'])") }
   if ([int]$FA['session_files'] -gt 0) { $act = $true; $inv.Add("sessions $($FA['session_files'])") }
   if ([int]$FA['mcp_token_files'] -gt 0) { $act = $true; $inv.Add("mcp-tokens $($FA['mcp_token_files'])") }
   if ([int]$FA['allow_list_keys'] -gt 0) { $act = $true; $inv.Add("allow-lists $($FA['allow_list_keys'])") }
+  # An SSH key malware adds (its incident is in incidents too): a login to the PC for the attacker.
+  if ([int]$FA['ssh_planted'] -gt 0) { $act = $true; $inv.Add("ssh-planted $($FA['ssh_planted'])") }
   if ([int]$FA['ak_links'] -gt 0) { $act = $true; $inv.Add("ssh-links $($FA['ak_links'])") }
   if ([int]$FA['ssh_open'] -gt 0) { $upd = $true; $inv.Add("ssh-open $($FA['ssh_open'])") }
   if ($FA['tools']) { $upd = $true; $inv.Add("update-tools $(Commas (Words $FA['tools']))") }
   if ($FA['platforms']) { $upd = $true; $inv.Add("platforms $(Commas (Words $FA['platforms']))") }
   if ([int]$FA['on_open'] -gt 0) { $upd = $true; $inv.Add("on-open $($FA['on_open'])") }
   if ([int]$FA['to_read'] -gt 0) { $upd = $true; $inv.Add("to-read $($FA['to_read'])") }
+  if ([int]$FA['autostart'] -gt 0) { $upd = $true; $inv.Add("autostart $($FA['autostart'])") }
   if ($FA['updates']) { $upd = $true }
   if ($FA['remove']) { $upd = $true; $inv.Add("remove $(Commas (Words $FA['remove']))") }
   $ul = New-Object System.Collections.Generic.List[string]
@@ -471,7 +478,7 @@ if ($FlNotChecked) {
   switch ($AccOut) { 'act' { $N_ACT = 1 } 'review' { $N_UPD = 1 } 'not_checked' { $N_NC = 1 } }
   if (-not $complete) { $inv.Add('partial') }
   $extra = ''; if ($stopped) { $extra += ',"stopped":"time_limit"' }; if ($FlLeft) { $extra += ',"processes_left":true' }
-  $Row = "{""account"":""$FlShown"",""complete"":$(Json-Bool $complete),""outcome"":""$AccOut"",""agents"":$(Json-List (Words $FA['agents'])),""agents_run_without_asking"":$(Json-List (Words $FA['yolo'])),""tools_to_update"":$(Json-List (Words $FA['tools'])),""mcp_servers"":$($FA['mcp_servers']),""mcp_token_files"":$($FA['mcp_token_files']),""key_files"":$($FA['key_files']),""key_providers"":$(Json-List (Words $FA['key_providers'])),""history_keys"":$($FA['history_keys']),""session_files_with_keys"":$($FA['session_files']),""allow_list_keys"":$($FA['allow_list_keys']),""ssh_keys_no_passphrase"":$($FA['ssh_open']),""authorized_keys_links"":$($FA['ak_links']),""planted_files"":$($FA['planted']),""possible_signs"":$(Json-List (Words $FA['possible'])),""project_settings_on_open"":$($FA['on_open']),""files_to_read"":$($FA['to_read']),""versions_to_update"":$(Json-List (Words $FA['updates'])),""wiper"":$(Json-Bool ($FA['wiper'] -eq '1')),""lockfile_only_incidents"":$(Json-List (Words $FA['lock_only'])),""extensions_to_remove"":$(Json-List (Words $FA['remove'])),""platforms_found"":$(Json-List (Words $FA['platforms'])),""files_not_checked"":$($FA['not_read']),""agent_folders_moved"":$(Json-Bool ($FA['moved'] -eq '1')),""shared_tmp_markers"":[],""shared_tmp_wiper_logs"":false,""sessions_partly_checked"":$(Json-Bool ($FA['sessions_partial'] -eq '1')),""protected_folders"":""checked"",""session_engine"":""$($FA['engine'])""$extra,""incidents"":$(Json-Incidents (Words $FA['incidents']))}"
+  $Row = "{""account"":""$FlShown"",""complete"":$(Json-Bool $complete),""outcome"":""$AccOut"",""agents"":$(Json-List (Words $FA['agents'])),""agents_run_without_asking"":$(Json-List (Words $FA['yolo'])),""agents_run_remote_commands"":$(Json-List (Words $FA['remote'])),""tools_to_update"":$(Json-List (Words $FA['tools'])),""mcp_servers"":$($FA['mcp_servers']),""mcp_token_files"":$($FA['mcp_token_files']),""key_files"":$($FA['key_files']),""key_providers"":$(Json-List (Words $FA['key_providers'])),""history_keys"":$($FA['history_keys']),""session_files_with_keys"":$($FA['session_files']),""allow_list_keys"":$($FA['allow_list_keys']),""ssh_keys_no_passphrase"":$($FA['ssh_open']),""authorized_keys_links"":$($FA['ak_links']),""authorized_keys_planted_keys"":$($FA['ssh_planted']),""planted_files"":$($FA['planted']),""possible_signs"":$(Json-List (Words $FA['possible'])),""project_settings_on_open"":$($FA['on_open']),""files_to_read"":$($FA['to_read']),""scripts_started_like_worms"":$($FA['autostart']),""versions_to_update"":$(Json-List (Words $FA['updates'])),""wiper"":$(Json-Bool ($FA['wiper'] -eq '1')),""lockfile_only_incidents"":$(Json-List (Words $FA['lock_only'])),""extensions_to_remove"":$(Json-List (Words $FA['remove'])),""platforms_found"":$(Json-List (Words $FA['platforms'])),""files_not_checked"":$($FA['not_read']),""agent_folders_moved"":$(Json-Bool ($FA['moved'] -eq '1')),""shared_tmp_markers"":[],""shared_tmp_wiper_logs"":false,""sessions_partly_checked"":$(Json-Bool ($FA['sessions_partial'] -eq '1')),""protected_folders"":""checked"",""session_engine"":""$($FA['engine'])""$extra,""incidents"":$(Json-Incidents (Words $FA['incidents']))}"
   $AccInv = "$($FlShown): $AccOut"; if ($inv.Count -gt 0) { $AccInv += ' ' + ($inv -join '; ') }
 }
 

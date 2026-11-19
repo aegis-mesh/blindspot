@@ -973,22 +973,25 @@ AR_RC=0
 [ "$_ar_ps" = "$FL_KEYS_LIST" ] || { echo "gird-check.ps1 -AccountRun prints \"$_ar_ps\", not the keys of data/account-run.tsv"; AR_RC=1; }
 
 # --- the ids gird-fleet.ps1 checks an account run's lines against ---------------------
-# Every incident with its level, the key providers, the agents of data/auto-approve.tsv, the tools of
+# Every incident with its level, the key providers, the agents of data/auto-approve.tsv and of
+# data/remote-commands.tsv's file lines, the tools of
 # data/outdated.tsv and the platforms, as Windows sees them, and the markers data/indicators.tsv puts in
 # %ProgramData%, which the PC's own check looks at by name.
 { rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $6 }'; rows data/keys.tsv | awk -F '\t' '{ print "K\t" $1 }'
   rows data/auto-approve.tsv | awk -F '\t' '$2 == "all" || $2 == "win" { print "A\t" $1 }'
+  rows data/remote-commands.tsv | awk -F '\t' '$1 == "file" && ($3 == "all" || $3 == "win") { print "R\t" $2 }'
   rows data/outdated.tsv | awk -F '\t' '$3 == "all" || $3 == "win" { print "O\t" $1 }'; rows data/platforms.tsv | awk -F '\t' '{ print "P\t" $1 }'
   rows data/indicators.tsv | awk -F '\t' '($2 == "all" || $2 == "win") && $5 ~ /^\{PROGRAMDATA\}\// { print "D\t" $1 "\t" substr($5, 15) }'; } | awk -F '\t' -v keys="$FL_KEYS_LIST" '
   function add(k, v) { if (!((k, v) in seen)) { seen[k, v] = 1; L[k] = L[k] (L[k] == "" ? "" : (k == "I" ? "; " : ", ")) v } }
   $1 == "I" { add("I", "\047" $2 "\047 = \047" $3 "\047") } $1 == "K" { k = k (k == "" ? "" : " ") $2 }
-  $1 == "A" { add("A", "\047" $2 "\047") } $1 == "O" { add("O", "\047" $2 "\047") } $1 == "P" { add("P", "\047" $2 "\047") }
+  $1 == "A" { add("A", "\047" $2 "\047") } $1 == "R" { add("R", "\047" $2 "\047") } $1 == "O" { add("O", "\047" $2 "\047") } $1 == "P" { add("P", "\047" $2 "\047") }
   $1 == "D" { d = d "  ,@(\047" $2 "\047, \047" $3 "\047)\n" }
   END {
     print "# >>> fleet-tables: generated from data/ by tools/gen.sh. Edit those files, then run it."
     print "$FlIncidents = @{ " L["I"] " }"
     print "$FlProviders = \047" k "\047"
     print "$FlYoloNames = @(" L["A"] ")"
+    print "$FlRemoteNames = @(" L["R"] ")"
     print "$FlTools = @(" L["O"] ")"
     print "$FlPlatforms = @(" L["P"] ")"
     printf "$FlProgramData = @(\n%s)\n", d
