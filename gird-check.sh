@@ -2665,12 +2665,11 @@ END {
   }
   for (i = 1; i <= n; i++) {
     if (D[i] != "allow" || R[i] != 1) continue
-    wn = words(WS[i]); if (wn == 0) continue
+    # A rule that matches one exact command (no wildcard, no prefix) can not run a command of an
+    # attacker'"'"'s choosing: it is never reported.
+    wn = words(WS[i]); if (wn == 0 || !OPEN) continue
     nl = 0; sn = 0; br = 0; seen = "\001"
     for (j = 1; j <= ns; j++) {
-      # A rule with no wildcard is that exact command: it runs a command elsewhere only with words past
-      # the command (a host and what to run there), so it counts only when it is longer.
-      if (wn <= SN[j] && !OPEN) continue
       if (!agrees(wn, j, C[i] || SC[j])) continue
       if ((j in OV) && OV[j] >= K[i]) continue
       if (!index(seen, "\001" SL[j] "\001")) { seen = seen SL[j] "\001"; LB[++nl] = SL[j] }

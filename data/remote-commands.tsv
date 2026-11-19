@@ -21,10 +21,11 @@
 # A rule is read as the words it fixes before its first wildcard. It hits a cmd line when those words
 # and the line's words agree as far as the shorter goes: aws, ssh prod-1 and aws ssm send-command all
 # hit; aws s3, ssh-keygen and git do not. A wildcard glued to a word (ssh*) covers any word it starts.
-# A rule with no wildcard is that exact command, and hits only when it has more words than the line:
-# Bash(ssh prod-1 uptime) runs uptime on prod-1, while Bash(ssh) or Bash(kubectl exec) alone runs no
-# command elsewhere. Whether the words past the command name a host and a command is not checked, so
-# Bash(ssh prod-1), a login with no command, also hits. A rule shorter than the line (Bash(aws *)) is
+# A rule that matches one exact command is never reported: it can not run a command of an attacker's
+# choosing, and most are ordinary (Bash(ssh -T git@github.com), GitHub's login check). That is a
+# Claude Code rule with no wildcard, and an Amazon Q or Gemini CLI regex that is literal to its end;
+# Codex, Gemini CLI prefixes, VS Code's string keys and Roo Code's entries match every command that
+# starts with them, so Codex's ["ssh", "prod"] is reported. A rule shorter than the line (Bash(aws *)) is
 # reported as allowing every such command. A deny or ask rule drops the hit only when it covers every
 # use of the line's command (its words, then any text, with nothing after its wildcard: Bash(ssh * rm)
 # or Bash(* --force) covers none) and the agent would apply it over the allow rule. A regex rule is

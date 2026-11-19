@@ -3062,7 +3062,6 @@ has    "remote commands: a deny with text after its wildcard does not drop a rul
 has    "remote commands: an open rule shorter than the command allows every such command" 'Bash\(aws \*\): allows every aws command, including ones that run commands on AWS servers and in AWS containers' "$WORK/rcm.txt"
 hasnot "remote commands: a deny ending in a glued wildcard drops a rule" 'Bash\(kubectl' "$WORK/rcm.txt"
 hasnot "remote commands: an exact rule with no more words than the command is not listed" 'Bash\(gcloud' "$WORK/rcm.txt"
-has    "remote commands: an exact rule longer than the command is listed" 'Bash\(az ssh vm \.\.\.\): runs commands on Azure servers' "$WORK/rcm.txt"
 has    "remote commands: a VS Code false regex with text after its wildcard does not drop a rule" 'kubectl exec \*: runs commands in Kubernetes containers' "$WORK/rcm.txt"
 # Codex rules as its README writes them, spaces around = and across lines, and its prompt and forbidden rules.
 rm -rf "$WORK/rcx"; cp -R "$WORK/clean" "$WORK/rcx"; mkdir -p "$WORK/rcx/.codex/rules"
@@ -3079,26 +3078,39 @@ rm -rf "$WORK/rcg"; cp -R "$WORK/clean" "$WORK/rcg"; mkdir -p "$WORK/rcg/.gemini
   printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "ssh"\ndecision = "ask_user"\npriority = 960\n\n'
   printf '[[rule]]\ntoolName = "run_shell_command"\ncommandRegex = "az ssh vm .*"\ndecision = "allow"\npriority = 950\n\n'
   printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "gcloud compute ssh"\ndecision = "allow"\npriority = 950\nmodes = ["yolo"]\n\n'
-  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "aws ecs execute-command"\ndecision = "allow"\npriority = 950\nmodes = ["autoEdit", "yolo"]\n'; } > "$WORK/rcg/.gemini/policies/a.toml"
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "aws ecs execute-command"\ndecision = "allow"\npriority = 950\nmodes = ["autoEdit", "yolo"]\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "az vm run-command invoke"\ndecision = "allow"\npriority = 950\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "az vm run-command invoke"\ndecision = "deny"\npriority = 999\nmodes = ["yolo"]\n'; } > "$WORK/rcg/.gemini/policies/a.toml"
 printf '{"tools": {"exclude": ["run_shell_command"]}}\n' > "$WORK/rcg/.gemini/settings.json"
 dzrun "$WORK/rcg" | tr -s ' \n' '  ' > "$WORK/rcg.txt"
 hasnot "remote commands: Gemini CLI's tools.exclude drops a policy of lower priority" 'kubectl' "$WORK/rcg.txt"
 hasnot "remote commands: a Gemini CLI ask_user rule of higher priority drops an allow rule" 'ssh \*: ' "$WORK/rcg.txt"
 has    "remote commands: a Gemini CLI regex is shown as written" 'az ssh vm \.\*: runs commands on Azure servers' "$WORK/rcg.txt"
 hasnot "remote commands: a Gemini CLI rule for yolo mode alone is not listed" 'gcloud' "$WORK/rcg.txt"
+has    "remote commands: a Gemini CLI deny for yolo mode alone does not drop an allow rule" 'az vm run-command invoke \*: runs commands on Azure servers' "$WORK/rcg.txt"
 has    "remote commands: a Gemini CLI rule for other modes says so" 'aws ecs execute-command \*: runs commands in AWS containers, only in autoEdit and yolo modes' "$WORK/rcg.txt"
 # Amazon Q: deniedCommands, and execute_cmd, the tool's name on Windows only.
 rm -rf "$WORK/rcq"; cp -R "$WORK/clean" "$WORK/rcq"; mkdir -p "$WORK/rcq/.aws/amazonq/cli-agents"
-printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["kubectl exec .*", "az ssh vm .*"], "deniedCommands": ["kubectl .*", "az ssh vm .* --rm"]}, "execute_cmd": {"allowedCommands": ["ssh .*"]}}}\n' > "$WORK/rcq/.aws/amazonq/cli-agents/a.json"
+KF="tok$(upper 24)"
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["kubectl exec .*", "az ssh vm .*", "ssh .* TOKEN=%s"], "deniedCommands": ["kubectl .*", "az ssh vm .* --rm"]}, "execute_cmd": {"allowedCommands": ["ssh .*"]}}}\n' "$KF" > "$WORK/rcq/.aws/amazonq/cli-agents/a.json"
 dzrun "$WORK/rcq" | tr -s ' \n' '  ' > "$WORK/rcq.txt"
 hasnot "remote commands: an Amazon Q denied command drops an allowed one" 'kubectl' "$WORK/rcq.txt"
 has    "remote commands: an Amazon Q denied command with more after its .* does not" 'az ssh vm \.\*: runs commands on Azure servers' "$WORK/rcq.txt"
+has    "remote commands: a regex is shown cut before a run of letters and digits" 'ssh \.\* TOKEN=\.\.\.: runs commands on other machines over SSH' "$WORK/rcq.txt"
+hasnot "remote commands: and the key in it is not printed" "$KF" "$WORK/rcq.txt"
 hasnot "remote commands: off Windows, Amazon Q's execute_cmd is not read" 'ssh \.\*: ' "$WORK/rcq.txt"
 mkdir -p "$WP/.aws/amazonq/cli-agents"; cp "$WORK/rcq/.aws/amazonq/cli-agents/a.json" "$WP/.aws/amazonq/cli-agents/a.json"
 winrun --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/rcw.txt"
 rm -rf "${WP:?}/.aws/amazonq"
 has    "remote commands: on Windows, Amazon Q's execute_cmd is read" 'ssh \.\*: runs commands on other machines over SSH' "$WORK/rcw.txt"
 hasnot "remote commands: and its execute_bash is not" 'az ssh vm' "$WORK/rcw.txt"
+# A rule that matches one exact command is never listed; a prefix rule with a host is.
+rm -rf "$WORK/rce"; cp -R "$WORK/clean" "$WORK/rce"; mkdir -p "$WORK/rce/.claude" "$WORK/rce/.codex/rules"
+printf '{"permissions": {"allow": ["Bash(ssh -T git@github.com)", "Bash(ssh prod-1)", "Bash(kubectl exec --help)", "Bash(az ssh vm --ip 10.0.0.1)"]}}\n' > "$WORK/rce/.claude/settings.json"
+printf 'prefix_rule(pattern=["ssh", "prod"])\n' > "$WORK/rce/.codex/rules/default.rules"
+dzrun "$WORK/rce" | tr -s ' \n' '  ' > "$WORK/rce.txt"
+hasnot "remote commands: a Claude Code rule for one exact command is not listed" 'Bash\((ssh|kubectl|az)' "$WORK/rce.txt"
+has    "remote commands: a Codex prefix rule with a host is listed" '! Codex ~/\.codex/rules/default\.rules ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rce.txt"
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/$DAS/Code/User" "$WORK/dz-unr/$DAS/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/$DAS/Code/User/settings.json" > "$WORK/dz-unr/$DAS/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.

@@ -2089,12 +2089,11 @@ function Rc-Match($entries) {
     if ($e[2] -ne 'allow' -or "$($e[1])" -ne '1') { continue }
     $W = @($e[6].Split(' ')); $open = $false
     if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
-    $wn = $W.Count; if ($wn -eq 0) { continue }
+    # A rule that matches one exact command is never reported, as in gird-check.sh.
+    $wn = $W.Count; if ($wn -eq 0 -or -not $open) { continue }
     $locs = New-Object System.Collections.Generic.List[string]; $sn = 0; $br = $false
     for ($j = 0; $j -lt $ns; $j++) {
       $sl = $RcSigWords[$j].Count
-      # A rule with no wildcard is that exact command: it counts only when it is longer, as in gird-check.sh.
-      if ($wn -le $sl -and -not $open) { continue }
       if (-not (Rc-Agrees $W $wn $j ($e[4] -or $RcSigs[$j][1] -eq 'any'))) { continue }
       if ($ov.ContainsKey($j) -and $ov[$j] -ge $e[3]) { continue }
       if (-not $locs.Contains($RcSigs[$j][2])) { $locs.Add($RcSigs[$j][2]) }
