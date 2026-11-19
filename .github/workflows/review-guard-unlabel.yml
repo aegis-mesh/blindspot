@@ -1,0 +1,30 @@
+name: review-guard-unlabel
+
+# New commits need a fresh look, so a push takes security-reviewed off. Tidiness, not safety: only
+# the labeling event itself clears the review-guard check (review-guard.yml). Runs no repository
+# code, and fails if the label cannot be removed.
+on:
+  pull_request_target:
+    types: [synchronize]
+
+permissions: {}
+
+jobs:
+  unlabel:
+    name: remove security-reviewed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          labels=$(gh api "repos/$REPO/issues/$PR/labels" --jq '.[].name')
+          if printf '%s\n' "$labels" | grep -qx security-reviewed; then
+            gh api --silent -X DELETE "repos/$REPO/issues/$PR/labels/security-reviewed"
+            echo "Removed security-reviewed: the new commits need a fresh review."
+          fi

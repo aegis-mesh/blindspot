@@ -1,0 +1,85 @@
+name: review-guard
+
+# The one workflow that runs on pull_request_target, so that the guard and this file come from the
+# base branch and a pull request cannot change the check that judges it. It never checks out or
+# runs the pull request's code: it fetches the pull request's commits as objects and reads their
+# diff with the base branch's tools/review-guard.sh. CONTRIBUTING.md "Security review" says what it
+# blocks and how a code owner clears it.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions: {}
+
+# A run cancelled by a newer event ends as cancelled, which does not pass a required check; the
+# newer run decides. Removing the label after a push is in review-guard-unlabel.yml, which this
+# cancelling cannot stop.
+concurrency:
+  group: review-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # No `if:` here: a skipped job would count as a passing required check.
+  review-guard:
+    name: review-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Fetch the pull request's commits, without checking them out
+        shell: bash
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags --quiet origin "+refs/pull/$PR/head:refs/remotes/pr/head"
+          git cat-file -e "$HEAD_SHA^{commit}"
+
+      - name: Run the base branch's guard on the diff
+        id: guard
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          rc=0
+          bash tools/review-guard.sh "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/findings.txt" 2>&1 || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "Commit checked: $HEAD_SHA, against $BASE_SHA"
+          # The findings quote the pull request's own lines: the log must not read them as commands.
+          stop=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+          echo "::stop-commands::$stop"
+          cat "$RUNNER_TEMP/findings.txt"
+          echo "::$stop::"
+          {
+            echo "## Review guard"
+            echo
+            echo "Commit checked: \`$HEAD_SHA\` (guard exit $rc)"
+            echo
+            sed 's/^/    /' "$RUNNER_TEMP/findings.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pass, or pass on a code owner adding security-reviewed
+        shell: bash
+        env:
+          RC: ${{ steps.guard.outputs.rc }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          SENDER: ${{ github.event.sender.login }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          rc=0
+          bash tools/review-guard-decide.sh "$RC" "$ACTION" "$LABEL" "$SENDER" .github/CODEOWNERS > "$RUNNER_TEMP/decision.txt" || rc=$?
+          stop=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+          echo "::stop-commands::$stop"
+          cat "$RUNNER_TEMP/decision.txt"
+          echo "::$stop::"
+          { echo; sed 's/^/    /' "$RUNNER_TEMP/decision.txt"; echo "    Commit: $HEAD_SHA"; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -eq 0 ] && [ "$RC" = 1 ]; then echo "This clears commit $HEAD_SHA only."; fi
+          exit "$rc"

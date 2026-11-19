@@ -79,6 +79,11 @@ for B in $BASHES; do
 done
 PFX=""
 
+echo "review guard"
+# Its own suite, with its own list of results: PARITY_LOG is cleared so it records nothing here.
+if PARITY_LOG='' bash tests/review-guard.sh > "$WORK/review-guard.txt" 2>&1; then ok "tools/review-guard.sh passes its tests"
+else bad "tools/review-guard.sh passes its tests"; grep -E 'FAIL|^ {8}' "$WORK/review-guard.txt" | head -n 20; fi
+
 echo "data files"
 # Exit code 3: the blocks match, and blindspot-fleet.ps1 was not built for want of PowerShell; tests/run-ps.sh checks it.
 bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; _rc=$?
