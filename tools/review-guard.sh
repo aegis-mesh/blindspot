@@ -7,21 +7,35 @@
 # Reads `git diff BASE...HEAD`: the lines HEAD adds or removes since it left BASE, and the paths it
 # changes. Exit 0: nothing found. Exit 1: findings, one per line. Exit 2: it could not check.
 #
-# Rules (a file is "data" when it is *.md, *.txt, data/*.tsv, LICENSE or NOTICE; any other file
-# is code, so a kind of file this list does not know is held to the stricter rules):
-#   hidden    in code, an added byte that is not printable ASCII, space or tab (CR included);
-#             in data, a control character, an invisible or direction-changing character, or bytes
-#             that are not UTF-8 (other non-ASCII text is allowed there); a changed path with any
-#             byte that is not printable ASCII; a binary file, symbolic link or submodule
-#   run       in code, an added line that runs text as code
-#   network   in code, an added line that makes a network call or names an http(s) URL; a line that
-#             is only a # comment is skipped (a URL in a comment, in docs or in data is not a call)
+# The rules match text, so they flag lines that look like what they name; quoting or splitting a
+# word (e\val, c''url) gets past them, which is why the review checklist still applies. A file is
+# "data" when it is *.md, *.txt, data/*.tsv, LICENSE or NOTICE; any other file is code, so a kind
+# of file this list does not know is held to the code rules.
+#   hidden    in *.ps1, an added byte that is not printable ASCII, space or tab; in any other file,
+#             a control character (CR included), an invisible or direction-changing character, or
+#             bytes that are not UTF-8; a changed path with a byte that is not printable ASCII; a
+#             binary file other than a png, jpg, gif or webp image under docs/; a symbolic link or a
+#             submodule
+#   mode      a file whose mode changed, such as one made executable
+#   run       in code, an added line that runs text as code: eval and its kin, a shell, interpreter
+#             or trap given text built from a variable, a pipe into a shell, a decoder (see RUN_SH
+#             and RUN_PS below); outside tests/, any inline interpreter code (python -c, perl -e).
+#             A line that is only a # comment is skipped. In *.ps1, & on a
+#             plain variable ($block) is not flagged: the scripts call their own script blocks that
+#             way; & on an expression, a string with a variable in it or $env: is.
+#   network   in code, an added line that names a network tool where a command starts, or a
+#             network API (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
+#             that is not only a # comment, in any code but tests/ and the blocks tools/gen.sh
+#             writes from data/: a URL in a test is fixture data, and a test that calls out is
+#             caught by the tool it calls with
 #   shrink    a removed line in data/*.tsv, other than a # comment or a blank line
-#   protected a change under .github/, to a .gitattributes or .gitmodules file, to this guard or
-#             its tests, or to what an AI coding agent or editor opening this repository reads or runs:
-#             at any depth, anything under .claude/ .codex/ .cursor/ .gemini/ .windsurf/ .vscode/
-#             .devcontainer/, and any file named .mcp.json, AGENTS.md, CLAUDE.md, GEMINI.md or
-#             .cursorrules
+#   protected a change under .github/, to a .gitattributes or .gitmodules file, to this guard, its
+#             decision script or its tests, or, at any depth, to what an AI coding agent, editor or
+#             shell opening this repository reads or runs: anything under .claude/ .codex/ .cursor/
+#             .gemini/ .windsurf/ .vscode/ .devcontainer/ .roo/ .kiro/ .zed/ .idea/ .clinerules/,
+#             and any file named .mcp.json, AGENTS.md, CLAUDE.md, GEMINI.md, .cursorrules,
+#             .clinerules, .envrc or .pre-commit-config.yaml
+# *.ps1 lines are matched without case, as PowerShell reads them; other code with case.
 set -u
 export LC_ALL=C
 cd "$(dirname "$0")/.." || exit 2
@@ -62,15 +76,30 @@ BAD_UTF8="$BAD_UTF8|$(o '\357\270')[$(o '\200')-$(o '\217')]|$(o '\357\273\277')
 
 B='(^|[^A-Za-z0-9_-])'   # word start
 E='([^A-Za-z0-9_-]|$)'   # word end
-CMD='(^[[:space:]]*|[;&|({][[:space:]]*|(then|do|else)[[:space:]]+)'   # command position
-RUN="${B}eval$E|invoke-expression|${B}iex$E|scriptblock\][[:space:]]*::[[:space:]]*create|newscriptblock|invokescript|invokecommand|add-type"
-RUN="$RUN|$CMD(source|\.)[[:space:]]+[^[:space:];|&]*[\$(\`]"
-RUN="$RUN|${B}(ba|z|k|da)?sh([[:space:]]+-[a-z]+)*[[:space:]]+-[a-z]*c[[:space:]]+(\"[^\"]*)?[\$\`]"
-RUN="$RUN|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(c|command)[[:space:]]+(\"[^\"]*)?[\$\`]|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(e|ec|enc|encodedcommand)$E"
-RUN="$RUN|\|[[:space:]]*(ba|z|k|da)?sh$E|\|[[:space:]]*(pwsh|powershell)$E|frombase64string|${B}base64[[:space:]]+(.*[[:space:]])?(-d|-D|--decode)$E"
-RUN="$RUN|${B}exec\(|os\.system|shell[[:space:]]*=[[:space:]]*true"
-NET="${B}(curl|wget|irm|iwr|nc|ncat|netcat|socat|telnet|nslookup|dig|resolve-dnsname|invoke-webrequest|invoke-restmethod|start-bitstransfer)$E"
-NET="$NET|webclient|httpclient|webrequest\]|downloadstring|downloadfile|tcpclient|udpclient|/dev/(tcp|udp)/|urlopen|urllib|http\.client|${B}requests\.|${B}socket\.|https?://"
+CMD='(^[[:space:]]*|[;&|({`=][[:space:]]*|(then|do|else|if|while|until|exec|env|command|sudo|xargs|time|!)[[:space:]]+)'   # command position
+SHELLS='(ba|z|k|da)?sh|pwsh|powershell'
+VAR='("[^"]*)?[$`]'   # text that expands a variable or a command
+RUN_SH="${B}eval$E|$CMD(source|\.)[[:space:]]+[^[:space:];|&]*[\$(\`]"
+RUN_SH="$RUN_SH|$CMD($SHELLS)([[:space:]]+-[A-Za-z]+)*[[:space:]]+(-[A-Za-z]*c[[:space:]]+)?$VAR"
+INLINE="$CMD(python[0-9.]*|perl|ruby|node|php|osascript)([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*[ceE][[:space:]]"
+RUN_SH="$RUN_SH|$INLINE+$VAR|${CMD}osascript$E"
+RUN_SH="$RUN_SH|${B}trap[[:space:]]+$VAR|(^|[[:space:]])\|[[:space:]]*($SHELLS)([[:space:]]|;|&|$)"
+RUN_SH="$RUN_SH|${B}system[[:space:]]*\(|\|[[:space:]]*getline|${B}exec\(|os\.(system|popen)|shell[[:space:]]*=[[:space:]]*True"
+RUN_SH="$RUN_SH|${B}base64([[:space:]]+-[A-Za-z-]+)*[[:space:]]+(-[A-Za-z]*[dD][A-Za-z]*|--decode)$E|${B}xxd([[:space:]]+-[A-Za-z]+)*[[:space:]]+-r"
+RUN_PS="${B}(invoke-expression|iex|invoke-command|start-process|add-type)$E|scriptblock\][[:space:]]*::[[:space:]]*create"
+RUN_PS="$RUN_PS|newscriptblock|invokescript|invokecommand|reflection\.assembly\][[:space:]]*::[[:space:]]*load|\.invoke[[:space:]]*\("
+RUN_PS="$RUN_PS|frombase64string|(^|[;({=[:space:]])&[[:space:]]*(\(|\"[^\"]*[$]|[$]env:)|$CMD\.[[:space:]]+[\$(]"
+RUN_PS="$RUN_PS|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(c|command)[[:space:]]+$VAR|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(e|ec|enc|encodedcommand)$E"
+# A network tool where a command would start (a # counts, so a commented-out call is still seen),
+# followed by an argument rather than an =.
+TOOL='(^[[:space:]]*|[;&|({`#!][[:space:]]*|(then|do|else|if|while|until|exec|env|command|sudo|xargs|time)[[:space:]]+)'
+ARG='([[:space:]]+[^=[:space:]]|[[:space:]]*$)'
+NET_SH="$TOOL(curl|wget|nc|ncat|netcat|socat|telnet|ssh|scp|sftp|rsync|ftp|tftp|nslookup|dig|host|drill|certutil|bitsadmin)$ARG"
+NET_SH="$NET_SH|${B}openssl[[:space:]]+s_client|/dev/(tcp|udp)/|/inet/|urlopen|urllib\.request|http\.client|${B}requests\.(get|post|put|patch|delete|head|request|Session)[[:space:]]*\("
+NET_SH="$NET_SH|${B}socket\.(socket|create_connection)|IO::Socket|LWP::|HTTP::Tiny"
+NET_PS="$TOOL(curl|wget|irm|iwr|ssh|scp|sftp|nslookup|certutil|bitsadmin)$ARG|${B}(invoke-webrequest|invoke-restmethod|start-bitstransfer|resolve-dnsname|test-netconnection)$E"
+NET_PS="$NET_PS|webclient|httpclient|webrequest\]|downloadstring|downloadfile|tcpclient|udpclient|net\.dns|net\.sockets"
+URL='https?://'
 
 is_data() {
   case "$1" in
@@ -83,9 +112,10 @@ is_data() {
 # Compared lowercased: a case-insensitive file system opens .Claude/ as .claude/.
 is_protected() {
   case "/$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in
-    /.github/*|*/.gitattributes|/.gitmodules|/tools/review-guard.sh|/tests/review-guard.sh) return 0 ;;
+    /.github/*|*/.gitattributes|/.gitmodules|/tools/review-guard.sh|/tools/review-guard-decide.sh|/tests/review-guard.sh) return 0 ;;
     */.claude/*|*/.codex/*|*/.cursor/*|*/.gemini/*|*/.windsurf/*|*/.vscode/*|*/.devcontainer/*) return 0 ;;
-    */.mcp.json|*/agents.md|*/claude.md|*/gemini.md|*/.cursorrules) return 0 ;;
+    */.roo/*|*/.kiro/*|*/.zed/*|*/.idea/*|*/.clinerules/*) return 0 ;;
+    */.mcp.json|*/agents.md|*/claude.md|*/gemini.md|*/.cursorrules|*/.clinerules|*/.envrc|*/.pre-commit-config.yaml) return 0 ;;
   esac
   return 1
 }
@@ -108,6 +138,10 @@ rule() {
   while IFS= read -r l; do finding "$1" "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"; done < "$W/hitlines"
 }
 is_binary() { tr '\0' '\n' < "$W/binary" | grep -qxF -- "$1"; }
+is_image() {
+  case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in docs/*.png|docs/*.jpg|docs/*.jpeg|docs/*.gif|docs/*.webp) return 0 ;; esac
+  return 1
+}
 
 N=0
 while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
@@ -120,7 +154,13 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     *120000*) finding hidden "$path" 0 "a symbolic link"; continue ;;
     *160000*) finding hidden "$path" 0 "a submodule"; continue ;;
   esac
-  if is_binary "$path"; then finding hidden "$path" 0 "a binary file"; continue; fi
+  if [ "$oldmode" != 000000 ] && [ "$newmode" != 000000 ] && [ "$oldmode" != "$newmode" ]; then
+    finding mode "$path" 0 "mode $oldmode to $newmode"
+  fi
+  if is_binary "$path"; then
+    [ "$status" = D ] || is_image "$path" || finding hidden "$path" 0 "a binary file"
+    continue
+  fi
   [ "$status" = D ] && ! { case "$path" in data/*.tsv) true ;; *) false ;; esac; } && continue
 
   # Each added line as "+<TAB>number<TAB>text", each removed line as "-<TAB>number<TAB>text".
@@ -136,19 +176,59 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
   grep -a "^+$TAB" "$W/lines" | cut -f2- > "$W/add"
   grep -a "^-$TAB" "$W/lines" | cut -f2- > "$W/del"
 
-  if is_data "$path"; then
-    rule hidden "[$(o '\001')-$(o '\010')$(o '\013')-$(o '\037')$(o '\177')]|$BAD_UTF8" "$W/add"
-    while IFS= read -r l; do
-      t=${l#*"$TAB"}
-      if [ -n "$(printf '%s' "$t" | tr -d ' -~\t')" ] && ! printf '%s' "$t" | iconv -f UTF-8 -t UTF-8 > /dev/null 2>&1; then
-        finding hidden "$path" "${l%%"$TAB"*}" "$t"
+  case "$path" in
+    *.ps1|*.psm1|*.psd1) ps=1; rule hidden "[^[:print:]$TAB]" "$W/add" ;;
+    *)
+      ps=0
+      rule hidden "[$(o '\001')-$(o '\010')$(o '\013')-$(o '\037')$(o '\177')]|$BAD_UTF8" "$W/add"
+      # One iconv for the file; only when it fails, one per non-ASCII line, to name the lines.
+      grep -a "[^ -~$TAB]" "$W/add" > "$W/nonascii"
+      if [ -s "$W/nonascii" ] && ! cut -f2- "$W/nonascii" | iconv -f UTF-8 -t UTF-8 > /dev/null 2>&1; then
+        while IFS= read -r l; do
+          printf '%s\n' "${l#*"$TAB"}" | iconv -f UTF-8 -t UTF-8 > /dev/null 2>&1 || finding hidden "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"
+        done < "$W/nonascii"
       fi
-    done < "$W/add"
-  else
-    rule hidden "[^[:print:]$TAB]" "$W/add"
-    rule run "$RUN" "$W/add" -i
+      ;;
+  esac
+  if ! is_data "$path"; then
     grep -av "^[0-9]*${TAB}[[:space:]]*#" "$W/add" > "$W/code"
-    rule network "$NET" "$W/code" -i
+    # Tests write shell profiles and hooks as fixtures, in single quotes: there the run rule reads
+    # each line with its single-quoted text left out. A line is read on its own, so one inside a
+    # quoted string that spans lines is not seen as such.
+    case "$path" in
+      tests/*) awk -v T="$TAB" '{
+          i = index($0, T); out = substr($0, 1, i); q = ""
+          for (k = i + 1; k <= length($0); k++) {
+            c = substr($0, k, 1)
+            if (q == "\047") { if (c == "\047") q = ""; continue }
+            if (c == "\\") { out = out c substr($0, k + 1, 1); k++; continue }
+            if (c == "\"") q = (q == "\"") ? "" : "\""
+            else if (c == "\047" && q == "") { q = "\047"; out = out "\047\047"; continue }
+            out = out c
+          }
+          print out }' "$W/code" > "$W/code-run" ;;
+      *) cp "$W/code" "$W/code-run" ;;
+    esac
+    if [ "$ps" = 1 ]; then
+      rule run "$RUN_PS" "$W/code-run" -i
+      rule network "$NET_PS" "$W/add" -i
+    else
+      rule run "$RUN_SH" "$W/code-run"
+      case "$path" in tests/*) ;; *) rule run "$INLINE" "$W/code-run" ;; esac
+      rule network "$NET_SH" "$W/add"
+    fi
+    case "$path" in
+      tests/*) ;;
+      *)
+        # Lines tools/gen.sh writes from data/ (between "# >>> NAME: generated from data/" and
+        # "# <<< NAME") carry the data's source URLs; gen.sh --check holds them to the data files.
+        { echo 0; git show "$HEAD:$path" 2>/dev/null | awk '
+          /^[[:space:]]*# >>> [a-z-]+: generated from data\// { g = 1; next }
+          /^[[:space:]]*# <<< / { g = 0 }
+          g { print NR }'; } > "$W/gen"
+        awk -F "$TAB" 'NR == FNR { gen[$1] = 1; next } !($1 in gen)' "$W/gen" "$W/code" > "$W/code-own"
+        rule network "$URL" "$W/code-own" -i ;;
+    esac
   fi
   case "$path" in
     data/*/*) ;;
