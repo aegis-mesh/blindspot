@@ -239,6 +239,7 @@ An account is `not_checked` when:
 - project settings that act when an agent or editor opens the folder;
 - an editor extension to remove whose malware was made for another system;
 - a file named like the ones worms plant;
+- a project or the person's own agent settings that start a script the way worms do;
 - a leftover file that can come from malware, or a startup file named like one malware installs.
 
 **`clear`** (exit 0): every account was checked in full and nothing was found.
@@ -310,6 +311,7 @@ Then:
 | A tool with a security fix, or a package version to update | Update it. |
 | An extension to remove | Uninstall it. Its malware was made for another system, so it did not run on this Mac. |
 | Project settings that act when a folder opens | Have them read those settings in each project section 2 of their report lists. |
+| Projects or agent settings that start a script the way worms do | Have them read the script each one section 2 lists runs. If they didn't put it there, delete it with the hook and the task, or the hook in their own settings. |
 | Files named like the ones worms plant | Have them read the files section 2 lists, and delete any they didn't put there. |
 | An SSH key without a passphrase | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets | If they used it, rotate the keys stored there. |

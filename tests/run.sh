@@ -918,6 +918,102 @@ has    "and the backdoor they start"                   '~/\.local/share/kitty/ca
 has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
 has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
 hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
+# A project can run its own script when an agent session starts or the folder opens, as popular projects
+# do: the report names the script, to check, never as malware. A session-start hook and a folder-open task
+# that both run a script named like a planted one is how the worms start themselves (SafeDep on the AntV
+# wave, Wiz on Mini Shai-Hulud), listed on its own, still as a check: the files here are empty markers whose
+# SHA-256 no source publishes. A hook the AntV wave adds to the person's own Claude Code or Codex settings
+# that runs a file from .claude/package or .codex/package is listed too, with or without the file.
+mkdir -p "$WORK/ast/code/w/.claude" "$WORK/ast/code/w/.vscode" "$WORK/ast/code/g/.claude/hooks" "$WORK/ast/code/h/.claude" \
+  "$WORK/ast/code/t/.claude" "$WORK/ast/code/t/.vscode" "$WORK/ast/code/n/.claude" "$WORK/ast/.claude" "$WORK/ast/.codex" \
+  "$WORK/ast/code/c/.claude" "$WORK/ast/code/c/.vscode" "$WORK/ast/code/x/.claude" "$WORK/ast/code/x/.vscode" \
+  "$WORK/ast/code/q1/.claude" "$WORK/ast/code/q1/.vscode" "$WORK/ast/code/q2/.claude" "$WORK/ast/code/q2/.vscode"
+# q1 and q2 only echo text that names the planted file after a ; inside shell quotes.
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s"}]}]}}\n' '\"x;node .claude/setup.mjs\"' > "$WORK/ast/code/q1/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s"}]}]}}\n' "'x;node .claude/setup.mjs'" > "$WORK/ast/code/q2/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' | tee "$WORK/ast/code/q1/.vscode/tasks.json" > "$WORK/ast/code/q2/.vscode/tasks.json"
+# c runs the planted file first in a chain; x runs an index.js from .github, a name planted only in .claude.
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs && node .claude/other.js; echo %s | grep %s"}]}]}}\n' '\"a;b\"' "'x|y'" > "$WORK/ast/code/c/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/c/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .github/scripts/index.js"}]}]}}\n' > "$WORK/ast/code/x/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .github/scripts/index.js","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/x/.vscode/tasks.json"
+: > "$WORK/ast/code/w/.claude/setup.mjs"; : > "$WORK/ast/code/w/.vscode/setup.mjs"; : > "$WORK/ast/code/g/.claude/hooks/nvm-path.sh"
+printf '{\n  "hooks": {\n    "SessionStart": [\n      { "matcher": "*", "hooks": [ { "type": "command", "command": "node .claude/setup.mjs" } ] }\n    ]\n  }\n}\n' > "$WORK/ast/code/w/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"lint","command":"npm run lint"},{"label":"env","type":"shell","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/w/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash .claude/hooks/nvm-path.sh"}]}]}}\n' > "$WORK/ast/code/g/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' | tee "$WORK/ast/code/h/.claude/settings.json" > "$WORK/ast/code/t/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup.mjs"},{"label":"open","command":"echo hi","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/t/.vscode/tasks.json"
+printf '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"node .github/check.js"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$WORK/ast/code/n/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node %s/.claude/package/index.js"}]}]}}\n' "$WORK/ast" > "$WORK/ast/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"bun run ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast/.codex/hooks.json"
+printf '# [[hooks.SessionStart]]\n# command = "node ~/.codex/package/index.js"\nmodel = "x"\n[[hooks.Stop]]\ncommand = "node ~/.codex/package/index.js"\n[[hooks.SessionStart]]\ncommand = "echo hi" # node ~/.codex/package/index.js\n' > "$WORK/ast/.codex/config.toml"
+HOME="$WORK/ast" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast.txt"
+has    "a session-start hook and a folder-open task that run a planted name are listed as worm-shaped" '! ~/code/w A session-start hook and a folder-open task both run setup\.mjs from this project, the way some npm worms do\.' "$WORK/ast.txt"
+hasnot "and a worm-shaped project is a check, not malware" 'ACT NOW|Treat this machine as compromised|runs a file a worm plants' "$WORK/ast.txt"
+has    "a project's session-start hook names the script it runs" '~/code/g/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/hooks/nvm-path\.sh\.' "$WORK/ast.txt"
+has    "a folder-open task names the script it runs" '~/code/w/\.vscode/tasks\.json Set to run a task when the folder opens in VS Code or Cursor\. That task runs this project.s \.claude/setup\.mjs\.' "$WORK/ast.txt"
+hasnot "a hook alone, or with a task that does not run on open, is not worm-shaped" '~/code/(g|h|t|n) A session-start hook' "$WORK/ast.txt"
+has    "a planted file a chain runs first counts as well" '! ~/code/c A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast.txt"
+has    "and the row names every script in the chain" '~/code/c/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/other\.js and \.claude/setup\.mjs\.' "$WORK/ast.txt"
+hasnot "a planted name in another folder is not worm-shaped" '~/code/x A session-start hook' "$WORK/ast.txt"
+hasnot "a ; inside shell quotes does not split the command" '~/code/q[12] A session-start hook' "$WORK/ast.txt"
+hasnot "a hook on another event names no startup script" '~/code/n/\.claude/settings\.json Set to run commands while the agent works\. Each' "$WORK/ast.txt"
+HOME="$WORK/ast" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast-c.txt"
+has    "the summary row counts the worm-shaped project" '02 . MCP servers .*worm-style startup in 2 projects' "$WORK/ast-c.txt"
+has    "what to do says to read that script" 'Read the script each project in section 2 starts the way worms do' "$WORK/ast.txt"
+has    "a session hook in your own Claude Code settings that runs a file from .claude/package is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts\. The AntV wave copies its payload there' "$WORK/ast.txt"
+has    "and one in Codex's hooks.json that runs a file from .codex/package" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast.txt"
+hasnot "a commented-out hook in Codex's config.toml, or one on another event, is not" '~/\.codex/config\.toml' "$WORK/ast.txt"
+mkdir -p "$WORK/ast2/.codex"
+printf '[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast2/.codex/config.toml"
+HOME="$WORK/ast2" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast2.txt"
+has    "a SessionStart array over several lines in Codex's config.toml is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast2.txt"
+mkdir -p "$WORK/ast3/.codex" "$WORK/ast4/.codex"
+# Root reads a file with no read permission, so this case can only be checked as another user.
+SKIPPING=""; [ "${EUID:-$(id -u)}" -eq 0 ] && SKIPPING="running as root, which reads a file with no read permission"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast3/.codex/hooks.json"; chmod 000 "$WORK/ast3/.codex/hooks.json"
+HOME="$WORK/ast3" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3.txt"
+has    "a Codex hooks.json that can't be read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast3.txt"
+HOME="$WORK/ast3" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3-c.txt"
+has    "and the summary row says a file could not be read" '02 . MCP servers .*but 1 file could not be read' "$WORK/ast3-c.txt"
+chmod 644 "$WORK/ast3/.codex/hooks.json"
+SKIPPING=""
+printf '[hooks]\nSessionStart = [\n  { command = "echo ]" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast4/.codex/config.toml"
+HOME="$WORK/ast4" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast4.txt"
+has    "a bracket inside a quoted string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast4.txt"
+mkdir -p "$WORK/ast5/a/.claude" "$WORK/ast5/a/.vscode" "$WORK/ast5/d/.claude" "$WORK/ast5/d/.vscode" "$WORK/ast5/e/.claude" "$WORK/ast5/e/.vscode"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' | tee "$WORK/ast5/a/.claude/settings.json" "$WORK/ast5/d/.claude/settings.json" > "$WORK/ast5/e/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node","args":["--x",".claude/setup.mjs"],"runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast5/a/.vscode/tasks.json"
+printf '{"tasks":[{"label":"open","command":"echo hi","dependsOn":["env"],"runOptions":{"runOn":"folderOpen"}},{"label":"env","command":"node .claude/setup.mjs"}]}\n' > "$WORK/ast5/d/.vscode/tasks.json"
+printf '{"tasks":[{"label":"open","command":"echo hi","dependsOn":"gone","runOptions":{"runOn":"folderOpen"}},{"label":"env","command":"node .claude/setup.mjs"}]}\n' > "$WORK/ast5/e/.vscode/tasks.json"
+HOME="$WORK/ast5" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast5.txt"
+has    "a folder-open task that runs the planted script as a later argument is joined to the hook" '! ~/a A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
+has    "and one that depends on a task that runs it is joined too" '! ~/d A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
+hasnot "a task that depends on a task with another label is not" '! ~/e A session-start hook' "$WORK/ast5.txt"
+# A hooks file too big to read, Codex's or the settings.json in CLAUDE_CONFIG_DIR, is named as not read, never clean.
+mkdir -p "$WORK/ast6/.codex" "$WORK/ast6/cc" "$WORK/ast7/.codex" "$WORK/ast8/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' | tee "$WORK/ast6/.codex/hooks.json" > "$WORK/ast6/cc/settings.json"
+for _f in "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"; do dd if=/dev/zero of="$_f" bs=1 count=0 seek=17000000 2>/dev/null; done
+HOME="$WORK/ast6" CLAUDE_CONFIG_DIR="$WORK/ast6/cc" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast6.txt"
+rm -f "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"
+has    "a Codex hooks.json too big to read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast6.txt"
+has    "and so is a settings.json in CLAUDE_CONFIG_DIR too big to read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/cc/settings\.json' "$WORK/ast6.txt"
+# A TOML multi-line string goes on over lines: a ] in it does not end the SessionStart array, and a table
+# header in it is not one.
+printf '[hooks]\nSessionStart = [\n  { command = """echo ]\n# [\n""" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast7/.codex/config.toml"
+printf "notes = '''\n[[hooks.SessionStart]]\ncommand = \"node ~/.codex/package/index.js\"\n'''\n" > "$WORK/ast8/.codex/config.toml"
+HOME="$WORK/ast7" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast7.txt"
+HOME="$WORK/ast8" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast8.txt"
+has    "a ] inside a multi-line string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast7.txt"
+hasnot "a table header inside a multi-line string in config.toml is not a SessionStart hook" '~/\.codex/config\.toml' "$WORK/ast8.txt"
+# grep can fail or crash while it matches a startup script (macOS's grep has crashed on long expressions):
+# the file is then named as not read, never as one that runs no script. A grep put first on PATH crashes
+# on one of the expressions start_scripts gives it.
+mkdir -p "$WORK/ast9/code/p/.claude" "$WORK/ast9-bin"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$WORK/ast9/code/p/.claude/settings.json"
+printf '#!/bin/sh\ncase "$*" in *"run[[:space:]]+"*"(claude|vscode|github|codex|cursor)"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v grep)" > "$WORK/ast9-bin/grep"; chmod +x "$WORK/ast9-bin/grep"
+HOME="$WORK/ast9" PATH="$WORK/ast9-bin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast9.txt"
+has    "a grep that crashes matching a startup script names the file as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/p/\.claude/settings\.json' "$WORK/ast9.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents"
@@ -2423,7 +2519,6 @@ for _c in cl cl2; do
 done
 chmod 755 "$WORK/cl/.cursor" "$WORK/cl/.codeium" "$WORK/cl2/.claude" "$WORK/cl2/.gemini"
 has    "an MCP config in an agent folder that can't be entered is named in section 2" '! [0-9]+ config or settings files? could not be read, so the servers, tokens and settings in them were not checked: [^!]*~/\.cursor/mcp\.json' "$WORK/cl.txt"
-has    "and row 02 does not read clean over it"        'MCP servers .*but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
 has    "a key file behind such a folder, deeper down, is named in section 3" '! No AI or cloud keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.codeium/windsurf/mcp_config\.json' "$WORK/cl.txt"
 has    "and row 03 does not read clean over it"        'Keys in plain text none found, but [0-9]+ files? could not be read' "$WORK/cl-c.txt"
 has    "Claude Code's settings in a folder that can't be entered are named in section 4" '! No saved commands with keys in the files read, but [0-9]+ files? could not be read: [^!]*~/\.claude/settings\.local\.json' "$WORK/cl2.txt"
@@ -4489,16 +4584,25 @@ has    "fleet: a marker folder root owns in the shared temp folder is a possible
 
 # Project settings that act when a folder opens, a file named like a worm's, a version to update and
 # the gh-token-monitor wiper reach the account's row, as they reach the one-person report.
-for h in proj upd2 wip wip1; do fl_home "$h"; done
+for h in proj upd2 wip wip1 ast uhk; do fl_home "$h"; done
+mkdir -p "$FL/uhk/.claude"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.claude/package/index.js"}]}]}}\n' > "$FL/uhk/.claude/settings.json"
+mkdir -p "$FL/ast/code/w/.claude" "$FL/ast/code/w/.vscode"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$FL/ast/code/w/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$FL/ast/code/w/.vscode/tasks.json"
 mkdir -p "$FL/proj/code/p/.claude" "$FL/proj/code/q/.claude" "$FL/upd2/Library/Python/3.9/lib/python/site-packages/mistralai-2.4.6.dist-info" "$FL/wip/Library/LaunchAgents" \
   "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core" "$FL/wip1/.config/gh-token-monitor" "$FL/wip/.local/share/opencode"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FL/proj/code/p/.claude/settings.json"
 : > "$FL/proj/code/q/.claude/setup.mjs"; : > "$FL/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
 printf '{"name":"@tanstack/router-core","version":"1.169.5"}\n' > "$FL/wip/.npm-global/lib/node_modules/@tanstack/router-core/package.json"
-users "proj:$U:$FL/proj:/bin/zsh" "upd2:$U:$FL/upd2:/bin/zsh" "wip:$U:$FL/wip:/bin/zsh" "wip1:$U:$FL/wip1:/bin/zsh"
+users "proj:$U:$FL/proj:/bin/zsh" "upd2:$U:$FL/upd2:/bin/zsh" "wip:$U:$FL/wip:/bin/zsh" "wip1:$U:$FL/wip1:/bin/zsh" "ast:$U:$FL/ast:/bin/zsh" "uhk:$U:$FL/uhk:/bin/zsh"
 fl_run rows --json
 has    "fleet: project settings that act when a folder opens reach the account's row" '^proj\.project_settings_on_open=1$' "$FL/rows.flat"
 has    "fleet: and a file named like the ones worms plant" '^proj\.files_to_read=1$' "$FL/rows.flat"
+has    "fleet: a project that starts a script the way worms do reaches the account's row" '^ast\.scripts_started_like_worms=1$' "$FL/rows.flat"
+has    "fleet: and so does an account with none" '^proj\.scripts_started_like_worms=0$' "$FL/rows.flat"
+has    "fleet: a session hook in the account's own settings counts alone" '^uhk\.scripts_started_like_worms=1$' "$FL/rows.flat"
+has    "fleet: and makes that account one to review" '^uhk\.outcome=review$' "$FL/rows.flat"
 has    "fleet: so that account is to review" '^proj\.outcome=review$' "$FL/rows.flat"
 has    "fleet: a package version to update reaches the account's row" '^upd2\.versions_to_update=mistralpy$' "$FL/rows.flat"
 has    "fleet: and that account is to review too" '^upd2\.outcome=review$' "$FL/rows.flat"

@@ -1544,6 +1544,118 @@ function Worm-Cmd([string]$name) {
   New-Object regex(($cs + $cp + '((node|tsx)(\.exe)?\s+(' + $co + ')*|(bun|deno)(\.exe)?\s+(' + $co + ')*(run\s+(' + $co + ')*)?)' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
 }
 $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
+# A script a session-start hook or a folder-open task runs from the project itself, from one of the
+# folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
+# path), so it is named for the person to check, never counted as malware. A command runs one as
+# Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
+# command itself. The same expressions as gird-check.sh's START_PATH and START_CMD.
+$StartPath = '\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
+$RxStartPath = New-Object regex($StartPath, $RxOpt, $RxTimeout)
+$RxStartCmd = & {
+  $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $StartPath + '(\\"|["''\s;&|)])'
+  $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
+  $co = '(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^\s"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)\s+'
+  $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
+  $cn = '(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
+  $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
+  $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $StartPath + '"'
+  $cb = '([^{}]|\{[^{}]*\})*'
+  New-Object regex(($cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
+}
+# The elements of every array that is the value of the key $key, from Flat-Text's text: a
+# session-start hook's entries, or each task of a tasks.json. Strings are skipped whole and brackets
+# counted outside them only, so each character is looked at once. As gird-check.sh's json_elems.
+function Json-Elems([string]$t, [string]$key) {
+  $out = New-Object System.Collections.Generic.List[string]
+  $stops = [char[]]@('"', '[', ']', '{', '}', ',', ':')
+  $i = 0; $w = 0; $cap = $false; $d = 0; $st = 0
+  while ($i -lt $t.Length) {
+    $k = $t.IndexOfAny($stops, $i); if ($k -lt 0) { break }
+    if (-not $cap -and $w -gt 0 -and $k -gt $i -and -not [string]::IsNullOrWhiteSpace($t.Substring($i, $k - $i))) { $w = 0 }
+    $c = $t[$k]
+    if ($c -eq '"') {
+      $j = $k + 1
+      while ($true) {
+        $j = $t.IndexOf('"', $j); if ($j -lt 0) { $j = $t.Length; break }
+        $b = 0; while ($j - $b - 1 -gt $k -and $t[$j - $b - 1] -eq '\') { $b++ }
+        if ($b % 2 -eq 0) { break }
+        $j++
+      }
+      if (-not $cap) { if ($t.Substring($k + 1, $j - $k - 1) -ceq $key) { $w = 1 } else { $w = 0 } }
+      $i = $j + 1; continue
+    }
+    $i = $k + 1
+    if (-not $cap) {
+      if ($w -eq 1 -and $c -eq ':') { $w = 2 } elseif ($w -eq 2 -and $c -eq '[') { $cap = $true; $d = 0; $st = $i } else { $w = 0 }
+      continue
+    }
+    if ($c -eq '[' -or $c -eq '{') { $d++ }
+    elseif (($c -eq ']' -or $c -eq '}') -and $d -gt 0) { $d-- }
+    elseif ($d -eq 0 -and ($c -eq ']' -or $c -eq '}' -or $c -eq ',')) {
+      $e = $t.Substring($st, $k - $st).Trim(); if ($e) { $out.Add($e) }
+      $st = $i
+      if ($c -ne ',') { $cap = $false; $w = 0 }
+    }
+  }
+  if ($cap) { $e = $t.Substring($st).Trim(); if ($e) { $out.Add($e) } }
+  ,$out
+}
+# Each part of a command, as "command": "part": the command is split at ;, &, | outside shell quotes
+# ('...' and \"...\"), so each script a chain runs is matched, not only the last. As gird-check.sh's
+# cmd_parts.
+$RxCmdValue = New-Object regex('"command"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+$CmdStops = [char[]]@(';', '&', '|', '\', "'")
+function Cmd-Parts([string]$el) {
+  foreach ($m in $RxCmdValue.Matches($el)) {
+    $v = $m.Groups[1].Value; $sq = $false; $dq = $false; $st = 0; $i = 0; $pp = New-Object System.Collections.Generic.List[string]
+    while ($true) {
+      $k = $v.IndexOfAny($CmdStops, $i); if ($k -lt 0) { break }
+      $c = $v[$k]; $i = $k + 1
+      if ($c -eq '\') { if ($k + 1 -lt $v.Length) { if (-not $sq -and $v[$k + 1] -eq '"') { $dq = -not $dq }; $i = $k + 2 }; continue }
+      if ($c -eq "'") { if (-not $dq) { $sq = -not $sq }; continue }
+      if (-not $sq -and -not $dq) { $pp.Add($v.Substring($st, $k - $st)); $st = $k + 1 }
+    }
+    $pp.Add($v.Substring($st))
+    foreach ($x in $pp) { $x = $x.TrimStart(' '); if ($x) { '"command": "' + $x + '"' } }
+  }
+}
+$RxDepends = New-Object regex('"dependsOn"\s*:\s*(\[[^\]]*\]|"(?:[^"\\]|\\.)*")', $RxOpt, $RxTimeout)
+$RxQuoted = New-Object regex('"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+$RxLabel = New-Object regex('"label"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+# With a filter, a task one of those elements lists in dependsOn by label counts too: one level, so a
+# task the dependency itself depends on does not. As gird-check.sh's start_scripts.
+function Start-Scripts([string]$f, [string]$t, [string]$key, [regex]$filter) {
+  $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
+  $all = New-Object System.Collections.Generic.List[string]; foreach ($x in (Json-Elems $t $key)) { $all.Add($x) }
+  $sel = New-Object System.Collections.Generic.List[string]
+  foreach ($el in $all) { if (-not $filter -or (Flat-Match $f $el $filter)) { $sel.Add($el) } }
+  if ($filter -and $sel.Count -gt 0) {
+    $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($el in @($sel)) {
+      foreach ($dm in $RxDepends.Matches($el)) { foreach ($lm in $RxQuoted.Matches($dm.Groups[1].Value)) { [void]$want.Add($lm.Groups[1].Value) } }
+    }
+    foreach ($el in $all) {
+      $lb = $RxLabel.Match($el)
+      if ($lb.Success -and $want.Contains($lb.Groups[1].Value) -and -not $sel.Contains($el)) { $sel.Add($el) }
+    }
+  }
+  foreach ($el in $sel) {
+    try {
+      foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $RxStartCmd.Matches($_) })) {
+        $ps = $RxStartPath.Matches($m.Value)
+        if ($ps.Count -gt 0) { [void]$set.Add(($ps[$ps.Count - 1].Value -replace '[/\\]+', '/')) }
+      }
+    } catch { Mark-Slow $f }
+  }
+  foreach ($x in $set) { $x }
+}
+function In-Words([string[]]$a) {
+  $a = @($a | Where-Object { $_ })
+  if ($a.Count -le 1) { return ($a -join '') }
+  ($a[0..($a.Count - 2)] -join ', ') + ' and ' + $a[$a.Count - 1]
+}
+$StartHooks = New-Object System.Collections.Generic.List[object]; $StartTasks = New-Object System.Collections.Generic.List[object]
 # Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
 # reference lists each as running your own command, set from any settings file. disableAllHooks set to
 # true turns off hooks, the status line, the file suggestion command and the subagent status line, but
@@ -1834,7 +1946,7 @@ function Aa-Hit([string]$f, $pats) {
   for ($i = 0; $i -lt $pp.Count; $i++) { if ($neg[$i] -eq $got[$i]) { return $false } }
   $true
 }
-function Auto-Row([string]$f, [string]$what, [string]$t) {
+function Auto-Row([string]$f, [string]$what, [string]$t, [string]$note = '') {
   # A worm file counts only when a command runs it (Worm-Cmd), and a file projects use too only in a
   # project that counts ($WormProj).
   if (($RxWormAlone -and (Flat-Match $f $t $RxWormAlone)) -or ($RxWormWeak -and $WormProj.Contains((Worm-Project $f)) -and (Flat-Match $f $t $RxWormWeak))) { $WormRefs.Add($f) }
@@ -1849,7 +1961,7 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
     if ($row.File -match '[/\\]\.claude[/\\]worktrees[/\\]' -and $f -notmatch '[/\\]\.claude[/\\]worktrees[/\\]') { $row.File = $f }
     return
   }
-  $row = @{ File = $f; What = $what; More = 0 }
+  $row = @{ File = $f; What = $(if ($note) { "$what. $note" } else { $what }); More = 0 }
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
 $homeClaude = J $HomeDir '.claude'
@@ -1910,7 +2022,18 @@ foreach ($f in $AllowFiles) {
     if ($null -eq $st) { continue }
     $v = Json-Top $s $st 'disableAllHooks'; if ($v) { $dah = $v; break }
   }
-  if ((Flat-Match $f $t $RxCmdAlways) -or ($dah -ne 'true' -and ((Flat-Match $f $t $RxHookRun) -or (Flat-Match $f $t $RxCmdHooked)))) { $w.Add('run commands while the agent works') }
+  $note = ''
+  if ((Flat-Match $f $t $RxCmdAlways) -or ($dah -ne 'true' -and ((Flat-Match $f $t $RxHookRun) -or (Flat-Match $f $t $RxCmdHooked)))) {
+    $w.Add('run commands while the agent works')
+    if ($dah -ne 'true') {
+      $ss = @(Start-Scripts $f $t 'SessionStart' $null)
+      if ($ss.Count -gt 0) {
+        $note = "Each agent session starts by running this project's $(In-Words $ss)"
+        $pd = [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($f))
+        foreach ($x in $ss) { $StartHooks.Add(@{ Proj = $pd; Script = $x }) }
+      }
+    }
+  }
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
   if ((Flat-Match $f $t $RxBypass) -and (Aa-Hit $f @('"permissions": {"defaultMode": "bypassPermissions"'))) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
@@ -1925,16 +2048,25 @@ foreach ($f in $AllowFiles) {
     if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '' }
     if ($ab) { $w.Add("run every Bash command without asking, with permissions.allow: $ab$tr") }
   }
-  Auto-Row $f ($w -join ', ') $t
+  Auto-Row $f ($w -join ', ') $t $note
 }
 foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/' -or (Too-Big $f)) { continue }
   $t = Flat-Text $f
   if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
-  if (Flat-Match $f $t $RxFolderOpen) { $w.Add('run a task when the folder opens in VS Code or Cursor') }
+  $note = ''
+  if (Flat-Match $f $t $RxFolderOpen) {
+    $w.Add('run a task when the folder opens in VS Code or Cursor')
+    $ss = @(Start-Scripts $f $t 'tasks' $RxFolderOpen)
+    if ($ss.Count -gt 0) {
+      $note = "That task runs this project's $(In-Words $ss)"
+      $pd = [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($f))
+      foreach ($x in $ss) { $StartTasks.Add(@{ Proj = $pd; Script = $x }) }
+    }
+  }
   if (Flat-Match $f $t $RxWorktreeTask) { $w.Add('run a task when VS Code creates a worktree of the project') }
-  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
+  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t $note }
 }
 # A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" or "autopilot"
 # starts new Copilot chats that run every tool call without asking, and the setting
@@ -1969,6 +2101,83 @@ $N_AUTO = $AutoRows.Count
 $AutoProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($r in $AutoRows) { [void]$AutoProj.Add([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($r.File))) }
 $N_AUTO_PROJ = $AutoProj.Count
+# The worms' own wiring (Wiz on Mini Shai-Hulud, SafeDep on the AntV wave): a session-start hook and a
+# folder-open task in one project that both run a planted file (data/planted.tsv: its folder and name)
+# of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
+# compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
+# A worktree is left out when its repo is listed. As gird-check.sh's WIRED.
+$TaskSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($x in $StartTasks) { if ($null -ne (Planted-Note $x.Script)) { [void]$TaskSet.Add($x.Proj + [char]0 + [IO.Path]::GetFileName($x.Script)) } }
+$Wired = New-Object System.Collections.Generic.List[object]
+$WiredSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+$WiredProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($x in $StartHooks) {
+  $b = [IO.Path]::GetFileName($x.Script); $k = $x.Proj + [char]0 + $b
+  if ($null -ne (Planted-Note $x.Script) -and $TaskSet.Contains($k) -and $WiredSeen.Add($k)) { $Wired.Add(@{ Proj = $x.Proj; Name = $b }); [void]$WiredProj.Add($x.Proj) }
+}
+$Wired = @($Wired | Where-Object { $r = $_.Proj -replace '[/\\]\.claude[/\\]worktrees[/\\].*$', ''; -not ($r -ne $_.Proj -and $WiredProj.Contains($r)) })
+$WiredP = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($x in $Wired) { [void]$WiredP.Add($x.Proj) }
+$N_WIRED = $WiredP.Count
+# The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
+# SessionStart hook that runs it to the Claude Code and Codex settings files it finds (SafeDep). The
+# copy is an indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex
+# reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
+# there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
+# with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it. As gird-check.sh's
+# toml_session_start.
+function Toml-SessionStart([string]$t) {
+  $out = New-Object System.Collections.Generic.List[string]; $in = $false; $hk = $false; $top = $true; $d = 0; $ml = ''
+  foreach ($line in ($t -split "`n")) {
+    # A multi-line string (""" or ''') goes on over lines, # and brackets in it too; $br counts [ less ] outside strings.
+    $q = ''; $i = 0; $cut = $line.Length; $br = 0; $inml = ($ml -ne '')
+    while ($i -lt $line.Length) {
+      if ($ml -ne '') {
+        if ($ml -eq '"""') { $k = $line.IndexOfAny([char[]]@('"', '\'), $i) } else { $k = $line.IndexOf("'", $i) }
+        if ($k -lt 0) { break }
+        if ($line[$k] -eq '\') { $i = $k + 2; continue }
+        if ($k + 3 -le $line.Length -and $line.Substring($k, 3) -ceq $ml) { $i = $k + 3; $e = 0; while ($e -lt 2 -and $i -lt $line.Length -and $line[$i] -eq $ml[0]) { $i++; $e++ }; $ml = '' } else { $i = $k + 1 }
+      }
+      elseif ($q -eq '') {
+        $k = $line.IndexOfAny([char[]]@('#', '"', "'", '[', ']'), $i); if ($k -lt 0) { break }
+        $ch = [string]$line[$k]; $i = $k + 1
+        if ($ch -eq '#') { $cut = $k; break }
+        elseif ($ch -eq '[') { $br++ }
+        elseif ($ch -eq ']') { $br-- }
+        elseif ($k + 3 -le $line.Length -and $line.Substring($k, 3) -ceq ($ch * 3)) { $ml = $ch * 3; $i = $k + 3 }
+        else { $q = $ch }
+      }
+      elseif ($q -eq "'") { $k = $line.IndexOf("'", $i); if ($k -lt 0) { break }; $q = ''; $i = $k + 1 }
+      else { $k = $line.IndexOfAny([char[]]@('"', '\'), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '\') { $i = $k + 2 } else { $q = ''; $i = $k + 1 } }
+    }
+    $l = $line.Substring(0, $cut)
+    if ($d -gt 0) { $out.Add($l); $d += $br; continue }
+    if ($inml) { if ($in) { $out.Add($l) }; continue }
+    if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); $top = $false; continue }
+    if ($in) { $out.Add($l); continue }
+    if (($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') -or ($top -and $l -cmatch '^\s*hooks\.SessionStart\s*=')) { $out.Add($l); $d = $br }
+  }
+  $out -join "`n"
+}
+$UserHooks = New-Object System.Collections.Generic.List[object]
+$cxd = Env-Or 'CODEX_HOME' (J $HomeDir '.codex')
+$ccd = Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')
+$UHookFiles = @((J $ccd 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))
+$RxPkg = New-Object regex('\.(claude|codex)[/\\]+package[/\\]', $RxOpt, $RxTimeout)
+foreach ($uf in @((J $ccd 'settings.json'), (J (J $HomeDir '.claude') 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))) {
+  if (-not (Is-File $uf) -or (Too-Big $uf) -or @($UserHooks | Where-Object { $_.File -eq $uf }).Count -gt 0) { continue }
+  if ($uf.EndsWith('.toml')) {
+    $ut = Read-Text $uf; if ($null -eq $ut) { continue }
+    $ut = Toml-SessionStart ($ut -replace "`r", '')
+  } else {
+    $ft = Flat-Text $uf; if ($null -eq $ft) { continue }
+    $ut = (Json-Elems $ft 'SessionStart') -join "`n"
+  }
+  $m = $null; try { $m = $RxPkg.Match($ut) } catch { Mark-Slow $uf }
+  if ($m -and $m.Success) { $UserHooks.Add(@{ File = $uf; Dir = '.' + $m.Groups[1].Value + '/package' }) }
+}
+$N_UHOOK = $UserHooks.Count
 
 # --- 3. Keys in plain text ---------------------------------------------------
 $DocsRoots = New-Object System.Collections.Generic.List[string]
@@ -2135,7 +2344,7 @@ function Unread-Files($files, [bool]$big = $false) {
   ,$out
 }
 $Sec2Unread = Unread-Files @($McpList)
-foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings) + @($UHookFiles)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
 $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive | Where-Object { -not (Own-Alias $_) })
 $AllowUnread = Unread-Files $allowAll $true
@@ -7148,6 +7357,8 @@ if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none
 if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox.' }
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
+if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
+if ($N_UHOOK -gt 0) { Add-Todo 2 'Check the session hooks section 2 lists in your own agent settings. If you didn''t add them, delete them and read what is in the folder they run from.' }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a
@@ -7362,6 +7573,22 @@ foreach ($r in $McpRows) {
 }
 if ($N_MCP_CACHE -gt 0) {
   Pair "$cDim$gMid$cRst" 'Plugin folders' 46 "$cDim$(Plural $N_MCP_CACHE 'server' 'servers') in $(Plural $N_MCP_CACHEF 'file' 'files'), not counted above$cRst"
+}
+if ($N_WIRED -gt 0) {
+  Blank
+  Emit "     ${cBold}Projects that start a script the way worms do$cRst"
+  foreach ($r in $Wired) {
+    Emit "     $cYel!$cRst  $(Short $r.Proj)"
+    Wrap "A session-start hook and a folder-open task both run $($r.Name) from this project, the way some npm worms do. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 '        ' '        ' $cDim
+  }
+}
+if ($N_UHOOK -gt 0) {
+  Blank
+  Emit "     ${cBold}Session hooks in your own agent settings$cRst"
+  foreach ($r in $UserHooks) {
+    Emit "     $cYel!$cRst  $(Short $r.File)"
+    Wrap "Set to run a file from $($r.Dir) each time a session starts. The AntV wave copies its payload there and adds a hook like this one. If you didn't add it, delete the hook and read what is in that folder." 8 '        ' '        ' $cDim
+  }
 }
 if ($N_AUTO -gt 0) {
   Blank
@@ -7705,6 +7932,8 @@ else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days"
 if ($N_AK -gt 0) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, $(Plural $N_AK 'file links' 'files link') to your SSH logins" }
 elseif ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
+elseif ($N_WIRED -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, worm-style startup in $(Plural $N_WIRED 'project' 'projects')" }
+elseif ($N_UHOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_UHOOK 'session hook' 'session hooks') to check" }
 elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
 elseif ($N_LOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_LOOK 'project file' 'project files') to read" }
 elseif ($Sec2Unread.Count -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, but $(Plural $Sec2Unread.Count 'file' 'files') could not be read" }

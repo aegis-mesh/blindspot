@@ -378,3 +378,8 @@ an SSH key of an unknown type	tools/gen.sh is one bash tool that writes the data
 an extension marker with a space	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension marker with an empty string	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an extension registry of one marketplace	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+fleet: a project that starts a script the way worms do reaches the account's row	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and so does an account with none	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: a session hook in the account's own settings counts alone	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and makes that account one to review	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a grep that crashes matching a startup script names the file as not read, never clean	gird-check.ps1 matches with .NET regular expressions and runs no grep, so there is no grep to crash

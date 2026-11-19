@@ -1797,6 +1797,19 @@ A line counts when the key type and then the key are two of its fields, whatever
 - A `setup.mjs` in a project's `.claude` or `.vscode` folder, a name the TanStack, keyv and Mini
   Shai-Hulud worms use for their loader, is listed as a file to read when nothing else of theirs is
   beside it.
+- When a session-start hook or a task that runs on opening runs a script from the project's own
+  `.claude`, `.vscode`, `.github`, `.codex` or `.cursor` folder (with node, bun, deno, tsx, sh, bash,
+  zsh, python or py, or as the command itself, in any part of a command split at `;`, `&` or `|`), the
+  row names that script for you to read: projects do this too, such as a hook that sets up a tool's
+  path.
+- A project where a session-start hook and a folder-open task both run one of the files worms plant in
+  `.claude` or `.vscode` (the folder and the name, from `data/planted.tsv`), the way the Mini
+  Shai-Hulud and AntV worms start themselves (Wiz, SafeDep), is listed on its own, first, still as a
+  script to read: the file counts as malware only by its published SHA-256 or beside a worm's own
+  file.
+- So is a session-start hook in your own Claude Code or Codex settings (`settings.json`, Codex's
+  `hooks.json` or the SessionStart hooks in its `config.toml`) that runs a file from `.claude/package`
+  or `.codex/package`, where the AntV wave copies its payload (SafeDep), even after that copy is gone.
 - A project's `.vscode/settings.json` that sets the old `chat.tools.autoApprove`, the setting the
   CVE-2025-53773 attack wrote, is listed too. VS Code 1.104 and later ignore it, so it is a sign to
   look at, not a setting in force.

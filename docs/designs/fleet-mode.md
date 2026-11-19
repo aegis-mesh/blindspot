@@ -489,7 +489,7 @@ Graph, never a real tenant.
   secret is never on a command line: the options line sets it inside the script, and the hash is
   computed with the secret in perl's environment, which only root can read. The install step is untested on a
   real Mac.
-- `review` means something to change or confirm, not urgent. It covers a tool with a security fix, an incident or a package version at the update level, project settings that act when a folder opens and files named like the ones worms plant, and also an agent set to run without asking, an SSH key without a passphrase, a
+- `review` means something to change or confirm, not urgent. It covers a tool with a security fix, an incident or a package version at the update level, project settings that act when a folder opens, files named like the ones worms plant and projects or agent settings that start a script the way worms do (`autostart`), and also an agent set to run without asking, an SSH key without a passphrase, a
   platform that leaked stored secrets and a leftover file that can come from malware; `act` also
   covers keys in shell history, MCP configs and Claude Code allow lists, links to
   `authorized_keys`, an SSH key malware adds in `authorized_keys`, files a worm plants and the gh-token-monitor wiper, whose stop-it-first line comes before any other. An account with a protected folder refused, a file not
