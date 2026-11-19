@@ -1,0 +1,72 @@
+# Well-known MCP servers, the fixed list mcp_known sends (TELEMETRY.md), in the order the report
+# lists them. A server's label, its name in the config, is lowercased and cut to the part after the
+# last / (so @scope/name gives name). Spaces, dots and underscores become -, and mcp- and server- come
+# off the front and -mcp and -server off the end, as often as they appear. When nothing is left, as
+# with @playwright/mcp, the part before the / is used. What remains must equal an id or one of its
+# aliases. Any other label only adds one to mcp_other, and is never sent. gird.ai keeps the same list
+# and drops any other id, so change both together. One line each, tab separated. After editing, run:
+# bash tools/gen.sh
+#   id       the server's id: lowercase letters, digits and -
+#   aliases  other labels that mean it, separated by ,, or - for none
+# id	aliases
+github	gh
+gitlab	-
+filesystem	fs,file-system
+git	-
+postgres	pg,postgresql
+mysql	-
+sqlite	sqlite3
+mongodb	mongo
+redis	-
+supabase	-
+firebase	-
+playwright	-
+puppeteer	-
+browserbase	browserbasehq
+chrome-devtools	-
+slack	-
+linear	-
+notion	notionhq
+jira	-
+atlassian	-
+confluence	-
+sentry	-
+stripe	-
+figma	figma-dev-mode,figma-developer
+context7	-
+memory	-
+fetch	-
+brave-search	brave
+exa	-
+tavily	-
+perplexity	perplexity-ask
+sequential-thinking	sequentialthinking
+time	-
+gdrive	google-drive
+google-maps	-
+aws	-
+cloudflare	-
+vercel	-
+docker	-
+kubernetes	k8s
+terraform	-
+datadog	-
+grafana	-
+shopify	-
+hubspot	-
+salesforce	-
+zapier	-
+n8n	-
+everything	-
+desktop-commander	desktopcommander
+serena	-
+firecrawl	-
+taskmaster	taskmaster-ai,task-master-ai,task-master
+shadcn	shadcn-ui
+deepwiki	-
+neon	-
+prisma	-
+netlify	-
+heroku	-
+azure	-
+huggingface	hf,hugging-face

@@ -3,15 +3,14 @@
 # followed: the run reads each profile as text, never runs it, and leaves the account partly checked
 # when one sets a variable below. One line each, tab separated. After editing, run: bash tools/gen.sh
 #   name     the variable, as the agent or tool reads it
-#   kind     agent: it moves an agent's own folders. gird-check.sh counts it set anywhere.
-#            tool: an npm or Python tool's folder, which counts only when set to somewhere other than
-#            a folder the check reads when it is not set (an installer can write that default into a
-#            profile).
+#   kind     agent: it moves an agent's own folders; tool: an npm or Python tool's folder. Either
+#            counts only when set to somewhere other than a folder the check reads when it is not
+#            set (an installer can write that default into a profile).
 #   sh       those folders for gird-check.sh, separated by ;, from ~, or - for none.
 #   windows  those folders for gird-check.ps1, which counts any variable set to one of them as not
 #            moved: from ~, {LOCALAPPDATA} or {APPDATA}, or - for none.
-#   scripts  the tool's own scripts in its folder, which gird-check.ps1 does not read when a profile
-#            sources them from there: each sets the tool's variable to the folder it is in. - for none.
+#   scripts  the tool's own scripts in its folder, which neither script reads when a profile sources
+#            them from there: each sets the tool's variable to the folder it is in. - for none.
 # name	kind	sh	windows	scripts
 CLAUDE_CONFIG_DIR	agent	-	-	-
 CODEX_HOME	agent	-	-	-
@@ -25,8 +24,8 @@ CLINE_SESSION_DATA_DIR	agent	-	-	-
 CONTINUE_GLOBAL_DIR	agent	-	-	-
 GOOSE_PATH_ROOT	agent	-	-	-
 KIRO_HOME	agent	-	-	-
-XDG_CONFIG_HOME	agent	-	~/.config	-
-XDG_DATA_HOME	agent	-	~/.local/share	-
+XDG_CONFIG_HOME	agent	~/.config	~/.config	-
+XDG_DATA_HOME	agent	~/.local/share	~/.local/share	-
 XDG_STATE_HOME	agent	-	-	-
 NVM_DIR	tool	~/.nvm	~/.nvm	nvm.sh;bash_completion
 VOLTA_HOME	tool	~/.volta	{LOCALAPPDATA}/Volta;~/.volta	-

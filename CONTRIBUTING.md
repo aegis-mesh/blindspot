@@ -35,13 +35,13 @@ Every change has to keep these true. Reviews check them first.
 
 ## Lists live in `data/`
 
-The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project, the hosted platforms that leaked stored secrets, the agent settings that run commands without asking, the commands that run commands on other machines with the agent files whose saved rules can allow them, the agent versions with a published security fix, the editor extensions that shipped malware, the SSH keys malware adds to `~/.ssh/authorized_keys` and the GitHub Actions that were compromised and the variables that move an agent's or a tool's folders each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts and into the lists in [docs/checks.md](docs/checks.md); edit the data file, never the generated block between `# >>> name` and `# <<< name` (or `<!-- >>> checks -->` and `<!-- <<< checks -->` in the page). `tests/run.sh` fails if a script or the page and its data file disagree.
+The key types, the agents' session folders, the incidents, the bad npm and Python packages, the files malware leaves on disk, the files worms plant in a project, the hosted platforms that leaked stored secrets, the agent settings that run commands without asking, the commands that run commands on other machines with the agent files whose saved rules can allow them, the agent versions with a published security fix, the editor extensions that shipped malware, the SSH keys malware adds to `~/.ssh/authorized_keys`, the GitHub Actions that were compromised, the variables that move an agent's or a tool's folders, the tools' own scripts a profile sources, the coding agents, the MCP apps, well-known MCP servers and MCP configs, the kinds of file the report counts, the terminals `TERM_PROGRAM` names and the lines an account run prints in fleet mode each live in one file under `data/`, one line per entry, described in the file's header. `bash tools/gen.sh` writes them into both scripts and into the lists in [docs/checks.md](docs/checks.md); edit the data file, never the generated block between `# >>> name` and `# <<< name` (or `<!-- >>> checks -->` and `<!-- <<< checks -->` in the page). `tests/run.sh` fails if a script or the page and its data file disagree.
 
 ## Add an agent
 
-1. Add a line to the `AGENTS` table in `gird-check.sh`: name, commands, install paths, folders that change when it's used, and an id.
-2. If it has an MCP config, add it to `MCP_FILES`. If it keeps keys in a config, add it to the candidate list in section 3.
-3. If it keeps session transcripts, add a line to `data/sessions.tsv` and run `bash tools/gen.sh`.
+1. Add a line to `data/agents.tsv`: name, commands, install paths and folders that change when it's used (for `gird-check.sh` and for `gird-check.ps1`), and an id.
+2. If it has an MCP config, add a line to `data/mcp-files.tsv` (and its id to `data/mcp-clients.tsv` when it is a new MCP app). If it keeps keys in a config, add it to the candidate list in section 3.
+3. If it keeps session transcripts, add a line to `data/sessions.tsv`. Run `bash tools/gen.sh`.
 4. Add a fake install to `tests/make-fixture.sh`, an assertion to `tests/run.sh` and its twin to `tests/run-ps.sh` (see [Test](#test)).
 
 ## Add a key format

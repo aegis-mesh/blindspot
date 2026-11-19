@@ -99,6 +99,20 @@ awk '/^- `axios` / { print "- `axios` 0.0.0"; next } { print }' docs/checks.md >
 if cmp -s docs/checks.md "$WORK/ck/docs/checks.md"; then bad "a hand edit to the lists in docs/checks.md fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ck" && bash tools/gen.sh --check > "$WORK/ck.txt" 2>&1) && grep -q 'docs/checks.md is out of date' "$WORK/ck.txt"; then ok "a hand edit to the lists in docs/checks.md fails gen.sh --check"
 else bad "a hand edit to the lists in docs/checks.md fails gen.sh --check" "$(cat "$WORK/ck.txt")"; fi
+# The lines an account run prints have one home, data/account-run.tsv: the readers are written from it,
+# and a printer that sends another key, or the keys in another order, fails gen.sh --check.
+mkdir -p "$WORK/ar"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ar/"
+sed 's/^    echo "moved=\$_moved"$/    echo "folders_moved=$_moved"/' gird-check.sh > "$WORK/ar/gird-check.sh"
+if cmp -s gird-check.sh "$WORK/ar/gird-check.sh"; then bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "the edit did not apply"
+elif ! (cd "$WORK/ar" && bash tools/gen.sh --check > "$WORK/ar.txt" 2>&1) && grep -q 'gird-check.sh --account-run prints' "$WORK/ar.txt"; then ok "an account-run line not in data/account-run.tsv fails gen.sh --check"
+else bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "$(cat "$WORK/ar.txt")"; fi
+# The printers' lines are found at any indentation: printers moved one level in still match.
+mkdir -p "$WORK/ari"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ari/"
+sed 's/^    echo "\([a-z_]*\)=/      echo "\1=/' gird-check.sh > "$WORK/ari/gird-check.sh"; sed "s/^    \([\'\"]\)\([a-z_]*\)=/  \1\2=/" gird-check.ps1 > "$WORK/ari/gird-check.ps1"
+(cd "$WORK/ari" && PWSH=/nonexistent bash tools/gen.sh --check > "$WORK/ari.txt" 2>&1); _ari=$?
+if cmp -s gird-check.sh "$WORK/ari/gird-check.sh" || cmp -s gird-check.ps1 "$WORK/ari/gird-check.ps1"; then bad "gen.sh --check finds the account-run lines at any indentation" "the edit did not apply"
+elif [ "$_ari" -eq 3 ] && ! grep -q 'account-run prints\|-AccountRun prints' "$WORK/ari.txt"; then ok "gen.sh --check finds the account-run lines at any indentation"
+else bad "gen.sh --check finds the account-run lines at any indentation" "$(cat "$WORK/ari.txt")"; fi
 
 echo "agent activity"
 # Codex writes each session to sessions/YYYY/MM/DD/rollout-*.jsonl, four folders down: one written
@@ -3537,9 +3551,14 @@ gen_refuses "a platform advice with a \$"               platforms.tsv "railway${
 gen_refuses "a platform with another found word"        platforms.tsv "railway${T}X${T}x${T}~/.x/${T}present${T}advice${T}summary"
 gen_refuses "a platform path that is only the home"     platforms.tsv "railway${T}X${T}x${T}~${T}CLI found${T}advice${T}summary"
 gen_refuses "a folder variable line without its folders" folder-vars.tsv "ZZ_DIR${T}tool"
+gen_refuses "an agent path from a place the scripts do not know" agents.tsv "Made${T}-${T}{NOPE}/x${T}-${T}-${T}-${T}made"
+gen_refuses "an MCP config of an app not in the list"   mcp-files.tsv "Made${T}nosuch${T}~/.made.json${T}~/.made.json"
+gen_refuses "an MCP server alias that is another server's id" mcp-servers.tsv "madeup${T}github"
 gen_refuses "a folder variable's folder outside the home" folder-vars.tsv "ZZ_DIR${T}tool${T}/opt/zz${T}-${T}-"
 gen_refuses "a folder variable's Windows folder with a \$" folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}{LOCALAPPDATA}/\$x${T}-"
 gen_refuses "a tool's own script outside its folder"     folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}-${T}../x.sh"
+gen_refuses "a tool's own script named by a path that is not plain" tool-scripts.tsv "opt/../nvm.sh${T}note"
+gen_refuses "a terminal id that is not lowercase"        term-programs.tsv "MadeTerm${T}Made"
 gen_refuses "a platform whose incident is not a leak"   platforms.tsv "axios${T}X${T}x${T}~/.x/${T}CLI found${T}advice${T}summary"
 gen_refuses "a leak that no platform names"           incidents.tsv "madeleak${T}Made Leak${T}October 2026${T}a made-up leak${T}https://example.com/leak${T}leak"
 gen_refuses "an npm package of a platform leak"       bad-npm.tsv "made-pkg${T}1.0.0${T}zeabur"
@@ -4625,17 +4644,32 @@ hasnot "fleet: and no row says the malware ran as root" 'the malware ran as root
 hasnot "fleet: a link at that name in /tmp is nothing" '^machine\.(incidents|possible_signs)=.*mastra' "$FL/tllink.flat"
 # The readable report under macOS's own bash, with a finding on the Mac's row: a loader holding its lock.
 # A loader counts only when root's own process holds the lock: in a test run, a process of the tester's.
+# GIRD_CHECK_FLEET_PS stands in for /bin/ps, which some test machines refuse to run: it gives the
+# holder's account, the tester's here, and records that it was asked.
 printf '#!/bin/sh\necho $PPID\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
-GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" fl_run macterm
+printf '#!/bin/sh\necho "$*" >> "%s/ps.log"\necho "  %s"\n' "$FL" "$U" > "$FL/ps-tester"; chmod +x "$FL/ps-tester"
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-tester" fl_run macterm
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
 has    "fleet: the readable report names the Mac's finding under macOS's bash" '^  This Mac +act now$' "$FL/macterm.out"
 hasnot "fleet: and prints no shell error" 'syntax error|command substitution' "$FL/macterm.err"
-# Another account's process holding the root-owned lock (launchd, PID 1, stands in) is only a possible sign.
+# Another account's process holding the root-owned lock is only a possible sign: the stand-in for ps
+# gives an account that is not root's stand-in, and must have been asked, and the Mac is fully checked.
 printf '#!/bin/sh\necho 1\n' > "$FL/other-lsof"; chmod +x "$FL/other-lsof"; : > "$FL/sharedtmp/remote_code_loader.lock"
-GIRD_CHECK_FLEET_LSOF="$FL/other-lsof" fl_run otherlock --json
+printf '#!/bin/sh\necho "$*" >> "%s/ps.log"\necho "  %s"\n' "$FL" "$((U + 1))" > "$FL/ps-other"; chmod +x "$FL/ps-other"; : > "$FL/ps.log"
+GIRD_CHECK_FLEET_LSOF="$FL/other-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-other" fl_run otherlock --json
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
-if grep -q '^machine\.possible_signs=litellm$' "$FL/otherlock.flat" && ! grep -q '^machine\.incidents=.*litellm' "$FL/otherlock.flat"; then ok "fleet: a lock another account's process holds is only a possible sign"
-else bad "fleet: a lock another account's process holds is only a possible sign" "$(grep '^machine' "$FL/otherlock.flat" | tr '\n' ' ')"; fi
+if grep -q '^machine\.possible_signs=litellm$' "$FL/otherlock.flat" && ! grep -q '^machine\.incidents=.*litellm' "$FL/otherlock.flat" && grep -q '^machine\.complete=true$' "$FL/otherlock.flat" && grep -qx -- '-o uid= -p 1' "$FL/ps.log"; then ok "fleet: a lock another account's process holds is only a possible sign"
+else bad "fleet: a lock another account's process holds is only a possible sign" "$(grep '^machine' "$FL/otherlock.flat" | tr '\n' ' ') ps: $(cat "$FL/ps.log")"; fi
+# When ps can't give the holder's account (refused, as on a machine that blocks it), the Mac reads
+# partly checked for the lock, never as if another account held it. (The lock file root owns is a
+# possible sign either way, as a marker in /tmp.)
+printf '#!/bin/sh\necho "ps: Operation not permitted" >&2\nexit 1\n' > "$FL/ps-refused"; chmod +x "$FL/ps-refused"; : > "$FL/sharedtmp/remote_code_loader.lock"
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-refused" fl_run nops --json
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-refused" fl_run nopsterm
+rm -f "$FL/sharedtmp/remote_code_loader.lock"
+if grep -q '^machine\.complete=false$' "$FL/nops.flat" && grep -q '^machine\.outcome=not_checked$' "$FL/nops.flat" && grep -q '^machine\.incidents=$' "$FL/nops.flat" &&
+   grep -q "Partly checked: who holds the LiteLLM loader's lock file could not be read" "$FL/nopsterm.out"; then ok "fleet: a lock whose holder's account can't be read leaves the Mac partly checked, never read as another account's"
+else bad "fleet: a lock whose holder's account can't be read leaves the Mac partly checked, never read as another account's" "$(grep '^machine' "$FL/nops.flat" | tr '\n' ' ')"; fi
 # An account links root's copy under a marker's name, to be left behind: the copy is emptied before it
 # goes, and the next run reads the link as no more than a possible sign.
 users "upd:$U:$FL/upd:/bin/zsh"; printf 'marklink\n' > "$FL/mode-upd"
@@ -4712,6 +4746,75 @@ has    "fleet: and keeps the accounts that need attention" '^inventory=.*person1
 _inv=$(sed -n 's/^inventory=//p' "$FL/inv.flat")
 if [ "${#_inv}" -le 250 ] && printf '%s' "$_inv" | grep -qE 'asha: act wiper; incidents [a-z0-9,-]+( |;)' && printf '%s' "$_inv" | grep -q 'itadmin: '; then ok "fleet: a value cut short keeps an act account's wiper and incidents, and every account"; else bad "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "$_inv"; fi
 if printf '%s' "$_inv" | grep -qE ' \+more$'; then ok "fleet: and ends with +more, since details were cut"; else bad "fleet: and ends with +more, since details were cut" "$_inv"; fi
+# Every value fl_value makes, at every length from 200 to 300, of each shape (no accounts, many
+# accounts, the Mac's row act, review and not_checked) goes to the report's own reader, the
+# Read-Inventory of gird-report.ps1, read from that file: each must be at most 250 characters, whole
+# when it fits, else end with +more, keep no accounts, and read as the writer meant (the outcome, and
+# each row the reader returns with the outcome the writer gave it). GIRD_REPORT names the file when it
+# is not next to the scripts.
+sed -n '/^fl_value() {/,/^}$/p' "$FLEETSH" > "$FL/value.sh"; . "$FL/value.sh"
+_vt="2026-10-25T09:12Z"; _vbad=""; : > "$FL/values.txt"; : > "$FL/values.want"
+vids() { # n: a comma list of ids, exactly n characters
+  _vo=""; _vr=$1; _vi=0
+  while [ "$_vr" -gt 61 ]; do _vi=$((_vi + 1)); _vo="$_vo$(printf 'p%02d%057d' "$_vi" 0 | tr 0 a),"; _vr=$((_vr - 61)); done
+  printf '%s%s' "$_vo" "$(printf 'q%0*d' "$((_vr - 1))" 0 | tr 0 b | cut -c1-"$_vr")"
+}
+vaccts() { # n: clear account rows, " | name: clear" each, exactly n characters (n >= 11)
+  _vo=""; _vr=$1; _vi=0
+  while [ "$_vr" -gt 80 ]; do _vi=$((_vi + 1)); _vo="$_vo | $(printf 'c%02d%057d' "$_vi" 0 | tr 0 a): clear"; _vr=$((_vr - 70)); done
+  if [ "$_vr" -gt 74 ]; then _vo="$_vo | $(printf 'd%039d' 0 | tr 0 a): clear"; _vr=$((_vr - 50)); fi
+  printf '%s | %s: clear' "$_vo" "$(printf 'e%0*d' "$((_vr - 11))" 0 | tr 0 b | cut -c1-"$((_vr - 10))")"
+}
+vworst() { printf '%s\n' "$@" | awk 'BEGIN { r["clear"] = 1; r["review"] = 2; r["not_checked"] = 3; r["act"] = 4 } r[$1] > r[w] { w = $1 } END { print w }'; }
+vcase() { # length accounts outcome parts
+  _vh="v1 $3 $_vt"; _vw="$_vh$4"; [ "$2" -eq 0 ] && _vw="$_vw | no accounts"
+  [ "${#_vw}" -eq "$1" ] || { _vbad="$_vbad $1/$2/$3: built ${#_vw}"; return; }
+  _vg=$(fl_value "$_vh" "$4" "$2")
+  [ "${#_vg}" -le 250 ] || _vbad="$_vbad $1/$2: ${#_vg} long"
+  if [ "$1" -le 250 ]; then [ "$_vg" = "$_vw" ] || _vbad="$_vbad $1/$2: cut"
+  else case "$_vg" in *" +more") ;; *) _vbad="$_vbad $1/$2: no +more" ;; esac; fi
+  if [ "$2" -eq 0 ]; then case "$_vg" in *" | no accounts"|*" | no accounts +more") ;; *) _vbad="$_vbad $1/0: no accounts dropped" ;; esac; fi
+  case "$_vg" in *"; +more"|*";") _vbad="$_vbad $1/$2: a ; before the end" ;; esac
+  printf '%s\n' "$_vg" >> "$FL/values.txt"
+  # What the writer meant: the outcome, and each row's outcome as the parts give it.
+  printf '%s %s\n' "$3" "$(printf '%s' "$4" | awk -F ' [|] ' '{ for (i = 2; i <= NF; i++) { split($i, p, "[ ;]"); n = p[1]; sub(/:$/, "", n); printf "%s=%s,", n, p[2] } }')$( [ "$2" -eq 0 ] && printf '(no accounts)=not_checked,')" >> "$FL/values.want"
+}
+_vA=" | asha: act wiper; incidents litellm; keys 3 openai | bob: review ssh-open 1 | carol: not_checked sudo"
+vh() { echo $((21 + ${#1})); }   # the length of "v1 <outcome> <time>"
+L=200
+while [ "$L" -le 300 ]; do
+  for _vm in act review not_checked; do
+    case "$_vm" in act) _vx=" | machine: act incidents litellm,"; _vy="; possible mastra" ;; review) _vx=" | machine: review; possible "; _vy="; tmp-wiper" ;; *) _vx=" | machine: not_checked incidents "; _vy="; possible litellm" ;; esac
+    _vo=$(vworst not_checked "$_vm"); vcase "$L" 0 "$_vo" "$_vx$(vids $((L - $(vh "$_vo") - ${#_vx} - ${#_vy} - 14)))$_vy"
+    _vo=$(vworst act "$_vm"); vcase "$L" 4 "$_vo" "$_vA$(vaccts $((L - $(vh "$_vo") - ${#_vA} - ${#_vx} - ${#_vy} - 5)))$_vx$(vids 5)$_vy"
+  done
+  vcase "$L" 7 act "$_vA$(vaccts $((L - 24 - ${#_vA})))"
+  vcase "$L" 2 act " | asha: act incidents $(vids $((L - 24 - 23 - 11 - 30)))$(vaccts 11) | machine: review; possible z"
+  L=$((L + 1))
+done
+_vps=${PWSH:-$(command -v pwsh 2>/dev/null)}; _vrep=${GIRD_REPORT:-$PWD/gird-report.ps1}
+if [ -z "$_vps" ] || [ ! -f "$_vrep" ]; then skip "fleet: every inventory value from 200 to 300 characters, of every shape, is one the report reads as the writer meant" "needs pwsh and gird-report.ps1 (or GIRD_REPORT)"
+else
+  { sed -n '/^\$Outcomes = @{/,/^function Get-UtcTime/p' "$_vrep" | sed '$d'
+    printf '%s\n' 'foreach ($v in [IO.File]::ReadAllLines($args[0])) {' \
+      '  $r = Read-Inventory $v' \
+      '  if (-not $r.Ok -or $r.Special) { "unread"; continue }' \
+      '  $r.Outcome + " " + ((@($r.Accounts) | ForEach-Object { $_.Name + "=" + $_.Outcome + "," }) -join "") }'; } > "$FL/read-inv.ps1"
+  "$_vps" -NoProfile -NonInteractive -File "$FL/read-inv.ps1" "$FL/values.txt" > "$FL/values.got" 2>&1
+  # A row the reader returns must be a row the writer wrote, with its outcome; every value read.
+  _vrd=$(paste -d '\t' "$FL/values.want" "$FL/values.got" "$FL/values.txt" | awk -F '\t' '
+    { split($1, w, " "); split($2, g, " "); bad = 0
+      if ($2 == "unread" || g[1] != w[1]) bad = 1
+      n = split(w[2], a, ","); for (i = 1; i < n; i++) { split(a[i], kv, "="); want[kv[1]] = kv[2] }
+      m = split(g[2], b, ","); for (i = 1; i < m; i++) { split(b[i], kv, "="); if (!(kv[1] in want) || want[kv[1]] != kv[2]) bad = 1 }
+      delete want
+      if (bad) { nb++; if (nb <= 3) printf "%s => %s; ", $3, $2 } }
+    END { printf "%d of %d not read as meant", nb, NR }')
+  if [ "$(wc -l < "$FL/values.txt" | tr -d ' ')" -eq 808 ] && [ "${_vrd#0 of }" != "$_vrd" ]; then ok "fleet: every inventory value from 200 to 300 characters, of every shape, is one the report reads as the writer meant" "$_vrd"
+  else bad "fleet: every inventory value from 200 to 300 characters, of every shape, is one the report reads as the writer meant" "$_vrd"; fi
+fi
+if [ -z "$_vbad" ]; then ok "fleet: an inventory value of every length from 200 to 300 is at most 250, and one cut ends with +more, keeps no accounts and no ; before it"
+else bad "fleet: an inventory value of every length from 200 to 300 is at most 250, and one cut ends with +more, keeps no accounts and no ; before it" "$_vbad"; fi
 
 # Names: a keyed hash on request.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
@@ -4850,6 +4953,14 @@ users "bad name:$U:$FL/clean:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 fl_run badname
 GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash -p "$FLEETSH" --inventory > "$FL/badname-inv.out" 2>&1
 if grep -q '^invalid-name\.not_checked=name$' "$FL/badname.flat" && grep -qE '^v1 [a-z_]+ .*\| invalid-name: not_checked name' "$FL/badname-inv.out"; then ok "fleet: an account name it can't read is shown as invalid-name, and the inventory still reads"; else bad "fleet: an account name it can't read is shown as invalid-name, and the inventory still reads" "$(cat "$FL/badname-inv.out")"; fi
+# An account named machine would read as the Mac's own row in the inventory value: it is shown as
+# invalid-name, still checked, and the Mac's own row (a marker root owns) stays the only machine one.
+users "Machine:$U:$FL/itadmin:/bin/zsh"; : > "$FL/sharedtmp/.pc_once_x"
+fl_run machname
+rm -f "$FL/sharedtmp/.pc_once_x"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" bash -p "$FLEETSH" --inventory > "$FL/machname-inv.out" 2>&1
+if grep -q '^invalid-name\.outcome=review$' "$FL/machname.flat" && grep -q '^machine\.possible_signs=litellm$' "$FL/machname.flat" && [ "$(grep -o '| [A-Za-z-]*:' "$FL/machname-inv.out" | tr '\n' ' ')" = '| invalid-name: | machine: ' ]; then ok "fleet: an account named machine shows as invalid-name, apart from the PC's row"
+else bad "fleet: an account named machine shows as invalid-name, apart from the PC's row" "$(cat "$FL/machname-inv.out")"; fi
 mkdir -p "$FL/unread/Library/Safari" "$FL/unread/code/locked"; printf 'export OPENAI_API_KEY=x\n' > "$FL/unread/.zshrc"; chmod 000 "$FL/unread/.zshrc" "$FL/unread/code/locked"
 users "unread:$U:$FL/unread:/bin/zsh"
 fl_run unread
@@ -4880,6 +4991,196 @@ has    "fleet: a profile that sets a tool's folder to its default moves nothing"
 has    "fleet: one that sets it elsewhere leaves the account partly checked" '^toolmv\.agent_folders_moved=true$' "$FL/toolmv.flat"
 has    "fleet: and so does one that moves pnpm's folder (PNPM_HOME)" '^pnmv\.agent_folders_moved=true$' "$FL/toolmv.flat"
 hasnot "fleet: so a bad package only there never reads clear" '^pnmv\.outcome=clear$' "$FL/toolmv.flat"
+# A line that names a listed variable other than to read it counts, unless it is a plain assignment of
+# the value the run sees: forms the reader does not know fail safe. Each case is its own home, read by
+# an account run as root starts it. The same forms as run-ps.sh's twins, in a Mac's shell files.
+MV=$FL/mv; mkdir -p "$MV"
+mv_case() { # name file lines...: an account run on a home holding that file; prints its moved= value
+  _n=$1; _f=$2; shift 2; mkdir -p "$MV/$_n" "$(dirname "$MV/$_n/$_f")"
+  printf '%s\n' "$@" > "$MV/$_n/$_f"
+  printf '%s=%s\n' "$_n" "$(env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$MV/$_n" /bin/bash "$SCRIPT" --account-run 2> /dev/null < /dev/null | sed -n 's/^moved=//p')"
+}
+{ mv_case exportmulti .bashrc 'export A=1 CODEX_HOME=/d/codex'
+  mv_case declare .bashrc 'declare -x CODEX_HOME=/d/codex'
+  mv_case default .bashrc ': "${CODEX_HOME:=/d/codex}"'
+  mv_case typeset .zshrc 'typeset -gx CODEX_HOME=/d/codex'
+  mv_case unset .zshrc 'unset NVM_DIR'
+  mv_case readvar .zshrc 'read -r CODEX_HOME < ~/.codex-home'
+  mv_case printfv .bashrc 'printf -v CODEX_HOME %s /d/codex'
+  mv_case zlogin .zlogin 'export CODEX_HOME=/d/codex'
+  mv_case fishset .config/fish/config.fish 'set -gx CODEX_HOME /d/codex'
+} > "$MV/forms.txt"
+if [ "$(grep -c '=1$' "$MV/forms.txt")" -eq 9 ]; then ok "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved"
+else bad "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved" "$(grep -v '=1$' "$MV/forms.txt" | tr '\n' ' ')"; fi
+# What installers write: nvm (and its own nvm.sh, which sets NVM_DIR its own way), pnpm, conda (and
+# the conda.sh it sources), oh-my-posh and starship, and a profile that reads a variable.
+mkdir -p "$MV/nvm/.nvm"; printf '%s\n' 'if [ -z "${NVM_DIR-}" ]; then' '  NVM_DIR="$(nvm_cd "$(dirname "${NVM_SCRIPT_SOURCE:-$0}")" >/dev/null && \pwd)"' '  export NVM_DIR' 'fi' > "$MV/nvm/.nvm/nvm.sh"
+mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='/opt/conda/bin/conda'" "export _CE_M=''" '__conda_exe() (' '    "$CONDA_EXE" $_CE_M "$@"' ')' > "$MV/conda/miniconda3/etc/profile.d/conda.sh"
+{ mv_case nvm .zshrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm' '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+  mv_case pnpm .zshrc '# pnpm' 'export PNPM_HOME="$HOME/Library/pnpm"' 'case ":$PATH:" in' '  *":$PNPM_HOME:"*) ;;' '  *) export PATH="$PNPM_HOME:$PATH" ;;' 'esac' '# pnpm end'
+  mv_case conda .zshrc '# >>> conda initialize >>>' '__conda_setup="$('"'"'/opt/conda/bin/conda'"'"' '"'"'shell.zsh'"'"' '"'"'hook'"'"' 2> /dev/null)"' 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then' '        . "$HOME/miniconda3/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' '# <<< conda initialize <<<'
+  mv_case omp .zshrc 'eval "$(oh-my-posh init zsh --config "$(brew --prefix oh-my-posh)/themes/jandedobbeleer.omp.json")"'
+  mv_case starship .zshrc 'eval "$(starship init zsh)"' 'export STARSHIP_CONFIG="$HOME/.config/starship.toml"'
+  mv_case starfish .config/fish/config.fish 'starship init fish | source' 'set -gx STARSHIP_CONFIG ~/.config/starship.toml'
+  mv_case reads .zshrc 'if [ -n "$CLAUDE_CONFIG_DIR" ]; then echo "$CLAUDE_CONFIG_DIR"; fi' 'echo "${#CODEX_HOME}"' 'export PATH="$PNPM_HOME:$PATH"'
+} > "$MV/plain.txt"
+if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 7 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
+else bad "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing" "$(grep -v '=0$' "$MV/plain.txt" | tr '\n' ' ')"; fi
+# A file a profile sources is read too, to any depth, wherever it is on a local disk. One that is there
+# but can't be followed or read counts only where some file read names a listed variable.
+mkdir -p "$MV/outside"; printf 'alias x=y\n' > "$MV/outside/env.sh"; mkdir -p "$MV/link"; ln -s "$MV/outside/env.sh" "$MV/link/.env.sh"
+mkdir -p "$MV/nested"; printf '%s\n' 'echo "$CODEX_HOME"' '. ~/.env2.sh' > "$MV/nested/.env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/nested/.env2.sh"
+mkdir -p "$MV/aliases"; printf 'alias ll="ls -l"\n' > "$MV/aliases/.bash_aliases"
+mkdir -p "$MV/unread"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/unread/.secret.sh"; chmod 000 "$MV/unread/.secret.sh"
+mkdir -p "$MV/fifo"; mkfifo "$MV/fifo/.env.sh"
+{ mv_case link .bashrc 'echo "$NVM_DIR"' '. ~/.env.sh'
+  mv_case nested .bashrc '. ~/.env.sh'
+  mv_case unread .bashrc 'echo "$NVM_DIR"' '. ~/.secret.sh'
+  mv_case fifo .zshrc 'echo "$NVM_DIR"' 'source ~/.env.sh'
+} > "$MV/src1.txt"
+{ mv_case aliases .bashrc '[ -f ~/.bash_aliases ] && . ~/.bash_aliases'
+  mv_case plainsrc .bashrc '. /nonexistent/blindspot/env.sh'
+  mv_case elsewhere .bashrc 'export NVM_DIR="$HOME/.nvm"' '. /nonexistent/blindspot/env.sh'
+} > "$MV/src0.txt"
+chmod 600 "$MV/unread/.secret.sh"
+if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
+else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# Each way a profile can reach a file that moves a folder: from outside the home, two files down, in a
+# loop over a folder's files (bash's and zsh's), through a variable set earlier, and a file placed in
+# a tool's own folder that is not the tool's own script.
+mkdir -p "$MV/ext"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ext/env.sh"
+mkdir -p "$MV/twodeep"; printf '. ~/.b.sh\n' > "$MV/twodeep/.a.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/twodeep/.b.sh"
+mkdir -p "$MV/loop/.bashrc.d"; printf 'alias k=kubectl\n' > "$MV/loop/.bashrc.d/00-alias.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/loop/.bashrc.d/10-codex.sh"
+mkdir -p "$MV/zloop/.zshrc.d"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/zloop/.zshrc.d/codex.zsh"
+mkdir -p "$MV/viavar/dotfiles"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/viavar/dotfiles/env.sh"
+mkdir -p "$MV/ownfolder/.nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ownfolder/.nvm/extra.sh"
+{ mv_case outside .bashrc ". '$MV/ext/env.sh'"
+  mv_case twodeep .bashrc '. ~/.a.sh'
+  mv_case loop .bashrc 'for f in ~/.bashrc.d/*.sh; do . "$f"; done'
+  mv_case zloop .zshrc 'for f (~/.zshrc.d/*.zsh) source $f'
+  mv_case viavar .zshrc 'DOTFILES="$HOME/dotfiles"' 'source "$DOTFILES/env.sh"'
+  mv_case ownfolder .bashrc '[ -s "$NVM_DIR/extra.sh" ] && . "$NVM_DIR/extra.sh"'
+} > "$MV/reach.txt"
+if [ "$(grep -c '=1$' "$MV/reach.txt")" -eq 6 ]; then ok "fleet: a folder moved in a file sourced from outside the home, two files down, through a variable or in a sourcing loop counts"
+else bad "fleet: a folder moved in a file sourced from outside the home, two files down, through a variable or in a sourcing loop counts" "$(grep -v '=1$' "$MV/reach.txt" | tr '\n' ' ')"; fi
+# What reads partly checked on an ordinary Mac for no reason: a tool's folder set to the folder the check
+# reads, a listed name in a comment, asdf 0.16's lines, source <(...), a file sourced from outside the
+# home beside a line that only reads a listed variable, and files that source each other.
+mkdir -p "$MV/Shared Tools/corp"; printf '%s\n' 'alias k=kubectl' 'export CORP_TOOLS=/opt/corp/bin' > "$MV/Shared Tools/corp/init.sh"
+mkdir -p "$MV/cycle"; printf '%s\n' '. ~/.bashrc' 'echo "$NVM_DIR"' > "$MV/cycle/.a.sh"
+{ mv_case bun .zshrc '# bun' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case voltash .zshrc 'export VOLTA_HOME="$HOME/.volta"' 'export PATH="$VOLTA_HOME/bin:$PATH"'
+  mv_case npmpfxsh .bashrc 'export NPM_CONFIG_PREFIX=~/.npm-global' 'export PATH=~/.npm-global/bin:$PATH'
+  mv_case comment .bashrc "alias ll='ls -l'  # CODEX_HOME stays where it is"
+  mv_case xdg .zshrc 'export XDG_CONFIG_HOME="$HOME/.config"'
+  mv_case asdf16 .zshrc 'export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"' '. <(asdf completion zsh)'
+  mv_case procsub .bashrc 'source <(kubectl completion bash)' 'echo "$NVM_DIR"'
+  mv_case shared .zshrc ". '$MV/Shared Tools/corp/init.sh'" 'export PATH="$PNPM_HOME:$PATH"'
+  mv_case cycle .bashrc '. ~/.a.sh'
+} > "$MV/quiet.txt"
+if [ "$(grep -c '=0$' "$MV/quiet.txt")" -eq 9 ]; then ok "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing"
+else bad "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing" "$(grep -v '=0$' "$MV/quiet.txt" | tr '\n' ' ')"; fi
+# What the tools a Mac's profile commonly carries write into it.
+mkdir -p "$MV/bunzsh/.bun"; printf 'export BUN_INSTALL=/elsewhere\n' > "$MV/bunzsh/.bun/_bun"
+mkdir -p "$MV/asdf15/.asdf/completions"; printf '%s\n' 'export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"' 'ASDF_DATA_DIR=/elsewhere' > "$MV/asdf15/.asdf/asdf.sh"; printf 'complete -F _asdf asdf\n' > "$MV/asdf15/.asdf/completions/asdf.bash"
+mkdir -p "$MV/uv/.local/bin"; printf '%s\n' '#!/bin/sh' 'case ":${PATH}:" in' '    *:"$HOME/.local/bin":*)' '        ;;' '    *)' '        export PATH="$HOME/.local/bin:$PATH"' '        ;;' 'esac' > "$MV/uv/.local/bin/env"
+mkdir -p "$MV/rustup/.cargo"; printf '%s\n' '#!/bin/sh' 'case ":${PATH}:" in' '    *:"$HOME/.cargo/bin":*) ;;' '    *) export PATH="$HOME/.cargo/bin:$PATH" ;;' 'esac' > "$MV/rustup/.cargo/env"
+mkdir -p "$MV/omz/.oh-my-zsh"; printf '%s\n' 'ZSH_CACHE_DIR="$ZSH/cache"' 'for config_file ("$ZSH"/lib/*.zsh); do source "$config_file"; done' > "$MV/omz/.oh-my-zsh/oh-my-zsh.sh"
+{ mv_case fnmsh .zshrc 'eval "$(fnm env --use-on-cd --shell zsh)"'
+  mv_case bunzsh .zshrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case misesh .zshrc 'eval "$(~/.local/bin/mise activate zsh)"'
+  mv_case asdf15 .bashrc '. "$HOME/.asdf/asdf.sh"' '. "$HOME/.asdf/completions/asdf.bash"'
+  mv_case uv .zshrc '. "$HOME/.local/bin/env"' 'eval "$(uv generate-shell-completion zsh)"'
+  mv_case pipx .zshrc 'autoload -U bashcompinit' 'bashcompinit' 'eval "$(register-python-argcomplete pipx)"' 'export PATH="$PATH:$HOME/.local/bin"'
+  mv_case brew .zprofile 'eval "$(/opt/homebrew/bin/brew shellenv)"'
+  mv_case pyenv .zshrc 'export PYENV_ROOT="$HOME/.pyenv"' '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' 'eval "$(pyenv init - zsh)"'
+  mv_case rustup .zshenv '. "$HOME/.cargo/env"'
+  mv_case omz .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh'
+  mv_case sdkman .zshrc 'export SDKMAN_DIR="$HOME/.sdkman"' '[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"'
+  mv_case orbstack .zprofile 'source ~/.orbstack/shell/init.zsh 2>/dev/null || :'
+} > "$MV/tools.txt"
+if [ "$(grep -c '=0$' "$MV/tools.txt")" -eq 12 ]; then ok "fleet: what fnm, bun, mise, asdf, uv, pipx, Homebrew, pyenv, rustup, Oh My Zsh, SDKMAN! and OrbStack write on a Mac moves nothing"
+else bad "fleet: what fnm, bun, mise, asdf, uv, pipx, Homebrew, pyenv, rustup, Oh My Zsh, SDKMAN! and OrbStack write on a Mac moves nothing" "$(grep -v '=0$' "$MV/tools.txt" | tr '\n' ' ')"; fi
+# Ordinary profiles that name a listed variable beside a line the reader can't follow: the tools' own
+# scripts where Homebrew puts them (data/tool-scripts.tsv), from Homebrew's prefix as their caveats
+# write it, Oh My Zsh's loader as it ships, and a plugin loader whose paths come from a loop's or a
+# function's own variable, inside that loop or function.
+MVPNPM='export PNPM_HOME="$HOME/Library/pnpm"'
+# Oh My Zsh's oh-my-zsh.sh, cut to how it loads files: lib, plugins and the theme through a function
+# given the path, and every custom/*.zsh in a loop.
+mv_omz() { mkdir -p "$1/.oh-my-zsh/lib" "$1/.oh-my-zsh/custom"; printf '%s\n' 'if [[ -z "$ZSH_CUSTOM" ]]; then' '    ZSH_CUSTOM="$ZSH/custom"' 'fi' \
+  '_omz_source() {' '  local context filepath="$1"' '  if [[ -f "$ZSH_CUSTOM/$filepath" ]]; then' '    source "$ZSH_CUSTOM/$filepath"' '  elif [[ -f "$ZSH/$filepath" ]]; then' '    source "$ZSH/$filepath"' '  fi' '}' \
+  'for lib_file ("$ZSH"/lib/*.zsh); do' '  _omz_source "lib/${lib_file:t}"' 'done' 'for plugin ($plugins); do' '  _omz_source "plugins/$plugin/$plugin.plugin.zsh"' 'done' \
+  'for config_file ("$ZSH_CUSTOM"/*.zsh(N)); do' '  source "$config_file"' 'done' 'unset config_file' \
+  'if [[ -n "$ZSH_THEME" ]]; then' '  if is_theme "$ZSH_CUSTOM" "$ZSH_THEME"; then' '    source "$ZSH_CUSTOM/$ZSH_THEME.zsh-theme"' '  else' '    source "$ZSH/themes/$ZSH_THEME.zsh-theme"' '  fi' 'fi' > "$1/.oh-my-zsh/oh-my-zsh.sh"; }
+for h in omzship omzbun; do mv_omz "$MV/$h"; done
+mkdir -p "$MV/loader/.zsh"; printf '%s\n' 'load_plugin() {' '  local name=$1' '  source "$ZSH_PLUGINS/$name/$name.zsh"' '}' 'for p ($plugins); do source $HOME/.zsh/plugins/$p/init.zsh; done' 'load_one() { . "$1"; }' > "$MV/loader/.zsh/loader.zsh"
+mkdir -p "$MV/bunr/.bun"; printf '#compdef bun\n_bun() { :; }\n' > "$MV/bunr/.bun/_bun"
+{ mv_case brewnvm .zshrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && \. "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"  # This loads nvm' '[ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && \. "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"'
+  mv_case brewasdf .zshrc '. $(brew --prefix)/opt/asdf/libexec/asdf.sh' "$MVPNPM"
+  mv_case brewasdfcmd .zshrc '. $(brew --prefix asdf)/libexec/asdf.sh' "$MVPNPM"
+  mv_case omzship .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' "$MVPNPM"
+  mv_case omzbun .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' '[ -s "/Users/x/.bun/_bun" ] && source "/Users/x/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case loader .zshrc 'plugins=(git)' 'source ~/.zsh/loader.zsh' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case pyenvnvm .zshrc 'export PYENV_ROOT="$HOME/.pyenv"' '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' 'eval "$(pyenv init - zsh)"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case rbenvdirenv .zshrc 'eval "$(rbenv init - zsh)"' 'eval "$(direnv hook zsh)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case starnvm .zshrc 'eval "$(starship init zsh)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case misepnpm .zshrc 'eval "$(/opt/homebrew/bin/mise activate zsh)"' "$MVPNPM"
+  mv_case condanvm .bash_profile "__conda_setup=\"\$('/opt/homebrew/Caskroom/miniconda/base/bin/conda' 'shell.bash' 'hook' 2> /dev/null)\"" 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh" ]; then' '        . "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case sdkpnpm .zshrc 'export SDKMAN_DIR="$HOME/.sdkman"' '[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"' "$MVPNPM"
+  mv_case brewnvmenv .zprofile 'eval "$(/opt/homebrew/bin/brew shellenv)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case bunr .zshrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case fpathpnpm .zshrc 'fpath=(~/.zfunc $fpath)' 'autoload -Uz compinit && compinit' 'source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh' "$MVPNPM"
+} > "$MV/ordinary.txt"
+if [ "$(grep -c '=0$' "$MV/ordinary.txt")" -eq 15 ]; then ok "fleet: nvm and asdf from Homebrew, Oh My Zsh, a plugin loader, pyenv, rbenv, direnv, starship, mise, conda, SDKMAN!, Homebrew, bun and pnpm as written move nothing"
+else bad "fleet: nvm and asdf from Homebrew, Oh My Zsh, a plugin loader, pyenv, rbenv, direnv, starship, mise, conda, SDKMAN!, Homebrew, bun and pnpm as written move nothing" "$(grep -v '=0$' "$MV/ordinary.txt" | tr '\n' ' ')"; fi
+# zsh's glob qualifiers in a sourcing loop, (N) and (.N), and a plain path in braces, are followed.
+for h in zq1 zq2 zq3 zq4; do mkdir -p "$MV/$h/.zshrc.d"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.zshrc.d/x.zsh"; done
+mkdir -p "$MV/zbrace"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/zbrace/.zsh_env_extra"
+{ mv_case zq1 .zshrc 'for f (~/.zshrc.d/*.zsh(N)) source $f'
+  mv_case zq2 .zshrc 'for f in ~/.zshrc.d/*.zsh(N); do source $f; done'
+  mv_case zq3 .zshrc 'for f in ~/.zshrc.d/*.zsh(.N); do . "$f"; done'
+  mv_case zq4 .zshrc 'for f ($HOME/.zshrc.d/*(N)) source $f'
+  mv_case zbrace .zshrc 'source ${HOME}/.zsh_env_extra'
+} > "$MV/zqual.txt"
+if [ "$(grep -c '=1$' "$MV/zqual.txt")" -eq 5 ]; then ok "fleet: a sourcing loop over a zsh glob with a qualifier, and a path in braces, is followed"
+else bad "fleet: a sourcing loop over a zsh glob with a qualifier, and a path in braces, is followed" "$(grep -v '=1$' "$MV/zqual.txt" | tr '\n' ' ')"; fi
+# Never a false clear: a file named like a tool's own script anywhere but Homebrew's prefix is read; Oh
+# My Zsh as it ships reads custom/*.zsh; a zsh glob qualifier the reader does not parse leaves the loop
+# unfollowed; and a function's or a loop's own variable is bound only inside it.
+mkdir -p "$MV/stuffnvm/stuff/opt/nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/stuffnvm/stuff/opt/nvm/nvm.sh"
+mv_case stuffnvm .zshrc 'source ~/stuff/opt/nvm/nvm.sh' > "$MV/stuffnvm.txt"
+has    "fleet: a file named like a tool's own script outside Homebrew's prefix is read" '^stuffnvm=1$' "$MV/stuffnvm.txt"
+mv_omz "$MV/omzcustom"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/omzcustom/.oh-my-zsh/custom/env.zsh"
+mv_case omzcustom .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' > "$MV/omzcustom.txt"
+has    "fleet: Oh My Zsh as it ships is read, and a custom file of it that moves a folder counts" '^omzcustom=1$' "$MV/omzcustom.txt"
+for h in zqq zqd; do mkdir -p "$MV/$h/.zshrc.d"; printf 'alias k=kubectl\n' > "$MV/$h/.zshrc.d/x.zsh"; done
+{ mv_case zqq .zshrc 'for f in ~/.zshrc.d/*.zsh(#q.N); do source $f; done' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case zqd .zshrc 'for f (~/.zshrc.d/*.zsh(N-.)) source $f' 'export NVM_DIR="$HOME/.nvm"'
+} > "$MV/zqq.txt"
+if [ "$(grep -c '=1$' "$MV/zqq.txt")" -eq 2 ]; then ok "fleet: a sourcing loop over a zsh glob qualifier the reader does not parse counts where a listed variable is named"
+else bad "fleet: a sourcing loop over a zsh glob qualifier the reader does not parse counts where a listed variable is named" "$(grep -v '=1$' "$MV/zqq.txt" | tr '\n' ' ')"; fi
+{   mv_case fnscope .zshrc 'load() {' '  local p=$1' '  source "$p/init.zsh"' '}' '. "$p/env.sh"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case loopscope .bashrc 'for d in ~/.a ~/.b; do . "$d/init.sh"; done' '. "$d/env.sh"' 'export NVM_DIR="$HOME/.nvm"'
+} > "$MV/scope.txt"
+if [ "$(grep -c '=1$' "$MV/scope.txt")" -eq 2 ]; then ok "fleet: a function's or a loop's own variable does not hide a source line outside it"
+else bad "fleet: a function's or a loop's own variable does not hide a source line outside it" "$(grep -v '=1$' "$MV/scope.txt" | tr '\n' ' ')"; fi
+# The caps: 64 files and 16 MiB read in all, and no file over 16 MiB. Past one, moved is 1 only where a
+# file read names a listed variable.
+for h in chain chainn; do mkdir -p "$MV/$h/.c"; i=1; while [ "$i" -le 70 ]; do printf '. ~/.c/%s.sh\n' "$((i + 1))" > "$MV/$h/.c/$i.sh"; i=$((i + 1)); done; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.c/71.sh"; done
+for h in big bign; do mkdir -p "$MV/$h"; for f in a b; do awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 9437; i++) print s }' > "$MV/$h/.$f.sh"; done; done
+for h in huge hugen; do mkdir -p "$MV/$h"; awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 17000; i++) print s }' > "$MV/$h/.h.sh"; done
+{ mv_case chain .bashrc '. ~/.c/1.sh'
+  mv_case big .bashrc '. ~/.a.sh' '. ~/.b.sh'
+  mv_case huge .bashrc '. ~/.h.sh'
+} > "$MV/cap0.txt"
+{ mv_case chainn .bashrc 'echo "$NVM_DIR"' '. ~/.c/1.sh'
+  mv_case bign .bashrc 'echo "$NVM_DIR"' '. ~/.a.sh' '. ~/.b.sh'
+  mv_case hugen .bashrc 'echo "$NVM_DIR"' '. ~/.h.sh'
+} > "$MV/cap1.txt"
+rm -rf "$MV/big" "$MV/bign" "$MV/huge" "$MV/hugen"
+if [ "$(grep -c '=0$' "$MV/cap0.txt")" -eq 3 ] && [ "$(grep -c '=1$' "$MV/cap1.txt")" -eq 3 ]; then ok "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named"
+else bad "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named" "$(cat "$MV/cap0.txt" "$MV/cap1.txt" | tr '\n' ' ')"; fi
 # A project Codex config the settings check can't read in full (a line past 64 KB that a string can
 # span) is a file not checked for the account, so its full-access setting can't hide behind it.
 fl_home cut; mkdir -p "$FL/cut/code/evil/.codex"
@@ -5308,7 +5609,7 @@ else bad "fleet one file: the guide's inventory reader reads an attempt time wit
 mkdir -p "$OF/old"; : > "$OF/old/gird-fleet.sh"; of_run old "$ONE" --all-users --json; rm -rf "$OF/old"; of_run noold "$ONE" --all-users --json
 of_env /bin/bash -p "$ONE" --all-users < /dev/null > "$OF/oldterm.out" 2>&1
 mkdir -p "$OF/old"; : > "$OF/old/gird-check.sh"; of_env /bin/bash -p "$ONE" < /dev/null > "$OF/oldsum.out" 2>&1; of_env /bin/bash -p "$ONE" --all-users < /dev/null > "$OF/oldterm2.out" 2>&1; rm -rf "$OF/old"
-if grep -q '^old_install=true$' "$OF/old.flat" && grep -q '^old_install=false$' "$OF/noold.flat" && grep -qE '^inventory=v1 act .*\| old-install( \||$)' "$OF/old.flat" \
+if grep -q '^old_install=true$' "$OF/old.flat" && grep -q '^old_install=false$' "$OF/noold.flat" && grep -qE '^inventory=v1 act .*\| old-install( \|| \+more$|$)' "$OF/old.flat" \
   && grep -q '^blindspot act accounts=2 .* old_install=yes$' "$OF/oldsum.out" && grep -q 'An older install of Blindspot' "$OF/oldterm2.out" && ! grep -q 'older install' "$OF/oldterm.out"; then
   ok "fleet one file: an older two-file install is named in the result"
 else bad "fleet one file: an older two-file install is named in the result" "$(grep -E '^(old_install|inventory)=' "$OF/old.flat" "$OF/noold.flat") $(cat "$OF/oldsum.out")"; fi

@@ -116,7 +116,7 @@ $Inv = [Globalization.CultureInfo]::InvariantCulture
 # ---------------------------------------------------------------------------
 # The tables, written here by tools/gen.sh: never edit them here.
 # ---------------------------------------------------------------------------
-# >>> agents: copied from gird-check.ps1 by tools/gen.sh. Edit it there, then run it.
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
@@ -129,8 +129,7 @@ $Agents = @(
   @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
   @('Goose', 'goose', @((J $AppData 'Block/goose')), @($GooseData), 'goose'),
   @('Aider', 'aider', @(), @(), 'aider'),
-  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')),
-    @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
+  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')), @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
   @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
 )
 # <<< agents
@@ -143,6 +142,7 @@ $FlPlatforms = @('opencode', 'railway', 'zeabur')
 $FlProgramData = @(
   ,@('mastra', 'NodePackages/protocal.cjs')
 )
+$FlKeys = @('v', 'agents', 'yolo', 'remote', 'tools', 'mcp_servers', 'mcp_token_files', 'key_files', 'key_providers', 'history_keys', 'session_files', 'sessions_partial', 'allow_list_keys', 'ssh_open', 'ak_links', 'ssh_planted', 'planted', 'possible', 'incidents', 'platforms', 'on_open', 'to_read', 'autostart', 'updates', 'wiper', 'lock_only', 'remove', 'not_read', 'moved', 'tmp_marks', 'tmp_wiper', 'protected', 'engine', 'end')
 # <<< fleet-tables
 # >>> packed-check: written into blindspot-fleet.ps1 by tools/gen.sh; empty here, where gird-check.ps1 sits next to this file.
 $PackedCheck = ''
@@ -161,7 +161,6 @@ $FlEnd = $FlStart.AddSeconds($FlDeadline - $FlReserve)
 $FlReason = ''
 $FlOutMax = 4096
 $FlStopSecs = 10
-$FlKeys = @('v', 'agents', 'yolo', 'tools', 'mcp_servers', 'mcp_token_files', 'key_files', 'key_providers', 'history_keys', 'session_files', 'sessions_partial', 'allow_list_keys', 'ssh_open', 'ak_links', 'planted', 'possible', 'incidents', 'platforms', 'on_open', 'to_read', 'updates', 'wiper', 'lock_only', 'remove', 'not_read', 'moved', 'tmp_marks', 'tmp_wiper', 'protected', 'engine', 'end')
 
 function Sha256-Hex([byte[]]$b) {
   $sha = [Security.Cryptography.SHA256]::Create()
@@ -479,7 +478,7 @@ if ($FlNotChecked) {
 # --- The PC's shared places, by name only: nothing in them is read or run ------------
 # Agents installed for every account under %ProgramFiles%, where the per-person install folders of
 # the agents table (under %LOCALAPPDATA%\Programs) have their machine-wide twin.
-$MAgents = New-Object System.Collections.Generic.List[string]; $MInc = New-Object System.Collections.Generic.List[string]; $MPoss = New-Object System.Collections.Generic.List[string]
+$MAgents = New-Object System.Collections.Generic.List[string]
 $PF = @(); $PD = ''
 if ($OnWindows) { $PF = @($env:ProgramFiles, ${env:ProgramFiles(x86)}) | Where-Object { $_ }; $PD = $env:ProgramData }
 elseif ($FlTest -and ($env:GIRD_CHECK_FLEET_PROGRAMFILES -or $env:GIRD_CHECK_FLEET_PROGRAMDATA)) { $PF = @($env:GIRD_CHECK_FLEET_PROGRAMFILES) | Where-Object { $_ }; $PD = $env:GIRD_CHECK_FLEET_PROGRAMDATA }
@@ -496,9 +495,9 @@ foreach ($a in $Agents) {
 # Malware markers in %ProgramData%, where any account can create a file but, on NTFS, a standard
 # account cannot give one to another owner, so the owner decides: one that Administrators, SYSTEM or a
 # service owns is a finding for the PC; one the person owns is a finding on their own row, which the
-# account run reports; one another account owns, or whose owner can't be read, is a possible sign for
-# the PC. A link is nothing, and a file with more than one name, whoever owns it, only a possible sign
-# for the PC: any account can hard-link a file it can reach under a marker's name.
+# account run reports; one another account owns is a possible sign for the PC, and one whose owner
+# can't be read is too, and leaves the PC partly checked. A link is nothing, and a file with more than
+# one name, whoever owns it, only a possible sign for the PC: any account can hard-link a file it can reach under a marker's name.
 function Owner-Kind([string]$p) {
   if ($OnWindows) {
     try { $o = (Get-Acl -LiteralPath $p -ErrorAction Stop).GetOwner([Security.Principal.SecurityIdentifier]).Value } catch { return 'unknown' }
@@ -515,22 +514,43 @@ function Mark-Kind([string]$kind, [string]$linkType) {
   if ($linkType) { return 'possible' }
   switch ($kind) { 'person' { 'account' } 'machine' { 'incident' } default { 'possible' } }
 }
-if ($PD) {
+# The markers found, by where they go, and whether every owner could be read.
+function Scan-Markers([string]$pd) {
+  $st = @{ Inc = (New-Object System.Collections.Generic.List[string]); Poss = (New-Object System.Collections.Generic.List[string]); Complete = $true }
+  if (-not $pd) { return $st }
   foreach ($r in $FlProgramData) {
-    $mp = J $PD $r[1]
+    $mp = J $pd $r[1]
     if (-not ([IO.File]::Exists($mp) -or [IO.Directory]::Exists($mp))) { continue }
     if (Is-Reparse $mp) { continue }
     $lt = $null; try { $lt = (Get-Item -LiteralPath $mp -Force -ErrorAction Stop).LinkType } catch { $lt = 'unknown' }
-    switch (Mark-Kind (Owner-Kind $mp) ([string]$lt)) {
-      'incident' { if (-not $MInc.Contains($r[0])) { $MInc.Add($r[0]) } }
-      'possible' { if (-not $MPoss.Contains($r[0])) { $MPoss.Add($r[0]) } }
+    $ok = Owner-Kind $mp
+    if ($ok -eq 'unknown') { $st.Complete = $false }
+    switch (Mark-Kind $ok ([string]$lt)) {
+      'incident' { if (-not $st.Inc.Contains($r[0])) { $st.Inc.Add($r[0]) } }
+      'possible' { if (-not $st.Poss.Contains($r[0])) { $st.Poss.Add($r[0]) } }
     }
   }
+  $st
 }
-$MOut = 'clear'
-foreach ($x in $MInc) { if ($FlIncidents[$x] -eq 'act') { $MOut = 'act' } elseif ($MOut -ne 'act') { $MOut = 'review' } }
-if ($MPoss.Count -gt 0 -and $MOut -ne 'act') { $MOut = 'review' }
-$Machine = "{""complete"":true,""outcome"":""$MOut"",""agents"":$(Json-List $MAgents),""possible_signs"":$(Json-List $MPoss),""incidents"":$(Json-Incidents $MInc)}"
+function Machine-Outcome($inc, $poss, [bool]$complete) {
+  $o = 'clear'
+  foreach ($x in $inc) { if ($FlIncidents[$x] -eq 'act') { $o = 'act' } elseif ($o -ne 'act') { $o = 'review' } }
+  if ($poss.Count -gt 0 -and $o -ne 'act') { $o = 'review' }
+  if (-not $complete -and $o -ne 'act') { $o = 'not_checked' }
+  $o
+}
+function Machine-Json($st, [string]$out, $agents) {
+  "{""complete"":$(Json-Bool $st.Complete),""outcome"":""$out"",""agents"":$(Json-List $agents),""possible_signs"":$(Json-List $st.Poss),""incidents"":$(Json-Incidents $st.Inc)}"
+}
+# The PC's part of the inventory value: nothing when it is clear.
+function Machine-Part($st, [string]$out) {
+  if ($out -eq 'clear') { return '' }
+  $t = " | machine: $out"; if ($st.Inc.Count -gt 0) { $t += " incidents $(Commas $st.Inc)" }; if ($st.Poss.Count -gt 0) { $t += "; possible $(Commas $st.Poss)" }
+  $t
+}
+$MSt = Scan-Markers $PD
+$MOut = Machine-Outcome $MSt.Inc $MSt.Poss $MSt.Complete
+$Machine = Machine-Json $MSt $MOut $MAgents
 
 # --- The result -----------------------------------------------------------------
 $rank = @{ 'failed' = 5; 'act' = 4; 'not_checked' = 3; 'review' = 2; 'clear' = 1 }
@@ -554,10 +574,7 @@ function Build-Text {
   # time, other_profiles, then reason on a failed result.
   $head = "v1 $($script:Outcome) $($FlAt.Substring(0, 16))Z other_profiles=$FlOther"
   if ($script:FlReason) { $head += " reason=$($script:FlReason)" }
-  $tail = ''
-  if ($MOut -ne 'clear') {
-    $tail = " | machine: $MOut"; if ($MInc.Count -gt 0) { $tail += " incidents $(Commas $MInc)" }; if ($MPoss.Count -gt 0) { $tail += "; possible $(Commas $MPoss)" }
-  }
+  $tail = Machine-Part $MSt $MOut
   $key = "$($FlShown): $AccOut"
   if ($AccOut -eq 'act') { $ks = @($inv | Where-Object { $_ -eq 'wiper' -or $_.StartsWith('incidents ') }); if ($ks.Count -gt 0) { $key += ' ' + ($ks -join '; ') } }
   $script:InventoryV = Fit-Value $head $script:AccInv $key "$($FlShown): $AccOut" $tail

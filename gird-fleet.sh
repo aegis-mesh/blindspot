@@ -496,7 +496,7 @@ Roo Code|all|roo|file|$AS/Cursor/User/settings.json|while its auto-approve for c
 Roo Code|all|roo|file|$AS/Cursor/User/profiles/*/settings.json|while its auto-approve for commands is on
 Amazon Q|all|amazonq|file|$H/.aws/amazonq/cli-agents/*.json|when you use that agent"
 # <<< remote-commands
-# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
@@ -617,7 +617,7 @@ zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that
 # Fleet mode, the root side (docs/designs/fleet-mode.md). Root lists the accounts, checks the
 # Mac's shared places, starts one account run at a time as that account, and builds every row
 # itself from lines it has checked. It calls every tool by its full path.
-# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof and find. They
+# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof, ps and find. They
 # are read only when the script is not running as root.
 # ===========================================================================
 FL_USERS=""; FL_LAUNCH=""; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
@@ -626,6 +626,7 @@ if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
   FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
   FL_SHARED_TMP=${GIRD_CHECK_FLEET_SHARED_TMP:-$FL_SHARED_TMP}; FL_LSOF=${GIRD_CHECK_FLEET_LSOF:-$FL_LSOF}
   FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}
+  FL_PS=${GIRD_CHECK_FLEET_PS:-$FL_PS}
 fi
 FL_OUT_MAX=4096                 # bytes root reads from one account run
 FL_US=$(printf '\037'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
@@ -763,7 +764,9 @@ FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 
 FL_REMOTE_IDS="$FL_AGENT_IDS $(printf '%s\n' "$RC_FILES" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
+# >>> account-run-keys: generated from data/account-run.tsv by tools/gen.sh. Edit that file, then run it.
 FL_KEYS="v agents yolo remote tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links ssh_planted planted possible incidents platforms on_open to_read autostart updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected engine end"
+# <<< account-run-keys
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -850,6 +853,8 @@ fl_worst() { # outcomes on stdin: the worst, in the order failed, act, not_check
     ($1 in r) && r[$1] > r[w] { w = $1 } END { print w }'
 }
 fl_name() { # the account as the result shows it: its name, or a keyed hash with --hash-accounts
+  # An account named machine, in any case, would read as the Mac's own row in the inventory value.
+  case "$1" in [Mm][Aa][Cc][Hh][Ii][Nn][Ee]) printf invalid-name; return ;; esac
   if [ -z "$HASHKEY" ] || [ "$1" = invalid-name ]; then printf '%s' "$1"; return; fi
   BS_K=$HASHKEY /usr/bin/perl -MDigest::SHA=hmac_sha256_hex -e 'print substr(hmac_sha256_hex($ARGV[0], $ENV{BS_K}), 0, 16)' -- "$1"
 }
@@ -931,12 +936,21 @@ EOF
   if [ ! -L "$_lk" ] && [ -f "$_lk" ] && [ "$(fl_ul "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
     fl_timed "${FM_LSOF_S:-10}" "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
     # A running loader is a sign only when root's own process holds the lock: any account can open a
-    # root-owned file it can read, and keep it open.
+    # root-owned file it can read, and keep it open. A holder whose account ps can't give (ps refused,
+    # or the process gone) leaves this part not checked, never read as another account's.
     _held=""; for _p in $(/usr/bin/tr -cs '0-9' ' ' < "$FL_TMP/lsof" 2>/dev/null); do
-      [ "$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' ')" = "$FL_OWNER" ] && { _held=root; break; }
-      _held=other
+      _pu=$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' \n')
+      case "$_pu" in
+        "$FL_OWNER") _held=root; break ;;
+        ''|*[!0-9]*) _held=unknown ;;
+        *) [ "$_held" = unknown ] || _held=other ;;
+      esac
     done
-    case "$_held" in root) FM_INC="$FM_INC litellm"; FM_ROOTLOADER=1 ;; other) FM_POSS="$FM_POSS litellm" ;; esac
+    case "$_held" in
+      root) FM_INC="$FM_INC litellm"; FM_ROOTLOADER=1 ;;
+      other) FM_POSS="$FM_POSS litellm" ;;
+      unknown) FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }who holds the LiteLLM loader's lock file could not be read" ;;
+    esac
     [ "$FL_TIMEOUT" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }a running LiteLLM loader could not be looked for in time"; }
   fi
   FM_AGENTS=$(printf '%s\n' $FM_AGENTS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
@@ -986,6 +1000,41 @@ fl_inventory() {
     fl_inv_out "stale: last run $(/bin/date -u -r "$_ep" +%Y-%m-%dT%H:%MZ)"; return 0
   fi
   fl_inv_out "$_iv"
+}
+
+# The inventory value: one line for an MDM's inventory field, no path, file name or key, at most 250
+# characters, in the order the report reads it: the accounts, the Mac's own row, old-install, then no
+# accounts. Too long, it keeps old-install and no accounts, and chooses the rest by need: act, then
+# not_checked, then review, then as many clear ones as fit, the Mac's row before an account at the same
+# level. Details go before rows: an act account keeps gh-token-monitor and its incidents, the Mac's row
+# drops its last parts first. It ends with +more whenever anything was cut; the saved file has the rest.
+fl_value() { # head parts accounts: parts each start with " | "; accounts 0 adds " | no accounts"
+  _vp=$2; [ "$3" -eq 0 ] && _vp="$_vp | no accounts"
+  _vv="$1$_vp"
+  if [ "${#_vv}" -le 250 ]; then printf '%s' "$_vv"; return; fi
+  printf '%s' "$_vp" | /usr/bin/awk -v head="$1" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
+      { n = 0; tail = ""
+        for (i = 2; i <= NF; i++) {
+          if ($i == "old-install" || $i == "no accounts") { tail = tail " | " $i; continue }
+          split($i, p, "[ ;]"); n++; mach[n] = (p[1] == "machine:"); k[n] = (p[2] in r) ? r[p[2]] : 5
+          base = p[1] " " p[2]; c = 0; cand[n, ++c] = $i
+          if (mach[n]) { m = split($i, d, "; "); for (x = m - 1; x >= 1; x--) { s = d[1]; for (y = 2; y <= x; y++) s = s "; " d[y]; cand[n, ++c] = s } }
+          else if (p[2] == "act") { key = base; m = split(substr($i, length(base) + 2), d, "; ")
+            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key = key (key == base ? " " : "; ") d[x]
+            if (key != base && key != $i) cand[n, ++c] = key }
+          if (cand[n, c] != base) cand[n, ++c] = base
+          nc[n] = c
+        }
+        room = 243 - length(head) - length(tail); cut = 0; stop = 0; acc = ""; mrow = ""
+        for (lv = 5; lv >= 0 && !stop; lv--) for (pass = 1; pass >= 0 && !stop; pass--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv && mach[j] == pass) {
+          got = 0
+          for (c = 1; c <= nc[j]; c++) if (length(cand[j, c]) + 3 <= room) { got = c; break }
+          if (got == 0) { cut = 1; stop = 1; continue }
+          if (got > 1) cut = 1
+          room -= length(cand[j, got]) + 3
+          if (mach[j]) mrow = " | " cand[j, got]; else acc = acc " | " cand[j, got]
+        }
+        print head acc mrow tail (cut ? " +more" : "") }'
 }
 
 fleet_main() {
@@ -1183,35 +1232,7 @@ fleet_main() {
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
   _sx=""; [ "$FL_OLDINST" = true ] && _sx=" old_install=yes"
   SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT$_sx"
-  # The inventory value: one line for an MDM's inventory field, no path, file name or key. Too
-  # long, it keeps the accounts that need attention first, cuts details before accounts (an act account
-  # keeps gh-token-monitor and its incidents), and ends with +more when anything was cut; the saved
-  # file has the rest.
-  INVENTORY_V="v1 $OUTCOME $_short$INV"; [ "$N_ACC" -eq 0 ] && INVENTORY_V="$INVENTORY_V | no accounts"
-  if [ "${#INVENTORY_V}" -gt 250 ]; then
-    _iv="v1 $OUTCOME $_short"
-    # The accounts that need attention come first, act, then not_checked, then review, then as many
-    # clear ones as fit. An account whose details don't fit keeps its outcome, and an act account its
-    # wiper and incidents too.
-    _iv=$(printf '%s' "$INV" | /usr/bin/awk -v head="$_iv" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
-      { n = 0
-        for (i = 2; i <= NF; i++) {
-          split($i, p, " "); n++; full[n] = $i; base[n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5
-          key[n] = base[n]
-          if (p[2] == "act") { m = split(substr($i, length(base[n]) + 2), d, "; ")
-            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key[n] = key[n] (key[n] == base[n] ? " " : "; ") d[x] }
-        }
-        out = head; cut = 0; stop = 0
-        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) {
-          if (length(out " | " full[j]) <= 243) { out = out " | " full[j]; continue }
-          cut = 1
-          if (key[j] != base[j] && length(out " | " key[j]) <= 243) out = out " | " key[j]
-          else if (length(out " | " base[j]) <= 243) out = out " | " base[j]
-          else stop = 1
-        }
-        print out (cut ? " +more" : "") }')
-    INVENTORY_V=$_iv
-  fi
+  INVENTORY_V=$(fl_value "v1 $OUTCOME $_short" "$INV" "$N_ACC")
   JSON_DOC="{
   \"blindspot\": \"1\",
   \"script\": \"$FL_REL\",

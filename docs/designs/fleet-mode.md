@@ -155,9 +155,27 @@ today, and no file paths, file names or key values:
 - The inventory value is a compact form of the whole result, one line, short enough for an MDM's
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
   `v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; run-without-asking claude-code; keys 2
-  anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. If it would not fit, it keeps the
-  outcome, then the accounts that need attention first (act, not_checked, review), then as many
-  clear ones as fit, and ends with `+more`; the full result is in the saved file.
+  anthropic,aws; sessions 3; ssh-open 1 | itadmin: clear`. Its parts, as both writers produce
+  them, in this order:
+  - `v1 <outcome> <YYYY-MM-DDTHH:MMZ>`, and on Windows ` other_profiles=<n>`, then for `failed`
+    ` reason=<why>`.
+  - The account rows, ` | <name>: <outcome>` and the account's findings, or the word that says why
+    it was not checked. A Mac lists every account, a PC the signed-in one.
+  - The machine's own row when its outcome is not `clear`: ` | machine: <act|review|not_checked>`,
+    then ` incidents <ids>`, `; possible <ids>` and, on a Mac, `; tmp-wiper`, each when it has one.
+    The PC writes `machine: not_checked` when a marker's owner can't be read and no finding makes it
+    `act`, and the Mac when a check of its own did not answer in time or a lock holder's account
+    can't be read.
+  - On a Mac, ` | old-install` while the two-file install is still there.
+  - On a Mac, ` | no accounts` when it has no account to check, always last.
+  - ` +more` when anything was cut.
+
+  If it would not fit, it keeps the outcome, `old-install` and `no accounts`, then chooses the rows
+  by need (act, not_checked, review, then as many clear ones as fit, the machine's row before an
+  account at the same level), and writes them in the order above. Details go before rows: an account
+  whose details don't fit keeps its outcome, an `act` one its `wiper` and `incidents` too, and the
+  machine's row drops its last parts first, never leaving a `;` at its end. It ends with `+more`;
+  the full result is in the saved file.
 - The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
   `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
   stopped running never shows an old `clear`.
@@ -769,10 +787,20 @@ PC, so an admin can see what one run left out.
     check keeps for profiles. A sourced file that is there but can't be followed or read, or a
     limit reached, counts as `1` only when some file read names a variable of the list: an
     ordinary setup sources completion scripts and plugins by the dozen, and one that names none of
-    the variables gives no reason to think the rest moves one. A tool's own script in its own
+    the variables gives no reason to think the rest moves one. This is deliberately conservative:
+    the check reads profiles as text, follows the loading it understands, and when it can't follow
+    something and a variable of the list is named, the account reads partly checked, never clear.
+    A shell file's path with a command in it, a nested `${...}` or a zsh glob qualifier other than
+    `(N)`, `(.)` and `(.N)` can't be followed. A path built from a variable of a loop or a function
+    (a loop variable, a shell `local` or one set from the arguments, a PowerShell `param()` or
+    `foreach` variable) is let pass only inside that loop or function, as far as the words of the
+    file show where it ends; outside it, it can't be followed. A tool's own script in its own
     folder (`$NVM_DIR/nvm.sh`, the `scripts` column of `data/folder-vars.tsv`) is not read: it sets
     the tool's variable to the folder it is in, the one the check reads. Any other file in that
-    folder is read. A variable set to one of the folders in that file's `windows` column, the
+    folder is read. nvm's and asdf's own scripts where Homebrew installs them (`data/tool-scripts.tsv`)
+    are not read either, matched only by the whole path written from Homebrew's prefix
+    (`/opt/homebrew/opt/nvm/nvm.sh`, `$(brew --prefix)/opt/...`, `$HOMEBREW_PREFIX/opt/...`); a file
+    with such a name anywhere else is read. A variable set to one of the folders in that file's `windows` column, the
     folders the check reads, counts as not moved; `tools/gen.sh` writes them, and gird-check.sh's
     `sh` column, into the scripts. A setting made by running a command is not seen: what a command
     prints for the shell to run (`eval "$(...)"`, `source <(...)`, `... | Invoke-Expression`), or a
@@ -893,8 +921,9 @@ The script then:
    can create a file there, but on NTFS a standard account cannot give a file to another owner, so
    the owner decides. A marker that Administrators, SYSTEM or a service owns is a finding for the
    PC. One the person owns is a finding on the person's row, at its incident's level, as the
-   person's own report shows it; the account run reports it. One another account owns, or whose
-   owner can't be read, is a possible sign for the PC. A link is nothing. A file with more than one
+   person's own report shows it; the account run reports it. One another account owns is a possible
+   sign for the PC. One whose owner can't be read is a possible sign too, and the PC reads partly
+   checked, never fully checked, unless a finding already makes it `act`. A link is nothing. A file with more than one
    name is only a possible sign for the PC, whoever owns it: any account can hard-link a file it can
    reach under a marker's name.
 7. Saves the result and prints the inventory value, one line, or with `-Json` the JSON and with
@@ -1016,7 +1045,10 @@ Graph, never a real tenant.
 - A profile that moves an agent's folders leaves the account partly checked, in a form the check
   does not know too, and in a file it sources from outside the home, two files down, by `&`,
   `Import-Module` or a manifest, in a sourcing loop, or placed in a tool's own folder. Past 64
-  files or 16 MiB read, it does only where a listed variable was named.
+  files or 16 MiB read, it does only where a listed variable was named. So does one that names a
+  listed variable beside a loop over a zsh glob qualifier the check does not parse, or a source line
+  outside the function whose `param()` builds its path; a file named like nvm's own script outside
+  Homebrew's prefix is read.
 - What nvm, nvm-windows, fnm, Volta, pnpm, bun, conda, mise, asdf (0.16 too), uv, pipx, Poetry,
   oh-my-posh, starship, posh-git, PSReadLine, Chocolatey, the Visual Studio developer shell and a
   corporate profile write moves nothing; nor does a default folder, a listed name in a comment,
@@ -1123,8 +1155,11 @@ Graph, never a real tenant.
   hard, and are only possible signs there, for the account that owns them or, when root owns them,
   for the Mac: any account can hard-link a file it can reach under a marker's name (a review found
   that through root's own copy of gird-check.sh, which root now empties and gives away before
-  deleting it); a running LiteLLM loader counts only when root's own process holds its lock; a
-  shell profile that moves an agent's folders leaves the account partly checked; each run is told
+  deleting it); a running LiteLLM loader counts only when root's own process holds its lock, and a holder whose
+  account `ps` cannot give leaves the Mac partly checked, never read as another account's; a
+  shell profile that moves an agent's folders leaves the account partly checked, read the way the
+  Windows account run reads it (`moved`, under Windows), with the same caps, apart from the forms only
+  PowerShell has; each run is told
   its time, so its session check stops in time; every path an account or admin could make is
   tested as a link first and never followed; a `find` or `lsof` that does not answer in time
   leaves the Mac's row not complete; agents in the account's own install folders
@@ -1153,8 +1188,9 @@ Graph, never a real tenant.
   `gird-check.sh`, the script each person runs, holds no root code: it keeps `--account-run`, the
   fixed lines one account's check sends back, and given `--all-users` it points to `gird-fleet.sh`.
   Root never sources `gird-check.sh`: `tools/gen.sh` writes the tables root reads (keys, agents set
-  to run without asking, the agent files whose rules can run commands on other machines, incidents, indicators, outdated tools, platforms) into `gird-fleet.sh` from
-  `data/`, and copies `gird-check.sh`'s agents table, which has no data file; `--check` covers both.
+  to run without asking, the agent files whose rules can run commands on other machines, incidents, indicators, outdated tools, platforms, the agents, and the keys
+  of the lines an account run sends) into `gird-fleet.sh` from `data/`; `--check` covers them, and
+  fails when the lines `gird-check.sh` prints are not those of `data/account-run.tsv`.
 - `gird-fleet.sh` needs to run from a file, since it copies `gird-check.sh` from its own folder for
   each account; from standard input it stops with a message. Root refuses to start (exit 13) unless
   `gird-fleet.sh`, `gird-check.sh` next to it and every folder above them are owned by root and

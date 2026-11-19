@@ -1,0 +1,42 @@
+# The lines an account run prints in fleet mode (gird-check.sh --account-run, gird-check.ps1
+# -AccountRun), one per key, in this order, and nothing else. Root on a Mac (gird-fleet.sh) and
+# gird-fleet.ps1 read them in this order and refuse any other; each reader checks a value by its key,
+# against the lists of its own OS. One key a line. After editing, run: bash tools/gen.sh, which writes
+# the keys into gird-fleet.sh and gird-fleet.ps1 and fails when the lines gird-check.sh or
+# gird-check.ps1 prints are not these, in this order.
+#   key     the key: lowercase letters and _
+# key
+v
+agents
+yolo
+remote
+tools
+mcp_servers
+mcp_token_files
+key_files
+key_providers
+history_keys
+session_files
+sessions_partial
+allow_list_keys
+ssh_open
+ak_links
+ssh_planted
+planted
+possible
+incidents
+platforms
+on_open
+to_read
+autostart
+updates
+wiper
+lock_only
+remove
+not_read
+moved
+tmp_marks
+tmp_wiper
+protected
+engine
+end

@@ -546,20 +546,14 @@ function Providers-In([string]$f, [string]$minus = '') {
 # file name or a name you gave an MCP server. gird.ai keeps the same lists and
 # drops anything else, so change all three together.
 # ---------------------------------------------------------------------------
+# MCP apps (data/mcp-clients.tsv), well-known MCP servers and the labels that mean them
+# (data/mcp-servers.tsv), and kinds of file (data/key-places.tsv).
+# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it.
 $MCP_CLIENT_IDS = 'claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other'
-$MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
-  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
-  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
-  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
-  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
-  shadcn deepwiki neon prisma netlify heroku azure huggingface'
-$MCP_ALIASES = 'gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
-  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
-  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
-  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
-  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
-  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface'
+$MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster shadcn deepwiki neon prisma netlify heroku azure huggingface'
+$MCP_ALIASES = 'gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres sqlite3=sqlite mongo=mongodb browserbasehq=browserbase notionhq=notion figma-dev-mode=figma figma-developer=figma brave=brave-search perplexity-ask=perplexity sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface'
 $KEY_PLACE_IDS = 'shell_rc shell_history env_file mcp_config agent_config project_file other'
+# <<< report-lists
 function Ids([string]$list) { , ($list -split '\s+' | Where-Object { $_ }) }
 
 # The well-known ids among MCP server labels, in list order, and how many labels
@@ -1478,10 +1472,9 @@ $ProjectMcp = @(@($Found) + @($LinkFiles) | Where-Object { $n = [IO.Path]::GetFi
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 
 # --- 1. Coding agents --------------------------------------------------------
-# name | commands (separated by ;) | install paths | folders that change when it is used | id
-# Windsurf became Devin Desktop on 2 June 2026: the devin-desktop command, and editor data under Devin,
-# not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
-# >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.ps1.
+# name | commands (separated by ;) | install paths | folders that change when it is used | id, from
+# data/agents.tsv
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
@@ -1494,8 +1487,7 @@ $Agents = @(
   @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
   @('Goose', 'goose', @((J $AppData 'Block/goose')), @($GooseData), 'goose'),
   @('Aider', 'aider', @(), @(), 'aider'),
-  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')),
-    @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
+  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')), @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
   @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
 )
 # <<< agents
@@ -1525,13 +1517,14 @@ $N_AG = $AgentIds.Count; $N_IDLE = $IdleIds.Count
 if ($N_AG -gt 0) { Progress "Found $(Plural $N_AG 'coding agent' 'coding agents'): $(First-Names $AgNames 3)" } else { Progress 'No coding agents found' }
 
 # --- 2. MCP servers ----------------------------------------------------------
-# app | client id, from the fixed list | config file
+# app | client id, from the fixed list | config file (data/mcp-files.tsv)
+# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it.
 $McpFiles = @(
   @('Claude Code', 'claude-code', (J $HomeDir '.claude.json')),
   @('Claude Desktop', 'claude-desktop', (J $AppData 'Claude/claude_desktop_config.json')),
   @('Cursor', 'cursor', (J $HomeDir '.cursor/mcp.json')),
   @('Windsurf', 'windsurf', (J $HomeDir '.codeium/windsurf/mcp_config.json')),
-  @('Devin Desktop', 'windsurf', (J $HomeDir '.codeium/mcp_config.json')),  # Windsurf renamed (docs.devin.ai/desktop/devin-desktop-faq)
+  @('Devin Desktop', 'windsurf', (J $HomeDir '.codeium/mcp_config.json')),
   @('Codex', 'codex', (J $HomeDir '.codex/config.toml')),
   @('Gemini CLI', 'gemini-cli', (J $HomeDir '.gemini/settings.json')),
   @('VS Code', 'vscode', (J $AppData 'Code/User/mcp.json')),
@@ -1542,6 +1535,7 @@ $McpFiles = @(
   @('Goose', 'goose', (J $AppData 'Block/goose/config/config.yaml')),
   @('OpenCode', 'opencode', (J $HomeDir '.config/opencode/opencode.json'))
 )
+# <<< mcp-files
 $McpRows = New-Object System.Collections.Generic.List[object]
 $N_MCP = 0; $N_MCP_TOKEN = 0; $McpTokFirst = ''; $N_MCP_CACHE = 0; $N_MCP_CACHEF = 0
 $McpTally = @{}; $McpNames = New-Object System.Collections.Generic.List[string]; $McpTokIds = New-Object System.Collections.Generic.List[string]
@@ -8016,11 +8010,12 @@ if ($SCORE -ge 90) { $GRADE = 'A' } elseif ($SCORE -ge 78) { $GRADE = 'B' } else
 $SCAN_SECS = [int][Math]::Floor(([DateTime]::UtcNow - $ScanT0).TotalSeconds)
 Progress-Clear
 
-# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it.
+# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it.
 $FolderVarsAgent = @('CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'CODEX_SQLITE_HOME', 'GEMINI_CLI_HOME', 'QWEN_HOME', 'COPILOT_HOME', 'CLINE_DIR', 'CLINE_DATA_DIR', 'CLINE_SESSION_DATA_DIR', 'CONTINUE_GLOBAL_DIR', 'GOOSE_PATH_ROOT', 'KIRO_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME')
 $FolderVarsTool = @('NVM_DIR', 'VOLTA_HOME', 'BUN_INSTALL', 'BUN_INSTALL_GLOBAL_DIR', 'N_PREFIX', 'ASDF_DATA_DIR', 'MISE_DATA_DIR', 'MISE_INSTALLS_DIR', 'MAMBA_ROOT_PREFIX', 'PIPX_HOME', 'PIPX_GLOBAL_HOME', 'WORKON_HOME', 'UV_CACHE_DIR', 'UV_TOOL_DIR', 'UV_PYTHON_INSTALL_DIR', 'POETRY_CACHE_DIR', 'POETRY_VIRTUALENVS_PATH', 'HATCH_DATA_DIR', 'XDG_CACHE_HOME', 'npm_config_prefix', 'NPM_CONFIG_PREFIX', 'npm_config_userconfig', 'NPM_CONFIG_USERCONFIG', 'CLINE_PROVIDER_SETTINGS_PATH', 'QWEN_RUNTIME_DIR', 'PNPM_HOME')
 $FolderVarsDefault = @{ 'XDG_CONFIG_HOME' = @((J $HomeDir '.config')); 'XDG_DATA_HOME' = @((J $HomeDir '.local/share')); 'NVM_DIR' = @((J $HomeDir '.nvm')); 'VOLTA_HOME' = @((J $LocalAppData 'Volta'), (J $HomeDir '.volta')); 'BUN_INSTALL' = @((J $HomeDir '.bun')); 'N_PREFIX' = @((J $HomeDir 'n')); 'ASDF_DATA_DIR' = @((J $HomeDir '.asdf')); 'MISE_DATA_DIR' = @((J $LocalAppData 'mise')); 'MAMBA_ROOT_PREFIX' = @((J $HomeDir 'micromamba')); 'PIPX_HOME' = @((J $HomeDir '.local/pipx'), (J $HomeDir 'pipx'), (J $LocalAppData 'pipx')); 'WORKON_HOME' = @((J $HomeDir '.virtualenvs'), (J $HomeDir 'Envs')); 'UV_CACHE_DIR' = @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv')); 'POETRY_CACHE_DIR' = @((J $LocalAppData 'pypoetry/Cache')); 'POETRY_VIRTUALENVS_PATH' = @((J $LocalAppData 'pypoetry/Cache/virtualenvs')); 'HATCH_DATA_DIR' = @((J $LocalAppData 'hatch')); 'npm_config_prefix' = @((J $AppData 'npm'), (J $HomeDir '.npm-global')); 'PNPM_HOME' = @((J $LocalAppData 'pnpm')) }
 $FolderVarsScripts = @{ 'NVM_DIR' = @('nvm.sh', 'bash_completion'); 'BUN_INSTALL' = @('_bun'); 'ASDF_DATA_DIR' = @('asdf.sh', 'asdf.fish', 'completions/asdf.bash') }
+$FolderVarsOwn = @('/opt/homebrew/opt/nvm/nvm.sh', '/usr/local/opt/nvm/nvm.sh', '$(brew --prefix)/opt/nvm/nvm.sh', '$(brew --prefix nvm)/nvm.sh', '$HOMEBREW_PREFIX/opt/nvm/nvm.sh', '${HOMEBREW_PREFIX}/opt/nvm/nvm.sh', '/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm', '/usr/local/opt/nvm/etc/bash_completion.d/nvm', '$(brew --prefix)/opt/nvm/etc/bash_completion.d/nvm', '$(brew --prefix nvm)/etc/bash_completion.d/nvm', '$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm', '${HOMEBREW_PREFIX}/opt/nvm/etc/bash_completion.d/nvm', '/opt/homebrew/opt/asdf/libexec/asdf.sh', '/usr/local/opt/asdf/libexec/asdf.sh', '$(brew --prefix)/opt/asdf/libexec/asdf.sh', '$(brew --prefix asdf)/libexec/asdf.sh', '$HOMEBREW_PREFIX/opt/asdf/libexec/asdf.sh', '${HOMEBREW_PREFIX}/opt/asdf/libexec/asdf.sh')
 # <<< folder-vars
 # An account run's lines: only numbers and ids from the fixed lists, in gird-check.sh --account-run's
 # order. gird-fleet.ps1 checks every line again and builds the row itself. On Windows protected is
@@ -8057,10 +8052,14 @@ if ($OptAcctRun) {
   # read. A file that exists but can't be followed or read, or a cap reached, counts only when some
   # file read names a variable of the list: an ordinary setup sources completion scripts and plugin
   # files by the dozen, and one that names none of the variables gives no reason to think the rest moves
-  # one. A tool's own script sourced from its own folder (FolderVarsScripts, such as nvm.sh) is not
-  # read: it sets the tool's variable to the folder it is in, the one the check reads. What a command
-  # prints (`eval "$(...)"`, `source <(...)`, `... | Invoke-Expression`) and a module imported by name
-  # are not followed.
+  # one. When unsure, the account reads partly checked, never clear: a shell path with a command in it,
+  # a nested ${...} or a zsh glob qualifier other than (N), (.) and (.N) can't be followed. A path built
+  # from a loop's or a function's own variable, or from an argument, does not count inside that loop
+  # or function: it names whatever the loop or function is given. A tool's own script sourced from its
+  # own folder (FolderVarsScripts, such as nvm.sh), or by its whole path from Homebrew's prefix
+  # (FolderVarsOwn, such as $HOMEBREW_PREFIX/opt/nvm/nvm.sh), is not read: it sets the tool's variable
+  # its own way. What a command prints (`eval "$(...)"`, `source <(...)`,
+  # `... | Invoke-Expression`) and a module imported by name are not followed.
   $fMvFiles = New-Object System.Collections.Generic.List[string]
   foreach ($f in $ShellRc) { $fMvFiles.Add($f) }
   foreach ($d in $DocsRoots) { $fMvFiles.Add((J $d 'WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1')) }
@@ -8100,12 +8099,14 @@ if ($OptAcctRun) {
   $fMvAlt = (@(@($FolderVarsAgent) + @($FolderVarsTool) | ForEach-Object { [regex]::Escape($_) }) -join '|')
   $fMvName = New-Object regex (('(?<![A-Za-z0-9_])(?:' + $fMvAlt + ')(?![A-Za-z0-9_])'), 'IgnoreCase')
   $fMvRead = New-Object regex (('(?:(?<e>\$\{?env:)|(?<b>\$\{#?)|\$|%|GetEnvironmentVariable\(\s*[''"]|Test-Path\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?)$'), 'IgnoreCase')
-  $fMvArg = '(?<p>"[^"]*"|''[^'']*''|[^\s;&|)}]+)'
-  $fMvSrcRx = New-Object regex (('(?:^|[;&|{(]|\b(?:then|else|do))\s*\\?(?:\.|source)\s+' + $fMvArg), 'IgnoreCase')
+  $fMvArg = '(?<p>"[^"]*"|''[^'']*''|(?:\$\{[^}]*\}|\$\([^)]*\)|[^\s;&|)}])+)'
+  $fMvSrcRx = New-Object regex (('(?:^|[;&|{(]|\b(?:then|else|do)|\bfor\s+[A-Za-z_][A-Za-z0-9_]*\s*\((?:[^()]|\([^()]*\))*\))\s*\\?(?:\.|source)\s+' + $fMvArg), 'IgnoreCase')
   $fMvAmpRx = New-Object regex ('(?:^|[;|{(=])\s*&\s*' + $fMvArg)
   $fMvImpRx = New-Object regex (('\b(?:Import-Module|ipmo)(?:\s+-(?:Force|Global|DisableNameChecking|PassThru|Name|Scope\s+\w+))*\s+' + $fMvArg), 'IgnoreCase')
   $fMvRootRx = New-Object regex ('^\s*(?:RootModule|ModuleToProcess)\s*=\s*(?:''(?<p>[^'']+)''|"(?<p>[^"]+)")', 'IgnoreCase')
-  $fMvForRx = New-Object regex ('\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<g>[^;]*?)\s*(?:;|$)|\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<g>[^)]*)\)')
+  $fMvForRx = New-Object regex ('\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<g>[^;]*?)\s*(?:;|$)|\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<g>(?:[^()]|\([^()]*\))*)\)')
+  # A function's own variables: PowerShell's param() and foreach variables, bound in Fleet-MvWalk.
+  $fMvPsFnRx = New-Object regex ('\b(?:param\s*\((?<l>[^)]*)\)|foreach\s*\(\s*\$(?<n>\w+)\s+in\b)', 'IgnoreCase')
   $fMvGciRx = New-Object regex ('(?:\bforeach\s*\(\s*\$(?<v>\w+)\s+in\s+\(?\s*)?(?<![\w-])(?:Get-ChildItem|gci|dir|ls)(?:\s+-(?:Path|LiteralPath|File|Recurse|Force))*\s+(?<g>"[^"]*"|''[^'']*''|[^\s;|)}-][^\s;|)}]*)', 'IgnoreCase')
   $fMvSAsgRx = New-Object regex ('^\s*(?:export\s+|local\s+|readonly\s+)?(?<n>[A-Za-z_][A-Za-z0-9_]*)=(?<v>"[^"]*"|''[^'']*''|[^\s;''"]*)\s*(?:;|$)')
   $fMvPAsgRx = New-Object regex ('^\s*\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<v>"[^"]*"|''[^'']*''|[^\s;''"]+)\s*;?\s*$', 'IgnoreCase')
@@ -8129,7 +8130,7 @@ if ($OptAcctRun) {
       elseif ($q -eq [char]'"') { if ($c -eq [char]'"') { $q = [char]0 } elseif ($c -eq $esc) { $i++ } }
       elseif ($c -eq [char]"'" -or $c -eq [char]'"') { $q = $c }
       elseif ($c -eq $esc) { $i++ }
-      elseif ($c -eq [char]'#' -and ($i -eq 0 -or " `t;(){|&".IndexOf($l[$i - 1]) -ge 0)) { return $l.Substring(0, $i) }
+      elseif ($c -eq [char]'#' -and ($i -eq 0 -or " `t;(){|&".IndexOf($l[$i - 1]) -ge 0) -and ($ps -or -not ($i -gt 1 -and $l[$i - 1] -eq [char]'(' -and " `t;(){|&".IndexOf($l[$i - 2]) -lt 0))) { return $l.Substring(0, $i) }
     }
     $l
   }
@@ -8153,6 +8154,7 @@ if ($OptAcctRun) {
   # command builds it.
   function Fleet-MvExpand([string]$raw, [string]$from, [bool]$ps) {
     if ($raw -match "^'([^']*)'$") { $x = $Matches[1] } else {
+      if ($raw -match '\$\{[^}]*\$') { return $null }
       $bad = @{ B = $false }
       $x = [regex]::Replace($raw.Replace('"', ''), '\$\{(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)(?::?-(?<d>[^}]*))?\}|\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)', [Text.RegularExpressions.MatchEvaluator] {
         param($m)
@@ -8165,7 +8167,7 @@ if ($OptAcctRun) {
     }
     if ($x -match '^~(?=[\\/]|$)') { $x = $HomeDir + $x.Substring(1) }
     if ($OnWindows -and $x -match '^/([A-Za-z])(?=/|$)') { $x = $Matches[1] + ':\' + $x.Substring(2) }
-    if ($x -match '[$`]' -or $x.StartsWith('(')) { return $null }
+    if ($x -match '[$`]' -or $x.StartsWith('(') -or (-not $ps -and $x -match '[()]')) { return $null }
     $x
   }
   function Fleet-MvLocal([string]$p) {
@@ -8214,10 +8216,87 @@ if ($OptAcctRun) {
     try { $fs = @([IO.Directory]::GetFiles($dir, $pat) | Sort-Object) } catch { $fMvSt.Lost = $true; return }
     foreach ($x in $fs) { Fleet-MvAdd $x }
   }
+  # Whether a path is built, in a way the reader understands, from a variable of the loop or function
+  # the line is in, or from an argument inside a function.
+  function Fleet-MvBound([string]$raw, $sc, [bool]$ps) {
+    $x = ($raw -replace '["'']', '') -replace '\$\{?(?:(?:env:)?[A-Za-z_][A-Za-z0-9_]*|[0-9@*#])\}?', ''
+    if ($x -match '[$`]' -or (-not $ps -and $x -match '[()]')) { return $false }
+    if ($raw -match '\$\{?(?:[0-9@*#]|args\b|_\b|PSItem\b)' -and (Fleet-MvInner $sc (-not $ps))) { return $true }
+    foreach ($m in [regex]::Matches($raw, '\$\{?(?:env:)?([A-Za-z_][A-Za-z0-9_]*)')) { if (Fleet-MvIsB $sc $m.Groups[1].Value) { return $true } }
+    $false
+  }
+  # Where a function or a loop begins and ends, as far as the words of a line tell: a name it binds
+  # counts as bound only inside it. A } or done at the start of a line ends every one.
+  function Fleet-MvSan([string]$l, [bool]$ps) {
+    $o = New-Object Text.StringBuilder; $q = [char]0; $d = 0; $esc = [char]'\'; if ($ps) { $esc = [char]'`' }
+    for ($i = 0; $i -lt $l.Length; $i++) {
+      $c = $l[$i]
+      if ($d -gt 0) { if ($c -eq [char]'{' -or $c -eq [char]'(') { $d++ } elseif ($c -eq [char]'}' -or $c -eq [char]')') { $d-- }; [void]$o.Append('_'); continue }
+      if ($q -ne [char]0) { if ($c -eq $q) { $q = [char]0 } elseif ($c -eq $esc -and $q -ne [char]"'" -and $i -lt $l.Length - 1) { [void]$o.Append('_'); $i++ }; [void]$o.Append('_'); continue }
+      if ($c -eq [char]"'" -or $c -eq [char]'"' -or (-not $ps -and $c -eq [char]'`')) { $q = $c; [void]$o.Append('_'); continue }
+      if ($c -eq $esc -and $i -lt $l.Length - 1) { [void]$o.Append('_').Append($l[$i + 1]); $i++; continue }
+      if ($c -eq [char]'$' -and $i -lt $l.Length - 1 -and ($l[$i + 1] -eq [char]'{' -or $l[$i + 1] -eq [char]'(')) { $d = 1; [void]$o.Append('__'); $i++; continue }
+      [void]$o.Append($c)
+    }
+    $o.ToString()
+  }
+  function Fleet-MvPush($sc, [string]$k) { $sc.Sid++; $sc.Stk.Add($sc.Sid); $sc.Kind[$sc.Sid] = $k; $sc.Act[$sc.Sid] = $true; $sc.Sid }
+  function Fleet-MvPop($sc, [string]$k) {
+    while ($sc.Stk.Count -gt 0) { $id = $sc.Stk[$sc.Stk.Count - 1]; $sc.Stk.RemoveAt($sc.Stk.Count - 1); $sc.Act[$id] = $false; if ($sc.Kind[$id] -eq $k -or ($k -eq 'b' -and $sc.Kind[$id] -eq 'f')) { return } }
+  }
+  function Fleet-MvBind($sc, [string]$n, $id) { if ($id) { if (-not $sc.Bnd.ContainsKey($n)) { $sc.Bnd[$n] = New-Object System.Collections.Generic.List[int] }; $sc.Bnd[$n].Add($id) } }
+  function Fleet-MvInner($sc, [bool]$fn) { for ($i = $sc.Stk.Count - 1; $i -ge 0; $i--) { $id = $sc.Stk[$i]; if ($sc.Act[$id] -and (-not $fn -or $sc.Kind[$id] -eq 'f')) { return $id } }; 0 }
+  function Fleet-MvIsB($sc, [string]$n) { if ($sc.Bnd.ContainsKey($n)) { foreach ($id in $sc.Bnd[$n]) { if ($sc.Act[$id]) { return $true } } }; $false }
+  function Fleet-MvWalk([string]$l, [string]$from, [bool]$ps, $loops, $sc, $srcs) {
+    $s = Fleet-MvSan $l $ps; $sc.Nr++; $nr = $sc.Nr
+    $tk = New-Object System.Collections.Generic.List[object]
+    if ($ps) {
+      foreach ($m in [regex]::Matches($s, '[{}]')) { $tk.Add(@($m.Index, $m.Value, $null)) }
+      foreach ($m in $fMvPsFnRx.Matches($l)) { if ($m.Groups['n'].Success) { $tk.Add(@($m.Index, 'foreach', $m.Groups['n'].Value)) } else { $tk.Add(@($m.Index, 'param', $m.Groups['l'].Value)) } }
+      $tk.Sort([Comparison[object]] { param($x, $y) $x[0].CompareTo($y[0]) })
+    } else { foreach ($m in [regex]::Matches($s, '[;&|()]|[^\s;&|()]+')) { $tk.Add(@($m.Index, $m.Value, $null)) } }
+    $si = 0; $cmd = $true
+    for ($k = 0; $k -lt $tk.Count; $k++) {
+      $t = [string]$tk[$k][1]
+      while ($si -lt $srcs.Count -and $srcs[$si][0] -le $tk[$k][0]) { Fleet-MvFollow $srcs[$si][1] $from $ps $srcs[$si][2] $loops $sc; $si++ }
+      if ($ps) {
+        if ($t -eq '{') { $id = Fleet-MvPush $sc 'b'; if ($sc.Pfor -and $nr - $sc.Pfl -le 1) { Fleet-MvBind $sc $sc.Pfor $id; $sc.Pfor = '' } }
+        elseif ($t -eq '}') { Fleet-MvPop $sc 'b' }
+        elseif ($t -eq 'foreach') { $sc.Pfor = [string]$tk[$k][2]; $sc.Pfl = $nr }
+        else { $id = Fleet-MvInner $sc $false; foreach ($x in [regex]::Matches([string]$tk[$k][2], '\$(\w+)')) { Fleet-MvBind $sc $x.Groups[1].Value $id } }
+        continue
+      }
+      if ($t -match '^[;&|()]$') { $cmd = $true; continue }
+      if (-not $cmd) { continue }
+      $cmd = $false
+      if ($t -eq '{') { if ($sc.Pfn -and $nr - $sc.Pfn -le 1) { [void](Fleet-MvPush $sc 'f'); $sc.Pfn = 0 } else { $id = Fleet-MvPush $sc 'b'; if ($sc.Pfor -and $nr - $sc.Pfl -le 1) { Fleet-MvBind $sc $sc.Pfor $id; $sc.Pfor = '' } }; $cmd = $true }
+      elseif ($t -eq '}') { Fleet-MvPop $sc 'b'; $cmd = $true }
+      elseif ($t -eq 'do') { $id = Fleet-MvPush $sc 'd'; if ($sc.Pfor -and $nr - $sc.Pfl -le 1) { Fleet-MvBind $sc $sc.Pfor $id; $sc.Pfor = '' }; $cmd = $true }
+      elseif ($t -eq 'done') { Fleet-MvPop $sc 'd'; $cmd = $true }
+      elseif ($t -cmatch '^(?:then|else|elif|if|while|until|!|builtin|command|time)$') { $cmd = $true }
+      elseif ($t -eq 'for' -and $k + 1 -lt $tk.Count -and [string]$tk[$k + 1][1] -match '^[A-Za-z_][A-Za-z0-9_]*$') {
+        $k++; $nm = [string]$tk[$k][1]; $sc.Pfor = $nm; $sc.Pfl = $nr
+        if ($k + 1 -lt $tk.Count -and $tk[$k + 1][1] -eq '(') {
+          $d = 0; for ($j = $k + 1; $j -lt $tk.Count; $j++) { if ($tk[$j][1] -eq '(') { $d++ } elseif ($tk[$j][1] -eq ')') { $d--; if ($d -eq 0) { break } } }
+          if ($j + 1 -lt $tk.Count -and [string]$tk[$j + 1][1] -notmatch '^(?:;|do|\{)$') { Fleet-MvBind $sc $nm (Fleet-MvPush $sc 'l'); $sc.Pfor = '' }
+          $k = $j; $cmd = $true
+        }
+      }
+      elseif ($t -ceq 'function' -and $k + 1 -lt $tk.Count) { $k++; $sc.Pfn = $nr; $cmd = $true }
+      elseif ($k + 2 -lt $tk.Count -and $tk[$k + 1][1] -eq '(' -and $tk[$k + 2][1] -eq ')') { $sc.Pfn = $nr; $k += 2; $cmd = $true }
+      elseif ($t -ceq 'local') { $id = Fleet-MvInner $sc $true; for ($j = $k + 1; $j -lt $tk.Count -and [string]$tk[$j][1] -notmatch '^[;&|()]$'; $j++) { $nm = [string]$tk[$j][1] -replace '=.*', ''; if ($id -and $nm -match '^[A-Za-z_][A-Za-z0-9_]*$') { Fleet-MvBind $sc $nm $id } }; $k = $j - 1 }
+      elseif ($t -match '^([A-Za-z_][A-Za-z0-9_]*)=') { $nm = $Matches[1]; $id = Fleet-MvInner $sc $true; if ($id -and $l.Substring($tk[$k][0] + $nm.Length + 1) -match '^["'']?\$\{?[0-9@*]') { Fleet-MvBind $sc $nm $id }; $cmd = $true }
+    }
+    while ($si -lt $srcs.Count) { Fleet-MvFollow $srcs[$si][1] $from $ps $srcs[$si][2] $loops $sc; $si++ }
+    while ($sc.Stk.Count -gt 0 -and $sc.Kind[$sc.Stk[$sc.Stk.Count - 1]] -eq 'l') { Fleet-MvPop $sc 'l' }
+    if ($s -match '^(?:\}|done)(?:[ \t;]|$)') { while ($sc.Stk.Count -gt 0) { Fleet-MvPop $sc 'x' } }
+  }
   # What a source line names. KIND is dot for . and source, amp for &, imp for Import-Module: those two
   # run a command or a module by name unless they name a PowerShell file.
-  function Fleet-MvFollow([string]$raw, [string]$from, [bool]$ps, [string]$kind, $loops) {
+  function Fleet-MvFollow([string]$raw, [string]$from, [bool]$ps, [string]$kind, $loops, $sc) {
     if ($raw.StartsWith('<') -or $raw -eq '-' -or $raw.StartsWith('{')) { return }
+    $bare = ($raw -replace '["'']', '') -replace '\\', '/'
+    foreach ($o in $FolderVarsOwn) { if ($fMvCmp.Equals($bare, $o)) { return } }
     $lv = [regex]::Match($raw, '^"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?(?:\.(?:FullName|PSPath|Path))?"?$')
     if ($lv.Success -and $loops.ContainsKey($lv.Groups[1].Value)) {
       foreach ($g in $loops[$lv.Groups[1].Value]) { $x = Fleet-MvExpand $g $from $ps; if ($null -eq $x) { $fMvSt.Lost = $true } else { Fleet-MvGlob $x } }
@@ -8225,7 +8304,7 @@ if ($OptAcctRun) {
     }
     $p = Fleet-MvExpand $raw $from $ps
     if ($kind -ne 'dot' -and ($null -eq $p -or $p -notmatch '[\\/]') -and $raw -notmatch '[\\/]|\.ps[dm]?1\b') { return }
-    if ($null -eq $p) { $fMvSt.Lost = $true; return }
+    if ($null -eq $p) { if (-not (Fleet-MvBound $raw $sc $ps)) { $fMvSt.Lost = $true }; return }
     if ($p -match '\.(?:exe|dll|com|bat|cmd)$' -or ($kind -ne 'dot' -and $p -notmatch '\.ps[dm]?1$')) { return }
     if ($p -match '[*?]') { Fleet-MvGlob $p } else { Fleet-MvAdd $p }
   }
@@ -8241,13 +8320,16 @@ if ($OptAcctRun) {
     } else {
       $m = $fMvSAsgRx.Match($l)
       if ($m.Success) { $fMvVars['env:' + $m.Groups['n'].Value] = Fleet-MvExpand $m.Groups['v'].Value $from $false }
-      foreach ($m in $fMvForRx.Matches($l)) { $loops[$m.Groups['v'].Value] = @($m.Groups['g'].Value -split '\s+' | Where-Object { $_ }) }
+      # zsh's glob qualifiers N and . (as in *.zsh(N) and *.zsh(.N)) come off a loop's globs; any other
+      # stays, and the path can't be told.
+      foreach ($m in $fMvForRx.Matches($l)) { $loops[$m.Groups['v'].Value] = @($m.Groups['g'].Value -split '\s+' | Where-Object { $_ } | ForEach-Object { if ($_ -match '[*?][^()]*\([N.]+\)$') { $_ -replace '\([N.]+\)$', '' } else { $_ } }) }
     }
   }
   function Fleet-MvScan([string]$f, [string]$t) {
     $ps = $f -match '\.ps[dm]?1$'
     if ($ps) { $t = [regex]::Replace($t, '<#[\s\S]*?#>', [Text.RegularExpressions.MatchEvaluator] { param($m) $m.Value -replace '[^\n]', '' }) }
     $loops = @{}
+    $sc = @{ Stk = (New-Object System.Collections.Generic.List[int]); Kind = @{}; Act = @{}; Bnd = @{}; Sid = 0; Pfn = 0; Pfor = ''; Pfl = 0; Nr = 0 }
     foreach ($l0 in ($t -split "`r?`n")) {
       $l = Fleet-MvCode $l0 $ps
       if ($l -notmatch '\S') { continue }
@@ -8258,10 +8340,15 @@ if ($OptAcctRun) {
         $r = $fMvRead.Match($l.Substring(0, $m.Index)); $post = $l.Substring($m.Index + $m.Length)
         if (-not $r.Success -or ($r.Groups['e'].Success -and $post -match '^\}?\s*(?:[-+*/%.?]|\?\?)?=(?!=)') -or ($r.Groups['b'].Success -and $post -match '^:?=')) { $w++ }
       }
-      foreach ($m in $fMvSrcRx.Matches($l)) { Fleet-MvFollow $m.Groups['p'].Value $f $ps 'dot' $loops }
+      $srcs = New-Object System.Collections.Generic.List[object]
+      foreach ($m in $fMvSrcRx.Matches($l)) { $srcs.Add(@($m.Groups['p'].Index, $m.Groups['p'].Value, 'dot')) }
       if ($ps) {
-        foreach ($m in $fMvAmpRx.Matches($l)) { Fleet-MvFollow $m.Groups['p'].Value $f $ps 'amp' $loops }
-        foreach ($m in $fMvImpRx.Matches($l)) { Fleet-MvFollow $m.Groups['p'].Value $f $ps 'imp' $loops }
+        foreach ($m in $fMvAmpRx.Matches($l)) { $srcs.Add(@($m.Groups['p'].Index, $m.Groups['p'].Value, 'amp')) }
+        foreach ($m in $fMvImpRx.Matches($l)) { $srcs.Add(@($m.Groups['p'].Index, $m.Groups['p'].Value, 'imp')) }
+        $srcs.Sort([Comparison[object]] { param($x, $y) $x[0].CompareTo($y[0]) })
+      }
+      Fleet-MvWalk $l $f $ps $loops $sc $srcs
+      if ($ps) {
         $m = $fMvRootRx.Match($l)
         if ($m.Success -and $f -match '\.psd1$' -and $m.Groups['p'].Value -match '\.ps[m]?1$') {
           $rm = $m.Groups['p'].Value; if (-not [IO.Path]::IsPathRooted($rm)) { $rm = J ([IO.Path]::GetDirectoryName($f)) $rm }; Fleet-MvAdd $rm
@@ -8389,9 +8476,17 @@ switch (([string]$archRaw).ToUpperInvariant()) { 'ARM64' { $ARCH_ID = 'arm64' } 
 $MODEL = ''
 if ($env:WT_SESSION) { $TERMAPP = 'windows-terminal' }
 else {
-  switch ($env:TERM_PROGRAM) {
-    'vscode' { $TERMAPP = 'vscode' } 'WezTerm' { $TERMAPP = 'wezterm' } 'Hyper' { $TERMAPP = 'hyper' } 'tmux' { $TERMAPP = 'tmux' }
-    'Apple_Terminal' { $TERMAPP = 'terminal' } 'iTerm.app' { $TERMAPP = 'iterm2' } 'WarpTerminal' { $TERMAPP = 'warp' } 'ghostty' { $TERMAPP = 'ghostty' }
+  switch -CaseSensitive ($env:TERM_PROGRAM) {
+# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it.
+    'Apple_Terminal' { $TERMAPP = 'terminal' }
+    'iTerm.app' { $TERMAPP = 'iterm2' }
+    'vscode' { $TERMAPP = 'vscode' }
+    'WarpTerminal' { $TERMAPP = 'warp' }
+    'ghostty' { $TERMAPP = 'ghostty' }
+    'WezTerm' { $TERMAPP = 'wezterm' }
+    'Hyper' { $TERMAPP = 'hyper' }
+    'tmux' { $TERMAPP = 'tmux' }
+# <<< term-programs
     default { if ($env:TERM_PROGRAM) { $TERMAPP = 'other' } elseif ($OnWindows) { $TERMAPP = 'conhost' } else { $TERMAPP = 'unknown' } }
   }
 }

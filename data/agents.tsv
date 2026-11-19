@@ -1,0 +1,29 @@
+# Coding agents: what section 1 lists, the ids the report and an account run send, and where each is
+# looked for. One line each, tab separated. After editing, run: bash tools/gen.sh
+# Windsurf became Devin Desktop on 2 June 2026: Devin.app, the devin-desktop command, and editor data
+# under Devin, not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
+#   name        the agent's name in the report
+#   commands    its commands, separated by ;, or - for none
+#   sh-install  for gird-check.sh: where it is installed, separated by ;, or - for none. A path is from
+#               ~, {AS} (Application Support, or the place the OS keeps it), {GOOSE_CFG} or {GOOSE_DATA},
+#               or is one of {APP_CLAUDE}, {APP_CURSOR}, {APP_WINDSURF}, {APP_DEVIN} and
+#               {APP_ANTIGRAVITY}, the app bundles on a Mac
+#   sh-used     for gird-check.sh: the folders that change when it is used, as sh-install
+#   ps-install  for gird-check.ps1: where it is installed, from ~, {LOCALAPPDATA} or {APPDATA}, or
+#               {GOOSE_DATA}, or - for none
+#   ps-used     for gird-check.ps1: the folders that change when it is used, as ps-install
+#   id          the id the report and an account run send: lowercase letters, digits and -
+# name	commands	sh-install	sh-used	ps-install	ps-used	id
+Claude Code	claude	~/.claude	~/.claude/projects	~/.claude	~/.claude/projects	claude-code
+Claude Desktop	-	{APP_CLAUDE};{AS}/Claude	{AS}/Claude	{LOCALAPPDATA}/AnthropicClaude;{APPDATA}/Claude	{APPDATA}/Claude	claude-desktop
+Codex	codex	~/.codex	~/.codex/sessions	~/.codex	~/.codex/sessions	codex
+Gemini CLI	gemini	~/.gemini	~/.gemini/tmp	~/.gemini	~/.gemini/tmp	gemini-cli
+Cursor	cursor	{APP_CURSOR};~/.cursor	{AS}/Cursor/User/workspaceStorage	{LOCALAPPDATA}/Programs/cursor;~/.cursor	{APPDATA}/Cursor/User/workspaceStorage	cursor
+Windsurf	windsurf;devin-desktop	{APP_WINDSURF};{APP_DEVIN};~/.codeium/windsurf	{AS}/Windsurf/User/workspaceStorage;{AS}/Devin/User/workspaceStorage	{LOCALAPPDATA}/Programs/Windsurf;~/.codeium/windsurf	{APPDATA}/Windsurf/User/workspaceStorage;{APPDATA}/Devin/User/workspaceStorage	windsurf
+Antigravity	antigravity	{APP_ANTIGRAVITY}	{AS}/Antigravity/User/workspaceStorage	{LOCALAPPDATA}/Programs/Antigravity	{APPDATA}/Antigravity/User/workspaceStorage	antigravity
+GitHub Copilot CLI	copilot	~/.copilot	~/.copilot	~/.copilot	~/.copilot	copilot-cli
+OpenCode	opencode	~/.config/opencode;~/.local/share/opencode	~/.local/share/opencode	~/.config/opencode;~/.local/share/opencode	~/.local/share/opencode	opencode
+Goose	goose	{GOOSE_CFG}	{GOOSE_DATA}	{APPDATA}/Block/goose	{GOOSE_DATA}	goose
+Aider	aider	-	-	-	-	aider
+Cline	-	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev;{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks;{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	{APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev;{APPDATA}/Cursor/User/globalStorage/saoudrizwan.claude-dev	{APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks;{APPDATA}/Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks	cline
+Continue	-	~/.continue	~/.continue/sessions	~/.continue	~/.continue/sessions	continue

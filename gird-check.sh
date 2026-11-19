@@ -1070,54 +1070,20 @@ command_secret() {
 # Fixed lists for the case-study counts in the report. Only ids from these
 # lists, counts and yes/no leave the Mac: never a path, a file name or a name
 # you gave an MCP server. gird.ai keeps the same lists and drops anything else,
-# so change both together. Agent ids are in the table under "1. Coding agents".
+# so change both together. Agent ids are in data/agents.tsv.
 # ---------------------------------------------------------------------------
 # Key providers, for key_providers and provider_files (names in providers_in).
 
-# MCP clients, for mcp_clients and mcp_token_clients, by the file the servers are in:
-#   claude-code     ~/.claude.json, and .mcp.json in a project folder
-#   claude-desktop  Claude Desktop's claude_desktop_config.json
-#   cursor          ~/.cursor/mcp.json, and .cursor/mcp.json in a project folder
-#   windsurf        ~/.codeium/windsurf/mcp_config.json
-#   codex           ~/.codex/config.toml
-#   gemini-cli      ~/.gemini/settings.json
-#   vscode          VS Code's mcp.json, and .vscode/mcp.json in a project folder
-#   cline           Cline's cline_mcp_settings.json, in VS Code or in Cursor
-#   continue        ~/.continue/config.json and ~/.continue/config.yaml
-#   goose           ~/.config/goose/config.yaml
-#   opencode        ~/.config/opencode/opencode.json
-#   other           any other file
+# MCP apps, for mcp_clients and mcp_token_clients (data/mcp-clients.tsv); well-known MCP servers, for
+# mcp_known, and the labels that mean them (data/mcp-servers.tsv says how a server's label is matched:
+# any other label only adds one to mcp_other, and is never sent); and kinds of file, for key_places
+# (data/key-places.tsv).
+# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it.
 MCP_CLIENT_IDS="claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other"
-
-# Well-known MCP servers, for mcp_known. A server's label, its name in the
-# config, is lowercased and cut to the part after the last / (so @scope/name
-# gives name). Spaces, dots and underscores become -, and mcp- and server- come
-# off the front and -mcp and -server off the end, as often as they appear. When
-# nothing is left, as with @playwright/mcp, the part before the / is used. What
-# remains must equal an id below or an alias (alias=id). Any other label only
-# adds one to mcp_other, and is never sent.
-MCP_KNOWN_IDS="github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
-  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
-  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
-  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
-  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
-  shadcn deepwiki neon prisma netlify heroku azure huggingface"
-MCP_ALIASES="gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
-  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
-  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
-  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
-  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
-  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface"
-
-# Places, for key_places. Each file counted in key_files gets the first that fits:
-#   shell_rc       ~/.zshrc .zprofile .zshenv .zlogin .bashrc .bash_profile .profile, fish's config.fish
-#   shell_history  the shell and REPL history files, the same ones history_keys counts
-#   env_file       .env, .env.* and .envrc, anywhere
-#   mcp_config     an MCP config from the list of clients above, at home or in a project folder
-#   agent_config   other coding-agent settings, like ~/.claude/settings.json or ~/.aider.conf.yml
-#   project_file   any other file found in a project folder
-#   other          anything else
+MCP_KNOWN_IDS="github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster shadcn deepwiki neon prisma netlify heroku azure huggingface"
+MCP_ALIASES="gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres sqlite3=sqlite mongo=mongodb browserbasehq=browserbase notionhq=notion figma-dev-mode=figma figma-developer=figma brave=brave-search perplexity-ask=perplexity sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface"
 KEY_PLACE_IDS="shell_rc shell_history env_file mcp_config agent_config project_file other"
+# <<< report-lists
 
 in_list() { for _il in $2; do [ "$_il" = "$1" ] && return 0; done; return 1; } # id list
 # The well-known ids among MCP server labels ("=label" lines on stdin), in list
@@ -1443,10 +1409,8 @@ case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=w
 # Git Bash, MSYS2 and Cygwin uppercase only a few Windows variables' names (PROGRAMFILES and SYSTEMDRIVE
 # among them, their runtime's environ.cc), so ProgramData keeps its Windows spelling.
 _pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-${ProgramData:-}}"); _pd=${_pd%/}; fi
-# Coding agents: name | commands | install paths | folders that change when it is used | id
-# Windsurf became Devin Desktop on 2 June 2026: Devin.app, the devin-desktop command, and editor data
-# under Devin, not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
-# >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.sh.
+# Coding agents (data/agents.tsv): name | commands | install paths | folders that change when it is used | id
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
@@ -2136,8 +2100,8 @@ if [ "$N_AG" -gt 0 ]; then progress i "Found $(plural "$N_AG" "coding agent" "co
 else progress i "No coding agents found"; fi
 
 # --- 2. MCP servers ----------------------------------------------------------
-# app | client id, from the fixed list | config file
-# Devin Desktop, Windsurf renamed, keeps its MCP config in ~/.codeium (docs.devin.ai/desktop/devin-desktop-faq).
+# app | client id, from the fixed list | config file (data/mcp-files.tsv)
+# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it.
 MCP_FILES="Claude Code|claude-code|$H/.claude.json
 Claude Desktop|claude-desktop|$AS/Claude/claude_desktop_config.json
 Cursor|cursor|$H/.cursor/mcp.json
@@ -2152,6 +2116,7 @@ Continue|continue|$H/.continue/config.json
 Continue|continue|$H/.continue/config.yaml
 Goose|goose|$GOOSE_CFG/config.yaml
 OpenCode|opencode|$H/.config/opencode/opencode.json"
+# <<< mcp-files
 
 MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""; N_MCP_CACHE=0; N_MCP_CACHEF=0
 # Configs inside plugin catalogs and caches (Codex's .tmp/plugins, Claude's plugins folder) are
@@ -9007,17 +8972,235 @@ if [ "$ACCTRUN" -eq 1 ]; then
   _poss=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=litellm
   _poss=$(printf '%s\n' $_poss $EXT_CHECK_TAGS | fleet_ids)
   # Root starts the run with a clean environment, so a variable a shell profile sets to move an agent's
-  # folders (CLAUDE_CONFIG_DIR and the like) is not followed: the account is partly checked then. The
-  # profiles are read, never run.
-  # The npm and Python tools' folder variables move a folder only when set somewhere other than the
-  # default the run reads: nvm's, Volta's and bun's installers write their own default into a profile.
-  # One with no default (fleet_dflt, from data/folder-vars.tsv) counts whenever it is set.
-  _mv_set='^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?'
-# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it.
+  # or a tool's folders (CLAUDE_CONFIG_DIR, NVM_DIR and the like, data/folder-vars.tsv) is not
+  # followed: the account is partly checked then. A variable set to a folder the run reads anyway
+  # (fleet_dflt: nvm's, Volta's and bun's installers write their own default into a profile) moves
+  # nothing.
+  # One file's lines, for the reader above: prints M when a line moves a folder, N when one names a
+  # listed variable, L for a file it sources that can't be told, V name value for a value a later path
+  # may use, A path for a file it sources, G path for the files a glob or a folder names. A line that
+  # names a listed variable other than to read it ($X, ${X}, ${X:-y}) moves a folder, unless it is
+  # export X=value, X=value or fish's set -x X value, of a folder the run reads for X (mv_seen).
+  FLEET_MV_AWK='
+    function code(l,   q, i, c, n) {
+      if (index(l, "#") == 0) return l
+      q = ""; n = length(l)
+      for (i = 1; i <= n; i++) {
+        c = substr(l, i, 1)
+        if (q == SQ) { if (c == SQ) q = ""; continue }
+        if (q == DQ) { if (c == DQ) q = ""; else if (c == "\\") i++; continue }
+        if (c == SQ || c == DQ) { q = c; continue }
+        if (c == "\\") { i++; continue }
+        if (c == "#" && (i == 1 || index(" \t;(){|&", substr(l, i - 1, 1)) > 0) && !(i > 2 && substr(l, i - 1, 1) == "(" && index(" \t;(){|&", substr(l, i - 2, 1)) == 0)) return substr(l, 1, i - 1)
+      }
+      return l
+    }
+    function seen(n,   v) { if (ENVIRON[n] != "") return ENVIRON[n]; return (n in DF) ? DF[n] : NUL }
+    function getv(n,   v) {
+      if (n in VARS) return VARS[n]
+      if (n == "HOME") return H
+      if (n in LISTED) { v = seen(n); if (v != NUL) return v }
+      if (ENVIRON[n] != "") return ENVIRON[n]
+      return NUL
+    }
+    function repl(x, from, to,   o, k) { o = ""; while ((k = index(x, from)) > 0) { o = o substr(x, 1, k - 1) to; x = substr(x, k + length(from)) }; return o x }
+    function expand(raw,   x, out, m, d, hasd, v, bad) {
+      if (raw ~ /^\047[^\047]*\047$/) x = substr(raw, 2, length(raw) - 2)
+      else {
+        if (raw ~ /\$\{[^}]*\$/) return NUL
+        x = repl(raw, DQ, ""); out = ""; bad = 0
+        while (match(x, /\$\{[A-Za-z_][A-Za-z0-9_]*(:?-[^}]*)?\}|\$[A-Za-z_][A-Za-z0-9_]*/)) {
+          m = substr(x, RSTART, RLENGTH); out = out substr(x, 1, RSTART - 1); x = substr(x, RSTART + RLENGTH); d = ""; hasd = 0
+          if (substr(m, 2, 1) == "{") {
+            m = substr(m, 3, length(m) - 3)
+            if (match(m, /:?-/)) { d = substr(m, RSTART + RLENGTH); hasd = 1; m = substr(m, 1, RSTART - 1) }
+          } else m = substr(m, 2)
+          v = getv(m)
+          if (v == NUL && hasd) v = expand(d)
+          if (v == NUL) { bad = 1; v = "" }
+          out = out v
+        }
+        x = out x
+        if (bad) return NUL
+      }
+      if (x ~ /^~(\/|$)/) x = H substr(x, 2)
+      if (x ~ /[$`()]/) return NUL
+      return x
+    }
+    function value(v,   x, k, o) {
+      sub(/^[ \t]+/, "", v)
+      if (substr(v, 1, 1) == SQ) { x = substr(v, 2); return substr(x, 1, index(x, SQ) - 1) }
+      if (substr(v, 1, 1) == DQ) { x = substr(v, 2); x = substr(x, 1, index(x, DQ) - 1) }
+      else if (match(v, /^[^ \t;)}#,]+/)) x = substr(v, 1, RLENGTH)
+      else return NUL
+      if (x ~ /^~(\/|$)/) x = H substr(x, 2)
+      x = repl(x, "${HOME}", H); o = ""
+      while ((k = index(x, "$HOME")) > 0) {
+        if (substr(x, k + 5, 1) ~ /[A-Za-z0-9_]/) { o = o substr(x, 1, k + 4); x = substr(x, k + 5); continue }
+        o = o substr(x, 1, k - 1) H; x = substr(x, k + 5)
+      }
+      x = o x
+      if (x ~ /[$`(]/) return NUL
+      return x
+    }
+    function norm(p) { gsub(/\/+/, "/", p); if (length(p) > 1) sub(/\/$/, "", p); return p }
+    function bound(raw,   x, v) {
+      x = raw; gsub(/["\047]/, "", x); gsub(/\$\{?([A-Za-z_][A-Za-z0-9_]*|[0-9@*#])\}?/, "", x); if (x ~ /[$`()]/) return 0
+      if (raw ~ /\$\{?[0-9@*#]/ && inner(1)) return 1
+      x = raw
+      while (match(x, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { v = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH); gsub(/[${]/, "", v); if (isb(v)) return 1 }
+      return 0
+    }
+    function follow(raw,   v, n, g, i, x, p) {
+      if (raw ~ /^</ || raw == "-" || raw ~ /^\{/) return
+      x = raw; gsub(/["\047]/, "", x)
+      for (i = 1; i <= NOWN; i++) if (x == OWN[i]) return
+      if (raw ~ /^"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?$/) {
+        v = raw; gsub(/["${}]/, "", v)
+        if (v in LOOPS) { n = split(LOOPS[v], g, " "); for (i = 1; i <= n; i++) { x = expand(g[i]); if (x == NUL) print "L"; else print "G\t" x }; return }
+      }
+      p = expand(raw)
+      if (p == NUL) { if (!bound(raw)) print "L"; return }
+      print ((p ~ /[*?]/) ? "G\t" : "A\t") p
+    }
+    function track(l,   r, n, v, w, pre, a, i, k) {
+      r = l; sub(/^[ \t]+/, "", r); sub(/^(export|local|readonly)[ \t]+/, "", r)
+      if (match(r, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
+        n = substr(r, 1, RLENGTH - 1); r = substr(r, RLENGTH + 1)
+        if (match(r, /^("[^"]*"|\047[^\047]*\047|[^ \t;\047"]*)/)) {
+          v = substr(r, 1, RLENGTH)
+          if (substr(r, RLENGTH + 1) ~ /^[ \t]*(;|$)/) { VARS[n] = expand(v); print "V\t" n "\t" VARS[n] }
+        }
+      }
+      r = l
+      while (match(r, /for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+[^;]*|for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)/)) {
+        pre = substr(r, 1, RSTART - 1); w = substr(r, RSTART, RLENGTH); r = substr(r, RSTART + RLENGTH)
+        if (pre ~ /[A-Za-z0-9_]$/) continue
+        sub(/^for[ \t]+/, "", w); match(w, /^[A-Za-z_][A-Za-z0-9_]*/); n = substr(w, 1, RLENGTH); w = substr(w, RLENGTH + 1)
+        if (w ~ /^[ \t]*\(/) { sub(/^[ \t]*\(/, "", w); sub(/\)$/, "", w) } else sub(/^[ \t]+in[ \t]+/, "", w)
+        gsub(/[ \t]+/, " ", w); sub(/^ /, "", w); sub(/ $/, "", w)
+        k = split(w, a, " "); w = ""; for (i = 1; i <= k; i++) { if (a[i] ~ /[*?][^()]*\([N.]+\)$/) sub(/\([N.]+\)$/, "", a[i]); w = w (i > 1 ? " " : "") a[i] }
+        LOOPS[n] = w
+      }
+    }
+    function sources(l,   i, n, pre, rest, c) {
+      n = length(l)
+      for (i = 1; i <= n; i++) {
+        rest = substr(l, i)
+        if (!match(rest, /^\\?(\.|source)[ \t]+/)) continue
+        pre = substr(l, 1, i - 1); sub(/[ \t]+$/, "", pre)
+        if (!(pre == "" || pre ~ /[;&|{(]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|else|do)$/ || pre ~ /(^|[^A-Za-z0-9_])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)$/)) continue
+        if (i > 1 && substr(l, i - 1, 1) !~ /[ \t;&|{()]/) continue
+        rest = substr(rest, RLENGTH + 1)
+        if (match(rest, /^("[^"]*"|\047[^\047]*\047|(\$\{[^}]*\}|\$\([^)]*\)|[^ \t;&|)}])+)/)) { NSRC++; SP[NSRC] = i; SR[NSRC] = substr(rest, 1, RLENGTH) }
+      }
+    }
+    # Where a function or a loop begins and ends, as far as the words of a line tell: a name it binds
+    # (a loop variable, a local of a function or one set from its arguments) counts as bound only inside it.
+    # A } or done at the start of a line ends every one.
+    function san(l,   o, n, i, c, q, d) {
+      o = ""; n = length(l); q = ""; d = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(l, i, 1)
+        if (d > 0) { if (c == "{" || c == "(") d++; else if (c == "}" || c == ")") d--; o = o "_"; continue }
+        if (q != "") { if (c == q) q = ""; else if (c == "\\" && q == DQ && i < n) { o = o "_"; i++ }; o = o "_"; continue }
+        if (c == SQ || c == DQ || c == "`") { q = c; o = o "_"; continue }
+        if (c == "\\" && i < n) { o = o "_" substr(l, i + 1, 1); i++; continue }
+        if (c == "$" && (substr(l, i + 1, 1) == "{" || substr(l, i + 1, 1) == "(")) { d = 1; o = o "__"; i++; continue }
+        o = o c
+      }
+      return o
+    }
+    function push(k) { SID++; NS++; STK[NS] = SID; KIND[SID] = k; ACT[SID] = 1; return SID }
+    function pop(k,   id) { while (NS > 0) { id = STK[NS--]; ACT[id] = 0; if (KIND[id] == k || (k == "b" && KIND[id] == "f")) return } }
+    function bind(n, id) { if (id) BND[n] = BND[n] " " id }
+    function inner(f,   i) { for (i = NS; i > 0; i--) if (ACT[STK[i]] && (!f || KIND[STK[i]] == "f")) return STK[i]; return 0 }
+    function isb(n,   a, k, i) { k = split(BND[n], a, " "); for (i = 1; i <= k; i++) if (ACT[a[i]]) return 1; return 0 }
+    function walk(l,   s, r, p, nt, tk, tp, k, j, t, cmd, si, nm, f, d) {
+      s = san(l); r = s; p = 0; nt = 0
+      while (match(r, /[;&|()]|[^ \t;&|()]+/)) { nt++; tk[nt] = substr(r, RSTART, RLENGTH); tp[nt] = p + RSTART; p += RSTART + RLENGTH - 1; r = substr(r, RSTART + RLENGTH) }
+      cmd = 1; si = 1
+      for (k = 1; k <= nt; k++) {
+        t = tk[k]; while (si <= NSRC && SP[si] <= tp[k]) follow(SR[si++])
+        if (t ~ /^[;&|()]$/) { cmd = 1; continue }
+        if (!cmd) continue
+        cmd = 0
+        if (t == "{") { if (PFN && NR - PFN <= 1) { push("f"); PFN = 0 } else { f = push("b"); if (PFOR != "" && NR - PFL <= 1) { bind(PFOR, f); PFOR = "" } }; cmd = 1 }
+        else if (t == "}") { pop("b"); cmd = 1 }
+        else if (t == "do") { f = push("d"); if (PFOR != "" && NR - PFL <= 1) { bind(PFOR, f); PFOR = "" }; cmd = 1 }
+        else if (t == "done") { pop("d"); cmd = 1 }
+        else if (t ~ /^(then|else|elif|if|while|until|!|builtin|command|time)$/) cmd = 1
+        else if (t == "for" && k < nt && tk[k + 1] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+          nm = tk[++k]; PFOR = nm; PFL = NR
+          if (k < nt && tk[k + 1] == "(") {
+            d = 0; for (j = k + 1; j <= nt; j++) { if (tk[j] == "(") d++; else if (tk[j] == ")" && --d == 0) break }
+            if (j < nt && tk[j + 1] !~ /^(;|do|\{)$/) { bind(nm, push("l")); PFOR = "" }
+            k = j; cmd = 1
+          }
+        }
+        else if (t == "function" && k < nt) { k++; PFN = NR; cmd = 1 }
+        else if (k + 2 <= nt && tk[k + 1] == "(" && tk[k + 2] == ")") { PFN = NR; k += 2; cmd = 1 }
+        else if (t == "local") { f = inner(1); for (j = k + 1; j <= nt && tk[j] !~ /^[;&|()]$/; j++) { nm = tk[j]; sub(/=.*/, "", nm); if (f && nm ~ /^[A-Za-z_][A-Za-z0-9_]*$/) bind(nm, f) }; k = j - 1 }
+        else if (match(t, /^[A-Za-z_][A-Za-z0-9_]*=/)) { if ((f = inner(1)) && substr(l, tp[k] + RLENGTH) ~ /^["\047]?\$\{?[0-9@*]/) bind(substr(t, 1, RLENGTH - 1), f); cmd = 1 }
+      }
+      while (si <= NSRC) follow(SR[si++])
+      while (NS > 0 && KIND[STK[NS]] == "l") ACT[STK[NS--]] = 0
+      if (s ~ /^(\}|done)([ \t;]|$)/) while (NS > 0) ACT[STK[NS--]] = 0
+    }
+    BEGIN {
+      SQ = "\047"; DQ = "\""; NUL = "\001"; H = ENVIRON["MV_H"]
+      n = split(ENVIRON["MV_NAMES"], a, "|"); for (i = 1; i <= n; i++) LISTED[a[i]] = 1
+      n = split(ENVIRON["MV_DFLT"], a, "\n"); for (i = 1; i <= n; i++) if ((k = index(a[i], "\t")) > 0) { v = substr(a[i], 1, k - 1); if (!(v in DF)) DF[v] = substr(a[i], k + 1); DS[v] = DS[v] "\n" substr(a[i], k + 1) "\n" }
+      NOWN = split(ENVIRON["MV_OWN"], OWN, "\n")
+      n = split(ENVIRON["MV_VARS"], a, "\n"); for (i = 1; i <= n; i++) if ((k = index(a[i], "\t")) > 0) VARS[substr(a[i], 1, k - 1)] = substr(a[i], k + 1)
+    }
+    {
+      l = code($0); if (l !~ /[^ \t]/) next
+      track(l); w = 0; r = l; p = 0
+      while (match(r, /[A-Za-z0-9_]+/)) {
+        t = substr(r, RSTART, RLENGTH); pre = substr(l, 1, p + RSTART - 1); post = substr(r, RSTART + RLENGTH)
+        p += RSTART + RLENGTH - 1; r = post
+        if (!(t in LISTED)) continue
+        named = 1
+        if (pre !~ /\$\{?#?$/ || pre ~ /\$#$/) w++
+        else if (pre ~ /\$\{#?$/ && post ~ /^:?=/) w++
+      }
+      NSRC = 0; sources(l); walk(l)
+      if (w == 0 || l ~ /^[ \t]*export([ \t]+[A-Za-z_][A-Za-z0-9_]*)+[ \t]*;?[ \t]*$/) next
+      if (w > 1) { print "M"; exit }
+      r = l; sub(/^[ \t]+/, "", r); n = ""
+      if (match(r, /^(export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=/)) { n = substr(r, 1, RLENGTH - 1); sub(/^export[ \t]+/, "", n); r = substr(r, RLENGTH + 1) }
+      else if (match(r, /^set[ \t]+-[A-Za-z]*x[A-Za-z]*[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+/)) { n = substr(r, 1, RLENGTH); sub(/[ \t]+$/, "", n); sub(/.*[ \t]/, "", n); r = substr(r, RLENGTH + 1) }
+      if (!(n in LISTED) || !match(r, /^(\047[^\047]*\047|"[^"]*"|[^ \t;\047"#,)]+)/) || substr(r, RLENGTH + 1) !~ /^[ \t]*;?[ \t]*$/) { print "M"; exit }
+      v = value(substr(r, 1, RLENGTH))
+      if (v == NUL || index(ENVIRON[n] != "" ? "\n" norm(ENVIRON[n]) "\n" : DS[n], "\n" norm(v) "\n") == 0) { print "M"; exit }
+    }
+    END { if (named) print "N" }'
+# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it.
   _mv_agent='CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME'
   _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR|PNPM_HOME'
+  _mv_own='/opt/homebrew/opt/nvm/nvm.sh
+/usr/local/opt/nvm/nvm.sh
+$(brew --prefix)/opt/nvm/nvm.sh
+$(brew --prefix nvm)/nvm.sh
+$HOMEBREW_PREFIX/opt/nvm/nvm.sh
+${HOMEBREW_PREFIX}/opt/nvm/nvm.sh
+/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm
+/usr/local/opt/nvm/etc/bash_completion.d/nvm
+$(brew --prefix)/opt/nvm/etc/bash_completion.d/nvm
+$(brew --prefix nvm)/etc/bash_completion.d/nvm
+$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm
+${HOMEBREW_PREFIX}/opt/nvm/etc/bash_completion.d/nvm
+/opt/homebrew/opt/asdf/libexec/asdf.sh
+/usr/local/opt/asdf/libexec/asdf.sh
+$(brew --prefix)/opt/asdf/libexec/asdf.sh
+$(brew --prefix asdf)/libexec/asdf.sh
+$HOMEBREW_PREFIX/opt/asdf/libexec/asdf.sh
+${HOMEBREW_PREFIX}/opt/asdf/libexec/asdf.sh'
   fleet_dflt() { # variable: the folders the run reads when it is not set
     case "$1" in
+      XDG_CONFIG_HOME) printf '%s\n' "$H/.config" ;;
+      XDG_DATA_HOME) printf '%s\n' "$H/.local/share" ;;
       NVM_DIR) printf '%s\n' "$H/.nvm" ;;
       VOLTA_HOME) printf '%s\n' "$H/.volta" ;;
       BUN_INSTALL) printf '%s\n' "$H/.bun" ;;
@@ -9037,23 +9220,102 @@ if [ "$ACCTRUN" -eq 1 ]; then
       PNPM_HOME) printf '%s\n' "$H/Library/pnpm" "$H/.local/share/pnpm" ;;
     esac
   }
+  fleet_scripts() { # variable: its tool's own scripts in its folder, which set it to that folder
+    case "$1" in
+      NVM_DIR) printf '%s\n' nvm.sh bash_completion ;;
+      BUN_INSTALL) printf '%s\n' _bun ;;
+      ASDF_DATA_DIR) printf '%s\n' asdf.sh asdf.fish completions/asdf.bash ;;
+    esac
+  }
 # <<< folder-vars
   _moved=0
-  for _pf in "$H/.zshenv" "$H/.zprofile" "$H/.zshrc" "$H/.bash_profile" "$H/.bashrc" "$H/.profile" "$H/.config/fish/config.fish"; do
-    [ -f "$_pf" ] && fleet_ok "$_pf" || continue
-    grep -qE "${_mv_set}(${_mv_agent})([=[:space:]])" "$_pf" 2>/dev/null && _moved=1
-    _mvl=$(awk -v re="${_mv_set}(${_mv_tool})([=[:space:]])" 'match($0, re) { n = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?/, "", n); sub(/[=[:space:]]$/, "", n); v = substr($0, RSTART + RLENGTH); sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+#.*$/, "", v); sub(/[[:space:]]*;.*$/, "", v); sub(/[[:space:]]+$/, "", v); print n "\t" v }' "$_pf" 2>/dev/null)
-    while IFS="$TAB" read -r _mvn _mvv; do
-      [ -n "$_mvn" ] || continue
-      _mvv=${_mvv#\"}; _mvv=${_mvv%\"}; _mvv=${_mvv#\'}; _mvv=${_mvv%\'}
-      case "$_mvv" in '$HOME'*) _mvv="$H${_mvv#\$HOME}" ;; '${HOME}'*) _mvv="$H${_mvv#\$\{HOME\}}" ;; '~'*) _mvv="$H${_mvv#\~}" ;; esac
-      _mvv=${_mvv%/}
-      _mvd=$(fleet_dflt "$_mvn")
-      if [ -z "$_mvd" ] || ! printf '%s\n' "$_mvd" | grep -qxF -- "$_mvv"; then _moved=1; fi
+  # Every file read, as text, never run: the profiles, then each file they source with . or source, to
+  # any depth, and the files of a loop that sources a folder's files. Only an existing regular file
+  # on a local disk is read: never a link, a device or pipe, a file under /Volumes or /Network, or one
+  # over FLEET_MAX bytes. At most 64 files and 16 MiB in all are read. A sourced file that exists but
+  # can't be followed or read, or a cap reached, counts only when some file read names a listed
+  # variable: ordinary setups source completion scripts and plugins by the dozen. When unsure, the
+  # account reads partly checked, never clear: a path with a command in it, a nested ${...} or a zsh
+  # glob qualifier other than (N), (.) and (.N) can't be followed. A path built from a loop's or a
+  # function's own variable, or from an argument, does not count inside that loop or function: it
+  # names whatever the loop or function is given (a plugin loader's). A tool's own script sourced from
+  # its own folder (fleet_scripts, such as nvm.sh), or by its whole path from Homebrew's prefix
+  # (_mv_own, such as $HOMEBREW_PREFIX/opt/nvm/nvm.sh), is not read: it sets the tool's variable its
+  # own way. What a command prints (eval "$(...)", source <(...)) is not followed. gird-check.ps1
+  # -AccountRun reads them the same way.
+  _mv_names="$_mv_agent|$_mv_tool"; _mv_dflt=""; _mv_scr=""
+  for _mvn in $(printf '%s' "$_mv_names" | tr '|' ' '); do
+    _mv_dflt="$_mv_dflt$(fleet_dflt "$_mvn" | sed "s/^/$_mvn$TAB/")$NL"
+    _mv_scr="$_mv_scr$(fleet_scripts "$_mvn" | sed "s/^/$_mvn$TAB/")$NL"
+  done
+  # mv_seen VAR: the folders the run reads for VAR: its own value, else its defaults.
+  mv_seen() { _mvs=$(printenv "$1" 2>/dev/null); if [ -n "$_mvs" ]; then printf '%s\n' "$_mvs"; else fleet_dflt "$1"; fi; }
+  mv_norm() { printf '%s' "$1" | sed -e 's#//*#/#g' -e 's#\(.\)/$#\1#'; }
+  mv_linked() { # path: 0 when it, or a folder on its way inside the home, is a link
+    _mvk=$1
+    while [ -n "$_mvk" ] && [ "$_mvk" != / ]; do
+      [ -L "$_mvk" ] && return 0
+      case "$_mvk" in "$H"/*) ;; *) return 1 ;; esac
+      _mvk=${_mvk%/*}
+    done
+    return 1
+  }
+  mv_local() { case "$1" in //*|/Volumes/*|/Network/*|/net/*) return 1 ;; /*) return 0 ;; esac; return 1; }
+  mv_add() { # path: queues a file a line sources
+    case "$1" in /*) ;; *) _mv_lost=1; return ;; esac
+    _mvp=$(mv_norm "$1")
+    while IFS="$TAB" read -r _mvv _mvs; do
+      [ -n "$_mvv" ] || continue
+      mv_seen "$_mvv" | while IFS= read -r _mvd; do [ "$(mv_norm "$_mvd/$_mvs")" = "$_mvp" ] && echo own; done | grep -q own && return
     done <<EOF
-$_mvl
+$_mv_scr
+EOF
+    mv_local "$_mvp" || { _mv_lost=1; return; }
+    if [ ! -e "$_mvp" ] && [ ! -L "$_mvp" ]; then behind_closed "$_mvp" && _mv_lost=1; return; fi
+    [ -d "$_mvp" ] && [ ! -L "$_mvp" ] && return
+    if [ ! -f "$_mvp" ] || mv_linked "$_mvp"; then _mv_lost=1; return; fi
+    _mv_q="$_mv_q$_mvp$NL"
+  }
+  mv_glob() { # path with * or ? in its last part, or a folder: queues each file it names, in order
+    _mvg=$(mv_norm "$1")
+    mv_local "$_mvg" || { _mv_lost=1; return; }
+    if [ -d "$_mvg" ]; then _mvg="$_mvg/*"; else case "$_mvg" in *[*?]*) ;; *) mv_add "$_mvg"; return ;; esac; fi
+    _mvgd=${_mvg%/*}; _mvgp=${_mvg##*/}
+    case "$_mvgd$_mvgp" in *\[*) _mv_lost=1; return ;; esac
+    case "$_mvgd" in ''|*[*?]*) _mv_lost=1; return ;; esac
+    mv_linked "$_mvgd" && { _mv_lost=1; return; }
+    if [ ! -d "$_mvgd" ]; then behind_closed "$_mvgd" && _mv_lost=1; return; fi
+    for _mvgf in "$_mvgd"/$_mvgp; do { [ -e "$_mvgf" ] || [ -L "$_mvgf" ]; } && mv_add "$_mvgf"; done
+  }
+  _mv_q=""; _mv_done="$NL"; _mv_lost=0; _mv_named=0; _mv_files=0; _mv_bytes=0; _mv_vars=""
+  for _pf in "$H/.zshrc" "$H/.zprofile" "$H/.zshenv" "$H/.zlogin" "$H/.bashrc" "$H/.bash_profile" "$H/.profile" "$H/.config/fish/config.fish"; do
+    [ -f "$_pf" ] && fleet_ok "$_pf" && _mv_q="$_mv_q$_pf$NL"
+  done
+  while [ -n "$_mv_q" ] && [ "$_moved" -eq 0 ]; do
+    _pf=${_mv_q%%"$NL"*}; _mv_q=${_mv_q#*"$NL"}
+    case "$_mv_done" in *"$NL$_pf$NL"*) continue ;; esac
+    _mv_done="$_mv_done$_pf$NL"
+    [ -f "$_pf" ] || continue
+    [ -r "$_pf" ] || { _mv_lost=1; continue; }
+    _mvz=$(/usr/bin/stat -L -f %z -- "$_pf" 2>/dev/null); case "$_mvz" in ''|*[!0-9]*) _mv_lost=1; continue ;; esac
+    [ "$_mvz" -le "$FLEET_MAX" ] || { _mv_lost=1; continue; }
+    if [ "$_mv_files" -ge 64 ] || [ $((_mv_bytes + _mvz)) -gt 16777216 ]; then _mv_lost=1; break; fi
+    _mv_files=$((_mv_files + 1)); _mv_bytes=$((_mv_bytes + _mvz))
+    _mvo=$(MV_NAMES="$_mv_names" MV_H="$H" MV_DFLT="$_mv_dflt" MV_VARS="$_mv_vars" MV_OWN="$_mv_own" awk "$FLEET_MV_AWK" "$_pf" 2>/dev/null) || _mv_lost=1
+    while IFS="$TAB" read -r _mvk _mvx _mvy; do
+      case "$_mvk" in
+        M) _moved=1 ;;
+        N) _mv_named=1 ;;
+        L) _mv_lost=1 ;;
+        V) _mv_vars="$_mv_vars$_mvx$TAB$_mvy$NL" ;;
+        A) [ "$_moved" -eq 0 ] && mv_add "$_mvx" ;;
+        G) [ "$_moved" -eq 0 ] && mv_glob "$_mvx" ;;
+      esac
+    done <<EOF
+$_mvo
 EOF
   done
+  [ "$_mv_lost" -eq 1 ] && [ "$_mv_named" -eq 1 ] && _moved=1
   {
     echo "v=1"
     echo "agents=$(printf '%s' "$AGENT_IDS" | fleet_ids)"
@@ -9169,8 +9431,16 @@ case "${__CFBundleIdentifier:-}" in
   net.kovidgoyal.kitty) TERMAPP=kitty ;; com.github.wez.wezterm) TERMAPP=wezterm ;; org.alacritty|io.alacritty) TERMAPP=alacritty ;;
   co.zeit.hyper) TERMAPP=hyper ;; com.jetbrains.*) TERMAPP=jetbrains ;;
   *) case "${TERM_PROGRAM:-}" in
-       Apple_Terminal) TERMAPP=terminal ;; iTerm.app) TERMAPP=iterm2 ;; vscode) TERMAPP=vscode ;; WarpTerminal) TERMAPP=warp ;;
-       ghostty) TERMAPP=ghostty ;; WezTerm) TERMAPP=wezterm ;; Hyper) TERMAPP=hyper ;; tmux) TERMAPP=tmux ;;
+# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it.
+       Apple_Terminal) TERMAPP=terminal ;;
+       iTerm.app) TERMAPP=iterm2 ;;
+       vscode) TERMAPP=vscode ;;
+       WarpTerminal) TERMAPP=warp ;;
+       ghostty) TERMAPP=ghostty ;;
+       WezTerm) TERMAPP=wezterm ;;
+       Hyper) TERMAPP=hyper ;;
+       tmux) TERMAPP=tmux ;;
+# <<< term-programs
        '') TERMAPP=unknown ;; *) TERMAPP=other ;;
      esac ;;
 esac

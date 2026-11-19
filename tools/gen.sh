@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Writes the data files into gird-check.sh and gird-check.ps1 (and the tables root reads into
-# gird-fleet.sh, with gird-check.sh's agents table), between each block's "# >>> <name>"
+# Writes the data files into gird-check.sh and gird-check.ps1 (and the tables the fleet scripts read
+# into gird-fleet.sh and gird-fleet.ps1), between each block's "# >>> <name>"
 # and "# <<< <name>" markers: key types (data/keys.tsv), published example and emulator values
 # that are not keys (data/public-values.tsv), agent session locations
 # (data/sessions.tsv), bad npm packages (data/bad-npm.tsv), incidents (data/incidents.tsv), bad
@@ -10,10 +10,15 @@
 # versions with a published fix (data/outdated.tsv), extensions that shipped malware
 # (data/bad-extensions.tsv), SSH keys malware adds to authorized_keys (data/ssh-keys.tsv), GitHub
 # Actions that were compromised (data/actions.tsv), commands that run commands on other machines,
-# with the agent files whose saved rules can allow them (data/remote-commands.tsv), and variables
-# that move an agent's or a tool's folders (data/folder-vars.tsv). The scripts stay single files
-# people can download and check. It also writes the lists in docs/checks.md, between
-# "<!-- >>> checks" and "<!-- <<< checks -->".
+# with the agent files whose saved rules can allow them (data/remote-commands.tsv), variables that
+# move an agent's or a tool's folders (data/folder-vars.tsv), tools' own scripts a profile sources
+# (data/tool-scripts.tsv), coding agents (data/agents.tsv), the fixed lists the report sends
+# (data/mcp-clients.tsv, data/mcp-servers.tsv, data/key-places.tsv), the terminal ids TERM_PROGRAM
+# names (data/term-programs.tsv), MCP configs (data/mcp-files.tsv) and the lines an account run
+# prints (data/account-run.tsv, written into the fleet scripts, and checked against what
+# gird-check.sh and gird-check.ps1 print). The scripts stay single files people can download and
+# check. It also writes the lists in docs/checks.md, between "<!-- >>> checks" and
+# "<!-- <<< checks -->".
 #
 #   bash tools/gen.sh           rewrite the blocks, and build blindspot-fleet.sh and blindspot-fleet.ps1
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files, or a one-file build
@@ -219,7 +224,37 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
             if (a[i] !~ /^~\/[^\/]/ && !(win && a[i] ~ /^\{(LOCALAPPDATA|APPDATA)\}\/[^\/]/)) return 0 }
           return 1 }
         function scripts_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (a[i] !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/) return 0; return 1 }
-        NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || ($2 == "agent" && $3 != "-") || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }')
+        NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }'
+      rows data/term-programs.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[A-Za-z0-9._-]+$/ || $2 !~ /^[a-z0-9-]+$/ || seen[$1]++ { print "data/term-programs.tsv: " $0 }'
+      rows data/tool-scripts.tsv | awk -F '\t' 'NF != 3 || $1 !~ /^[a-z0-9][a-z0-9_.@+-]*$/ || $2 !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/ || $3 == "" || seen[$1 "/" $2]++ { print "data/tool-scripts.tsv: " $0 }'
+      # A path is a token or ~, then folders and files made of plain characters; - is none.
+      rows data/agents.tsv | awk -F '\t' '
+        function paths_ok(s, toks,   n, a, i, t) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) {
+            if (a[i] ~ /^\{[A-Z_]+\}/) { t = substr(a[i], 2, index(a[i], "}") - 2); if (index(" " toks " ", " " t " ") == 0) return 0; r = substr(a[i], length(t) + 3) }
+            else if (a[i] ~ /^~\//) r = substr(a[i], 2); else return 0
+            if (r != "" && r !~ /^(\/[A-Za-z0-9 ._-]+)+$/) return 0
+            if (r == "" && a[i] ~ /^~/) return 0 }
+          return 1 }
+        NF != 7 || $1 == "" || $1 ~ /[\047"`$|\\;]/ || $2 !~ /^(-|[a-z0-9._-]+(;[a-z0-9._-]+)*)$/ ||
+        !paths_ok($3, "AS GOOSE_CFG GOOSE_DATA APP_CLAUDE APP_CURSOR APP_WINDSURF APP_DEVIN APP_ANTIGRAVITY") || !paths_ok($4, "AS GOOSE_CFG GOOSE_DATA") ||
+        !paths_ok($5, "LOCALAPPDATA APPDATA GOOSE_DATA") || !paths_ok($6, "LOCALAPPDATA APPDATA GOOSE_DATA") ||
+        $7 !~ /^[a-z0-9-]+$/ || seen[$7]++ { print "data/agents.tsv: " $0 }'
+      # other, for any other file, is the last client and the only one no config of data/mcp-files.tsv names.
+      rows data/mcp-clients.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[a-z0-9-]+$/ || $2 == "" || seen[$1]++ { print "data/mcp-clients.tsv: " $0 } { last = $1 } END { if (last != "other") print "data/mcp-clients.tsv: other is not the last line" }'
+      rows data/mcp-servers.tsv | awk -F '\t' '{ n = split($2, a, ","); ok = NF == 2 && $1 ~ /^[a-z0-9-]+$/ && !seen[$1]++ && ($2 == "-" || n > 0)
+          if ($2 != "-") for (i = 1; i <= n; i++) { if (a[i] !~ /^[a-z0-9-]+$/ || (a[i] in seen) || (a[i] in al)) ok = 0; al[a[i]] = 1 }
+          if (!ok) print "data/mcp-servers.tsv: " $0 }
+        END { for (x in al) if (x in seen) print "data/mcp-servers.tsv: " x " is an id and an alias" }'
+      rows data/key-places.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[a-z_]+$/ || $2 == "" || seen[$1]++ { print "data/key-places.tsv: " $0 }'
+      _cl=" $(rows data/mcp-clients.tsv | cut -f1 | tr '\n' ' ')"
+      rows data/mcp-files.tsv | awk -F '\t' -v cl="$_cl" '
+        function path_ok(p, toks,   t, r) {
+          if (p ~ /^\{[A-Z_]+\}\//) { t = substr(p, 2, index(p, "}") - 2); if (index(" " toks " ", " " t " ") == 0) return 0; r = substr(p, length(t) + 3) }
+          else if (p ~ /^~\//) r = substr(p, 2); else return 0
+          return r ~ /^(\/[A-Za-z0-9 ._-]+)+$/ }
+        NF != 4 || $1 == "" || $1 ~ /[\047"`$|\\;]/ || $2 == "other" || index(cl, " " $2 " ") == 0 || !path_ok($3, "AS GOOSE_CFG") || !path_ok($4, "APPDATA LOCALAPPDATA") { print "data/mcp-files.tsv: " $0 }'
+      rows data/account-run.tsv | awk -F '\t' 'NF != 1 || $1 !~ /^[a-z_]+$/ || seen[$1]++ { print "data/account-run.tsv: " $0 }
+        NR == 1 { first = $1 } { last = $1 } END { if (first != "v" || last != "end") print "data/account-run.tsv: the first key is not v or the last not end" }')
 # A published value names a key type of data/keys.tsv and holds only key characters. It is a part of
 # the value, never one its key pattern matches by itself: the list must not hold a whole key.
 KEY_IDS=" $(rows data/keys.tsv | cut -f1 | tr '\n' ' ')"
@@ -836,26 +871,106 @@ rows data/actions.tsv | awk -F '\t' '
   { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
   END { print ")"; print "# <<< actions" }' > "$WORK/actions.ps1"
 # --- variables that move an agent's or a tool's folders, for an account run ---------------
-# gird-check.sh gets the list of each kind and fleet_dflt, the folders of the sh column; gird-check.ps1
-# the lists, the folders of the windows column and the tools' own scripts. Windows reads a variable's
-# name in any case, so a PowerShell table keeps a name's first line (npm_config_prefix's).
-rows data/folder-vars.tsv | awk -F '\t' '
+# gird-check.sh gets the list of each kind, fleet_dflt, the folders of the sh column, fleet_scripts,
+# the tools' own scripts, and _mv_own, the whole paths of data/tool-scripts.tsv; gird-check.ps1 the lists, the
+# folders of the windows column and the tools' own scripts of both files. Windows reads a variable's name in any case, so a PowerShell table keeps a name's first line
+# (npm_config_prefix's).
+# Each script of data/tool-scripts.tsv as a profile writes its whole path from Homebrew's prefix.
+OWN_ALL=$(rows data/tool-scripts.tsv | awk -F '\t' '{ for (i = 1; i <= 2; i++) print (i == 1 ? "/opt/homebrew" : "/usr/local") "/opt/" $1 "/" $2
+  print "$(brew --prefix)/opt/" $1 "/" $2; print "$(brew --prefix " $1 ")/" $2; print "$HOMEBREW_PREFIX/opt/" $1 "/" $2; print "${HOMEBREW_PREFIX}/opt/" $1 "/" $2 }')
+OWN_PS=$(printf '%s\n' "$OWN_ALL" | sed "s/.*/'&'/" | paste -sd, - | sed 's/,/, /g')
+rows data/folder-vars.tsv | OWN="$OWN_ALL" awk -F '\t' '
   { L[$2] = L[$2] (L[$2] == "" ? "" : "|") $1
-    if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }
-  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
-        print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"
+    if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" }
+    if ($5 != "-") { n = split($5, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " " a[i]; S = S "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it."
+        print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"; print "  _mv_own=\047" ENVIRON["OWN"] "\047"
         print "  fleet_dflt() { # variable: the folders the run reads when it is not set"; print "    case \"$1\" in"; printf "%s", D; print "    esac"; print "  }"
+        print "  fleet_scripts() { # variable: its tool\047s own scripts in its folder, which set it to that folder"; print "    case \"$1\" in"; printf "%s", S; print "    esac"; print "  }"
         print "# <<< folder-vars" }' > "$WORK/folder-vars.sh"
-rows data/folder-vars.tsv | awk -F '\t' '
+rows data/folder-vars.tsv | awk -F '\t' -v own="$OWN_PS" '
   function ps(p) { if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"; if (p ~ /^\{LOCALAPPDATA\}/) return "(J $LocalAppData \047" substr(p, 16) "\047)"; return "(J $AppData \047" substr(p, 11) "\047)" }
   function list(s, f,   n, a, i, o) { n = split(s, a, ";"); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") (f ? ps(a[i]) : "\047" a[i] "\047"); return "@(" o ")" }
   { L[$2] = L[$2] (L[$2] == "" ? "" : ", ") "\047" $1 "\047"
     if ($4 != "-" && !(tolower($1) in w)) W = W (W == "" ? "" : "; ") "\047" $1 "\047 = " list($4, 1)
     w[tolower($1)] = 1
     if ($5 != "-") S = S (S == "" ? "" : "; ") "\047" $1 "\047 = " list($5, 0) }
-  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it."
         print "$FolderVarsAgent = @(" L["agent"] ")"; print "$FolderVarsTool = @(" L["tool"] ")"
-        print "$FolderVarsDefault = @{ " W " }"; print "$FolderVarsScripts = @{ " S " }"; print "# <<< folder-vars" }' > "$WORK/folder-vars.ps1"
+        print "$FolderVarsDefault = @{ " W " }"; print "$FolderVarsScripts = @{ " S " }"; print "$FolderVarsOwn = @(" own ")"; print "# <<< folder-vars" }' > "$WORK/folder-vars.ps1"
+
+# --- coding agents -------------------------------------------------------------
+# Rows are name|commands|install paths|folders that change when it is used|id, paths separated by ;.
+rows data/agents.tsv | awk -F '\t' '
+  function sh(s,   n, a, i, o, p) { if (s == "-") return ""; n = split(s, a, ";"); o = ""
+    for (i = 1; i <= n; i++) { p = a[i]; if (p ~ /^~/) p = "$H" substr(p, 2); else { sub(/^\{/, "$", p); sub(/\}/, "", p) }; o = o (i > 1 ? ";" : "") p }
+    return o }
+  BEGIN { print "# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it."; printf "AGENTS=\"" }
+  { printf "%s%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, ($2 == "-" ? "" : $2), sh($3), sh($4), $7 }
+  END { print "\""; print "# <<< agents" }' > "$WORK/agents.sh"
+rows data/agents.tsv | awk -F '\t' '
+  function ps(p,   r) {
+    if (p == "{GOOSE_DATA}") return "$GooseData"
+    if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"
+    if (p ~ /^\{LOCALAPPDATA\}\//) return "(J $LocalAppData \047" substr(p, 16) "\047)"
+    return "(J $AppData \047" substr(p, 11) "\047)" }
+  function list(s,   n, a, i, o) { if (s == "-") return "@()"; n = split(s, a, ";"); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") ps(a[i]); return "@(" o ")" }
+  { r[NR] = sprintf("  @(\047%s\047, \047%s\047, %s, %s, \047%s\047)", $1, ($2 == "-" ? "" : $2), list($5), list($6), $7); n = NR }
+  END { print "# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it."; print "$Agents = @("
+        for (i = 1; i <= n; i++) print r[i] (i < n ? "," : ""); print ")"; print "# <<< agents" }' > "$WORK/agents.ps1"
+
+# --- the fixed lists the report sends ------------------------------------------------
+# MCP apps (data/mcp-clients.tsv), well-known MCP servers and their aliases (data/mcp-servers.tsv),
+# and kinds of file (data/key-places.tsv), as space-separated strings, aliases as alias=id.
+{ rows data/mcp-clients.tsv | awk -F '\t' '{ print "C\t" $1 }'; rows data/mcp-servers.tsv | awk -F '\t' '{ print "S\t" $1 "\t" $2 }'
+  rows data/key-places.tsv | awk -F '\t' '{ print "P\t" $1 }'; } | awk -F '\t' '
+  $1 == "C" { c = c (c == "" ? "" : " ") $2 }
+  $1 == "P" { pl = pl (pl == "" ? "" : " ") $2 }
+  $1 == "S" { k = k (k == "" ? "" : " ") $2; if ($3 != "-") { n = split($3, a, ","); for (i = 1; i <= n; i++) al = al (al == "" ? "" : " ") a[i] "=" $2 } }
+  END {
+    print "# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it."
+    print "MCP_CLIENT_IDS=\"" c "\""; print "MCP_KNOWN_IDS=\"" k "\""; print "MCP_ALIASES=\"" al "\""; print "KEY_PLACE_IDS=\"" pl "\""
+    print "# <<< report-lists"
+    print "# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it." > "/dev/stderr"
+    print "$MCP_CLIENT_IDS = \047" c "\047" > "/dev/stderr"; print "$MCP_KNOWN_IDS = \047" k "\047" > "/dev/stderr"
+    print "$MCP_ALIASES = \047" al "\047" > "/dev/stderr"; print "$KEY_PLACE_IDS = \047" pl "\047" > "/dev/stderr"
+    print "# <<< report-lists" > "/dev/stderr"
+  }' > "$WORK/report-lists.sh" 2> "$WORK/report-lists.ps1"
+
+# --- MCP configs at home --------------------------------------------------------------
+rows data/mcp-files.tsv | awk -F '\t' '
+  BEGIN { print "# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it."; printf "MCP_FILES=\"" }
+  { p = $3; if (p ~ /^~/) p = "$H" substr(p, 2); else { sub(/^\{/, "$", p); sub(/\}/, "", p) }
+    printf "%s%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, p }
+  END { print "\""; print "# <<< mcp-files" }' > "$WORK/mcp-files.sh"
+rows data/mcp-files.tsv | awk -F '\t' '
+  function ps(p) {
+    if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"
+    if (p ~ /^\{LOCALAPPDATA\}\//) return "(J $LocalAppData \047" substr(p, 16) "\047)"
+    return "(J $AppData \047" substr(p, 11) "\047)" }
+  { r[NR] = sprintf("  @(\047%s\047, \047%s\047, %s)", $1, $2, ps($4)); n = NR }
+  END { print "# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it."; print "$McpFiles = @("
+        for (i = 1; i <= n; i++) print r[i] (i < n ? "," : ""); print ")"; print "# <<< mcp-files" }' > "$WORK/mcp-files.ps1"
+
+# --- the terminal ids TERM_PROGRAM names (data/term-programs.tsv) ---------------------------
+rows data/term-programs.tsv | awk -F '\t' '
+  BEGIN { print "# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it." }
+  { print "       " $1 ") TERMAPP=" $2 " ;;" } END { print "# <<< term-programs" }' > "$WORK/term-programs.sh"
+rows data/term-programs.tsv | awk -F '\t' '
+  BEGIN { print "# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it." }
+  { print "    \047" $1 "\047 { $TERMAPP = \047" $2 "\047 }" } END { print "# <<< term-programs" }' > "$WORK/term-programs.ps1"
+
+# --- the lines an account run prints, for the readers -----------------------------------
+FL_KEYS_LIST=$(rows data/account-run.tsv | cut -f1 | tr '\n' ' ' | sed 's/ $//')
+printf '# >>> account-run-keys: generated from data/account-run.tsv by tools/gen.sh. Edit that file, then run it.\nFL_KEYS="%s"\n# <<< account-run-keys\n' "$FL_KEYS_LIST" > "$WORK/account-run-keys.sh"
+# The printers are code: --check fails when the keys gird-check.sh and gird-check.ps1 print, in order,
+# are not those of data/account-run.tsv.
+# A printer line is found at any indentation.
+_ar_sh=$(awk '/^[ \t]*echo "v=1"[ \t]*$/ { on = 1 } on && /^[ \t]*echo "[a-z_]+=/ { k = $2; sub(/^"/, "", k); sub(/=.*/, "", k); printf "%s ", k } on && /^[ \t]*echo "end=1"[ \t]*$/ { exit }' gird-check.sh | sed 's/ $//')
+_ar_ps=$(awk '/^[ \t]*[\047"]v=1[\047"][ \t]*$/ { on = 1 } on && /^[ \t]*[\047"][a-z_]+=/ { k = $1; sub(/^[\047"]/, "", k); sub(/=.*/, "", k); printf "%s ", k } on && /^[ \t]*[\047"]end=1[\047"][ \t]*$/ { exit }' gird-check.ps1 | sed 's/ $//')
+AR_RC=0
+[ "$_ar_sh" = "$FL_KEYS_LIST" ] || { echo "gird-check.sh --account-run prints \"$_ar_sh\", not the keys of data/account-run.tsv"; AR_RC=1; }
+[ "$_ar_ps" = "$FL_KEYS_LIST" ] || { echo "gird-check.ps1 -AccountRun prints \"$_ar_ps\", not the keys of data/account-run.tsv"; AR_RC=1; }
 
 # --- the ids gird-fleet.ps1 checks an account run's lines against ---------------------
 # Every incident with its level, the key providers, the agents of data/auto-approve.tsv, the tools of
@@ -864,7 +979,7 @@ rows data/folder-vars.tsv | awk -F '\t' '
 { rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $6 }'; rows data/keys.tsv | awk -F '\t' '{ print "K\t" $1 }'
   rows data/auto-approve.tsv | awk -F '\t' '$2 == "all" || $2 == "win" { print "A\t" $1 }'
   rows data/outdated.tsv | awk -F '\t' '$3 == "all" || $3 == "win" { print "O\t" $1 }'; rows data/platforms.tsv | awk -F '\t' '{ print "P\t" $1 }'
-  rows data/indicators.tsv | awk -F '\t' '($2 == "all" || $2 == "win") && $5 ~ /^\{PROGRAMDATA\}\// { print "D\t" $1 "\t" substr($5, 15) }'; } | awk -F '\t' '
+  rows data/indicators.tsv | awk -F '\t' '($2 == "all" || $2 == "win") && $5 ~ /^\{PROGRAMDATA\}\// { print "D\t" $1 "\t" substr($5, 15) }'; } | awk -F '\t' -v keys="$FL_KEYS_LIST" '
   function add(k, v) { if (!((k, v) in seen)) { seen[k, v] = 1; L[k] = L[k] (L[k] == "" ? "" : (k == "I" ? "; " : ", ")) v } }
   $1 == "I" { add("I", "\047" $2 "\047 = \047" $3 "\047") } $1 == "K" { k = k (k == "" ? "" : " ") $2 }
   $1 == "A" { add("A", "\047" $2 "\047") } $1 == "O" { add("O", "\047" $2 "\047") } $1 == "P" { add("P", "\047" $2 "\047") }
@@ -877,6 +992,8 @@ rows data/folder-vars.tsv | awk -F '\t' '
     print "$FlTools = @(" L["O"] ")"
     print "$FlPlatforms = @(" L["P"] ")"
     printf "$FlProgramData = @(\n%s)\n", d
+    n = split(keys, ka, " "); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") "\047" ka[i] "\047"
+    print "$FlKeys = @(" o ")"
     print "# <<< fleet-tables"
   }' > "$WORK/fleet-tables.ps1"
 
@@ -888,31 +1005,24 @@ splice() { # file block-name generated-file
     !skip { print }
     END { if (!found) { print "no \"# >>> " name "\" marker" > "/dev/stderr"; exit 3 } }' "$1"
 }
-# --- the agents table and the ownership walk, for gird-fleet.sh ---------------------
-# Their home is gird-check.sh; root in gird-fleet.sh runs the same copies.
-awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
-  on { print } /^# <<< agents$/ { exit }' gird-check.sh > "$WORK/agents.sh"
-grep -q '^# <<< agents$' "$WORK/agents.sh" || { echo "gird-check.sh has no agents block"; exit 1; }
+# --- the ownership walk, for gird-fleet.sh ---------------------------------------
+# Its home is gird-check.sh; root in gird-fleet.sh runs the same copy. The agents table both fleet
+# scripts read is written into them from data/agents.tsv, as into the checks.
 awk '/^# >>> owned-walk[: ]/ { on = 1; print "# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< owned-walk$/ { exit }' gird-check.sh > "$WORK/owned-walk.sh"
 grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has no owned-walk block"; exit 1; }
-# gird-check.ps1's agents table, for gird-fleet.ps1: the ids an account run may send, and the install
-# folders whose machine-wide twins under %ProgramFiles% the PC's own check looks at.
-awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.ps1 by tools/gen.sh. Edit it there, then run it."; next }
-  on { print } /^# <<< agents$/ { exit }' gird-check.ps1 > "$WORK/agents.ps1"
-grep -q '^# <<< agents$' "$WORK/agents.ps1" || { echo "gird-check.ps1 has no agents block"; exit 1; }
 
-RC=0
+RC=$AR_RC
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1; do
-  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve remote-commands agents incidents indicators outdated platforms"
+  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve remote-commands agents incidents indicators outdated platforms account-run-keys"
   elif [ "$f" = gird-fleet.ps1 ]; then blocks="agents fleet-tables"
-  else blocks="keys public-values sessions planted auto-approve remote-commands incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms actions folder-vars"; fi
+  else blocks="keys public-values sessions planted auto-approve remote-commands incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms actions folder-vars agents report-lists mcp-files term-programs"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }
   done
   if [ "$CHECK" -eq 1 ]; then
-    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh and gird-fleet.ps1, with gird-check.sh and gird-check.ps1): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
+    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh, with gird-check.sh's ownership walk): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
 done
 # docs/checks.md: a copy of the scripts without docs/ (as the tests make) has no page to write.

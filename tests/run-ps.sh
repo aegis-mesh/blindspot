@@ -4473,6 +4473,27 @@ cat > "$FW/fn-mark.ps1" <<'PS'
 PS
 if [ "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")" = 'person/=account person/HardLink=possible machine/=incident machine/HardLink=possible machine/unknown=possible other/=possible unknown/=possible' ]
 then ok "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says"; else bad "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says" "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")"; fi
+cat > "$FW/fn-mach.ps1" <<'PS'
+$FlIncidents = @{ 'mastra' = 'act'; 'litellm' = 'review' }
+$a = [string[]]@('mastra'); $l = [string[]]@('litellm'); $p = [string[]]@('mastra'); $n = [string[]]@()
+(@(@($n, $n, $true), @($n, $p, $true), @($n, $n, $false), @($n, $p, $false), @($l, $n, $false), @($a, $p, $false)) | ForEach-Object { Machine-Outcome $_[0] $_[1] $_[2] }) -join ' '
+PS
+if [ "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")" = 'clear review not_checked not_checked not_checked act' ]
+then ok "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act"; else bad "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act" "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")"; fi
+# The same through the marker scan itself, with the owner lookup made to fail: the PC's row says it
+# was not fully checked, in the JSON and in the inventory value.
+mkdir -p "$FW/pdu/NodePackages"; : > "$FW/pdu/NodePackages/protocal.cjs"
+cat > "$FW/fn-scan.ps1" <<PS
+\$Sep = [IO.Path]::DirectorySeparatorChar
+\$FlIncidents = @{ 'mastra' = 'act' }; \$FlProgramData = @(,@('mastra', 'NodePackages/protocal.cjs'))
+function Owner-Kind([string]\$p) { 'unknown' }
+\$st = Scan-Markers '$FW/pdu'; \$o = Machine-Outcome \$st.Inc \$st.Poss \$st.Complete
+(Machine-Json \$st \$o @()) + (Machine-Part \$st \$o)
+PS
+_fs=$(fw_fn Scan-Markers,Machine-Outcome,Machine-Json,Machine-Part,Mark-Kind,J,Is-Reparse,Json-Bool,Json-List,Json-Incidents,Commas "$FW/fn-scan.ps1")
+if [ "$_fs" = '{"complete":false,"outcome":"not_checked","agents":[],"possible_signs":["mastra"],"incidents":[]} | machine: not_checked; possible mastra' ]
+then ok "fleet: a marker whose owner can't be read leaves the PC's row not complete and not_checked in the JSON and the inventory value"; else bad "fleet: a marker whose owner can't be read leaves the PC's row not complete and not_checked in the JSON and the inventory value" "$_fs"; fi
+rm -rf "$FW/pdu"
 cat > "$FW/fn-prof.ps1" <<'PS'
 (@(@('S-1-5-21-11-22-33-500', 'C:\Users\Administrator'), @('S-1-5-21-11-22-33-503', 'C:\Users\DefaultAccount'), @('S-1-5-21-11-22-33-1001', 'C:\Users\asha'),
   @('S-1-5-21-11-22-33-1002', 'C:\Users\defaultuser0'), @('S-1-12-1-11-22-33-44', 'C:\Users\bob'), @('S-1-5-18', 'C:\Windows\system32\config\systemprofile'),
@@ -4834,6 +4855,73 @@ printf '%s\n' 'function script:chocoCommands { choco -h }' > "$MV/choco/ProgramD
 } > "$MV/tools.txt"
 if [ "$(grep -c '=0$' "$MV/tools.txt")" -eq 16 ]; then ok "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing"
 else bad "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing" "$(grep -v '=0$' "$MV/tools.txt" | tr '\n' ' ')"; fi
+# Ordinary profiles that name a listed variable beside a line the reader can't follow: the tools' own
+# scripts where Homebrew puts them (data/tool-scripts.tsv), from Homebrew's prefix as their caveats
+# write it, Oh My Zsh's loader as it ships, and a plugin loader whose paths come from a loop's or a
+# function's own variable, inside that loop or function.
+# pnpm's folder on a Mac is not its folder on Windows: another listed variable at its default here.
+MVPNPM='export NVM_DIR="$HOME/.nvm"'
+# Oh My Zsh's oh-my-zsh.sh, cut to how it loads files: lib, plugins and the theme through a function
+# given the path, and every custom/*.zsh in a loop.
+mv_omz() { mkdir -p "$1/.oh-my-zsh/lib" "$1/.oh-my-zsh/custom"; printf '%s\n' 'if [[ -z "$ZSH_CUSTOM" ]]; then' '    ZSH_CUSTOM="$ZSH/custom"' 'fi' \
+  '_omz_source() {' '  local context filepath="$1"' '  if [[ -f "$ZSH_CUSTOM/$filepath" ]]; then' '    source "$ZSH_CUSTOM/$filepath"' '  elif [[ -f "$ZSH/$filepath" ]]; then' '    source "$ZSH/$filepath"' '  fi' '}' \
+  'for lib_file ("$ZSH"/lib/*.zsh); do' '  _omz_source "lib/${lib_file:t}"' 'done' 'for plugin ($plugins); do' '  _omz_source "plugins/$plugin/$plugin.plugin.zsh"' 'done' \
+  'for config_file ("$ZSH_CUSTOM"/*.zsh(N)); do' '  source "$config_file"' 'done' 'unset config_file' \
+  'if [[ -n "$ZSH_THEME" ]]; then' '  if is_theme "$ZSH_CUSTOM" "$ZSH_THEME"; then' '    source "$ZSH_CUSTOM/$ZSH_THEME.zsh-theme"' '  else' '    source "$ZSH/themes/$ZSH_THEME.zsh-theme"' '  fi' 'fi' > "$1/.oh-my-zsh/oh-my-zsh.sh"; }
+for h in omzship omzbun; do mv_omz "$MV/$h"; done
+mkdir -p "$MV/loader/.zsh"; printf '%s\n' 'load_plugin() {' '  local name=$1' '  source "$ZSH_PLUGINS/$name/$name.zsh"' '}' 'for p ($plugins); do source $HOME/.zsh/plugins/$p/init.zsh; done' 'load_one() { . "$1"; }' > "$MV/loader/.zsh/loader.zsh"
+mkdir -p "$MV/bunr/.bun"; printf '#compdef bun\n_bun() { :; }\n' > "$MV/bunr/.bun/_bun"
+{ mv_case brewnvm .zshrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && \. "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"  # This loads nvm' '[ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && \. "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"'
+  mv_case brewasdf .zshrc '. $(brew --prefix)/opt/asdf/libexec/asdf.sh' "$MVPNPM"
+  mv_case brewasdfcmd .zshrc '. $(brew --prefix asdf)/libexec/asdf.sh' "$MVPNPM"
+  mv_case omzship .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' "$MVPNPM"
+  mv_case omzbun .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' '[ -s "/Users/x/.bun/_bun" ] && source "/Users/x/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case loader .zshrc 'plugins=(git)' 'source ~/.zsh/loader.zsh' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case pyenvnvm .zshrc 'export PYENV_ROOT="$HOME/.pyenv"' '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' 'eval "$(pyenv init - zsh)"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case rbenvdirenv .zshrc 'eval "$(rbenv init - zsh)"' 'eval "$(direnv hook zsh)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case starnvm .zshrc 'eval "$(starship init zsh)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case misepnpm .zshrc 'eval "$(/opt/homebrew/bin/mise activate zsh)"' "$MVPNPM"
+  mv_case condanvm .bash_profile "__conda_setup=\"\$('/opt/homebrew/Caskroom/miniconda/base/bin/conda' 'shell.bash' 'hook' 2> /dev/null)\"" 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh" ]; then' '        . "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case sdkpnpm .zshrc 'export SDKMAN_DIR="$HOME/.sdkman"' '[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"' "$MVPNPM"
+  mv_case brewnvmenv .zprofile 'eval "$(/opt/homebrew/bin/brew shellenv)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case bunr .zshrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case fpathpnpm .zshrc 'fpath=(~/.zfunc $fpath)' 'autoload -Uz compinit && compinit' 'source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh' "$MVPNPM"
+} > "$MV/ordinary.txt"
+if [ "$(grep -c '=0$' "$MV/ordinary.txt")" -eq 15 ]; then ok "fleet: nvm and asdf from Homebrew, Oh My Zsh, a plugin loader, pyenv, rbenv, direnv, starship, mise, conda, SDKMAN!, Homebrew, bun and pnpm as written move nothing"
+else bad "fleet: nvm and asdf from Homebrew, Oh My Zsh, a plugin loader, pyenv, rbenv, direnv, starship, mise, conda, SDKMAN!, Homebrew, bun and pnpm as written move nothing" "$(grep -v '=0$' "$MV/ordinary.txt" | tr '\n' ' ')"; fi
+# zsh's glob qualifiers in a sourcing loop, (N) and (.N), and a plain path in braces, are followed.
+for h in zq1 zq2 zq3 zq4; do mkdir -p "$MV/$h/.zshrc.d"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.zshrc.d/x.zsh"; done
+mkdir -p "$MV/zbrace"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/zbrace/.zsh_env_extra"
+{ mv_case zq1 .zshrc 'for f (~/.zshrc.d/*.zsh(N)) source $f'
+  mv_case zq2 .zshrc 'for f in ~/.zshrc.d/*.zsh(N); do source $f; done'
+  mv_case zq3 .zshrc 'for f in ~/.zshrc.d/*.zsh(.N); do . "$f"; done'
+  mv_case zq4 .zshrc 'for f ($HOME/.zshrc.d/*(N)) source $f'
+  mv_case zbrace .zshrc 'source ${HOME}/.zsh_env_extra'
+} > "$MV/zqual.txt"
+if [ "$(grep -c '=1$' "$MV/zqual.txt")" -eq 5 ]; then ok "fleet: a sourcing loop over a zsh glob with a qualifier, and a path in braces, is followed"
+else bad "fleet: a sourcing loop over a zsh glob with a qualifier, and a path in braces, is followed" "$(grep -v '=1$' "$MV/zqual.txt" | tr '\n' ' ')"; fi
+# Never a false clear: a file named like a tool's own script anywhere but Homebrew's prefix is read; Oh
+# My Zsh as it ships reads custom/*.zsh; a zsh glob qualifier the reader does not parse leaves the loop
+# unfollowed; and a function's or a loop's own variable is bound only inside it.
+mkdir -p "$MV/stuffnvm/stuff/opt/nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/stuffnvm/stuff/opt/nvm/nvm.sh"
+mv_case stuffnvm .zshrc 'source ~/stuff/opt/nvm/nvm.sh' > "$MV/stuffnvm.txt"
+has    "fleet: a file named like a tool's own script outside Homebrew's prefix is read" '^stuffnvm=1$' "$MV/stuffnvm.txt"
+mv_omz "$MV/omzcustom"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/omzcustom/.oh-my-zsh/custom/env.zsh"
+mv_case omzcustom .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' > "$MV/omzcustom.txt"
+has    "fleet: Oh My Zsh as it ships is read, and a custom file of it that moves a folder counts" '^omzcustom=1$' "$MV/omzcustom.txt"
+for h in zqq zqd; do mkdir -p "$MV/$h/.zshrc.d"; printf 'alias k=kubectl\n' > "$MV/$h/.zshrc.d/x.zsh"; done
+{ mv_case zqq .zshrc 'for f in ~/.zshrc.d/*.zsh(#q.N); do source $f; done' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case zqd .zshrc 'for f (~/.zshrc.d/*.zsh(N-.)) source $f' 'export NVM_DIR="$HOME/.nvm"'
+} > "$MV/zqq.txt"
+if [ "$(grep -c '=1$' "$MV/zqq.txt")" -eq 2 ]; then ok "fleet: a sourcing loop over a zsh glob qualifier the reader does not parse counts where a listed variable is named"
+else bad "fleet: a sourcing loop over a zsh glob qualifier the reader does not parse counts where a listed variable is named" "$(grep -v '=1$' "$MV/zqq.txt" | tr '\n' ' ')"; fi
+{   mv_case psparam "$PSP" 'function Load-One {' '  param($Path)' '  . "$Path\init.ps1"' '}' '. "$Path\x.ps1"' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case psforeach "$PSP" 'foreach ($m in @("a", "b")) { . "$HOME\$m.ps1" }' '. "$m\x.ps1"' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case fnscope .zshrc 'load() {' '  local p=$1' '  source "$p/init.zsh"' '}' '. "$p/env.sh"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case loopscope .bashrc 'for d in ~/.a ~/.b; do . "$d/init.sh"; done' '. "$d/env.sh"' 'export NVM_DIR="$HOME/.nvm"'
+} > "$MV/scope.txt"
+if [ "$(grep -c '=1$' "$MV/scope.txt")" -eq 4 ]; then ok "fleet: a function's or a loop's own variable does not hide a source line outside it"
+else bad "fleet: a function's or a loop's own variable does not hide a source line outside it" "$(grep -v '=1$' "$MV/scope.txt" | tr '\n' ' ')"; fi
 # The caps: 64 files and 16 MiB read in all, and no file over 16 MiB. Past one, moved is 1 only where a
 # file read names a listed variable.
 for h in chain chainn; do mkdir -p "$MV/$h/.c"; for i in $(seq 1 70); do printf '. ~/.c/%s.sh\n' "$((i + 1))" > "$MV/$h/.c/$i.sh"; done; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.c/71.sh"; done
