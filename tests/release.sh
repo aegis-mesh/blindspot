@@ -23,7 +23,7 @@ cat > "$W/bin/gh" <<'EOF'
 case "$1 $2" in
   "release create")
     : > "$GH_LOG"
-    for a in "$@"; do printf '%s\n' "$a" >> "$GH_LOG"; done
+    for a in "$@"; do printf '%s\n' "$a" >> "$GH_LOG"; case $a in */SHA256SUMS) cp "$a" "$GH_LOG.sums" ;; esac; done
     n=""; for a in "$@"; do [ "$n" = 1 ] && cp "$a" "$GH_LOG.notes"; n=""; [ "$a" = --notes-file ] && n=1; done
     [ -z "$GH_FAIL" ] ;;
   "release view") [ -n "$GH_EXISTS" ] ;;
@@ -47,9 +47,9 @@ SIGNERLINE="release@blindspot namespaces=\"git,blindspot-release\" $(cat "$W/key
 fresh() {
   R=$W/$1
   mkdir -p "$R/.github" "$R/tools"
-  cp -R "$SRC/gird-check.sh" "$SRC/gird-check.ps1" "$SRC/gird-fleet.sh" "$SRC/data" "$SRC/.gitattributes" "$R/"
+  cp -R "$SRC/gird-check.sh" "$SRC/gird-check.ps1" "$SRC/gird-fleet.sh" "$SRC/data" "$SRC/.gitattributes" "$SRC/.gitignore" "$R/"
   cp "$SRC/tools/gen.sh" "$SRC/tools/release.sh" "$R/tools/"
-  cp "$SRC/.github/allowed_signers" "$R/.github/"
+  cp "$SRC/.github/allowed_signers" "$SRC/.github/release-files" "$R/.github/"
   [ "${2:-}" = nokey ] || printf '%s\n' "$SIGNERLINE" >> "$R/.github/allowed_signers"
   cp "$SRC/CHANGELOG.md" "$R/"
   git -C "$R" init -q
@@ -67,7 +67,7 @@ fresh() {
 recommit() { git -C "$W/$1" commit -q -am "$2" && git -C "$W/$1" push -q origin HEAD:main && git -C "$W/$1" fetch -q origin; }
 # rel NAME ANSWER [ARGS...]: runs the release tool in $W/NAME, typing ANSWER, into $W/NAME.out.
 rel() {
-  _n=$1; _a=$2; shift 2; rm -f "$GH_LOG" "$GH_LOG.notes"
+  _n=$1; _a=$2; shift 2; rm -f "$GH_LOG" "$GH_LOG.notes" "$GH_LOG.sums"
   (cd "$W/$_n" && printf '%s\n' "$_a" | GH_FAIL="${GH_FAIL:-}" GH_EXISTS="${GH_EXISTS:-}" TMPDIR="$W/tmp" PATH="$W/bin:$PATH" BLINDSPOT_SIGNING_KEY="${KEY:-$W/key}" "$RB" tools/release.sh "$@") > "$W/$_n.out" 2>&1
   RC=$?
 }
@@ -108,6 +108,8 @@ if refused 'release key is inside the repository' inside; then ok "refuses a rel
 
 fresh pinned; git -C "$W/pinned" config gpg.ssh.program "$W/pinned/evil"; rel pinned 1.3.0 1.3.0
 if refused "own git config sets gpg.ssh.program" pinned; then ok "refuses a repository whose git config sets gpg.ssh.program"; else bad "refuses a repository whose git config sets gpg.ssh.program" "exit $RC: $(tail -n 2 "$W/pinned.out")"; fi
+fresh filter; git -C "$W/filter" config filter.x.smudge "$W/filter/evil"; rel filter 1.3.0 1.3.0
+if refused "own git config sets filter.x.smudge" filter; then ok "refuses a repository whose git config sets a filter"; else bad "refuses a repository whose git config sets a filter" "exit $RC: $(tail -n 2 "$W/filter.out")"; fi
 
 fresh order; printf '#!/usr/bin/env bash\n: > "%s/ran-gen"\n' "$W" > "$W/order/tools/gen.sh"; recommit order "A gen.sh that leaves a mark"
 rel order 1.3 1.3.0
@@ -121,6 +123,61 @@ if refused 'gen.sh --check failed' gen; then ok "refuses a failing gen.sh --chec
 
 fresh empty; { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n'; sed 1d "$SRC/CHANGELOG.md"; } > "$W/empty/CHANGELOG.md"; recommit empty "An empty 1.3.0 section"; rel empty 1.3.0 1.3.0
 if refused 'section is empty' empty; then ok "refuses an empty CHANGELOG section"; else bad "refuses an empty CHANGELOG section" "exit $RC: $(tail -n 2 "$W/empty.out")"; fi
+
+echo "release tool: the list of released files"
+if (cd "$SRC" && "$RB" tools/release.sh --check-list) > "$W/list.out" 2>&1; then ok "this repository's .github/release-files names every file people run"
+else bad "this repository's .github/release-files names every file people run" "$(cat "$W/list.out")"; fi
+fresh unlisted; printf 'Write-Output new\n' > "$W/unlisted/gird-new.ps1"; git -C "$W/unlisted" add gird-new.ps1; recommit unlisted "A new script"
+(cd "$W/unlisted" && "$RB" tools/release.sh --check-list) > "$W/unlisted.list" 2>&1; LRC=$?
+if [ "$LRC" -ne 0 ] && grep -q 'does not name gird-new.ps1' "$W/unlisted.list"; then ok "the list check fails for a root-level script the list does not name"; else bad "the list check fails for a root-level script the list does not name" "exit $LRC: $(cat "$W/unlisted.list")"; fi
+rel unlisted 1.3.0 1.3.0
+if refused 'does not name gird-new.ps1' unlisted && ! grep -q 'Type 1.3.0' "$W/unlisted.out"; then ok "refuses, before the review, a root-level script the list does not name"; else bad "refuses, before the review, a root-level script the list does not name" "exit $RC: $(tail -n 2 "$W/unlisted.out")"; fi
+fresh genlist; printf '#!/usr/bin/env bash\ncd "$(dirname "$0")/.." || exit 1\n[ "${1:-}" = --check ] || printf x > blindspot-made.sh\n' > "$W/genlist/tools/gen.sh"; recommit genlist "A gen.sh that builds a file"
+(cd "$W/genlist" && "$RB" tools/release.sh --check-list) > "$W/genlist.list" 2>&1; LRC=$?
+if [ "$LRC" -ne 0 ] && grep -q 'does not name blindspot-made.sh' "$W/genlist.list"; then ok "the list check fails for a file gen.sh builds that the list does not name"; else bad "the list check fails for a file gen.sh builds that the list does not name" "exit $LRC: $(cat "$W/genlist.list")"; fi
+
+# built NAME GEN: a repository whose gen.sh is GEN and whose list adds blindspot-built.sh as built.
+built() {
+  fresh "$1"; printf '%s\n' "$2" > "$W/$1/tools/gen.sh"; printf 'blindspot-built.sh built\n' >> "$W/$1/.github/release-files"
+  recommit "$1" "A built file"
+}
+built nobuild '#!/usr/bin/env bash
+exit 0'
+rel nobuild 1.3.0 1.3.0
+if refused 'blindspot-built.sh, listed in .github/release-files, is missing or empty' nobuild; then ok "refuses a built file gen.sh did not make"; else bad "refuses a built file gen.sh did not make" "exit $RC: $(tail -n 2 "$W/nobuild.out")"; fi
+built genfail '#!/usr/bin/env bash
+[ "${1:-}" = --check ] && exit 0
+echo "could not build"; exit 1'
+rel genfail 1.3.0 1.3.0
+if refused 'bash tools/gen.sh failed (exit 1)' genfail; then ok "refuses when gen.sh fails to build"; else bad "refuses when gen.sh fails to build" "exit $RC: $(tail -n 2 "$W/genfail.out")"; fi
+built nopwsh '#!/usr/bin/env bash
+echo "blindspot-fleet.ps1 not built: it needs PowerShell" >&2; exit 3'
+rel nopwsh 1.3.0 1.3.0
+if refused 'Install PowerShell (pwsh)' nopwsh; then ok "says to install PowerShell when gen.sh exits 3"; else bad "says to install PowerShell when gen.sh exits 3" "exit $RC: $(tail -n 2 "$W/nopwsh.out")"; fi
+built stray '#!/usr/bin/env bash
+cd "$(dirname "$0")/.." || exit 1
+[ "${1:-}" = --check ] && exit 0
+printf "built\n" > blindspot-built.sh; : > stray.txt'
+rel stray 1.3.0 1.3.0
+if refused 'gen.sh made stray.txt' stray; then ok "refuses a file gen.sh made that the list does not name"; else bad "refuses a file gen.sh made that the list does not name" "exit $RC: $(tail -n 2 "$W/stray.out")"; fi
+
+built both '#!/usr/bin/env bash
+cd "$(dirname "$0")/.." || exit 1
+[ "${1:-}" = --check ] && exit 0
+printf "built\n" > blindspot-built.sh'
+# The working tree's list drops gird-fleet.sh and git is told not to look: the release must not notice.
+git -C "$W/both" update-index --skip-worktree .github/release-files
+grep -v '^gird-fleet.sh ' "$W/both/.github/release-files" > "$W/both.list" && cat "$W/both.list" > "$W/both/.github/release-files"
+rel both 1.3.0 1.3.0
+H=$(printf 'built\n' | shasum -a 256 | awk '{ print $1 }')
+C=$(git -C "$W/both" cat-file blob HEAD:gird-check.sh | shasum -a 256 | awk '{ print $1 }')
+if [ "$RC" -eq 0 ] && grep -qx "$H  blindspot-built.sh" "$GH_LOG.sums" && grep -qx "$C  gird-check.sh" "$GH_LOG.sums"; then ok "a committed file and a built file both land in SHA256SUMS"; else bad "a committed file and a built file both land in SHA256SUMS" "exit $RC: $(tail -n 2 "$W/both.out")"; fi
+G=$(tr '\n' ' ' < "$GH_LOG" 2>/dev/null)
+case "$G" in
+  "release create v1.3.0 "*/blindspot-built.sh\ */gird-check.ps1\ */gird-check.sh\ */gird-fleet.sh\ */SHA256SUMS\ */SHA256SUMS.sig\ *) ok "and both go to the GitHub release, in name order" ;;
+  *) bad "and both go to the GitHub release, in name order" "gh got: $G" ;;
+esac
+if grep -q '  gird-fleet.sh$' "$GH_LOG.sums" 2>/dev/null; then ok "the list comes from the reviewed commit, not the working tree"; else bad "the list comes from the reviewed commit, not the working tree"; fi
 
 echo "release tool: a dry run"
 fresh dry; rel dry 1.3.0 --dry-run 1.3.0

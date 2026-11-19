@@ -17,8 +17,11 @@ A release is a version a maintainer has reviewed and signed. It has three parts.
 
 - **A signed tag**, `vX.Y.Z`, on a commit of `main`, signed with the maintainer's release key (`git tag -s`
   with `gpg.format=ssh`).
-- **The files people run**, attached to the GitHub release: `gird-check.sh`, `gird-check.ps1` and
-  `gird-fleet.sh`.
+- **The files people run**, attached to the GitHub release: every file `.github/release-files` names,
+  for macOS, Windows and Linux, fleet and admin files included. Each is either committed, taken as it
+  is in the reviewed commit, or built, made from that commit by `bash tools/gen.sh` at release. A
+  pull request that adds a file people run adds its line; `bash tools/release.sh --check-list`, run by
+  the tests, fails when a root-level `.sh` or `.ps1`, or a file `gen.sh` builds, is missing.
 - **A signed list.** `SHA256SUMS` starts with a line `version vX.Y.Z`, then holds the SHA-256 of every
   attached file. `SHA256SUMS.sig` is its signature, made with `ssh-keygen -Y sign` in the namespace
   `blindspot-release`, so a release signature can't be passed off as any other kind. The version is
@@ -45,8 +48,10 @@ review, like every file here.
    the version to confirm they reviewed that range against the
    [security review](../../CONTRIBUTING.md#security-review), with the changes to `tools/`, `.github/`
    and `.gitattributes` in full. A release is the second look at everything merged since the last
-   one. Then it checks that `bash tools/gen.sh --check` passes.
-3. It writes `SHA256SUMS` and signs it with the key at `BLINDSPOT_SIGNING_KEY`. `ssh-keygen` asks for
+   one. Then, in a copy of the reviewed commit made with `git archive`, it runs `bash tools/gen.sh
+   --check` and `bash tools/gen.sh`. It stops if either fails, if a listed file is missing or empty,
+   if a committed file changed, or if `gen.sh` made a file the list does not name as built.
+3. It writes `SHA256SUMS`, one line per listed file in name order, and signs it with the key at `BLINDSPOT_SIGNING_KEY`. `ssh-keygen` asks for
    the passphrase; the script never reads, stores or passes it.
 4. It checks its own signature against `.github/allowed_signers`, and stops if it fails.
 5. It creates and pushes the signed tag, checking it with `git tag -v` (`gpg.ssh.allowedSignersFile`
@@ -67,7 +72,8 @@ release.
 - **It verifies a release before serving it.** The signature must be valid, in the
   `blindspot-release` namespace, by one of the keys gird.ai holds itself. The signature's own key is
   never trusted; it must be one of those keys. The signed `version` line must equal the release's tag,
-  and every file must match `SHA256SUMS`.
+  and every file must match `SHA256SUMS`. gird.ai serves every file the signed list names, so a new
+  file needs no change to the website.
 - **It never goes backwards.** It refuses a version at or below the highest it has served, starting from
   a minimum version it holds. Deleting newer releases, or republishing an old one under a new tag, can't
   bring an older build back.
