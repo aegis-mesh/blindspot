@@ -3,7 +3,8 @@
 `gird-check.sh` (bash 3.2: macOS, Linux, Git Bash) and `gird-check.ps1` (PowerShell 5.1 and 7, ASCII
 only) must find the same things and print the same report. A change to one lands in the other, with a
 test in each suite. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules the scripts keep and the review
-checklist; read it first.
+checklist; read it first. A review of any pull request here applies its Review checklist and
+Security review, point by point, and does not approve while one fails.
 
 ## macOS, Linux and Windows stay at par
 
