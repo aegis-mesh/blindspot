@@ -39,12 +39,13 @@ review, like every file here.
 `tools/release.sh <version>` does every step, and publishes nothing until all of them pass.
 
 1. It checks that it runs on a clean checkout at the tip of `origin/main`, that the version is higher
-   than every existing release, that `CHANGELOG.md` has a section for it, and that
-   `bash tools/gen.sh --check` passes.
+   than every existing release, and that `CHANGELOG.md` has a section for it. It runs nothing from the
+   checkout until step 2 is confirmed.
 2. It lists every commit and changed file since the previous release, and asks the maintainer to type
    the version to confirm they reviewed that range against the
-   [security review](../../CONTRIBUTING.md#security-review). A release is the second look at
-   everything merged since the last one.
+   [security review](../../CONTRIBUTING.md#security-review), with the changes to `tools/`, `.github/`
+   and `.gitattributes` in full. A release is the second look at everything merged since the last
+   one. Then it checks that `bash tools/gen.sh --check` passes.
 3. It writes `SHA256SUMS` and signs it with the key at `BLINDSPOT_SIGNING_KEY`. `ssh-keygen` asks for
    the passphrase; the script never reads, stores or passes it.
 4. It checks its own signature against `.github/allowed_signers`, and stops if it fails.
@@ -116,6 +117,7 @@ An IT team using fleet mode verifies once, before uploading the files to its MDM
 - **One laptop can be the whole chain.** A maintainer's laptop holds the key file and, usually, a
   signed-in GitHub session. With it and the passphrase, someone could sign and publish a release. A
   hardware security key would close this.
+- **The release tool comes from the repository.** `tools/release.sh` runs from the checkout it releases, so a maintainer reviews every change to it since the last release before running it.
 - **First trust.** The keys shown on gird.ai come from gird.ai. Someone who controlled gird.ai could
   change both the files and the keys it shows. To guard against that, compare the keys with
   `.github/allowed_signers` on GitHub.

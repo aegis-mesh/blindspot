@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tests tools/release.sh offline. Each case copies the repository's release inputs into a new
-# throwaway repository whose origin is a local bare repository, signs with a throwaway ed25519 key
-# made here with no passphrase, and puts a stand-in gh first on PATH that records its arguments.
-# Nothing reaches GitHub. Git reads only a config made here, so no global hook or signing setting
+# throwaway repository whose origin reads as a GitHub URL but is rewritten (url.insteadOf) to a
+# local bare repository, signs with a throwaway ed25519 key made here with no passphrase, and puts a
+# stand-in gh first on PATH that records its arguments. Nothing reaches GitHub. Git reads only a config made here, so no global hook or signing setting
 # applies.
 #
 #   bash tests/release.sh
@@ -17,12 +17,18 @@ RB=/bin/bash; [ -x "$RB" ] || RB=bash
 export HOME="$W/home" GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$HOME" "$W/bin" "$W/tmp"
 printf '[user]\n\tname = Release Test\n\temail = release-test@example.com\n[init]\n\tdefaultBranch = main\n[core]\n\thooksPath = %s/nohooks\n' "$W" > "$HOME/.gitconfig"
+# The stand-in gh: GH_FAIL makes release create fail, GH_EXISTS makes release view find it.
 cat > "$W/bin/gh" <<'EOF'
 #!/bin/sh
-: > "$GH_LOG"
-for a in "$@"; do printf '%s\n' "$a" >> "$GH_LOG"; done
-n=""; for a in "$@"; do [ "$n" = 1 ] && cp "$a" "$GH_LOG.notes"; n=""; [ "$a" = --notes-file ] && n=1; done
-exit 0
+case "$1 $2" in
+  "release create")
+    : > "$GH_LOG"
+    for a in "$@"; do printf '%s\n' "$a" >> "$GH_LOG"; done
+    n=""; for a in "$@"; do [ "$n" = 1 ] && cp "$a" "$GH_LOG.notes"; n=""; [ "$a" = --notes-file ] && n=1; done
+    [ -z "$GH_FAIL" ] ;;
+  "release view") [ -n "$GH_EXISTS" ] ;;
+  *) exit 1 ;;
+esac
 EOF
 chmod +x "$W/bin/gh"
 export GH_LOG="$W/gh.log"
@@ -53,13 +59,16 @@ fresh() {
   { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n- A change for the tests.\n- And a second one.\n\n'; sed 1d "$SRC/CHANGELOG.md"; } > "$R/CHANGELOG.md"
   git -C "$R" commit -q -am "Notes for 1.3.0"
   git clone -q --bare "$R" "$R.git"
-  git -C "$R" remote add origin "$R.git"
+  git config --global url."$R.git".insteadOf "https://github.com/test-owner/$1.git"
+  git -C "$R" remote add origin "https://github.com/test-owner/$1.git"
   git -C "$R" fetch -q origin
 }
+# recommit NAME MESSAGE: commits every change in $W/NAME and makes it origin/main.
+recommit() { git -C "$W/$1" commit -q -am "$2" && git -C "$W/$1" push -q origin HEAD:main && git -C "$W/$1" fetch -q origin; }
 # rel NAME ANSWER [ARGS...]: runs the release tool in $W/NAME, typing ANSWER, into $W/NAME.out.
 rel() {
   _n=$1; _a=$2; shift 2; rm -f "$GH_LOG" "$GH_LOG.notes"
-  (cd "$W/$_n" && printf '%s\n' "$_a" | TMPDIR="$W/tmp" PATH="$W/bin:$PATH" BLINDSPOT_SIGNING_KEY="${KEY:-$W/key}" "$RB" tools/release.sh "$@") > "$W/$_n.out" 2>&1
+  (cd "$W/$_n" && printf '%s\n' "$_a" | GH_FAIL="${GH_FAIL:-}" GH_EXISTS="${GH_EXISTS:-}" TMPDIR="$W/tmp" PATH="$W/bin:$PATH" BLINDSPOT_SIGNING_KEY="${KEY:-$W/key}" "$RB" tools/release.sh "$@") > "$W/$_n.out" 2>&1
   RC=$?
 }
 refused() { [ "$RC" -ne 0 ] && grep -q "$1" "$W/$2.out" && [ -z "$(git -C "$W/$2" tag -l v1.3.0)" ] && [ ! -s "$GH_LOG" ]; }
@@ -97,6 +106,22 @@ if refused 'does not verify against' stranger; then ok "refuses a key not in all
 fresh inside; cp "$W/key" "$W/inside/release-key"; KEY=$W/inside/release-key rel inside 1.3.0 1.3.0
 if refused 'release key is inside the repository' inside; then ok "refuses a release key inside the repository"; else bad "refuses a release key inside the repository" "exit $RC: $(tail -n 2 "$W/inside.out")"; fi
 
+fresh pinned; git -C "$W/pinned" config gpg.ssh.program "$W/pinned/evil"; rel pinned 1.3.0 1.3.0
+if refused "own git config sets gpg.ssh.program" pinned; then ok "refuses a repository whose git config sets gpg.ssh.program"; else bad "refuses a repository whose git config sets gpg.ssh.program" "exit $RC: $(tail -n 2 "$W/pinned.out")"; fi
+
+fresh order; printf '#!/usr/bin/env bash\n: > "%s/ran-gen"\n' "$W" > "$W/order/tools/gen.sh"; recommit order "A gen.sh that leaves a mark"
+rel order 1.3 1.3.0
+if refused 'confirmation did not match' order && [ ! -e "$W/ran-gen" ]; then ok "runs nothing from the checkout before the review is confirmed"; else bad "runs nothing from the checkout before the review is confirmed" "exit $RC, gen.sh ran: $([ -e "$W/ran-gen" ] && echo yes || echo no)"; fi
+if grep -q '^+: > ".*/ran-gen"$' "$W/order.out"; then ok "shows a change to tools/ in full before the review"; else bad "shows a change to tools/ in full before the review"; fi
+rel order 1.3.0 --dry-run 1.3.0
+if [ "$RC" -eq 0 ] && [ -e "$W/ran-gen" ]; then ok "runs gen.sh --check once the review is confirmed"; else bad "runs gen.sh --check once the review is confirmed" "exit $RC"; fi
+
+fresh gen; printf '#!/usr/bin/env bash\necho "gird-check.sh is out of date"; exit 1\n' > "$W/gen/tools/gen.sh"; recommit gen "A gen.sh that fails"; rel gen 1.3.0 1.3.0
+if refused 'gen.sh --check failed' gen; then ok "refuses a failing gen.sh --check"; else bad "refuses a failing gen.sh --check" "exit $RC: $(tail -n 2 "$W/gen.out")"; fi
+
+fresh empty; { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n'; sed 1d "$SRC/CHANGELOG.md"; } > "$W/empty/CHANGELOG.md"; recommit empty "An empty 1.3.0 section"; rel empty 1.3.0 1.3.0
+if refused 'section is empty' empty; then ok "refuses an empty CHANGELOG section"; else bad "refuses an empty CHANGELOG section" "exit $RC: $(tail -n 2 "$W/empty.out")"; fi
+
 echo "release tool: a dry run"
 fresh dry; rel dry 1.3.0 --dry-run 1.3.0
 D=$(sed -n 's/^Files: //p' "$W/dry.out")
@@ -110,6 +135,7 @@ then ok "its signature verifies as release@blindspot in the blindspot-release na
 if [ -f "$D/SHA256SUMS.sig" ] && ! ssh-keygen -Y verify -f "$W/dry/.github/allowed_signers" -I release@blindspot -n git -s "$D/SHA256SUMS.sig" < "$D/SHA256SUMS" > /dev/null 2>&1
 then ok "and not in another namespace"; else bad "and not in another namespace"; fi
 if [ -z "$(git -C "$W/dry" tag -l v1.3.0)" ] && [ -z "$(git -C "$W/dry.git" tag -l v1.3.0)" ] && [ ! -s "$GH_LOG" ]; then ok "a dry run makes no tag and no release"; else bad "a dry run makes no tag and no release"; fi
+rm -rf "$D"
 
 echo "release tool: a release"
 fresh full; rel full 1.3.0 1.3.0
@@ -118,9 +144,19 @@ if git -C "$W/full.git" -c gpg.ssh.allowedSignersFile="$W/full/.github/allowed_s
 then ok "it pushes a signed tag on HEAD that git tag -v accepts"; else bad "it pushes a signed tag on HEAD that git tag -v accepts" "$(head -n 3 "$W/tagv.txt")"; fi
 G=$(tr '\n' ' ' < "$GH_LOG" 2>/dev/null)
 case "$G" in
-  "release create v1.3.0 "*/gird-check.ps1\ */gird-check.sh\ */gird-fleet.sh\ */SHA256SUMS\ */SHA256SUMS.sig\ *--verify-tag*) ok "it creates the GitHub release with the five files" ;;
+  "release create v1.3.0 "*/gird-check.ps1\ */gird-check.sh\ */gird-fleet.sh\ */SHA256SUMS\ */SHA256SUMS.sig\ "-R test-owner/full "*--verify-tag*) ok "it creates the GitHub release with the five files" ;;
   *) bad "it creates the GitHub release with the five files" "gh got: $G" ;;
 esac
 if [ -f "$GH_LOG.notes" ] && [ "$(cat "$GH_LOG.notes")" = "$(printf -- '- A change for the tests.\n- And a second one.')" ]; then ok "its notes are the version's CHANGELOG section"; else bad "its notes are the version's CHANGELOG section" "$(head -n 3 "$GH_LOG.notes" 2>/dev/null)"; fi
+
+echo "release tool: when publishing fails"
+fresh push; git -C "$W/push" config remote.origin.pushurl "$W/no-such-remote.git"; rel push 1.3.0 1.3.0
+if refused 'push of v1.3.0 failed' push && [ -z "$(git -C "$W/push.git" tag -l v1.3.0)" ]; then ok "a failed tag push deletes the tag and publishes nothing"; else bad "a failed tag push deletes the tag and publishes nothing" "exit $RC: $(tail -n 2 "$W/push.out")"; fi
+fresh ghfail; GH_FAIL=1 rel ghfail 1.3.0 1.3.0
+D=$(sed -n 's/.*Its files are in \([^;]*\);.*/\1/p' "$W/ghfail.out")
+if [ "$RC" -ne 0 ] && grep -q 'create it with: gh release create v1.3.0 .*SHA256SUMS.sig -R test-owner/ghfail .*--verify-tag' "$W/ghfail.out" && [ -f "$D/SHA256SUMS.sig" ]; then ok "a failed GitHub release keeps its files and says how to create it"; else bad "a failed GitHub release keeps its files and says how to create it" "exit $RC: $(tail -n 2 "$W/ghfail.out")"; fi
+[ -z "$D" ] || rm -rf "$D"
+fresh ghpart; GH_FAIL=1 GH_EXISTS=1 rel ghpart 1.3.0 1.3.0
+if [ "$RC" -ne 0 ] && grep -q 'finish it with: gh release upload v1.3.0 .*SHA256SUMS.sig --clobber -R test-owner/ghpart' "$W/ghpart.out"; then ok "a release left part-made says to upload its files with --clobber"; else bad "a release left part-made says to upload its files with --clobber" "exit $RC: $(tail -n 2 "$W/ghpart.out")"; fi
 
 finish
