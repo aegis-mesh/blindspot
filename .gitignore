@@ -1,3 +1,6 @@
 # Reports saved with --save or the menu hold your findings. Keep them out of git.
 gird-ai-key-check-*.txt
 .DS_Store
+
+# blindspot-fleet.ps1 is built by bash tools/gen.sh for each release, never checked in.
+blindspot-fleet.ps1

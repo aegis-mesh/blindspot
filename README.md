@@ -18,7 +18,7 @@ Blindspot tells an IT or security team, for each computer:
 - which keys an AI tool has already read;
 - whether a recent supply-chain attack, malware planted in software packages that developers install, reached that computer.
 
-It answers with one outcome for each computer and a short list of what was found for each account on it. On Macs it runs from your MDM, the tool you already use to manage company computers.
+It answers with one outcome for each computer and a short list of what was found for each account on it. On Macs and Windows PCs it runs from your MDM, the tool you already use to manage company computers.
 
 **Safe to deploy.** It only reads files. It changes nothing in anyone's files and never shows a key. Run from an MDM, it sends nothing to GIRD or anyone else. The code is open, and [your own tools can review it](docs/fleet-reference.md#have-your-coding-agent-review-it) before you deploy.
 
@@ -48,7 +48,7 @@ The result never holds a file path, a file name or a key. It does name each acco
 
 ## Roll it out
 
-Rollout from an MDM is for Macs today. On Windows and Linux, each person runs the check themselves: see [Run it on one computer](#run-it-on-one-computer).
+Rollout from an MDM works on Macs, below, and on Windows PCs: there `blindspot-fleet.ps1` is one file your MDM runs once a day as the person who is signed in. It checks that person's account only, with their own rights, and needs no administrator rights; other people's profiles on the PC are counted, not read. [docs/fleet.md](docs/fleet.md#windows) has the Windows steps. It has not yet been run on a real Windows PC. On Linux, each person runs the check themselves ([issue #39](https://github.com/aegis-mesh/blindspot/issues/39)): see [Run it on one computer](#run-it-on-one-computer).
 
 1. **Try it on one Mac.** [docs/fleet.md](docs/fleet.md) is the one-screen quick start.
 2. **Add it to your MDM.** [docs/mdm/](docs/mdm/) has a page each for Jamf Pro, Iru, Microsoft Intune and ManageEngine Endpoint Central (Mobile Device Manager Plus alone runs no scripts on a Mac; [its page](docs/mdm/manageengine-mdm-plus.md) says what to do instead). The MDM installs two files once, runs the check once a day, and shows the result. None of these pages has been run end to end on a real Mac yet, so try it on a few Macs before the whole fleet.

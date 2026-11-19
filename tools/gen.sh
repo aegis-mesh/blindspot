@@ -9,13 +9,18 @@
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
 # versions with a published fix (data/outdated.tsv), extensions that shipped malware
 # (data/bad-extensions.tsv), SSH keys malware adds to authorized_keys (data/ssh-keys.tsv), GitHub
-# Actions that were compromised (data/actions.tsv) and commands that run commands on other machines,
-# with the agent files whose saved rules can allow them (data/remote-commands.tsv). The scripts stay
-# single files people can download and check. It also writes the lists in docs/checks.md, between
+# Actions that were compromised (data/actions.tsv), commands that run commands on other machines,
+# with the agent files whose saved rules can allow them (data/remote-commands.tsv), and variables
+# that move an agent's or a tool's folders (data/folder-vars.tsv). The scripts stay single files
+# people can download and check. It also writes the lists in docs/checks.md, between
 # "<!-- >>> checks" and "<!-- <<< checks -->".
 #
-#   bash tools/gen.sh           rewrite the blocks
-#   bash tools/gen.sh --check   exit 1 if a block differs from the data files
+#   bash tools/gen.sh           rewrite the blocks, and build blindspot-fleet.ps1
+#   bash tools/gen.sh --check   exit 1 if a block differs from the data files, or blindspot-fleet.ps1
+#                               would not be under 200 KB or is not what gen.sh builds
+#
+# Building blindspot-fleet.ps1 needs PowerShell: pwsh on PATH, or PWSH=/path/to/pwsh. Without it the
+# blocks are still written or checked, and the exit code is 3 when they are right.
 set -eu
 cd "$(dirname "$0")/.."
 CHECK=0; [ "${1:-}" = --check ] && CHECK=1
@@ -205,7 +210,16 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
             ok = NF == 7 && txt($2) && $3 ~ /^(all|mac|linux|win)$/ && $4 ~ /^(claude|codex|gemini-toml|gemini-json|vscode|roo|amazonq)$/ && $5 ~ /^(agent|file)$/ && txt($7)
             p = $6; g = gsub(/\/\*\//, "/x/", p); g += sub(/\/\*\.[A-Za-z0-9]+$/, "/x.y", p); ok = ok && g <= 1 && path_ok(p)
           } else ok = 0
-          if (!ok) print "data/remote-commands.tsv: " $0 }')
+          if (!ok) print "data/remote-commands.tsv: " $0 }'
+      # A folder is from ~ (or, for Windows, {LOCALAPPDATA} or {APPDATA}), below it, and holds nothing a
+      # shell or PowerShell string would read as code; a script is a path below the tool's folder.
+      rows data/folder-vars.tsv | awk -F '\t' '
+        function dirs_ok(s, win,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) {
+            if (a[i] ~ /[\047"`$\\*?;]/ || a[i] ~ /\/\.\.?(\/|$)/ || a[i] ~ /\/$/) return 0
+            if (a[i] !~ /^~\/[^\/]/ && !(win && a[i] ~ /^\{(LOCALAPPDATA|APPDATA)\}\/[^\/]/)) return 0 }
+          return 1 }
+        function scripts_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (a[i] !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/) return 0; return 1 }
+        NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || ($2 == "agent" && $3 != "-") || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }')
 # A published value names a key type of data/keys.tsv and holds only key characters. It is a part of
 # the value, never one its key pattern matches by itself: the list must not hold a whole key.
 KEY_IDS=" $(rows data/keys.tsv | cut -f1 | tr '\n' ' ')"
@@ -821,6 +835,50 @@ rows data/actions.tsv | awk -F '\t' '
   BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; print "$ActTable = @(" }
   { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
   END { print ")"; print "# <<< actions" }' > "$WORK/actions.ps1"
+# --- variables that move an agent's or a tool's folders, for an account run ---------------
+# gird-check.sh gets the list of each kind and fleet_dflt, the folders of the sh column; gird-check.ps1
+# the lists, the folders of the windows column and the tools' own scripts. Windows reads a variable's
+# name in any case, so a PowerShell table keeps a name's first line (npm_config_prefix's).
+rows data/folder-vars.tsv | awk -F '\t' '
+  { L[$2] = L[$2] (L[$2] == "" ? "" : "|") $1
+    if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
+        print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"
+        print "  fleet_dflt() { # variable: the folders the run reads when it is not set"; print "    case \"$1\" in"; printf "%s", D; print "    esac"; print "  }"
+        print "# <<< folder-vars" }' > "$WORK/folder-vars.sh"
+rows data/folder-vars.tsv | awk -F '\t' '
+  function ps(p) { if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"; if (p ~ /^\{LOCALAPPDATA\}/) return "(J $LocalAppData \047" substr(p, 16) "\047)"; return "(J $AppData \047" substr(p, 11) "\047)" }
+  function list(s, f,   n, a, i, o) { n = split(s, a, ";"); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") (f ? ps(a[i]) : "\047" a[i] "\047"); return "@(" o ")" }
+  { L[$2] = L[$2] (L[$2] == "" ? "" : ", ") "\047" $1 "\047"
+    if ($4 != "-" && !(tolower($1) in w)) W = W (W == "" ? "" : "; ") "\047" $1 "\047 = " list($4, 1)
+    w[tolower($1)] = 1
+    if ($5 != "-") S = S (S == "" ? "" : "; ") "\047" $1 "\047 = " list($5, 0) }
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it."
+        print "$FolderVarsAgent = @(" L["agent"] ")"; print "$FolderVarsTool = @(" L["tool"] ")"
+        print "$FolderVarsDefault = @{ " W " }"; print "$FolderVarsScripts = @{ " S " }"; print "# <<< folder-vars" }' > "$WORK/folder-vars.ps1"
+
+# --- the ids gird-fleet.ps1 checks an account run's lines against ---------------------
+# Every incident with its level, the key providers, the agents of data/auto-approve.tsv, the tools of
+# data/outdated.tsv and the platforms, as Windows sees them, and the markers data/indicators.tsv puts in
+# %ProgramData%, which the PC's own check looks at by name.
+{ rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $6 }'; rows data/keys.tsv | awk -F '\t' '{ print "K\t" $1 }'
+  rows data/auto-approve.tsv | awk -F '\t' '$2 == "all" || $2 == "win" { print "A\t" $1 }'
+  rows data/outdated.tsv | awk -F '\t' '$3 == "all" || $3 == "win" { print "O\t" $1 }'; rows data/platforms.tsv | awk -F '\t' '{ print "P\t" $1 }'
+  rows data/indicators.tsv | awk -F '\t' '($2 == "all" || $2 == "win") && $5 ~ /^\{PROGRAMDATA\}\// { print "D\t" $1 "\t" substr($5, 15) }'; } | awk -F '\t' '
+  function add(k, v) { if (!((k, v) in seen)) { seen[k, v] = 1; L[k] = L[k] (L[k] == "" ? "" : (k == "I" ? "; " : ", ")) v } }
+  $1 == "I" { add("I", "\047" $2 "\047 = \047" $3 "\047") } $1 == "K" { k = k (k == "" ? "" : " ") $2 }
+  $1 == "A" { add("A", "\047" $2 "\047") } $1 == "O" { add("O", "\047" $2 "\047") } $1 == "P" { add("P", "\047" $2 "\047") }
+  $1 == "D" { d = d "  ,@(\047" $2 "\047, \047" $3 "\047)\n" }
+  END {
+    print "# >>> fleet-tables: generated from data/ by tools/gen.sh. Edit those files, then run it."
+    print "$FlIncidents = @{ " L["I"] " }"
+    print "$FlProviders = \047" k "\047"
+    print "$FlYoloNames = @(" L["A"] ")"
+    print "$FlTools = @(" L["O"] ")"
+    print "$FlPlatforms = @(" L["P"] ")"
+    printf "$FlProgramData = @(\n%s)\n", d
+    print "# <<< fleet-tables"
+  }' > "$WORK/fleet-tables.ps1"
 
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
@@ -838,17 +896,23 @@ grep -q '^# <<< agents$' "$WORK/agents.sh" || { echo "gird-check.sh has no agent
 awk '/^# >>> owned-walk[: ]/ { on = 1; print "# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< owned-walk$/ { exit }' gird-check.sh > "$WORK/owned-walk.sh"
 grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has no owned-walk block"; exit 1; }
+# gird-check.ps1's agents table, for gird-fleet.ps1: the ids an account run may send, and the install
+# folders whose machine-wide twins under %ProgramFiles% the PC's own check looks at.
+awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.ps1 by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< agents$/ { exit }' gird-check.ps1 > "$WORK/agents.ps1"
+grep -q '^# <<< agents$' "$WORK/agents.ps1" || { echo "gird-check.ps1 has no agents block"; exit 1; }
 
 RC=0
-for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
+for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve remote-commands agents incidents indicators outdated platforms"
-  else blocks="keys public-values sessions planted auto-approve remote-commands incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms actions"; fi
+  elif [ "$f" = gird-fleet.ps1 ]; then blocks="agents fleet-tables"
+  else blocks="keys public-values sessions planted auto-approve remote-commands incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms actions folder-vars"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }
   done
   if [ "$CHECK" -eq 1 ]; then
-    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh, with gird-check.sh): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
+    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh and gird-fleet.ps1, with gird-check.sh and gird-check.ps1): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
 done
 # docs/checks.md: a copy of the scripts without docs/ (as the tests make) has no page to write.
@@ -865,4 +929,41 @@ if [ -d docs ]; then
     elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
   else echo "$f has no <!-- >>> checks --> ... <!-- <<< checks --> block"; RC=1; fi
 fi
+
+# --- blindspot-fleet.ps1, the one file an MDM runs ------------------------------
+# gird-fleet.ps1 with gird-check.ps1 packed inside it, without its comments (tools/strip-comments.ps1,
+# which needs PowerShell), gzip-compressed and base64-encoded, and the SHA-256 of that copy. Built from
+# the files as they are here and never checked in: tools/gen.sh builds it for each release. Intune
+# takes a script of under 200 KB, so --check builds it and fails at 200 KB or more, or when the check
+# it unpacks is not gird-check.ps1 without its comments byte for byte. A blindspot-fleet.ps1 already
+# here must be that build too, apart from how gzip compressed it.
+PWSH=${PWSH:-$(command -v pwsh 2> /dev/null || true)}
+if [ -z "$PWSH" ] || [ ! -x "$PWSH" ]; then
+  echo "blindspot-fleet.ps1 not built: removing gird-check.ps1's comments needs PowerShell. Put pwsh on PATH or set PWSH=/path/to/pwsh." >&2
+  [ "$RC" -eq 0 ] && RC=3
+  exit "$RC"
+fi
+if command -v sha256sum > /dev/null 2>&1; then sha() { sha256sum | cut -c1-64; }; else sha() { shasum -a 256 | cut -c1-64; }; fi
+if ! "$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 gird-check.ps1 "$WORK/stripped.ps1" > /dev/null; then
+  echo "blindspot-fleet.ps1 not built: tools/strip-comments.ps1 could not remove gird-check.ps1's comments"; exit 1
+fi
+gzip -9 -n -c < "$WORK/stripped.ps1" | base64 | tr -d '\n\r' > "$WORK/packed.b64"
+_sha=$(sha < "$WORK/stripped.ps1")
+{ printf '# >>> packed-check: gird-check.ps1 without its comments, written into blindspot-fleet.ps1 by tools/gen.sh.\n'
+  printf '$PackedCheck = \047%s\047\n' "$(cat "$WORK/packed.b64")"
+  printf '$PackedSha = \047%s\047\n# <<< packed-check\n' "$_sha"; } > "$WORK/packed-check.ps1"
+splice gird-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/blindspot-fleet.ps1" || exit 1
+_sz=$(wc -c < "$WORK/blindspot-fleet.ps1" | tr -d ' ')
+if [ "$_sz" -ge 204800 ]; then echo "blindspot-fleet.ps1 is $_sz bytes: Intune takes a script of under 200 KB (204,800 bytes)"; RC=1; fi
+if [ "$_sz" -lt 204800 ] && [ "$_sz" -ge 184320 ]; then echo "warning: blindspot-fleet.ps1 is $_sz bytes, past 90% of the 204,800 Intune takes"; fi
+unpacked() { sed -n "s|^\\\$PackedCheck = '\\([A-Za-z0-9+/=]*\\)'\$|\\1|p" "$1" | base64 -d 2> /dev/null | gzip -dc 2> /dev/null | sha; }
+if [ "$(unpacked "$WORK/blindspot-fleet.ps1")" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1 without its comments"; RC=1; fi
+if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.ps1 ]; then
+  splice blindspot-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/here.ps1" 2> /dev/null || : > "$WORK/here.ps1"
+  if ! cmp -s "$WORK/here.ps1" "$WORK/blindspot-fleet.ps1" || [ "$(unpacked blindspot-fleet.ps1)" != "$_sha" ] ||
+     ! grep -qx "\\\$PackedSha = '$_sha'" blindspot-fleet.ps1; then
+    echo "blindspot-fleet.ps1 is out of date with gird-fleet.ps1 and gird-check.ps1, or was edited: run bash tools/gen.sh"; RC=1
+  fi
+fi
+if [ "$CHECK" -eq 0 ] && [ "$RC" -eq 0 ] && ! cmp -s "$WORK/blindspot-fleet.ps1" blindspot-fleet.ps1; then cat "$WORK/blindspot-fleet.ps1" > blindspot-fleet.ps1; echo "built blindspot-fleet.ps1 ($_sz bytes)"; fi
 exit "$RC"

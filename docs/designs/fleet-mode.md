@@ -3,8 +3,9 @@
 Status: built for macOS (phase 1), as `gird-fleet.sh --all-users`, with the admin quick start in
 `docs/fleet.md`, the rest in `docs/fleet-reference.md`, and the MDM pages in `docs/mdm/` (each marked untested until run end to end on a real
 Mac). Linux is phase 2: until then `--all-users` on Linux exits 13 with a message. Windows is
-designed under "Windows" below and not built yet. What the build adds to this design, or settles
-where it was open, is under "As built" at the end.
+built as `gird-fleet.ps1` and `blindspot-fleet.ps1`, under "Windows" below; `gird-intune.ps1`, the
+admin's tool for Intune, is not built yet. What the macOS build adds to this design, or settles where
+it was open, is under "As built" at the end.
 
 ## Why
 
@@ -248,7 +249,8 @@ For IT teams that manage Windows PCs, and for engineers changing `gird-check.ps1
 On Windows the check runs as the person who is signed in, started by the MDM in that person's own
 session. It reads only what that person can already read. Nothing runs as SYSTEM, the Windows
 account that runs services, and nothing needs administrator rights on the PC. The result has the
-same shape, outcomes and exit codes as on a Mac, so one way of reading results covers both.
+same shape and outcomes as on a Mac, so one way of reading results covers both. The exit codes
+differ: see "The result" under Windows.
 
 An admin sets it up with one command and reads every PC's result with one more. See "Microsoft
 Intune" below.
@@ -272,21 +274,51 @@ PC, so an admin can see what one run left out.
 
 - `gird-check.ps1`, the script each person runs, gains `-AccountRun`. It prints the same fixed
   lines as `gird-check.sh --account-run`: the same keys in the same order, with numbers and names
-  from the fixed lists only. Four values differ on Windows:
+  from the fixed lists only. Five values differ on Windows:
   - `engine` is `rg`, `dotnet` or `none`. `dotnet` reads agent sessions when the person has no
     ripgrep. The person's own ripgrep is used, as in a run by hand, because the check has only the
     person's rights.
   - `protected` is always `ok`. Windows has no folders that need a grant like Full Disk Access.
-  - `moved` is always `0`. The run keeps the person's environment, so a variable that moves an
-    agent's folders is followed.
-  - `tmp_marks` lists malware markers the person owns in `%ProgramData%`, the shared folder any
-    account can write to. They are possible signs, as markers in `/tmp` are on a Mac.
+  - `moved` comes from the person's profiles, read as text and never run: PowerShell's profiles in
+    Documents and in the folder Windows keeps Documents in when it was moved, the Windows
+    PowerShell ISE profile, the profiles every account's PowerShell runs (Windows PowerShell's, and
+    PowerShell 7's in `%ProgramFiles%\PowerShell\7` and, for a preview, `7-preview`), and the
+    shell profiles in the home folder, which Git Bash runs. A PowerShell 7 installed from the
+    Microsoft Store has no all-users profile: its install folder can't be written. Sources:
+    Microsoft's about_Profiles, about_Windows_PowerShell_ISE and "Install PowerShell 7 on Windows".
+    It is `1` when a line names a variable of `data/folder-vars.tsv` other than to read it, unless
+    the line is a plain assignment (`$env:X = ...`, `${env:X} = ...`, `Set-Item env:X ...`,
+    `[Environment]::SetEnvironmentVariable('X', ...)`, `export X=...`, `X=...`, fish's
+    `set -x X ...`) of the value the run sees. So a form the check does not know, such as `+=`,
+    `New-Item -Path Env: -Name X`, `export A=1 X=2` or `declare -x X=...`, counts as `1`. A tool's
+    variable that the run does not have is seen as the folder the check reads without it. A value
+    the check can't work out, such as one built by a command, counts as `1`. Each file a profile
+    sources is read the same way, to any depth: `. file`, `source file`, a loop that sources
+    each file of a folder, and in PowerShell `& file.ps1`, `Import-Module` of a `.ps1`, `.psm1`
+    or `.psd1` file and a manifest's `RootModule`. Only an existing regular file on a local disk
+    is read, as text: never a link, a network path, a device or pipe, or a cloud file not on the
+    disk. At most 64 files and 16 MiB in all are read, and no file over 16 MiB, the limit the
+    check keeps for profiles. A sourced file that is there but can't be followed or read, or a
+    limit reached, counts as `1` only when some file read names a variable of the list: an
+    ordinary setup sources completion scripts and plugins by the dozen, and one that names none of
+    the variables gives no reason to think the rest moves one. A tool's own script in its own
+    folder (`$NVM_DIR/nvm.sh`, the `scripts` column of `data/folder-vars.tsv`) is not read: it sets
+    the tool's variable to the folder it is in, the one the check reads. Any other file in that
+    folder is read. A variable set to one of the folders in that file's `windows` column, the
+    folders the check reads, counts as not moved; `tools/gen.sh` writes them, and gird-check.sh's
+    `sh` column, into the scripts. A setting made by running a command is not seen: what a command
+    prints for the shell to run (`eval "$(...)"`, `source <(...)`, `... | Invoke-Expression`), or a
+    module imported by name.
+  - `tmp_marks` is always empty and `tmp_wiper` always `0`. Windows has no shared `/tmp`. A marker
+    in `%ProgramData%` is judged by its owner instead: see step 6 under "How a run goes".
+  An account run in the reduced language prints only `language_mode=1`.
 - `gird-fleet.ps1` is new. It starts the account run, checks every line it sends back, and builds
   the result. It holds every fleet option. `gird-check.ps1` holds none.
 - `blindspot-fleet.ps1` is the one file an MDM runs. `tools/gen.sh` builds it for each release:
-  `gird-fleet.ps1` with `gird-check.ps1` packed inside it, compressed, and the SHA-256 of
-  `gird-check.ps1` written next to it. It is under 200 KB, the largest script Intune accepts, and
-  `tools/gen.sh --check` fails if it grows past that.
+  `gird-fleet.ps1` with `gird-check.ps1` packed inside it, without its comments and compressed,
+  and the SHA-256 of that copy written next to it. It is under 200 KB, the largest script Intune
+  accepts. `tools/gen.sh --check` fails if it grows past that and warns past 90%. See "The check a
+  PC runs" below.
 - `gird-intune.ps1` is the admin's tool for Microsoft Intune. It runs on the admin's own PC, never
   on the fleet.
 
@@ -306,6 +338,46 @@ shared PC cannot change the code another account's check runs.
 
 `%ProgramData%` is not used: any account can create a folder there first and keep control of it.
 
+### The check a PC runs
+
+The check a PC runs is `gird-check.ps1` without its comments. `blindspot-fleet.ps1` must stay under
+Intune's 200 KB, and `gird-check.ps1` grows with every check. Without its comments the packed copy is
+about a quarter smaller, which keeps the whole file well under that. Nothing else changes: the
+header at the top of the file is kept, because `-Help` prints it and `gird-fleet.ps1` reads the
+version from it, and so is any `#requires` line.
+
+`tools/strip-comments.ps1` makes the copy. It finds comments with PowerShell's own parser, so a `#`
+inside a string, a here-string or a regex is never touched. A comment at the end of a line goes,
+with the spaces before it. One between two pieces of code on a line becomes a space, so the two
+never join. A line left empty is dropped, unless the line before it ends with a backtick that
+carries it on to the next. The copy is then parsed again, and is written only if it has no errors,
+the same code word for word apart from comments and blank lines, the same structure, and the same
+`#requires`. A script that is signed, or has help comments outside its header, is refused.
+This check is made with the PowerShell that builds the release; a Windows-only test parses the copy
+with Windows PowerShell 5.1 too and compares the SHA-256 the 5.1 command below prints.
+
+Anyone can check that the SHA-256 `blindspot-fleet.ps1` carries (`$PackedSha`) comes from the
+published `gird-check.ps1`. With both files from the same release, this prints that SHA-256:
+
+```
+pwsh -NoProfile -File tools/strip-comments.ps1 gird-check.ps1
+```
+
+On Windows PowerShell 5.1: `powershell -NoProfile -ExecutionPolicy Bypass -File
+tools\strip-comments.ps1 gird-check.ps1`. Adding a second path also writes the copy there.
+
+The SHA-256 is the same on every machine that builds it. The packed text in `$PackedCheck` may not
+be: gzip programs compress the same file differently. That is why `--check` compares what it
+unpacks to, not the packed text.
+
+Building `blindspot-fleet.ps1` needs PowerShell: `tools/gen.sh` uses `pwsh` on the PATH, or
+`PWSH=/path/to/pwsh`. Without it, `tools/gen.sh` still writes and checks the generated blocks,
+says that `blindspot-fleet.ps1` was not built, and exits with code 3.
+
+`gird-fleet.ps1`, the rest of `blindspot-fleet.ps1`, keeps its comments. It is the part an admin
+reads in Intune before deploying it, and without them it would be about 5.8 KB smaller, 3% of the
+limit.
+
 ### How a run goes
 
 The MDM runs `blindspot-fleet.ps1` once a day, as the signed-in person, in 64-bit PowerShell.
@@ -324,27 +396,46 @@ The script then:
    saving a report and every network request. It refuses `-All`, for the same reason as on a Mac.
 2. Starts `gird-check.ps1 -AccountRun` as a separate Windows PowerShell process, by full path,
    with `-NoProfile`, so the person's PowerShell profile does not run. The process keeps the
-   person's own environment, so a variable that moves an agent's folders is followed, as in a run
-   by hand. The test-only `GIRD_CHECK_*` settings are removed first, as on a Mac.
+   person's own environment, so a variable set there that moves an agent's folders is followed, as
+   in a run by hand. One set only in a profile is not: the account is then partly checked
+   (`moved`, above). The test-only `GIRD_CHECK_*` settings are removed first, as on a Mac.
 3. Reads at most 4096 bytes of what the account run prints and checks each line against the fixed
    format. A line that does not fit makes the account `not_checked`. Nothing the account run
    printed, on its output or its error stream, is copied into the result or reaches the MDM.
-4. Stops the account run at the time limit, with every process it started. `-Deadline` sets the
-   limit in seconds. It is 1500 when not given, to finish inside the 30 minutes Intune allows a
-   script. What was found by then still counts, and the account is partly checked. A process
-   that is still running after the stop is reported. Windows PowerShell can only follow a process
-   to the ones it started, so a process that cut itself loose is not seen.
+4. Stops the check it started at the time limit, or when it prints more than it may, and nothing
+   else. `-Deadline` sets the limit in seconds. It is 1500 when not given, to finish inside the
+   30 minutes Intune allows a script. What was found by then still counts, and the account is
+   partly checked. The script stops only the process it started, through the handle Windows gave
+   it when it started it. It never looks a process up by its id to stop it: Windows gives an ended
+   process's id to new processes, so an id can name an unrelated program.
+   The check stops the tools it started itself. Its only one is ripgrep, for the session check.
+   The check stops it at three quarters of its time, or when its own run ends normally, then waits
+   2 seconds for it to exit. A ripgrep still running after that, or a session check that does not
+   end by the end of the run's time, leaves the sessions partly checked. When the script stops the
+   check at its time limit, the check's own clean-up does not run, so ripgrep is not stopped by the
+   check: it ends when its search ends or when the output it writes to has no reader left, and the
+   process list below reports it if it is still running.
+   A tool can still be running for a moment after the check is stopped. It is reported, not
+   force-closed: the script reads the system's process list once, and a process that names the
+   check as its parent and started while the check ran, or whose start time can't be read, makes
+   the account report a process left running. When the list can't be read in time, a process may be left, and the account says so.
+   The stop and that one read end within 10 seconds, kept back from the account run's time.
 5. Looks for agents installed under `%ProgramFiles%`, by name.
-6. Looks in `%ProgramData%` for the malware markers `data/indicators.tsv` lists there. A marker
-   that Administrators or SYSTEM own is a finding for the PC. One the person owns goes on the
-   person's row as a possible sign. One another account owns is a possible sign for the PC. Any
-   account can create a file there, so the owner decides.
-7. Saves the result and prints the inventory value, one line.
+6. Looks in `%ProgramData%` for the malware markers `data/indicators.tsv` lists there. Any account
+   can create a file there, but on NTFS a standard account cannot give a file to another owner, so
+   the owner decides. A marker that Administrators, SYSTEM or a service owns is a finding for the
+   PC. One the person owns is a finding on the person's row, at its incident's level, as the
+   person's own report shows it; the account run reports it. One another account owns, or whose
+   owner can't be read, is a possible sign for the PC. A link is nothing. A file with more than one
+   name is only a possible sign for the PC, whoever owns it: any account can hard-link a file it can
+   reach under a marker's name.
+7. Saves the result and prints the inventory value, one line, or with `-Json` the JSON and with
+   `-Summary` the summary line. `-Json` and `-Summary` together are refused.
 
 ### The result
 
-The JSON, the summary line, the inventory value, the five outcomes and the exit codes are the
-ones in "The result" above. The differences:
+The JSON, the summary line, the inventory value and the five outcomes are the ones in "The result"
+above. The differences:
 
 - `os` reads `Windows 10` or `Windows 11`, told apart by build number: 22000 and up is 11.
 - `accounts` holds one row, for the signed-in account.
@@ -352,7 +443,29 @@ ones in "The result" above. The differences:
   checked in this run. The summary line and the inventory value carry it as `other_profiles=<n>`.
 - The saved result is `%LOCALAPPDATA%\Blindspot\last.json`, in the person's own profile.
   Nothing running as SYSTEM ever opens it.
-- A `failed` result ends with `reason=<why>`, from a fixed list.
+- `other_profiles` counts the profiles of people: a local account other than the built-in ones
+  (an account number of 1000 or more), or a domain or Microsoft Entra ID account, whose folder
+  exists and is not one of the `defaultuser` profiles Windows setup leaves. A local account an IT
+  team made for itself can't be told from a person's, so it counts.
+- A `failed` result ends with `reason=<why>`, one of:
+  - `host_32bit`: run in 32-bit PowerShell.
+  - `system_account`: run as SYSTEM, LocalService or NetworkService, which have no person's files.
+  - `language_mode`: PowerShell runs only the reduced language, here or in the account run.
+  - `unpack`: the check it carries could not be read, did not match its SHA-256, could not be
+    written to the person's profile, or was not the right file just before it started; also when
+    `gird-fleet.ps1` was run from standard input, with no folder to read `gird-check.ps1` from.
+  - `save`: the result could not be saved.
+  - `start`: the account run could not be started.
+  - `no_output`: the account run ended without printing anything, for a reason other than the
+    language mode.
+- A name that does not fit the characters an account name may have (letters, digits, `.`, `_`
+  and `-`, up to 64), or that is `machine`, the name of the PC's own part of the inventory value,
+  shows as `invalid-name`, so the inventory value stays readable.
+- Exit codes: 0 when the outcome is `clear` and 1 otherwise, which Intune lists as a PC with
+  issues. `-MacExitCodes` gives the codes of a Mac instead. `-ExitZero` exits 0 whenever the run
+  finished; `failed` still exits 1, or 13 with `-MacExitCodes`.
+- There is no `-Inventory` and no stale age on the PC. The MDM's script prints the inventory value
+  on every run, the MDM keeps that output, and the admin's report judges how old it is.
 - `-HashAccounts` is not offered. On a Mac the secret stays in a file only root can read. Here the
   script runs as the person, who could read the secret.
 
@@ -380,8 +493,10 @@ PowerShell module. It sends nothing anywhere else.
 | `gird-intune.ps1 -Report` | Reads each PC's latest result from Intune and writes one report on the admin's PC: how many PCs had each kind of finding, the PCs to deal with first, and the PCs that were not checked or sent nothing. |
 | `gird-intune.ps1 -Remove` | Deletes the Remediation it made. |
 
-Intune keeps at most 2,048 characters of a script's output. The inventory value is cut to fit, as
-on a Mac. The script exits 1 unless the outcome is `clear`, which Intune lists as a PC with issues.
+Intune keeps at most 2,048 characters of a script's output. The inventory value is at most 2,047,
+so a value of 2,048 or more without `+more` can only be one Intune cut, and is cut to fit as on a
+Mac. The script exits 1 unless the outcome is `clear`, which Intune lists as a PC with issues.
+`blindspot-fleet.ps1` must stay under 200 KB; `tools/gen.sh` warns once it passes 90% of that.
 
 The report never calls a PC clear that sent no result, sent one older than the stale age, or sent
 one that does not fit the inventory value's format. Those are listed as not checked.
@@ -393,10 +508,13 @@ Remediation's detection script with the same settings. `docs/mdm/` gets a page w
 
 Some companies let PowerShell run only a reduced language, called Constrained Language Mode, or
 only signed scripts. `gird-check.ps1` calls .NET directly and cannot run in the reduced language.
-The script checks the language mode first, with a statement the reduced language allows. Its own
-mode does not settle the account run's, which is a separate process. So an account run that stops
-before its first line is `failed` too. Either way the result ends with `reason=language_mode`, and
-a PC that could not be checked never reads `clear`.
+The script checks the language mode first, with a statement the reduced language allows, and in
+the reduced language prints its result in the form asked for, `failed` with
+`reason=language_mode`. Its own mode does not settle the account run's, which is a separate
+process. So the account run checks its own mode first too, and in the reduced language prints only
+`language_mode=1`: the result is then `failed` with `reason=language_mode`. An account run that
+prints nothing at all is `failed` with `reason=no_output`. A PC that could not be checked never
+reads `clear`.
 
 ### Tests
 
@@ -409,13 +527,32 @@ Graph, never a real tenant.
 - Output for another account, a forged machine section, oversized output or a malformed line:
   the account is `not_checked`.
 - An unpacked check whose SHA-256 differs is written again before it runs.
-- `blindspot-fleet.ps1` is under 200 KB, and the check it unpacks is `gird-check.ps1`, byte for byte.
-- An account run that outlives its time limit is stopped, with everything it started, and the
-  account is partly checked. A process still running after the stop is reported.
+- `blindspot-fleet.ps1` is under 200 KB, the check it unpacks is `gird-check.ps1` without its
+  comments, byte for byte, and the SHA-256 it carries is that copy's. A packed copy edited by hand
+  fails `tools/gen.sh --check`.
+- `gird-check.ps1` without its comments parses, prints the same `-AccountRun` lines and the same
+  `-Offline -Full` report for the suites' fixtures, and has the same strings, here-strings and
+  tables, token for token. In a small script, a `#` in a string, a here-string and a regex stays,
+  `#requires` stays, and the script prints the same.
+- An account run that outlives its time limit is stopped, and the account is partly checked. A
+  process it started that is still running is reported and left running. When the process list
+  can't be read, a process is reported as maybe left, never as none.
+- A slow tool the account run started is stopped by the account run itself, before its limit.
 - No network request, no browser, no saved report.
 - The JSON, the summary and the inventory value hold no path, file name or planted key.
 - Each outcome and exit code, from a fixture that produces it.
-- A marker in `%ProgramData%` owned by an ordinary account is a possible sign, not a finding.
+- A marker in `%ProgramData%` owned by an ordinary account is a possible sign, not a finding; one
+  the person owns is a finding on their row; one with two names is a possible sign for the PC.
+- `gird-fleet.ps1` stops no process by its id: the only process it stops is the account run,
+  through the handle it started it with. The process list decides only what is reported.
+- A profile that moves an agent's folders leaves the account partly checked, in a form the check
+  does not know too, and in a file it sources from outside the home, two files down, by `&`,
+  `Import-Module` or a manifest, in a sourcing loop, or placed in a tool's own folder. Past 64
+  files or 16 MiB read, it does only where a listed variable was named.
+- What nvm, nvm-windows, fnm, Volta, pnpm, bun, conda, mise, asdf (0.16 too), uv, pipx, Poetry,
+  oh-my-posh, starship, posh-git, PSReadLine, Chocolatey, the Visual Studio developer shell and a
+  corporate profile write moves nothing; nor does a default folder, a listed name in a comment,
+  `source <(...)`, a file sourced from outside the home, or files that source each other.
 - A session in Constrained Language Mode: `failed`, with `reason=language_mode`.
 - A 32-bit PowerShell: `failed`, with `reason=host_32bit`.
 - A profile that would print or change something does not run.

@@ -20,6 +20,7 @@ the source of truth for every other check.
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Save      saves the full report as a text file
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -AllSessions  waits until every agent session is checked
   -NoColor (or NO_COLOR=1)                                            plain text, no colors
+  For IT teams: blindspot-fleet.ps1 checks the signed-in person's account from an MDM (docs/designs/fleet-mode.md, Windows)
 
 Runs on Windows PowerShell 5.1 and PowerShell 7. This file is plain ASCII on purpose:
 Windows PowerShell 5.1 reads a script without a byte order mark as the ANSI code page,
@@ -27,24 +28,47 @@ so every non-ASCII character below is built from its code point.
 #>
 param(
   [switch]$All, [switch]$Full, [switch]$Offline, [switch]$Save, [switch]$NoColor, [switch]$Help, [switch]$AllSessions,
+  [switch]$AccountRun,
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
+# The reduced language (Constrained Language Mode) refuses the .NET calls below. An account run says so
+# in the one line gird-fleet.ps1 reads for it, with statements that language allows.
+if (($AccountRun -or $Rest -contains '--account-run') -and $ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { 'language_mode=1'; exit 13 }
 
+$AccountSeconds = ''
 $OptAllSess = [bool]$AllSessions; $OptAll = [bool]$All; $OptFull = [bool]$Full; $OptOffline = [bool]$Offline; $OptSave = [bool]$Save; $OptNoColor = [bool]$NoColor
 foreach ($arg in $Rest) {
   switch ($arg) {
     '--all' { $OptAll = $true } '--full' { $OptFull = $true } '--save' { $OptSave = $true }
     '--offline' { $OptOffline = $true } '--no-color' { $OptNoColor = $true } '--no-game' { } '--all-sessions' { $OptAllSess = $true }
+    '--account-run' { $AccountRun = $true }
+    { $_ -like '--account-seconds=*' } { $AccountSeconds = $_.Substring(18) }
     { $_ -eq '--help' -or $_ -eq '-h' } { $Help = $true }
     default { [Console]::Out.WriteLine("Unknown option: $arg (try -Help)"); exit 2 }
   }
 }
 if ($Help) {
-  $lines = (Get-Content -LiteralPath $PSCommandPath -TotalCount 22) | Select-Object -Skip 1
+  $lines = (Get-Content -LiteralPath $PSCommandPath -TotalCount 23) | Select-Object -Skip 1
   foreach ($l in $lines) { if ($l -notmatch '^#>') { [Console]::Out.WriteLine($l) } }
   exit 0
 }
 if ($env:DO_NOT_TRACK -eq '1') { $OptOffline = $true }
+# An account run: started by gird-fleet.ps1 as the signed-in person. Its only output is the fixed
+# lines gird-fleet.ps1 reads, the same as gird-check.sh --account-run prints, written where the
+# checks end; everything else goes nowhere.
+$OptAcctRun = [bool]$AccountRun; $AcctOut = $null; $AcctEnd = $null; $AcctDeadline = $null
+if ($OptAcctRun) {
+  if ($env:OS -eq 'Windows_NT') {
+    try { if (@('S-1-5-18', 'S-1-5-19', 'S-1-5-20') -contains [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { exit 13 } } catch { exit 13 }
+  }
+  $OptOffline = $true; $OptSave = $false; $OptNoColor = $true; $OptFull = $true; $OptAll = $false; $OptAllSess = $true
+  # The session check stops at three quarters of the time gird-fleet.ps1 gives the run, so what was
+  # found still reaches it, with the sessions partly checked. Its ripgrep is stopped then even while the
+  # rest of the check is still busy, so the run leaves no process behind when gird-fleet.ps1 stops it.
+  if ($AccountSeconds -match '^[0-9]{1,5}$') { $AcctEnd = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds * 3 / 4); $AcctDeadline = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds) }
+  $AcctOut = [Console]::Out
+  [Console]::SetOut([IO.TextWriter]::Null); [Console]::SetError([IO.TextWriter]::Null)
+}
 
 $ScriptVersion = '1'
 $Web = 'https://gird.ai'; if ($env:GIRD_CHECK_WEB) { $Web = $env:GIRD_CHECK_WEB }   # the overrides here are for testing
@@ -78,6 +102,7 @@ if ($TempDirs.Count -eq 0) { $TempDirs.Add([IO.Path]::GetTempPath().TrimEnd('\',
 # ---------------------------------------------------------------------------
 $IsConsole = $false; $InConsole = $false
 try { $IsConsole = -not [Console]::IsOutputRedirected; $InConsole = -not [Console]::IsInputRedirected } catch { }
+if ($OptAcctRun) { $IsConsole = $false; $InConsole = $false }
 $Compact = $IsConsole
 if ($env:GIRD_CHECK_COMPACT -eq '1') { $Compact = $true }
 if ($OptFull) { $Compact = $false }
@@ -100,7 +125,7 @@ if ($Fancy) {
   $gOk = '+'; $gX = 'x'; $gDot = '*'; $gRing = 'o'; $gBul = '-'; $gMid = '.'; $gBar = '|'; $gStar = '*'; $gRuleCh = [char]'-'
 }
 $OldOutEnc = $null
-if ($OnWindows) { try { $OldOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { $OldOutEnc = $null } }
+if ($OnWindows -and -not $OptAcctRun) { try { $OldOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { $OldOutEnc = $null } }
 $Width = 80
 if ($IsConsole) {
   try { $Width = [Console]::WindowWidth } catch { $Width = 80 }
@@ -700,9 +725,13 @@ function Entries([string]$dir) {
 }
 function Is-Link($info) { ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }
 function Is-DirInfo($info) { ($info.Attributes -band [IO.FileAttributes]::Directory) -ne 0 }
-# Whether this person owns a file, read off Windows (PowerShell 7 adds User to a file's info). A link
-# is judged by what it points at, as bash's -O does, where .NET can resolve it (PowerShell 7.2 and up).
+# Whether this person owns a file: on Windows its owner's SID, off Windows the User PowerShell 7 adds to
+# a file's info. Off Windows a link is judged by what it points at, as bash's -O does, where .NET can
+# resolve it (PowerShell 7.2 and up).
 function Owns-File([string]$p) {
+  if ($OnWindows) {
+    try { return [bool]((Get-Acl -LiteralPath $p -ErrorAction Stop).GetOwner([Security.Principal.SecurityIdentifier]).Value -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) } catch { return $false }
+  }
   try {
     $it = Get-Item -LiteralPath $p -Force -ErrorAction Stop
     $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
@@ -1258,7 +1287,7 @@ $SessRoots = @(@(foreach ($sessRow in $SessTable) {
 # Runs in its own runspace: lists the files newest first and checks them until told to stop, or
 # lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
 $SessWorker = {
-  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold)
+  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold, $stopAt, $graceMs)
   . ([scriptblock]::Create($fns))
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
   $rxs = @($keys | ForEach-Object { New-Object regex($_, ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Compiled), $to) })
@@ -1275,8 +1304,9 @@ $SessWorker = {
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
+    $halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() } catch { }; $gone = $false; try { $gone = $st.Proc.WaitForExit(2000) } catch { }; if (-not $gone) { $st.Hung = $true } }
     # One run for each pass of data/keys.tsv ($keys), one after the other; RgExit is the worst of
-    # their codes: 2 for an error, else 0 when any found a key.
+    # their codes: 2 for an error, else 0 when any found a key. The deadline ($stopAt) covers them all.
     $first = $true; $worst = 1
     try { foreach ($kp in $keys) {
       if ($st.Stop) { break }
@@ -1289,15 +1319,22 @@ $SessWorker = {
       $psi.Arguments = '-a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
+      if ($st.Stop) { & $halt; return }
       # --null ends the file name with a NUL, the one character a path can't hold. ripgrep ends a
       # match with a newline (LF) alone, and its lines are split there only: a carriage return can be
       # the byte before a key, and ReadLine would end the line at it, dropping the key or gluing it to
       # the next file name. So all text after a NUL is the match, and a line without one is a piece
       # of a file name that holds a newline.
       $frag = ''; $sb = New-Object Text.StringBuilder; $cb = New-Object char[] 65536; $so = $st.Proc.StandardOutput
-      while (($got = $so.Read($cb, 0, $cb.Length)) -gt 0) {
+      while ($true) {
+        if ($null -ne $stopAt -and [DateTime]::UtcNow -ge $stopAt) { & $halt; return }
+        $rt = $so.ReadAsync($cb, 0, $cb.Length); $ms = -1
+        if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
+        if (-not $rt.Wait($ms)) { & $halt; return }
+        $got = $rt.Result; if ($got -le 0) { break }
         $s = New-Object string($cb, 0, $got); $at = 0
         while (($nl = $s.IndexOf([char]10, $at)) -ge 0) {
+          if ($null -ne $stopAt -and [DateTime]::UtcNow -ge $stopAt) { & $halt; return }
           [void]$sb.Append($s, $at, $nl - $at); $l = $sb.ToString(); [void]$sb.Clear(); $at = $nl + 1
           $i = $l.IndexOf([char]0)
           if ($i -lt 0) { $frag += $l + '?'; continue }
@@ -1307,10 +1344,14 @@ $SessWorker = {
       }
       $l = $sb.ToString(); $i = $l.IndexOf([char]0)
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
-      $st.Proc.WaitForExit()
+      $ms = $graceMs; if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
+      if (-not $st.Proc.WaitForExit($ms)) { & $halt; return }
       if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -gt 1) { $worst = $c } elseif ($c -eq 0 -and $worst -le 1) { $worst = 0 }; $st.RgExit = $worst }
     }
-    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
+    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally {
+      if ($st.Proc) { try { if (-not $st.Proc.HasExited) { & $halt } } catch { } }
+      if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+    }
     return
   }
   # Stopped while still listing: Listed stays false and the report says the sessions were not all checked.
@@ -1362,7 +1403,8 @@ $SessWorker = {
     } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Slow = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
+$SessGraceMs = 30000; if ($env:GIRD_CHECK_TEST_GRACE_MS -match '^[0-9]{1,6}$') { $SessGraceMs = [int]$env:GIRD_CHECK_TEST_GRACE_MS }   # tests only
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Slow = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hung = $false; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -1373,19 +1415,32 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_PASSES).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_PASSES).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD).AddArgument($AcctEnd).AddArgument($SessGraceMs)
   $SessHandle = $SessPs.BeginInvoke()
 }
-# Stops the check, or waits for it with -AllSessions.
+# Stops the check, or waits for it with -AllSessions. A check that does not end in time (by the end of
+# an account run's time, or within $SessGraceMs by hand) is left behind and its sessions are partly
+# checked. -AllSessions by hand waits in short steps, so Ctrl+C can still stop the run.
 function Sess-Stop([bool]$wait) {
   if ($null -eq $script:SessPs) { return }
   if (-not $wait) {
     $SessSt.Stop = $true
-    if (-not $script:SessHandle.IsCompleted) { $SessSt.Stopped = $true; if ($SessSt.Proc) { try { $SessSt.Proc.Kill() } catch { } } }
+    if (-not $script:SessHandle.IsCompleted) {
+      $SessSt.Stopped = $true; $p = $SessSt.Proc
+      if ($p) { try { $p.Kill() } catch { }; $gone = $false; try { $gone = $p.WaitForExit(2000) } catch { }; if (-not $gone) { $SessSt.Hung = $true } }
+    }
   }
-  [void]$script:SessHandle.AsyncWaitHandle.WaitOne()
+  $done = $false
+  if ($wait -and $null -eq $AcctEnd) { while (-not $done) { $done = $script:SessHandle.AsyncWaitHandle.WaitOne(250) } }
+  else {
+    $ms = $SessGraceMs; if ($null -ne $AcctDeadline) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($AcctDeadline - [DateTime]::UtcNow).TotalMilliseconds)) }
+    $done = $script:SessHandle.AsyncWaitHandle.WaitOne($ms)
+  }
+  if (-not $done) { $SessSt.Stopped = $true; $SessSt.Hung = $true; $script:SessPs = $null; return }
   try { $script:SessPs.EndInvoke($script:SessHandle) | Out-Null } catch { }
   $script:SessPs.Dispose(); $script:SessPs = $null
+  # Disposed only here, after every Kill(): a Kill() after Dispose() would look ripgrep up again by its id.
+  if ($SessSt.Proc) { try { $SessSt.Proc.Dispose() } catch { } }
 }
 
 Scan-Home $HomeDir 0
@@ -1426,6 +1481,7 @@ $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' 
 # name | commands (separated by ;) | install paths | folders that change when it is used | id
 # Windsurf became Devin Desktop on 2 June 2026: the devin-desktop command, and editor data under Devin,
 # not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
+# >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.ps1.
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
@@ -1442,6 +1498,7 @@ $Agents = @(
     @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
   @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
 )
+# <<< agents
 $AgRows = New-Object System.Collections.Generic.List[object]
 $AgentIds = New-Object System.Collections.Generic.List[string]; $AgNames = New-Object System.Collections.Generic.List[string]
 $IdleNames = New-Object System.Collections.Generic.List[string]; $IdleIds = New-Object System.Collections.Generic.List[string]
@@ -7522,6 +7579,8 @@ $Persist = New-Object System.Collections.Generic.List[object]
 # file to check ($ExtCheck), not a compromised machine.
 $ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
 $ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
+# $IndHits: the incidents of the startup files in $Persist, which an account run sends.
+$IndHits = New-Object System.Collections.Generic.List[string]
 $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
@@ -7579,6 +7638,12 @@ foreach ($r in $IndOn) {
   # A Python incident's startup file is shown in its row ($PyStart).
   if ($r[2] -eq 'startup' -and $PyIncidents -contains $r[0]) { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
+  # In %ProgramData% any account can create a file, but on NTFS a standard account cannot give one to
+  # another owner. An account run counts a marker there only under its one name and owned by this
+  # person; gird-fleet.ps1 judges every other one for the PC.
+  if ($OptAcctRun -and $env:ProgramData -and $m.StartsWith($env:ProgramData.TrimEnd('\', '/') + $Sep, $PathCmp)) {
+    if ((Multi-Name $m) -or -not (Owns-File $m)) { continue }
+  }
   if ($r[3] -eq 'yes') {
     if ($OnWindows) { continue }
     # Only under its one name, outside the home folder: a link, symbolic or hard, could put another
@@ -7594,7 +7659,7 @@ foreach ($r in $IndOn) {
     if ($alone) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
     else { $xcPend.Add(@($r[0], $m, $r[5])) }
   }
-  else { $Persist.Add(@($m, $r[5])) }
+  else { $Persist.Add(@($m, $r[5])); if (-not $IndHits.Contains($r[0])) { $IndHits.Add($r[0]) } }
 }
 # Beside a file of the same incident that is its sign on its own, a file is its sign too.
 foreach ($x in $xcPend) {
@@ -7605,7 +7670,7 @@ foreach ($x in $xcPend) {
 if ($OnWindows) {
   try {
     $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
-    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')) }; $rk.Close() }
+    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')); if (-not $IndHits.Contains('mastra')) { $IndHits.Add('mastra') } }; $rk.Close() }
   } catch { }
 }
 foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }
@@ -7724,7 +7789,11 @@ elseif ($N_WF -gt 0) { Progress "No compromised GitHub Actions in $(Plural $N_WF
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
-Sess-Stop $OptAllSess
+if ($env:GIRD_CHECK_TEST_PAUSE_MS -match '^[0-9]{1,6}$') { Start-Sleep -Milliseconds ([int]$env:GIRD_CHECK_TEST_PAUSE_MS) }   # tests only
+if ($null -ne $AcctEnd -and $null -ne $SessPs) {
+  $sessMs = [int][Math]::Max(0, [Math]::Min(2147483647, ($AcctEnd - [DateTime]::UtcNow).TotalMilliseconds))
+  Sess-Stop ([bool]$SessHandle.AsyncWaitHandle.WaitOne($sessMs))
+} else { Sess-Stop $OptAllSess }
 # SESS_DONE counts the files read to the end; SESS_UNREAD the folders that could not be read (-1:
 # some, rg.exe gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
 # looked at, because there is none or the check could not start.
@@ -7748,7 +7817,7 @@ if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
 $sessClosed = @(@(foreach ($sessRow in $SessTable) { if ($sessRow[0] -eq 'read' -or $sessRow[0] -eq 'db') { Closed-Folder $sessRow[2] } }) | Where-Object { $_ } | Select-Object -Unique)
 if ($SESS_UNREAD -ge 0) { $SESS_UNREAD += $sessClosed.Count }
 $sessHits = New-Object System.Collections.Generic.List[string]
-foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
+foreach ($h in $SessSt.Hits.ToArray()) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
 # in each project, found by the home scan, and they are checked here. One counts as read once the
 # pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
@@ -7790,8 +7859,8 @@ $SessPlaces.Sort([Comparison[string]]{ param($x, $y) if ($sessPlaceN[$x] -ne $se
 $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
-# check was stopped), or a folder that could not be read.
-$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
+# check was stopped), a folder that could not be read, or a check or ripgrep that did not end when told to.
+$SESS_PARTIAL = $SessSt.Hung -or ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
 # The encrypted .pb files in those folders, by agent. A folder that holds none (Antigravity's newer
 # conversations are SQLite, read above) is never named.
 $SessSealedAg = New-Object System.Collections.Generic.List[string]; $SessSealedN = 0
@@ -7947,6 +8016,324 @@ if ($SCORE -ge 90) { $GRADE = 'A' } elseif ($SCORE -ge 78) { $GRADE = 'B' } else
 $SCAN_SECS = [int][Math]::Floor(([DateTime]::UtcNow - $ScanT0).TotalSeconds)
 Progress-Clear
 
+# >>> folder-vars: generated from data/folder-vars.tsv by tools/gen.sh. Edit that file, then run it.
+$FolderVarsAgent = @('CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'CODEX_SQLITE_HOME', 'GEMINI_CLI_HOME', 'QWEN_HOME', 'COPILOT_HOME', 'CLINE_DIR', 'CLINE_DATA_DIR', 'CLINE_SESSION_DATA_DIR', 'CONTINUE_GLOBAL_DIR', 'GOOSE_PATH_ROOT', 'KIRO_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME')
+$FolderVarsTool = @('NVM_DIR', 'VOLTA_HOME', 'BUN_INSTALL', 'BUN_INSTALL_GLOBAL_DIR', 'N_PREFIX', 'ASDF_DATA_DIR', 'MISE_DATA_DIR', 'MISE_INSTALLS_DIR', 'MAMBA_ROOT_PREFIX', 'PIPX_HOME', 'PIPX_GLOBAL_HOME', 'WORKON_HOME', 'UV_CACHE_DIR', 'UV_TOOL_DIR', 'UV_PYTHON_INSTALL_DIR', 'POETRY_CACHE_DIR', 'POETRY_VIRTUALENVS_PATH', 'HATCH_DATA_DIR', 'XDG_CACHE_HOME', 'npm_config_prefix', 'NPM_CONFIG_PREFIX', 'npm_config_userconfig', 'NPM_CONFIG_USERCONFIG', 'CLINE_PROVIDER_SETTINGS_PATH', 'QWEN_RUNTIME_DIR', 'PNPM_HOME')
+$FolderVarsDefault = @{ 'XDG_CONFIG_HOME' = @((J $HomeDir '.config')); 'XDG_DATA_HOME' = @((J $HomeDir '.local/share')); 'NVM_DIR' = @((J $HomeDir '.nvm')); 'VOLTA_HOME' = @((J $LocalAppData 'Volta'), (J $HomeDir '.volta')); 'BUN_INSTALL' = @((J $HomeDir '.bun')); 'N_PREFIX' = @((J $HomeDir 'n')); 'ASDF_DATA_DIR' = @((J $HomeDir '.asdf')); 'MISE_DATA_DIR' = @((J $LocalAppData 'mise')); 'MAMBA_ROOT_PREFIX' = @((J $HomeDir 'micromamba')); 'PIPX_HOME' = @((J $HomeDir '.local/pipx'), (J $HomeDir 'pipx'), (J $LocalAppData 'pipx')); 'WORKON_HOME' = @((J $HomeDir '.virtualenvs'), (J $HomeDir 'Envs')); 'UV_CACHE_DIR' = @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv')); 'POETRY_CACHE_DIR' = @((J $LocalAppData 'pypoetry/Cache')); 'POETRY_VIRTUALENVS_PATH' = @((J $LocalAppData 'pypoetry/Cache/virtualenvs')); 'HATCH_DATA_DIR' = @((J $LocalAppData 'hatch')); 'npm_config_prefix' = @((J $AppData 'npm'), (J $HomeDir '.npm-global')); 'PNPM_HOME' = @((J $LocalAppData 'pnpm')) }
+$FolderVarsScripts = @{ 'NVM_DIR' = @('nvm.sh', 'bash_completion'); 'BUN_INSTALL' = @('_bun'); 'ASDF_DATA_DIR' = @('asdf.sh', 'asdf.fish', 'completions/asdf.bash') }
+# <<< folder-vars
+# An account run's lines: only numbers and ids from the fixed lists, in gird-check.sh --account-run's
+# order. gird-fleet.ps1 checks every line again and builds the row itself. On Windows protected is
+# always ok (no folder needs a grant like Full Disk Access), tmp_marks empty and tmp_wiper 0 (Windows
+# has no shared /tmp), and engine dotnet where gird-check.sh has perl.
+if ($OptAcctRun) {
+  function Fleet-Ids($ids) {
+    $o = New-Object System.Collections.Generic.List[string]
+    foreach ($x in @($ids)) { foreach ($y in ([string]$x -split ' ')) { if ($y -cmatch '^[a-z0-9-]+$' -and -not $o.Contains($y)) { $o.Add($y) } } }
+    $o -join ' '
+  }
+  function Fleet-AgentId([string]$n) {
+    foreach ($a in $Agents) { if ($a[0] -ceq $n) { return $a[4] } }
+    ($n.ToLowerInvariant() -replace ' ', '-') -replace '[^a-z0-9-]', ''
+  }
+  $fNpm = @($NpmTags); $fLock = @()
+  if ($MAL_LOCKONLY -eq 1) {
+    $fLock = @($NpmTags | Where-Object { (Incident-Level $_) -eq 'act' })
+    $fNpm = @($NpmTags | Where-Object { (Incident-Level $_) -ne 'act' })
+  }
+  $fPoss = @(); if ($LitePyc.Count -gt 0 -and $LITELLM_HIT -eq 0) { $fPoss = @('litellm') }
+  $fNr = $KeyUnread.Count + $Sec2Unread.Count + $AllowUnread.Count + $NpmUnread + $LockUnread.Count + $NpmSlow + $SlowFiles.Count + $ExtUnread + $PyUnread + $UnreadDirs.Count + $NmUnread.Count
+  $fEngine = $SessEngine; if ($fEngine -eq 'net') { $fEngine = 'dotnet' }
+  $fSp = 0; if ($SESS_PARTIAL) { $fSp = 1 }
+  # The run starts with -NoProfile, so a variable a profile sets is not followed. The profiles are read
+  # as text, never run, and so is every file they source, to any depth: `. file`, `source file`, a
+  # sourcing loop over a folder's files, and in PowerShell `& file.ps1`, Import-Module of a .ps1, .psm1
+  # or .psd1 file and a module manifest's RootModule. A line that names a variable of
+  # data/folder-vars.tsv other than to read it moves a folder, and the account is partly checked,
+  # unless it is one of the plain assignments below of the value this run sees. A variable unset here
+  # is seen as the folder this check reads without it (FolderVarsDefault).
+  # Only an existing regular file on a local disk is read: never a link, a network path, a device or
+  # pipe, a cloud file not on the disk, or one over ReadMax. At most 64 files and 16 MiB in all are
+  # read. A file that exists but can't be followed or read, or a cap reached, counts only when some
+  # file read names a variable of the list: an ordinary setup sources completion scripts and plugin
+  # files by the dozen, and one that names none of the variables gives no reason to think the rest moves
+  # one. A tool's own script sourced from its own folder (FolderVarsScripts, such as nvm.sh) is not
+  # read: it sets the tool's variable to the folder it is in, the one the check reads. What a command
+  # prints (`eval "$(...)"`, `source <(...)`, `... | Invoke-Expression`) and a module imported by name
+  # are not followed.
+  $fMvFiles = New-Object System.Collections.Generic.List[string]
+  foreach ($f in $ShellRc) { $fMvFiles.Add($f) }
+  foreach ($d in $DocsRoots) { $fMvFiles.Add((J $d 'WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1')) }
+  if ($OnWindows) {
+    foreach ($d in @((J $env:SystemRoot 'System32/WindowsPowerShell/v1.0'), (J $env:ProgramFiles 'PowerShell/7'), (J $env:ProgramFiles 'PowerShell/7-preview'))) {
+      foreach ($pf in @('profile.ps1', 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1', 'Microsoft.PowerShellISE_profile.ps1')) { $fMvFiles.Add((J $d $pf)) }
+    }
+  }
+  $fMvMaxFiles = 64; $fMvMaxBytes = [long]16777216
+  $fMvSt = @{ Named = $false; Lost = $false; Files = 0; Bytes = [long]0 }
+  $fMvQ = New-Object System.Collections.Generic.Queue[string]
+  $fMvCmp = [StringComparer]::Ordinal; if ($OnWindows) { $fMvCmp = [StringComparer]::OrdinalIgnoreCase }
+  $fMvDone = New-Object 'System.Collections.Generic.HashSet[string]' ($fMvCmp)
+  $fMvVars = @{}
+  function Fleet-MvNorm([string]$p) { ($p -replace '[\\/]+', [string]$Sep).TrimEnd($Sep) }
+  function Fleet-MvValue([string]$v, [bool]$sh) {
+    $v = $v.Trim()
+    if ($v -match "^'([^']*)'") { return $Matches[1] }
+    if ($v -match '^"([^"]*)"') { $x = $Matches[1] } elseif ($v -match '^([^\s;)}#,]+)') { $x = $Matches[1] } else { return $null }
+    if ($sh -and $x -match '^~(?=[\\/]|$)') { $x = $HomeDir + $x.Substring(1) }
+    foreach ($t in @(@('\$\{?env:USERPROFILE\}?', $HomeDir), @('\$\{?env:LOCALAPPDATA\}?', $LocalAppData), @('\$\{?env:APPDATA\}?', $AppData), @('\$\{?HOME\}?', $HomeDir))) {
+      $x = [regex]::Replace($x, $t[0] + '(?![A-Za-z0-9_])', $t[1].Replace('$', '$$'), 'IgnoreCase')
+    }
+    if ($x -match '[$`(]') { return $null }
+    $x
+  }
+  function Fleet-MvSeen([string]$n) {
+    $cur = [Environment]::GetEnvironmentVariable($n)
+    if ($cur) { return @($cur) }
+    if ($FolderVarsDefault.ContainsKey($n)) { return @($FolderVarsDefault[$n]) }
+    @()
+  }
+  function Fleet-MvUnder([string]$p, [string]$dir) {
+    $p = Fleet-MvNorm $p; $dir = Fleet-MvNorm $dir
+    $dir.Length -gt 0 -and $p.Length -gt $dir.Length + 1 -and $p.StartsWith($dir + $Sep, $PathCmp)
+  }
+  $fMvAlt = (@(@($FolderVarsAgent) + @($FolderVarsTool) | ForEach-Object { [regex]::Escape($_) }) -join '|')
+  $fMvName = New-Object regex (('(?<![A-Za-z0-9_])(?:' + $fMvAlt + ')(?![A-Za-z0-9_])'), 'IgnoreCase')
+  $fMvRead = New-Object regex (('(?:(?<e>\$\{?env:)|(?<b>\$\{#?)|\$|%|GetEnvironmentVariable\(\s*[''"]|Test-Path\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?)$'), 'IgnoreCase')
+  $fMvArg = '(?<p>"[^"]*"|''[^'']*''|[^\s;&|)}]+)'
+  $fMvSrcRx = New-Object regex (('(?:^|[;&|{(]|\b(?:then|else|do))\s*\\?(?:\.|source)\s+' + $fMvArg), 'IgnoreCase')
+  $fMvAmpRx = New-Object regex ('(?:^|[;|{(=])\s*&\s*' + $fMvArg)
+  $fMvImpRx = New-Object regex (('\b(?:Import-Module|ipmo)(?:\s+-(?:Force|Global|DisableNameChecking|PassThru|Name|Scope\s+\w+))*\s+' + $fMvArg), 'IgnoreCase')
+  $fMvRootRx = New-Object regex ('^\s*(?:RootModule|ModuleToProcess)\s*=\s*(?:''(?<p>[^'']+)''|"(?<p>[^"]+)")', 'IgnoreCase')
+  $fMvForRx = New-Object regex ('\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<g>[^;]*?)\s*(?:;|$)|\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<g>[^)]*)\)')
+  $fMvGciRx = New-Object regex ('(?:\bforeach\s*\(\s*\$(?<v>\w+)\s+in\s+\(?\s*)?(?<![\w-])(?:Get-ChildItem|gci|dir|ls)(?:\s+-(?:Path|LiteralPath|File|Recurse|Force))*\s+(?<g>"[^"]*"|''[^'']*''|[^\s;|)}-][^\s;|)}]*)', 'IgnoreCase')
+  $fMvSAsgRx = New-Object regex ('^\s*(?:export\s+|local\s+|readonly\s+)?(?<n>[A-Za-z_][A-Za-z0-9_]*)=(?<v>"[^"]*"|''[^'']*''|[^\s;''"]*)\s*(?:;|$)')
+  $fMvPAsgRx = New-Object regex ('^\s*\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<v>"[^"]*"|''[^'']*''|[^\s;''"]+)\s*;?\s*$', 'IgnoreCase')
+  $fMvHereRx = New-Object regex ('^\s*\$(?<n>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*\(?\s*Split-Path\s+(?:-Parent\s+)?\$(?:MyInvocation\.MyCommand\.(?:Definition|Path)|PSCommandPath)(?:\s+-Parent)?\s*\)?\s*;?\s*$', 'IgnoreCase')
+  $fMvExport = New-Object regex ('^\s*export(?:\s+[A-Za-z_][A-Za-z0-9_]*)+\s*;?\s*(?:#.*)?$')
+  $fMvV = '(?<v>''[^'']*''|"[^"]*"|[^\s;''"#,)]+)'; $fMvT = '\s*;?\s*(?:#.*)?$'
+  $fMvSet = @(
+    ('^\s*\$(?:\{env:(?<n>' + $fMvAlt + ')\}|env:(?<n>' + $fMvAlt + '))\s*=\s*' + $fMvV + $fMvT),
+    ('^\s*\[(?:System\.)?Environment\]::SetEnvironmentVariable\(\s*[''"](?<n>' + $fMvAlt + ')[''"]\s*,\s*' + $fMvV + '\s*(?:,[^)]*)?\)' + $fMvT),
+    ('^\s*(?:Set-Item|New-Item|si|ni)\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?(?<n>' + $fMvAlt + ')[''"]?\s+(?:-Value\s+)?' + $fMvV + $fMvT),
+    ('^\s*(?:export\s+)?(?<n>' + $fMvAlt + ')=' + $fMvV + $fMvT),
+    ('^\s*set\s+-[A-Za-z]*x[A-Za-z]*\s+(?<n>' + $fMvAlt + ')\s+' + $fMvV + $fMvT)
+  ) | ForEach-Object { New-Object regex ($_, 'IgnoreCase') }
+  # A line without its comment: from a # outside quotes that starts a word.
+  function Fleet-MvCode([string]$l, [bool]$ps) {
+    if ($l.IndexOf('#') -lt 0) { return $l }
+    $q = [char]0; $esc = [char]'\'; if ($ps) { $esc = [char]'`' }
+    for ($i = 0; $i -lt $l.Length; $i++) {
+      $c = $l[$i]
+      if ($q -eq [char]"'") { if ($c -eq [char]"'") { $q = [char]0 } }
+      elseif ($q -eq [char]'"') { if ($c -eq [char]'"') { $q = [char]0 } elseif ($c -eq $esc) { $i++ } }
+      elseif ($c -eq [char]"'" -or $c -eq [char]'"') { $q = $c }
+      elseif ($c -eq $esc) { $i++ }
+      elseif ($c -eq [char]'#' -and ($i -eq 0 -or " `t;(){|&".IndexOf($l[$i - 1]) -ge 0)) { return $l.Substring(0, $i) }
+    }
+    $l
+  }
+  # A variable's value as the file would see it: one set earlier in a file read, else the run's own,
+  # else for a listed variable the folder the check reads. $null when it can't be told.
+  function Fleet-MvVar([string]$n, [bool]$isEnv, [bool]$ps, [string]$from) {
+    if ($ps -and -not $isEnv) {
+      if ($n -eq 'HOME') { return $HomeDir }
+      if ($n -eq 'PSScriptRoot') { return [IO.Path]::GetDirectoryName($from) }
+      if ($n -eq 'PSCommandPath') { return $from }
+      if ($fMvVars.ContainsKey("ps:$n")) { return $fMvVars["ps:$n"] }
+      return $null
+    }
+    if ($fMvVars.ContainsKey("env:$n")) { return $fMvVars["env:$n"] }
+    if (-not $ps -and $n -ceq 'HOME') { return $HomeDir }
+    if ((@($FolderVarsAgent) + @($FolderVarsTool)) -contains $n) { $s = @(Fleet-MvSeen $n); if ($s.Count) { return [string]$s[0] } }
+    $v = [Environment]::GetEnvironmentVariable($n); if ($v) { return $v }
+    $null
+  }
+  # A path as written in a file, with its variables and ~ replaced: $null when one can't be told or a
+  # command builds it.
+  function Fleet-MvExpand([string]$raw, [string]$from, [bool]$ps) {
+    if ($raw -match "^'([^']*)'$") { $x = $Matches[1] } else {
+      $bad = @{ B = $false }
+      $x = [regex]::Replace($raw.Replace('"', ''), '\$\{(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)(?::?-(?<d>[^}]*))?\}|\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)', [Text.RegularExpressions.MatchEvaluator] {
+        param($m)
+        $v = Fleet-MvVar $m.Groups['n'].Value $m.Groups['e'].Success $ps $from
+        if ($null -eq $v -and $m.Groups['d'].Success) { $v = Fleet-MvExpand $m.Groups['d'].Value $from $ps }
+        if ($null -eq $v) { $bad.B = $true; return '' }
+        $v
+      }, 'IgnoreCase')
+      if ($bad.B) { return $null }
+    }
+    if ($x -match '^~(?=[\\/]|$)') { $x = $HomeDir + $x.Substring(1) }
+    if ($OnWindows -and $x -match '^/([A-Za-z])(?=/|$)') { $x = $Matches[1] + ':\' + $x.Substring(2) }
+    if ($x -match '[$`]' -or $x.StartsWith('(')) { return $null }
+    $x
+  }
+  function Fleet-MvLocal([string]$p) {
+    if ($p -match '^[\\/]{2}') { return $false }
+    if (-not $OnWindows) { return $p.StartsWith('/') }
+    if ($p -notmatch '^[A-Za-z]:[\\/]') { return $false }
+    try { $t = [string](New-Object IO.DriveInfo ($p.Substring(0, 1))).DriveType } catch { return $false }
+    @('Fixed', 'Removable', 'Ram') -contains $t
+  }
+  # Whether a path, or a folder on its way, is a link or junction, or a cloud file or folder not on the
+  # disk. Off Windows, where only the tests run this, folders above the home are not asked about.
+  function Fleet-MvLinked([string]$p) {
+    try {
+      $q = [IO.Path]::GetFullPath($p); $first = $true
+      while ($q) {
+        if (-not $OnWindows -and -not $first -and -not (Fleet-MvUnder $q $HomeDir)) { break }
+        $a = [IO.File]::GetAttributes($q)
+        if (([int]$a -band 0x441000) -ne 0) { return $true }
+        if (($a -band [IO.FileAttributes]::ReparsePoint) -ne 0 -and (Get-Item -LiteralPath $q -Force -ErrorAction Stop).LinkType) { return $true }
+        $first = $false; $q = [IO.Path]::GetDirectoryName($q)
+      }
+    } catch { return $true }
+    $false
+  }
+  # Queues a file a line sources: nothing for one that is not there or a tool's own script; Lost for
+  # one that is there but is not a regular file on a local disk, or can't be told.
+  function Fleet-MvAdd([string]$p) {
+    try { if (-not [IO.Path]::IsPathRooted($p)) { $fMvSt.Lost = $true; return }; $p = [IO.Path]::GetFullPath((Fleet-MvNorm $p)) } catch { $fMvSt.Lost = $true; return }
+    foreach ($k in $FolderVarsScripts.Keys) {
+      foreach ($d in (Fleet-MvSeen $k)) { foreach ($s in $FolderVarsScripts[$k]) { if ($fMvCmp.Equals($p, (Fleet-MvNorm (J $d $s)))) { return } } }
+    }
+    if (-not (Fleet-MvLocal $p)) { $fMvSt.Lost = $true; return }
+    try { $a = [IO.File]::GetAttributes($p) } catch { if (Behind-Closed $p) { $fMvSt.Lost = $true }; return }
+    if (($a -band [IO.FileAttributes]::Directory) -ne 0) { return }
+    if ((([int]$a -band 0x40) -ne 0) -or (Fleet-MvLinked $p)) { $fMvSt.Lost = $true; return }
+    $fMvQ.Enqueue($p)
+  }
+  # Every file a glob names, or every file in a folder; only the last part of the path may hold * or ?.
+  function Fleet-MvGlob([string]$p) {
+    $p = Fleet-MvNorm $p
+    if (-not (Fleet-MvLocal $p)) { $fMvSt.Lost = $true; return }
+    if (Is-Dir $p) { $p = J $p '*' } elseif ($p -notmatch '[*?]') { Fleet-MvAdd $p; return }
+    $dir = [IO.Path]::GetDirectoryName($p); $pat = [IO.Path]::GetFileName($p)
+    if (-not $dir -or $dir -match '[*?\[]' -or $pat -match '\[' -or (Fleet-MvLinked $dir)) { $fMvSt.Lost = $true; return }
+    if (-not (Is-Dir $dir)) { if (Behind-Closed $dir) { $fMvSt.Lost = $true }; return }
+    try { $fs = @([IO.Directory]::GetFiles($dir, $pat) | Sort-Object) } catch { $fMvSt.Lost = $true; return }
+    foreach ($x in $fs) { Fleet-MvAdd $x }
+  }
+  # What a source line names. KIND is dot for . and source, amp for &, imp for Import-Module: those two
+  # run a command or a module by name unless they name a PowerShell file.
+  function Fleet-MvFollow([string]$raw, [string]$from, [bool]$ps, [string]$kind, $loops) {
+    if ($raw.StartsWith('<') -or $raw -eq '-' -or $raw.StartsWith('{')) { return }
+    $lv = [regex]::Match($raw, '^"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?(?:\.(?:FullName|PSPath|Path))?"?$')
+    if ($lv.Success -and $loops.ContainsKey($lv.Groups[1].Value)) {
+      foreach ($g in $loops[$lv.Groups[1].Value]) { $x = Fleet-MvExpand $g $from $ps; if ($null -eq $x) { $fMvSt.Lost = $true } else { Fleet-MvGlob $x } }
+      return
+    }
+    $p = Fleet-MvExpand $raw $from $ps
+    if ($kind -ne 'dot' -and ($null -eq $p -or $p -notmatch '[\\/]') -and $raw -notmatch '[\\/]|\.ps[dm]?1\b') { return }
+    if ($null -eq $p) { $fMvSt.Lost = $true; return }
+    if ($p -match '\.(?:exe|dll|com|bat|cmd)$' -or ($kind -ne 'dot' -and $p -notmatch '\.ps[dm]?1$')) { return }
+    if ($p -match '[*?]') { Fleet-MvGlob $p } else { Fleet-MvAdd $p }
+  }
+  # Values a file sets that a later path may use, and the files a loop goes over.
+  function Fleet-MvTrack([string]$l, [string]$from, [bool]$ps, $loops) {
+    if ($ps) {
+      $m = $fMvPAsgRx.Match($l)
+      if ($m.Success) { $k = 'ps:'; if ($m.Groups['e'].Success) { $k = 'env:' }; $fMvVars[$k + $m.Groups['n'].Value] = Fleet-MvExpand $m.Groups['v'].Value $from $true }
+      $m = $fMvHereRx.Match($l)
+      if ($m.Success) { $fMvVars['ps:' + $m.Groups['n'].Value] = [IO.Path]::GetDirectoryName($from) }
+      $m = $fMvGciRx.Match($l)
+      if ($m.Success) { $v = '_'; if ($m.Groups['v'].Success) { $v = $m.Groups['v'].Value }; $loops[$v] = @($m.Groups['g'].Value) }
+    } else {
+      $m = $fMvSAsgRx.Match($l)
+      if ($m.Success) { $fMvVars['env:' + $m.Groups['n'].Value] = Fleet-MvExpand $m.Groups['v'].Value $from $false }
+      foreach ($m in $fMvForRx.Matches($l)) { $loops[$m.Groups['v'].Value] = @($m.Groups['g'].Value -split '\s+' | Where-Object { $_ }) }
+    }
+  }
+  function Fleet-MvScan([string]$f, [string]$t) {
+    $ps = $f -match '\.ps[dm]?1$'
+    if ($ps) { $t = [regex]::Replace($t, '<#[\s\S]*?#>', [Text.RegularExpressions.MatchEvaluator] { param($m) $m.Value -replace '[^\n]', '' }) }
+    $loops = @{}
+    foreach ($l0 in ($t -split "`r?`n")) {
+      $l = Fleet-MvCode $l0 $ps
+      if ($l -notmatch '\S') { continue }
+      Fleet-MvTrack $l $f $ps $loops
+      $w = 0
+      foreach ($m in $fMvName.Matches($l)) {
+        $fMvSt.Named = $true
+        $r = $fMvRead.Match($l.Substring(0, $m.Index)); $post = $l.Substring($m.Index + $m.Length)
+        if (-not $r.Success -or ($r.Groups['e'].Success -and $post -match '^\}?\s*(?:[-+*/%.?]|\?\?)?=(?!=)') -or ($r.Groups['b'].Success -and $post -match '^:?=')) { $w++ }
+      }
+      foreach ($m in $fMvSrcRx.Matches($l)) { Fleet-MvFollow $m.Groups['p'].Value $f $ps 'dot' $loops }
+      if ($ps) {
+        foreach ($m in $fMvAmpRx.Matches($l)) { Fleet-MvFollow $m.Groups['p'].Value $f $ps 'amp' $loops }
+        foreach ($m in $fMvImpRx.Matches($l)) { Fleet-MvFollow $m.Groups['p'].Value $f $ps 'imp' $loops }
+        $m = $fMvRootRx.Match($l)
+        if ($m.Success -and $f -match '\.psd1$' -and $m.Groups['p'].Value -match '\.ps[m]?1$') {
+          $rm = $m.Groups['p'].Value; if (-not [IO.Path]::IsPathRooted($rm)) { $rm = J ([IO.Path]::GetDirectoryName($f)) $rm }; Fleet-MvAdd $rm
+        }
+      }
+      if ($w -eq 0 -or $fMvExport.IsMatch($l)) { continue }
+      if ($w -gt 1) { return 1 }
+      $hit = $null
+      for ($ri = 0; $ri -lt $fMvSet.Count; $ri++) { $hit = $fMvSet[$ri].Match($l); if ($hit.Success) { break } }
+      if (-not $hit.Success) { return 1 }
+      $val = Fleet-MvValue $hit.Groups['v'].Value ($ri -ge 3)
+      $seen = @(Fleet-MvSeen $hit.Groups['n'].Value)
+      if ($null -eq $val -or -not (@($seen | Where-Object { [string]::Equals((Fleet-MvNorm $_), (Fleet-MvNorm $val), $PathCmp) }).Count)) { return 1 }
+    }
+    0
+  }
+  function Fleet-Moved {
+    foreach ($f in $fMvFiles) { if (Is-File $f) { $fMvQ.Enqueue($f) } }
+    while ($fMvQ.Count -gt 0) {
+      $f = $fMvQ.Dequeue()
+      $k = $f; try { $k = [IO.Path]::GetFullPath($f) } catch { }
+      if (-not $fMvDone.Add((Fleet-MvNorm $k))) { continue }
+      if (-not (Is-File $f)) { continue }
+      if (-not (Is-SafeToRead $f) -or (Too-Big $f)) { $fMvSt.Lost = $true; continue }
+      $len = [long]0; try { $len = ([IO.FileInfo]$f).Length } catch { }
+      if ($fMvSt.Files -ge $fMvMaxFiles -or $fMvSt.Bytes + $len -gt $fMvMaxBytes) { $fMvSt.Lost = $true; break }
+      $t = Read-Text $f
+      if ($null -eq $t) { $fMvSt.Lost = $true; continue }
+      $fMvSt.Files++; $fMvSt.Bytes += $len
+      if ((Fleet-MvScan $f $t) -eq 1) { return 1 }
+    }
+    if ($fMvSt.Lost -and $fMvSt.Named) { return 1 }
+    0
+  }
+  $fMoved = Fleet-Moved
+  $fl = @(
+    'v=1'
+    "agents=$(Fleet-Ids $AgentIds)"
+    "yolo=$(Fleet-Ids @($AaList | ForEach-Object { Fleet-AgentId $_.Agent }))"
+    "tools=$(Fleet-Ids @($OldList | Where-Object { $null -ne $_.Fixed } | ForEach-Object { $_.Id }))"
+    "mcp_servers=$N_MCP"
+    "mcp_token_files=$N_MCP_TOKEN"
+    "key_files=$KEY_FILES"
+    "key_providers=$(Fleet-Ids $ProvIds)"
+    "history_keys=$HIST_KEYS"
+    "session_files=$N_SESS"
+    "sessions_partial=$fSp"
+    "allow_list_keys=$N_ALLOW"
+    "ssh_open=$N_SSH_OPEN"
+    "ak_links=$N_AK"
+    "planted=$($WormHit.Count + $WormRefs.Count)"
+    "possible=$(Fleet-Ids (@($fPoss) + @($ExtCheckTags)))"
+    "incidents=$(Fleet-Ids (@($fNpm) + @($ExtTags) + @($PyHits) + @($IndHits)))"
+    "platforms=$(Fleet-Ids $PlatFound)"
+    "on_open=$N_AUTO"
+    "to_read=$N_LOOK"
+    "updates=$(Fleet-Ids @($PyUpd | ForEach-Object { $_[0] }))"
+    "wiper=$WIPER_HIT"
+    "lock_only=$(Fleet-Ids $fLock)"
+    "remove=$(Fleet-Ids $ExtUpdTags)"
+    "not_read=$fNr"
+    "moved=$fMoved"
+    'tmp_marks='
+    'tmp_wiper=0'
+    'protected=ok'
+    "engine=$fEngine"
+    'end=1'
+  )
+  $AcctOut.Write((($fl -join "`n") + "`n"))
+  $AcctOut.Flush()
+  exit 0
+}
 # ---------------------------------------------------------------------------
 # Counts for GIRD's research, sent once when the scan is done unless -Offline or
 # DO_NOT_TRACK=1, with the same fields as gird-check.sh. Never a path, a file name,

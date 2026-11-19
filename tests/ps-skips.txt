@@ -112,3 +112,4 @@ and its macOS LaunchAgent is not looked for there	gird-check.ps1 takes Linux fro
 on a Mac, Claude Code below 2.1.251 shows the Edit tool race	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
 on Linux the Edit tool race is not listed	gird-check.ps1 takes Linux from the file system (not Windows, no /System/Library/CoreServices), which a test can't set: runs where pwsh is on Linux, as in CI
 so is its LaunchAgent	gird-check.ps1 takes macOS from /System/Library/CoreServices, which a test can't set: runs where pwsh is on macOS
+fleet: run as root, the test settings are ignored	gird-fleet.ps1 reads its test settings only off Windows, so the twin runs on a Windows PC only: off Windows the suite needs them

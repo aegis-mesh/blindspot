@@ -4075,6 +4075,925 @@ report_of "$WORK/report-winprof.json" winprof GIRD_CHECK_API="$API" --
 has    "Windows: key_places puts PowerShell's profiles in shell_rc" '"shell_rc":2' "$WORK/report-winprof.json"
 hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|winp|_netrc' "$WORK/report-win.json"
 
+echo "fleet mode on Windows (gird-fleet.ps1)"
+# The suites run off Windows. GIRD_CHECK_FLEET_TEST lets gird-fleet.ps1 run there, GIRD_CHECK_FLEET_POWERSHELL
+# stands in for Windows PowerShell, and GIRD_CHECK_FLEET_LAUNCH names tests/fleet-launch-ps.sh, which records
+# what gird-fleet.ps1 starts and can make the account run misbehave ($FW/mode). gird-fleet.ps1 reads them only
+# off Windows. The account is the person running the tests.
+FW=$WORK/fleetw; mkdir -p "$FW"
+# GIRD_CHECK_FLEET_PS stands in for ps, the process list gird-fleet.ps1 reads after it stops an account
+# run: the processes in $FW/procs that still run. Windows keeps a process's parent id after the parent
+# ends; macOS and Linux give the process a new parent, so the list is kept here as Windows would show it.
+cat > "$FW/ps" <<'SH'
+#!/bin/bash
+[ -f "$FWL_DIR/procs" ] || exit 0
+while read -r p rest; do kill -0 "$p" 2>/dev/null && printf '%s %s\n' "$p" "$rest"; done < "$FWL_DIR/procs"
+exit 0
+SH
+chmod +x "$FW/ps"
+FLEETPS=$PWD/gird-fleet.ps1; FWL=$PWD/tests/fleet-launch-ps.sh; FWFLAT=$PWD/tests/fleet-flat.py
+FA=$(id -un); printf '%s' "$FA" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' || FA=invalid-name
+WINONLY=""; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) WINONLY="needs Windows" ;; esac
+fw_home() { mkdir -p "$FW/$1/AppData/Local/Temp" "$FW/$1/AppData/Roaming"; }
+fw_run() { # out-prefix home [env...] -- args...: a run of gird-fleet.ps1; stdout, stderr, exit code, flat JSON
+  _p=$1; _h=$2; shift 2; _e=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
+  : > "$FW/argv.log"; : > "$FW/env.log"; rm -f "$FW/procs"
+  env -i PATH="${FW_PATH:-$WORK/bin}" HOME="$WORK/pshome" USERPROFILE="$_h" APPDATA="$_h/AppData/Roaming" LOCALAPPDATA="$_h/AppData/Local" \
+    TEMP="$_h/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" \
+    GIRD_CHECK_FLEET_LAUNCH="$FWL" GIRD_CHECK_FLEET_PS="$FW/ps" FWL_DIR="$FW" FWL_REPO="$PWD" ${_e[@]+"${_e[@]}"} \
+    "$PWSH" -NoProfile -NonInteractive -File "${FW_SCRIPT:-$FLEETPS}" "$@" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+  python3 "$FWFLAT" "$_h/AppData/Local/Blindspot/last.json" > "$FW/$_p.flat" 2>/dev/null || : > "$FW/$_p.flat"
+}
+INVRX='^v1 (failed|act|not_checked|review|clear) ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z)( other_profiles=([0-9]{1,4}))?( reason=([a-z0-9_]{1,40}))?(( \| [^|]+)*)$'
+cp -R "$WORK/home" "$FW/asha"; fw_home asha
+for h in clean upd; do fw_home "$h"; done
+mkdir -p "$FW/upd/.ssh"; printf -- '-----BEGIN OPENSSH ''PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH ''PRIVATE KEY-----\n' > "$FW/upd/.ssh/id_ed25519"
+
+# The same lines as gird-check.sh --account-run, key for key.
+env -i PATH=/usr/bin:/bin HOME="$WORK/home" bash "$BASH_SCRIPT" --account-run 2> /dev/null | cut -d= -f1 > "$FW/keys-sh.txt"
+psrun "$WORK/home" -- -AccountRun 2> /dev/null | cut -d= -f1 > "$FW/keys-ps.txt"
+if [ -s "$FW/keys-sh.txt" ] && cmp -s "$FW/keys-sh.txt" "$FW/keys-ps.txt"; then ok "fleet: -AccountRun prints the keys of --account-run, in the same order"
+else bad "fleet: -AccountRun prints the keys of --account-run, in the same order" "$(diff "$FW/keys-sh.txt" "$FW/keys-ps.txt" | head -n 4)"; fi
+
+fw_run two "$FW/asha" -- --json --mac-exit-codes
+# The Windows-shaped home holds one key file more than the Mac one: PowerShell's history.
+has    "fleet: each account's row holds its own findings" "^$FA\\.key_files=5\$" "$FW/two.flat"
+if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$FW/two.out" 2>/dev/null; then ok "fleet: --json prints one JSON document and nothing else"; else bad "fleet: --json prints one JSON document and nothing else" "$(head -c 300 "$FW/two.out")"; fi
+hasnot "fleet: the JSON holds no path or file name" '/(Users|home|private|tmp|var)/|~/|AppData|\.zshrc|zsh_history|\.env|settings(\.local)?\.json|mcp\.json' "$FW/two.out"
+nokeys "fleet: the JSON holds no planted key" "$WORK/keys.txt" "$FW/two.out"
+has    "fleet: act exits 10" '^10$' "$FW/two.rc"
+if diff -q <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FW/two.out") <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FW/asha/AppData/Local/Blindspot/last.json") > /dev/null 2>&1
+then ok "fleet: the saved file is the JSON printed"; else bad "fleet: the saved file is the JSON printed"; fi
+has    "fleet: the JSON names where to learn more" '^learn_more=https://gird.ai/argus$' "$FW/two.flat"
+has    "fleet: the JSON names the platforms found" "^$FA\\.platforms_found=opencode\$" "$FW/two.flat"
+has    "fleet: the JSON says how many other people have a profile on the PC" '^other_profiles=0$' "$FW/two.flat"
+if grep -qE "^/.* -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $FW/asha/AppData/Local/Blindspot/[0-9.]+/gird-check\\.ps1 -AccountRun --account-seconds=[0-9]+\$" "$FW/argv.log" && [ ! -s "$FW/env.log" ]
+then ok "fleet: the account run is PowerShell by full path, with -NoProfile and no GIRD_CHECK_ setting"; else bad "fleet: the account run is PowerShell by full path, with -NoProfile and no GIRD_CHECK_ setting" "$(cat "$FW/argv.log" "$FW/env.log")"; fi
+if cmp -s "$FW/asha/AppData/Local/Blindspot/$(sed -n 's/^script=//p' "$FW/two.flat")/gird-check.ps1" "$SCRIPT"; then ok "fleet: the check it unpacks is gird-check.ps1, byte for byte"; else bad "fleet: the check it unpacks is gird-check.ps1, byte for byte"; fi
+sed -n 's/^inventory=//p' "$FW/two.flat" > "$FW/two.inv"
+has    "fleet: the inventory value has the header the admin tool reads" "$INVRX" "$FW/two.inv"
+fw_run twoz "$FW/asha" -- --exit-zero --summary-to-stdout --mac-exit-codes
+has    "fleet: --exit-zero exits 0 on act" '^0$' "$FW/twoz.rc"
+if [ "$(grep -c '' "$FW/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=1 act=1 review=0 not_checked=0 other_profiles=[0-9]+ v=[0-9]+\.[0-9]+\.[0-9]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FW/twoz.out"
+then ok "fleet: --summary-to-stdout prints the one summary line"; else bad "fleet: --summary-to-stdout prints the one summary line" "$(cat "$FW/twoz.out")"; fi
+hasnot "fleet: the summary and the inventory value hold no path, file name or key" '/|~|AppData|\.zshrc|\.env|sk-|AKIA|ghp_' "$FW/twoz.out" "$FW/two.inv"
+
+# An account run cannot speak for anyone else: any line out of place refuses its whole output.
+fw_run clear "$FW/clean" -- --mac-exit-codes
+grep '^machine\.' "$FW/clear.flat" > "$FW/m-ok.txt"
+for M in other-row machine oversize malformed; do
+  printf '%s\n' "$M" > "$FW/mode"
+  fw_run "forge-$M" "$FW/upd"
+  grep '^machine\.' "$FW/forge-$M.flat" > "$FW/m-$M.txt"
+  has "fleet: $M output makes that account not checked" "^$FA\\.not_checked=bad_output\$" "$FW/forge-$M.flat"
+  if [ -s "$FW/m-ok.txt" ] && diff -q "$FW/m-ok.txt" "$FW/m-$M.txt" > /dev/null; then ok "fleet: $M output changes no other row"; else bad "fleet: $M output changes no other row" "$(diff "$FW/m-ok.txt" "$FW/m-$M.txt" | head -n 4)"; fi
+done
+hasnot "fleet: nothing an account run sent reaches the result" 'forged|99999' "$FW/forge-malformed.flat"
+has    "fleet: the default exit codes: 1 unless the outcome is clear" '^1$' "$FW/forge-malformed.rc"
+printf 'endless\n' > "$FW/mode"
+T0=$SECONDS; fw_run endless "$FW/upd" -- --deadline=60; T1=$((SECONDS - T0))
+if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/endless.flat" && [ "$T1" -lt 30 ]; then ok "fleet: root reads a set number of bytes, then stops the run" "${T1}s"; else bad "fleet: root reads a set number of bytes, then stops the run" "${T1}s $(grep "^$FA" "$FW/endless.flat")"; fi
+printf 'empty\n' > "$FW/mode"; fw_run empty "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/empty.flat" && grep -q '^reason=no_output$' "$FW/empty.flat" && grep -q '^13$' "$FW/empty.rc" && grep -qE "$INVRX" "$FW/empty.out" && grep -q ' reason=no_output |' "$FW/empty.out"
+then ok "fleet: an account run that prints nothing is failed, reason=no_output"; else bad "fleet: an account run that prints nothing is failed, reason=no_output" "$(cat "$FW/empty.rc" "$FW/empty.out")"; fi
+printf 'clm\n' > "$FW/mode"; fw_run clmrun "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/clmrun.flat" && grep -q '^reason=language_mode$' "$FW/clmrun.flat" && grep -q '^13$' "$FW/clmrun.rc" && grep -qE "$INVRX" "$FW/clmrun.out"
+then ok "fleet: an account run in the reduced language is failed, reason=language_mode"; else bad "fleet: an account run in the reduced language is failed, reason=language_mode" "$(cat "$FW/clmrun.rc" "$FW/clmrun.out")"; fi
+# The reduced language, set for a session here: gird-check.ps1 says so in its one line, and
+# gird-fleet.ps1's own result keeps the form each option asks for.
+fw_clm() { # out-prefix script args...: the script run in a session set to the reduced language
+  _p=$1; _s=$2; shift 2
+  env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" GIRD_CHECK_FLEET_TEST=1 \
+    "$PWSH" -NoProfile -NonInteractive -Command "\$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'; & '$_s' $*; exit \$LASTEXITCODE" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+}
+fw_clm clmac "$SCRIPT" --account-run
+if [ "$(cat "$FW/clmac.out")" = language_mode=1 ] && grep -q '^13$' "$FW/clmac.rc"; then ok "fleet: -AccountRun in the reduced language prints only language_mode=1"; else bad "fleet: -AccountRun in the reduced language prints only language_mode=1" "$(cat "$FW/clmac.rc" "$FW/clmac.out" | head -c 300)"; fi
+fw_clm clmv "$FLEETPS"; fw_clm clms "$FLEETPS" --summary-to-stdout; fw_clm clmj "$FLEETPS" --json --mac-exit-codes
+if grep -qE "$INVRX" "$FW/clmv.out" && grep -qE '^v1 failed [0-9T:-]+Z other_profiles=0 reason=language_mode \| ' "$FW/clmv.out" && grep -q '^1$' "$FW/clmv.rc" \
+  && grep -qE '^blindspot failed accounts=1 act=0 review=0 not_checked=1 other_profiles=0 v=unknown at=[0-9T:-]+Z reason=language_mode$' "$FW/clms.out" \
+  && python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d["outcome"] == "failed" and d["reason"] == "language_mode" and d["other_profiles"] == 0 else 1)' "$FW/clmj.out" 2>/dev/null && grep -q '^13$' "$FW/clmj.rc"
+then ok "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode"; else bad "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode" "$(cat "$FW/clmv.out" "$FW/clms.out" | head -c 300)"; fi
+
+# A run that holds its output open past its limit, with a process of its own that keeps running.
+# gird-fleet.ps1 stops the run and nothing else: that process is reported, and left alone.
+printf 'hold\n' > "$FW/mode"; rm -f "$FW/hold.pid" "$FW/launcher.pid"
+T0=$SECONDS; fw_run hold "$FW/upd" -- --deadline=40 --summary-to-stdout --mac-exit-codes; T1=$((SECONDS - T0))
+if [ "$T1" -lt 40 ] && grep -q '^12$' "$FW/hold.rc" && grep -q '^blindspot not_checked ' "$FW/hold.out"; then ok "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s"; else bad "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s, $(cat "$FW/hold.rc" "$FW/hold.out")"; fi
+has    "fleet: that account is partly checked" "^$FA\\.not_checked=time_limit\$" "$FW/hold.flat"
+if [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null; then ok "fleet: the account run itself is stopped"; else bad "fleet: the account run itself is stopped"; fi
+has    "fleet: a process that outlives the stop is reported" "^$FA\\.processes_left=true\$" "$FW/hold.flat"
+if [ -s "$FW/hold.pid" ] && kill -0 "$(cat "$FW/hold.pid")" 2>/dev/null; then ok "fleet: and that process is not stopped by gird-fleet.ps1"; else bad "fleet: and that process is not stopped by gird-fleet.ps1"; fi
+kill "$(cat "$FW/hold.pid" 2>/dev/null)" 2>/dev/null
+# A stuck run with no process of its own: nothing is reported left.
+printf 'stuck\n' > "$FW/mode"; rm -f "$FW/launcher.pid"; fw_run stuck "$FW/upd" -- --deadline=40
+if grep -q "^$FA\\.not_checked=time_limit\$" "$FW/stuck.flat" && [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null && ! grep -q processes_left "$FW/stuck.flat"
+then ok "fleet: a stopped run that left nothing running reports no process left"; else bad "fleet: a stopped run that left nothing running reports no process left" "$(grep "^$FA" "$FW/stuck.flat" | tr '\n' ' ')"; fi
+# The process list could not be read: a process may be left, and the account says so.
+rm -f "$FW/launcher.pid"; fw_run stucknops "$FW/upd" GIRD_CHECK_FLEET_PS="$FW/no-such-program" -- --deadline=40
+if grep -q "^$FA\\.not_checked=time_limit\$" "$FW/stucknops.flat" && grep -q "^$FA\\.processes_left=true\$" "$FW/stucknops.flat"; then ok "fleet: a process list that can't be read reports processes left, never none"
+else bad "fleet: a process list that can't be read reports processes left, never none" "$(grep "^$FA" "$FW/stucknops.flat" | tr '\n' ' ')"; fi
+# Output past the limit stops the run as a stuck one does.
+printf 'bighold\n' > "$FW/mode"; rm -f "$FW/launcher.pid"
+fw_run bighold "$FW/upd" -- --deadline=40
+if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/bighold.flat" && [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null && ! grep -q processes_left "$FW/bighold.flat"
+then ok "fleet: output past the limit stops the run"; else bad "fleet: output past the limit stops the run" "$(grep "^$FA" "$FW/bighold.flat" | tr '\n' ' ')"; fi
+# A tool the account run starts that never finishes: a stand-in for ripgrep. The account run stops it
+# itself, at three quarters of the 26 seconds it is given here, and ends before its limit with the sessions
+# partly checked.
+rm -f "$FW/mode" "$FW/rg.pid"; fw_home slowrg; mkdir -p "$FW/slowrg/.claude/projects/p" "$FW/slowrgbin"; printf '{}\n' > "$FW/slowrg/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash\necho "$$" > "$FWL_DIR/rg.pid"\nexec /bin/sleep 300\n' > "$FW/slowrgbin/rg"; chmod +x "$FW/slowrgbin/rg"
+T0=$SECONDS; FW_PATH="$FW/slowrgbin:$WORK/bin" fw_run slowrg "$FW/slowrg" -- --deadline=40; T1=$((SECONDS - T0))
+if [ -s "$FW/rg.pid" ] && ! kill -0 "$(cat "$FW/rg.pid")" 2>/dev/null && [ "$T1" -ge 15 ] && [ "$T1" -lt 26 ] && grep -q "^$FA\\.session_engine=rg\$" "$FW/slowrg.flat" \
+  && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowrg.flat" && ! grep -qE "^$FA\\.(not_checked|stopped|processes_left)=" "$FW/slowrg.flat"
+then ok "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s"
+else bad "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s $(grep -E "^$FA\\.(session|not_checked|stopped|processes)" "$FW/slowrg.flat" | tr '\n' ' ')"; kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null; fi
+# An account run run directly, given 8 seconds: its ripgrep (a stand-in) is stopped at three quarters
+# of that, 6 seconds after the run starts, while the rest of the check is held 20 seconds before it
+# would stop the session check itself (GIRD_CHECK_TEST_PAUSE_MS, tests only), so the run ends at least
+# 14 seconds after that stop is due. The stand-in leaves a watcher that writes the second it saw the
+# stand-in end. One stand-in never prints; one prints all the time, so output is always waiting. The
+# bounds are generous, so load does not fail them: the stand-in ended no sooner than 6 seconds after
+# the run was started, and at least 6 seconds before the run ended.
+fw_home rgstop; mkdir -p "$FW/rgstop/.claude/projects/p" "$FW/rgquiet" "$FW/rgloud"; printf '{}\n' > "$FW/rgstop/.claude/projects/p/a.jsonl"
+_w='#!/bin/bash\necho "$$" > "$RGT_DIR/rg.pid"; me=$$\n( while kill -0 "$me" 2>/dev/null; do /bin/sleep 0.2; done; /bin/date +%%s > "$RGT_DIR/rg.end" ) < /dev/null > /dev/null 2>&1 &\n'
+printf "$_w"'exec /bin/sleep 300\n' > "$FW/rgquiet/rg"
+printf "$_w"'exec %s -e '\''print "f\\0nokey\\n" while 1'\''\n' "$(command -v perl)" > "$FW/rgloud/rg"; chmod +x "$FW/rgquiet/rg" "$FW/rgloud/rg"
+for _m in quiet loud; do
+  rm -f "$FW/rg.pid" "$FW/rg.end"; _t0=$(date +%s)
+  psrun "$FW/rgstop" PATH="$FW/rg$_m:$WORK/bin" RGT_DIR="$FW" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_TEST_PAUSE_MS=20000 -- -AccountRun --account-seconds=8 > "$FW/rg$_m.out" 2> /dev/null; _rc=$?
+  _t2=$(date +%s); for _i in $(seq 1 25); do [ -s "$FW/rg.end" ] && break; sleep 0.2; done   # safety ceiling for the watcher's last write
+  _e=$(cat "$FW/rg.end" 2>/dev/null); _e=${_e:-$((_t2 + 999))}
+  if [ "$_rc" -eq 0 ] && [ "$_e" -ge $((_t0 + 6)) ] && [ "$_e" -le $((_t2 - 6)) ] && grep -q '^sessions_partial=1$' "$FW/rg$_m.out" && grep -q '^engine=rg$' "$FW/rg$_m.out"
+  then ok "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "ended at $((_e - _t0))s of $((_t2 - _t0))s"
+  else bad "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "exit $_rc, ended at $((_e - _t0))s of $((_t2 - _t0))s, $(grep -E '^(sessions_partial|engine)=' "$FW/rg$_m.out" | tr '\n' ' ')"; fi
+  kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
+done
+# A ripgrep that closes its output and never ends does not hold up a run by hand, even with
+# -AllSessions: it gets a while (GIRD_CHECK_TEST_GRACE_MS, tests only) and is stopped, and the
+# sessions are partly checked. 120 seconds is a safety ceiling.
+mkdir -p "$FW/rgshut"; printf '#!/bin/bash\necho "$$" > "$RGT_DIR/rg.pid"\nexec >&-\nexec /bin/sleep 300\n' > "$FW/rgshut/rg"; chmod +x "$FW/rgshut/rg"; rm -f "$FW/rg.pid"
+psrun "$FW/rgstop" PATH="$FW/rgshut:$WORK/bin" RGT_DIR="$FW" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_TEST_GRACE_MS=2000 -- -Offline -AllSessions > "$FW/rgshut.out" 2>&1 &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done
+if kill -0 "$_bp" 2>/dev/null; then kill -9 "$_bp" 2>/dev/null; bad "a ripgrep that never ends after its output does not hold up -AllSessions" "still running after 120 s"
+elif kill -0 "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null; then bad "a ripgrep that never ends after its output does not hold up -AllSessions" "the stand-in is still running"
+else has "a ripgrep that never ends after its output does not hold up -AllSessions" 'Agent sessions were partly checked' "$FW/rgshut.out"; fi
+wait "$_bp" 2>/dev/null; kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
+# -AllSessions waiting on a session check that never ends can still be stopped with Ctrl+C (SIGINT
+# here). The signal is sent once the check has long reached that wait: twice as long as the same run
+# takes without the held check, plus 5 seconds. 30 seconds is a safety ceiling.
+: > "$FW/hold"; _t0=$SECONDS; psrun "$FW/rgstop" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > /dev/null 2>&1; _d=$((SECONDS - _t0))
+# A job started in the background ignores SIGINT; the run is started with it restored.
+"$(command -v python3)" -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' /usr/bin/env -i PATH="$WORK/bin" \
+  HOME="$WORK/pshome" USERPROFILE="$FW/rgstop" APPDATA="$FW/rgstop/AppData/Roaming" LOCALAPPDATA="$FW/rgstop/AppData/Local" TEMP="$FW/rgstop/AppData/Local/Temp" \
+  LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$FW/hold" "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline -AllSessions > /dev/null 2>&1 &
+_bp=$!; sleep $((2 * _d + 5)); kill -INT "$_bp" 2>/dev/null
+for _i in $(seq 1 150); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done
+if kill -0 "$_bp" 2>/dev/null; then kill -9 "$_bp" 2>/dev/null; bad "Ctrl+C stops -AllSessions waiting on a session check that never ends" "still running 30 s after the signal"
+else ok "Ctrl+C stops -AllSessions waiting on a session check that never ends"; fi
+wait "$_bp" 2>/dev/null; rm -f "$FW/hold"
+# When ripgrep has not ended 2 seconds after it is told to stop, the check says the sessions were
+# partly checked. $halt is run on its own, with a process that never ends.
+cat > "$FW/fn-halt.ps1" <<'PS'
+param([string]$File)
+$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+$a = $ast.Find({ param($x) $x -is [Management.Automation.Language.AssignmentStatementAst] -and $x.Left.Extent.Text -ceq '$halt' }, $true)
+$halt = [scriptblock]::Create($a.Right.Extent.Text.Trim().TrimStart('{').TrimEnd('}'))
+$out = foreach ($ends in @($false, $true)) {
+  $o = New-Object PSObject; $o | Add-Member ScriptMethod Kill { }; $o | Add-Member NoteProperty Ends $ends; $o | Add-Member ScriptMethod WaitForExit { param($ms) $this.Ends }
+  $st = @{ Proc = $o; Stop = $false; Stopped = $false; Hung = $false }
+  & $halt; "$($st.Stopped)/$($st.Hung)"
+}
+$p = $ast.Find({ param($x) $x -is [Management.Automation.Language.AssignmentStatementAst] -and $x.Left.Extent.Text -ceq '$SESS_PARTIAL' }, $true)
+$out += [string]($p.Right.Extent.Text.StartsWith('$SessSt.Hung -or '))
+$out -join ' '
+PS
+_h=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-halt.ps1" "$SCRIPT" 2>&1 | tr -d '\r')
+if [ "$_h" = 'True/True True/False True' ]; then ok "a ripgrep still running after it was stopped leaves the sessions partly checked"
+else bad "a ripgrep still running after it was stopped leaves the sessions partly checked" "$_h"; fi
+printf 'tmpmarks\n' > "$FW/mode"; fw_run tmpmarks "$FW/upd"
+has    "fleet: an account run that names markers in a shared /tmp is refused on Windows" "^$FA\\.not_checked=bad_output\$" "$FW/tmpmarks.flat"
+rm -f "$FW/mode"
+fw_run late "$FW/upd" -- --deadline=1 --mac-exit-codes
+if grep -q "^$FA\\.not_checked=deadline\$" "$FW/late.flat" && grep -q '^deadline_reached=true$' "$FW/late.flat" && grep -q '^12$' "$FW/late.rc"; then ok "fleet: a run stopped by its deadline is not_checked"; else bad "fleet: a run stopped by its deadline is not_checked" "$(head -n 5 "$FW/late.flat")"; fi
+has    "fleet: not_checked exits 12" '^12$' "$FW/late.rc"
+
+# What an account run reads.
+KEYX="AK""IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)"; printf '%s\n' "$KEYX" > "$FW/keys-x.txt"
+fw_home linker; mkdir -p "$FW/keeper/private"; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FW/keeper/private/zshrc"; chmod 000 "$FW/keeper/private"
+ln -s "$FW/keeper/private/zshrc" "$FW/linker/.zshrc"; ln -s /etc/hosts "$FW/linker/.bash_profile"; ln -s "$FW/keeper/private" "$FW/linker/.config"
+fw_run links "$FW/linker"
+chmod 755 "$FW/keeper/private"
+if grep -q "^$FA\\.key_files=0\$" "$FW/links.flat" && grep -q "^$FA\\.history_keys=0\$" "$FW/links.flat"; then ok "fleet: links to another home or a system file are read with the account's own rights"; else bad "fleet: links to another home or a system file are read with the account's own rights" "$(grep "^$FA" "$FW/links.flat" | tr '\n' ' ')"; fi
+nokeys "fleet: and the key behind them is never in the result" "$FW/keys-x.txt" "$FW/linker/AppData/Local/Blindspot/last.json"
+fw_home odd; mkfifo "$FW/odd/.zsh_history"; ln -s /dev/zero "$FW/odd/.bash_history"
+python3 -c "import sys; open(sys.argv[1], 'w').write('export OPENAI_API_KEY=x\n' + '#' * 17000000 + '\n')" "$FW/odd/.zshrc"
+T0=$SECONDS; fw_run odd "$FW/odd" -- --deadline=120; T1=$((SECONDS - T0)); rm -f "$FW/odd/.zshrc"
+if grep -q "^$FA\\.files_not_checked=3\$" "$FW/odd.flat" && grep -q "^$FA\\.key_files=0\$" "$FW/odd.flat" && [ "$T1" -lt 60 ]; then ok "fleet: a fifo, a link to a device and an oversized file are not read, and are counted"; else bad "fleet: a fifo, a link to a device and an oversized file are not read, and are counted" "${T1}s $(grep "^$FA" "$FW/odd.flat" | tr '\n' ' ')"; fi
+has    "fleet: so the account is not_checked, never clear" "^$FA\\.outcome=not_checked\$" "$FW/odd.flat"
+fw_home closed; mkdir -p "$FW/closed/.cursor"; printf '{"mcpServers":{}}\n' > "$FW/closed/.cursor/mcp.json"; chmod 000 "$FW/closed/.cursor"
+fw_run closedf "$FW/closed"; chmod 755 "$FW/closed/.cursor"
+has    "fleet: a config behind a folder the account can't enter counts as not read" "^$FA\\.files_not_checked=[1-9]" "$FW/closedf.flat"
+has    "fleet: so that account is never clear"        "^$FA\\.outcome=not_checked\$" "$FW/closedf.flat"
+fw_home devnull; ln -s /dev/null "$FW/devnull/.zsh_history"
+fw_run devnull "$FW/devnull"
+has    "fleet: a history file linked to /dev/null is not counted as not read" "^$FA\\.files_not_checked=0\$" "$FW/devnull.flat"
+fw_home unread; mkdir -p "$FW/unread/code/locked"; printf 'export OPENAI_API_KEY=x\n' > "$FW/unread/.zshrc"; chmod 000 "$FW/unread/.zshrc" "$FW/unread/code/locked"
+fw_run unread "$FW/unread"
+chmod 755 "$FW/unread/code/locked"; chmod 644 "$FW/unread/.zshrc"
+if grep -qE "^$FA\\.files_not_checked=([2-9]|[1-9][0-9]+)\$" "$FW/unread.flat" && grep -q "^$FA\\.outcome=not_checked\$" "$FW/unread.flat"; then ok "fleet: a file or folder the account can't read is not checked, never clear"; else bad "fleet: a file or folder the account can't read is not checked, never clear" "$(grep "^$FA" "$FW/unread.flat" | tr '\n' ' ')"; fi
+fw_home cut; mkdir -p "$FW/cut/code/evil/.codex"
+python3 -c "import sys; open(sys.argv[1], 'w').write('args = [' + '\"a\",' * 17000 + '\"\"\"x\"\"\"]\napproval_policy = \"never\"\nsandbox_mode = \"danger-full-access\"\n')" "$FW/cut/code/evil/.codex/config.toml"
+fw_run cut "$FW/cut" -- --json
+has    "fleet: a settings file read only in part leaves the account partly checked" "^$FA\\.complete=false\$" "$FW/cut.flat"
+has    "fleet: and counts as a file not checked" "^$FA\\.files_not_checked=[1-9]" "$FW/cut.flat"
+
+# Each outcome, its exit code, and the order between them.
+if grep -q '^outcome=clear$' "$FW/clear.flat" && grep -q '^0$' "$FW/clear.rc"; then ok "fleet: clear exits 0"; else bad "fleet: clear exits 0" "$(cat "$FW/clear.rc"; head -n 4 "$FW/clear.flat")"; fi
+fw_run upd "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=review$' "$FW/upd.flat" && grep -q '^11$' "$FW/upd.rc"; then ok "fleet: review exits 11"; else bad "fleet: review exits 11" "$(cat "$FW/upd.rc")"; fi
+cp -R "$FW/upd" "$FW/updnr"; printf 'x\n' > "$FW/updnr/.zshrc"; chmod 000 "$FW/updnr/.zshrc"
+fw_run order1 "$FW/updnr"; chmod 644 "$FW/updnr/.zshrc"
+has    "fleet: not_checked comes before review" '^outcome=not_checked$' "$FW/order1.flat"
+fw_home actnr; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FW/actnr/.bashrc"; printf 'x\n' > "$FW/actnr/.zshrc"; chmod 000 "$FW/actnr/.zshrc"
+fw_run order2 "$FW/actnr"; chmod 644 "$FW/actnr/.zshrc"
+has    "fleet: act comes before not_checked" '^outcome=act$' "$FW/order2.flat"
+fw_run clearz "$FW/clean"
+has    "fleet: and clear exits 0 with the default codes" '^0$' "$FW/clearz.rc"
+
+# Nothing it runs comes from PATH, and nothing reaches the network, a browser or a saved report.
+FAKE=$FW/fakebin; mkdir -p "$FAKE"
+# Not rg: the account run uses the person's own ripgrep, as a run by hand does (docs/designs/fleet-mode.md).
+for t in ps pgrep pwsh powershell powershell.exe taskkill taskkill.exe sh bash env open xdg-open; do
+  printf '#!/bin/sh\necho %s >> "%s/fake-ran"\nexit 1\n' "$t" "$FW" > "$FAKE/$t"; chmod +x "$FAKE/$t"
+done
+rm -f "$FW/fake-ran"; mkdir -p "$FW/cwd"; : > "$WORK/received.log"; : > "$WORK/gets.log"
+( cd "$FW/cwd" && FW_PATH="$FAKE:$WORK/bin" fw_run net "$FW/upd" FWL_API="$API" GIRD_CHECK_SESSIONS_ENGINE=none -- --mac-exit-codes )
+if [ ! -s "$WORK/received.log" ] && [ ! -s "$WORK/gets.log" ] && grep -q '^11$' "$FW/net.rc"; then ok "fleet: makes no network request"; else bad "fleet: makes no network request" "exit $(cat "$FW/net.rc")"; fi
+if [ ! -e "$FW/fake-ran" ] && [ -z "$(ls "$FW/cwd")" ] && [ -z "$(find "$FW/upd" -name 'gird-ai-key-check-*' 2>/dev/null)" ]; then ok "fleet: opens no browser and saves no report"; else bad "fleet: opens no browser and saves no report" "$(ls "$FW/cwd"; cat "$FW/fake-ran" 2>/dev/null)"; fi
+if [ ! -e "$FW/fake-ran" ]; then ok "fleet: runs no program it finds on PATH"; else bad "fleet: runs no program it finds on PATH" "$(cat "$FW/fake-ran")"; fi
+if [ ! -s "$FW/env.log" ] && grep -q "^$FA\\.session_engine=dotnet\$" "$FW/net.flat"; then ok "fleet: a test-only GIRD_CHECK_ setting in the person's environment changes nothing"; else bad "fleet: a test-only GIRD_CHECK_ setting in the person's environment changes nothing" "$(cat "$FW/env.log"; grep session_engine "$FW/net.flat")"; fi
+# An MDM-like run: no HOME, a minimal PATH, / as the working folder, no terminal.
+( cd / && env -i PATH=/usr/bin:/bin USERPROFILE="$FW/upd" APPDATA="$FW/upd/AppData/Roaming" LOCALAPPDATA="$FW/upd/AppData/Local" TEMP="$FW/upd/AppData/Local/Temp" \
+    GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" "$PWSH" -NoProfile -NonInteractive -File "$FLEETPS" --summary-to-stdout < /dev/null > "$FW/mdm.out" 2>&1 )
+has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspot review accounts=1 ' "$FW/mdm.out"
+# A PowerShell profile that would print or change something does not run, for the account run either.
+mkdir -p "$WORK/pshome/.config/powershell"
+printf '[Console]::Out.WriteLine("agents=from-a-profile"); Set-Content -LiteralPath "%s/profile-ran" -Value 1\n' "$FW" > "$WORK/pshome/.config/powershell/Microsoft.PowerShell_profile.ps1"
+fw_run prof "$FW/upd"
+rm -f "$WORK/pshome/.config/powershell/Microsoft.PowerShell_profile.ps1"
+if [ ! -e "$FW/profile-ran" ] && grep -q '^outcome=review$' "$FW/prof.flat"; then ok "fleet: a profile that would print or change something does not run"; else bad "fleet: a profile that would print or change something does not run" "$(head -n 3 "$FW/prof.flat")"; fi
+
+# The saved result's folder, in the person's own profile.
+fw_home slink; mkdir -p "$FW/elsewhere"; ln -s "$FW/elsewhere" "$FW/slink/AppData/Local/Blindspot"
+fw_run slink "$FW/slink"
+if [ -d "$FW/slink/AppData/Local/Blindspot" ] && [ ! -L "$FW/slink/AppData/Local/Blindspot" ] && [ -f "$FW/slink/AppData/Local/Blindspot/last.json" ] && [ -z "$(ls "$FW/elsewhere")" ]; then ok "fleet: a saved-result folder that is a link is made again"; else bad "fleet: a saved-result folder that is a link is made again" "$(ls -la "$FW/slink/AppData/Local" "$FW/elsewhere" 2>&1 | head -n 6)"; fi
+fw_home swrite; mkdir -p "$FW/swrite/AppData/Local/Blindspot"; printf 'keep\n' > "$FW/target"; ln -s "$FW/target" "$FW/swrite/AppData/Local/Blindspot/last.json"
+fw_run swrite "$FW/swrite"
+if [ "$(cat "$FW/target")" = keep ] && [ -f "$FW/swrite/AppData/Local/Blindspot/last.json" ] && [ ! -L "$FW/swrite/AppData/Local/Blindspot/last.json" ]; then ok "fleet: the result is written to a new file and renamed into place"; else bad "fleet: the result is written to a new file and renamed into place"; fi
+# An unpacked check that is not the one this run carries is written again before it runs.
+fw_home rehash; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/rehash/AppData/Local/Blindspot/$_v"
+printf 'Write-Output "v=1"\n' > "$FW/rehash/AppData/Local/Blindspot/$_v/gird-check.ps1"
+fw_run rehash "$FW/rehash"
+if cmp -s "$FW/rehash/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && grep -q '^outcome=clear$' "$FW/rehash.flat"; then ok "fleet: an unpacked check whose SHA-256 differs is written again before it runs"; else bad "fleet: an unpacked check whose SHA-256 differs is written again before it runs" "$(head -n 3 "$FW/rehash.flat")"; fi
+# Without gird-check.ps1 next to it or packed inside, nothing can run: failed, never clear.
+mkdir -p "$FW/alone"; cp "$FLEETPS" "$FW/alone/"
+FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone "$FW/clean" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/alone.flat" && grep -q '^reason=unpack$' "$FW/alone.flat" && grep -q '^13$' "$FW/alone.rc" && grep -qE "$INVRX" "$FW/alone.out"; then ok "fleet: without gird-check.ps1 next to it or packed inside, the run is failed"; else bad "fleet: without gird-check.ps1 next to it or packed inside, the run is failed" "$(cat "$FW/alone.rc" "$FW/alone.out")"; fi
+FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone1 "$FW/clean"
+has    "fleet: and failed exits 1 with the default codes" '^1$' "$FW/alone1.rc"
+# A saved-result folder that can't be made: failed, reason=save, and the JSON still printed.
+fw_home save; chmod 555 "$FW/save/AppData/Local"; : > "$FW/argv.log"
+fw_run save "$FW/save" -- --json --mac-exit-codes; chmod 755 "$FW/save/AppData/Local"
+if python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d["outcome"] == "failed" and d["reason"] == "save" else 1)' "$FW/save.out" 2>/dev/null && grep -q '^13$' "$FW/save.rc" && [ ! -s "$FW/argv.log" ]
+then ok "fleet: a result it can't save is failed, reason=save"; else bad "fleet: a result it can't save is failed, reason=save" "exit $(cat "$FW/save.rc") $(head -c 300 "$FW/save.out")"; fi
+fw_run start "$FW/clean" GIRD_CHECK_FLEET_LAUNCH="$FW/no-such-program" -- --mac-exit-codes
+if grep -q '^13$' "$FW/start.rc" && grep -qE "$INVRX" "$FW/start.out" && grep -q ' reason=start | ' "$FW/start.out"; then ok "fleet: an account run that can't be started is failed, reason=start"
+else bad "fleet: an account run that can't be started is failed, reason=start" "exit $(cat "$FW/start.rc") $(cat "$FW/start.out")"; fi
+# The file it starts is hashed again just before it starts: one it could not write again is never started.
+fw_home rehold; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/rehold/AppData/Local/Blindspot/$_v"
+printf 'Write-Output "v=1"\n' > "$FW/rehold/AppData/Local/Blindspot/$_v/gird-check.ps1"; chmod 555 "$FW/rehold/AppData/Local/Blindspot/$_v"; : > "$FW/argv.log"
+fw_run rehold "$FW/rehold" -- --mac-exit-codes; chmod 755 "$FW/rehold/AppData/Local/Blindspot/$_v"
+if grep -q '^reason=unpack$' "$FW/rehold.flat" && grep -q '^13$' "$FW/rehold.rc" && [ ! -s "$FW/argv.log" ]; then ok "fleet: an unpacked check it could not write again is never started, reason=unpack"
+else bad "fleet: an unpacked check it could not write again is never started, reason=unpack" "$(cat "$FW/rehold.rc" "$FW/argv.log"; head -n 6 "$FW/rehold.flat")"; fi
+
+# The inventory value, cut to what Intune keeps.
+printf 'maxed\n' > "$FW/mode"; fw_run maxed "$FW/clean"; rm -f "$FW/mode"
+sed -n 's/^inventory=//p' "$FW/maxed.flat" > "$FW/maxed.inv"
+has    "fleet: a long inventory value ends with +more" ' \+more$' "$FW/maxed.inv"
+if [ "$(tr -d '\n' < "$FW/maxed.inv" | wc -c)" -le 2047 ] && cmp -s "$FW/maxed.inv" "$FW/maxed.out"; then ok "fleet: and still fits"; else bad "fleet: and still fits" "$(wc -c < "$FW/maxed.inv")"; fi
+has    "fleet: and keeps the accounts that need attention" "\\| $FA: act" "$FW/maxed.inv"
+has    "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "\\| $FA: act wiper; incidents [a-z0-9,]+ \\+more\$" "$FW/maxed.inv"
+has    "fleet: and ends with +more, since details were cut" ' \+more$' "$FW/maxed.inv"
+has    "fleet: the cut value has the header the admin tool reads" "$INVRX" "$FW/maxed.inv"
+if [ "$(tr -d '\n' < "$FW/two.inv" | wc -c)" -le 2047 ] && ! grep -qE '/|AppData|\.zshrc|\.env' "$FW/two.inv"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
+
+# Possible signs and the account's own temp folder.
+fw_home gw; mkdir -p "$FW/gw/Library/LaunchAgents"; : > "$FW/gw/Library/LaunchAgents/com.user.nodestart.plist"
+fw_run gw "$FW/gw"
+has    "fleet: a startup file named like GlassWorm's, with no GlassWorm extension, is a possible sign" "^$FA\\.possible_signs=glassworm\$" "$FW/gw.flat"
+has    "fleet: and its account is to review, not act now" "^$FA\\.outcome=review\$" "$FW/gw.flat"
+fw_home tm; : > "$FW/tm/AppData/Local/Temp/remote_code_loader.lock"
+fw_run tm "$FW/tm"
+has    "fleet: a malware marker in the account's own temp folder counts for that account" "^$FA\\.incidents=litellm\$" "$FW/tm.flat"
+hasnot "fleet: and not for the Mac" '^machine\.incidents=.*litellm' "$FW/tm.flat"
+fw_home tmd; mkdir -p "$FW/tmd/AppData/Local/Temp/.pc_sq_abc123"
+fw_run tmd "$FW/tmd"
+has    "fleet: a marker folder in the account's own temp folder counts for that account" "^$FA\\.incidents=litellm\$" "$FW/tmd.flat"
+# %ProgramData%, where any account can create a file but a standard account can't give one to another
+# owner: the owner decides. GIRD_CHECK_FLEET_PROGRAMDATA is the folder the PC's own check reads.
+fw_home pd; mkdir -p "$FW/progdata/NodePackages"; : > "$FW/progdata/NodePackages/protocal.cjs"
+fw_run pd "$FW/pd" ProgramData="$FW/progdata" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/progdata"
+if grep -q '^machine\.possible_signs=$' "$FW/pd.flat" && grep -q '^machine\.incidents=$' "$FW/pd.flat"; then ok "fleet: a marker the person owns in %ProgramData% is not the PC's"; else bad "fleet: a marker the person owns in %ProgramData% is not the PC's" "$(grep '^machine' "$FW/pd.flat" | tr '\n' ' ')"; fi
+ln "$FW/progdata/NodePackages/protocal.cjs" "$FW/progdata/second-name"
+fw_run pdh "$FW/pd" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/progdata"
+if grep -q '^machine\.possible_signs=mastra$' "$FW/pdh.flat" && grep -q '^machine\.incidents=$' "$FW/pdh.flat"; then ok "fleet: a marker the person owns under two names in %ProgramData% is a possible sign for the PC"
+else bad "fleet: a marker the person owns under two names in %ProgramData% is a possible sign for the PC" "$(grep '^machine' "$FW/pdh.flat" | tr '\n' ' ')"; fi
+rm -rf "$FW/progdata"
+# Windows PowerShell on a Windows PC, with a fixture home's folders and the rest of the PC's own environment.
+fw_runwin() { # out-prefix home [env...] -- args...
+  _p=$1; _h=$2; shift 2; _e=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
+  env USERPROFILE="$(cygpath -w "$_h")" APPDATA="$(cygpath -w "$_h/AppData/Roaming")" LOCALAPPDATA="$(cygpath -w "$_h/AppData/Local")" \
+    TEMP="$(cygpath -w "$_h/AppData/Local/Temp")" TMP="$(cygpath -w "$_h/AppData/Local/Temp")" ${_e[@]+"${_e[@]}"} \
+    "$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" "$@" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+  python3 "$FWFLAT" "$_h/AppData/Local/Blindspot/last.json" > "$FW/$_p.flat" 2>/dev/null || : > "$FW/$_p.flat"
+}
+# A marker owned by someone else: administrator rights on Windows, or passwordless sudo elsewhere, give it away.
+fw_give() { # file owner(root|other): exit 0 when the file now has that owner
+  if [ -z "$WINONLY" ]; then [ "$2" = root ] && icacls "$(cygpath -w "$1")" /setowner '*S-1-5-32-544' > /dev/null 2>&1; return; fi
+  if [ "$2" = root ]; then sudo -n chown root "$1" 2> /dev/null; else sudo -n chown nobody "$1" 2> /dev/null; fi
+}
+fw_mark() { # out-prefix owner: a marker that owner owns, as the PC's own check classes it
+  mkdir -p "$FW/pd-$1/NodePackages"; : > "$FW/pd-$1/NodePackages/protocal.cjs"
+  if ! fw_give "$FW/pd-$1/NodePackages/protocal.cjs" "$2"; then sudo -n rm -rf "$FW/pd-$1" 2> /dev/null; rm -rf "$FW/pd-$1" 2> /dev/null; return 1; fi
+  if [ -z "$WINONLY" ]; then fw_runwin "$1" "$FW/pd" ProgramData="$(cygpath -w "$FW/pd-$1")" --; else fw_run "$1" "$FW/pd" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/pd-$1"; fi
+  sudo -n rm -rf "$FW/pd-$1" 2> /dev/null; rm -rf "$FW/pd-$1" 2> /dev/null; return 0
+}
+if fw_mark pdm root; then
+  if grep -q '^machine\.incidents=mastra$' "$FW/pdm.flat" && grep -q '^machine\.outcome=act$' "$FW/pdm.flat" && grep -q '^outcome=act$' "$FW/pdm.flat"; then ok "fleet: one Administrators or SYSTEM own is a finding for the PC"
+  else bad "fleet: one Administrators or SYSTEM own is a finding for the PC" "$(grep '^machine' "$FW/pdm.flat" | tr '\n' ' ')"; fi
+else skip "fleet: one Administrators or SYSTEM own is a finding for the PC" "giving a file to Administrators takes administrator rights on Windows, and to root passwordless sudo elsewhere, as CI runners have"; fi
+if [ -n "$WINONLY" ] && fw_mark pdo other; then
+  if grep -q '^machine\.possible_signs=mastra$' "$FW/pdo.flat" && grep -q '^machine\.incidents=$' "$FW/pdo.flat"; then ok "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding"
+  else bad "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "$(grep '^machine' "$FW/pdo.flat" | tr '\n' ' ')"; fi
+else skip "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "needs a second ordinary account on Windows, or passwordless sudo elsewhere, as CI runners have"; fi
+if [ -n "$WINONLY" ]; then
+  skip "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "$WINONLY: the only marker data/indicators.tsv lists in %ProgramData% is for Windows, so an account run elsewhere never looks for it"
+  skip "fleet: a stale unpacked check marked read-only is written again" "$WINONLY: off Windows a read-only file can be deleted from a folder its owner can write"
+else
+  fw_home pdw; mkdir -p "$FW/pdw-data/NodePackages"; : > "$FW/pdw-data/NodePackages/protocal.cjs"
+  if [ "$(powershell.exe -NoProfile -Command "(Get-Acl -LiteralPath '$(cygpath -w "$FW/pdw-data/NodePackages/protocal.cjs")').GetOwner([Security.Principal.SecurityIdentifier]).Value -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value" | tr -d '\r')" != True ]; then
+    skip "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "a file this account creates is not its own here (an administrator's new files can belong to Administrators)"
+  else
+    fw_runwin pdw "$FW/pdw" ProgramData="$(cygpath -w "$FW/pdw-data")" --
+    if grep -q "^$FA\\.incidents=mastra\$" "$FW/pdw.flat" && grep -q "^$FA\\.outcome=act\$" "$FW/pdw.flat" && grep -q '^machine\.incidents=$' "$FW/pdw.flat" && grep -q '^machine\.possible_signs=$' "$FW/pdw.flat"
+    then ok "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level"; else bad "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "$(grep -E "^($FA|machine)\\.(incidents|outcome|possible_signs)" "$FW/pdw.flat" | tr '\n' ' ')"; fi
+  fi
+  rm -rf "$FW/pdw-data"
+  fw_home ro; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/ro/AppData/Local/Blindspot/$_v"
+  printf 'Write-Output "v=1"\n' > "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1"; attrib.exe +R "$(cygpath -w "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1")"
+  fw_runwin ro "$FW/ro" --
+  if cmp -s "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && ! grep -q '^reason=' "$FW/ro.flat"; then ok "fleet: a stale unpacked check marked read-only is written again"; else bad "fleet: a stale unpacked check marked read-only is written again" "$(head -n 6 "$FW/ro.flat")"; fi
+fi
+# The decisions themselves, from gird-fleet.ps1's own functions: which marker goes where, which
+# profiles are people's, and how the account run is stopped.
+cat > "$FW/fn.ps1" <<'PS'
+param([string]$File, [string]$Names, [string]$Code)
+$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+foreach ($f in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)) { if (($Names -split ',') -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) } }
+. ([scriptblock]::Create([IO.File]::ReadAllText($Code)))
+PS
+fw_fn() { "$PWSH" -NoProfile -NonInteractive -File "$FW/fn.ps1" "$FLEETPS" "$1" "$2" 2>&1 | tr -d '\r'; }
+cat > "$FW/fn-mark.ps1" <<'PS'
+(@(@('person', ''), @('person', 'HardLink'), @('machine', ''), @('machine', 'HardLink'), @('machine', 'unknown'), @('other', ''), @('unknown', '')) | ForEach-Object { $_[0] + '/' + $_[1] + '=' + (Mark-Kind $_[0] $_[1]) }) -join ' '
+PS
+if [ "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")" = 'person/=account person/HardLink=possible machine/=incident machine/HardLink=possible machine/unknown=possible other/=possible unknown/=possible' ]
+then ok "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says"; else bad "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says" "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")"; fi
+cat > "$FW/fn-prof.ps1" <<'PS'
+(@(@('S-1-5-21-11-22-33-500', 'C:\Users\Administrator'), @('S-1-5-21-11-22-33-503', 'C:\Users\DefaultAccount'), @('S-1-5-21-11-22-33-1001', 'C:\Users\asha'),
+  @('S-1-5-21-11-22-33-1002', 'C:\Users\defaultuser0'), @('S-1-12-1-11-22-33-44', 'C:\Users\bob'), @('S-1-5-18', 'C:\Windows\system32\config\systemprofile'),
+  @('S-1-5-21-11-22-33-1003', '')) | ForEach-Object { [string](Is-PersonProfile $_[0] $_[1]) }) -join ' '
+PS
+if [ "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")" = 'False False True False True False False' ]; then ok "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's"
+else bad "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's" "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")"; fi
+# Each script stops only a process it started, through the handle it got when it started it, and never
+# a process by its id: an id Windows has given to another process would stop that one. gird-fleet.ps1
+# stops the account run; gird-check.ps1 stops its ripgrep. Read by parsing both scripts.
+cat > "$FW/fn-kills.ps1" <<'PS'
+param([string]$Fleet, [string]$Check)
+$Start = '[Diagnostics.Process]::Start($psi)'
+# The only Kill() calls allowed: file, where it is (the function, or the variable holding the script
+# block), the process object it is called on, and what that object is assigned from there.
+$Sites = @(
+  @('fleet', 'Stop-Run', '$proc', 'Stop-Run $proc in Run-Account'),
+  @('check', '$halt', '$st.Proc', $Start),
+  @('check', 'Sess-Stop', '$p', '$SessSt.Proc'))
+# Where each script disposes of the process objects it kills: after every Kill() on them.
+$Disposed = @(@('fleet', 'Run-Account', '$proc', @('$proc')), @('check', 'Sess-Stop', '$SessSt.Proc', @('$st.Proc', '$p', '$SessSt.Proc')))
+$bad = New-Object System.Collections.Generic.List[string]
+function Where-In($a) {
+  for ($x = $a.Parent; $x; $x = $x.Parent) {
+    if ($x -is [Management.Automation.Language.FunctionDefinitionAst]) { return $x.Name }
+    if ($x -is [Management.Automation.Language.ScriptBlockExpressionAst] -and $x.Parent -is [Management.Automation.Language.CommandExpressionAst] -and $x.Parent.Parent -is [Management.Automation.Language.AssignmentStatementAst]) { return $x.Parent.Parent.Left.Extent.Text }
+  }
+  ''
+}
+function Site-Ast($ast, [string]$name) {
+  $ast.Find({ param($a) ($a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq $name) -or ($a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq $name -and $a.Right.Extent.Text.StartsWith('{')) }, $true)
+}
+function Sets($ast, [string]$var) { @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq $var }, $true)) }
+$Asts = @{}
+foreach ($f in @(@('fleet', $Fleet), @('check', $Check))) {
+  $tag = $f[0]; $ast = [Management.Automation.Language.Parser]::ParseFile($f[1], [ref]$null, [ref]$null); $Asts[$tag] = $ast
+  foreach ($c in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] }, $true)) {
+    if ([string]$c.GetCommandName() -match '^(Stop-Process|spps|kill|killall|pkill|taskkill(\.exe)?|tskill(\.exe)?|wmic(\.exe)?|Stop-Computer|Restart-Computer|shutdown(\.exe)?|Invoke-CimMethod|Invoke-WmiMethod|Remove-CimInstance|Remove-WmiObject|Invoke-Expression|iex|Get-Process|gps|ps)$') { $bad.Add("$tag $($c.Extent.Text)") }
+  }
+  # A string naming a way to stop a process, handed to a command, a method or a program to start.
+  foreach ($x in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.StringConstantExpressionAst] -or $a -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
+    if ($x.Value -notmatch '(?i)terminate|taskkill|tskill|wmic|Stop-Process') { continue }
+    $prev = $x
+    for ($u = $x.Parent; $u -and -not ($u -is [Management.Automation.Language.StatementBlockAst] -or $u -is [Management.Automation.Language.NamedBlockAst] -or $u -is [Management.Automation.Language.ScriptBlockAst]); $u = $u.Parent) {
+      if ($u -is [Management.Automation.Language.CommandAst] -or ($u -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $prev -ne $u.Expression -and $prev -ne $u.Member) -or ($u -is [Management.Automation.Language.AssignmentStatementAst] -and $u.Left.Extent.Text -match '(?i)\.(FileName|Arguments)$')) { $bad.Add("$tag $($x.Extent.Text)"); break }
+      $prev = $u
+    }
+  }
+  $members = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true))
+  foreach ($m in $members) {
+    $n = [string]$m.Member.Extent.Text
+    if ($n -match '(?i)^(GetProcessById|GetProcesses|GetProcessesByName|Terminate)$') { $bad.Add("$tag $($m.Extent.Text)"); continue }
+    if ($n -match '(?i)^(Close|Dispose)$') {
+      $v = $m.Expression.Extent.Text
+      foreach ($k in $members) { if ([string]$k.Member.Extent.Text -match '(?i)^Kill$' -and $k.Expression.Extent.Text -ceq $v -and $k.Extent.StartOffset -gt $m.Extent.StartOffset) { $bad.Add("$tag $v disposed before $($k.Extent.Text)") } }
+    }
+    if ($n -notmatch '(?i)^Kill$') { continue }
+    $w = Where-In $m; $v = $m.Expression.Extent.Text
+    $row = @($Sites | Where-Object { $_[0] -ceq $tag -and $_[1] -ceq $w -and $_[2] -ceq $v })
+    if ($row.Count -ne 1 -or ($null -ne $m.Arguments -and $m.Arguments.Count -ne 0)) { $bad.Add("$tag $($m.Extent.Text) in $w") }
+  }
+}
+foreach ($s in $Sites) {
+  $ast = $Asts[$s[0]]; $site = Site-Ast $ast $s[1]
+  if (-not $site) { $bad.Add("$($s[0]) has no $($s[1])"); continue }
+  $k = @($site.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'Kill' -and $a.Expression.Extent.Text -ceq $s[2] }, $true))
+  if ($k.Count -ne 1) { $bad.Add("$($k.Count) Kill calls on $($s[2]) in $($s[1])") }
+  if ($s[3] -ceq $Start) {
+    $sets = Sets $ast $s[2]
+    if ($sets.Count -lt 1 -or @($sets | Where-Object { $_.Right.Extent.Text -cne $Start }).Count -gt 0) { $bad.Add("$($s[2]) is set other than by starting a process") }
+  } elseif ($s[3] -ceq '$SessSt.Proc') {
+    $sets = Sets $site $s[2]
+    if ($sets.Count -lt 1 -or @($sets | Where-Object { $_.Right.Extent.Text -cne $s[3] }).Count -gt 0) { $bad.Add("$($s[2]) in $($s[1]) is set other than from $($s[3])") }
+    # $SessSt is the table the check gives its worker as $st, and its Proc is set only there.
+    if ((Sets $ast '$SessSt.Proc').Count -ne 0 -or $ast.Extent.Text.IndexOf('.AddArgument($SessSt)') -lt 0) { $bad.Add('$SessSt.Proc is not the worker''s $st.Proc') }
+  } else {
+    # Stop-Run's process is the one Run-Account started, and nothing else in Run-Account names $proc.
+    $ra = Site-Ast $ast 'Run-Account'
+    $calls = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Stop-Run' }, $true))
+    $sets = Sets $ast '$proc'
+    if ($calls.Count -ne 1 -or $calls[0].CommandElements[1].Extent.Text -cne '$proc' -or -not $ra -or $ra.Extent.Text.IndexOf($calls[0].Extent.Text) -lt 0) { $bad.Add('Stop-Run is called other than once, with the started process') }
+    if ($sets.Count -ne 1 -or $sets[0].Right.Extent.Text -cne $Start) { $bad.Add('$proc is set other than by starting the account run') }
+  }
+}
+foreach ($d in $Disposed) {
+  $ast = $Asts[$d[0]]; $last = -1
+  foreach ($m in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
+    $n = [string]$m.Member.Extent.Text; $v = $m.Expression.Extent.Text
+    if ($d[3] -cnotcontains $v) { continue }
+    if ($n -ceq 'Kill' -and $m.Extent.EndOffset -gt $last) { $last = $m.Extent.EndOffset }
+    if ($n -match '(?i)^(Close|Dispose)$' -and -not ((Where-In $m) -ceq $d[1] -and $v -ceq $d[2])) { $bad.Add("$($d[0]) $($m.Extent.Text) in $(Where-In $m)") }
+  }
+  $ds = @((Site-Ast $ast $d[1]).FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'Dispose' -and $a.Expression.Extent.Text -ceq $d[2] }, $true))
+  if ($ds.Count -ne 1 -or $ds[0].Extent.StartOffset -lt $last) { $bad.Add("$($d[2]) is not disposed once in $($d[1]), after every Kill() on it") }
+}
+if ($bad.Count -eq 0) { 'none' } else { 'refused (a guard against slips, not proof: a command name held in a variable cannot be ruled out): ' + ($bad -join ' | ') }
+PS
+_k=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-kills.ps1" "$FLEETPS" "$SCRIPT" 2>&1 | tr -d '\r')
+if [ "$_k" = none ]; then ok "fleet: gird-fleet.ps1 and gird-check.ps1 stop no process by id, only the ones they started, through their own handles"
+else bad "fleet: gird-fleet.ps1 and gird-check.ps1 stop no process by id, only the ones they started, through their own handles" "$_k"; fi
+# After the stop, the process list is only read, to report. A process counts as left when it names the
+# account run (100, run from 1000 to 2000) as its parent and started while the run ran, or when its
+# start time or the run's can't be read. The process tables of the earlier stop's reviews: a child
+# whose parent id was reused (it started before the run), one a later holder of the run's id started
+# (after the run ended), the clock set back, a grandchild, and no child at all.
+cat > "$FW/fn-left.ps1" <<'PS'
+$out = @()
+$out += Left-Running @(,@(101, 100, [long]1100)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]900)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]2500)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]-1)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]1100)) 100 -1 2000
+$out += Left-Running @(@(101, 7, [long]1100), @(102, 101, [long]1200)) 100 1000 2000
+$out += Left-Running @(,@(100, 100, [long]1000)) 100 1000 2000
+$out += Left-Running @() 100 1000 2000
+$out -join ' '
+PS
+_l=$(fw_fn Left-Running "$FW/fn-left.ps1")
+if [ "$_l" = 'True False False True True False False False' ]; then ok "fleet: a process left is reported from one read of the process list, and the list is never used to stop one"
+else bad "fleet: a process left is reported from one read of the process list, and the list is never used to stop one" "$_l"; fi
+# The stop through Stop-Run itself: the run is stopped, and a list that can't be read is unknown, so
+# processes are reported left; an empty list reports none. The stop ends within its time.
+cat > "$FW/fn-stop.ps1" <<'PS'
+$script:FlStopSecs = 3; $OnWindows = $false; $FlTest = $false
+$ps = (Get-Process -Id $PID).Path
+function Proc-Rows([int]$secs) { if ($script:none) { return $null }; , (New-Object System.Collections.Generic.List[object]) }
+$out = @()
+foreach ($none in @($true, $false)) {
+  $script:none = $none
+  $p = [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command Start-Sleep 60')
+  $w = [Diagnostics.Stopwatch]::StartNew()
+  $r = Stop-Run $p ([long]$p.StartTime.ToUniversalTime().Ticks)
+  $out += "$r/$($p.HasExited)/$($w.Elapsed.TotalSeconds -le 4)"
+}
+$out -join ' '
+PS
+_s=$(fw_fn Stop-Run,Left-Running "$FW/fn-stop.ps1")
+if [ "$_s" = 'True/True/True False/True/True' ]; then ok "fleet: a process list that can't be read in time is unknown, not none"
+else bad "fleet: a process list that can't be read in time is unknown, not none" "$_s"; fi
+cat > "$FW/fn-fit.ps1" <<'PS'
+$h = 'v1 review 2026-01-01T00:00Z other_profiles=0'; $t = ' | machine: review; possible mastra'
+$fill = { param($n) 'asha: review to-read 1; possible ' + ('a' * ($n - ($h.Length + 3 + 'asha: review to-read 1; possible '.Length + $t.Length))) }
+$a = Fit-Value $h (& $fill 2047) 'asha: review' 'asha: review' $t
+$b = Fit-Value $h (& $fill 2048) 'asha: review' 'asha: review' $t
+"$($a.Length) $($a.EndsWith(' +more')) $($b.Length -le 2047) $($b.EndsWith(' +more'))"
+PS
+if [ "$(fw_fn Fit-Value "$FW/fn-fit.ps1")" = '2047 False True True' ]; then ok "fleet: an inventory value is at most 2,047 characters, and one cut ends with +more"
+else bad "fleet: an inventory value is at most 2,047 characters, and one cut ends with +more" "$(fw_fn Fit-Value "$FW/fn-fit.ps1")"; fi
+cat > "$FW/fn-name.ps1" <<'PS'
+(@('asha', 'machine', 'Machine', 'a b', '.x', 'machine2') | ForEach-Object { Shown-Name $_ }) -join ' '
+PS
+if [ "$(fw_fn Shown-Name "$FW/fn-name.ps1")" = 'asha invalid-name invalid-name invalid-name invalid-name machine2' ]; then ok "fleet: an account named machine shows as invalid-name, apart from the PC's row"
+else bad "fleet: an account named machine shows as invalid-name, apart from the PC's row" "$(fw_fn Shown-Name "$FW/fn-name.ps1")"; fi
+_tk=$(awk '/^[[:space:]]*#/ { next } /taskkill|\/T /' "$FLEETPS")
+if [ -z "$_tk" ]; then ok "fleet: no process is stopped by its tree alone (no taskkill /T)"; else bad "fleet: no process is stopped by its tree alone (no taskkill /T)" "$_tk"; fi
+skip "fleet: run as SYSTEM, it is failed, reason=system_account" "needs a PowerShell started as SYSTEM on a Windows PC, which takes administrator rights"
+if [ -n "$WINONLY" ]; then
+  skip "fleet: a session in Constrained Language Mode is failed, reason=language_mode" "$WINONLY: Windows PowerShell's reduced language"
+  skip "fleet: a 32-bit PowerShell is failed, reason=host_32bit" "$WINONLY: its 32-bit Windows PowerShell"
+  skip "fleet: run as root, the test settings are ignored" "$WINONLY: off Windows gird-fleet.ps1 runs for tests only, and reads them"
+else
+  _wps="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
+  __PSLockdownPolicy=4 "$_wps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" > "$FW/clm.out" 2>&1; RC=$?
+  if [ "$RC" -eq 1 ] && grep -qE '^v1 failed [0-9T:-]+Z reason=language_mode' "$FW/clm.out"; then ok "fleet: a session in Constrained Language Mode is failed, reason=language_mode"; else bad "fleet: a session in Constrained Language Mode is failed, reason=language_mode" "exit $RC $(head -c 200 "$FW/clm.out")"; fi
+  "$SYSTEMROOT/SysWOW64/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" --summary-to-stdout > "$FW/w32.out" 2>&1; RC=$?
+  if [ "$RC" -eq 1 ] && grep -qE '^blindspot failed .* reason=host_32bit$' "$FW/w32.out"; then ok "fleet: a 32-bit PowerShell is failed, reason=host_32bit"; else bad "fleet: a 32-bit PowerShell is failed, reason=host_32bit" "exit $RC $(head -c 200 "$FW/w32.out")"; fi
+  USERPROFILE="$(cygpath -w "$FW/clean")" LOCALAPPDATA="$(cygpath -w "$FW/clean/AppData/Local")" GIRD_CHECK_FLEET_PROFILES=9999 GIRD_CHECK_FLEET_POWERSHELL=nothing-here \
+    "$_wps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" --summary-to-stdout > "$FW/wtest.out" 2>&1
+  if grep -q '^blindspot clear ' "$FW/wtest.out" && ! grep -q 'other_profiles=9999' "$FW/wtest.out"; then ok "fleet: run as root, the test settings are ignored"; else bad "fleet: run as root, the test settings are ignored" "$(head -c 200 "$FW/wtest.out")"; fi
+fi
+fw_home pf; mkdir -p "$FW/progfiles/cursor"
+fw_run pf "$FW/pf" GIRD_CHECK_FLEET_PROGRAMFILES="$FW/progfiles" GIRD_CHECK_FLEET_PROFILES=2
+has    "fleet: an agent installed under %ProgramFiles% is the PC's" '^machine\.agents=cursor$' "$FW/pf.flat"
+if grep -q '^other_profiles=2$' "$FW/pf.flat" && grep -qE '^v1 clear [0-9T:-]+Z other_profiles=2 \| ' "$FW/pf.out"; then ok "fleet: the summary and the inventory value carry other_profiles"; else bad "fleet: the summary and the inventory value carry other_profiles" "$(cat "$FW/pf.out")"; fi
+
+# Findings reach the account's row as they reach the person's own report.
+for h in proj upd2 wip wip1 mrf mrn msx lk; do fw_home "$h"; done
+mkdir -p "$FW/proj/code/p/.claude" "$FW/proj/code/q/.claude" "$FW/upd2/code/venv/lib/site-packages/telnyx-4.87.1.dist-info" "$FW/wip/Library/LaunchAgents" \
+  "$FW/wip/AppData/Roaming/npm/node_modules/@tanstack/router-core" "$FW/wip1/.config/gh-token-monitor"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FW/proj/code/p/.claude/settings.json"
+: > "$FW/proj/code/q/.claude/setup.mjs"; : > "$FW/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
+printf '{"name":"@tanstack/router-core","version":"1.169.5"}\n' > "$FW/wip/AppData/Roaming/npm/node_modules/@tanstack/router-core/package.json"
+fw_run proj "$FW/proj"
+has    "fleet: project settings that act when a folder opens reach the account's row" "^$FA\\.project_settings_on_open=1\$" "$FW/proj.flat"
+has    "fleet: and a file named like the ones worms plant" "^$FA\\.files_to_read=1\$" "$FW/proj.flat"
+has    "fleet: so that account is to review" "^$FA\\.outcome=review\$" "$FW/proj.flat"
+fw_run upd2 "$FW/upd2"
+has    "fleet: a package version to update reaches the account's row" "^$FA\\.versions_to_update=telnyx\$" "$FW/upd2.flat"
+has    "fleet: and that account is to review too" "^$FA\\.outcome=review\$" "$FW/upd2.flat"
+fw_run wip "$FW/wip"
+has    "fleet: the gh-token-monitor wiper reaches the account's row" "^$FA\\.wiper=true\$" "$FW/wip.flat"
+fw_run wip1 "$FW/wip1"
+if grep -q "^$FA\\.wiper=true\$" "$FW/wip1.flat" && grep -q "^$FA\\.incidents=\$" "$FW/wip1.flat" && grep -q "^$FA\\.outcome=act\$" "$FW/wip1.flat"; then ok "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm"
+else bad "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm" "$(grep "^$FA\\." "$FW/wip1.flat" | tr '\n' ' ')"; fi
+for h in mrf mrn; do mkdir -p "$FW/$h/AppData/Roaming/npm/node_modules/mcp-remote"; done
+printf '{"name":"mcp-remote","version":"0.1.10"}\n' > "$FW/mrf/AppData/Roaming/npm/node_modules/mcp-remote/package.json"
+printf '{"name":"mcp-remote","version":"0.1.20"}\n' > "$FW/mrn/AppData/Roaming/npm/node_modules/mcp-remote/package.json"
+fw_run mrf "$FW/mrf"; fw_run mrn "$FW/mrn"
+has    "fleet: a tool with a fix to install reaches the account's tools" "^$FA\\.tools_to_update=mcpremote\$" "$FW/mrf.flat"
+has    "fleet: one with a published hole and no fixed version does not" "^$FA\\.tools_to_update=\$" "$FW/mrn.flat"
+mkdir -p "$FW/msx/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+fw_run msx "$FW/msx"
+has    "fleet: an extension whose malware runs only on another system is one to remove" "^$FA\\.extensions_to_remove=glasswormoct\$" "$FW/msx.flat"
+has    "fleet: so its account is to review, not act" "^$FA\\.outcome=review\$" "$FW/msx.flat"
+mkdir -p "$FW/lk/code/app"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$FW/lk/code/app/package-lock.json"
+fw_run lk "$FW/lk"
+has    "fleet: a bad npm version only in a lockfile is its own field" "^$FA\\.lockfile_only_incidents=axios\$" "$FW/lk.flat"
+has    "fleet: not one of the incidents" "^$FA\\.incidents=\$" "$FW/lk.flat"
+# A session check that would never end on its own is stopped in time, and what it found still counts.
+printf 'slowsess\n' > "$FW/mode"; fw_run slowsess "$FW/asha" -- --deadline=30; rm -f "$FW/mode" "$FW/sesshold"
+if grep -q "^$FA\\.outcome=act\$" "$FW/slowsess.flat" && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowsess.flat" && ! grep -q "^$FA\\.not_checked=" "$FW/slowsess.flat"; then ok "fleet: a session check that runs long is stopped in time, and the findings still count"
+else bad "fleet: a session check that runs long is stopped in time, and the findings still count" "$(grep -E "^$FA\\.(outcome|sessions|not_checked|stopped)" "$FW/slowsess.flat" | tr '\n' ' ')"; fi
+
+# The account run starts with -NoProfile: a variable a profile sets to move an agent's folders is not
+# followed, so the profile is read as text and the account is partly checked.
+fw_prof() { # home lines...: the home's PowerShell profile, holding those lines
+  fw_home "$1"; mkdir -p "$FW/$1/Documents/PowerShell"; _h=$1; shift; printf '%s\n' "$@" > "$FW/$_h/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
+}
+fw_prof moved '$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-work"'
+fw_run moved "$FW/moved" -- --json
+if grep -q "^$FA\\.agent_folders_moved=true\$" "$FW/moved.flat" && grep -q "^$FA\\.outcome=not_checked\$" "$FW/moved.flat" && grep -qE "\\| $FA: not_checked partial\$" "$FW/moved.flat"
+then ok "fleet: a profile that moves an agent's folders leaves the account partly checked"; else bad "fleet: a profile that moves an agent's folders leaves the account partly checked" "$(grep "^$FA\\." "$FW/moved.flat" | tr '\n' ' ')"; fi
+fw_prof dflt '$env:NVM_DIR = "$env:USERPROFILE\.nvm"' '${env:PNPM_HOME} = "$env:LOCALAPPDATA\pnpm\"' "[Environment]::SetEnvironmentVariable('BUN_INSTALL', 'D:\\bun', 'User')" '# $env:CODEX_HOME = "D:\codex"' 'if ($env:CLAUDE_CONFIG_DIR -eq "x") { }'
+fw_run dflt "$FW/dflt" 'BUN_INSTALL=D:\bun'
+has    "fleet: a profile that sets a tool's folder to its default moves nothing" "^$FA\\.agent_folders_moved=false\$" "$FW/dflt.flat"
+fw_prof toolmv '$env:WORKON_HOME = "D:\envs"'
+fw_run toolmv "$FW/toolmv"
+has    "fleet: one that sets it elsewhere leaves the account partly checked" "^$FA\\.agent_folders_moved=true\$" "$FW/toolmv.flat"
+fw_prof pnmv 'Set-Item -Path env:PNPM_HOME -Value "$env:USERPROFILE\.cache\pnpm"'
+mkdir -p "$FW/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$FW/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios/package.json"
+fw_run pnmv "$FW/pnmv"
+has    "fleet: and so does one that moves pnpm's folder (PNPM_HOME)" "^$FA\\.agent_folders_moved=true\$" "$FW/pnmv.flat"
+hasnot "fleet: so a bad package only there never reads clear" "^$FA\\.outcome=clear\$" "$FW/pnmv.flat"
+fw_home gbash; printf 'export CODEX_HOME=/d/codex\n' > "$FW/gbash/.bashrc"
+fw_run gbash "$FW/gbash"
+has    "fleet: a Git Bash profile that moves an agent's folders counts too" "^$FA\\.agent_folders_moved=true\$" "$FW/gbash.flat"
+# A line that names a listed variable other than to read it counts, unless it is a plain assignment of
+# the value the run sees: forms the reader does not know fail safe. Each case is its own home.
+MV=$WORK/mv; mkdir -p "$MV"
+mv_case() { # name file lines...: an -AccountRun on a home holding that file; prints its moved= value
+  _n=$1; _f=$2; shift 2; mkdir -p "$MV/$_n/AppData/Local/Temp" "$MV/$_n/AppData/Roaming" "$(dirname "$MV/$_n/$_f")"
+  printf '%s\n' "$@" > "$MV/$_n/$_f"
+  printf '%s=%s\n' "$_n" "$(psrun "$MV/$_n" ${MVENV:+"$MVENV"} -- -AccountRun 2> /dev/null | sed -n 's/^moved=//p')"
+}
+PSP=Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+{ mv_case pluseq "$PSP" '$env:CODEX_HOME += "\codex"'
+  mv_case newitem "$PSP" 'New-Item -Path Env: -Name CODEX_HOME -Value "D:\codex"'
+  mv_case setcontent "$PSP" 'Set-Content env:CODEX_HOME "D:\codex"'
+  mv_case indirect "$PSP" '$n = "CODEX_HOME"; [Environment]::SetEnvironmentVariable($n, "D:\codex")'
+  mv_case remove "$PSP" 'Remove-Item env:NVM_DIR'
+  mv_case exportmulti .bashrc 'export A=1 CODEX_HOME=/d/codex'
+  mv_case declare .bashrc 'declare -x CODEX_HOME=/d/codex'
+  mv_case default .bashrc ': "${CODEX_HOME:=/d/codex}"'
+  mv_case ise Documents/WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1 '$env:CODEX_HOME = "D:\codex"'
+} > "$MV/forms.txt"
+if [ "$(grep -c '=1$' "$MV/forms.txt")" -eq 9 ]; then ok "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved"
+else bad "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved" "$(grep -v '=1$' "$MV/forms.txt" | tr '\n' ' ')"; fi
+# What installers write: nvm (and its own nvm.sh, which sets NVM_DIR its own way), pnpm, conda (and
+# the conda.sh it sources), oh-my-posh and starship, and a profile that reads a variable.
+mkdir -p "$MV/nvm/.nvm"; printf '%s\n' 'if [ -z "${NVM_DIR-}" ]; then' '  NVM_DIR="$(nvm_cd "$(dirname "${NVM_SCRIPT_SOURCE:-$0}")" >/dev/null && \pwd)"' '  export NVM_DIR' 'fi' > "$MV/nvm/.nvm/nvm.sh"
+mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='/opt/conda/bin/conda'" "export _CE_M=''" '__conda_exe() (' '    "$CONDA_EXE" $_CE_M "$@"' ')' > "$MV/conda/miniconda3/etc/profile.d/conda.sh"
+{ mv_case nvm .bashrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm' '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+  mv_case pnpm .bashrc '# pnpm' 'export PNPM_HOME="$HOME/AppData/Local/pnpm"' 'case ":$PATH:" in' '  *":$PNPM_HOME:"*) ;;' '  *) export PATH="$PNPM_HOME:$PATH" ;;' 'esac' '# pnpm end'
+  mv_case conda .bashrc '# >>> conda initialize >>>' '__conda_setup="$('"'"'/opt/conda/bin/conda'"'"' '"'"'shell.bash'"'"' '"'"'hook'"'"' 2> /dev/null)"' 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then' '        . "$HOME/miniconda3/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' '# <<< conda initialize <<<'
+  mv_case condaps "$PSP" '#region conda initialize' 'If (Test-Path "C:\Users\u\miniconda3\Scripts\conda.exe") {' '    (& "C:\Users\u\miniconda3\Scripts\conda.exe" "shell.powershell" "hook") | Out-String | ?{$_} | Invoke-Expression' '}' '#endregion'
+  mv_case omp "$PSP" 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression'
+  mv_case starship "$PSP" 'Invoke-Expression (&starship init powershell)' '$ENV:STARSHIP_CONFIG = "$HOME\.config\starship.toml"'
+  mv_case starsh .bashrc 'eval "$(starship init bash)"' 'eval "$(oh-my-posh init bash)"' 'source /usr/share/bash-completion/bash_completion'
+  mv_case reads "$PSP" 'if ($env:CLAUDE_CONFIG_DIR) { Write-Host $env:CLAUDE_CONFIG_DIR }' 'if ([Environment]::GetEnvironmentVariable("CODEX_HOME")) { }' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+} > "$MV/plain.txt"
+if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 8 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
+else bad "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing" "$(grep -v '=0$' "$MV/plain.txt" | tr '\n' ' ')"; fi
+# A file a profile sources is read too, to any depth, wherever it is on a local disk. One that is there
+# but can't be followed or read counts only where some file read names a listed variable.
+mkdir -p "$MV/follow/Documents/PowerShell" "$MV/outside"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/follow/Documents/PowerShell/env.ps1"
+mkdir -p "$MV/link"; printf 'alias x=y\n' > "$MV/outside/env.sh"; ln -s "$MV/outside/env.sh" "$MV/link/.env.sh"
+mkdir -p "$MV/nested"; printf '%s\n' 'echo "$CODEX_HOME"' '. ~/.env2.sh' > "$MV/nested/.env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/nested/.env2.sh"
+mkdir -p "$MV/aliases"; printf 'alias ll="ls -l"\n' > "$MV/aliases/.bash_aliases"
+mkdir -p "$MV/unread"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/unread/.secret.sh"; chmod 000 "$MV/unread/.secret.sh"
+{ mv_case follow "$PSP" '. "$PSScriptRoot\env.ps1"'
+  mv_case link .bashrc 'echo "$NVM_DIR"' '. ~/.env.sh'
+  mv_case nested .bashrc '. ~/.env.sh'
+  mv_case unread .bashrc 'echo "$NVM_DIR"' '. ~/.secret.sh'
+} > "$MV/src1.txt"
+{ mv_case aliases .bashrc '[ -f ~/.bash_aliases ] && . ~/.bash_aliases'
+  mv_case plainsrc .bashrc '. /nonexistent/blindspot/env.sh'
+  mv_case elsewhere .bashrc 'export NVM_DIR="$HOME/.nvm"' '. /nonexistent/blindspot/env.sh'
+} > "$MV/src0.txt"
+chmod 600 "$MV/unread/.secret.sh"
+if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
+else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# Each way a profile can reach a file that moves a folder: from outside the home, two files down, by
+# & or Import-Module of a path, through a module's manifest, in a loop over a folder's files, and a
+# file placed in a tool's own folder that is not the tool's own script.
+mkdir -p "$MV/ext"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ext/env.sh"
+mkdir -p "$MV/twodeep"; printf '. ~/.b.sh\n' > "$MV/twodeep/.a.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/twodeep/.b.sh"
+mkdir -p "$MV/impmod/Documents/PowerShell/Modules/corp"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/impmod/Documents/PowerShell/Modules/corp/corp.psm1"
+mkdir -p "$MV/amp/Documents/PowerShell"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/amp/Documents/PowerShell/setenv.ps1"
+mkdir -p "$MV/psd1/tools/corp"; printf '%s\n' '@{' "  RootModule = 'corp.psm1'" "  ModuleVersion = '1.0'" '}' > "$MV/psd1/tools/corp/corp.psd1"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/psd1/tools/corp/corp.psm1"
+mkdir -p "$MV/loop/.bashrc.d"; printf 'alias k=kubectl\n' > "$MV/loop/.bashrc.d/00-alias.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/loop/.bashrc.d/10-codex.sh"
+mkdir -p "$MV/psloop/Documents/PowerShell/profile.d"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/psloop/Documents/PowerShell/profile.d/codex.ps1"
+mkdir -p "$MV/ownfolder/.nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ownfolder/.nvm/extra.sh"
+{ mv_case outside .bashrc ". '$MV/ext/env.sh'"
+  mv_case twodeep .bashrc '. ~/.a.sh'
+  mv_case impmod "$PSP" 'Import-Module "$env:USERPROFILE\Documents\PowerShell\Modules\corp\corp.psm1"'
+  mv_case amp "$PSP" '& "$PSScriptRoot\setenv.ps1"'
+  mv_case psd1 "$PSP" 'Import-Module -Force "$HOME\tools\corp\corp.psd1"'
+  mv_case loop .bashrc 'for f in ~/.bashrc.d/*.sh; do . "$f"; done'
+  mv_case psloop "$PSP" 'Get-ChildItem "$PSScriptRoot\profile.d\*.ps1" | ForEach-Object { . $_.FullName }'
+  mv_case ownfolder .bashrc '[ -s "$NVM_DIR/extra.sh" ] && . "$NVM_DIR/extra.sh"'
+} > "$MV/reach.txt"
+if [ "$(grep -c '=1$' "$MV/reach.txt")" -eq 8 ]; then ok "fleet: a folder moved in a file sourced from outside the home, two files down, by & or Import-Module, or in a sourcing loop counts"
+else bad "fleet: a folder moved in a file sourced from outside the home, two files down, by & or Import-Module, or in a sourcing loop counts" "$(grep -v '=1$' "$MV/reach.txt" | tr '\n' ' ')"; fi
+# What reads partly checked on an ordinary PC for no reason: a tool's folder set to the folder the check
+# reads, a listed name in a comment, asdf 0.16's lines, source <(...), a file sourced from outside the
+# home beside a line that only reads a listed variable, and files that source each other.
+mkdir -p "$MV/Program Files/Corp"; printf '%s\n' 'Set-Alias k kubectl' '$env:CORP_TOOLS = "C:\Corp\bin"' > "$MV/Program Files/Corp/init.ps1"
+mkdir -p "$MV/cycle"; printf '%s\n' '. ~/.bashrc' 'echo "$NVM_DIR"' > "$MV/cycle/.a.sh"
+{ mv_case bun .bashrc '# bun' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case volta "$PSP" '$env:VOLTA_HOME = "$env:LOCALAPPDATA\Volta"'
+  mv_case voltash .bashrc 'export VOLTA_HOME="$HOME/.volta"' 'export PATH="$VOLTA_HOME/bin:$PATH"'
+  mv_case npmpfx "$PSP" '$env:NPM_CONFIG_PREFIX = "$env:APPDATA\npm"'
+  mv_case npmpfxsh .bashrc 'export NPM_CONFIG_PREFIX=~/.npm-global' 'export PATH=~/.npm-global/bin:$PATH'
+  mv_case comment .bashrc "alias ll='ls -l'  # CODEX_HOME stays where it is"
+  mv_case pscomment "$PSP" 'Set-Alias g git # sets nothing, not even CLAUDE_CONFIG_DIR' '<#' '$env:CODEX_HOME = "D:\old"' '#>'
+  mv_case xdg .bashrc 'export XDG_CONFIG_HOME="$HOME/.config"'
+  mv_case asdf16 .bashrc 'export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"' '. <(asdf completion bash)'
+  mv_case procsub .bashrc 'source <(kubectl completion bash)' 'echo "$NVM_DIR"'
+  mv_case progfiles "$PSP" ". '$MV/Program Files/Corp/init.ps1'" '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case cycle .bashrc '. ~/.a.sh'
+} > "$MV/quiet.txt"
+if [ "$(grep -c '=0$' "$MV/quiet.txt")" -eq 12 ]; then ok "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing"
+else bad "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing" "$(grep -v '=0$' "$MV/quiet.txt" | tr '\n' ' ')"; fi
+# What the tools write into a profile, or a profile written for them.
+mkdir -p "$MV/bunzsh/.bun"; printf 'export BUN_INSTALL=/elsewhere\n' > "$MV/bunzsh/.bun/_bun"
+mkdir -p "$MV/asdf15/.asdf/completions"; printf '%s\n' 'export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"' 'ASDF_DATA_DIR=/elsewhere' > "$MV/asdf15/.asdf/asdf.sh"; printf 'complete -F _asdf asdf\n' > "$MV/asdf15/.asdf/completions/asdf.bash"
+mkdir -p "$MV/uv/.local/bin"; printf '%s\n' '#!/bin/sh' 'case ":${PATH}:" in' '    *:"$HOME/.local/bin":*)' '        ;;' '    *)' '        export PATH="$HOME/.local/bin:$PATH"' '        ;;' 'esac' > "$MV/uv/.local/bin/env"
+mkdir -p "$MV/choco/ProgramData/chocolatey/helpers/functions"; printf '%s\n' '$thisDirectory = (Split-Path -parent $MyInvocation.MyCommand.Definition);' '. $thisDirectory\functions\Update-SessionEnvironment.ps1' '. $thisDirectory\ChocolateyTabExpansion.ps1' 'Set-Alias refreshenv Update-SessionEnvironment' > "$MV/choco/ProgramData/chocolatey/helpers/chocolateyProfile.psm1"
+printf '%s\n' 'function Update-SessionEnvironment {' '  $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine")' '}' > "$MV/choco/ProgramData/chocolatey/helpers/functions/Update-SessionEnvironment.ps1"
+printf '%s\n' 'function script:chocoCommands { choco -h }' > "$MV/choco/ProgramData/chocolatey/helpers/ChocolateyTabExpansion.ps1"
+{ mv_case nvmwin "$PSP" 'if ($env:NVM_SYMLINK) { $env:PATH = "$env:NVM_SYMLINK;$env:PATH" }'
+  mv_case fnm "$PSP" 'fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression'
+  mv_case fnmsh .bashrc 'eval "$(fnm env --use-on-cd --shell bash)"'
+  mv_case bunzsh .bashrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case mise "$PSP" '(&mise activate pwsh) | Out-String | Invoke-Expression'
+  mv_case misesh .bashrc 'eval "$(~/.local/bin/mise activate bash)"'
+  mv_case asdf15 .bashrc '. "$HOME/.asdf/asdf.sh"' '. "$HOME/.asdf/completions/asdf.bash"'
+  mv_case uv .bashrc '. "$HOME/.local/bin/env"' 'eval "$(uv generate-shell-completion bash)"'
+  mv_case uvps "$PSP" '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
+  mv_case pipx .bashrc 'eval "$(register-python-argcomplete pipx)"' 'export PATH="$PATH:/c/Users/u/.local/bin"'
+  mv_case poetry "$PSP" '$env:Path += ";$env:APPDATA\Python\Scripts"' 'poetry completions powershell | Out-String | Invoke-Expression'
+  mv_case poshgit "$PSP" 'Import-Module posh-git' '$GitPromptSettings.DefaultPromptAbbreviateHomeDirectory = $true' "Import-Module 'C:\tools\poshgit\dahlbyk-posh-git-9bda399\src\posh-git.psd1'"
+  mv_case psrl "$PSP" 'Import-Module PSReadLine' 'Set-PSReadLineOption -PredictionSource History -EditMode Windows' 'Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete' 'Set-PSReadLineOption -HistorySavePath "$env:APPDATA\PSReadLine\history.txt"'
+  MVENV="ChocolateyInstall=$MV/choco/ProgramData/chocolatey" mv_case choco "$PSP" '# Import the Chocolatey Profile that contains the necessary code to enable' '# tab-completions to function for `choco`.' '$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"' 'if (Test-Path($ChocolateyProfile)) {' '  Import-Module "$ChocolateyProfile"' '}' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case vsdev "$PSP" 'Import-Module "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"' 'Enter-VsDevShell 3f2a1b0c -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"' "& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64"
+  mv_case corp "$PSP" '$env:HTTPS_PROXY = "http://proxy.example.com:8080"' '$env:NO_PROXY = "localhost,127.0.0.1,.example.com"' 'function prompt { "[$env:USERNAME@$env:COMPUTERNAME] $(Get-Location)> " }' '. "\\fileserver\it$\profile\corp.ps1"' 'Set-Location $HOME'
+} > "$MV/tools.txt"
+if [ "$(grep -c '=0$' "$MV/tools.txt")" -eq 16 ]; then ok "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing"
+else bad "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing" "$(grep -v '=0$' "$MV/tools.txt" | tr '\n' ' ')"; fi
+# The caps: 64 files and 16 MiB read in all, and no file over 16 MiB. Past one, moved is 1 only where a
+# file read names a listed variable.
+for h in chain chainn; do mkdir -p "$MV/$h/.c"; for i in $(seq 1 70); do printf '. ~/.c/%s.sh\n' "$((i + 1))" > "$MV/$h/.c/$i.sh"; done; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.c/71.sh"; done
+for h in big bign; do mkdir -p "$MV/$h"; for f in a b; do awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 9437; i++) print s }' > "$MV/$h/.$f.sh"; done; done
+for h in huge hugen; do mkdir -p "$MV/$h"; awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 17000; i++) print s }' > "$MV/$h/.h.sh"; done
+{ mv_case chain .bashrc '. ~/.c/1.sh'
+  mv_case big .bashrc '. ~/.a.sh' '. ~/.b.sh'
+  mv_case huge .bashrc '. ~/.h.sh'
+} > "$MV/cap0.txt"
+{ mv_case chainn .bashrc 'echo "$NVM_DIR"' '. ~/.c/1.sh'
+  mv_case bign .bashrc 'echo "$NVM_DIR"' '. ~/.a.sh' '. ~/.b.sh'
+  mv_case hugen .bashrc 'echo "$NVM_DIR"' '. ~/.h.sh'
+} > "$MV/cap1.txt"
+rm -rf "$MV/big" "$MV/bign" "$MV/huge" "$MV/hugen"
+if [ "$(grep -c '=0$' "$MV/cap0.txt")" -eq 3 ] && [ "$(grep -c '=1$' "$MV/cap1.txt")" -eq 3 ]; then ok "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named"
+else bad "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named" "$(cat "$MV/cap0.txt" "$MV/cap1.txt" | tr '\n' ' ')"; fi
+
+# blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
+mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf/"
+if (cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh > /dev/null 2>&1) && [ -f "$FW/bf/blindspot-fleet.ps1" ] && [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 204800 ]; then ok "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ') bytes"
+else bad "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" 2>/dev/null)"; fi
+fw_home bfh; mkdir -p "$FW/bfrun"; cp "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/"
+FW_SCRIPT="$FW/bfrun/blindspot-fleet.ps1" fw_run bfrun "$FW/bfh"
+_v=$(sed -n 's/^script=//p' "$FW/bfrun.flat")
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SCRIPT" "$FW/bf/stripped.ps1" > /dev/null 2>&1
+if [ -n "$_v" ] && [ -s "$FW/bf/stripped.ps1" ] && cmp -s "$FW/bfh/AppData/Local/Blindspot/$_v/gird-check.ps1" "$FW/bf/stripped.ps1" && grep -q '^outcome=clear$' "$FW/bfrun.flat"; then ok "fleet: and the check it unpacks and runs is gird-check.ps1 without its comments, byte for byte"
+else bad "fleet: and the check it unpacks and runs is gird-check.ps1 without its comments, byte for byte" "$(head -n 3 "$FW/bfrun.flat")"; fi
+sed "s/^\\\$PackedSha = '[0-9a-f]*'\$/\$PackedSha = '$(printf '0%.0s' $(seq 64))'/" "$FW/bf/blindspot-fleet.ps1" > "$FW/bfrun/blindspot-bad.ps1"
+fw_home bfbad; : > "$FW/argv.log"
+FW_SCRIPT="$FW/bfrun/blindspot-bad.ps1" fw_run bfbad "$FW/bfbad"
+if ! cmp -s "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/blindspot-bad.ps1" && grep -qE ' reason=unpack \| ' "$FW/bfbad.out" && [ ! -s "$FW/argv.log" ]; then ok "fleet: a packed check whose SHA-256 differs is never started, reason=unpack"
+else bad "fleet: a packed check whose SHA-256 differs is never started, reason=unpack" "$(cat "$FW/bfbad.out" "$FW/argv.log")"; fi
+# The 90% warning, both ways: the build as it is (under 90% today, so no warning), and a copy whose
+# gird-fleet.ps1 carries comment lines that put blindspot-fleet.ps1 at about 190,000 bytes.
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1); _rc=$?
+_sz=$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ')
+mkdir -p "$FW/bf90"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf90/"
+python3 -c "import sys; n = 190000 - int(sys.argv[2]); open(sys.argv[1], 'a').write(('# ' + 'x' * 97 + '\n') * (n // 100))" "$FW/bf90/gird-fleet.ps1" "$_sz"
+(cd "$FW/bf90" && PWSH="$PWSH" bash tools/gen.sh > "$FW/bf90.log" 2>&1); _rc90=$?
+_sz90=$(wc -c < "$FW/bf90/blindspot-fleet.ps1" 2> /dev/null | tr -d ' ')
+if [ "$_rc" -eq 0 ] && { { [ "$_sz" -lt 184320 ] && ! grep -q 'past 90%' "$FW/bf-check.log"; } || { [ "$_sz" -ge 184320 ] && grep -q 'past 90%' "$FW/bf-check.log"; }; } \
+  && [ "$_rc90" -eq 0 ] && [ "${_sz90:-0}" -ge 184320 ] && [ "$_sz90" -lt 204800 ] && grep -q "^warning: blindspot-fleet.ps1 is $_sz90 bytes, past 90% of the 204,800 Intune takes\$" "$FW/bf90.log"
+then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "$_sz and $_sz90 bytes"
+else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 90% of 200 KB" "as built: exit $_rc, $_sz bytes, $(grep -c 'past 90%' "$FW/bf-check.log") warnings; inflated: exit $_rc90, $_sz90 bytes, $(head -n 2 "$FW/bf90.log")"; fi
+# blindspot-fleet.ps1 packs gird-check.ps1 without its comments (tools/strip-comments.ps1): it must
+# parse and run as gird-check.ps1 does, and nothing but comments may go.
+SC=$WORK/strip; mkdir -p "$SC"
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SCRIPT" "$SC/check.ps1" > "$SC/sha.txt" 2> "$SC/err.txt"; _rc=$?
+"$PWSH" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$SC/check.ps1', [ref]\$null, [ref]\$e); \$e.Count" > "$SC/parse.txt" 2>&1
+if [ "$_rc" -eq 0 ] && [ -s "$SC/check.ps1" ] && [ "$(cat "$SC/parse.txt")" = 0 ] && [ "$(wc -c < "$SC/check.ps1")" -lt "$(wc -c < "$SCRIPT")" ]; then ok "strip-comments: gird-check.ps1 without its comments parses" "$(wc -c < "$SC/check.ps1" | tr -d ' ') bytes"
+else bad "strip-comments: gird-check.ps1 without its comments parses" "exit $_rc, $(cat "$SC/err.txt" "$SC/parse.txt" | head -n 3)"; fi
+psrun "$WORK/home" -- -AccountRun > "$SC/ar-orig.txt" 2> /dev/null
+SCRIPT="$SC/check.ps1" psrun "$WORK/home" -- -AccountRun > "$SC/ar-strip.txt" 2> /dev/null
+if grep -qE '^key_files=[1-9]' "$SC/ar-orig.txt" && cmp -s "$SC/ar-orig.txt" "$SC/ar-strip.txt"; then ok "strip-comments: without its comments, -AccountRun prints the same lines"
+else bad "strip-comments: without its comments, -AccountRun prints the same lines" "$(diff "$SC/ar-orig.txt" "$SC/ar-strip.txt" | head -n 4)"; fi
+for _fx in home clean; do
+  psrun "$WORK/$_fx" -- -Offline -Full -NoColor > "$SC/full-orig-$_fx.txt" 2>&1
+  SCRIPT="$SC/check.ps1" psrun "$WORK/$_fx" -- -Offline -Full -NoColor > "$SC/full-strip-$_fx.txt" 2>&1
+done
+if [ -s "$SC/full-orig-home.txt" ] && cmp -s "$SC/full-orig-home.txt" "$SC/full-strip-home.txt" && cmp -s "$SC/full-orig-clean.txt" "$SC/full-strip-clean.txt"; then ok "strip-comments: without its comments, the -Offline -Full report is the same"
+else bad "strip-comments: without its comments, the -Offline -Full report is the same" "$(diff "$SC/full-orig-home.txt" "$SC/full-strip-home.txt" | head -n 4; diff "$SC/full-orig-clean.txt" "$SC/full-strip-clean.txt" | head -n 4)"; fi
+# gird-check.ps1's strings, here-strings and tables, token for token: every token but comments and blank lines.
+"$PWSH" -NoProfile -NonInteractive -Command "foreach (\$p in @(@('$SCRIPT', '$SC/orig.tokens'), @('$SC/check.ps1', '$SC/strip.tokens'))) { \$t = \$null; [void][Management.Automation.Language.Parser]::ParseFile(\$p[0], [ref]\$t, [ref]\$null)
+  [IO.File]::WriteAllLines(\$p[1], [string[]]@(\$t | Where-Object { \$_.Kind -ne 'Comment' -and \$_.Kind -ne 'NewLine' } | ForEach-Object { \"\$(\$_.Kind) \$(\$_.Text)\" })) }" > /dev/null 2>&1
+if [ -s "$SC/orig.tokens" ] && cmp -s "$SC/orig.tokens" "$SC/strip.tokens" && grep -q '^HereString' "$SC/orig.tokens"; then ok "strip-comments: gird-check.ps1's strings, here-strings and tables are unchanged token for token" "$(grep -c '' "$SC/orig.tokens") lines"
+else bad "strip-comments: gird-check.ps1's strings, here-strings and tables are unchanged token for token" "$(diff "$SC/orig.tokens" "$SC/strip.tokens" 2>&1 | head -n 4)"; fi
+# A small script: a # in a string, a here-string and a regex, comments of every kind, a <# inside a
+# word (an argument, not a comment), #requires, and a line continued with a backtick before a comment line.
+cat > "$SC/t.ps1" <<'PS'
+<#
+The header stays.
+#>
+$a = 'single # quoted'   # end of line
+$b = "double # $a"
+# a whole line
+$c = @'
+# in a here-string
+'@
+$d = @"
+# in an expandable here-string: $b
+"@
+<# a block
+   of two lines #>
+#requires -Version 5.1
+$e = 'x#1' -match '^x#\d$'
+$f = [regex]::Replace('a#b', '#', '-')
+Write-Output $a $b $c $d $e $f<#in a word#>'next'
+Write-Output 'x'<#gone#>'y' <#gone too#> 'z'
+Write-Output one `
+  two
+Write-Output three `
+# after a continuation
+'four'
+PS
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SC/t.ps1" "$SC/t-strip.ps1" > /dev/null 2> "$SC/t-err.txt"; _rc=$?
+"$PWSH" -NoProfile -NonInteractive -File "$SC/t.ps1" > "$SC/t-orig.out" 2>&1
+"$PWSH" -NoProfile -NonInteractive -File "$SC/t-strip.ps1" > "$SC/t-strip.out" 2>&1
+if [ "$_rc" -eq 0 ] && grep -qF -- "'single # quoted'" "$SC/t-strip.ps1" && grep -qxF -- '# in a here-string' "$SC/t-strip.ps1" && grep -qxF -- '# in an expandable here-string: $b' "$SC/t-strip.ps1" \
+  && grep -qF -- "'^x#\\d\$'" "$SC/t-strip.ps1" && grep -qF -- "'a#b', '#'" "$SC/t-strip.ps1" && grep -qF 'The header stays.' "$SC/t-strip.ps1" \
+  && grep -qF "\$f<#in a word#>'next'" "$SC/t-strip.ps1" \
+  && ! grep -qE 'end of line|a whole line|a block|of two lines|gone|after a continuation' "$SC/t-strip.ps1" && [ -s "$SC/t-orig.out" ] && cmp -s "$SC/t-orig.out" "$SC/t-strip.out"
+then ok "strip-comments: a # in a string, a here-string or a regex stays, and the script runs the same"
+else bad "strip-comments: a # in a string, a here-string or a regex stays, and the script runs the same" "exit $_rc $(cat "$SC/t-err.txt"; diff "$SC/t-orig.out" "$SC/t-strip.out" | head -n 4)"; fi
+if grep -qx '#requires -Version 5.1' "$SC/t-strip.ps1"; then ok "strip-comments: #requires is kept"; else bad "strip-comments: #requires is kept" "$(head -n 20 "$SC/t-strip.ps1")"; fi
+# The SHA-256 blindspot-fleet.ps1 checks before every start is that copy's, as the tool prints it.
+_ps=$(sed -n "s/^\\\$PackedSha = '\\([0-9a-f]*\\)'\$/\\1/p" "$FW/bf/blindspot-fleet.ps1")
+if [ -n "$_ps" ] && [ "$_ps" = "$(cat "$SC/sha.txt")" ] && [ "$_ps" = "$( (shasum -a 256 "$SC/check.ps1" 2> /dev/null || sha256sum "$SC/check.ps1") | cut -c1-64)" ]; then ok "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments"
+else bad "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments" "packed '$_ps', tool '$(cat "$SC/sha.txt")'"; fi
+# The self-check above is made with the PowerShell that builds the release. Windows PowerShell 5.1 must
+# parse the copy too, and the 5.1 command the design gives must print the same SHA-256.
+if [ -n "$WINONLY" ]; then skip "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256" "$WINONLY: Windows PowerShell 5.1 runs only on Windows"
+else
+  _w51="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
+  "$_w51" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$SC/check.ps1")', [ref]\$null, [ref]\$e); \$e.Count; \$PSVersionTable.PSVersion.Major" < /dev/null > "$SC/parse51.txt" 2>&1
+  "$_w51" -NoProfile -ExecutionPolicy Bypass -File 'tools\strip-comments.ps1' gird-check.ps1 < /dev/null > "$SC/sha51.txt" 2>&1; _rc=$?
+  if [ "$(tr -d '\r' < "$SC/parse51.txt" | tr '\n' ' ')" = '0 5 ' ] && [ "$_rc" -eq 0 ] && [ -s "$SC/sha.txt" ] && [ "$(tr -d '\r\n' < "$SC/sha51.txt")" = "$(tr -d '\r\n' < "$SC/sha.txt")" ]
+  then ok "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256"
+  else bad "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256" "parse: $(tr '\r\n' '  ' < "$SC/parse51.txt"); exit $_rc: $(head -c 200 "$SC/sha51.txt"); pwsh: $(cat "$SC/sha.txt")"; fi
+fi
+# A packed copy edited by hand, its SHA-256 left as built, fails --check.
+{ cat "$SC/check.ps1"; printf 'Write-Output edited\n'; } | gzip -9 -n -c | base64 | tr -d '\n\r' > "$SC/edited.b64"
+cp "$FW/bf/blindspot-fleet.ps1" "$SC/built.ps1"
+sed "s|^\\\$PackedCheck = '[A-Za-z0-9+/=]*'\$|\$PackedCheck = '$(sed 's/[|&]/\\&/g' "$SC/edited.b64")'|" "$SC/built.ps1" > "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/edited-check.log" 2>&1); _rc=$?
+cp "$SC/built.ps1" "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/built-check.log" 2>&1); _rc2=$?
+if [ "$_rc" -ne 0 ] && grep -q 'blindspot-fleet.ps1 is out of date .* or was edited' "$SC/edited-check.log" && [ "$_rc2" -eq 0 ]; then ok "fleet: a hand-edited packed copy fails tools/gen.sh --check"
+else bad "fleet: a hand-edited packed copy fails tools/gen.sh --check" "edited: exit $_rc $(head -n 2 "$SC/edited-check.log"); as built: exit $_rc2 $(head -n 2 "$SC/built-check.log")"; fi
+
+# Refusals, and the rules a reader checks in the file itself.
+fw_run all "$FW/clean" -- --all
+if grep -q '^13$' "$FW/all.rc" && grep -q -- '-All is refused' "$FW/all.err" && [ ! -s "$FW/argv.log" ]; then ok "fleet: --all with --all-users is refused"; else bad "fleet: --all with --all-users is refused" "exit $(cat "$FW/all.rc")"; fi
+fw_run js "$FW/clean" -- --json --summary-to-stdout
+if grep -q '^2$' "$FW/js.rc" && grep -q 'choose -Json or -Summary, not both' "$FW/js.err" && [ ! -s "$FW/js.out" ] && [ ! -s "$FW/argv.log" ]; then ok "fleet: -Json with -Summary is refused"; else bad "fleet: -Json with -Summary is refused" "exit $(cat "$FW/js.rc")"; fi
+_dl=""
+for d in 0 abc 100000 -5 1.5 ' 60' 060; do
+  fw_run dl "$FW/clean" -- "--deadline=$d"
+  grep -q '^2$' "$FW/dl.rc" && grep -q -- '-Deadline takes a number of seconds' "$FW/dl.err" && [ ! -s "$FW/argv.log" ] || _dl="$_dl [$d]"
+done
+fw_run dlp "$FW/clean" -- -Deadline abc
+grep -q '^2$' "$FW/dlp.rc" || _dl="$_dl [-Deadline abc]"
+if [ -z "$_dl" ]; then ok "fleet: a -Deadline that is not 1 to 99999 seconds is refused"; else bad "fleet: a -Deadline that is not 1 to 99999 seconds is refused" "$_dl"; fi
+# Run by a relative path from the script's folder; from standard input it can't read gird-check.ps1 next to it.
+( cd "$(dirname "$FLEETPS")" && FW_SCRIPT=gird-fleet.ps1 fw_run rel "$FW/upd" -- --summary-to-stdout )
+has    "fleet: runs by a relative path from the script's folder" '^blindspot review accounts=1 act=0 review=1 not_checked=0 ' "$FW/rel.out"
+( cd / && env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" \
+    "$PWSH" -NoProfile -NonInteractive -Command '$s = [Console]::In.ReadToEnd(); Invoke-Expression $s' < "$FLEETPS" > "$FW/stdin.out" 2> "$FW/stdin.err" ); RC=$?
+if [ "$RC" -eq 1 ] && grep -q 'run it from a file: gird-fleet.ps1 reads gird-check.ps1 from its own folder' "$FW/stdin.err" && grep -qE "$INVRX" "$FW/stdin.out" && grep -q ' reason=unpack | ' "$FW/stdin.out"
+then ok "fleet: from standard input it fails, and says why"; else bad "fleet: from standard input it fails, and says why" "exit $RC $(cat "$FW/stdin.err" "$FW/stdin.out")"; fi
+env -i PATH=/usr/bin:/bin USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" "$PWSH" -NoProfile -NonInteractive -File "$FLEETPS" > "$FW/notwin.out" 2> "$FW/notwin.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FW/notwin.out" ] && grep -q 'run gird-fleet.sh' "$FW/notwin.err"; then ok "fleet: off Windows it exits 13 and points to gird-fleet.sh"; else bad "fleet: off Windows it exits 13 and points to gird-fleet.sh" "exit $RC"; fi
+_unguarded=$(awk '/^[[:space:]]*#/ { next } /GIRD_CHECK_FLEET_/ && !/\$FlTest -and/ && !/^  if \(\$env:GIRD_CHECK_FLEET_TEST -ne .1.\) \{ Fl-Usage / { print NR ": " $0 }' "$FLEETPS")
+if [ -z "$_unguarded" ]; then ok "fleet: every test setting is read only off Windows"; else bad "fleet: every test setting is read only off Windows" "$_unguarded"; fi
+if LC_ALL=C grep -q '[^ -~	]' "$FLEETPS"; then bad "fleet: gird-fleet.ps1 is plain ASCII"; else ok "fleet: gird-fleet.ps1 is plain ASCII"; fi
+sed -e 's/#.*$//' -e "s/'[^']*'//g" -e 's/"[^"]*"//g' "$FLEETPS" > "$WORK/fleet-code.txt"
+hasnot "fleet: gird-fleet.ps1 uses nothing PowerShell 7 alone has" '\?\?|\?\.|&&|\|\||-Parallel|-AsHashtable|\$Is(Windows|MacOS|Linux)\b| \? [^ ]+ : ' "$WORK/fleet-code.txt"
+# The reduced language allows only some statements: the check of it comes before any other.
+if awk '/LanguageMode -ne .FullLanguage./ { f = NR } /\[(Environment|IO\.|Security|Diagnostics|Convert|Text\.|Console\]::Out)/ && !c { c = NR } END { exit !(f && c && f < c) }' "$FLEETPS"; then ok "fleet: the language mode is checked before any .NET call"; else bad "fleet: the language mode is checked before any .NET call"; fi
+if psrun "$WORK/home" -- -Help | grep -q 'blindspot-fleet.ps1 checks the signed-in'; then ok "-Help names blindspot-fleet.ps1 for IT teams"; else bad "-Help names blindspot-fleet.ps1 for IT teams"; fi
+
 # The Worker's own validation. It must keep the Windows values as sent, not turn
 # them into 'other', and they must be the plan's values.
 WORKER=${GIRD_CHECK_WORKER:-}

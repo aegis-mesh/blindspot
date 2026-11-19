@@ -80,13 +80,15 @@ done
 PFX=""
 
 echo "data files"
-if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
+# Exit code 3: the blocks match, and blindspot-fleet.ps1 was not built for want of PowerShell; tests/run-ps.sh checks it.
+bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; _rc=$?
+if [ "$_rc" -eq 0 ] || [ "$_rc" -eq 3 ]; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
 # BusyBox awk (Alpine) refuses ++ or -- on a field, and an awk that fails prints nothing: a row list
 # rewritten through it would come back empty.
 if grep -nE '\$([0-9]+|NF)(\+\+|--)' gird-check.sh gird-fleet.sh > "$WORK/inc.txt"; then bad "no ++ or -- on an awk field, which BusyBox refuses" "$(head -n 3 "$WORK/inc.txt" | tr '\n' '|')"
 else ok "no ++ or -- on an awk field, which BusyBox refuses"; fi
 # gird-fleet.sh's copy of the ownership walk has its home in gird-check.sh: a hand edit to the copy is drift.
-mkdir -p "$WORK/ow"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/ow/"
+mkdir -p "$WORK/ow"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ow/"
 sed 's/^    case "\${_oo_m#\* }" in ?\[2367\]?|??\[2367\]) return 1 ;; esac$/    :/' gird-fleet.sh > "$WORK/ow/gird-fleet.sh"
 if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
@@ -3534,6 +3536,10 @@ gen_refuses "a platform with an unknown incident"       platforms.tsv "nosuch${T
 gen_refuses "a platform advice with a \$"               platforms.tsv "railway${T}X${T}x${T}~/.x/${T}CLI found${T}costs \$5${T}summary"
 gen_refuses "a platform with another found word"        platforms.tsv "railway${T}X${T}x${T}~/.x/${T}present${T}advice${T}summary"
 gen_refuses "a platform path that is only the home"     platforms.tsv "railway${T}X${T}x${T}~${T}CLI found${T}advice${T}summary"
+gen_refuses "a folder variable line without its folders" folder-vars.tsv "ZZ_DIR${T}tool"
+gen_refuses "a folder variable's folder outside the home" folder-vars.tsv "ZZ_DIR${T}tool${T}/opt/zz${T}-${T}-"
+gen_refuses "a folder variable's Windows folder with a \$" folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}{LOCALAPPDATA}/\$x${T}-"
+gen_refuses "a tool's own script outside its folder"     folder-vars.tsv "ZZ_DIR${T}tool${T}-${T}-${T}../x.sh"
 gen_refuses "a platform whose incident is not a leak"   platforms.tsv "axios${T}X${T}x${T}~/.x/${T}CLI found${T}advice${T}summary"
 gen_refuses "a leak that no platform names"           incidents.tsv "madeleak${T}Made Leak${T}October 2026${T}a made-up leak${T}https://example.com/leak${T}leak"
 gen_refuses "an npm package of a platform leak"       bad-npm.tsv "made-pkg${T}1.0.0${T}zeabur"
@@ -5081,6 +5087,16 @@ cp tests/run.sh "$WORK/pr8.sh"; printf '%s\n' 'echo "a quote left open' >> "$WOR
 if ! pcase "$WORK/pr8.sh" tests/run-ps.sh && grep -q 'the file ends inside a quote' "$WORK/pcase.txt"; then ok "the text backstop fails on a file that ends inside a quote"; else bad "the text backstop fails on a file that ends inside a quote"; fi
 { cat tests/bash-only.txt; grep -v '^#' tests/bash-only.txt | grep . | head -n 1; } > "$WORK/only-twice.txt"
 if ! bash tests/parity-text.sh tests/run.sh tests/run-ps.sh "$WORK/only-twice.txt" > "$WORK/pcase.txt" 2>&1 && grep -q '^  bash-only\.txt lists twice: ' "$WORK/pcase.txt"; then ok "the text backstop fails on a bash-only line listed twice"; else bad "the text backstop fails on a bash-only line listed twice"; fi
+{ cat tests/bash-only.txt; printf "a cited test\tthe reason cites a renamed test, tested as 'no test has this name'\n"; } > "$WORK/only-cite.txt"
+printf "a cited test\tthe reason cites a test that is there, tested as 'both scripts match the data files'\n" > "$WORK/only-cite-ok.txt"
+cp tests/run.sh "$WORK/pr9.sh"; cat >> "$WORK/pr9.sh" <<'EOF2'
+ok "a cited test"
+EOF2
+bash tests/parity-text.sh "$WORK/pr9.sh" tests/run-ps.sh "$WORK/only-cite.txt" > "$WORK/pcase.txt" 2>&1; _rc=$?
+{ cat tests/bash-only.txt "$WORK/only-cite-ok.txt"; } > "$WORK/only-cite-ok2.txt"
+bash tests/parity-text.sh "$WORK/pr9.sh" tests/run-ps.sh "$WORK/only-cite-ok2.txt" > "$WORK/pcase-ok.txt" 2>&1; _rc2=$?
+if [ "$_rc" -ne 0 ] && grep -q "^  bash-only.txt cites a test neither suite has: no test has this name\$" "$WORK/pcase.txt" && [ "$_rc2" -eq 0 ]; then ok "the text backstop fails on a reason that cites a test neither suite has"
+else bad "the text backstop fails on a reason that cites a test neither suite has" "exit $_rc, $_rc2: $(grep -v '^    ' "$WORK/pcase.txt" "$WORK/pcase-ok.txt" | head -n 3)"; fi
 if bash tests/parity-text.sh > "$WORK/parity.txt" 2>&1; then ok "the text backstop finds a twin for every test"
 else bad "the text backstop finds a twin for every test" "$(grep -v '^    ' "$WORK/parity.txt")"; fi
 

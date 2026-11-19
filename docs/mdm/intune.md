@@ -1,5 +1,7 @@
 # Blindspot with Microsoft Intune
 
+For IT administrators. This page has two parts: macOS first, then [Windows](#windows).
+
 **Untested:** this page has not yet been run end to end on a real Mac. Menu paths and limits were
 checked on 2026-10-24 against
 [Microsoft's guide to shell scripts on macOS](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos).
@@ -103,6 +105,77 @@ Checked 2026-10-24:
   root: run as another account, it writes `needs root` to standard error and exits 13, so the
   attribute gets no value and reads **Failed**.
 - Scripts need the Intune management agent, at `/Library/Intune/Microsoft Intune Agent.app`.
+
+## Windows
+
+**Untested:** this section has not yet been run end to end on a real PC through Intune. Menu paths,
+setting names and limits were checked on 2026-11-18 against
+[Microsoft's guide to Remediations](https://learn.microsoft.com/en-us/intune/device-management/tools/deploy-remediations),
+which Microsoft last updated on 2026-11-04.
+
+Read [docs/fleet.md](../fleet.md#windows) first: what the check does and what each outcome means.
+
+The daily check is an Intune Remediation: a script that Intune runs on a schedule and whose output it
+shows for each PC. You add one script, `blindspot-fleet.ps1`, as the detection script. There is no
+remediation script, and nothing to install first.
+
+### What you need
+
+- Each PC is Microsoft Entra joined or Microsoft Entra hybrid joined, enrolled in Intune, and runs
+  Windows Enterprise, Professional or Education.
+- A licence for the people who use the PCs: Windows Enterprise E3 or E5 (included in Microsoft 365 F3,
+  E3 or E5), Windows Education A3 or A5 (included in Microsoft 365 A3 or A5), or Windows Virtual
+  Desktop Access (VDA) per user.
+- `blindspot-fleet.ps1` from a tagged release whose SHA-256 you checked, as in
+  [docs/fleet.md](../fleet.md#1-get-the-file-and-check-it).
+
+### Add the Remediation
+
+1. In the [Microsoft Intune admin center](https://go.microsoft.com/fwlink/?linkid=2109431), select
+   **Devices** > **Manage devices** > **Scripts and remediations** > **Create script package**.
+2. In **Basics**, give it a **Name**, such as `Blindspot`, and select **Next**.
+3. In **Settings**, select the folder icon next to **Detection script file** and upload
+   `blindspot-fleet.ps1`. Leave **Remediation script file** empty.
+4. Set these three:
+   - **Run this script using the logged-on credentials**: **Yes**.
+   - **Enforce script signature check**: **No**. The file is not signed.
+   - **Run script in 64-bit PowerShell**: **Yes**.
+5. Select **Next**, add any **Scope tags** you use, and select **Next**.
+6. In **Assignments**, select the device groups. Set the **Schedule** to **Daily** and choose a time.
+7. Select **Next**, then **Create**.
+
+Microsoft's page recommends **No** for **Run script in 64-bit PowerShell** in general. Here it must be
+**Yes**: in 32-bit PowerShell the result is `failed` with `reason=host_32bit`.
+
+### What you should see
+
+Select **Devices** > **Manage devices** > **Scripts and remediations**, open the script package and
+select **Device status**. It shows the output of each PC's run, such as:
+
+```
+v1 act 2026-10-25T09:12Z other_profiles=2 | asha: act incidents tanstack; keys 2 anthropic,aws
+```
+
+**Export** saves the outputs as a `.csv` file. For one PC, select **Devices** > **By platform** >
+**Windows**, select the PC, then **Remediations** in the **Monitor** section.
+
+The line starts with the outcome: `act`, `review`, `not_checked`, `clear` or `failed`. See
+[docs/fleet.md](../fleet.md#what-you-get) for what each means and
+[Why a run reads `failed`](../fleet.md#why-a-run-reads-failed) for the reasons. A PC with no output,
+or an exit code you do not expect, was not checked. The script exits 1 unless the outcome is
+`clear`, which Intune lists as a PC with issues.
+
+### Intune's limits
+
+Checked 2026-11-18:
+
+- The output is kept to 2,048 characters. Blindspot's line is at most 2,047.
+- A script package can hold a detection script on its own. Scripts must be encoded in UTF-8.
+- Intune reruns the scripts every 24 hours. A PC gets new settings after a restart, after a person
+  signs in, and every 8 hours.
+- A recurring script reports within its first six days only when its output changes, and every seven
+  days even if it does not. Blindspot's line carries the time of the check, so it changes on each run.
+- A missed run happens as soon as the PC is back online.
 
 ## Seeing all your Macs, all the time
 
