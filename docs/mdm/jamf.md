@@ -25,7 +25,7 @@ the result either way: each account's `protected_folders` is `checked` once acce
 ## Install it once
 
 1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
+   release of `gird-check.sh` and `gird-fleet.sh` whose signature you checked, with the options line
    starting the second line of `gird-fleet.sh` (`--deadline=3000` for Jamf), each pasted between its
    marker lines in the install script. This install step has not yet been run end to end on a real
    Mac.

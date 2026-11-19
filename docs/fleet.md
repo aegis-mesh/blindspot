@@ -21,8 +21,8 @@ What it never does:
 ## 0. Before you deploy: have your coding agent review it
 
 Both files are long. Ask the coding agent you already use to review them first. It reads them and
-never runs them. Download both, check their SHA-256 as in step 1, and give it this prompt in that
-folder:
+never runs them. Download both and check their signature as in step 1, and give it this prompt in
+that folder:
 
 ```text
 Review gird-fleet.sh and gird-check.sh in this folder before I deploy them to
@@ -59,13 +59,29 @@ changes (list them), or not safe, and why.
 
 ## 1. Try it on your own Mac
 
-Download both files and check their SHA-256:
+Download one release's files by version from GitHub and check that the maintainers signed them.
+Every file a release ships, fleet files included, has a line in its signed `SHA256SUMS`, so you
+verify the signature once, then check each file you deploy against its line. Set `V` to the version
+on the [releases page](https://github.com/aegis-mesh/blindspot/releases), and list the files you deploy
+after `set --`. Every file comes from that one release, so a new release in between can't mix versions:
 
 ```sh
-curl -fsSLO https://gird.ai/blindspot/gird-check.sh
-curl -fsSLO https://gird.ai/blindspot/gird-fleet.sh
-shasum -a 256 gird-check.sh gird-fleet.sh   # compare with the SHA-256 on gird.ai/blindspot
+V=vX.Y.Z
+set -- gird-check.sh gird-fleet.sh
+for f in "$@" SHA256SUMS SHA256SUMS.sig; do
+  curl -fsSLO "https://github.com/aegis-mesh/blindspot/releases/download/$V/$f"
+done
+curl -fsSLO https://gird.ai/blindspot/allowed_signers   # compare its keys with .github/allowed_signers on GitHub
+ssh-keygen -Y verify -f allowed_signers -I release@blindspot -n blindspot-release -s SHA256SUMS.sig < SHA256SUMS
+head -n 1 SHA256SUMS                                     # must say: version $V
+for f in "$@"; do awk -v f="$f" '$2 == f' SHA256SUMS | shasum -a 256 -c; done
 ```
+
+Go on only if `ssh-keygen` says `Good "blindspot-release" signature` and every file says `OK`. These
+are the files you deploy: verify once here, then upload these same files to your MDM. To prepare
+them on a Windows PC, use the PowerShell steps in the
+[README](../README.md#check-the-signature) with the same files.
+[docs/designs/signed-releases.md](designs/signed-releases.md) says what each step proves.
 
 Root runs only files that root alone can change, so put both where only root can:
 
@@ -119,8 +135,8 @@ before it starts any account's check. So the MDM installs both files once, in
 `/Library/Application Support/Blindspot`, and its other items only run `gird-fleet.sh` from there.
 The install step has not yet been run end to end on a real Mac.
 
-1. Take `gird-check.sh` and `gird-fleet.sh` from a tagged release whose SHA-256 you checked (the
-   release notes give them). Add exactly this line under the first line of `gird-fleet.sh`,
+1. Take `gird-check.sh` and `gird-fleet.sh` from one release whose signature you checked, as in
+   [step 1](#1-try-it-on-your-own-mac). Add exactly this line under the first line of `gird-fleet.sh`,
    starting the line. It sets the options for the daily check, and leaves `--inventory`, `--list` and
    `--help` alone:
 
@@ -297,9 +313,10 @@ hook sends npm tokens out on every push. Then:
 
 ## 6. Update or remove it
 
-To update, paste the new release of both files, with the options line, into the install script
-after checking their SHA-256, and have your MDM run the install again. To remove it, delete the MDM's items, then remove
-the installed script and the saved result on each Mac:
+To update, download and verify the new release as in [step 1](#1-try-it-on-your-own-mac), paste
+both files, with the options line, into the install script, and have your MDM run the install
+again. To remove it, delete the MDM's items, then remove the installed script and the saved result
+on each Mac:
 
 ```sh
 sudo rm -rf "/Library/Application Support/Blindspot" /var/db/blindspot /var/db/blindspot.replaced-*
