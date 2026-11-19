@@ -36,13 +36,18 @@ read_list() {
     { print $1, $2; n++ }
     END { if (!bad && !n) { print "release: " f " names no file" > "/dev/stderr"; exit 1 } }'
 }
-# Prints each file people would run that the entries in $1 do not name: a root-level .sh or .ps1
-# (tracked paths on stdin), one the .gitignore at $2 says bash tools/gen.sh builds, or one the
-# tools/gen.sh at $3 writes by name.
+# Prints each file people would run that the entries in $1 do not name: a root-level script
+# (tracked paths on stdin), one the .gitignore at $2 lists under a "built by bash tools/gen.sh"
+# comment, or one the tools/gen.sh at $3 writes by name outside a folder it made with mktemp.
 unlisted() {
-  { grep -E '^[^/]+\.(sh|ps1)$'
-    awk '/^#.*built by bash tools\/gen\.sh/ { b = 1; next } b && /^[^#[:space:]]/ { sub(/^\//, ""); print } { b = 0 }' "$2"
-    grep -oE '>[[:space:]]*[A-Za-z0-9._-]+\.(sh|ps1)([^A-Za-z0-9._-]|$)' "$3" | sed -E 's/^>[[:space:]]*//; s/[^A-Za-z0-9._-]$//'
+  [ -f "$2" ] || { printf 'release: no .gitignore to read the built files from\n' >&2; return 1; }
+  [ -f "$3" ] || { printf 'release: no tools/gen.sh to read the built files from\n' >&2; return 1; }
+  _t=$(grep -oE '(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*=\$\(mktemp' "$3" | sed -E 's/^[^A-Za-z_]//; s/=.*//' | tr '\n' ' ')
+  { grep -E '^[^/]+\.(sh|ps1|psm1|bat|cmd|command)$'
+    awk '/^#.*built by bash tools\/gen\.sh/ { b = 1; next } /^[[:space:]]*$/ || /^#/ { b = 0; next } b { sub(/^\//, ""); print }' "$2"
+    grep -oE '>[[:space:]]*"?(\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/)?[A-Za-z0-9._-]+\.(sh|ps1|psm1|bat|cmd|command)([^A-Za-z0-9._-]|$)' "$3" |
+      sed -E 's/^>[[:space:]]*"?//; s/[^A-Za-z0-9._-]$//' |
+      awk -v t=" $_t" '{ v = "" } /\// { v = $0; sub(/\/.*/, "", v); gsub(/[${}]/, "", v); sub(/^[^\/]*\//, "") } v == "" || index(t, " " v " ") == 0 { print }'
   } | LC_ALL=C sort -u | while IFS= read -r n; do
     printf '%s\n' "$1" | awk -v n="$n" '$1 == n { f = 1 } END { exit !f }' || printf '%s\n' "$n"
   done
@@ -63,14 +68,15 @@ cd "$(dirname "$0")/.." || die "can't find the repository"
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git repository"
 cd "$TOP" || die "can't enter $TOP"
 TOP=$(pwd -P)
+export GIT_NO_REPLACE_OBJECTS=1
 # Hooks and the file system monitor are programs a checkout could name; no git call here runs them.
 G() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
 
 if [ "$CL" -eq 1 ]; then
   [ -f "$RLIST" ] || die "$RLIST is missing"
   E=$(read_list < "$RLIST") || exit 1
-  M=$(G ls-files | unlisted "$E" .gitignore tools/gen.sh 2>/dev/null)
-  [ -z "$M" ] || die "$RLIST does not name $(printf '%s' "$M" | tr '\n' ' ')which people would run: add each, as committed or built, in the pull request that adds it"
+  M=$(G ls-files | unlisted "$E" .gitignore tools/gen.sh) || exit 1
+  [ -z "$M" ] || die "$RLIST does not name $(printf '%s\n' "$M" | tr '\n' ' ')which people would run: add each, as committed or built, in the pull request that adds it"
   say "$RLIST names every file people run."; exit 0
 fi
 
@@ -90,9 +96,11 @@ KGDIR=$(cd "$(dirname "$KEYGEN")" && pwd -P) || die "can't resolve the folder of
 case "$KGDIR/" in "$TOP/"*) die "ssh-keygen on PATH is inside the repository ($KEYGEN): put the system's first" ;; esac
 
 CFG=$(git config --list --show-scope) || die "git config --show-scope failed: this needs git 2.26 or later"
-BAD=$(printf '%s\n' "$CFG" | awk '$1 == "local" || $1 == "worktree" { print $2 }' |
-  grep -iE '^(gpg\.|core\.hookspath=|core\.fsmonitor=|core\.sshcommand=|alias\.|include\.|includeif\.|user\.signingkey=|tag\.|filter\.)' | cut -d= -f1)
-[ -z "$BAD" ] || die "this repository's own git config sets $(printf '%s' "$BAD" | tr '\n' ' ')which can change what signs or runs: remove it, or release from a fresh clone"
+BAD=$(printf '%s\n' "$CFG" | awk -F '\t' '$1 == "local" || $1 == "worktree" { k = $2; sub(/=.*/, "", k); print k }' |
+  grep -vE '^(core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode)|remote\.origin\.(url|fetch)|branch\..+\.(remote|merge)|extensions\.worktreeconfig)$' | LC_ALL=C sort -u)
+[ -z "$BAD" ] || die "this repository's own git config sets $(printf '%s\n' "$BAD" | tr '\n' ' ')which git clone and git worktree add do not write: remove each, or release from a fresh clone"
+IA=$(git rev-parse --git-path info/attributes) || die "can't find .git/info/attributes"
+[ ! -s "$IA" ] || die "$IA is not empty: it changes how git copies files out; empty it, or release from a fresh clone"
 
 K=${BLINDSPOT_SIGNING_KEY:-}
 [ -n "$K" ] || die "set BLINDSPOT_SIGNING_KEY to the path of your release key"
@@ -143,10 +151,10 @@ awk -v h="## $V," 'index($0, h) == 1 { f = 1 } END { exit !f }' "$W/CHANGELOG.md
 G cat-file blob "$SHA:$RLIST" > "$W/release-files" 2>/dev/null || die "$RLIST is not committed at $SHA"
 ENTRIES=$(read_list < "$W/release-files") || die "$RLIST can't be used: fix it by pull request"
 printf '%s\n' "$ENTRIES" | LC_ALL=C sort > "$W/entries"
-G cat-file blob "$SHA:.gitignore" > "$W/gitignore" 2>/dev/null || : > "$W/gitignore"
-G cat-file blob "$SHA:tools/gen.sh" > "$W/gen.sh" 2>/dev/null || : > "$W/gen.sh"
-MISS=$(G ls-tree --name-only "$SHA" | unlisted "$ENTRIES" "$W/gitignore" "$W/gen.sh")
-[ -z "$MISS" ] || die "$RLIST does not name $(printf '%s' "$MISS" | tr '\n' ' ')which people would run: add each by pull request first"
+G cat-file blob "$SHA:.gitignore" > "$W/gitignore" 2>/dev/null || die ".gitignore is not committed at $SHA"
+G cat-file blob "$SHA:tools/gen.sh" > "$W/gen.sh" 2>/dev/null || die "tools/gen.sh is not committed at $SHA"
+MISS=$(G ls-tree --name-only "$SHA" | unlisted "$ENTRIES" "$W/gitignore" "$W/gen.sh") || die "can't check $RLIST"
+[ -z "$MISS" ] || die "$RLIST does not name $(printf '%s\n' "$MISS" | tr '\n' ' ')which people would run: add each by pull request first"
 
 if [ -n "$PREV" ]; then
   FROM=$PREV; RANGE="$PREV..$SHA"; say "Changes since $PREV:"
@@ -169,6 +177,19 @@ read -r ANSWER || ANSWER=""
 # Everything from here runs on a copy of the reviewed commit, not on the checkout.
 S=$W/src
 mkdir "$S" && G archive --format=tar -o "$W/src.tar" "$SHA" && tar -xf "$W/src.tar" -C "$S" || die "could not copy $SHA out to build it"
+# git archive applies export-subst and export-ignore, so the copy is checked against the commit's
+# tree, file by file, before gen.sh runs in it.
+G ls-tree -r -z "$SHA" | while IFS= read -r -d '' l; do
+  case $l in *" blob "*) r=${l#* blob }; printf '%s %s\0' "${r%%$'\t'*}" "${r#*$'\t'}" ;; esac
+done | LC_ALL=C sort -z > "$W/tree"
+(cd "$S" && find . \( -type f -o -type l \) -print0) | while IFS= read -r -d '' p; do
+  p=${p#./}
+  if [ -L "$S/$p" ]; then h=$(printf '%s' "$(readlink "$S/$p")" | G hash-object --stdin)
+  else h=$(G hash-object --no-filters -- "$S/$p"); fi
+  printf '%s %s\0' "$h" "$p"
+done | LC_ALL=C sort -z > "$W/copy"
+cmp -s "$W/tree" "$W/copy" ||
+  die "the copy of $SHA is not the commit, at: $(LC_ALL=C comm -3 <(tr '\0' '\n' < "$W/tree") <(tr '\0' '\n' < "$W/copy") | sed -E 's/^[[:space:]]*[0-9a-f]+ //' | LC_ALL=C sort -u | head -n 5 | tr '\n' ' ')nothing was run, signed or published"
 gen() {
   (cd "$S" && bash tools/gen.sh "$@") > "$W/gen.txt" 2>&1 && return
   _r=$?; cat "$W/gen.txt" >&2

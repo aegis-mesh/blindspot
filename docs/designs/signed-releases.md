@@ -21,7 +21,8 @@ A release is a version a maintainer has reviewed and signed. It has three parts.
   for macOS, Windows and Linux, fleet and admin files included. Each is either committed, taken as it
   is in the reviewed commit, or built, made from that commit by `bash tools/gen.sh` at release. A
   pull request that adds a file people run adds its line; `bash tools/release.sh --check-list`, run by
-  the tests, fails when a root-level `.sh` or `.ps1`, or a file `gen.sh` builds, is missing.
+  the tests, fails when a root-level `.sh`, `.ps1`, `.psm1`, `.bat`, `.cmd` or `.command`, or a file
+  `gen.sh` builds, is missing.
 - **A signed list.** `SHA256SUMS` starts with a line `version vX.Y.Z`, then holds the SHA-256 of every
   attached file. `SHA256SUMS.sig` is its signature, made with `ssh-keygen -Y sign` in the namespace
   `blindspot-release`, so a release signature can't be passed off as any other kind. The version is
@@ -48,8 +49,8 @@ review, like every file here.
    the version to confirm they reviewed that range against the
    [security review](../../CONTRIBUTING.md#security-review), with the changes to `tools/`, `.github/`
    and `.gitattributes` in full. A release is the second look at everything merged since the last
-   one. Then, in a copy of the reviewed commit made with `git archive`, it runs `bash tools/gen.sh
-   --check` and `bash tools/gen.sh`. It stops if either fails, if a listed file is missing or empty,
+   one. Then, in a copy of the reviewed commit made with `git archive` and checked file by file
+   against the commit, it runs `bash tools/gen.sh --check` and `bash tools/gen.sh`. It stops if either fails, if a listed file is missing or empty,
    if a committed file changed, or if `gen.sh` made a file the list does not name as built.
 3. It writes `SHA256SUMS`, one line per listed file in name order, and signs it with the key at `BLINDSPOT_SIGNING_KEY`. `ssh-keygen` asks for
    the passphrase; the script never reads, stores or passes it.

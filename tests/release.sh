@@ -32,6 +32,7 @@ esac
 EOF
 chmod +x "$W/bin/gh"
 export GH_LOG="$W/gh.log"
+if command -v shasum >/dev/null 2>&1; then sha() { shasum -a 256 | awk '{ print $1 }'; }; else sha() { sha256sum | awk '{ print $1 }'; }; fi
 
 # shellcheck disable=SC2034  # tests/lib.sh's helpers read SKIPPING
 if ! ssh-keygen -Y sign 2>&1 | grep -q 'namespace'; then SKIPPING="ssh-keygen here has no -Y sign (OpenSSH 8.1 or later)"
@@ -110,6 +111,24 @@ fresh pinned; git -C "$W/pinned" config gpg.ssh.program "$W/pinned/evil"; rel pi
 if refused "own git config sets gpg.ssh.program" pinned; then ok "refuses a repository whose git config sets gpg.ssh.program"; else bad "refuses a repository whose git config sets gpg.ssh.program" "exit $RC: $(tail -n 2 "$W/pinned.out")"; fi
 fresh filter; git -C "$W/filter" config filter.x.smudge "$W/filter/evil"; rel filter 1.3.0 1.3.0
 if refused "own git config sets filter.x.smudge" filter; then ok "refuses a repository whose git config sets a filter"; else bad "refuses a repository whose git config sets a filter" "exit $RC: $(tail -n 2 "$W/filter.out")"; fi
+fresh upload; git -C "$W/upload" config remote.origin.uploadpack "$W/upload/evil"; rel upload 1.3.0 1.3.0
+if refused "own git config sets remote.origin.uploadpack which" upload; then ok "refuses a repository whose git config sets remote.origin.uploadpack"; else bad "refuses a repository whose git config sets remote.origin.uploadpack" "exit $RC: $(tail -n 2 "$W/upload.out")"; fi
+fresh cred; git -C "$W/cred" config credential.helper "$W/cred/evil"; rel cred 1.3.0 1.3.0
+if refused "own git config sets credential.helper which" cred; then ok "refuses a repository whose git config sets credential.helper"; else bad "refuses a repository whose git config sets credential.helper" "exit $RC: $(tail -n 2 "$W/cred.out")"; fi
+fresh wt; git -C "$W/wt" worktree add -q --detach "$W/wt2" origin/main; rel wt2 1.3.0 --dry-run 1.3.0
+if [ "$RC" -eq 0 ]; then ok "releases from a git worktree add checkout, whose config git wrote"; else bad "releases from a git worktree add checkout, whose config git wrote" "exit $RC: $(tail -n 2 "$W/wt2.out")"; fi
+D=$(sed -n 's/^Files: //p' "$W/wt2.out"); [ -z "$D" ] || rm -rf "$D"
+fresh iattr; printf '* export-subst\n' > "$W/iattr/.git/info/attributes"; rel iattr 1.3.0 1.3.0
+if refused 'info/attributes is not empty' iattr; then ok "refuses a repository with a non-empty .git/info/attributes"; else bad "refuses a repository with a non-empty .git/info/attributes" "exit $RC: $(tail -n 2 "$W/iattr.out")"; fi
+fresh subst; printf '$Format:%%H$\n' > "$W/subst/stamp.txt"; printf 'stamp.txt export-subst\n' >> "$W/subst/.gitattributes"; git -C "$W/subst" add stamp.txt; recommit subst "A file git archive rewrites"
+rel subst 1.3.0 1.3.0
+if refused 'is not the commit, at: stamp.txt' subst; then ok "refuses when a file git archive copied out is not the committed one"; else bad "refuses when a file git archive copied out is not the committed one" "exit $RC: $(tail -n 2 "$W/subst.out")"; fi
+fresh ignore; printf 'gird-fleet.sh export-ignore\n' >> "$W/ignore/.gitattributes"; recommit ignore "A file git archive leaves out"; rel ignore 1.3.0 1.3.0
+if refused 'is not the commit, at: gird-fleet.sh' ignore; then ok "refuses when git archive leaves a committed file out"; else bad "refuses when git archive leaves a committed file out" "exit $RC: $(tail -n 2 "$W/ignore.out")"; fi
+fresh replace; E=$(printf 'echo replaced\n' | git -C "$W/replace" hash-object -w --stdin); git -C "$W/replace" replace "$(git -C "$W/replace" rev-parse HEAD:gird-check.sh)" "$E"
+rel replace 1.3.0 1.3.0
+C=$(git -C "$W/replace.git" cat-file blob HEAD:gird-check.sh | sha)
+if [ "$RC" -eq 0 ] && grep -qx "$C  gird-check.sh" "$GH_LOG.sums"; then ok "a replace ref does not change what is released"; else bad "a replace ref does not change what is released" "exit $RC: $(tail -n 2 "$W/replace.out")"; fi
 
 fresh order; printf '#!/usr/bin/env bash\n: > "%s/ran-gen"\n' "$W" > "$W/order/tools/gen.sh"; recommit order "A gen.sh that leaves a mark"
 rel order 1.3 1.3.0
@@ -125,6 +144,8 @@ fresh empty; { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n'; sed 1d "$
 if refused 'section is empty' empty; then ok "refuses an empty CHANGELOG section"; else bad "refuses an empty CHANGELOG section" "exit $RC: $(tail -n 2 "$W/empty.out")"; fi
 
 echo "release tool: the list of released files"
+# --check-list needs neither OpenSSH 8.1 nor a newer git, so these run wherever the suite does.
+SKIPPED=$SKIPPING; SKIPPING=""
 if (cd "$SRC" && "$RB" tools/release.sh --check-list) > "$W/list.out" 2>&1; then ok "this repository's .github/release-files names every file people run"
 else bad "this repository's .github/release-files names every file people run" "$(cat "$W/list.out")"; fi
 fresh unlisted; printf 'Write-Output new\n' > "$W/unlisted/gird-new.ps1"; git -C "$W/unlisted" add gird-new.ps1; recommit unlisted "A new script"
@@ -135,6 +156,19 @@ if refused 'does not name gird-new.ps1' unlisted && ! grep -q 'Type 1.3.0' "$W/u
 fresh genlist; printf '#!/usr/bin/env bash\ncd "$(dirname "$0")/.." || exit 1\n[ "${1:-}" = --check ] || printf x > blindspot-made.sh\n' > "$W/genlist/tools/gen.sh"; recommit genlist "A gen.sh that builds a file"
 (cd "$W/genlist" && "$RB" tools/release.sh --check-list) > "$W/genlist.list" 2>&1; LRC=$?
 if [ "$LRC" -ne 0 ] && grep -q 'does not name blindspot-made.sh' "$W/genlist.list"; then ok "the list check fails for a file gen.sh builds that the list does not name"; else bad "the list check fails for a file gen.sh builds that the list does not name" "exit $LRC: $(cat "$W/genlist.list")"; fi
+# lcheck NAME: runs --check-list in $W/NAME, into $W/NAME.list and LRC.
+lcheck() { (cd "$W/$1" && "$RB" tools/release.sh --check-list) > "$W/$1.list" 2>&1; LRC=$?; }
+fresh ignored; printf '\n# The fleet files, built by bash tools/gen.sh\n/blindspot-a.sh\nblindspot-b.ps1\n\nblindspot-c.sh\n' >> "$W/ignored/.gitignore"; lcheck ignored
+if [ "$LRC" -ne 0 ] && grep -q 'does not name blindspot-a.sh blindspot-b.ps1 which' "$W/ignored.list"; then ok "the list check reads every name under a built-by-gen.sh comment in .gitignore"; else bad "the list check reads every name under a built-by-gen.sh comment in .gitignore" "exit $LRC: $(cat "$W/ignored.list")"; fi
+fresh redir; printf '%s\n' '#!/usr/bin/env bash' 'ROOT=$(pwd); WORK=$(mktemp -d)' 'echo > "blindspot-q.ps1"' 'echo > "$ROOT/blindspot-r.cmd"' 'echo > "${ROOT}/blindspot-s.psm1"' 'echo > "$WORK/scratch.sh"' > "$W/redir/tools/gen.sh"; recommit redir "A gen.sh that writes by quoted paths"; lcheck redir
+if [ "$LRC" -ne 0 ] && grep -q 'does not name blindspot-q.ps1 blindspot-r.cmd blindspot-s.psm1 which' "$W/redir.list"; then ok "the list check reads quoted and folder-prefixed files gen.sh writes, but not its mktemp folder"; else bad "the list check reads quoted and folder-prefixed files gen.sh writes, but not its mktemp folder" "exit $LRC: $(cat "$W/redir.list")"; fi
+fresh kinds; for f in a.bat b.cmd c.command d.psm1; do : > "$W/kinds/$f"; done; git -C "$W/kinds" add -A; recommit kinds "Scripts of every kind"; lcheck kinds
+if [ "$LRC" -ne 0 ] && grep -q 'does not name a.bat b.cmd c.command d.psm1 which' "$W/kinds.list"; then ok "the list check covers root-level .bat, .cmd, .command and .psm1 files"; else bad "the list check covers root-level .bat, .cmd, .command and .psm1 files" "exit $LRC: $(cat "$W/kinds.list")"; fi
+fresh noignore; rm "$W/noignore/.gitignore"; lcheck noignore
+if [ "$LRC" -ne 0 ] && grep -q 'no .gitignore' "$W/noignore.list"; then ok "the list check fails with no .gitignore"; else bad "the list check fails with no .gitignore" "exit $LRC: $(cat "$W/noignore.list")"; fi
+fresh nogen; rm "$W/nogen/tools/gen.sh"; lcheck nogen
+if [ "$LRC" -ne 0 ] && grep -q 'no tools/gen.sh' "$W/nogen.list"; then ok "the list check fails with no tools/gen.sh"; else bad "the list check fails with no tools/gen.sh" "exit $LRC: $(cat "$W/nogen.list")"; fi
+SKIPPING=$SKIPPED
 
 # built NAME GEN: a repository whose gen.sh is GEN and whose list adds blindspot-built.sh as built.
 built() {
@@ -169,8 +203,8 @@ printf "built\n" > blindspot-built.sh'
 git -C "$W/both" update-index --skip-worktree .github/release-files
 grep -v '^gird-fleet.sh ' "$W/both/.github/release-files" > "$W/both.list" && cat "$W/both.list" > "$W/both/.github/release-files"
 rel both 1.3.0 1.3.0
-H=$(printf 'built\n' | shasum -a 256 | awk '{ print $1 }')
-C=$(git -C "$W/both" cat-file blob HEAD:gird-check.sh | shasum -a 256 | awk '{ print $1 }')
+H=$(printf 'built\n' | sha)
+C=$(git -C "$W/both" cat-file blob HEAD:gird-check.sh | sha)
 if [ "$RC" -eq 0 ] && grep -qx "$H  blindspot-built.sh" "$GH_LOG.sums" && grep -qx "$C  gird-check.sh" "$GH_LOG.sums"; then ok "a committed file and a built file both land in SHA256SUMS"; else bad "a committed file and a built file both land in SHA256SUMS" "exit $RC: $(tail -n 2 "$W/both.out")"; fi
 G=$(tr '\n' ' ' < "$GH_LOG" 2>/dev/null)
 case "$G" in
@@ -183,7 +217,7 @@ echo "release tool: a dry run"
 fresh dry; rel dry 1.3.0 --dry-run 1.3.0
 D=$(sed -n 's/^Files: //p' "$W/dry.out")
 if [ "$RC" -eq 0 ] && [ -n "$D" ] && [ -f "$D/SHA256SUMS" ]; then ok "a dry run passes and keeps its files" "$D"; else bad "a dry run passes and keeps its files" "exit $RC: $(tail -n 3 "$W/dry.out")"; D=$W/none; fi
-want() { printf 'version v1.3.0\n'; for f in gird-check.ps1 gird-check.sh gird-fleet.sh; do printf '%s  %s\n' "$(git -C "$W/dry" cat-file blob "HEAD:$f" | shasum -a 256 | awk '{ print $1 }')" "$f"; done; }
+want() { printf 'version v1.3.0\n'; for f in gird-check.ps1 gird-check.sh gird-fleet.sh; do printf '%s  %s\n' "$(git -C "$W/dry" cat-file blob "HEAD:$f" | sha)" "$f"; done; }
 if [ -f "$D/SHA256SUMS" ] && want | cmp -s - "$D/SHA256SUMS"; then ok "SHA256SUMS is the version line, then each committed file's SHA-256, sorted"; else bad "SHA256SUMS is the version line, then each committed file's SHA-256, sorted" "$(cat "$D/SHA256SUMS" 2>/dev/null)"; fi
 if [ -f "$D/SHA256SUMS" ] && ! LC_ALL=C grep -q "$(printf '\r')" "$D/SHA256SUMS" && [ "$(tail -c 1 "$D/SHA256SUMS" | od -An -c | tr -d ' ')" = '\n' ] && [ "$(sed 1d "$D/SHA256SUMS" | awk '{ print $2 }')" = "$(sed 1d "$D/SHA256SUMS" | awk '{ print $2 }' | LC_ALL=C sort)" ]
 then ok "SHA256SUMS has LF line ends, a final newline and names in byte order"; else bad "SHA256SUMS has LF line ends, a final newline and names in byte order"; fi
@@ -207,7 +241,9 @@ esac
 if [ -f "$GH_LOG.notes" ] && [ "$(cat "$GH_LOG.notes")" = "$(printf -- '- A change for the tests.\n- And a second one.')" ]; then ok "its notes are the version's CHANGELOG section"; else bad "its notes are the version's CHANGELOG section" "$(head -n 3 "$GH_LOG.notes" 2>/dev/null)"; fi
 
 echo "release tool: when publishing fails"
-fresh push; git -C "$W/push" config remote.origin.pushurl "$W/no-such-remote.git"; rel push 1.3.0 1.3.0
+# The origin refuses every push, so the push fails after the tag is made.
+fresh push; mkdir "$W/push-hooks"; printf '#!/bin/sh\nexit 1\n' > "$W/push-hooks/pre-receive"; chmod +x "$W/push-hooks/pre-receive"
+git -C "$W/push.git" config core.hooksPath "$W/push-hooks"; rel push 1.3.0 1.3.0
 if refused 'push of v1.3.0 failed' push && [ -z "$(git -C "$W/push.git" tag -l v1.3.0)" ]; then ok "a failed tag push deletes the tag and publishes nothing"; else bad "a failed tag push deletes the tag and publishes nothing" "exit $RC: $(tail -n 2 "$W/push.out")"; fi
 fresh ghfail; GH_FAIL=1 rel ghfail 1.3.0 1.3.0
 D=$(sed -n 's/.*Its files are in \([^;]*\);.*/\1/p' "$W/ghfail.out")
