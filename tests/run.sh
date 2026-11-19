@@ -78,6 +78,11 @@ for B in $BASHES; do
 done
 PFX=""
 
+echo "review guard"
+# Its own suite, with its own list of results: PARITY_LOG is cleared so it records nothing here.
+if PARITY_LOG='' bash tests/review-guard.sh > "$WORK/review-guard.txt" 2>&1; then ok "tools/review-guard.sh passes its tests"
+else bad "tools/review-guard.sh passes its tests"; grep -E 'FAIL|^ {8}' "$WORK/review-guard.txt" | head -n 20; fi
+
 echo "data files"
 if bash tools/gen.sh --check > "$WORK/gen.txt" 2>&1; then ok "both scripts match the data files"; else bad "both scripts match the data files"; head -n 8 "$WORK/gen.txt"; fi
 # BusyBox awk (Alpine) refuses ++ or -- on a field, and an awk that fails prints nothing: a row list
