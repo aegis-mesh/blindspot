@@ -2129,7 +2129,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 12 recent leaks or malware it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 13 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -2140,7 +2140,7 @@ hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftove
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +12 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +13 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -2946,6 +2946,42 @@ dz_blocks() { grep -aoE 'Agents set to run commands without asking.*02 MCP SERVE
 if [ -n "$(dz_blocks "$WORK/dz-hit-flat.txt")" ] && [ "$(dz_blocks "$WORK/dz-hit-flat.txt")" = "$(dz_blocks "$WORK/dz-b-flat.txt")" ]; then ok "sections 1 and 2 read the same as gird-check.sh's"
 else bad "sections 1 and 2 read the same as gird-check.sh's"; diff <(dz_blocks "$WORK/dz-b-flat.txt" | tr '!' '\n') <(dz_blocks "$WORK/dz-hit-flat.txt" | tr '!' '\n') | head -n 6; fi
 
+echo "GitHub Actions that were compromised"
+# Workflows in a home of their own (tests/make-fixture.sh has none), built as harmless YAML: a use of a
+# listed action by a tag the source names, by a tag it does not, pinned to a malicious commit, pinned to
+# another commit, and pinned where the source says pins ran it too.
+GA=$WORK/ga; rm -rf "$GA"; mkdir -p "$GA/code/hit/.github/workflows" "$GA/code/pin/.github/workflows" "$GA/code/rd/.github/workflows" "$GA/code/ok/.github/workflows/old" "$GA/AppData/Roaming" "$GA/AppData/Local/Temp"
+GA_BAD=a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d; GA_OTHER=$(printf '%040d' 7)
+printf 'jobs:\n  close:\n    steps:\n      - uses: actions/checkout@v4\n      - name: close\n        uses: actions-cool/issues-helper@v3   # close inactive\n      # - uses: xygeni/xygeni-action@v5\n      - uses: "tj-actions/changed-files@v44.5.1"\n      - uses: tj-actions/changed-files@v46\n      - uses: '"'"'Aquasecurity/trivy-action@0.28.0'"'"'\n      - uses: aquasecurity/trivy-action@0.35.0\n      - uses: actions-cool/issues-helper-next@v3\n' > "$GA/code/hit/.github/workflows/issues.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: actions-cool/issues-helper@%s # v2.2.1\n      - uses: actions-cool/maintain-one-comment@%s\n' "$GA_BAD" "$GA_OTHER" > "$GA/code/pin/.github/workflows/ci.yaml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: reviewdog/action-shellcheck@%s\n' "$GA_OTHER" > "$GA/code/rd/.github/workflows/lint.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4\n' > "$GA/code/ok/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: xygeni/xygeni-action@v5\n' > "$GA/code/ok/.github/workflows/old/kept.yml"
+GA_N=$(grep -v '^#' data/actions.tsv | grep -c .)
+GA_RUN() { if [ -n "${3:-}" ]; then psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline; else psrun "$1" -- -Offline; fi 2>&1 | tr -s ' \n' '  ' > "$2"; }
+GA_RUN "$GA" "$GA/out.txt"; GA_RUN "$GA" "$GA/sum.txt" compact
+has    "a listed action used by a tag the source names is a project to check" 'GitHub Actions +3 projects use an action that was compromised ~/code/hit/\.github/workflows/issues\.yml Uses actions-cool/issues-helper@v3, compromised from 18 May 2026\.' "$GA/out.txt"
+has    "a quoted use is read"                           'Uses tj-actions/changed-files@v44\.5\.1, compromised on 14 and 15 March 2025\.' "$GA/out.txt"
+has    "the owner and name are compared without case"   'Uses aquasecurity/trivy-action@0\.28\.0, compromised on 19 and 20 March 2026\.' "$GA/out.txt"
+hasnot "a tag the source does not name is not flagged"  'changed-files@v46|trivy-action@0\.35\.0' "$GA/out.txt"
+hasnot "a longer name that starts with a listed one is not flagged" 'issues-helper-next' "$GA/out.txt"
+hasnot "a commented-out use is not read"                'xygeni' "$GA/out.txt"
+has    "a pin to a commit the source lists is flagged"  '~/code/pin/\.github/workflows/ci\.yaml Uses actions-cool/issues-helper pinned to a commit the source lists as malicious' "$GA/out.txt"
+hasnot "a pin to any other commit is not flagged"       'maintain-one-comment' "$GA/out.txt"
+has    "a pin is flagged where the source says pins ran it too" '~/code/rd/\.github/workflows/lint\.yml Uses reviewdog/action-shellcheck pinned to a commit, compromised on 11 March 2025' "$GA/out.txt"
+has    "it says what to check if the workflows ran then" "If these workflows ran in that window, rotate the secrets they could read and check the repository's history for commits by github-actions\[bot\] that you didn't make\." "$GA/out.txt"
+has    "and adds a fix to What to do"                   'If the workflows section 5 lists ran while their GitHub Action was compromised, rotate the secrets' "$GA/out.txt"
+hasnot "it never calls the machine compromised"         'ACT NOW|Treat this machine as compromised|signs of' "$GA/out.txt"
+has    "row 05 names the projects"                      'Recent leaks +3 projects use a compromised GitHub Action' "$GA/sum.txt"
+rm -rf "$GA/code/hit" "$GA/code/pin" "$GA/code/rd"
+GA_RUN "$GA" "$GA/clean.txt"
+has    "workflows with no listed action read clean, a subfolder's workflow not read" "GitHub Actions +none of $GA_N compromised actions in 1 workflow file" "$GA/clean.txt"
+chmod 000 "$GA/code/ok/.github/workflows/ci.yml"
+GA_RUN "$GA" "$GA/unread.txt"; GA_RUN "$GA" "$GA/unread-sum.txt" compact
+chmod 644 "$GA/code/ok/.github/workflows/ci.yml"
+has    "a workflow file that cannot be read is not called clean" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$GA/unread.txt"
+has    "and row 05 says so"                             'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
+
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
 # package to a copy's data files and runs gen.sh there; it fails if any code changed.
@@ -2959,7 +2995,7 @@ mups() { # home out [compact]
 mups "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +14 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +15 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -2983,7 +3019,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
 mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 14 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 15 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
@@ -3002,6 +3038,7 @@ has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagen
 has    "made-up agent setting in a folder for each profile" '! Made Agent ~/\.madeagent/profiles/p1/config\.json madeMode profile' "$WORK/mu.txt"
 has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 3\.0\.0 or later A made-up hole for the tests\. example\.com/madetool A second made-up hole\. example\.com/madetool2' "$WORK/mu.txt"
 has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
+has    "made-up compromised GitHub Action"           '~/code/made/\.github/workflows/made\.yml Uses Made-Org/made-action@v1\.2, compromised in October 2026\. Remove it\. \(example\.com\)' "$WORK/mu.txt"
 has    "a made-up extension whose malware runs on Windows only is one to remove here" '~/\.cursor/extensions/made\.winext-2\.0\.0 made\.winext 2\.0\.0 \(Made extension, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/mu.txt"
 # A Python incident's temp file alone: stop and delete, not "don't run Python".
 rm -rf "$WORK/mu-tmp"; cp -R "$WORK/clean" "$WORK/mu-tmp"; mkdir -p "$WORK/mu-tmp/AppData/Local/Temp"; : > "$WORK/mu-tmp/AppData/Local/Temp/.madepy_1"

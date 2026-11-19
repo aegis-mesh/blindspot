@@ -6,8 +6,9 @@
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
-# versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check.
+# versions with a published fix (data/outdated.tsv), extensions that shipped malware
+# (data/bad-extensions.tsv) and GitHub Actions that were compromised (data/actions.tsv). The scripts
+# stay single files people can download and check.
 #
 #   bash tools/gen.sh           rewrite the blocks
 #   bash tools/gen.sh --check   exit 1 if a block differs from the data files
@@ -118,6 +119,14 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
         function os_ok(s,   n, a, i, got) { if (s == "all") return 1; n = split(s, a, ","); if (n < 1 || n > 2) return 0
           for (i = 1; i <= n; i++) { if (a[i] !~ /^(mac|linux|win)$/ || (a[i] in got)) return 0; got[a[i]] = 1 }; return 1 }
         NF != 5 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || !os_ok($5) || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+      # A compromised action: owner/repo once (GitHub ignores case), refs as shell patterns of the
+      # characters a tag or branch name uses, full 40-character SHAs, and plain text the scripts quote.
+      rows data/actions.tsv | awk -F '\t' '
+        function refs_ok(s,   n, a, i) { n = split(s, a, " "); if (n < 1) return 0; for (i = 1; i <= n; i++) if (a[i] !~ /^!?[]A-Za-z0-9_.*?\/[-]+$/ || a[i] ~ /^!?\*$/ && n > 1) return 0; return 1 }
+        function shas_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ","); for (i = 1; i <= n; i++) if (a[i] !~ /^[0-9a-f]+$/ || length(a[i]) != 40) return 0; return 1 }
+        function text_ok(s) { return s != "" && s !~ /[\047"`$|\\]/ }
+        NF != 7 || $1 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || seen[tolower($1)]++ || !refs_ok($2) || !shas_ok($3) || $4 !~ /^(safe|unsafe)$/ ||
+        !text_ok($5) || $6 !~ /^https:\/\/[^ \047"`$|\\]+$/ || !text_ok($7) { print "data/actions.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
@@ -397,6 +406,19 @@ rows data/bad-extensions.tsv | awk -F '\t' '
   { print $1 " " $2 " " $3 " " $4 " " $5 }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
 
+# --- GitHub Actions that were compromised --------------------------------------------
+# Rows are "owner/repo in lowercase|owner/repo|refs|shas|pin|window|source's site|fix".
+rows data/actions.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; printf "ACT_TABLE=\"" }
+  { printf "%s%s|%s|%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), tolower($1), $1, $2, $3, $4, $5, host($6), $7 }
+  END { print "\""; print "# <<< actions" }' > "$WORK/actions.sh"
+rows data/actions.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; print "$ActTable = @(" }
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", tolower($1), $1, $2, $3, $4, $5, host($6), $7 }
+  END { print ")"; print "# <<< actions" }' > "$WORK/actions.ps1"
+
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
   awk -v name="$2" -v gen="$3" '
@@ -417,7 +439,7 @@ grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has 
 RC=0
 for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
   if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
-  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
+  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms actions"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }

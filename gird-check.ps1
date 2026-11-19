@@ -710,6 +710,8 @@ $LockBin = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
 $AiderFiles = New-Object System.Collections.Generic.List[string]
+# A project's GitHub Actions workflows (section 5): GitHub runs those directly in .github/workflows.
+$Workflows = New-Object System.Collections.Generic.List[string]
 # The project files of data/auto-approve.tsv, every project's .vscode/settings.json (section 2), and
 # links to this user's ~/.ssh/authorized_keys outside ~/.ssh.
 $AaFiles = New-Object System.Collections.Generic.List[string]
@@ -954,6 +956,7 @@ function Scan-Home([string]$dir, [int]$depth) {
     elseif ($name -ceq '.aider.chat.history.md' -or $name -ceq '.aider.input.history') { Add-Plain $AiderFiles $e }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { Add-Plain $TaskFiles $e }
     elseif (Is-WormFile $parent $name) { Add-Plain $WormFiles $e }
+    elseif ($parent -ceq 'workflows' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($dir)) -ceq '.github' -and ($name -clike '*.yml' -or $name -clike '*.yaml')) { Add-Plain $Workflows $e }
     else {
       if ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { Add-Plain $VscSettings $e }
       if (Is-AaProject $path) { Add-Plain $AaFiles $e }
@@ -6816,6 +6819,76 @@ $PlatFix = Join-Or @($Platforms | Where-Object { $PlatFound -contains $_.Id } | 
 # The report's fixed fields opencode and railway.
 $OC = 0; if ($PlatFound -contains 'opencode') { $OC = 1 }
 $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
+# Workflows that name a GitHub Action whose code was replaced by malware for a time (data/actions.tsv),
+# as gird-check.sh reads them. A uses: line names owner/repo[/path]@ref. A ref of 40 hex digits is a
+# pin to a commit: it matches a malicious commit the source lists, or any pin when the source says
+# pins ran it too. Any other ref matches the line's patterns. A match is a project to check.
+# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it.
+$ActTable = @(
+  ,@('tj-actions/changed-files', 'tj-actions/changed-files', 'v[1-9] v[1-9].* v[1-3][0-9] v[1-3][0-9].* v4[0-5] v4[0-5].*', '0e58ed8671d6b60d0890c21b07f8835ace038e67', 'safe', 'on 14 and 15 March 2025', 'github.com', 'Its tags were restored after the attack. Pin it to a full commit SHA.')
+  ,@('reviewdog/action-shellcheck', 'reviewdog/action-shellcheck', '*', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-composite-template', 'reviewdog/action-composite-template', '*', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-staticcheck', 'reviewdog/action-staticcheck', '*', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-ast-grep', 'reviewdog/action-ast-grep', '*', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-typos', 'reviewdog/action-typos', '*', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-setup', 'reviewdog/action-setup', 'v1', 'f0d342d24037bb11d26b9bd8496e0808ba32e9ec', 'safe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Its v1 tag was restored after the attack. Pin it to a full commit SHA.')
+  ,@('xygeni/xygeni-action', 'xygeni/xygeni-action', 'v5', '4bf1d4e19ad81a3e8d4063755ae0f482dd3baf12', 'safe', 'from about 3 to 10 March 2026', 'github.com', 'Pin it to 13c6ed2797df7d85749864e2cbcf09c893f43b23, its v6.4.0, as Xygeni advises.')
+  ,@('aquasecurity/trivy-action', 'aquasecurity/trivy-action', '0.* !0.35.0', '-', 'unsafe', 'on 19 and 20 March 2026', 'github.com', 'Pin it to the full commit SHA of v0.35.0 or later. A pin to a commit from before 9 April 2025 ran the compromised setup-trivy then too.')
+  ,@('aquasecurity/setup-trivy', 'aquasecurity/setup-trivy', 'v0.2.*', '-', 'safe', 'on 19 March 2026, about 17:43 to 21:44 UTC', 'github.com', 'Pin it to the full commit SHA of v0.2.6 or later, published again with safe code.')
+  ,@('checkmarx/kics-github-action', 'Checkmarx/kics-github-action', 'v*', '0e22ec8d1e0dda3c62bf4beffcd4a8a5db1abda1,45f3749467a6017cb4fb749054b498d149dd5924,8e20c7a67bb95632e2040327a355fb97e6014d29,93de85c910d859b759cf9185aa78d5a23a4b7000,0e7343ba084735863db92b6f8ba2fa9dee604f7c,2dc0fa613f6f4c15f26ad98225ad253475681616,f00191dd3352c0cd83c6cce4e6bf04b628214dd0,e0359b1a253ee66c8018586c3225e6e9cd2d8a4f,dc6dbf358998c0c64da83edc8fcd581c12656b19,08b9ea97eb292d5e1f9ac2d8e21c0ba32f0fdff0,005fb0837553de722f8bf11d98e905dbdde19861,a5471d37c656ecd4560e8e0b3977910f27025618,3d49875ed47c6b8b4c8b50e0421418cf6b9f35f4,121c38fb49c9fc82160245fb6e2a9119db636e4d,1e9eeaba37fe0032deba133f598e74dab0ceb3b7,c5c07508527fc6a125855eebfb533e64f675bd8e,c999dbb9cc904e23675f9929f7e0e51d132879cf,4ebf62dd8ff318412b38d19841fc3c8650e294bf,3ae9f0d6f8139964635d411149f9b3e0a6eb935e,96a0e8eb31c3cce6c495c9a49dd49c881cd17934,31fbf5831a2e52429738fdc0cbaa20e57872b6fc,fca3a20afcb8ec7f9932c060a236d2a9021fdd2b,0f81f132f9f09bb4976d403914a44a1a1eb6158d,c0e23718a5074f3b8ad286f37b532e02057af35f,d66f0657133bc42f8264458063999bf1910490db,e35c9d6a5faffc1c5b3450d0bf09006aa9b9e906,2eee333d70fb6e14ce1d4aa73f12058bc5d70193,f9641eb512f5c6530d13275903e8a97baf0925f1,e8754eebc822b5122e96a6142b28dbc0e179c91c,69b3f020390222a9fcb6029ba56533b2fb12f103,db942a0dd7e9d1aeac72bc675bdb67f39a688b63,208813bf5feca5df9a935363cd426bc914614d0b,3fdeadb81fbeddc1453163cc87bc173911fd47e2,310734c0ffd29438f6195a24e2cbbacfdc33c9ab,b974e53df1e3a2cd22ea90f0ec01882394feede4', 'safe', 'on 23 March 2026, 12:58 to 16:50 UTC', 'wiz.io', 'Pin it to the full commit SHA of a release published after the attack.')
+  ,@('actions-cool/issues-helper', 'actions-cool/issues-helper', 'v*', '1c9e803c80cc7fed000022d4c94f4b5bc2e90062,f0448c62fc57b8a5ce23d8acd6e795cdd76a3b6c,abc4310e6b8520aff6af79a4880217917cd1436b,aea87833045e38098e64310e962b897ae8aaba33,aeb05195dbd618afce6f22ca4937e46940d86be1,4b10341e231301a86c66f6c09e3e4de76d8719fe,8a3a7c2960ff3a4e3fd1481cfd1eb31301e16337,aa44b5492c787fbc4c51edb8d98d88b668fe89d1,03bbf452b52fb318196d9c193fd178a79a6d7f9b,257849272e291fb74ff4bee4d3be4796dd35fbbb,4bb72d31eaee87562b70a0cf1b93579bb2b14c23,e0585c10366288eeec3117d65ed24240ccbf1f47,419b34c603623ea8749a98b7153df20e389dd0ec,8cc2629c5681d794c494b79283d23aa3ce78749c,4b69521f9829a1114b94d74fdc1a38f2291d8c34,dc5687b71897e8b57bc9743e325ac72cee763c9c,3846bd4230da36f68a4cc1527298ca9ab2652fb9,459b0cfc4dd708b6218b72a7a01dda6c6a7ab0c0,fa6a4ca487f2dc699d428126ea2b18e9d0d15c9d,15c89f718cd325833aad8000d3ec72e2660f6584,a7d3c46a35564fa85321f3557700f6ea0c0616a9,85c9d842e1c0f41f8805f17600c25237e08a0224,64ed6d61b6eee8744417e1d1cc651665a8bce236,d9b1764cbe78ec9b12f01a66b2d2c902b15981b6,b9c83f01929e190cda300e76f688bf7ea7e37a7a,147337a919d92f4bf42f02843682d694650f1e22,e9631d2e615d95a19111c272049444fb073a99be,91b26b99c50ad890f98c2184d251bd3a16f5b1b1,3f4d6804812734dfe945bbe8ef619f151e4b27f6,46eff1378ad0faee27c017ebd97f605548777098,071e169dfb36005b3262b3853c9894698b8b303b,55253d49c68133ae52e791a3f1f8242b191f5e91,edf8cf78d6feeb5a73cda9317af5ddfc4da6c5fd,a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d,896379edfaac994ff214a3097c6c82e21be16066,9bd6ce03e0c279f347b519548b87d26699ad31c9,d2877f69bae9d8dcbadb06b3214ebf0789ed566e,601e1296a5a0853b5e109f9820151c72619e11e4,75fb02043af24e6f3eaf534464de338173993629,3480e51eec2be03a70d6fe17507413a96fe5b57d,67716d94ad07d7fe793cabc6f6d1ffe24f77bdf7,cd96d6518c6338f8510638bce764c7abd7194983,6a538e928b8856062de61103ed5a08f0ea0faee9,9793761b1bc3dde7ad1ccb9be6211919e20a3f01,8a64710bb8fee9f5c92eb1a816e016ed00fbcce0,710ff89debb143f6859cf8d54c0e8739224ff6c1,3904fe935f1a18fee5dbad6db46a66c9dcffde01,cfbd14ccc97afd3baa822bd231df8460e4f02f29,15dc537110a44b0625622e82b7d6ca95583f276a,e778a401e233bf0a416f3fe2a52d9039949b30a6,203671479d663755cb5bf8ffbeca6d2b685af7ae,a7156495f3403674cafe3796382bded1d9af8931,5c267592a87e92c2b005b338bd0d2724c2f64acb', 'safe', 'from 18 May 2026', 'stepsecurity.io', 'Remove it. Every tag was moved to a malicious commit, and in September 2026 the tags still ran it.')
+  ,@('actions-cool/maintain-one-comment', 'actions-cool/maintain-one-comment', 'v*', '7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b', 'safe', 'from 18 May 2026', 'stepsecurity.io', 'Remove it. Every tag was moved to a malicious commit.')
+)
+# <<< actions
+function Act-Uses([string]$t) {
+  foreach ($line in $t.Split("`n")) {
+    $line = $line -replace "`r$", ''
+    $m = [regex]::Match($line, '^[ \t]*(-[ \t]+)?["'']?uses["'']?[ \t]*:[ \t]*')
+    if (-not $m.Success) { continue }
+    $v = $line.Substring($m.Length)
+    if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
+      $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { continue }; $v = $v.Substring(0, $i)
+    } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' }
+    $at = $v.IndexOf('@'); if ($at -lt 0) { continue }
+    $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
+    if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { continue }
+    $p = $a.Split('/'); ,@(($p[0] + '/' + $p[1]).ToLowerInvariant(), $r)
+  }
+}
+$ActHits = New-Object System.Collections.Generic.List[object]; $ActSeen = @{}; $ActUnread = 0; $N_WF = 0
+$WfSorted = $Workflows.ToArray(); [Array]::Sort($WfSorted, [StringComparer]::Ordinal)
+foreach ($wf in $WfSorted) {
+  if (-not (Is-SafeToRead $wf) -or (Too-Big $wf)) { $ActUnread++; continue }
+  $t = $null; try { $t = [IO.File]::ReadAllText($wf) } catch { $t = $null }
+  if ($null -eq $t) { $ActUnread++; continue }
+  $N_WF++
+  foreach ($u in @(Act-Uses $t)) {
+    $ur = $u[1]; $sha = ''
+    if ($ur.Length -eq 40 -and $ur -match '^[0-9a-fA-F]+$') { $sha = $ur.ToLowerInvariant() }
+    foreach ($row in $ActTable) {
+      if ($row[0] -cne $u[0]) { continue }
+      $kind = ''
+      if ($sha) {
+        if ((",$($row[3]),").Contains(",$sha,")) { $kind = 'commit' } elseif ($row[4] -ceq 'unsafe') { $kind = 'pin' }
+      } else {
+        $in = $false; $out = $false
+        foreach ($pt in $row[2].Split(' ')) {
+          if ($pt.StartsWith('!')) { if ($ur -clike $pt.Substring(1)) { $out = $true } } elseif ($ur -clike $pt) { $in = $true }
+        }
+        if ($in -and -not $out) { $kind = 'ref' }
+      }
+      if (-not $kind) { continue }
+      $key = "$wf`t$($row[1])`t$ur`t$kind"
+      if ($ActSeen.ContainsKey($key)) { continue }; $ActSeen[$key] = 1
+      $ActHits.Add(@($wf, $row[1], $ur, $kind, $row[5], $row[6], $row[7]))
+    }
+  }
+}
+$N_ACT = $ActHits.Count
+$N_ACT_PROJ = @($ActHits | ForEach-Object { [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($_[0]))) } | Sort-Object -Unique).Count
+if ($N_ACT -gt 0) { Progress "A project's workflows use a GitHub Action that was compromised" }
+elseif ($ActUnread -gt 0 -or $HOME_PARTIAL -eq 1) { Progress 'GitHub Actions workflows not fully checked' }
+elseif ($N_WF -gt 0) { Progress "No compromised GitHub Actions in $(Plural $N_WF 'workflow file' 'workflow files')" }
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
@@ -7018,6 +7091,7 @@ if (($MAL_HIT -eq 0 -or $MAL_LOCKONLY -eq 1) -and $UpdFix) { Add-Todo 5 'Update 
 if ($PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 if ($EXT_HIT -eq 0 -and $ExtUpd.Count -gt 0) { Add-Todo 5 'Uninstall the editor extensions listed in section 5. Their malware could not run on this system.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
+if ($N_ACT -gt 0) { Add-Todo 5 'If the workflows section 5 lists ran while their GitHub Action was compromised, rotate the secrets they could read and check the repository''s history for commits by github-actions[bot] that you didn''t make. Then pin or remove each action as section 5 says.' }
 $ISSUES = $Todo.Count
 
 $SCORE = 100
@@ -7134,7 +7208,7 @@ if (-not $OptOffline) {
 # checked, a key file, part of npm's cache, a Python environment or an extension folder could not
 # be read, or a file took too long. The headline then says what it can: no findings in the paths
 # checked.
-$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0 -or $PyUnread -gt 0)
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0 -or $PyUnread -gt 0 -or $ActUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -7335,7 +7409,7 @@ foreach ($r in $AllowRows) {
 if ($N_ALLOW -gt 0 -and $AllowUnread.Count -gt 0) { Wrap "$(Plural $AllowUnread.Count 'file' 'files') could not be read, so this is not the full list." 8 "     $cYel!$cRst  " '        ' }
 $Sec4 = Take-Cap
 $ind26 = ' ' * 26
-$N_LEAKS = @($PyIncidents).Count + 2 + @($Platforms).Count   # the Python incidents, npm, editor extensions and each platform
+$N_LEAKS = @($PyIncidents).Count + 3 + @($Platforms).Count   # the Python incidents, npm, editor extensions, GitHub Actions and each platform
 Section '05' 'RECENT KEY LEAKS' "$N_LEAKS checked"
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
 # advice under a hit: for a bad package in an environment, don't run Python there; for its temp
@@ -7508,6 +7582,25 @@ foreach ($p in $Platforms) {
     Pair "$cDim$gMid$cRst" $p.Name 16 "$cDim$w$cRst"
   }
 }
+# Projects whose workflows use a compromised GitHub Action, each use under its workflow file.
+if ($N_ACT -gt 0) {
+  Pair "$cYel!$cRst" 'GitHub Actions' 16 "$cYel$(Plural $N_ACT_PROJ 'project uses' 'projects use') an action that was compromised$cRst"
+  $lw = $null
+  foreach ($h in $ActHits) {
+    if ($h[0] -cne $lw) { Emit "        $(Short $h[0])" }; $lw = $h[0]
+    $ur = [regex]::Replace($h[2], '[\x00-\x1f\x7f-\x9f]', '?')
+    if ($h[3] -ceq 'commit') { $t = "Uses $($h[1]) pinned to a commit the source lists as malicious, compromised $($h[4])." }
+    elseif ($h[3] -ceq 'pin') { $t = "Uses $($h[1]) pinned to a commit, compromised $($h[4])." }
+    else { $t = "Uses $($h[1])@$ur, compromised $($h[4])." }
+    Wrap "$t $($h[6]) ($($h[5]))" 10 '          ' '          ' $cDim
+  }
+  Wrap (Rotate-Wait "If these workflows ran in that window, rotate the secrets they could read and check the repository's history for commits by github-actions[bot] that you didn't make.") 8 '        ' '        '
+  if ($ActUnread -gt 0) { Wrap "$(Plural $ActUnread 'workflow file' 'workflow files') could not be read, so this is not the full list." 8 '        ' '        ' $cYel }
+}
+elseif ($ActUnread -gt 0) { Pair "$cYel!$cRst" 'GitHub Actions' 16 "${cYel}not fully checked: $(Plural $ActUnread 'workflow file' 'workflow files') could not be read$cRst" }
+elseif ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" 'GitHub Actions' 16 "${cYel}not fully checked: some folders were not read$cRst" }
+elseif ($N_WF -eq 0) { Pair "$cDim$gMid$cRst" 'GitHub Actions' 16 "${cDim}no workflow files found$cRst" }
+else { Pair "$cGrn$gOk$cRst" 'GitHub Actions' 16 "none of $(@($ActTable).Count) compromised actions in $(Plural $N_WF 'workflow file' 'workflow files')" }
 $Sec5 = Take-Cap
 Heading 'WHAT TO DO' 'most urgent first'
 $i = 0
@@ -7588,6 +7681,7 @@ elseif ($ExtUpd.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'an editor extension t
 elseif ($NPM_UPD -eq 1 -and $PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'npm and Python packages to update, see section 5' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
 elseif ($PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'a Python package to update, see section 5' }
+elseif ($N_ACT -gt 0) { $G5 = "$cYel!$cRst"; $D5 = "$(Plural $N_ACT_PROJ 'project uses' 'projects use') a compromised GitHub Action" }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"
   $names = @($leaks | ForEach-Object { $_.Name })
@@ -7601,6 +7695,7 @@ elseif ($LockUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not 
 elseif ($NpmUnread - $NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: folder unreadable' }
 elseif ($ExtUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'extensions not fully checked: folder unreadable' }
+elseif ($ActUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'workflows not fully checked: files unreadable' }
 elseif ($PyUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'Python not fully checked: folder unreadable' }
 elseif ($HOME_PARTIAL -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'none found, but some folders were not read' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }

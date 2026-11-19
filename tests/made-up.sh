@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Proves that a new incident of each data-only kind (and a new gh-token-monitor file, agent setting,
-# agent version, extension, extension whose malware runs on another OS, and Python incident's startup file) needs nothing but data lines: copies the repo
+# agent version, extension, extension whose malware runs on another OS, Python incident's startup file and
+# compromised GitHub Action) needs nothing but data lines: copies the repo
 # to REPO, appends a made-up incident of each kind to the data files, runs tools/gen.sh there, and
 # checks that only the generated blocks changed. Then plants matching files in HOME (a copy of a
 # clean fixture home) and in HOME/tmp for the temp folder. The suites run the copy's scripts.
@@ -37,6 +38,7 @@ printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >
 printf 'Made Agent\tall\t~/.madeagent/profiles/*/config.json\tmadeMode profile\t"made": "profile"\n' >> "$R/data/auto-approve.tsv"
 printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\nmadetool\tMade Tool\tall\tnpm\tmade-tool\t<3.0.0\ta second made-up hole\thttps://example.com/madetool2\n' >> "$R/data/outdated.tsv"
 printf 'made.ext\t1.0.0\tmadeext\tany\tall\nmade.winext\t2.0.0\tmadeext\tany\twin\n' >> "$R/data/bad-extensions.tsv"
+printf 'Made-Org/made-action\tv1*\t-\tsafe\tin October 2026\thttps://example.com/madeaction\tRemove it.\n' >> "$R/data/actions.tsv"
 bash "$R/tools/gen.sh" > /dev/null
 # Outside the generated blocks, both scripts are unchanged.
 for s in gird-check.sh gird-check.ps1; do
@@ -64,3 +66,4 @@ mkdir -p "$F/.madeagent" "$F/.npm-global/lib/node_modules/made-tool" "$F/.vscode
 printf '{\n  "made": "yolo"\n}\n' > "$F/.madeagent/config.json"
 mkdir -p "$F/.madeagent/profiles/p1"; printf '{"made": "profile"}\n' > "$F/.madeagent/profiles/p1/config.json"
 printf '{"name":"made-tool","version":"1.5.0"}\n' > "$F/.npm-global/lib/node_modules/made-tool/package.json"
+mkdir -p "$F/code/made/.github/workflows"; printf 'jobs:\n  a:\n    steps:\n      - uses: made-org/made-action@v1.2\n' > "$F/code/made/.github/workflows/made.yml"
