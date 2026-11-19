@@ -51,14 +51,24 @@ still a key that was sent.
 
 ## Matching
 
-- Blindspot's own key list, `ALL_KEYS`, the same one used for files.
+- Blindspot's own key list, `data/keys.tsv`, the same one used for files, matched pass by pass (a
+  key of a later pass never hides one of an earlier pass): ripgrep and .NET get one regex for each
+  pass, perl one for each pattern.
 - Transcripts are JSON, where a key often follows an escape such as `\n`. Three patterns need a
   non-alphanumeric character before the key (OpenAI's legacy `sk-` keys, `hf_`, `AQ.`), so the
   transcript check also accepts `\n`, `\t`, `\r` and `\"` as that boundary.
 - A match that looks made up is dropped inside the matching stage: eight or more of the same
   character in a row, fewer than 12 distinct characters (fewer than 8 in a key under 30
-  characters), or `EXAMPLE`, `xxxx`, `0123456789`, `abcdef` in it. Shell history is not filtered this way, because its matches come from commands
+  characters), `EXAMPLE`, `xxxx`, `0123456789`, `abcdef` or a vendor's published example
+  (`data/public-values.tsv`) in it, or a match longer than its key type's `max` in `data/keys.tsv`
+  (300 characters unless the line says more). Shell history is not filtered this way, because its matches come from commands
   the person typed; transcripts also hold tool output such as test fixtures.
+- What matching misses. Within a pass the leftmost match wins, so a key glued to another key of
+  the same pass, or one character after it, can be hidden by it: two new key types side by side
+  can hide one another, though never a key of 1.2.0's types, which have a pass of their own. The
+  perl and .NET engines read a file in pieces of about 1 MB, each ending after a character that no
+  key holds, so no key is cut in two; a run of 8 MB with no such character is cut where it ends,
+  and a key across that cut is missed.
 - Amazon Q CLI caches temporary AWS credentials for its own telemetry in its `data.sqlite3` (the
   `telemetry-cognito-credentials` entry of its `state` table, an `ASIA` key id from Cognito), and
   Kiro CLI, the same CLI renamed and closed source, keeps the same entry by third-party accounts.
@@ -115,8 +125,14 @@ machines will differ:
   has its own pipe to the parent, which is the only writer, so result lines never interleave.
   Workers also exit when their parent or the script itself is gone, checked before each file and
   each 1 MB piece of one, so after a kill -9 of the script they stop within one piece. ripgrep is
-  killed by its process ID, and under Git Bash with `taskkill`; after a kill -9 of the script it
-  runs to its end. The pipe and the results file live in a `mktemp -d` folder (owner only, name
+  run by a job, one run a pass, and stopping that job sends TERM to the ripgrep run it started, and
+  to nothing else. No process is stopped by an ID read from somewhere (`/proc`, a process list,
+  `taskkill`): the process may have ended and Windows may have given its ID to another program.
+  Under Git Bash, ripgrep is a Windows program and TERM may not end it. Then stopping the filter
+  that reads its output closes the pipe it writes to, and ripgrep ends at its next write; one that
+  finds nothing more writes nothing, and reads on to the end of the session files before it exits.
+  It only reads. Either way no more passes start, and the sessions read partly checked. After a kill -9 of the
+  script it runs to its end. The pipe and the results file live in a `mktemp -d` folder (owner only, name
   not guessable) removed by the existing cleanup; if it can't be made, the report says the
   sessions were not checked. The filter the keys pass through is stopped with the engine,
   which also traps HUP from now on; a kill -9 leaves it behind, holding paths and provider names

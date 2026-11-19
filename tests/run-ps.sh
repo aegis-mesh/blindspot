@@ -213,7 +213,7 @@ SKIPPING=""
 # A long-term key holds + and /, and a 1 MB read must not end just after one of them, inside the key.
 BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
 mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
-cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv data/public-values.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 # A real key's next 104 characters are fixed as well (the base64 of /?Action=CallWithBearerToken&...
 # &X-Amz-Credential=): quoted only that far, it is not a key.
@@ -3014,6 +3014,159 @@ mups "$WORK/mu-tmp" "$WORK/mu-tmp.txt"
 has    "a temp file alone: the incident's own advice, in section 5" 'Stop any process started from these files, then delete them\. Advisory: example\.com' "$WORK/mu-tmp.txt"
 has    "and in the fix"                               "Stop any process started from the files listed in section 5\. From another computer, rotate every key the machine could reach, then delete those files and follow Madepkg's advisory" "$WORK/mu-tmp.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mu-tmp.txt"
+
+echo "key patterns"
+# gird-check.ps1 matches the key types with one compiled .NET regex for each pass of data/keys.tsv:
+# compiled, each must find just what the plain one finds, over the fixture home and a corpus of every
+# key type and its near misses in many contexts.
+KP=$WORK/kp; mkdir -p "$KP"
+python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
+grep -E '^\$KEY_PASSES = |^\$TR_PASSES = ' "$SCRIPT" > "$KP/keys.ps1"
+find "$KP/corpus" "$WORK/home" -type f | sort > "$KP/files.txt"
+cat > "$KP/cmp.ps1" <<'PSEOF'
+. $args[0]; $o = [Text.RegularExpressions.RegexOptions]::Multiline
+$plain = @($TR_PASSES | ForEach-Object { New-Object regex($_, $o) }); $comp = @($TR_PASSES | ForEach-Object { New-Object regex($_, ($o -bor [Text.RegularExpressions.RegexOptions]::Compiled)) })
+$latin = [Text.Encoding]::GetEncoding(28591); $n = 0; $m = 0; $diff = 0
+foreach ($f in [IO.File]::ReadAllLines($args[1])) {
+  $t = [IO.File]::ReadAllText($f, $latin); $n++
+  $a = @($plain | ForEach-Object { $_.Matches($t) } | ForEach-Object { "$($_.Index):$($_.Value)" }); $b = @($comp | ForEach-Object { $_.Matches($t) } | ForEach-Object { "$($_.Index):$($_.Value)" })
+  $m += $a.Count; if (($a -join "`n") -cne ($b -join "`n")) { $diff++ }
+}
+"$n $m $diff"
+PSEOF
+"$PWSH" -NoProfile -NonInteractive -File "$KP/cmp.ps1" "$KP/keys.ps1" "$KP/files.txt" > "$KP/net.txt" 2>&1
+read -r _n _m _d < "$KP/net.txt"
+if [ "${_n:-0}" -gt 400 ] && [ "${_m:-0}" -gt 0 ] && [ "${_d:-x}" = 0 ]; then ok "net: the session engine finds what one plain alternation of the key patterns finds" "$_n files, $_m matches"
+else bad "net: the session engine finds what one plain alternation of the key patterns finds" "$(head -c 300 "$KP/net.txt")"; fi
+# ripgrep reads every session folder once a pass: count its runs, so a change that adds one shows.
+SKIPPING=$NORG
+if [ -z "$SKIPPING" ]; then
+  mkdir -p "$KP/rgshim" "$KP/rglog"
+  printf '#!/bin/bash\n[ "$1" = --version ] || /usr/bin/mktemp "%s/r.XXXXXX" > /dev/null\nexec %s "$@"\n' "$KP/rglog" "$RG" > "$KP/rgshim/rg"; chmod +x "$KP/rgshim/rg"
+  psrun "$WORK/home" PATH="$WORK/bin:$KP/rgshim" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions > "$KP/rgshim.txt" 2>&1
+  _nr=$(find "$KP/rglog" -name 'r.*' | grep -c .); _np=$(sed -n "s/^\$KEY_PASSES = @(\(.*\))\$/\1/p" "$SCRIPT" | grep -o "', '" | grep -c .); _np=$((_np + 1))
+fi
+if [ -n "$SKIPPING" ] || { [ "${_nr:-0}" -eq "${_np:-x}" ] 2>/dev/null; }; then ok "ripgrep runs once for each pass" "${_nr:-} runs, ${_np:-} passes"
+else bad "ripgrep runs once for each pass" "${_nr:-?} runs, ${_np:-?} passes"; fi
+SKIPPING=""
+
+# The new key types, case by case through the script's own Providers-In: each found and named at a
+# line start, mid-line, after an escaped newline and in an escaped quote; and not a key one character
+# short or long, with a wrong marker, as a vendor's published example, inside base64 or glued to a
+# word, unless what makes it a key is its own text (a connection string, a signed address).
+PIDS=$(sed -n "s/^\$PROVIDER_IDS = '\(.*\)'\$/\1/p" "$SCRIPT")
+{ awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< public-values/ { on = 0 }' "$SCRIPT"
+  grep -E '^\$TR_KEYS = |^\$TR_PASSES = |^\$RxOpt = |^\$RxTimeout = |^\$RxKeyOpt = |^\$RxKeys = |^\$RxKeyPasses = ' "$SCRIPT"
+  awk '/^\$KeyFns = / { on = 1 } on { print } on && /^\. \(\[scriptblock\]::Create\(\$KeyFns\)\)/ { exit }' "$SCRIPT"
+  grep -E '^function Key-Norm' "$SCRIPT"
+  awk '/^function Providers-In/ { on = 1 } on { print } on && /^}/ { exit }' "$SCRIPT"
+  cat <<'PSEOF'
+$SlowFiles = New-Object System.Collections.Generic.List[string]
+function Mark-Slow([string]$f) { }
+function Read-Text([string]$f) { [IO.File]::ReadAllText($f) }
+foreach ($l in [IO.File]::ReadAllLines($args[0])) {
+  $c = $l.Split("`t")[0]
+  "$c`t" + ((Providers-In (Join-Path $args[1] "code/$c/.env")) -join ', ')
+}
+PSEOF
+} > "$KP/fns.ps1"
+python3 -I tests/make-keys.py cases "$KP/nk" "$KP/nk-man.txt" "$KP/nk-keys.txt" "$PIDS" data/public-values.tsv
+"$PWSH" -NoProfile -NonInteractive -File "$KP/fns.ps1" "$KP/nk-man.txt" "$KP/nk" > "$KP/nk-found.txt" 2>&1
+if python3 -I tests/make-keys.py check "$KP/nk-man.txt" "$KP/nk-found.txt" > "$KP/nk-check.txt"; then ok "each new key type is found and named, and its near misses are not keys" "$(grep -c . < "$KP/nk-man.txt") cases"
+else bad "each new key type is found and named, and its near misses are not keys" "$(head -n 6 "$KP/nk-check.txt" | tr '\n' '|')"; fi
+# And through the whole script: one .env file for each new key type, and all of them in one Claude
+# Code session, read by each session engine.
+python3 -I tests/make-keys.py home "$KP/nh" "$KP/nh-keys.txt" "$PIDS" .claude/projects/p/s.jsonl > "$KP/nh-names.txt"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$KP/nh" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$KP/nh-$E.txt" 2>&1
+  _miss=""; while IFS= read -r _nm; do
+    _id=$(awk -F '\t' -v n="$_nm" '$2 == n { print $1 }' data/keys.tsv)
+    grep -aqE "^ +. +~[/\\\\]code[/\\\\]$_id[/\\\\]\\.env +$_nm\$" "$KP/nh-$E.txt" || _miss="$_miss $_nm(.env)"
+    sed -n '/Keys in agent sessions/,/^$/p' "$KP/nh-$E.txt" | tr -s ' \n' '  ' | grep -aqF "$_nm" || _miss="$_miss $_nm(session)"
+  done < "$KP/nh-names.txt"
+  if [ -s "$KP/nh-names.txt" ] && [ -z "$_miss" ]; then ok "$E: each new key type is found in a .env file and an agent session"
+  else bad "$E: each new key type is found in a .env file and an agent session" "missing:$_miss"; fi
+  if grep -aqF -f "$KP/nh-keys.txt" "$KP/nh-$E.txt"; then bad "$E: and no new key is printed"; else ok "$E: and no new key is printed"; fi
+done
+SKIPPING=""
+
+echo "data platform login files"
+# Login files are listed by name when they hold a secret, never shown. Built from pieces at run time.
+LG=$WORK/lg; _sec=$(rnd 32)
+mkdir -p "$LG"; for _h in has none env sys; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/has/.azure" "$LG/has/.dbt" "$LG/has/.snowflake" "$LG/none/.azure" "$LG/none/.dbt" "$LG/none/.snowflake" \
+  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf" "$LG/sys/Library/Application Support/snowflake" "$LG/sys/.config/snowflake"
+printf '[{"client_id": "%s", "tenant": "t", "client_secret": "%s"}]\n' "$(rnd 8)" "$_sec" > "$LG/has/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\ntoken = %s\n' "$_sec" > "$LG/has/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n' "$_sec" > "$LG/has/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nuser = "u"\npassword = "%s"\n' "$_sec" > "$LG/has/.snowflake/connections.toml"
+printf '[{"client_id": "%s", "tenant": "t", "certificate": "/home/me/sp.pem"}]\n' "$(rnd 8)" > "$LG/none/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nauth_type = databricks-cli\n' > "$LG/none/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\n' > "$LG/none/.snowflake/connections.toml"
+cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
+# The system's own folder, as gird-check.sh picks it: Application Support on a Mac, ~/.config on Linux.
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/Library/Application Support/snowflake/config.toml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/.config/snowflake/config.toml"
+for _h in has none sys; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+psrun "$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
+_want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
+has    "lists the Azure, Databricks, dbt and Snowflake login files that hold a secret" "$_want" "$LG/has.txt"
+hasnot "but not one with only a certificate, a host, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
+has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
+has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
+if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
+# A dbt password in single quotes is one too, and Snowflake's Windows folder is not read off Windows.
+for _h in sq win; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/sq/.dbt" "$LG/win/AppData/Local/snowflake"
+printf "app:\n  outputs:\n    dev:\n      type: postgres\n      password: '%s'\n" "$_sec" > "$LG/sq/.dbt/profiles.yml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connections.toml"
+for _h in sq win; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
+hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
+
+echo "shared access signatures"
+# A shared access signature is not a key type: GitHub hands out short-lived signed links to its own
+# storage (container registry blobs, Actions artifacts) that turn up in docker and curl output, and
+# the text alone can't tell one from a signature for storage the person owns.
+SA=$WORK/sas; mkdir -p "$SA"; cp -R "$WORK/clean" "$SA/h"
+mkdir -p "$SA/h/code/blob" "$SA/h/.claude/projects/p"
+printf 'BLOB_URL=https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&se=2099-01-01&sig=%s%%2B%s%%3D\n' "$(rnd 40)" "$(rnd 3)" > "$SA/h/code/blob/.env"
+printf '{"t":"curl -L https://pkg-containers.githubusercontent.com/ghcr1/blobs/sha256:%s?se=2099-01-01T00%%3A00%%3A00Z&sig=%s%%3D&sp=r&spr=https&sr=b&sv=2019-12-12"}\n' "$(rnd 64)" "$(rnd 43)" > "$SA/h/.claude/projects/p/s.jsonl"
+psrun "$SA/h" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SA/h.txt"
+has    "a shared access signature is not a key, in a .env file or an agent session: the check ran" 'KEYS IN PLAIN TEXT' "$SA/h.txt"
+hasnot "and names none" 'Azure Storage|shared access signature|code[/\\]blob[/\\]\.env' "$SA/h.txt"
+
+echo "published values in every section"
+# Azurite's published account key (data/public-values.tsv) is not a key wherever a key is judged: in
+# a .env file (section 3), in an MCP config (section 2) and in a Claude Code allow rule (section 4).
+# The same files with a Storage key of the same shape in its place are flagged in all three.
+PV=$WORK/pv; mkdir -p "$PV"
+_azp=$(awk -F '\t' '$1 == "azurestorage" { print $2; exit }' data/public-values.tsv)
+for _v in pub real; do
+  cp -R "$WORK/clean" "$PV/$_v"; mkdir -p "$PV/$_v/code/az/.claude"
+  if [ "$_v" = pub ]; then _k="$_azp$(rnd 46)=="; else _k="$(rnd 86)=="; fi
+  _cs="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account""Key=$_k;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+  printf 'AZURE_STORAGE_CONNECTION_STRING=%s\n' "$_cs" > "$PV/$_v/code/az/.env"
+  printf '{"mcpServers":{"az":{"command":"npx","args":["-y","@azure/mcp"],"env":{"AZURE_STORAGE_CONNECTION_STRING":"%s"}}}}\n' "$_cs" > "$PV/$_v/code/az/.mcp.json"
+  printf '{"permissions":{"allow":["Bash(az storage blob list --connection-string %s)"]}}\n' "$_cs" > "$PV/$_v/code/az/.claude/settings.local.json"
+  psrun "$PV/$_v" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$PV/$_v.txt"
+done
+_d='[/\\]'
+hasnot "Azurite's published key is not a key in plain text"  "~${_d}code${_d}az${_d}\\.env Azure Storage" "$PV/pub.txt"
+has    "and a Storage key in its place is"                   "~${_d}code${_d}az${_d}\\.env Azure Storage" "$PV/real.txt"
+hasnot "nor a token in an MCP config"                       "~${_d}code${_d}az${_d}\\.mcp\\.json 1 server, token in the file" "$PV/pub.txt"
+has    "where a Storage key in its place is one"             "~${_d}code${_d}az${_d}\\.mcp\\.json 1 server, token in the file" "$PV/real.txt"
+hasnot "nor a saved command with a key in an allow rule"     "~${_d}code${_d}az${_d}\\.claude${_d}settings\\.local\\.json A saved command contains a key" "$PV/pub.txt"
+has    "where a Storage key in its place is one too"         "~${_d}code${_d}az${_d}\\.claude${_d}settings\\.local\\.json A saved command contains a key" "$PV/real.txt"
+
+echo "stopping processes"
+# gird-check.ps1 stops ripgrep through the Process object it started ($SessSt.Proc.Kill(): that process
+# alone, by the handle .NET holds), never by an id it looked up and never as a tree.
+_k=$(grep -n 'taskkill\|Stop-Process\|\.Kill(\|Kill(\$true)' "$SCRIPT" | grep -v '^[0-9]*:[[:space:]]*#')
+if [ "$(printf '%s\n' "$_k" | grep -c .)" = 1 ] && printf '%s\n' "$_k" | grep -qF '$SessSt.Proc.Kill()'; then ok "the script stops only processes it started"
+else bad "the script stops only processes it started" "$(printf '%s' "$_k" | head -n 3 | tr '\n' '|')"; fi
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"

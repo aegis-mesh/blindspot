@@ -145,7 +145,7 @@ SKIPPING=""
 # A long-term key holds + and /, and a 1 MB read must not end just after one of them, inside the key.
 BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
 mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
-cat gird-check.sh gird-check.ps1 gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+cat gird-check.sh gird-check.ps1 gird-fleet.sh data/keys.tsv data/public-values.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 # A real key's next 104 characters are fixed as well (the base64 of /?Action=CallWithBearerToken&...
 # &X-Amz-Credential=): quoted only that far, it is not a key.
@@ -3195,10 +3195,273 @@ gen_refuses "an extension registry that is not openvsx or any" bad-extensions.ts
 gen_refuses "an extension os that is not all, mac, linux or win" bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any${T}windows"
 gen_refuses "an extension line without its os"         bad-extensions.tsv "pub.ext${T}1.0.0${T}glassworm${T}any"
 gen_refuses "a line that is not ASCII"                  incidents.tsv "newone${T}$(printf 'X\303\251')${T}October 2026${T}x${T}https://example.com${T}act"
-gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}"
-gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}"
+gen_refuses "a key id that is not lowercase"            keys.tsv "Newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
+gen_refuses "a key id listed twice"                     keys.tsv "openai${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
+# fleet_ids in gird-check.sh keeps only ids of lowercase letters, digits and -: an id with _ would
+# be dropped from gird-fleet.sh's output and the result link without a word.
+gen_refuses "a key id with _, which the fleet output would drop" keys.tsv "new_key${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
+gen_refuses "a key line without at and max"            keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}"
+gen_refuses "a key at other than start or in"          keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}middle${T}-"
+gen_refuses "a key max over 1024"                       keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}2000"
+gen_refuses "a key pattern that counts past 255"       keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20,300}${T}start${T}-"
+gen_refuses "a key pattern with a POSIX class"         keys.tsv "newkey${T}New${T}nk-${T}nk-[[:alnum:]]{20}${T}start${T}-"
+gen_refuses "a key start that is not fixed text"       keys.tsv "newkey${T}New${T}[A-Z]*nk-${T}nk-[a-z]{20}${T}in${T}-"
+gen_refuses "a #pass line with no key line after it"     keys.tsv "#pass"
+gen_refuses "a start line after an in line"            keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}start${T}-"
+# An in line's start says where in the key its text is (TEXT@N), and a start line's never does.
+gen_refuses "an in line's start without its place"       keys.tsv "newkey${T}New${T}nk-${T}nk-[a-z]{20}${T}in${T}-"
+gen_refuses "a start line's start with a place"          keys.tsv 'edit:$1 == "npm" { $3 = "npm_@0" } { print }'
+# A published value (data/public-values.tsv) is a part of a known key type's value, never a whole key.
+gen_refuses "a published value of an unknown key type" public-values.tsv "nosuch${T}abcdefghij0123456789xyz${T}https://example.com/doc"
+gen_refuses "a published value shorter than 20"        public-values.tsv "groq${T}short0123456789${T}https://example.com/doc"
+gen_refuses "a published value that is a whole key"    public-values.tsv "groq${T}g""sk_$(rnd 52)${T}https://example.com/doc"
 # gird-check.sh hands the bad npm versions to awk in four environment strings of 1,000 lines.
 gen_refuses "a list of bad npm versions longer than awk gets" bad-npm.tsv 'edit:{ print } !/^#/ && $3 == "keyvspread" { print $1, $2 "-x", $3 }'
+
+echo "key patterns"
+# fleet_ids in gird-check.sh keeps only ids of lowercase letters, digits and -, and the result link
+# and gird-fleet.sh carry the same ids: one it would drop is lost without a word.
+KP=$WORK/kp; mkdir -p "$KP"
+grep '^fleet_ids() ' gird-check.sh > "$KP/fids.sh"; . "$KP/fids.sh"
+_ids=$(sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' gird-check.sh)
+if [ -n "$_ids" ] && [ "$(printf '%s' "$_ids" | fleet_ids)" = "$_ids" ]; then ok "every key id passes the fleet id filter"
+else bad "every key id passes the fleet id filter" "$_ids"; fi
+# grep and perl get the key patterns one at a time (key_o, SESS_KEYS), and must find just what one
+# alternation of each pass's patterns finds (perl given each as one pattern): grep -o the same
+# matches in every file, and perl the same matches. Over the fixture homes and a corpus of every key
+# type and its near misses in many contexts.
+python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
+{ awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< public-values/ { on = 0 }' gird-check.sh
+  awk '/^TR_KEYS=/ { on = 1 } /^# A secret written as a value/ { exit } on' gird-check.sh
+  awk '/^SESS_PERL=/ { on = 1 } on { print } on && /^1 while wait/ { exit }' gird-check.sh; } > "$KP/keys.sh"
+. "$KP/keys.sh"
+_n=0; _diff=""
+while IFS= read -r _f; do
+  _n=$((_n + 1))
+  if ! cmp -s <(printf '%s\n' "$TR_PASSES" | while IFS= read -r _p; do grep -aoE "$_p" "$_f" 2>/dev/null; done) <(key_o cat "$_f" 2>/dev/null); then _diff="$_diff ${_f#"$WORK"/}"; fi
+done <<EOF
+$(find "$KP/corpus" "$WORK/home" -type f | sort)
+EOF
+if [ "$_n" -gt 400 ] && [ -z "$_diff" ]; then ok "grep finds with the split key patterns what one alternation finds" "$_n files"
+else bad "grep finds with the split key patterns what one alternation finds" "$_n files, differ:$_diff"; fi
+SESS_KEYS=$TR_ALTS SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/split.txt"
+SESS_KEYS=$(printf '%s\n' "$TR_PASSES" | sed G) SESS_PRE=$KEY_STARTS SESS_WORKERS=1 perl -e "$SESS_PERL" -- "$KP/corpus" | awk -F '\t' '$1 == "K"' | sort > "$KP/one.txt"
+if [ -s "$KP/one.txt" ] && cmp -s "$KP/one.txt" "$KP/split.txt"; then ok "perl: the session engine finds what one plain alternation of the key patterns finds" "$(grep -c . < "$KP/one.txt") matches"
+else bad "perl: the session engine finds what one plain alternation of the key patterns finds" "$(diff "$KP/one.txt" "$KP/split.txt" | head -n 4 | tr '\n' '|')"; fi
+# What the split saves is the work of one long alternation: count it. Every pattern grep is given
+# holds at most one key pattern, and perl compiles one regex for each, whatever the run reads.
+mkdir -p "$KP/shim" "$KP/log"
+_rg=$(command -v grep); _rp=$(command -v perl)
+printf '#!/bin/bash\n_l=$(mktemp "%s/g.XXXXXX"); printf "%%s\\0" "$@" > "$_l"; exec %s "$@"\n' "$KP/log" "$_rg" > "$KP/shim/grep"
+printf '#!/bin/bash\n[ -n "${SESS_KEYS:-}" ] && printf "%%s" "$SESS_KEYS" > "$(mktemp "%s/p.XXXXXX")"\nexec %s "$@"\n' "$KP/log" "$_rp" > "$KP/shim/perl"
+chmod +x "$KP/shim/grep" "$KP/shim/perl"
+HOME="$WORK/home" PATH="$KP/shim:$PATH" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline > "$KP/shim.txt" 2>&1
+printf '%s\n' "$TR_ALTS" > "$KP/alts.txt"
+_cnt=$(python3 -I -c 'import glob, sys
+alts = [a for a in open(sys.argv[1]).read().split("\n") if a]
+most, calls, perls, plines = 0, 0, 0, -1
+for f in glob.glob(sys.argv[2] + "/g.*"):
+    args = open(f, "rb").read().decode("latin-1").split("\0")
+    n = max([sum(1 for a in alts if a in x) for x in args] or [0])
+    calls += n > 0; most = max(most, n)
+for f in glob.glob(sys.argv[2] + "/p.*"):
+    ls = [l for l in open(f).read().split("\n") if l]; perls += 1
+    plines = len(ls) if all(l in alts for l in ls) and len(set(ls)) == len(alts) else -1
+print(most, calls, perls, plines, len(alts))' "$KP/alts.txt" "$KP/log")
+read -r _c1 _c2 _c3 _c4 _c5 <<EOF
+$_cnt
+EOF
+if [ "${_c1:-x}" = 1 ] && [ "${_c2:-0}" -gt 0 ] && [ "${_c3:-0}" = 1 ] && [ "${_c4:-x}" = "${_c5:-y}" ]; then ok "grep and perl get each key pattern on its own" "$_c2 grep calls, $_c5 patterns"
+else bad "grep and perl get each key pattern on its own" "most key patterns in one grep pattern: ${_c1:-?} (want 1), perl runs: ${_c3:-?}, perl patterns: ${_c4:-?} of ${_c5:-?}"; fi
+# A later pass costs a grep -F for its fixed strings (PF) in each text, and its patterns run only
+# where one is: on the fixture home, grep runs a later pass's patterns far less often than the first's.
+_pc=$(python3 -I -c 'import glob, sys
+blocks = open(sys.argv[1]).read().split("\n\n")
+first = [a for a in blocks[0].split("\n") if a]; later = [a for b in blocks[1:] for a in b.split("\n") if a]
+p1 = p2 = 0
+for f in glob.glob(sys.argv[2] + "/g.*"):
+    args = open(f, "rb").read().decode("latin-1").split("\0")
+    if not any(x.startswith("-") and "o" in x for x in args if not x.startswith("--")): continue
+    p1 += any(a in args for a in first); p2 += any(a in args for a in later)
+print(p1, p2)' "$KP/alts.txt" "$KP/log")
+read -r _p1 _p2 <<EOF
+$_pc
+EOF
+if [ "${_p1:-0}" -gt 0 ] && [ "${_p2:-x}" -lt "$_p1" ] 2>/dev/null; then ok "grep runs a later pass only on text that holds its fixed strings" "first pass $_p1 times, later passes $_p2"
+else bad "grep runs a later pass only on text that holds its fixed strings" "first pass ${_p1:-?} times, later passes ${_p2:-?}"; fi
+# ripgrep reads every session folder once a pass: count its runs, so a change that adds one shows.
+SKIPPING=$NORG
+if [ -z "$SKIPPING" ]; then
+  mkdir -p "$KP/rgshim" "$KP/rglog"
+  printf '#!/bin/bash
+[ "$1" = --version ] || /usr/bin/mktemp "%s/r.XXXXXX" > /dev/null
+exec %s "$@"
+' "$KP/rglog" "$(command -v rg)" > "$KP/rgshim/rg"; chmod +x "$KP/rgshim/rg"
+  HOME="$WORK/home" PATH="$KP/rgshim:$PATH" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline --all-sessions > "$KP/rgshim.txt" 2>&1
+  _nr=$(find "$KP/rglog" -name 'r.*' | grep -c .); _np=$(printf '%s\n' "$TR_PASSES" | grep -c .)
+fi
+if [ -n "$SKIPPING" ] || { [ "${_nr:-0}" -eq "${_np:-x}" ] 2>/dev/null; }; then ok "ripgrep runs once for each pass" "${_nr:-} runs, ${_np:-} passes"
+else bad "ripgrep runs once for each pass" "${_nr:-?} runs, ${_np:-?} passes"; fi
+SKIPPING=""
+
+# The new key types, case by case through the script's own providers_in: each found and named at a
+# line start, mid-line, after an escaped newline and in an escaped quote; and not a key one character
+# short or long, with a wrong marker, as a vendor's published example, inside base64 or glued to a
+# word, unless what makes it a key is its own text (a connection string, a signed address).
+{ awk '/^sess_filter\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' gird-check.sh
+  awk '/^providers_in\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' gird-check.sh; } > "$KP/fns.sh"
+. "$KP/fns.sh"
+python3 -I tests/make-keys.py cases "$KP/nk" "$KP/nk-man.txt" "$KP/nk-keys.txt" "$PROVIDER_IDS" data/public-values.tsv
+while IFS="$_tab" read -r _c _w; do printf '%s\t%s\n' "$_c" "$(providers_in "$KP/nk/code/$_c/.env")"; done < "$KP/nk-man.txt" > "$KP/nk-found.txt"
+if python3 -I tests/make-keys.py check "$KP/nk-man.txt" "$KP/nk-found.txt" > "$KP/nk-check.txt"; then ok "each new key type is found and named, and its near misses are not keys" "$(grep -c . < "$KP/nk-man.txt") cases"
+else bad "each new key type is found and named, and its near misses are not keys" "$(head -n 6 "$KP/nk-check.txt" | tr '\n' '|')"; fi
+# And through the whole script: one .env file for each new key type, and all of them in one Claude
+# Code session, read by each session engine.
+python3 -I tests/make-keys.py home "$KP/nh" "$KP/nh-keys.txt" "$PROVIDER_IDS" .claude/projects/p/s.jsonl > "$KP/nh-names.txt"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$KP/nh" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$KP/nh-$E.txt" 2>&1
+  _miss=""; while IFS= read -r _nm; do
+    _id=$(prov_id "$_nm")
+    grep -aqE "^ +. +~/code/$_id/\\.env +$_nm\$" "$KP/nh-$E.txt" || _miss="$_miss $_nm(.env)"
+    sed -n '/Keys in agent sessions/,/^$/p' "$KP/nh-$E.txt" | tr -s ' \n' '  ' | grep -aqF "$_nm" || _miss="$_miss $_nm(session)"
+  done < "$KP/nh-names.txt"
+  if [ -s "$KP/nh-names.txt" ] && [ -z "$_miss" ]; then ok "$E: each new key type is found in a .env file and an agent session"
+  else bad "$E: each new key type is found in a .env file and an agent session" "missing:$_miss"; fi
+  if grep -aqF -f "$KP/nh-keys.txt" "$KP/nh-$E.txt"; then bad "$E: and no new key is printed"; else ok "$E: and no new key is printed"; fi
+done
+SKIPPING=""
+
+echo "data platform login files"
+# Login files are listed by name when they hold a secret, never shown. Built from pieces at run time.
+LG=$WORK/lg; _sec=$(rnd 32)
+mkdir -p "$LG"; for _h in has none env sys; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/has/.azure" "$LG/has/.dbt" "$LG/has/.snowflake" "$LG/none/.azure" "$LG/none/.dbt" "$LG/none/.snowflake" \
+  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf" "$LG/sys/Library/Application Support/snowflake" "$LG/sys/.config/snowflake"
+printf '[{"client_id": "%s", "tenant": "t", "client_secret": "%s"}]\n' "$(rnd 8)" "$_sec" > "$LG/has/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\ntoken = %s\n' "$_sec" > "$LG/has/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n' "$_sec" > "$LG/has/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nuser = "u"\npassword = "%s"\n' "$_sec" > "$LG/has/.snowflake/connections.toml"
+printf '[{"client_id": "%s", "tenant": "t", "certificate": "/home/me/sp.pem"}]\n' "$(rnd 8)" > "$LG/none/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nauth_type = databricks-cli\n' > "$LG/none/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\n' > "$LG/none/.snowflake/connections.toml"
+cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/Library/Application Support/snowflake/config.toml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/.config/snowflake/config.toml"
+for _h in has none sys; do HOME="$LG/$_h" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+HOME="$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
+_want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
+has    "lists the Azure, Databricks, dbt and Snowflake login files that hold a secret" "$_want" "$LG/has.txt"
+hasnot "but not one with only a certificate, a host, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
+has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
+has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
+if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
+# A dbt password in single quotes is one too, and Snowflake's Windows folder is not read off Windows.
+for _h in sq win; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/sq/.dbt" "$LG/win/AppData/Local/snowflake"
+printf "app:\n  outputs:\n    dev:\n      type: postgres\n      password: '%s'\n" "$_sec" > "$LG/sq/.dbt/profiles.yml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connections.toml"
+for _h in sq win; do HOME="$LG/$_h" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
+hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
+
+echo "shared access signatures"
+# A shared access signature is not a key type: GitHub hands out short-lived signed links to its own
+# storage (container registry blobs, Actions artifacts) that turn up in docker and curl output, and
+# the text alone can't tell one from a signature for storage the person owns.
+SA=$WORK/sas; mkdir -p "$SA"; cp -R "$WORK/clean" "$SA/h"
+mkdir -p "$SA/h/code/blob" "$SA/h/.claude/projects/p"
+printf 'BLOB_URL=https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&se=2099-01-01&sig=%s%%2B%s%%3D\n' "$(rnd 40)" "$(rnd 3)" > "$SA/h/code/blob/.env"
+printf '{"t":"curl -L https://pkg-containers.githubusercontent.com/ghcr1/blobs/sha256:%s?se=2099-01-01T00%%3A00%%3A00Z&sig=%s%%3D&sp=r&spr=https&sr=b&sv=2019-12-12"}\n' "$(rnd 64)" "$(rnd 43)" > "$SA/h/.claude/projects/p/s.jsonl"
+HOME="$SA/h" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SA/h.txt"
+has    "a shared access signature is not a key, in a .env file or an agent session: the check ran" 'KEYS IN PLAIN TEXT' "$SA/h.txt"
+hasnot "and names none" 'Azure Storage|shared access signature|code/blob/\.env' "$SA/h.txt"
+
+echo "published values in every section"
+# Azurite's published account key (data/public-values.tsv) is not a key wherever a key is judged: in
+# a .env file (section 3), in an MCP config (section 2) and in a Claude Code allow rule (section 4).
+# The same files with a Storage key of the same shape in its place are flagged in all three.
+PV=$WORK/pv; mkdir -p "$PV"
+_azp=$(awk -F '\t' '$1 == "azurestorage" { print $2; exit }' data/public-values.tsv)
+for _v in pub real; do
+  cp -R "$WORK/clean" "$PV/$_v"; mkdir -p "$PV/$_v/code/az/.claude"
+  if [ "$_v" = pub ]; then _k="$_azp$(rnd 46)=="; else _k="$(rnd 86)=="; fi
+  _cs="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account""Key=$_k;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+  printf 'AZURE_STORAGE_CONNECTION_STRING=%s\n' "$_cs" > "$PV/$_v/code/az/.env"
+  printf '{"mcpServers":{"az":{"command":"npx","args":["-y","@azure/mcp"],"env":{"AZURE_STORAGE_CONNECTION_STRING":"%s"}}}}\n' "$_cs" > "$PV/$_v/code/az/.mcp.json"
+  printf '{"permissions":{"allow":["Bash(az storage blob list --connection-string %s)"]}}\n' "$_cs" > "$PV/$_v/code/az/.claude/settings.local.json"
+  HOME="$PV/$_v" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$PV/$_v.txt"
+done
+hasnot "Azurite's published key is not a key in plain text"  '~/code/az/\.env Azure Storage' "$PV/pub.txt"
+has    "and a Storage key in its place is"                   '~/code/az/\.env Azure Storage' "$PV/real.txt"
+hasnot "nor a token in an MCP config"                       '~/code/az/\.mcp\.json 1 server, token in the file' "$PV/pub.txt"
+has    "where a Storage key in its place is one"             '~/code/az/\.mcp\.json 1 server, token in the file' "$PV/real.txt"
+hasnot "nor a saved command with a key in an allow rule"     '~/code/az/\.claude/settings\.local\.json A saved command contains a key' "$PV/pub.txt"
+has    "where a Storage key in its place is one too"         '~/code/az/\.claude/settings\.local\.json A saved command contains a key' "$PV/real.txt"
+
+echo "stopping processes"
+# gird-check.sh stops only a process it started and still holds, by the variable that holds it, and
+# never one by an id read from somewhere (taskkill, wmic, kill -f, /proc): that id may by then be
+# another program's. Every place it signals a process is in this one list, each a signal to a process
+# this script started (SPIN_PID, SP_PID, GAME_PID, KEYS_PID, SESS_PID, SESS_FILTER_PID, the job's
+# ripgrep run _rgp, g_keys's $1 which is GAME_PID, the perl workers @kids), or the advice the report
+# prints for a person to run. kill -0 and perl's kill(0, ...) only ask whether a process is there.
+STOP_SITES='kill "$SPIN_PID"
+kill "$SP_PID"
+kill "$GAME_PID"
+kill "$KEYS_PID"
+kill -USR1 "$GAME_PID"
+kill -USR2 "$1"
+kill -ALRM "$1"
+kill -VTALRM "$1"
+kill -PROF "$1"
+kill -TERM "$SESS_PID"
+kill -TERM "$SESS_FILTER_PID"
+kill -TERM "$_rgp"
+kill "TERM", @kids
+pkill -f gh-token-monitor"'
+_kw='(p?kill|killall|taskkill|tskill|wmic|Stop-Process)'
+_ks=$(grep -v '^[[:space:]]*#' "$SCRIPT" | grep -oE "(^[[:space:]]*|[;&|({)!][[:space:]]*|(then|do|else|if|elif|while|until)[[:space:]]+)$_kw(([[:space:]]|\\()[^;&|)<>]*|\$)" |
+  sed -E "s/^.*(^|[^A-Za-z_-])($_kw([[:space:]]|\\(|\$))/\\2/; s/[[:space:]]+[0-9]*\$//" | grep -vE '^kill( -0 |\(0, )' | sort -u)
+_kx=$(printf '%s\n' "$STOP_SITES" | sort -u)
+_kn=$(grep -nE 'taskkill|tskill|wmic|Stop-Process|killall|(^|[^a-z])kill +(-f|//[Ff])|/bin/kill' "$SCRIPT" | grep -v '^[0-9]*:[[:space:]]*#' | head -n 3 | tr '\n' '|')
+if [ -z "$_kn" ] && [ "$_ks" = "$_kx" ]; then ok "the script stops only processes it started"
+else bad "the script stops only processes it started" "forbidden: [$_kn] not listed: [$(comm -23 <(printf '%s\n' "$_ks") <(printf '%s\n' "$_kx") | tr '\n' '|')] listed, not found: [$(comm -13 <(printf '%s\n' "$_ks") <(printf '%s\n' "$_kx") | tr '\n' '|')]"; fi
+# A stopped ripgrep run, with a stand-in ripgrep that never finishes and writes nothing: once with one
+# that ends on TERM, once with one that ignores it, as a Windows rg.exe under Git Bash may. Either way
+# the run ends, the sessions read partly checked, and nothing but the stand-in gets a signal: its own
+# child and a process the test started live on, and one that ignores TERM is left to finish.
+RGS=$WORK/rgstand; mkdir -p "$RGS/bin" "$RGS/home/.claude/projects/p"; printf '{}\n' > "$RGS/home/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash
+[ "$1" = --version ] && { echo "ripgrep 14.1.0"; exit 0; }
+D=%s; [ -e "$D/rg.pid" ] && exit 1
+echo $$ > "$D/rg.pid"
+/bin/sleep 300 < /dev/null > /dev/null 2>&1 & echo $! > "$D/child.pid"
+if [ -e "$D/ignore" ]; then trap "echo ignored >> $D/rg.term" TERM; else trap "echo term >> $D/rg.term; exit 143" TERM; fi
+while :; do /bin/sleep 0.2; done
+' "$RGS" > "$RGS/bin/rg"; chmod +x "$RGS/bin/rg"
+_rgstand() { # term|ignore
+  rm -f "$RGS/rg.pid" "$RGS/child.pid" "$RGS/rg.term" "$RGS/ignore"; [ "$1" = ignore ] && : > "$RGS/ignore"
+  /bin/sleep 300 < /dev/null > /dev/null 2>&1 & _dp=$!
+  HOME="$RGS/home" PATH="$RGS/bin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$RGS/$1.txt"
+  _rp=$(cat "$RGS/rg.pid" 2>/dev/null); _cp=$(cat "$RGS/child.pid" 2>/dev/null)
+  _st="$1: report[$(grep -c 'Agent sessions were partly checked' "$RGS/$1.txt")] signal[$(cat "$RGS/rg.term" 2>/dev/null)]"
+  if [ -n "$_rp" ] && kill -0 "$_rp" 2>/dev/null; then _st="$_st stand-in[running]"; else _st="$_st stand-in[ended]"; fi
+  if [ -n "$_cp" ] && kill -0 "$_cp" 2>/dev/null; then _st="$_st child[running]"; else _st="$_st child[ended]"; fi
+  if kill -0 "$_dp" 2>/dev/null; then _st="$_st other[running]"; else _st="$_st other[ended]"; fi
+  [ -n "$_rp" ] && kill -KILL "$_rp" 2>/dev/null; [ -n "$_cp" ] && kill "$_cp" 2>/dev/null; kill "$_dp" 2>/dev/null; wait "$_dp" 2>/dev/null
+  printf '%s' "$_st"
+}
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) skip "a stopped ripgrep leaves the sessions partly checked and stops nothing else" "a bash stand-in for ripgrep is not a Windows program" ;;
+  *)
+    _t=$(_rgstand term); _i=$(_rgstand ignore)
+    if [ "$_t" = "term: report[1] signal[term] stand-in[ended] child[running] other[running]" ] &&
+       [ "$_i" = "ignore: report[1] signal[ignored] stand-in[running] child[running] other[running]" ]; then
+      ok "a stopped ripgrep leaves the sessions partly checked and stops nothing else"
+    else bad "a stopped ripgrep leaves the sessions partly checked and stops nothing else" "$_t | $_i"; fi ;;
+esac
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
@@ -3794,6 +4057,14 @@ has    "fleet: sudo failing means not checked" '^asha\.not_checked=sudo$' "$FL/s
 printf 'chmod\n' > "$FL/mode-asha"; fl_run copy
 if grep -q '^13$' "$FL/copy.rc" && grep -q '^outcome=failed$' "$FL/copy.flat" && grep -q '^itadmin\.not_checked=copy_changed$' "$FL/copy.flat"; then ok "fleet: a script copy an account could write stops the run"; else bad "fleet: a script copy an account could write stops the run" "$(cat "$FL/copy.rc"; grep -E '^(outcome|itadmin\.not)' "$FL/copy.flat")"; fi
 rm -f "$FL/mode-asha"
+# A gird-check.sh from another release, with key types this gird-fleet.sh does not know: every
+# account is named as not checked for that reason, and none is run.
+mkdir -p "$FL/skew"; cp gird-fleet.sh "$FL/skew/"
+sed 's/^PROVIDER_IDS="\(.*\)"$/PROVIDER_IDS="\1 newertype"/' gird-check.sh > "$FL/skew/gird-check.sh"
+_fs=$FLEETSH; FLEETSH=$FL/skew/gird-fleet.sh; fl_run skew; FLEETSH=$_fs
+if grep -q '^asha\.not_checked=release_mismatch$' "$FL/skew.flat" && grep -q '^itadmin\.not_checked=release_mismatch$' "$FL/skew.flat" && [ ! -s "$FL/argv.log" ]; then ok "fleet: a gird-check.sh from another release is named, and no account is run"
+else bad "fleet: a gird-check.sh from another release is named, and no account is run" "$(grep -E 'not_checked' "$FL/skew.flat" | head -n 3 | tr '\n' ' '; head -c 200 "$FL/skew.err")"; fi
+has    "fleet: and the summary says to install both from one release" 'gird-check\.sh and gird-fleet\.sh know different key types: install both from one release' "$FL/skew.out"
 
 # A run that holds its output open past its limit, and a process that leaves its group.
 printf 'hold\n' > "$FL/mode-asha"

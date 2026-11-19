@@ -224,6 +224,8 @@ An account is `not_checked` when:
 - its home folder is missing, a link, shared or not its own;
 - it has no login shell;
 - its check could not start, ran out of time, or sent back something unexpected;
+- `gird-check.sh` and `gird-fleet.sh` know different key types, as two releases can
+  (`release_mismatch`; two releases with the same key types are not told apart);
 - part of it was not read: a protected folder, a folder it could not open, a file that is not a
   regular file or is over 16 MB, or agent sessions not all checked.
 
@@ -375,7 +377,9 @@ Nothing in these places is read or run.
 
 To update, check the SHA-256 of the new release of both files, run the commands in
 [fleet.md](fleet.md#1-install-it-once) again in their folder, and have your MDM run the new
-`blindspot-install.sh`.
+`blindspot-install.sh`. Always install the two files from one release, together: a `gird-check.sh`
+can look for key types an older `gird-fleet.sh` does not know, and then every account reads
+`not_checked` until both match.
 
 To remove it, delete the MDM's items, then remove the installed scripts and the saved result on each
 Mac:

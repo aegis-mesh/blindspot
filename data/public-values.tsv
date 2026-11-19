@@ -1,0 +1,7 @@
+# Values published as examples or built into emulators: they match a key pattern, but they are
+# public and give no access to anything. A match that holds one is not a key. One line each, tab
+# separated: the key id (data/keys.tsv), a part of the value, at least 20 characters and never one
+# its key pattern matches alone, and where the vendor publishes it. After editing, run: bash tools/gen.sh
+# id	part	source
+azurestorage	Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u	https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string
+slack	19874698323-pdFZKVeTuE8sk7oOcBrzbqgy	https://docs.slack.dev/reference/methods/oauth.v2.access

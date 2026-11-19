@@ -248,11 +248,17 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
-$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
-$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+$KEY_PASSES = @('sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}', '(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}==')
+$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage'
+$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_(?:(?<![A-Za-z0-9_]hf_)|(?<=\\[ntr]hf_))|pplx-|r8_(?:(?<![A-Za-z0-9+/_-]r8_)|(?<=\\[ntr]r8_))|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi(?:(?<![A-Za-z0-9_-]dapi)|(?<=\\[ntr]dapi))|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.](?:(?<![A-Za-z0-9_.-]SG[.])|(?<=\\[ntr]SG[.]))|pypi-AgEIcHlwaS5vcmc(?:(?<![A-Za-z0-9_-]pypi-AgEIcHlwaS5vcmc)|(?<=\\[ntr]pypi-AgEIcHlwaS5vcmc))|dckr_pat_(?:(?<![A-Za-z0-9_-]dckr_pat_)|(?<=\\[ntr]dckr_pat_))|dop_v1_|doo_v1_|dor_v1_|hvs[.](?:(?<![A-Za-z0-9_.-]hvs[.])|(?<=\\[ntr]hvs[.]))|nvapi-(?:(?<![A-Za-z0-9_-]nvapi-)|(?<=\\[ntr]nvapi-))|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_(?:(?<![A-Za-z0-9_-]sb_secret_)|(?<=\\[ntr]sb_secret_))|ops_eyJ(?:(?<![A-Za-z0-9_-]ops_eyJ)|(?<=\\[ntr]ops_eyJ))|7Q~|8Q~|JQQJ99|[+]ASt|AccountName='
 $KeyProviderFn = @'
+function Key-At([string]$s, [string]$t, [int]$o) { for ($b = 0; $b -le 2; $b++) { if ($s.Length -ge $b + $o + $t.Length -and $s.Substring($b + $o, $t.Length) -ceq $t) { return $true } }; $false }
 function Key-Provider([string]$s) {
+  if ((Key-At $s '7Q~' 3) -or (Key-At $s '8Q~' 3)) { return 'Microsoft Entra' }
+  if (((Key-At $s 'JQQJ99' 52) -and (Key-At $s 'AAAAAZDO' 72))) { return 'Azure DevOps' }
+  if (((Key-At $s 'JQQJ99' 52) -and (Key-At $s 'ACOG' 76))) { return 'Azure AI' }
+  if (((Key-At $s '+ASt' 76) -and (Key-At $s '==' 86)) -or (Key-At $s 'AccountName=' 0)) { return 'Azure Storage' }
   $s = $s -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', ''
   if ($s -cmatch '^(sk-ant-)') { return 'Anthropic' }
   if ($s -cmatch '^(sk-or-v1-)') { return 'OpenRouter' }
@@ -266,14 +272,38 @@ function Key-Provider([string]$s) {
   if ($s -cmatch '^(AKIA|ASIA|ABSK|bedrock-api-key)') { return 'AWS' }
   if ($s -cmatch '^(gh[pousr]_|github_pat_)') { return 'GitHub' }
   if ($s -cmatch '^(npm_)') { return 'npm' }
+  if ($s -cmatch '^(dapi)') { return 'Databricks' }
+  if ($s -cmatch '^(glpat-|gldt-|glrt-|glft-|glsoat-)') { return 'GitLab' }
+  if ($s -cmatch '^(xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com)') { return 'Slack' }
+  if ($s -cmatch '^(sk_live_|rk_live_|whsec_)') { return 'Stripe' }
+  if ($s -cmatch '^(SG[.])') { return 'SendGrid' }
+  if ($s -cmatch '^(pypi-AgEIcHlwaS5vcmc)') { return 'PyPI' }
+  if ($s -cmatch '^(dckr_pat_)') { return 'Docker Hub' }
+  if ($s -cmatch '^(dop_v1_|doo_v1_|dor_v1_)') { return 'DigitalOcean' }
+  if ($s -cmatch '^(hvs[.])') { return 'HashiCorp Vault' }
+  if ($s -cmatch '^(nvapi-)') { return 'NVIDIA' }
+  if ($s -cmatch '^(lsv2_pt_|lsv2_sk_)') { return 'LangSmith' }
+  if ($s -cmatch '^(shpat_|shppa_)') { return 'Shopify' }
+  if ($s -cmatch '^(sntryu_|sntrys_)') { return 'Sentry' }
+  if ($s -cmatch '^(sb_secret_)') { return 'Supabase' }
+  if ($s -cmatch '^(ops_eyJ)') { return '1Password' }
   $null
 }
-function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } default { $null } } }
+function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } 'PyPI' { 600 } 'Sentry' { 320 } '1Password' { 1024 } default { 300 } } }
+function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } 'Databricks' { 'databricks' } 'GitLab' { 'gitlab' } 'Slack' { 'slack' } 'Stripe' { 'stripe' } 'SendGrid' { 'sendgrid' } 'PyPI' { 'pypi' } 'Docker Hub' { 'dockerhub' } 'DigitalOcean' { 'digitalocean' } 'HashiCorp Vault' { 'vault' } 'NVIDIA' { 'nvidia' } 'LangSmith' { 'langsmith' } 'Shopify' { 'shopify' } 'Sentry' { 'sentry' } 'Supabase' { 'supabase' } '1Password' { 'onepassword' } 'Microsoft Entra' { 'azureentra' } 'Azure DevOps' { 'azuredevops' } 'Azure AI' { 'azureai' } 'Azure Storage' { 'azurestorage' } default { $null } } }
 '@
 # <<< keys
+# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
+$PublicValuesFn = @'
+function Is-Public([string]$k) { $false -or $k.Contains('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u') -or $k.Contains('19874698323-pdFZKVeTuE8sk7oOcBrzbqgy') }
+'@
+# <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
 $TR_KEYS = $ALL_KEYS -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])'
+# One regex for each pass of data/keys.tsv: each is matched on its own, so a key of a later pass
+# never hides one of an earlier pass. $TR_KEYS, all of them in one, is for a yes or no.
+$TR_PASSES = @($KEY_PASSES | ForEach-Object { $_ -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])' })
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 # These match what gird-check.sh's patterns match, rewritten so .NET's backtracking
 # stays linear: a name is tried once from its first character, (?>...) never gives
@@ -311,11 +341,16 @@ $P_NOTSECRET = '(?:_PATH|_FILE|_DIR)S?"?[^\S\n]*[:=]|[:=][^\S\n]*"?(?:~|\.\.?/|[
 $RxOpt = [Text.RegularExpressions.RegexOptions]::Multiline
 $RxTimeout = [TimeSpan]::FromSeconds(2)
 if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS -gt 0) { $RxTimeout = [TimeSpan]::FromMilliseconds([int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS) }
-$RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
-$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxOpt, $RxTimeout)
+# The patterns that hold every key type are compiled: .NET reads their long alternation about four
+# times faster compiled, and each is built once.
+$RxKeyOpt = $RxOpt -bor [Text.RegularExpressions.RegexOptions]::Compiled
+$RxKeys = New-Object regex($TR_KEYS, $RxKeyOpt, $RxTimeout)
+$RxKeyPasses = @($TR_PASSES | ForEach-Object { New-Object regex($_, $RxKeyOpt, $RxTimeout) })
+$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxKeyOpt, $RxTimeout)
+$RxInlines = @(for ($i = 0; $i -lt $TR_PASSES.Count; $i++) { if ($i -eq 0) { New-Object regex("$($TR_PASSES[0])|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxKeyOpt, $RxTimeout) } else { $RxKeyPasses[$i] } })
 $RxHeaderYaml = New-Object regex($P_HEADERYAML, $RxOpt, $RxTimeout)
 $RxHeaderSq = New-Object regex($P_HEADERSQ, $RxOpt, $RxTimeout)
-$RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
+$RxCommands = @(for ($i = 0; $i -lt $TR_PASSES.Count; $i++) { if ($i -eq 0) { New-Object regex("$($TR_PASSES[0])|$P_ASSIGN", $RxKeyOpt, $RxTimeout) } else { $RxKeyPasses[$i] } })
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
 $RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
 $SlowFiles = New-Object System.Collections.Generic.List[string]
@@ -390,7 +425,9 @@ function Has-Match([string]$f, [regex]$rx) {
   try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false }
 }
 # A match that is not a placeholder like your-key-here, nor a path ($RxNotSecret).
-function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) }
+# A match that holds a published value (data/public-values.tsv, Is-Public) is not a secret, here as in
+# Made-Up: an emulator's key in an MCP config or a saved command no more than in a .env file.
+function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) -and -not (Is-Public $v) }
 # Codex's env_http_headers name the environment variable each header's value comes from, so they hold
 # no token: a TOML file is read without them, in an inline table, as dotted keys and in a
 # [...env_http_headers] table, which ends at the next table. The same as gird-check.sh's no_env_headers.
@@ -421,24 +458,23 @@ function Yaml-Headers([string]$t) {
   }
   $keep -join "`n"
 }
-function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders, [switch]$YamlHeaders) {
+function Has-RealMatch([string]$f, [regex[]]$rxs, [switch]$NoEnvHeaders, [switch]$YamlHeaders) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
   if ($NoEnvHeaders) { $t = No-EnvHeaders $t }
   if ($YamlHeaders) { $t = Yaml-Headers $t }
-  try { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } catch { Mark-Slow $f }
+  try { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } } catch { Mark-Slow $f }
   $false
 }
 # The provider of a matched key (generated above) and whether a key looks made up. Text, so the
 # background session check can load the same functions.
-$KeyFns = $KeyProviderFn + @'
+$KeyFns = $KeyProviderFn + $PublicValuesFn + @'
 function Made-Up([string]$k) {
-  # No key is longer than 300 characters (GitHub's 93-character tokens are the longest fixed
-  # format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens, about 520 with
-  # two dots: a longer run of key characters is data.
-  if ($k.Length -gt 1024 -or ($k.Length -gt 300 -and $k -cnotmatch 'ghs_[A-Za-z0-9_-]+\.')) { return $true }
+  # A match longer than its provider's max in data/keys.tsv (Key-Max, 300 unless the line says more,
+  # as for GitHub's stateless ghs_ tokens of about 520) is a run of data, not a key.
+  if ($k.Length -gt 1024 -or $k.Length -gt (Key-Max (Key-Provider $k))) { return $true }
   $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' -replace '[^A-Za-z0-9_.-]+$', ''
-  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
+  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}' -or (Is-Public $k)) { return $true }
   $set = New-Object 'System.Collections.Generic.HashSet[char]'
   foreach ($c in $k.ToCharArray()) { [void]$set.Add($c) }
   $min = 12; if ($k.Length -lt 30) { $min = 8 }
@@ -466,10 +502,10 @@ function Providers-In([string]$f, [string]$minus = '') {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
   $seen = New-Object System.Collections.Generic.List[string]
-  try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
+  try { $all = @(foreach ($rx in $RxKeyPasses) { $rx.Matches($t) }) } catch { Mark-Slow $f; return @() }
   $skip = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
   if ($minus) {
-    try { foreach ($m in $RxKeys.Matches($minus)) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
+    try { foreach ($m in @(foreach ($rx in $RxKeyPasses) { $rx.Matches($minus) })) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
   }
   foreach ($m in $all) {
     if ($skip.Count -gt 0) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k) -and $skip[$k] -gt 0) { $skip[$k] = $skip[$k] - 1; continue } }
@@ -1190,9 +1226,11 @@ $SessWorker = {
   param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold)
   . ([scriptblock]::Create($fns))
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
-  $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
+  $rxs = @($keys | ForEach-Object { New-Object regex($_, ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Compiled), $to) })
   $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
-  $rxSep = New-Object regex('[^A-Za-z0-9_.+/=\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
+  # A piece ends after a character no key holds, as in gird-check.sh's perl engine (~ and ; are in
+  # Entra secrets and Storage connection strings).
+  $rxSep = New-Object regex('[^A-Za-z0-9_.+/=~;\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
@@ -1202,10 +1240,15 @@ $SessWorker = {
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
-    try {
-      $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
+    # One run for each pass of data/keys.tsv ($keys), one after the other; RgExit is the worst of
+    # their codes: 2 for an error, else 0 when any found a key.
+    $first = $true; $worst = 1
+    try { foreach ($kp in $keys) {
+      if ($st.Stop) { break }
+      if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+      $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $kp)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
-      $rgRoots = @($roots); if ($hold) { $rgRoots += $hold }
+      $rgRoots = @($roots); if ($hold -and $first) { $rgRoots += $hold }; $first = $false
       # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
       # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed.
       $psi.Arguments = '-a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
@@ -1229,7 +1272,9 @@ $SessWorker = {
       }
       $l = $sb.ToString(); $i = $l.IndexOf([char]0)
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
-      $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
+      $st.Proc.WaitForExit()
+      if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -gt 1) { $worst = $c } elseif ($c -eq 0 -and $worst -le 1) { $worst = 0 }; $st.RgExit = $worst }
+    }
     } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
     return
   }
@@ -1268,9 +1313,9 @@ $SessWorker = {
           $at = $sep.Index + 1
           $carry = $t.Substring($at); $t = $t.Substring(0, $at)
         } else { $carry = '' }
-        if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
+        if ($rxPre.IsMatch($t)) { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } } }
       }
-      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
+      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } } }
       if ($whole) { $st.Done++ }
     } catch {
       # A pattern that ran out of time leaves the file not checked: it is counted as one that took
@@ -1293,7 +1338,7 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_PASSES).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
   $SessHandle = $SessPs.BeginInvoke()
 }
 # Stops the check, or waits for it with -AllSessions.
@@ -1433,7 +1478,7 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
   }
   $tok = $false; $toml = $f.EndsWith('.toml')
   $yaml = $f.EndsWith('.yaml') -or $f.EndsWith('.yml')
-  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline -NoEnvHeaders:$toml)) { $tok = $true }
+  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInlines -NoEnvHeaders:$toml)) { $tok = $true }
   elseif (($toml -or $yaml) -and (Has-RealMatch $f $RxHeaderSq -NoEnvHeaders:$toml)) { $tok = $true }
   elseif ($yaml -and (Has-RealMatch $f $RxHeaderYaml -YamlHeaders)) { $tok = $true }
   if ($c -eq 0 -and $null -ne $c -and -not $tok) { return }
@@ -2023,7 +2068,11 @@ function Login($paths, [string]$label, [string]$id, [string]$marker = '') {
 }
 Login (J $HomeDir '.aws/credentials') 'AWS keys' 'aws'
 Login @((J $AppData 'gcloud/application_default_credentials.json'), (J $HomeDir '.config/gcloud/application_default_credentials.json')) 'Google Cloud login' 'gcloud'
-Login (J $HomeDir '.azure/msal_token_cache.json') 'Azure login' 'azure'
+# The Azure CLI keeps its logins and a service principal's secret in AZURE_CONFIG_DIR or ~/.azure,
+# encrypted (.bin) on Windows unless it is told not to; the plain-text .json files are listed
+# (learn.microsoft.com, MSAL-based Azure CLI). One signed in with a certificate has no client_secret.
+Login (J (Env-Or 'AZURE_CONFIG_DIR' (J $HomeDir '.azure')) 'msal_token_cache.json') 'Azure login' 'azure'
+Login (J (Env-Or 'AZURE_CONFIG_DIR' (J $HomeDir '.azure')) 'service_principal_entries.json') 'Azure service principal secrets' 'azure-sp' '"client_secret"'
 Login (J $HomeDir '.kube/config') 'Kubernetes logins' 'kube'
 Login (J $HomeDir '.docker/config.json') 'Docker registry logins' 'docker' '"auth"\s*:\s*"[A-Za-z0-9+/=]{8,}'
 Login (J $HomeDir '.npmrc') 'npm token' 'npm' '_authToken'
@@ -2037,6 +2086,22 @@ Login (J $HomeDir '.claude/.credentials.json') 'Claude Code login' 'claude-code'
 Login (J $HomeDir '.gemini/oauth_creds.json') 'Gemini CLI login' 'gemini'
 Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'opencode'
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
+# Data platforms' own files, found as gird-check.sh finds them: Databricks configuration profiles, dbt's
+# profiles.yml (a value taken from env_var is not in the file), and Snowflake's connections.toml and
+# config.toml in the folder Snowflake CLI picks.
+Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret)[ \t]*='
+Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]'
+$sf = $null
+if ($env:SNOWFLAKE_HOME) { if (Is-Dir $env:SNOWFLAKE_HOME) { $sf = $env:SNOWFLAKE_HOME } }
+elseif (Is-Dir (J $HomeDir '.snowflake')) { $sf = J $HomeDir '.snowflake' }
+# Else the system's own folder, as gird-check.sh picks it: LocalAppData on Windows, Application
+# Support on a Mac, XDG_CONFIG_HOME or ~/.config elsewhere.
+if (-not $sf) {
+  if ($OnWindows) { $sf = J $LocalAppData 'snowflake' }
+  elseif ((Get-Variable IsMacOS -ValueOnly -ErrorAction SilentlyContinue)) { $sf = J $HomeDir 'Library/Application Support/snowflake' }
+  else { $sf = J (Env-Or 'XDG_CONFIG_HOME' (J $HomeDir '.config')) 'snowflake' }
+}
+Login @((J $sf 'connections.toml'), (J $sf 'config.toml')) 'Snowflake logins' 'snowflake' '(?m)^[ \t]*(password|private_key_passphrase)[ \t]*='
 $N_SSH = 0; $N_SSH_OPEN = 0
 $SshDir = J $HomeDir '.ssh'
 if (Is-Dir $SshDir) {
@@ -2076,11 +2141,11 @@ $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeD
 $AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }
-  if (-not (Has-RealMatch $f $RxCommand)) { continue }
+  if (-not (Has-RealMatch $f $RxCommands)) { continue }
   # A key in its permission rules (Cc-Rules) is a saved command; one elsewhere, such as its env, is a key
   # in plain text (section 3) and nothing more.
   $rules = Cc-Rules $f; $real = $false
-  try { foreach ($m in $RxCommand.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } } } catch { Mark-Slow $f }
+  try { foreach ($rx in $RxCommands) { foreach ($m in $rx.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } }; if ($real) { break } } } catch { Mark-Slow $f }
   if (-not $real) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
@@ -6849,7 +6914,6 @@ foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
 # in each project, found by the home scan, and they are checked here. One counts as read once the
 # pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
-$rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
 # A session file whose pattern ran out of time in the check above is one of them too. It is counted,
 # not listed: a session file's path can spell out a project folder (see Sess-Where below).
 $SESS_SLOW = [int]$SessSt.Slow
@@ -6858,7 +6922,7 @@ foreach ($f in $AiderFiles) {
   $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }
   $seenA = @{}
   try {
-    foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
+    foreach ($m in @(foreach ($rx in $RxKeyPasses) { $rx.Matches($t) })) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
     if ($SESS_DONE -ge 0) { $SESS_DONE++ }
   } catch { Mark-Slow $f; $SESS_SLOW++ }
 }

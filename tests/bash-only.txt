@@ -111,6 +111,18 @@ a child that sources tests/lib.sh keeps the parent's list	tests tests/parity.sh 
 and so is the folder it is in	the perl session engine, its worker processes, fifo and signals are gird-check.sh's only; gird-check.ps1 has no perl engine
 a key id that is not lowercase	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a key id listed twice	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key id with _, which the fleet output would drop	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key line without at and max	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key at other than start or in	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key max over 1024	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key pattern that counts past 255	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key pattern with a POSIX class	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a key start that is not fixed text	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a #pass line with no key line after it	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a start line after an in line	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a published value of an unknown key type	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a published value shorter than 20	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a published value that is a whole key	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 HUP leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 INT leaves no engine or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
 HUP leaves no ripgrep, tr or filter process	the filter process the keys pass through, the fifo and the signal traps are gird-check.sh's; gird-check.ps1 checks sessions in a runspace of its own process
@@ -340,3 +352,12 @@ fleet: a marker folder in the account's own temp folder counts for that account	
 fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 a settings read whose awk fails names the file as not read	gird-check.ps1 reads settings with .NET, not awk
 a hand edit to the lists in docs/checks.md fails gen.sh --check	tools/gen.sh is one bash tool that writes the data files into both scripts and docs/checks.md, so its check is tested once
+every key id passes the fleet id filter	fleet mode (fleet_ids, gird-fleet.sh) is gird-check.sh's alone: gird-check.ps1 has no account run
+grep finds with the split key patterns what one alternation finds	it checks gird-check.sh's grep calls; gird-check.ps1 runs no grep
+grep and perl get each key pattern on its own	it counts the patterns gird-check.sh hands to grep and perl; gird-check.ps1 runs neither
+fleet: a gird-check.sh from another release is named, and no account is run	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the summary says to install both from one release	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+grep runs a later pass only on text that holds its fixed strings	it counts gird-check.sh grep calls; gird-check.ps1 runs no grep, and its .NET passes are compiled regexes
+an in line's start without its place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a start line's start with a place	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a stopped ripgrep leaves the sessions partly checked and stops nothing else	it runs gird-check.sh's ripgrep job, its TERM to the run it started and the tr and awk pipes behind it, with a bash stand-in for ripgrep; gird-check.ps1 has none of these: it stops the rg.exe it started through the .NET Process object it holds, which its twin of "the script stops only processes it started" checks is its only stop

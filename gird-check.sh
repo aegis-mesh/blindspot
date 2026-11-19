@@ -749,11 +749,125 @@ trap 'cleanup; exit 129' HUP
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
-PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
-KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+KEY_PASSES='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+KEY_ALTS='sk-ant-[A-Za-z0-9_-]{90,}
+sk-or-v1-[a-f0-9]{64}
+sk-proj-[A-Za-z0-9_-]{120,}
+sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-None-[A-Za-z0-9_-]{120,}
+sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-svcacct-[A-Za-z0-9_-]{60,}
+sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-admin-[A-Za-z0-9_-]{120,}
+(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
+(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}
+(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}
+gsk_[A-Za-z0-9]{52}
+xai-[A-Za-z0-9]{64,}
+(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)
+pplx-[A-Za-z0-9]{40,52}
+(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}
+(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)
+ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}
+bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}
+gh[pour]_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}
+github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
+npm_[A-Za-z0-9]{36}
+
+(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}
+hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)
+(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)
+(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}
+(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)
+(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}
+(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage"
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_(?:(?<![A-Za-z0-9_]hf_)|(?<=\\[ntr]hf_))|pplx-|r8_(?:(?<![A-Za-z0-9+/_-]r8_)|(?<=\\[ntr]r8_))|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi(?:(?<![A-Za-z0-9_-]dapi)|(?<=\\[ntr]dapi))|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.](?:(?<![A-Za-z0-9_.-]SG[.])|(?<=\\[ntr]SG[.]))|pypi-AgEIcHlwaS5vcmc(?:(?<![A-Za-z0-9_-]pypi-AgEIcHlwaS5vcmc)|(?<=\\[ntr]pypi-AgEIcHlwaS5vcmc))|dckr_pat_(?:(?<![A-Za-z0-9_-]dckr_pat_)|(?<=\\[ntr]dckr_pat_))|dop_v1_|doo_v1_|dor_v1_|hvs[.](?:(?<![A-Za-z0-9_.-]hvs[.])|(?<=\\[ntr]hvs[.]))|nvapi-(?:(?<![A-Za-z0-9_-]nvapi-)|(?<=\\[ntr]nvapi-))|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_(?:(?<![A-Za-z0-9_-]sb_secret_)|(?<=\\[ntr]sb_secret_))|ops_eyJ(?:(?<![A-Za-z0-9_-]ops_eyJ)|(?<=\\[ntr]ops_eyJ))|7Q~|8Q~|JQQJ99|[+]ASt|AccountName='
+PASS_FIXED='sk-ant-
+sk-or-v1-
+sk-
+AIza
+AQ.
+gsk_
+xai-
+hf_
+pplx-
+r8_
+AKIA
+ASIA
+ABSK
+bedrock-api-key
+ghp_
+gho_
+ghu_
+ghs_
+ghr_
+github_pat_
+npm_
+
+dapi
+glpat-
+gldt-
+glrt-
+glft-
+glsoat-
+xoxb-
+xoxp-
+xoxe.xapp-
+xapp-
+hooks.slack.com
+sk_live_
+rk_live_
+whsec_
+SG.
+pypi-AgEIcHlwaS5vcmc
+dckr_pat_
+dop_v1_
+doo_v1_
+dor_v1_
+hvs.
+nvapi-
+lsv2_pt_
+lsv2_sk_
+shpat_
+shppa_
+sntryu_
+sntrys_
+sb_secret_
+ops_eyJ
+7Q~
+8Q~
+JQQJ99
++ASt
+AccountName='
 PROV_AWK='
+function at(s, t, o,   b) { for (b = 0; b <= 2; b++) if (substr(s, b + o + 1, length(t)) == t) return 1; return 0 }
 function prov(s) {
+  if (at(s, "7Q~", 3) || at(s, "8Q~", 3)) return "Microsoft Entra"
+  if ((at(s, "JQQJ99", 52) && at(s, "AAAAAZDO", 72))) return "Azure DevOps"
+  if ((at(s, "JQQJ99", 52) && at(s, "ACOG", 76))) return "Azure AI"
+  if ((at(s, "+ASt", 76) && at(s, "==", 86)) || at(s, "AccountName=", 0)) return "Azure Storage"
   sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s)
   if (s ~ /^(sk-ant-)/) return "Anthropic"
   if (s ~ /^(sk-or-v1-)/) return "OpenRouter"
@@ -767,13 +881,64 @@ function prov(s) {
   if (s ~ /^(AKIA|ASIA|ABSK|bedrock-api-key)/) return "AWS"
   if (s ~ /^(gh[pousr]_|github_pat_)/) return "GitHub"
   if (s ~ /^(npm_)/) return "npm"
+  if (s ~ /^(dapi)/) return "Databricks"
+  if (s ~ /^(glpat-|gldt-|glrt-|glft-|glsoat-)/) return "GitLab"
+  if (s ~ /^(xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com)/) return "Slack"
+  if (s ~ /^(sk_live_|rk_live_|whsec_)/) return "Stripe"
+  if (s ~ /^(SG[.])/) return "SendGrid"
+  if (s ~ /^(pypi-AgEIcHlwaS5vcmc)/) return "PyPI"
+  if (s ~ /^(dckr_pat_)/) return "Docker Hub"
+  if (s ~ /^(dop_v1_|doo_v1_|dor_v1_)/) return "DigitalOcean"
+  if (s ~ /^(hvs[.])/) return "HashiCorp Vault"
+  if (s ~ /^(nvapi-)/) return "NVIDIA"
+  if (s ~ /^(lsv2_pt_|lsv2_sk_)/) return "LangSmith"
+  if (s ~ /^(shpat_|shppa_)/) return "Shopify"
+  if (s ~ /^(sntryu_|sntrys_)/) return "Sentry"
+  if (s ~ /^(sb_secret_)/) return "Supabase"
+  if (s ~ /^(ops_eyJ)/) return "1Password"
   return ""
-}'
-prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
+}
+function pmax(p) { if (p == "GitHub") return 1024; if (p == "PyPI") return 600; if (p == "Sentry") return 320; if (p == "1Password") return 1024; return 300 }'
+prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; "Databricks") printf databricks ;; "GitLab") printf gitlab ;; "Slack") printf slack ;; "Stripe") printf stripe ;; "SendGrid") printf sendgrid ;; "PyPI") printf pypi ;; "Docker Hub") printf dockerhub ;; "DigitalOcean") printf digitalocean ;; "HashiCorp Vault") printf vault ;; "NVIDIA") printf nvidia ;; "LangSmith") printf langsmith ;; "Shopify") printf shopify ;; "Sentry") printf sentry ;; "Supabase") printf supabase ;; "1Password") printf onepassword ;; "Microsoft Entra") printf azureentra ;; "Azure DevOps") printf azuredevops ;; "Azure AI") printf azureai ;; "Azure Storage") printf azurestorage ;; esac; }
 # <<< keys
+# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
+PUBLIC_AWK='
+function public(k) { return 0 || index(k, "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u") || index(k, "19874698323-pdFZKVeTuE8sk7oOcBrzbqgy") }'
+# <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
 TR_KEYS=$(printf '%s' "$ALL_KEYS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+TR_ALTS=$(printf '%s\n' "$KEY_ALTS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+TR_PASSES=$(printf '%s\n' "$KEY_PASSES" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+# grep gets the key patterns as one -e each (key_o, files_matching): the grep macOS ships reads one
+# long alternation of them many times slower than all of its parts one by one, and grep -o finds the
+# same matches either way (the leftmost, then the longest).
+# PF[n]: the fixed strings of pass n of data/keys.tsv (from 0), one a line. Every match of a pass's
+# patterns holds one of them, and grep -F finds them many times faster than the patterns run: a
+# later pass is matched only in text that holds one (the first pass, the 1.2.0 types, always is).
+PF=(); _pi=0; _pf=""
+while IFS= read -r _ka; do
+  if [ -z "$_ka" ]; then PF[_pi]=$_pf; _pi=$((_pi + 1)); _pf=""; else _pf="$_pf${_pf:+$'\n'}$_ka"; fi
+done <<EOF
+$PASS_FIXED
+
+EOF
+# The keys in what CMD... prints (grep -o), one grep for each pass of data/keys.tsv, so a key of a
+# later pass never hides one of an earlier pass. KO_X, when set, holds -e patterns for the first pass.
+KO_X=()
+key_o() { # CMD...
+  _ko=(${KO_X[@]+"${KO_X[@]}"}); _kn=0
+  while IFS= read -r _ka; do
+    if [ -n "$_ka" ]; then _ko+=(-e "$_ka"); continue; fi
+    if [ "${#_ko[@]}" -gt 0 ] && { [ "$_kn" -eq 0 ] || "$@" < /dev/null | grep -aqF -e "${PF[_kn]}"; }; then
+      "$@" < /dev/null | grep -aoE "${_ko[@]}"
+    fi
+    _ko=(); _kn=$((_kn + 1))
+  done <<EOF
+$TR_ALTS
+
+EOF
+}
 
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{12,}'
@@ -806,7 +971,7 @@ P_NOTSECRET='(_PATH|_FILE|_DIR)S?"?[[:space:]]*[:=]|[:=][[:space:]]*"?(~|\.\.?/|
 # documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either. Control
 # characters become spaces first, so the match is one field.
 providers_in() {
-  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
+  key_o cat "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
     awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
 # The providers of a Claude Code settings file's keys that are not in its permission rules (cc_rules),
@@ -815,7 +980,7 @@ providers_in() {
 # comments too, as providers_in reads a file, and the keys stay inside the pipe. The matches left go
 # through sess_filter as providers_in's do, so a key that looks made up is not one here either.
 cc_providers() { # file
-  { cc_rules "$1" | grep -aoE "$TR_KEYS" | sed 's/^/R /'; grep -aoE "$TR_KEYS" "$1" 2>/dev/null | sed 's/^/F /'; } | awk '
+  { key_o cc_rules "$1" | sed 's/^/R /'; key_o cat "$1" 2>/dev/null | sed 's/^/F /'; } | awk '
     function norm(s) { sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s); return s }
     substr($0, 1, 2) == "R " { r[norm(substr($0, 3))]++; next }
     { m = substr($0, 3); k = norm(m); if (r[k] > 0) { r[k]--; next }
@@ -825,8 +990,23 @@ cc_providers() { # file
 # Print the files in a newline list that contain a match, in order, with one grep pass. Only regular
 # files are read, following links: a pipe, socket or device at a fixed path (a fifo made at
 # ~/.zsh_history, a link to /dev/tty) would hold the read for ever.
-files_matching() { # pattern; list on stdin
-  while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$1" 2>/dev/null
+# The key patterns are added here, a pass at a time as key_o has them, and a later pass's only on the
+# files that hold one of its fixed strings (PF); the -e patterns given go with the first pass.
+files_matching() { # -e pattern...; list on stdin
+  _fl=$(while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\n' "$_fm"; done)
+  [ -n "$_fl" ] || return 0
+  { _ko=(${1+"$@"}); _kn=0
+    while IFS= read -r _ka; do
+      if [ -n "$_ka" ]; then _ko+=(-e "$_ka"); continue; fi
+      if [ "$_kn" -eq 0 ]; then printf '%s\n' "$_fl" | tr '\n' '\0' | xargs -0 grep -alE "${_ko[@]}" 2>/dev/null
+      else printf '%s\n' "$_fl" | tr '\n' '\0' | xargs -0 grep -alF -e "${PF[_kn]}" 2>/dev/null | tr '\n' '\0' | xargs -0 grep -alE "${_ko[@]}" 2>/dev/null; fi
+      _ko=(); _kn=$((_kn + 1))
+    done <<EOF
+$TR_ALTS
+
+EOF
+    printf '\001\n%s\n' "$_fl"
+  } | awk '$0 == "\001" { l = 1; next } l { if (($0 in hit) && !seen[$0]++) print; next } { hit[$0] = 1 }'
 }
 # Codex's env_http_headers name the environment variable each header's value comes from, so they hold
 # no token: a TOML file is read without them, in an inline table, as dotted keys and in a
@@ -852,17 +1032,21 @@ yaml_headers() { # file
       n = split(f, e, ","); for (i = 1; i <= n; i++) print e[i]; next }
     t ~ /(:|^-) +[|>][-+0-9]* *(#.*)?$/ { insc = 1; scind = ind }' "$1" 2>/dev/null
 }
+# Drops the matches that hold a published value (data/public-values.tsv, PUBLIC_AWK): an emulator's
+# key in an MCP config or a saved command is no more a key there than in a .env file, where
+# sess_filter's madeup() drops it with the same public().
+not_public() { awk "$PUBLIC_AWK"' !public($0)'; }
 inline_secret() {
-  _ip="$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET"
-  case "$1" in *.toml|*.yaml|*.yml) _ip="$_ip|$P_HEADERSQ" ;; esac
-  { no_env_headers "$1" | grep -aoE "$_ip"
+  KO_X=(-e "$P_JSONSECRET" -e "$P_TOMLSECRET" -e "$P_HEADERSECRET")
+  case "$1" in *.toml|*.yaml|*.yml) KO_X+=(-e "$P_HEADERSQ") ;; esac
+  { key_o no_env_headers "$1"
     case "$1" in *.yaml|*.yml) yaml_headers "$1" | grep -aoE "$P_HEADERYAML" ;; esac
-  } | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
+  } | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | not_public | grep -q .; _r=$?; KO_X=(); return "$_r"
 }
 # A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
 # elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
 command_secret() {
-  cc_rules "$1" | grep -aoE "$TR_KEYS|$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
+  KO_X=(-e "$P_ASSIGN"); key_o cc_rules "$1" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | not_public | grep -q .; _r=$?; KO_X=(); return "$_r"
 }
 
 # ---------------------------------------------------------------------------
@@ -1465,7 +1649,7 @@ SESS_PRE=$KEY_STARTS
 # script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
-my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
+my @passes = map { [map { qr/$_/ } grep { length } split /\n/] } split /\n\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
 $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
 my @f = grep { !-d $_ && -f $_ } @ARGV; my $unread = 0;
 {
@@ -1492,12 +1676,29 @@ for my $w (0 .. $n - 1) {
       if ($file =~ /\.(zst|gz)$/) { print "Z\t$fn\n"; next }
       my $h; unless (open($h, "<", $file)) { print "U\t$fn\n"; next }
       binmode $h; local $/ = \1048576; my $buf = "";
-      my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { (my $k = $&) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n" } } };
+      # One regex a pattern (SESS_KEYS), each run from where the last match ended: the leftmost
+      # match wins, and of two at one place the pattern listed first, as in one alternation. Each
+      # pass (an empty line in SESS_KEYS) is matched on its own.
+      my $scan = sub { my $t = shift; return unless $t =~ $pre; $_->($t) for map { my $re = $_; sub {
+        my $t = shift; my @re = @$re;
+        my $at = 0; my @nx;
+        my $find = sub { my $i = shift; pos($t) = $at; $nx[$i] = $t =~ /$re[$i]/g ? [$-[0], $+[0]] : undef };
+        $find->($_) for 0 .. $#re;
+        while (1) {
+          my $b; for my $i (0 .. $#re) { $b = $i if $nx[$i] && (!defined $b || $nx[$i][0] < $nx[$b][0]) }
+          last unless defined $b;
+          my ($s, $e) = @{$nx[$b]}; (my $k = substr($t, $s, $e - $s)) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n";
+          $at = $e > $s ? $e : $s + 1;
+          for my $i (0 .. $#re) { $find->($i) if $nx[$i] && $nx[$i][0] < $at }
+        }
+      } } @passes };
       while (defined(my $c = <$h>)) {
         exit 0 unless $alive->();
         select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
         $buf .= $c;
-        my $cut = $buf =~ /[^A-Za-z0-9_.+\/=\\-][A-Za-z0-9_.+\/=\\-]*\z/ ? $-[0] + 1 : -1;
+        # A piece ends after a character no key holds: an Entra secret holds ~ and a Storage
+        # connection string ;, so those two never end one.
+        my $cut = $buf =~ /[^A-Za-z0-9_.+\/=~;\\-][A-Za-z0-9_.+\/=~;\\-]*\z/ ? $-[0] + 1 : -1;
         next if $cut < 0 && length($buf) < 8388608;
         $scan->(substr($buf, 0, $cut < 0 ? length($buf) : $cut, ""));
       }
@@ -1522,15 +1723,14 @@ while ($sel->count) {
 # With rg, the input is ripgrep's own: the file, the NUL that --null puts after it (the one byte
 # a path can't hold) turned into a tab by tr, which turns every real tab into ?, then the match.
 # So a line without a tab is a piece of a file name that holds a newline, and the match may hold
-# any byte but a newline. No key is longer than 300 characters (GitHub's 93-character tokens are
-# the longest fixed format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens,
-# about 520 with two dots: a longer run of key characters is data, not a key, and would make madeup()
-# slow. Always called in a subshell (a pipe or a
+# any byte but a newline. A match longer than its provider's max in data/keys.tsv (pmax, 300 unless
+# the line says more, as for GitHub's stateless ghs_ tokens of about 520) is a run of data, not a
+# key, and so is any match over 1024: madeup() would be slow on it. Always called in a subshell (a pipe or a
 # background job): exec makes awk that job's own process, the one sess_stop signals.
 sess_filter() { # [rg]
-  exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK"'
+  exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK$PUBLIC_AWK"'
     function madeup(k,   i, c, run, last, n, seen, len) {
-      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF/) return 1
+      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF/ || public(k)) return 1
       run = 0; last = ""; n = 0; len = length(k)
       for (i = 1; i <= len; i++) {
         c = substr(k, i, 1)
@@ -1555,8 +1755,8 @@ sess_filter() { # [rg]
         if (i == 0) { part = part $0 "?"; next }
         f = part substr($0, 1, i - 1); k = substr($0, i + 1); part = ""
       } else if ($1 == "K") { f = $2; k = $3 } else next
-      if (length(k) > 1024 || (length(k) > 300 && k !~ /ghs_[A-Za-z0-9_-]+\./)) next
-      p = prov(k); if (p == "") next
+      if (length(k) > 1024) next
+      p = prov(k); if (p == "" || length(k) > pmax(p)) next
       sub(/^[^A-Za-z]*\\[ntr"]/, "", k); sub(/^[^A-Za-z]+/, "", k); sub(/[^A-Za-z0-9_.-]+$/, "", k)
       if (madeup(k) || cli_own(f, k) || ((f "|" p) in done)) next
       done[f "|" p] = 1; print "H\t" f "\t" p; fflush()
@@ -1604,6 +1804,17 @@ elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
 [ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
 # SESS_FAIL is set when the check could not start, so the report can say the sessions were not checked.
 SESS_FAIL=0
+# Stops the ripgrep run in progress, from inside the job that started it: TERM to $_rgp, the process
+# that job started, and nothing else. No process is ever stopped by an id read from somewhere else
+# (such as /proc or a process list): by the time it is used, the process may be gone and its id
+# given to another. Under Git Bash ripgrep is a Windows program and TERM may not end it. Then
+# sess_stop stops the filter it started, awk: tr, which passes ripgrep's output on to it, ends at its
+# next write, which closes the pipe ripgrep writes to, and ripgrep ends at its own next write. A ripgrep that finds nothing
+# more writes nothing, so it reads on to the end of the session files and exits, and tr with it:
+# both only read. The run is reported partly checked either way, as any stopped run is.
+rg_stop() {
+  [ -n "$_rgp" ] && kill -TERM "$_rgp" 2>/dev/null
+}
 sess_start() {
   [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" != none ] || return 0
   # Keys pass through a pipe inside a folder that only the owner can open, whatever the umask
@@ -1618,14 +1829,34 @@ EOF
     [ -n "$GIRD_CHECK_SESSIONS_HOLD" ] && _roots+=("$GIRD_CHECK_SESSIONS_HOLD")  # tests only: a pipe nobody writes to holds ripgrep
     # --null ends each file name with a NUL, the one byte a path can't hold: tr turns it into the
     # tab the filter splits on, and every real tab into ?, so a file name can't shift the fields.
-    tr '\000\t' '\t?' < "$SESS_FIFO" | sess_filter rg > "$SESS_FILE" &
+    # tr runs on its own, through a second pipe, never in the filter's job: it may outlive the
+    # script, with a ripgrep left to finish (rg_stop), and a wait for the filter would wait for it
+    # too. So it holds none of the script's output or fd 3, and nothing ever waits for it.
+    mkfifo -m 600 "$SESS_DIR/text" 2>/dev/null || { rm -rf "$SESS_DIR"; SESS_DIR=""; SESS_FILE=""; SESS_FIFO=""; SESS_FAIL=1; return 0; }
+    tr '\000\t' '\t?' < "$SESS_FIFO" > "$SESS_DIR/text" 2>/dev/null 3>&- &
+    sess_filter rg < "$SESS_DIR/text" > "$SESS_FILE" &
     SESS_FILTER_PID=$!
     # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
     # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed. The
     # patterns are byte patterns, as perl and grep read them under LC_ALL=C. 3>&-: in an account run
     # fd 3 is root's pipe, and ripgrep gets no handle to it.
-    "$RG_BIN" -a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
-      -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null 3>&- &
+    # One run for each pass of data/keys.tsv, one after the other, in one job that holds the pipe open
+    # and stops the run in progress when it is stopped (rg_stop). Its status is the worst of the
+    # runs': 2 for an error, else 0 when any found a key.
+    (
+      _rgp=""
+      trap 'rg_stop; exit 143' TERM
+      _rgs=1
+      while IFS= read -r _rgx; do
+        "$RG_BIN" -a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
+          -e "$_rgx" -- "${_roots[@]}" < /dev/null 2>/dev/null 3>&- &
+        _rgp=$!; wait "$_rgp"; _r=$?; _rgp=""
+        if [ "$_r" -gt 1 ]; then _rgs=$_r; elif [ "$_r" -eq 0 ] && [ "$_rgs" -le 1 ]; then _rgs=0; fi
+      done <<EOF
+$TR_PASSES
+EOF
+      exit "$_rgs"
+    ) > "$SESS_FIFO" 3>&- &
     SESS_PID=$!
     [ "$WIN" -eq 1 ] && SESS_WIN=1
   else
@@ -1634,7 +1865,7 @@ EOF
     _nw=$( (sysctl -n hw.ncpu || nproc || getconf _NPROCESSORS_ONLN) 2>/dev/null | head -n 1)
     case "$_nw" in ''|*[!0-9]*) _nw=4 ;; esac
     [ "$_nw" -gt 8 ] && _nw=8; [ "$_nw" -lt 1 ] && _nw=1
-    SESS_KEYS=$TR_KEYS SESS_PRE=$SESS_PRE SESS_WORKERS=$_nw perl -e "$SESS_PERL" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+    SESS_KEYS=$TR_ALTS SESS_PRE=$SESS_PRE SESS_WORKERS=$_nw perl -e "$SESS_PERL" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
     SESS_PID=$!
   fi
 }
@@ -1645,9 +1876,6 @@ sess_stop() { # [wait|kill]
   if [ -n "$SESS_PID" ]; then
     if [ "${1:-}" = wait ]; then wait "$SESS_PID" 2>/dev/null; SESS_RC=$?
     elif kill -0 "$SESS_PID" 2>/dev/null; then
-      if [ "$SESS_WIN" -eq 1 ] && [ -r "/proc/$SESS_PID/winpid" ]; then
-        taskkill //F //PID "$(cat "/proc/$SESS_PID/winpid")" >/dev/null 2>&1
-      fi
       kill -TERM "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null; SESS_RC=stopped
     else wait "$SESS_PID" 2>/dev/null; SESS_RC=$?; fi
     SESS_PID=""
@@ -1866,7 +2094,7 @@ is_plugin_path() {
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
-MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET|$P_HEADERSQ" | tr '\n' '|')"
+MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching -e "$P_JSONSECRET" -e "$P_TOMLSECRET" -e "$P_HEADERSECRET" -e "$P_HEADERSQ" | tr '\n' '|')"
 mcp_row() { # who file client-id
   _f=$2; _c=""; _nm=""
   case "$_f" in
@@ -2541,7 +2769,7 @@ CC_PROJECT=$(printf '%s\n' "$ALLOW_FILES" | while IFS= read -r _f; do
   case "$_f" in (""|"$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
   own_cc "$_f" || too_big "$_f" || printf '%s\n' "$_f"
 done)
-MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching "$TR_KEYS")
+MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching)
 # For the report: one place id per file, and one provider id per file and provider.
 KEY_PLACES=""; PROV_TALLY=""
 MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n%s\n' "$PROJECT_FILES" "$CC_PROJECT" | tr '\n' '|')"
@@ -2603,7 +2831,15 @@ login() { # file label id [marker regex]
 }
 login "$H/.aws/credentials" "AWS keys" aws
 login "$H/.config/gcloud/application_default_credentials.json" "Google Cloud login" gcloud
-login "$H/.azure/msal_token_cache.json" "Azure login" azure
+# The folders these tools are told to use in the environment, a Windows path (C:\...) in Git Bash
+# written as this shell reads it, as APPDATA is.
+_azd=${AZURE_CONFIG_DIR:-}; _dbd=${DBT_ENGINE_PROFILES_DIR:-${DBT_PROFILES_DIR:-}}; _sfh=${SNOWFLAKE_HOME:-}
+if [ "$WIN" -eq 1 ]; then _azd=$(winpath "$_azd"); _dbd=$(winpath "$_dbd"); _sfh=$(winpath "$_sfh"); fi
+# The Azure CLI keeps its logins, and a service principal's secret, in AZURE_CONFIG_DIR or ~/.azure:
+# plain text on macOS and Linux, encrypted (.bin) on Windows (learn.microsoft.com, MSAL-based Azure
+# CLI). A service principal signed in with a certificate has no client_secret there.
+login "${_azd:-$H/.azure}/msal_token_cache.json" "Azure login" azure
+login "${_azd:-$H/.azure}/service_principal_entries.json" "Azure service principal secrets" azure-sp '"client_secret"'
 login "$H/.kube/config" "Kubernetes logins" kube
 login "$H/.docker/config.json" "Docker registry logins" docker '"auth"[[:space:]]*:[[:space:]]*"[A-Za-z0-9+/=]{8,}'
 login "$H/.npmrc" "npm token" npm '_authToken'
@@ -2616,6 +2852,22 @@ login "$H/.claude/.credentials.json" "Claude Code login" claude-code
 login "$H/.gemini/oauth_creds.json" "Gemini CLI login" gemini
 login "$H/.local/share/opencode/auth.json" "OpenCode provider keys" opencode
 login "$H/.railway/config.json" "Railway login" railway
+# Data platforms' own files: Databricks configuration profiles (docs.databricks.com), dbt's
+# profiles.yml, found as dbt finds it (docs.getdbt.com; a value taken from env_var is not in the file),
+# and Snowflake's connections.toml and config.toml, in the folder Snowflake CLI picks
+# (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
+# else the system's own folder.
+login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret)[[:space:]]*='
+login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]'
+_sf=""
+if [ -n "$_sfh" ]; then [ -d "$_sfh" ] && _sf=$_sfh
+elif [ -d "$H/.snowflake" ]; then _sf=$H/.snowflake; fi
+if [ -z "$_sf" ]; then
+  case "$_os" in win) _sf=$WLAPP/snowflake ;; mac) _sf="$H/Library/Application Support/snowflake" ;; *) _sf=${XDG_CONFIG_HOME:-$H/.config}/snowflake ;; esac
+fi
+for _sfc in connections.toml config.toml; do
+  case " $LOGIN_IDS " in *" snowflake "*) ;; *) login "$_sf/$_sfc" "Snowflake logins" snowflake '^[[:space:]]*(password|private_key_passphrase)[[:space:]]*=' ;; esac
+done
 if [ "$WIN" -eq 1 ]; then # where these tools keep the same logins on Windows
   case " $LOGIN_IDS " in *" gcloud "*) ;; *) login "$WAPP/gcloud/application_default_credentials.json" "Google Cloud login" gcloud ;; esac
   case " $LOGIN_IDS " in *" netrc "*) ;; *) login "$H/_netrc" "saved passwords in _netrc" netrc ;; esac
@@ -2656,7 +2908,7 @@ N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
-  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; }; done | files_matching "$TR_KEYS|$P_ASSIGN")
+  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; }; done | files_matching -e "$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
@@ -7649,7 +7901,7 @@ while IFS= read -r f; do
   SESS_TOTAL=$((SESS_TOTAL + 1))
   if [ ! -r "$f" ]; then SESS_UNREAD_FILES=$((SESS_UNREAD_FILES + 1)); continue; fi
   [ "$SESS_DONE" -ge 0 ] && SESS_DONE=$((SESS_DONE + 1))
-  _h=$(grep -aoE "$TR_KEYS" "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
+  _h=$(key_o cat "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
   [ -n "$_h" ] && SESS_HITS="$SESS_HITS
 $_h"
 done <<EOF

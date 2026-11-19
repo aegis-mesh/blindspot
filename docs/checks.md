@@ -114,6 +114,25 @@ Paths: `~` is your home folder, `{AS}` the app data folder (Application Support 
 | AWS | `AKIA`, `ASIA`, `ABSK`, `bedrock-api-key` |
 | GitHub | `gh[pousr]_`, `github_pat_` |
 | npm | `npm_` |
+| Databricks | `dapi` |
+| GitLab | `glpat-`, `gldt-`, `glrt-`, `glft-`, `glsoat-` |
+| Slack | `xoxb-`, `xoxp-`, `xoxe[.]xapp-`, `xapp-`, `hooks[.]slack[.]com` |
+| Stripe | `sk_live_`, `rk_live_`, `whsec_` |
+| SendGrid | `SG[.]` |
+| PyPI | `pypi-AgEIcHlwaS5vcmc` |
+| Docker Hub | `dckr_pat_` |
+| DigitalOcean | `dop_v1_`, `doo_v1_`, `dor_v1_` |
+| HashiCorp Vault | `hvs[.]` |
+| NVIDIA | `nvapi-` |
+| LangSmith | `lsv2_pt_`, `lsv2_sk_` |
+| Shopify | `shpat_`, `shppa_` |
+| Sentry | `sntryu_`, `sntrys_` |
+| Supabase | `sb_secret_` |
+| 1Password | `ops_eyJ` |
+| Microsoft Entra | `7Q~@3`, `8Q~@3` |
+| Azure DevOps | `JQQJ99@52&AAAAAZDO@72` |
+| Azure AI | `JQQJ99@52&ACOG@76` |
+| Azure Storage | `[+]ASt@76&==@86`, `AccountName=@0` |
 
 ### Agent session transcripts
 
