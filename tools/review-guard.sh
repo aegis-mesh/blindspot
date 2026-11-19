@@ -18,11 +18,12 @@
 #             submodule
 #   mode      a file whose mode changed, such as one made executable
 #   run       in code, an added line that runs text as code: eval and its kin, a shell, interpreter
-#             or trap given text built from a variable, a pipe into a shell, a decoder (see RUN_SH
-#             and RUN_PS below); outside tests/, any inline interpreter code (python -c, perl -e).
-#             A line that is only a # comment is skipped. In *.ps1, & on a
-#             plain variable ($block) is not flagged: the scripts call their own script blocks that
-#             way; & on an expression, a string with a variable in it or $env: is.
+#             or trap given text built from a variable, a pipe into a shell, a decoder, outside
+#             tests/ a shell running a script a variable names (see RUN_SH, SHELL_FILE and RUN_PS
+#             below), any inline interpreter code (python -c, perl -e). A line that is
+#             only a # comment is skipped. In *.ps1, & on a variable is flagged unless the file
+#             assigns that variable a { script block }; & on an expression, a string with a
+#             variable in it or $env: is always flagged, and so is assigning Get-Command.
 #   network   in code, an added line that names a network tool where a command starts, or a
 #             network API (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
 #             that is not only a # comment, in any code but tests/ and the blocks tools/gen.sh
@@ -76,28 +77,37 @@ BAD_UTF8="$BAD_UTF8|$(o '\357\270')[$(o '\200')-$(o '\217')]|$(o '\357\273\277')
 
 B='(^|[^A-Za-z0-9_-])'   # word start
 E='([^A-Za-z0-9_-]|$)'   # word end
-CMD='(^[[:space:]]*|[;&|({`=][[:space:]]*|(then|do|else|if|while|until|exec|env|command|sudo|xargs|time|!)[[:space:]]+)'   # command position
+# Where a command starts: a line's start, after ; & | ( { ` = # ! or a keyword, or inside the
+# quotes of a -c or -e (bash -c 'curl ...'); then any env [-flags] and NAME=value words.
+START='(^[[:space:]]*|[;&|({`=#!][[:space:]]*|(then|do|else|if|while|until|exec|command|sudo|xargs|time)[[:space:]]+|[[:space:]]-[A-Za-z]*[ceE][[:space:]]+['"'"'"][[:space:]]*)'
+PRE='((env([[:space:]]+-[A-Za-z-]+)*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*'
+CMD="$START$PRE"
+# Network tools in bash and other code also start after any quote: a quoted command is often run.
+QSTART='(^[[:space:]]*|[;&|({`=#!'"'"'"][[:space:]]*|(then|do|else|if|while|until|exec|command|sudo|xargs|time)[[:space:]]+)'
+QCMD="$QSTART$PRE"
 SHELLS='(ba|z|k|da)?sh|pwsh|powershell'
 VAR='("[^"]*)?[$`]'   # text that expands a variable or a command
 RUN_SH="${B}eval$E|$CMD(source|\.)[[:space:]]+[^[:space:];|&]*[\$(\`]"
-RUN_SH="$RUN_SH|$CMD($SHELLS)([[:space:]]+-[A-Za-z]+)*[[:space:]]+(-[A-Za-z]*c[[:space:]]+)?$VAR"
+RUN_SH="$RUN_SH|$CMD($SHELLS)([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c[[:space:]]+$VAR"
+# A shell running a script a variable names. Not read in tests/, which run the scripts under test
+# that way (bash "$SCRIPT").
+SHELL_FILE="$CMD($SHELLS)([[:space:]]+-[A-Za-z]+)*[[:space:]]+$VAR"
 INLINE="$CMD(python[0-9.]*|perl|ruby|node|php|osascript)([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*[ceE][[:space:]]"
 RUN_SH="$RUN_SH|$INLINE+$VAR|${CMD}osascript$E"
-RUN_SH="$RUN_SH|${B}trap[[:space:]]+$VAR|(^|[[:space:]])\|[[:space:]]*($SHELLS)([[:space:]]|;|&|$)"
+RUN_SH="$RUN_SH|${B}trap[[:space:]]+$VAR|(^|[[:space:]])\|[[:space:]]*($SHELLS)([[:space:];&\"']|$)"
 RUN_SH="$RUN_SH|${B}system[[:space:]]*\(|\|[[:space:]]*getline|${B}exec\(|os\.(system|popen)|shell[[:space:]]*=[[:space:]]*True"
 RUN_SH="$RUN_SH|${B}base64([[:space:]]+-[A-Za-z-]+)*[[:space:]]+(-[A-Za-z]*[dD][A-Za-z]*|--decode)$E|${B}xxd([[:space:]]+-[A-Za-z]+)*[[:space:]]+-r"
 RUN_PS="${B}(invoke-expression|iex|invoke-command|start-process|add-type)$E|scriptblock\][[:space:]]*::[[:space:]]*create"
 RUN_PS="$RUN_PS|newscriptblock|invokescript|invokecommand|reflection\.assembly\][[:space:]]*::[[:space:]]*load|\.invoke[[:space:]]*\("
-RUN_PS="$RUN_PS|frombase64string|(^|[;({=[:space:]])&[[:space:]]*(\(|\"[^\"]*[$]|[$]env:)|$CMD\.[[:space:]]+[\$(]"
+RUN_PS="$RUN_PS|=[[:space:]]*(get-command|gcm)$E|frombase64string|(^|[;({=[:space:]])&[[:space:]]*(\(|\"[^\"]*[$]|[$]env:)|$CMD\.[[:space:]]+[\$(]"
 RUN_PS="$RUN_PS|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(c|command)[[:space:]]+$VAR|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(e|ec|enc|encodedcommand)$E"
-# A network tool where a command would start (a # counts, so a commented-out call is still seen),
+# A network tool where a command starts (after # too, so a commented-out call is still seen),
 # followed by an argument rather than an =.
-TOOL='(^[[:space:]]*|[;&|({`#!][[:space:]]*|(then|do|else|if|while|until|exec|env|command|sudo|xargs|time)[[:space:]]+)'
 ARG='([[:space:]]+[^=[:space:]]|[[:space:]]*$)'
-NET_SH="$TOOL(curl|wget|nc|ncat|netcat|socat|telnet|ssh|scp|sftp|rsync|ftp|tftp|nslookup|dig|host|drill|certutil|bitsadmin)$ARG"
+NET_SH="$QCMD(curl|wget|nc|ncat|netcat|socat|telnet|ssh|scp|sftp|rsync|ftp|tftp|nslookup|dig|host|drill|certutil|bitsadmin)$ARG"
 NET_SH="$NET_SH|${B}openssl[[:space:]]+s_client|/dev/(tcp|udp)/|/inet/|urlopen|urllib\.request|http\.client|${B}requests\.(get|post|put|patch|delete|head|request|Session)[[:space:]]*\("
 NET_SH="$NET_SH|${B}socket\.(socket|create_connection)|IO::Socket|LWP::|HTTP::Tiny"
-NET_PS="$TOOL(curl|wget|irm|iwr|ssh|scp|sftp|nslookup|certutil|bitsadmin)$ARG|${B}(invoke-webrequest|invoke-restmethod|start-bitstransfer|resolve-dnsname|test-netconnection)$E"
+NET_PS="$CMD(curl|wget|irm|iwr|ssh|scp|sftp|nslookup|certutil|bitsadmin)$ARG|${B}(invoke-webrequest|invoke-restmethod|start-bitstransfer|resolve-dnsname|test-netconnection)$E"
 NET_PS="$NET_PS|webclient|httpclient|webrequest\]|downloadstring|downloadfile|tcpclient|udpclient|net\.dns|net\.sockets"
 URL='https?://'
 
@@ -136,6 +146,41 @@ rule() {
   [ -s "$W/hits" ] || return 0
   awk 'NR == FNR { want[$1] = 1; next } want[FNR]' "$W/hits" "$3" > "$W/hitlines"
   while IFS= read -r l; do finding "$1" "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"; done < "$W/hitlines"
+}
+# fixtures IN OUT: IN's lines, with single-quoted text left out of each line that writes a fixture.
+fixtures() {
+  awk -v T="$TAB" '
+    { i = index($0, T); t = substr($0, i + 1) }
+    t !~ /(^[[:space:]]*|[;&|{][[:space:]]*)(printf|echo|cat|mv_case)[[:space:]]/ ||
+    t ~ /((ba|z|k|da)?sh|pwsh|powershell|python[0-9.]*|perl|ruby|node|php|osascript)([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*[ceE][[:space:]]/ { print; next }
+    {
+      out = substr($0, 1, i); q = ""
+      for (k = i + 1; k <= length($0); k++) {
+        c = substr($0, k, 1)
+        if (q == "\047") { if (c == "\047") q = ""; continue }
+        if (c == "\\") { out = out c substr($0, k + 1, 1); k++; continue }
+        if (c == "\"") q = (q == "\"") ? "" : "\""
+        else if (c == "\047" && q == "") { q = "\047"; out = out "\047\047"; continue }
+        out = out c
+      }
+      print out
+    }' "$1" > "$2"
+}
+# call_operator: in a *.ps1, a run finding for each & $name whose name the file never assigns a
+# { script block } (variable names are compared without case and without a scope: prefix).
+call_operator() {
+  grep -aiE '(^|[;({=[:space:]])&[[:space:]]*[$][A-Za-z_]' "$W/code-run" > "$W/amp" || return 0
+  git show "$HEAD:$path" 2>/dev/null | tr 'A-Z' 'a-z' |
+    grep -aoE '[$]((script|global|local|private):)?[a-z_][a-z0-9_]*[[:space:]]*=[[:space:]]*[{]' |
+    sed -E 's/^[$]((script|global|local|private):)?([a-z_][a-z0-9_]*).*/\3/' > "$W/blocks"
+  while IFS= read -r l; do
+    printf '%s\n' "${l#*"$TAB"}" | tr 'A-Z' 'a-z' |
+      grep -oE '(^|[;({=[:space:]])&[[:space:]]*[$][a-z_][a-z0-9_:]*' |
+      sed -E 's/^.*&[[:space:]]*[$]((script|global|local|private):)?//' > "$W/called"
+    while IFS= read -r n; do
+      grep -qxF -- "$n" "$W/blocks" || { finding run "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"; break; }
+    done < "$W/called"
+  done < "$W/amp"
 }
 is_binary() { tr '\0' '\n' < "$W/binary" | grep -qxF -- "$1"; }
 is_image() {
@@ -192,30 +237,25 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
   esac
   if ! is_data "$path"; then
     grep -av "^[0-9]*${TAB}[[:space:]]*#" "$W/add" > "$W/code"
-    # Tests write shell profiles and hooks as fixtures, in single quotes: there the run rule reads
-    # each line with its single-quoted text left out. A line is read on its own, so one inside a
-    # quoted string that spans lines is not seen as such.
+    # Tests write shell profiles, hooks and configs as fixtures: on a line that writes one (printf,
+    # echo, cat or mv_case) and hands no text to a shell or interpreter, single-quoted text is
+    # left out before the run and network rules read it. A line is read on its own, so one inside
+    # a quoted string that spans lines is not seen as such.
     case "$path" in
-      tests/*) awk -v T="$TAB" '{
-          i = index($0, T); out = substr($0, 1, i); q = ""
-          for (k = i + 1; k <= length($0); k++) {
-            c = substr($0, k, 1)
-            if (q == "\047") { if (c == "\047") q = ""; continue }
-            if (c == "\\") { out = out c substr($0, k + 1, 1); k++; continue }
-            if (c == "\"") q = (q == "\"") ? "" : "\""
-            else if (c == "\047" && q == "") { q = "\047"; out = out "\047\047"; continue }
-            out = out c
-          }
-          print out }' "$W/code" > "$W/code-run" ;;
-      *) cp "$W/code" "$W/code-run" ;;
+      tests/*)
+        fixtures "$W/code" "$W/code-run"
+        fixtures "$W/add" "$W/add-net" ;;
+      *) cp "$W/code" "$W/code-run"; cp "$W/add" "$W/add-net" ;;
     esac
     if [ "$ps" = 1 ]; then
       rule run "$RUN_PS" "$W/code-run" -i
-      rule network "$NET_PS" "$W/add" -i
+      call_operator
+      rule network "$NET_PS" "$W/add-net" -i
     else
       rule run "$RUN_SH" "$W/code-run"
-      case "$path" in tests/*) ;; *) rule run "$INLINE" "$W/code-run" ;; esac
-      rule network "$NET_SH" "$W/add"
+      rule run "$INLINE" "$W/code-run"
+      case "$path" in tests/*) ;; *) rule run "$SHELL_FILE" "$W/code-run" ;; esac
+      rule network "$NET_SH" "$W/add-net"
     fi
     case "$path" in
       tests/*) ;;

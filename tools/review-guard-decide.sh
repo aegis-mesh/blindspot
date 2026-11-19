@@ -26,7 +26,7 @@ esac
 [ -f "$OWNERS" ] || { echo "No CODEOWNERS on the base branch: nobody can clear findings."; exit 1; }
 # The last * line wins, as in GitHub's reading of the file. Teams (@org/team) and emails don't count.
 owners=$(LC_ALL=C awk '
-  { sub(/#.*/, "") }
+  { sub(/\r$/, ""); sub(/#.*/, "") }
   $1 == "*" { line = $0 }
   END {
     n = split(line, f, /[ \t]+/)

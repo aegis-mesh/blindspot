@@ -12,33 +12,13 @@ on:
 permissions: {}
 
 # A run cancelled by a newer event ends as cancelled, which does not pass a required check; the
-# newer run decides.
+# newer run decides. Removing the label after a push is in review-guard-unlabel.yml, which this
+# cancelling cannot stop.
 concurrency:
   group: review-guard-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  # Tidiness, not safety: only the labeling event itself can clear findings (see the decide step).
-  unlabel:
-    name: remove security-reviewed
-    if: github.event.action == 'synchronize'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      pull-requests: write
-    steps:
-      - shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          labels=$(gh api "repos/$REPO/issues/$PR/labels" --jq '.[].name')
-          if printf '%s\n' "$labels" | grep -qx security-reviewed; then
-            gh api --silent -X DELETE "repos/$REPO/issues/$PR/labels/security-reviewed"
-            echo "Removed security-reviewed: the new commits need a fresh review."
-          fi
-
   # No `if:` here: a skipped job would count as a passing required check.
   review-guard:
     name: review-guard

