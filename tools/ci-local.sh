@@ -23,10 +23,16 @@ shellcheck_run() {
   if command -v shellcheck >/dev/null 2>&1; then shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh
   else pipx run --spec shellcheck-py==0.10.0.1 shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tests/*.sh; fi
 }
+# A git worktree's .git is a file naming the main repository's folder by its path here; mounted at the
+# same path, read-only, git in the container sees the repository.
+GITMNT=()
+if [ -f .git ]; then
+  _gc=$(cd "$(git rev-parse --git-common-dir)" && pwd -P) && GITMNT=(-v "$_gc:$_gc:ro")
+fi
 # The Ubuntu jobs: the repo mounted read-only, the tools the CI image has, run as a user, not root.
 in_linux() { # image command [extra docker args]
   _img=$1; _cmd=$2; shift 2
-  docker run --rm -v "$PWD:/src:ro" "$@" "$_img" bash -c "
+  docker run --rm -v "$PWD:/src:ro" ${GITMNT[@]+"${GITMNT[@]}"} "$@" "$_img" bash -c "
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq >/dev/null && apt-get install -y -qq python3 perl jq procps curl git expect file xxd ca-certificates libicu74 >/dev/null &&
     { [ ! -f /pwsh.tar.gz ] || { mkdir -p /opt/pwsh && tar -xzf /pwsh.tar.gz -C /opt/pwsh && chmod +x /opt/pwsh/pwsh && ln -s /opt/pwsh/pwsh /usr/local/bin/pwsh; }; } &&

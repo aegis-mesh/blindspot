@@ -60,7 +60,7 @@ fresh() {
   { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n- A change for the tests.\n- And a second one.\n\n'; sed 1d "$SRC/CHANGELOG.md"; } > "$R/CHANGELOG.md"
   git -C "$R" commit -q -am "Notes for 1.3.0"
   git clone -q --bare "$R" "$R.git"
-  git config --global url."$R.git".insteadOf "https://github.com/test-owner/$1.git"
+  git -C "$W" config --global url."$R.git".insteadOf "https://github.com/test-owner/$1.git"
   git -C "$R" remote add origin "https://github.com/test-owner/$1.git"
   git -C "$R" fetch -q origin
 }
