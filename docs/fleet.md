@@ -62,19 +62,19 @@ changes (list them), or not safe, and why.
 Download one release's files by version from GitHub and check that the maintainers signed them.
 Every file a release ships, fleet files included, has a line in its signed `SHA256SUMS`, so you
 verify the signature once, then check each file you deploy against its line. Set `V` to the version
-on the [releases page](https://github.com/aegis-mesh/blindspot/releases), and `FILES` to the files
-you deploy. Every file comes from that one release, so a new release in between can't mix versions:
+on the [releases page](https://github.com/aegis-mesh/blindspot/releases), and list the files you deploy
+after `set --`. Every file comes from that one release, so a new release in between can't mix versions:
 
 ```sh
 V=vX.Y.Z
-FILES="gird-check.sh gird-fleet.sh"
-for f in $FILES SHA256SUMS SHA256SUMS.sig; do
+set -- gird-check.sh gird-fleet.sh
+for f in "$@" SHA256SUMS SHA256SUMS.sig; do
   curl -fsSLO "https://github.com/aegis-mesh/blindspot/releases/download/$V/$f"
 done
 curl -fsSLO https://gird.ai/blindspot/allowed_signers   # compare its keys with .github/allowed_signers on GitHub
 ssh-keygen -Y verify -f allowed_signers -I release@blindspot -n blindspot-release -s SHA256SUMS.sig < SHA256SUMS
 head -n 1 SHA256SUMS                                     # must say: version $V
-for f in $FILES; do awk -v f="$f" '$2 == f' SHA256SUMS | shasum -a 256 -c; done
+for f in "$@"; do awk -v f="$f" '$2 == f' SHA256SUMS | shasum -a 256 -c; done
 ```
 
 Go on only if `ssh-keygen` says `Good "blindspot-release" signature` and every file says `OK`. These
