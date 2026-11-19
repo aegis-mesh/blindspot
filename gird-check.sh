@@ -1967,7 +1967,7 @@ start_cmd() {
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wn='(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
-  _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$START_PATH"'"'
+  _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$START_PATH"'"'
   _wb='([^{}]|\{[^{}]*\})*'
   printf '%s' "$_ws$_wp$_wn[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
 }
@@ -2030,8 +2030,20 @@ cmd_parts() {
       if (on) printf "\"\n"
     }'
 }
+# With an element-ERE, a task one of those elements lists in dependsOn by label counts too: one level, so a
+# task the dependency itself depends on does not.
 start_scripts() { # flattened-text key [element-ERE]: the scripts those elements run, one per line
-  _el=$(printf '%s' "$1" | json_elems "$2" | { if [ -n "${3:-}" ]; then grep -E "$3"; else cat; fi; })
+  _all=$(printf '%s' "$1" | json_elems "$2")
+  _el=$(printf '%s\n' "$_all" | { if [ -n "${3:-}" ]; then grep -E "$3"; else cat; fi; })
+  if [ -n "${3:-}" ] && [ -n "$_el" ]; then
+    _dl=$(printf '%s\n' "$_el" | grep -oE '"dependsOn"[[:space:]]*:[[:space:]]*(\[[^]]*\]|"([^"\\]|\\.)*")' | sed -E 's/^"dependsOn"[[:space:]]*:[[:space:]]*//' | grep -oE '"([^"\\]|\\.)*"' | sed -E 's/^"//; s/"$//')
+    if [ -n "$_dl" ]; then
+      _dep=$(printf '%s\n' "$_all" | DEPS="$_dl" awk '
+        BEGIN { n = split(ENVIRON["DEPS"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") w[a[i]] = 1 }
+        match($0, /"label"[ \t]*:[ \t]*"([^"\\]|\\.)*"/) { s = substr($0, RSTART, RLENGTH); sub(/^"label"[ \t]*:[ \t]*"/, "", s); sub(/"$/, "", s); if (s in w) print }')
+      [ -n "$_dep" ] && _el=$(printf '%s\n%s\n' "$_el" "$_dep")
+    fi
+  fi
   [ -n "$_el" ] || return 0
   { printf '%s\n' "$_el"; printf '%s\n' "$_el" | cmd_parts; } | grep -oE "$START_CMD" |
     while IFS= read -r _m; do printf '%s\n' "$_m" | grep -oE "$START_PATH" | tail -n 1; done | sed -E 's#[/\\]+#/#g' | sort -u
@@ -2606,13 +2618,16 @@ toml_session_start() { # file: the lines of its SessionStart hook tables, commen
       }
       printf "\n" }' < "$1"; } 2>/dev/null | awk '
     BEGIN { top = 1 }
-    d > 0 { print; d += gsub(/\[/, "[") - gsub(/\]/, "]"); next }
+    function nb(s) { gsub(/"([^"\\]|\\.)*"/, "", s); gsub(/'"'"'[^'"'"']*'"'"'/, "", s); return gsub(/\[/, "[", s) - gsub(/\]/, "]", s) }
+    d > 0 { print; d += nb($0); next }
     /^[[:space:]]*\[/ { t = $0; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); top = 0; next }
     s { print; next }
-    (h && /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print; d = gsub(/\[/, "[") - gsub(/\]/, "]") }'
+    (h && /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print; d = nb($0) }'
 }
 USER_HOOKS=""
-_cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
+_cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; UHOOK_FILES="$_cxd/hooks.json
+$_cxd/settings.json
+$_cxd/config.toml"; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
 for _uf in "$_ccd/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "$_cxd/settings.json" "$_cxd/config.toml"; do
   [ -f "$_uf" ] && ! too_big "$_uf" || continue
   case "$USER_HOOKS" in "$(rowsafe "$_uf")$TAB"*|*"
@@ -2809,7 +2824,7 @@ unread_files() { # files on stdin that are there but not read (not_read), each o
 }
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
-SEC2_UNREAD=$({ printf '%s\n' "$MCP_LIST" | unread_files; printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" | unread_files big; } | awk '!s[$0]++')
+SEC2_UNREAD=$({ printf '%s\n' "$MCP_LIST" | unread_files; printf '%s\n%s\n%s\n%s\n' "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" "$UHOOK_FILES" | unread_files big; } | awk '!s[$0]++')
 N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
@@ -8420,7 +8435,7 @@ if [ "$N_WIRED" -gt 0 ]; then
   while IFS="$TAB" read -r p b; do
     [ -n "$p" ] || continue
     emit "     ${YEL}!${RST}  $(short "$p")"
-    wrap "A session-start hook and a folder-open task both run $b from this project, the way recent npm worms start themselves. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 "        " "        " "$DIM"
+    wrap "A session-start hook and a folder-open task both run $b from this project, the way some npm worms do. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 "        " "        " "$DIM"
   done <<EOF
 $WIRED
 EOF

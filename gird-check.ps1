@@ -1514,7 +1514,7 @@ $RxStartCmd = & {
   $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
   $cn = '(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
-  $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $StartPath + '"'
+  $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $StartPath + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
   New-Object regex(($cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
 }
@@ -1575,10 +1575,27 @@ function Cmd-Parts([string]$el) {
     foreach ($x in $pp) { $x = $x.TrimStart(' '); if ($x) { '"command": "' + $x + '"' } }
   }
 }
+$RxDepends = New-Object regex('"dependsOn"\s*:\s*(\[[^\]]*\]|"(?:[^"\\]|\\.)*")', $RxOpt, $RxTimeout)
+$RxQuoted = New-Object regex('"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+$RxLabel = New-Object regex('"label"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+# With a filter, a task one of those elements lists in dependsOn by label counts too: one level, so a
+# task the dependency itself depends on does not. As gird-check.sh's start_scripts.
 function Start-Scripts([string]$f, [string]$t, [string]$key, [regex]$filter) {
   $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
-  foreach ($el in (Json-Elems $t $key)) {
-    if ($filter -and -not (Flat-Match $f $el $filter)) { continue }
+  $all = New-Object System.Collections.Generic.List[string]; foreach ($x in (Json-Elems $t $key)) { $all.Add($x) }
+  $sel = New-Object System.Collections.Generic.List[string]
+  foreach ($el in $all) { if (-not $filter -or (Flat-Match $f $el $filter)) { $sel.Add($el) } }
+  if ($filter -and $sel.Count -gt 0) {
+    $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($el in @($sel)) {
+      foreach ($dm in $RxDepends.Matches($el)) { foreach ($lm in $RxQuoted.Matches($dm.Groups[1].Value)) { [void]$want.Add($lm.Groups[1].Value) } }
+    }
+    foreach ($el in $all) {
+      $lb = $RxLabel.Match($el)
+      if ($lb.Success -and $want.Contains($lb.Groups[1].Value) -and -not $sel.Contains($el)) { $sel.Add($el) }
+    }
+  }
+  foreach ($el in $sel) {
     try {
       foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $RxStartCmd.Matches($_) })) {
         $ps = $RxStartPath.Matches($m.Value)
@@ -2073,7 +2090,8 @@ function Toml-SessionStart([string]$t) {
       else { $k = $line.IndexOfAny([char[]]@('"', '\'), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '\') { $i = $k + 2 } else { $q = ''; $i = $k + 1 } }
     }
     $l = $line.Substring(0, $cut)
-    $br = ($l.Split('[').Count - 1) - ($l.Split(']').Count - 1)
+    $lb = [regex]::Replace($l, '"(?:[^"\\]|\\.)*"|''[^'']*''', '')
+    $br = ($lb.Split('[').Count - 1) - ($lb.Split(']').Count - 1)
     if ($d -gt 0) { $out.Add($l); $d += $br; continue }
     if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); $top = $false; continue }
     if ($in) { $out.Add($l); continue }
@@ -2083,6 +2101,7 @@ function Toml-SessionStart([string]$t) {
 }
 $UserHooks = New-Object System.Collections.Generic.List[object]
 $cxd = Env-Or 'CODEX_HOME' (J $HomeDir '.codex')
+$UHookFiles = @((J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))
 $RxPkg = New-Object regex('\.(claude|codex)[/\\]+package[/\\]', $RxOpt, $RxTimeout)
 foreach ($uf in @((J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), (J (J $HomeDir '.claude') 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))) {
   if (-not (Is-File $uf) -or (Too-Big $uf) -or @($UserHooks | Where-Object { $_.File -eq $uf }).Count -gt 0) { continue }
@@ -2243,7 +2262,7 @@ function Unread-Files($files, [bool]$big = $false) {
   ,$out
 }
 $Sec2Unread = Unread-Files @($McpList)
-foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings) + @($UHookFiles)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
 $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive | Where-Object { -not (Own-Alias $_) })
 $AllowUnread = Unread-Files $allowAll $true
@@ -7404,7 +7423,7 @@ if ($N_WIRED -gt 0) {
   Emit "     ${cBold}Projects that start a script the way worms do$cRst"
   foreach ($r in $Wired) {
     Emit "     $cYel!$cRst  $(Short $r.Proj)"
-    Wrap "A session-start hook and a folder-open task both run $($r.Name) from this project, the way recent npm worms start themselves. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 '        ' '        ' $cDim
+    Wrap "A session-start hook and a folder-open task both run $($r.Name) from this project, the way some npm worms do. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 '        ' '        ' $cDim
   }
 }
 if ($N_UHOOK -gt 0) {
