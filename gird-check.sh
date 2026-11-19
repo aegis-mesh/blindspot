@@ -2219,7 +2219,7 @@ start_cmd() {
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$START_PATH"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s\n%s\n%s\n%s' "$_ws$_wp$_wn[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
+  printf '%s\n%s\n%s\n%s' "$_ws$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
 }
 # One expression per line, each given to grep alone: macOS's grep can crash on all four joined by |.
 START_CMD=$(start_cmd)
@@ -2852,7 +2852,7 @@ N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/
 # of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
 # compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
 # A worktree is left out when its repo is listed.
-WIRED=$(printf '%s\n%s\n' "$PLANTED" "-" "$START_TASKS" "-" "$START_HOOKS" | awk -F "$TAB" '
+WIRED=$(printf '%s\n' "$PLANTED" "-" "$START_TASKS" "-" "$START_HOOKS" | awk -F "$TAB" '
   function base(s) { sub(/.*\//, "", s); return s }
   $0 == "-" { part++; next }
   part == 0 { if (NF) P[$0] = 1; next }
