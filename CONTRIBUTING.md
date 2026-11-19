@@ -84,14 +84,16 @@ A reviewer starts from the person who acts on the report, not from the diff:
 Blindspot runs on other people's computers, and in fleet mode as root on every Mac a company manages. A merge to `main` reaches everyone who downloads from gird.ai (see [Releases](#releases)). So every pull request also gets this review, from a maintainer who didn't write it, and doesn't merge until each point holds:
 
 - **Read every line, tests and tools included.** Maintainers run the suites on their own machines, so code in `tests/` and `tools/` runs there too. For a pull request from someone who isn't a maintainer, read the whole diff before running anything, and run it first in a container or a throwaway virtual machine.
-- **Nothing hidden.** No encoded blobs, minified code, binaries or downloaded code. Account for every non-ASCII or control character the change adds: invisible and right-to-left characters can make code read differently from how it runs. This lists them:
+- **Nothing hidden.** No encoded blobs, minified code, binaries or downloaded code. Account for every non-ASCII or control character the change adds, in file contents and file names: invisible and right-to-left characters can make code read differently from how it runs. `gird-check.ps1` stays ASCII, so any such character there is a no. These list them:
 
   ```sh
-  git diff origin/main... | LC_ALL=C grep -n '^+.*[^[:print:][:space:]]'
+  git diff origin/main... | LC_ALL=C grep -n '^+.*[^[:print:][:blank:]]'
+  git diff --name-only origin/main... | LC_ALL=C grep -n '[^ -~]'
   ```
 
-- **Runs nothing it reads.** No `eval`, `Invoke-Expression`, or `source` of a file it finds, and no command built from a file's name or contents. A found name reaches `sh -c` only as an argument (`"$1"`), never inside the command text.
-- **Nothing new on the network.** No new host and no new call. A reply from gird.ai is data: limited in size and time, never run, and never used in a path or a command.
+- **Runs nothing it reads** (the rule "Runs nothing it finds" above). Look for `eval`, `Invoke-Expression`, `source`, and any command built from a found name or file content. A found name reaches `sh -c` only as an argument, never inside the command text.
+- **Lists match the scripts.** A change to `data/` passes `bash tools/gen.sh --check`, so the scripts carry exactly the lines you reviewed.
+- **Nothing new on the network** (with "Shares nothing new by accident" above). No new host and no new call. A reply from gird.ai is data: limited in size and time, never run, and never used in a path or a command.
 - **No trap for root.** In `gird-fleet.sh`, look for anything one account can plant to change what root reads, follows or reports for another: a link, a file swapped between check and use, a name with a newline.
 - **A list shrinks only with a source.** Removing or narrowing a line in `data/` hides a known threat from everyone who runs the check. Link the primary source that shows the entry was wrong.
 - **CI stays powerless.** A change under `.github/` keeps `permissions: contents: read`, pins every action to a full commit SHA, uses no secrets, never runs on `pull_request_target`, and publishes nothing.

@@ -11,5 +11,5 @@
 - [ ] `bash tests/run.sh` and shellcheck pass
 - [ ] If `gird-check.ps1` changed: `bash tests/run-ps.sh` passes, and it still runs on Windows PowerShell 5.1
 - [ ] TELEMETRY.md is updated if the shared counts changed
-- [ ] Ready for the [security review](https://github.com/aegis-mesh/blindspot/blob/main/CONTRIBUTING.md#security-review): nothing hidden, no new network call, CI unchanged or still read-only
+- [ ] I checked the points of the [security review](https://github.com/aegis-mesh/blindspot/blob/main/CONTRIBUTING.md#security-review): nothing hidden, no new network call, CI unchanged or still read-only
 - [ ] Commits are signed off (`git commit -s`)
