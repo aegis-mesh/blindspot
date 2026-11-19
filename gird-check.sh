@@ -1528,6 +1528,85 @@ PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/openc
 railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.|Railway CLI found: rotate secrets stored there
 zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.|Zeabur CLI found: rotate secrets stored there"
 # <<< platforms
+# The OWASP Agentic Top 10 risk of each kind of finding (data/owasp.tsv, docs/designs/owasp.md).
+# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it.
+OWASP_TABLE="agents_run_without_asking|ASI02|Tool Misuse and Exploitation|run without asking|01|yolo
+agents_run_remote_commands|ASI02|Tool Misuse and Exploitation|remote commands without asking|01|remote
+tools_to_update|ASI04|Agentic Supply Chain Vulnerabilities|tools with a security fix|01|tools
+mcp_token_files|ASI03|Identity and Privilege Abuse|tokens in MCP configs|02|mcp_token_files
+authorized_keys_links|ASI03|Identity and Privilege Abuse|links to authorized_keys|02|ak_links
+project_settings_on_open|ASI05|Unexpected Code Execution|settings that act on opening|02|on_open
+scripts_started_like_worms|ASI05|Unexpected Code Execution|scripts started like worms|02|autostart
+key_files|ASI03|Identity and Privilege Abuse|keys in plain text|03|key_files
+history_keys|ASI03|Identity and Privilege Abuse|keys in shell history|03|history_keys
+session_files_with_keys|ASI03|Identity and Privilege Abuse|keys in agent sessions|03|session_files
+ssh_keys_no_passphrase|ASI03|Identity and Privilege Abuse|SSH keys without a passphrase|03|ssh_open
+allow_list_keys|ASI03|Identity and Privilege Abuse|keys in allow lists|04|allow_list_keys
+incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|05|incidents:act
+incidents_to_update|ASI04|Agentic Supply Chain Vulnerabilities|versions to update|05|incidents:update
+wiper|ASI04|Agentic Supply Chain Vulnerabilities|gh-token-monitor|05|wiper
+planted_files|ASI04|Agentic Supply Chain Vulnerabilities|files a worm plants|05|planted
+authorized_keys_planted_keys|ASI04|Agentic Supply Chain Vulnerabilities|SSH keys malware adds|05|ssh_planted
+lockfile_only_incidents|ASI04|Agentic Supply Chain Vulnerabilities|npm malware in a lockfile|05|lock_only
+versions_to_update|ASI04|Agentic Supply Chain Vulnerabilities|Python versions to update|05|updates
+extensions_to_remove|ASI04|Agentic Supply Chain Vulnerabilities|extensions to remove|05|remove
+platforms_found|ASI04|Agentic Supply Chain Vulnerabilities|platforms with a leak|05|platforms
+machine.incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|-|machine:incidents"
+# <<< owasp
+# >>> owasp-derive: this block's home; tools/gen.sh copies it into gird-fleet.sh.
+# The one rule from findings to risks, which the person's report and root in gird-fleet.sh both run:
+# each reads the finding fields the account run sends (FA_<key>, set by finding_fields in gird-check.sh
+# and by fl_parse in gird-fleet.sh). Root runs this copy through fl_owasp_kinds in gird-fleet.sh. It
+# reads bash's own reprint of these functions and refuses any line not on its list of the lines they
+# need (fl_owasp_code_ok), then runs them with a search path that holds nothing. A line of a new shape
+# here needs adding to that list, or every fleet run reads failed.
+# owasp_set SOURCE: 0 when the field SOURCE names holds a finding: a number above 0, a list that is
+# not empty, or for incidents:act an act-level incident and for incidents:update one of any other level.
+owasp_set() {
+  case "$1" in
+    incidents:act|incidents:update)
+      for _ow in $FA_incidents; do
+        if [ "$(incident_level "$_ow")" = act ]; then
+          [ "$1" = incidents:act ] && return 0
+        else
+          [ "$1" = incidents:update ] && return 0
+        fi
+      done
+      return 1 ;;
+    yolo) _ov=$FA_yolo ;;
+    remote) _ov=$FA_remote ;;
+    tools) _ov=$FA_tools ;;
+    mcp_token_files) _ov=$FA_mcp_token_files ;;
+    ak_links) _ov=$FA_ak_links ;;
+    ssh_planted) _ov=$FA_ssh_planted ;;
+    autostart) _ov=$FA_autostart ;;
+    on_open) _ov=$FA_on_open ;;
+    key_files) _ov=$FA_key_files ;;
+    history_keys) _ov=$FA_history_keys ;;
+    session_files) _ov=$FA_session_files ;;
+    ssh_open) _ov=$FA_ssh_open ;;
+    allow_list_keys) _ov=$FA_allow_list_keys ;;
+    wiper) _ov=$FA_wiper ;;
+    planted) _ov=$FA_planted ;;
+    lock_only) _ov=$FA_lock_only ;;
+    updates) _ov=$FA_updates ;;
+    remove) _ov=$FA_remove ;;
+    platforms) _ov=$FA_platforms ;;
+    *) return 1 ;;
+  esac
+  [ -n "$_ov" ] && [ "$_ov" != 0 ]
+}
+# owasp_kinds: risk|kind|section|name|label for each kind of finding the FA_ fields hold, in
+# OWASP_TABLE's order. The Mac's own kinds and those only the person's report shows are not fields.
+owasp_kinds() {
+  while IFS='|' read -r _ok _or _on _ol _os _osrc; do
+    case "$_osrc" in
+      ''|machine:*|report) continue ;;
+    esac
+    if owasp_set "$_osrc"; then printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"; fi
+  done <<< "$OWASP_TABLE"
+}
+# <<< owasp-derive
 
 # ===========================================================================
 # Public totals for the line under the banner, fetched while the banner prints.
@@ -8498,8 +8577,8 @@ $_xcpend
 EOF
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if [ "$WIN" -eq 1 ]; then
-  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra malware at login
-"
+  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && { PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra malware at login
+"; IND_HITS="$IND_HITS mastra"; }
 fi
 [ -n "$WORM_HIT" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_HIT" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
 "
@@ -8950,27 +9029,42 @@ fleet_agent_id() { # an agent's name in data/auto-approve.tsv or data/remote-com
   [ -n "$_fa" ] || _fa=$(printf '%s' "$1" | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9-')
   printf '%s' "$_fa"
 }
-if [ "$ACCTRUN" -eq 1 ]; then
-  _yolo=$(printf '%s\n' "$AA_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
-  _remote=$(printf '%s\n' "$REMOTE_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
+# The finding fields the account run sends root, set as FA_<key> (the names gird-fleet.sh's fl_parse
+# gives them), so the account run prints them and the person's report tags its OWASP risks from them.
+finding_fields() {
+  FA_yolo=$(printf '%s\n' "$AA_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
+  FA_tools=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '$4 != "-"' | cut -f1 | fleet_ids)
+  FA_remote=$(printf '%s\n' "$REMOTE_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
   # A bad npm version found only in a lockfile, nothing installed (MAL_LOCKONLY), is act-if-installed:
   # its act-level incidents go in lock_only, worded as the person's report words them.
-  _npm_inc=$NPM_TAGS; _lock=""
+  _npm_inc=$NPM_TAGS; FA_lock_only=""
   if [ "$MAL_LOCKONLY" -eq 1 ]; then
-    _lock=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] && printf '%s\n' "$_t"; done | fleet_ids)
+    FA_lock_only=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] && printf '%s\n' "$_t"; done | fleet_ids)
     _npm_inc=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" != act ] && printf '%s\n' "$_t"; done)
   fi
   # An extension whose malware can't run on this system (EXT_UPD) is one to remove, not a sign.
-  _inc=$(printf '%s\n' $_npm_inc $EXT_ACT_TAGS $PY_HITS $IND_HITS | fleet_ids)
+  FA_incidents=$(printf '%s\n' $_npm_inc $EXT_ACT_TAGS $PY_HITS $IND_HITS | fleet_ids)
+  # Planted files that count (WORM_HIT), as the report lists them; one named like them alone is to read.
+  FA_planted=$(( $(count_lines "$WORM_HIT") + $(count_lines "$WORM_REFS") ))
+  # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
+  # named like an extension incident's with no such extension (EXT_CHECK).
+  FA_possible=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && FA_possible=litellm
+  FA_possible=$(printf '%s\n' $FA_possible $EXT_CHECK_TAGS | fleet_ids)
+  FA_mcp_token_files=$N_MCP_TOKEN; FA_key_files=$KEY_FILES; FA_history_keys=$HIST_KEYS; FA_session_files=$N_SESS
+  FA_allow_list_keys=$N_ALLOW; FA_ssh_open=$N_SSH_OPEN; FA_ak_links=$N_AK; FA_on_open=$N_AUTO; FA_to_read=$N_LOOK
+  # An SSH key malware adds (EXT_KEY), and projects or settings that start a script the way worms do.
+  FA_ssh_planted=$(count_lines "$EXT_KEY"); FA_autostart=$((N_WIRED + N_UHOOK))
+  FA_platforms=$(printf '%s' "$PLAT_FOUND" | fleet_ids)
+  FA_updates=$(printf '%s\n' "$PY_UPD" | cut -f1 | fleet_ids)
+  FA_wiper=$WIPER_HIT
+  FA_remove=$(printf '%s\n' $EXT_UPD_TAGS | fleet_ids)
+  FA_tmp_marks=$(printf '%s\n' $FLEET_TMPMARK | fleet_ids); FA_tmp_wiper=$FLEET_TMPWIPER
+}
+finding_fields
+if [ "$ACCTRUN" -eq 1 ]; then
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
   _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + SSHK_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
-  # Planted files that count (WORM_HIT), as the report lists them; one named like them alone is to read.
-  _planted=$(( $(count_lines "$WORM_HIT") + $(count_lines "$WORM_REFS") ))
-  # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
-  # named like an extension incident's with no such extension (EXT_CHECK).
-  _poss=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=litellm
-  _poss=$(printf '%s\n' $_poss $EXT_CHECK_TAGS | fleet_ids)
   # Root starts the run with a clean environment, so a variable a shell profile sets to move an agent's
   # or a tool's folders (CLAUDE_CONFIG_DIR, NVM_DIR and the like, data/folder-vars.tsv) is not
   # followed: the account is partly checked then. A variable set to a folder the run reads anyway
@@ -9319,35 +9413,35 @@ EOF
   {
     echo "v=1"
     echo "agents=$(printf '%s' "$AGENT_IDS" | fleet_ids)"
-    echo "yolo=$_yolo"
-    echo "remote=$_remote"
-    echo "tools=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '$4 != "-"' | cut -f1 | fleet_ids)"
+    echo "yolo=$FA_yolo"
+    echo "remote=$FA_remote"
+    echo "tools=$FA_tools"
     echo "mcp_servers=$N_MCP"
-    echo "mcp_token_files=$N_MCP_TOKEN"
-    echo "key_files=$KEY_FILES"
+    echo "mcp_token_files=$FA_mcp_token_files"
+    echo "key_files=$FA_key_files"
     echo "key_providers=$(printf '%s' "$PROV_IDS" | fleet_ids)"
-    echo "history_keys=$HIST_KEYS"
-    echo "session_files=$N_SESS"
+    echo "history_keys=$FA_history_keys"
+    echo "session_files=$FA_session_files"
     echo "sessions_partial=$SESS_PARTIAL"
-    echo "allow_list_keys=$N_ALLOW"
-    echo "ssh_open=$N_SSH_OPEN"
-    echo "ak_links=$N_AK"
-    echo "ssh_planted=$(count_lines "$EXT_KEY")"
-    echo "planted=$_planted"
-    echo "possible=$_poss"
-    echo "incidents=$_inc"
-    echo "platforms=$(printf '%s' "$PLAT_FOUND" | fleet_ids)"
-    echo "on_open=$N_AUTO"
-    echo "to_read=$N_LOOK"
-    echo "autostart=$((N_WIRED + N_UHOOK))"
-    echo "updates=$(printf '%s\n' "$PY_UPD" | cut -f1 | fleet_ids)"
-    echo "wiper=$WIPER_HIT"
-    echo "lock_only=$_lock"
-    echo "remove=$(printf '%s\n' $EXT_UPD_TAGS | fleet_ids)"
+    echo "allow_list_keys=$FA_allow_list_keys"
+    echo "ssh_open=$FA_ssh_open"
+    echo "ak_links=$FA_ak_links"
+    echo "ssh_planted=$FA_ssh_planted"
+    echo "planted=$FA_planted"
+    echo "possible=$FA_possible"
+    echo "incidents=$FA_incidents"
+    echo "platforms=$FA_platforms"
+    echo "on_open=$FA_on_open"
+    echo "to_read=$FA_to_read"
+    echo "autostart=$FA_autostart"
+    echo "updates=$FA_updates"
+    echo "wiper=$FA_wiper"
+    echo "lock_only=$FA_lock_only"
+    echo "remove=$FA_remove"
     echo "not_read=$_nr"
     echo "moved=$_moved"
-    echo "tmp_marks=$(printf '%s\n' $FLEET_TMPMARK | fleet_ids)"
-    echo "tmp_wiper=$FLEET_TMPWIPER"
+    echo "tmp_marks=$FA_tmp_marks"
+    echo "tmp_wiper=$FA_tmp_wiper"
     echo "protected=$FLEET_PROT"
     echo "engine=$SESS_ENGINE"
     echo "end=1"
@@ -9482,6 +9576,18 @@ if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
 fi
 
 
+# The OWASP Agentic Top 10 risks of what was found (owasp_kinds): risk|kind|section|name|label for
+# each kind, and the risks in code order. With nothing tagged every OWASP line is left out, partly
+# checked or not: no line ever says none.
+OW_FOUND=$(owasp_kinds)
+OW_CODES=$(printf '%s\n' "$OW_FOUND" | cut -d'|' -f1 | grep -v '^$' | sort -u | paste -sd ',' - | sed 's/,/, /g')
+owasp_sec() { # section: one dimmed line under its rule for each risk with a finding there, in code order
+  _osl=$(printf '%s\n' "$OW_FOUND" | awk -F '|' -v s="$1" '$3 == s && !seen[$1]++ { print $1 "|" $4 }' | sort)
+  while IFS='|' read -r _oc _on; do [ -n "$_oc" ] && emit "     ${DIM}OWASP $_oc $_on${RST}"; done <<EOF
+$_osl
+EOF
+}
+
 # ===========================================================================
 # The report. Every part is built first, then shown: a summary on a terminal,
 # with each section's details a key press away, or every detail with --full or
@@ -9551,9 +9657,11 @@ if [ "$N_NL_DIRS" -gt 0 ]; then
   else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$NL_DIRS"), the line break shown as ?." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
+if [ -n "$OW_CODES" ]; then blank; emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"; fi
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
+owasp_sec 01
 if [ "$N_AG" -eq 0 ]; then emit "     No coding agents found."; fi
 while IFS='|' read -r n st; do
   [ -n "$n" ] || continue
@@ -9633,6 +9741,7 @@ fi
 
 SEC1=$CAP; CAP=""
 section 02 "MCP SERVERS" "$(plural "$N_MCP" server servers)"
+owasp_sec 02
 if [ "$N_MCP" -eq 0 ] && [ "$N_MCP_TOKEN" -eq 0 ]; then emit "     No MCP servers configured."; fi
 while IFS='|' read -r who c tok pl f; do
   [ -n "$who" ] || continue
@@ -9715,6 +9824,7 @@ fi
 
 SEC2=$CAP; CAP=""
 section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
+owasp_sec 03
 # With files that could not be read, this line comes below, with them.
 if [ "$KEY_FILES" -eq 0 ] && [ "$N_KEY_UNREAD" -eq 0 ]; then
   if [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
@@ -9820,6 +9930,7 @@ fi
 
 SEC3=$CAP; CAP=""
 section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
+owasp_sec 04
 if [ "$N_ALLOW" -eq 0 ] && [ "$N_ALLOW_UNREAD" -gt 0 ]; then wrap "No saved commands with keys in the files read, but $(plural "$N_ALLOW_UNREAD" "file" "files") could not be read:" 8 "     ${YEL}!${RST}  " "        "
   _shown=0
   while IFS= read -r f; do
@@ -9844,6 +9955,7 @@ EOF
 SEC4=$CAP; CAP=""
 N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 3 + N_PLAT))   # the Python incidents, npm, editor extensions, GitHub Actions and each platform
 section 05 "RECENT KEY LEAKS" "$N_LEAKS checked"
+owasp_sec 05
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
 # advice under a hit: for a bad package in an environment, don't run Python there; for its temp
 # files, the incident's own (data/indicators.tsv); for a version whose malware could not run on this
@@ -10331,6 +10443,7 @@ cline 02 "$G2" "MCP servers" "$D2"
 cline 03 "$G3" "Keys in plain text" "$D3"
 cline 04 "$G4" "Allow lists" "$D4"
 cline 05 "$G5" "Recent leaks" "$D5"
+if [ -n "$OW_CODES" ]; then blank; emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"; fi
 if [ "$ISSUES" -gt 0 ]; then
   blank
   emit "   ${B}What to do, most urgent first${RST}"

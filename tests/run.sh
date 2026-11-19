@@ -2164,6 +2164,7 @@ case "$2|$4" in
   'HKLM\SOFTWARE\Microsoft\Cryptography|MachineGuid') v=$FAKE_GUID ;;
   'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion|CurrentBuildNumber') v=${FAKE_BUILD:-} ;;
   'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders|Personal') v=${FAKE_DOCS:-} ;;
+  'HKCU\Software\Microsoft\Windows\CurrentVersion\Run|NvmProtocal') v=${FAKE_RUNKEY:-} ;;
   *) exit 1 ;;
 esac
 [ -n "$v" ] || exit 1
@@ -2201,6 +2202,13 @@ rm -rf "${WP:?}/AppData/Local/gh-token-monitor"
 tr -s ' \n' '  ' < "$WORK/wlad.txt" > "$WORK/wlad1.txt"
 has    "Windows: gh-token-monitor's folder in LOCALAPPDATA is a waiting wiper" 'a wiper is waiting ~/AppData/Local/gh-token-monitor Don' "$WORK/wlad1.txt"
 has    "Windows: the stop deletes its scheduled task first" "one command at a time: powershell -NoProfile -Command 'schtasks /Delete /TN gh-token-monitor /F; Get-CimInstance" "$WORK/wlad1.txt"
+# The Mastra malware's Run key, on a Windows home with nothing else: a sign of the Mastra incident, ASI04.
+mkdir -p "$WORK/wmk/Temp" "$WORK/wmk/msyshome" "$WORK/wmk/Users/me"
+WR=$WORK/wmk winrun --offline --full > "$WORK/wmk0.txt" 2>&1
+WR=$WORK/wmk FAKE_RUNKEY='C:\Users\me\AppData\Local\nvm\protocal.cjs' winrun --offline --full > "$WORK/wmk1.txt" 2>&1
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$WORK/wmk1.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && grep -aq 'NvmProtocal in your startup programs' "$WORK/wmk1.txt" && ! grep -aq 'OWASP\|NvmProtocal' "$WORK/wmk0.txt"
+then ok "owasp: the Mastra Run key on Windows tags section 05 with ASI04"; else bad "owasp: the Mastra Run key on Windows tags section 05 with ASI04" "$OW_ONE"; fi
 _u=$(unwaited "$WORK/wlad.txt")
 if grep -q 'ACT NOW: REMOVE GH-TOKEN-MONITOR' "$WORK/wlad.txt" && grep -q 'rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm.s cache with npm cache clean --force\. Only once gh-token-monitor' "$WORK/wlad1.txt" && [ -z "$_u" ]; then
   ok "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait"
@@ -3528,7 +3536,7 @@ has    "a made-up extension whose malware runs on Windows only is one to remove 
 
 echo "gen.sh refuses what it cannot write safely"
 gen_refuses() { # what file line, or what file edit:awk-program to change the file's lines in place
-  rm -rf "$WORK/gr"; mkdir -p "$WORK/gr"; cp -R gird-check.sh gird-check.ps1 tools data "$WORK/gr/"
+  rm -rf "$WORK/gr"; mkdir -p "$WORK/gr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/gr/"
   case "$3" in
     edit:*) awk -F '\t' -v OFS='\t' "${3#edit:}" "$WORK/gr/data/$2" > "$WORK/gr/x" && mv "$WORK/gr/x" "$WORK/gr/data/$2" ;;
     *) printf '%s\n' "$3" >> "$WORK/gr/data/$2" ;;
@@ -3898,6 +3906,105 @@ case "$(uname -s)" in
       ok "a stopped ripgrep leaves the sessions partly checked and stops nothing else"
     else bad "a stopped ripgrep leaves the sessions partly checked and stops nothing else" "$_t | $_i"; fi ;;
 esac
+# data/owasp.tsv: every account-run key and Mac field has its line, a risk only where root can tag it.
+gen_refuses "an OWASP risk outside ASI01 to ASI10"      owasp.tsv 'edit:$1 == "key_files" { $2 = "ASI11" } { print }'
+gen_refuses "two names for one OWASP risk"              owasp.tsv 'edit:$1 == "key_files" { $3 = "Identity Abuse" } { print }'
+gen_refuses "an OWASP line with no risk and no reason"  owasp.tsv 'edit:$1 == "mcp_servers" { $7 = "-" } { print }'
+gen_refuses "an OWASP label longer than 32 characters"  owasp.tsv 'edit:$1 == "key_files" { $4 = "keys kept in plain text in many places" } { print }'
+gen_refuses "an OWASP line on a bare incidents source"  owasp.tsv 'edit:$1 == "incidents" { $6 = "incidents" } { print }'
+gen_refuses "an account-run key with no OWASP line"     owasp.tsv 'edit:$1 != "mcp_servers" { print }'
+gen_refuses "an account-run key with two OWASP lines"   owasp.tsv "servers_again${T}-${T}-${T}-${T}-${T}mcp_servers${T}A second line."
+gen_refuses "a completeness key with an OWASP risk"     owasp.tsv 'edit:$1 == "files_not_checked" { $2 = "ASI03"; $3 = "Identity and Privilege Abuse"; $4 = "files not read"; $5 = "03"; $7 = "-" } { print }'
+gen_refuses "a report-only line with an OWASP risk"     owasp.tsv 'edit:$1 == "login_files" { $2 = "ASI03"; $3 = "Identity and Privilege Abuse"; $4 = "login files"; $5 = "03"; $7 = "-" } { print }'
+gen_refuses "a Mac field other than incidents with an OWASP risk" owasp.tsv 'edit:$1 == "machine.possible_signs" { $2 = "ASI04"; $3 = "Agentic Supply Chain Vulnerabilities"; $4 = "possible signs"; $7 = "-" } { print }'
+gen_refuses "an OWASP risk on a source owasp_set has no arm for" owasp.tsv 'edit:$1 == "possible_signs" { $2 = "ASI04"; $3 = "Agentic Supply Chain Vulnerabilities"; $4 = "possible signs"; $5 = "05"; $7 = "-" } { print }'
+# The Mac's own incidents come from these files and are tagged as malware signs: each must be act level.
+gen_refuses "an indicator of an incident that is not act level" indicators.tsv "injective${T}all${T}startup${T}no${T}~/.config/inj.cjs${T}starts it"
+# The data file and the scripts: an edit not written in fails --check, and so does a hand edit to root's copy.
+rm -rf "$WORK/owg"; mkdir -p "$WORK/owg"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/owg/"
+awk -F '\t' -v OFS='\t' '$1 == "key_files" { $4 = "keys kept in plain text" } { print }' data/owasp.tsv > "$WORK/owg/data/owasp.tsv"
+(cd "$WORK/owg" && bash tools/gen.sh --check > "$WORK/owg.txt" 2>&1); RC=$?
+if [ "$RC" -eq 1 ] && grep -q 'gird-check.sh is out of date' "$WORK/owg.txt" && grep -q 'gird-fleet.sh is out of date' "$WORK/owg.txt"; then ok "gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check"
+else bad "gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check" "exit $RC $(head -n 3 "$WORK/owg.txt")"; fi
+rm -rf "$WORK/owf"; mkdir -p "$WORK/owf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/owf/"
+sed 's/^    yolo) _ov=\$FA_yolo ;;$/    yolo) _ov="" ;;/' gird-fleet.sh > "$WORK/owf/gird-fleet.sh"
+if cmp -s gird-fleet.sh "$WORK/owf/gird-fleet.sh"; then bad "gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check" "the edit did not apply"
+elif ! (cd "$WORK/owf" && bash tools/gen.sh --check > "$WORK/owf.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/owf.txt"; then ok "gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check"
+else bad "gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check" "$(cat "$WORK/owf.txt")"; fi
+# Root runs the owasp-derive block: gen.sh refuses a bare command in it, as an early warning.
+rm -rf "$WORK/owb"; mkdir -p "$WORK/owb"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/owb/"
+sed 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  _ov=$(printf "%s" "$_ov" | tr -d " "); [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/' gird-check.sh > "$WORK/owb/gird-check.sh"
+(cd "$WORK/owb" && bash tools/gen.sh > "$WORK/owb.txt" 2>&1); RC=$?
+if cmp -s gird-check.sh "$WORK/owb/gird-check.sh"; then bad "gen.sh: a bare command in the owasp-derive block is refused" "the edit did not apply"
+elif [ "$RC" -eq 2 ] && grep -q 'owasp-derive block, runs a bare command (tr)' "$WORK/owb.txt"; then ok "gen.sh: a bare command in the owasp-derive block is refused"
+else bad "gen.sh: a bare command in the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/owb.txt")"; fi
+sed 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  _ov=$(printf "%s" "$_ov" | \/usr\/bin\/tr -d " "); [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/' gird-check.sh > "$WORK/owb/gird-check.sh"
+(cd "$WORK/owb" && bash tools/gen.sh > "$WORK/owb.txt" 2>&1); RC=$?
+if [ "$RC" -eq 0 ] && grep -qF '_ov=$(printf "%s" "$_ov" | /usr/bin/tr -d " ")' "$WORK/owb/gird-fleet.sh"; then ok "gen.sh: the same command by its full path is written into gird-fleet.sh"
+else bad "gen.sh: the same command by its full path is written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/owb.txt")"; fi
+# The guard reads one line at a time: what would carry shell text past a line, or past its reading, is
+# refused outright. od_put TEXT: gen.sh on a copy whose owasp_kinds has TEXT in place of its here-string
+# line; sets RC, and OD_SAME when the edit did not apply.
+od_put() {
+  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+  OD_TEXT=$1 awk '$0 == "  done <<< \"$OWASP_TABLE\"" { print ENVIRON["OD_TEXT"]; next } { print }' gird-check.sh > "$WORK/odr/gird-check.sh"
+  OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
+  (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
+}
+od_says() { # fixed-string...: 0 when the edit applied, gen.sh exited 2 and printed every string; else OD_WHY says why
+  OD_WHY="exit $RC"; [ "$OD_SAME" -eq 0 ] || OD_WHY="the edit did not apply"
+  [ "$RC" -eq 2 ] || OD_WHY="$OD_WHY, wanted exit 2"
+  for _s in "$@"; do grep -qF -- "$_s" "$WORK/odr.txt" || OD_WHY="$OD_WHY, no: $_s"; done
+  OD_WHY="$OD_WHY: $(head -n 3 "$WORK/odr.txt")"; [ "$OD_WHY" = "exit 2: $(head -n 3 "$WORK/odr.txt")" ]
+}
+OD_HD='has an unquoted or <<- here-document'; OD_DONE='  done <<< "$OWASP_TABLE"'
+OD_LN=$(awk '$0 == "  done <<< \"$OWASP_TABLE\"" { print NR; exit }' gird-check.sh)
+od_put "$(printf '  done <<EOF\n$OWASP_TABLE\nEOF')"
+if od_says "line $OD_LN, owasp-derive block, $OD_HD" "a line that is exactly X: "'  done <<EOF'; then ok "gen.sh: an unquoted here-document in the owasp-derive block is refused"; else bad "gen.sh: an unquoted here-document in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  done <<-EOF\n$OWASP_TABLE\n\tEOF')"
+if od_says "line $OD_LN, owasp-derive block, $OD_HD" "a line that is exactly X: "'  done <<-EOF'; then ok "gen.sh: a <<- here-document in the owasp-derive block is refused"; else bad "gen.sh: a <<- here-document in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  done <<EOF\n$OWASP_TABLE$(id)\nEOF')"
+if od_says "$OD_HD" 'runs a bare command (id)'; then ok "gen.sh: \$(id) in an unquoted here-document of the owasp-derive block is refused"; else bad "gen.sh: \$(id) in an unquoted here-document of the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "  done <<-'X'\n\$OWASP_TABLE\n\tX\n  id")"
+if od_says "$OD_HD" 'runs a bare command (id)'; then ok "gen.sh: a bare command after a quoted <<- here-document of the owasp-derive block is refused"; else bad "gen.sh: a bare command after a quoted <<- here-document of the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  done <<EOF\n$OWASP_TABLE$(printf x >/dev/null)\nEOF')"
+if od_says "$OD_HD" 'redirects output (>)'; then ok "gen.sh: a redirection inside \$( ) in an unquoted here-document of the owasp-derive block is refused"; else bad "gen.sh: a redirection inside \$( ) in an unquoted here-document of the owasp-derive block is refused" "$OD_WHY"; fi
+od_put '  done <<< "$OWASP_TABLE`:`"'
+if od_says 'has a backtick'; then ok "gen.sh: a backtick in the owasp-derive block is refused"; else bad "gen.sh: a backtick in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  _ox=$%s\nid)\n  done <<< "$OWASP_TABLE"' '(')"
+if od_says 'opens a ( that does not close on its line'; then ok "gen.sh: a ( that does not close on its line in the owasp-derive block is refused"; else bad "gen.sh: a ( that does not close on its line in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "  _ox='\n' ; id ; '\n'\n%s" "$OD_DONE")"
+if od_says 'has a quote that does not close on its line'; then ok "gen.sh: a quote that does not close on its line in the owasp-derive block is refused"; else bad "gen.sh: a quote that does not close on its line in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf '  _ox=a \\\n  done <<< "$OWASP_TABLE"')"
+if od_says 'continues onto the next line'; then ok "gen.sh: a line that ends in a backslash in the owasp-derive block is refused"; else bad "gen.sh: a line that ends in a backslash in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "%s # <<'X'\n  id\nX" "$OD_DONE")"
+if od_says 'opens a here-document after a #'; then ok "gen.sh: a here-document opened after a # in the owasp-derive block is refused"; else bad "gen.sh: a here-document opened after a # in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "%s\n  : <<'X'\n  id" "$OD_DONE")"
+if od_says 'has a here-document that never ends (X)'; then ok "gen.sh: a quoted here-document that never ends in the owasp-derive block is refused"; else bad "gen.sh: a quoted here-document that never ends in the owasp-derive block is refused" "$OD_WHY"; fi
+od_put "$(printf "  done <<<'X'\n  id\nX")"
+if od_says 'runs a bare command (id)'; then ok "gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read"; else bad "gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read" "$OD_WHY"; fi
+OD_BODY='id $(id) > /tmp/ow `id` "'
+od_put "$(printf "%s\n  : <<'X'\n%s\n  X\nX" "$OD_DONE" "$OD_BODY")"
+if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 0 ] && grep -qxF -- "$OD_BODY" "$WORK/odr/gird-fleet.sh"; then ok "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh"
+else bad "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
+rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+(cd "$WORK/odr" && bash tools/gen.sh --check > "$WORK/odr.txt" 2>&1); RC=$?
+if [ "$RC" -eq 0 ] && ! grep -q 'owasp-derive block' "$WORK/odr.txt"; then ok "gen.sh: the committed owasp-derive block passes the guard"
+else bad "gen.sh: the committed owasp-derive block passes the guard" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
+od_edit() { # sed-program: gen.sh on a copy whose gird-check.sh has the edit; sets RC, and OD_SAME when the edit did not apply
+  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+  sed "$1" gird-check.sh > "$WORK/odr/gird-check.sh"; OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
+  (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
+}
+od_edit 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  printf "%s" "$_ov" > \/tmp\/ow; [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/'
+if od_says 'redirects output (>)'; then ok "gen.sh: an output redirection in the owasp-derive block is refused"; else bad "gen.sh: an output redirection in the owasp-derive block is refused" "$OD_WHY"; fi
+# gird-check.ps1 tags by its own Owasp-Set: a source with a risk and no arm there would never be tagged.
+rm -rf "$WORK/opa"; mkdir -p "$WORK/opa"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/opa/"
+grep -v "^    'ak_links' { return" gird-check.ps1 > "$WORK/opa/gird-check.ps1"
+(cd "$WORK/opa" && bash tools/gen.sh > "$WORK/opa.txt" 2>&1); RC=$?
+if cmp -s gird-check.ps1 "$WORK/opa/gird-check.ps1"; then bad "gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused" "the edit did not apply"
+elif [ "$RC" -eq 2 ] && grep -q 'Owasp-Set in gird-check.ps1 has no arm for the source ak_links' "$WORK/opa.txt"; then ok "gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused"
+else bad "gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused" "exit $RC $(head -n 3 "$WORK/opa.txt")"; fi
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
@@ -4188,6 +4295,9 @@ PY
   if python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1]) if l.strip()]' "$WORK/received.log" 2>/dev/null; then ok "the report is valid JSON"; else bad "the report is valid JSON"; fi
   has "the device ID is a 64-character hash or empty" '"device_id":"([0-9a-f]{64})?"' "$WORK/received.log"
   hasnot "the report holds no path"     '/(Users|home|private|tmp)/|~/' "$WORK/received.log"
+  # The run shows its OWASP tags, and the shared counts carry none of them, nor does the result link.
+  if grep -aq '^   OWASP Agentic Top 10: ' "$OUT" && ! grep -aqiE 'owasp|ASI[0-9]' "$WORK/received.log" && ! grep -aE 'blindspot/card/' "$OUT" | grep -aqiE 'owasp|ASI[0-9]'
+  then ok "owasp: the shared counts carry no OWASP field"; else bad "owasp: the shared counts carry no OWASP field"; fi
   if grep -aqF -f "$WORK/keys.txt" "$WORK/received.log"; then bad "the report holds no planted key"; else ok "the report holds no planted key"; fi
   if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
   has  "shows one real total under the banner" '★ (1,234 AI builders have run Blindspot|456 AI builders ran it this week|Blindspot has found 3,412 files with AI keys in plain text so far|31% of AI builders had no keys in plain text)' "$OUT"
@@ -4367,6 +4477,109 @@ echo "help"
 if bash "$SCRIPT" --help | grep -q -- '--offline'; then ok "--help lists the options"; else bad "--help lists the options"; fi
 if bash "$SCRIPT" --help | grep -q -- 'gird-fleet.sh checks every account'; then ok "--help shows the whole header, gird-fleet.sh included"; else bad "--help shows the whole header, gird-fleet.sh included"; fi
 
+echo "OWASP Agentic Top 10 tags"
+# docs/designs/owasp.md. The owasp fixture carries every kind of finding both scripts tag at once, so
+# every section line of every risk shows on one home; small homes each hold one kind, or none.
+OW=$WORK/ow; mkdir -p "$OW"
+bash tests/make-fixture.sh "$OW/all" "$OW/keys-all.txt" owasp > /dev/null
+HOME="$OW/all" bash "$SCRIPT" --offline > "$OW/all.txt" 2>&1
+HOME="$OW/all" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline > "$OW/all-compact.txt" 2>&1
+HOME="$OW/all" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline --full > "$OW/all-full.txt" 2>&1
+# Each OWASP line under a section's rule, with the section it is in.
+OW_WANT='01|     OWASP ASI02 Tool Misuse and Exploitation
+01|     OWASP ASI04 Agentic Supply Chain Vulnerabilities
+02|     OWASP ASI03 Identity and Privilege Abuse
+02|     OWASP ASI05 Unexpected Code Execution
+03|     OWASP ASI03 Identity and Privilege Abuse
+04|     OWASP ASI03 Identity and Privilege Abuse
+05|     OWASP ASI04 Agentic Supply Chain Vulnerabilities'
+OW_GOT=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s "|" $0 }' "$OW/all.txt")
+if [ "$OW_GOT" = "$OW_WANT" ]; then ok "owasp: a home with every finding kind gets exactly the section lines of its risks"
+else bad "owasp: a home with every finding kind gets exactly the section lines of its risks" "$(printf '%s' "$OW_GOT" | tr '\n' ';')"; fi
+if awk '/^  01  CODING AGENTS/ { s = 1 } /^  02  MCP SERVERS/ { s = 2 } /^  03  / { s = 3 }
+  s == 1 && /OWASP ASI02/ { a = NR } s == 1 && /OWASP ASI04/ { b = NR } s == 2 && /OWASP ASI03/ { c = NR } s == 2 && /OWASP ASI05/ { d = NR }
+  END { exit !(a && b && c && d && a < b && c < d) }' "$OW/all.txt"; then ok "owasp: two risks in one section print in code order"
+else bad "owasp: two risks in one section print in code order"; fi
+if awk '/^   05  / { r = NR } /^   OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR } /^   First fix: / { f = NR } END { exit !(r && o && f && r < o && o < f) }' "$OW/all-compact.txt"
+then ok "owasp: the summary lists every risk found, in code order, after row 05"; else bad "owasp: the summary lists every risk found, in code order, after row 05" "$(grep -a 'OWASP' "$OW/all-compact.txt")"; fi
+if awk '/^   0[1-5]  / { n[++k] = NR } /^   OWASP Agentic Top 10:/ { o = NR } END { exit !(k == 5 && n[5] - n[1] == 4 && o == n[5] + 2) }' "$OW/all-compact.txt"
+then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; else bad "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; fi
+if awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all.txt" \
+  && awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all-full.txt"
+then ok "owasp: --full and piped output carry the line at the end of the header"; else bad "owasp: --full and piped output carry the line at the end of the header"; fi
+for _f in "$OW/all.txt" "$OW/all-full.txt"; do
+  if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$_f"
+  then ok "owasp: --full and piped output set the line apart from the stats lines by a blank line"; else bad "owasp: --full and piped output set the line apart from the stats lines by a blank line" "$_f"; fi
+done
+if awk '/OWASP/ { n++; if (length($0) > 60) w = 1 } END { exit !(n >= 8 && !w) }' "$OW/all.txt"; then ok "owasp: every OWASP line fits the narrowest report, 60 columns"
+else bad "owasp: every OWASP line fits the narrowest report, 60 columns" "$(awk '/OWASP/ && length($0) > 60' "$OW/all.txt")"; fi
+# One kind each. Keys come from the fixture's random ones; nothing key-shaped is written here.
+mkdir -p "$OW/key"; printf 'export OPENAI_API_KEY=%s\n' "$(sed -n 2p "$WORK/keys.txt")" > "$OW/key/.zshrc"
+mkdir -p "$OW/yolo/.codex"; printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$OW/yolo/.codex/config.toml"
+mkdir -p "$OW/open/code/x/.claude"; printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"make setup"}]}]}}\n' > "$OW/open/code/x/.claude/settings.json"
+mkdir -p "$OW/lock/code/l"; printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$OW/lock/code/l/package-lock.json"
+mkdir -p "$OW/upd/code/m"; printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.2","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.2.tgz"}}}\n' > "$OW/upd/code/m/package-lock.json"
+mkdir -p "$OW/none"
+mkdir -p "$OW/part/code/locked"; chmod 000 "$OW/part/code/locked"
+cp -R "$OW/key" "$OW/partf"; mkdir -p "$OW/partf/code/locked"; chmod 000 "$OW/partf/code/locked"
+mkdir -p "$OW/worm/code/p/.claude"; printf 'console.log("my own setup")\n' > "$OW/worm/code/p/.claude/setup.mjs"
+mkdir -p "$OW/login/.aws"; printf '[default]\nregion = eu-west-1\n' > "$OW/login/.aws/credentials"
+# PATH holds only the system folders, so a command on this machine (a platform's CLI) is not found.
+for h in key yolo open lock upd none part partf worm login; do HOME="$OW/$h" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$OW/$h.txt" 2>&1; done
+chmod 755 "$OW/part/code/locked" "$OW/partf/code/locked"
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/key.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI03;03 ASI03;" ]; then ok "owasp: a key in plain text tags section 03 with ASI03"; else bad "owasp: a key in plain text tags section 03 with ASI03" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/yolo.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: run without asking tags section 01 with ASI02"; else bad "owasp: run without asking tags section 01 with ASI02" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/open.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: project settings that act on opening tag section 02 with ASI05"; else bad "owasp: project settings that act on opening tag section 02 with ASI05" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/lock.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && grep -aq 'LOCKFILE LISTS NPM MALWARE' "$OW/lock.txt"; then ok "owasp: npm malware in a lockfile alone tags section 05 with ASI04"; else bad "owasp: npm malware in a lockfile alone tags section 05 with ASI04" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/upd.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && ! grep -aq 'ACT NOW' "$OW/upd.txt"; then ok "owasp: an update-level incident alone tags section 05 with ASI04"; else bad "owasp: an update-level incident alone tags section 05 with ASI04" "$OW_ONE"; fi
+hasnot "owasp: a home with no findings has no OWASP line" 'OWASP' "$OW/none.txt"
+# Agents installed on this machine can still show here, idle: housekeeping, which carries no tag.
+if grep -aq 'in your home could not be read' "$OW/part.txt" && ! grep -aq 'OWASP' "$OW/part.txt"; then ok "owasp: a partly checked home with no findings has no OWASP line and never says none"
+else bad "owasp: a partly checked home with no findings has no OWASP line and never says none" "$(grep -a 'OWASP\|could not be read' "$OW/part.txt" | head -n 3)"; fi
+if grep -aq 'in your home could not be read' "$OW/partf.txt" && grep -aq '^   OWASP Agentic Top 10: ASI03$' "$OW/partf.txt" && grep -aq '^     OWASP ASI03 Identity and Privilege Abuse$' "$OW/partf.txt"
+then ok "owasp: a partly checked home with findings keeps its tags"; else bad "owasp: a partly checked home with findings keeps its tags"; fi
+if grep -aq 'code/p/\.claude/setup\.mjs' "$OW/worm.txt" && ! grep -aq 'OWASP' "$OW/worm.txt"; then ok "owasp: a file named like a worm's, alone, carries no tag"
+else bad "owasp: a file named like a worm's, alone, carries no tag" "$(grep -a 'setup\.mjs\|OWASP' "$OW/worm.txt" | head -n 3)"; fi
+if grep -aq 'AWS keys' "$OW/login.txt" && ! grep -aq 'OWASP' "$OW/login.txt"; then ok "owasp: login files alone carry no tag"
+else bad "owasp: login files alone carry no tag" "$(grep -a 'AWS keys\|OWASP' "$OW/login.txt" | head -n 3)"; fi
+# One kind of finding per home, for the kinds the home above does not hold alone (tests/owasp-kind.sh),
+# so a wrong arm for one kind in either script fails its own test. A key in shell history is always a
+# key in a file too, so it has no home of its own.
+ow_kind() { # kind: builds its home (tests/owasp-kind.sh), runs the script on it, sets OW_ONE
+  bash tests/owasp-kind.sh "$OW/k-$1" "$1" "$WORK/keys.txt"
+  HOME="$OW/k-$1" PATH=/usr/bin:/bin bash "$SCRIPT" --offline > "$OW/k-$1.txt" 2>&1
+  OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/k-$1.txt" | tr '\n' ';')
+}
+ow_kind tools
+if [ "$OW_ONE" = "top ASI04;01 ASI04;" ]; then ok "owasp: a tool with a security fix alone tags section 01 with ASI04"; else bad "owasp: a tool with a security fix alone tags section 01 with ASI04" "$OW_ONE"; fi
+ow_kind ak_links
+if [ "$OW_ONE" = "top ASI03;02 ASI03;" ]; then ok "owasp: a link to authorized_keys alone tags section 02 with ASI03"; else bad "owasp: a link to authorized_keys alone tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind mcp_token
+if [ "$OW_ONE" = "top ASI03;02 ASI03;03 ASI03;" ]; then ok "owasp: a token in an MCP config tags section 02 with ASI03"; else bad "owasp: a token in an MCP config tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind sessions
+if [ "$OW_ONE" = "top ASI03;03 ASI03;" ]; then ok "owasp: a key in an agent session alone tags section 03 with ASI03"; else bad "owasp: a key in an agent session alone tags section 03 with ASI03" "$OW_ONE"; fi
+ow_kind wiper
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: gh-token-monitor alone tags section 05 with ASI04"; else bad "owasp: gh-token-monitor alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind planted
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a file a worm plants alone tags section 05 with ASI04"; else bad "owasp: a file a worm plants alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind remove
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an extension to remove alone tags section 05 with ASI04"; else bad "owasp: an extension to remove alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind platforms
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a platform with a leak alone tags section 05 with ASI04"; else bad "owasp: a platform with a leak alone tags section 05 with ASI04" "$OW_ONE"; fi
+# The tags in the docs are written by hand: every risk, name and label in the data file is in both.
+OW_MISS=""
+while IFS="$(printf '\t')" read -r _k _r _n _l _rest; do
+  case "$_k" in '#'*|'') continue ;; esac
+  [ "$_r" = - ] && continue
+  for _d in README.md docs/fleet.md; do for _w in "$_r" "$_n" "$_l"; do grep -qF -- "$_w" "$_d" || OW_MISS="$OW_MISS $_d:$_w;"; done; done
+done < data/owasp.tsv
+if [ -z "$OW_MISS" ]; then ok "owasp: every risk and label in data/owasp.tsv is in README.md and docs/fleet.md"; else bad "owasp: every risk and label in data/owasp.tsv is in README.md and docs/fleet.md" "$OW_MISS"; fi
+
 echo "fleet mode (--all-users)"
 # The suites never run as root. GIRD_CHECK_FLEET_ROOT stands in for root, GIRD_CHECK_FLEET_USERS
 # for dscl's account list, GIRD_CHECK_FLEET_LAUNCH for sudo (tests/fleet-launch.sh records what
@@ -4376,6 +4589,8 @@ FL=$WORK/fleet; mkdir -p "$FL"
 FSKIP=""; [ "$(uname -s)" = Darwin ] || FSKIP="fleet mode is built for macOS only so far: its root side reads dscl and BSD stat"
 U=$(id -u); FLL=$PWD/tests/fleet-launch.sh; FLEETSH=$PWD/gird-fleet.sh
 FLBASH=(/bin/bash -p)   # what an MDM runs it with, by its first line: macOS's own bash, 3.2, with -p
+# Root counts a loader as the Mac's finding only when /bin/ps says root's own process holds its lock.
+FPSSKIP=$FSKIP; [ -n "$FPSSKIP" ] || [ "$(/usr/bin/env LC_ALL=C /bin/ps -o uid= -p $$ 2>/dev/null | tr -d ' ')" = "$U" ] || FPSSKIP="/bin/ps can't be run here, so whose process holds a lock can't be told"
 fl_home() { mkdir -p "$FL/$1/Library/Safari"; }
 for h in asha itadmin clean upd linker odd shared keeper; do fl_home "$h"; done
 bash tests/make-fixture.sh "$FL/asha" "$FL/keys-asha.txt" > /dev/null; mkdir -p "$FL/asha/Library/Safari"
@@ -4427,7 +4642,7 @@ then ok "fleet: the saved file is the JSON printed"; else bad "fleet: the saved 
 has    "fleet: the JSON names where to learn more" '^learn_more=https://gird.ai/argus$' "$FL/two.flat"
 fl_run twoz --exit-zero --summary-to-stdout
 has    "fleet: --exit-zero exits 0 on act" '^0$' "$FL/twoz.rc"
-if [ "$(grep -c '' "$FL/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=2 act=1 review=1 not_checked=0 v=[0-9]+\.[0-9]+\.[0-9]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FL/twoz.out"
+if [ "$(grep -c '' "$FL/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=2 act=1 review=1 not_checked=0 v=[0-9]+\.[0-9]+\.[0-9]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z( owasp=[A-Za-z0-9:,+]+;counted:[0-9]+(;not_counted:[0-9]+)?(;partial:[0-9]+)?)?$' "$FL/twoz.out"
 then ok "fleet: --summary-to-stdout prints the one summary line"; else bad "fleet: --summary-to-stdout prints the one summary line" "$(cat "$FL/twoz.out")"; fi
 fl_run term
 has    "fleet: the readable report lists each account" '^  asha +act now$' "$FL/term.out"
@@ -4650,7 +4865,9 @@ printf '#!/bin/sh\necho $PPID\n' > "$FL/hold-lsof"; chmod +x "$FL/hold-lsof"; : 
 printf '#!/bin/sh\necho "$*" >> "%s/ps.log"\necho "  %s"\n' "$FL" "$U" > "$FL/ps-tester"; chmod +x "$FL/ps-tester"
 GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_PS="$FL/ps-tester" fl_run macterm
 rm -f "$FL/sharedtmp/remote_code_loader.lock"
+SKIPPING=$FPSSKIP
 has    "fleet: the readable report names the Mac's finding under macOS's bash" '^  This Mac +act now$' "$FL/macterm.out"
+SKIPPING=$FSKIP
 hasnot "fleet: and prints no shell error" 'syntax error|command substitution' "$FL/macterm.err"
 # Another account's process holding the root-owned lock is only a possible sign: the stand-in for ps
 # gives an account that is not root's stand-in, and must have been asked, and the Mac is fully checked.
@@ -5296,6 +5513,100 @@ else
     && grep -q '^asha\.sessions_partly_checked=' "$FL/rgnone.flat" && [ "$(grep '^asha\.sessions_partly_checked=' "$FL/rgreal.flat")" = "$(grep '^asha\.sessions_partly_checked=' "$FL/rgnone.flat")" ]; then ok "fleet: a real ripgrep finds the same session keys as perl"
   else bad "fleet: a real ripgrep finds the same session keys as perl" "$(grep -E 'session' "$FL/rgreal.flat" | tr '\n' ' ')"; fi
 fi
+# OWASP Agentic Top 10 tags (docs/designs/owasp.md). asha has findings of three risks and is partly
+# checked (a compressed session), itadmin one risk, first nothing, and gone is never checked.
+users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh" "first:$U:$FL/clean:/bin/zsh" "gone:$U:$FL/nothere:/bin/zsh"
+FL_KEYS_SH=$(sed -n 's/^FL_KEYS="\(.*\)"$/\1/p' "$FLEETSH")
+( cd "$FL" && /usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$FL/asha" GIRD_CHECK_FLEET_USER_TMP="$FL/usertmp-asha" GIRD_CHECK_FLEET_RG_ADMIN="$FL/no-admin-rg/rg" /bin/bash "$SCRIPT" --account-run ) > "$FL/acctrun.out" 2>&1
+if [ -n "$FL_KEYS_SH" ] && [ "$(cut -d= -f1 "$FL/acctrun.out" | paste -sd ' ' -)" = "$FL_KEYS_SH" ]; then ok "fleet: the account run prints exactly FL_KEYS, in order"
+else bad "fleet: the account run prints exactly FL_KEYS, in order" "$(cut -d= -f1 "$FL/acctrun.out" | paste -sd ' ' -)"; fi
+fl_run ow --json
+fl_run owt
+fl_run ows --summary-to-stdout
+has    "fleet: an account's findings map to their risks in its row" '^asha\.owasp=ASI03 ASI04 ASI05$' "$FL/ow.flat"
+if grep -q '^first\.outcome=clear$' "$FL/ow.flat" && grep -q '^first\.owasp=$' "$FL/ow.flat" && grep -q '^itadmin\.owasp=ASI03$' "$FL/ow.flat" && grep -q '^owasp\.ASI03\.accounts=2$' "$FL/ow.flat"
+then ok "fleet: a clear account has an empty owasp list and adds to no risk"; else bad "fleet: a clear account has an empty owasp list and adds to no risk" "$(grep -E '^(first|itadmin)\.owasp|^owasp\.ASI03\.accounts' "$FL/ow.flat" | tr '\n' ' ')"; fi
+if grep -q '^gone\.not_checked=home_missing$' "$FL/ow.flat" && ! grep -q '^gone\.owasp' "$FL/ow.flat" && grep -q '^owasp\.accounts_counted=3$' "$FL/ow.flat"
+then ok "fleet: a not-checked account has no owasp field and is not counted"; else bad "fleet: a not-checked account has no owasp field and is not counted" "$(grep -E '^gone\.|^owasp\.accounts' "$FL/ow.flat" | tr '\n' ' ')"; fi
+if grep -q '^owasp\.accounts_not_checked=1$' "$FL/ow.flat" && grep -q '^owasp\.accounts_partly_checked=1$' "$FL/ow.flat" && grep -q '^asha\.complete=false$' "$FL/ow.flat"
+then ok "fleet: the JSON counts accounts not checked and partly checked apart"; else bad "fleet: the JSON counts accounts not checked and partly checked apart" "$(grep -E '^owasp\.accounts' "$FL/ow.flat" | tr '\n' ' ')"; fi
+if grep -q '^owasp\.risks=ASI03 ASI04 ASI05$' "$FL/ow.flat" && grep -q '^owasp\.ASI04\.findings=incidents wiper planted_files platforms_found$' "$FL/ow.flat" && grep -q '^owasp\.ASI04\.machine=false$' "$FL/ow.flat"
+then ok "fleet: the JSON lists each risk with its accounts and the kinds found"; else bad "fleet: the JSON lists each risk with its accounts and the kinds found" "$(grep '^owasp\.' "$FL/ow.flat" | tr '\n' ' ')"; fi
+has    "fleet: the terminal block counts checked accounts and names what was found" '^    ASI03 Identity and Privilege Abuse  2 of 3 checked accounts \(tokens in MCP configs, keys in plain text, keys in shell history, keys in agent sessions, SSH keys without a passphrase, keys in allow lists\)$' "$FL/owt.out"
+has    "fleet: the terminal block says how many accounts were not counted" '^    Not counted: 1 account not checked$' "$FL/owt.out"
+has    "fleet: the terminal block says how many accounts were partly checked" '^    1 account partly checked: its tags may be incomplete$' "$FL/owt.out"
+if awk '/^  OWASP Agentic Top 10$/ { o = NR } /^  Saved: / { s = NR } END { exit !(o && s && o < s) }' "$FL/owt.out"; then ok "fleet: the terminal block comes before where the result was saved"; else bad "fleet: the terminal block comes before where the result was saved"; fi
+has    "fleet: the summary line ends with the owasp part, its counts included" ' owasp=ASI03:2,ASI04:1,ASI05:1;counted:3;not_counted:1;partial:1$' "$FL/ows.out"
+# A long value is cut, and has no token: asha's details alone take more than the value holds.
+if grep -q '^owasp\.risks=ASI03 ASI04 ASI05$' "$FL/ow.flat" && grep -qE '^inventory=.* \+more$' "$FL/ow.flat" && ! grep -q '^inventory=.*owasp' "$FL/ow.flat"; then ok "fleet: a long inventory value has no owasp token and ends with +more"
+else bad "fleet: a long inventory value has no owasp token and ends with +more" "$(grep '^inventory=' "$FL/ow.flat")"; fi
+# The save fails when the saved-result folder can't be made: the summary says failed and keeps its part.
+mkdir -p "$FL/ro"; chmod 500 "$FL/ro"
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_LAUNCH="$FLL" GIRD_CHECK_FLEET_STATE="$FL/ro/state" \
+  GIRD_CHECK_FLEET_SHARED_TMP="$FL/sharedtmp" FLL_DIR="$FL" "${FLBASH[@]}" "$FLEETSH" --all-users --summary-to-stdout < /dev/null > "$FL/owro.out" 2>&1; RC=$?
+chmod 700 "$FL/ro"
+if [ "$RC" -eq 13 ] && grep -qE '^blindspot failed accounts=4 .* owasp=ASI03:2,ASI04:1,ASI05:1;counted:3;not_counted:1;partial:1$' "$FL/owro.out" && [ ! -e "$FL/ro/state" ]
+then ok "fleet: a failed save keeps the owasp part in the summary line"; else bad "fleet: a failed save keeps the owasp part in the summary line" "exit $RC $(cat "$FL/owro.out")"; fi
+fl_run owh --json --hash-accounts=owasp-secret
+if grep -qE '^[0-9a-f]{16}\.owasp=ASI03 ASI04 ASI05$' "$FL/owh.flat" && grep -q '^owasp\.accounts_counted=3$' "$FL/owh.flat" && ! grep -q 'asha' "$FL/owh.out"
+then ok "fleet: --json and --hash-accounts carry the owasp object and each row's tags"; else bad "fleet: --json and --hash-accounts carry the owasp object and each row's tags" "$(grep -E 'owasp' "$FL/owh.flat" | tr '\n' ' ')"; fi
+# An update-level incident alone: a version to update, never malware signs.
+mkdir -p "$FL/mis/code/m" "$FL/mis/Library/Safari"
+printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.2","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.2.tgz"}}}\n' > "$FL/mis/code/m/package-lock.json"
+users "mis:$U:$FL/mis:/bin/zsh"
+fl_run owmis
+if grep -q '^    ASI04 Agentic Supply Chain Vulnerabilities  1 of 1 checked account (versions to update)$' "$FL/owmis.out" && ! grep -q 'malware signs' "$FL/owmis.out"
+then ok "fleet: an update-level incident is labelled versions to update, not malware signs"; else bad "fleet: an update-level incident is labelled versions to update, not malware signs" "$(grep -A3 '^  OWASP' "$FL/owmis.out")"; fi
+# The inventory value with room for the token, and --inventory reads it back.
+users "itadmin:$U:$FL/itadmin:/bin/zsh"
+fl_run owinv
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "${FLBASH[@]}" "$FLEETSH" --inventory > "$FL/owinv-read.out" 2>&1
+if grep -qE '^inventory=v1 review 20[0-9-]{8}T[0-9:]{5}Z \| itadmin: review ssh-open 1 \| owasp\.ASI03:1; counted 1$' "$FL/owinv.flat" && [ "$(cat "$FL/owinv-read.out")" = "$(sed -n 's/^inventory=//p' "$FL/owinv.flat")" ]
+then ok "fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back"; else bad "fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back" "$(cat "$FL/owinv-read.out")"; fi
+# Two risks: each carries its own prefix, so a filter for owasp.ASI04 finds the one listed second.
+users "itadmin:$U:$FL/itadmin:/bin/zsh" "mis:$U:$FL/mis:/bin/zsh"
+fl_run owinv2
+if grep -qE '^inventory=v1 review .* \| owasp\.ASI03:1 owasp\.ASI04:1; counted 2$' "$FL/owinv2.flat" && grep -qE '^summary=.* owasp=ASI03:1,ASI04:1;counted:2$' "$FL/owinv2.flat"
+then ok "fleet: each risk in the inventory value carries its own owasp. prefix"; else bad "fleet: each risk in the inventory value carries its own owasp. prefix" "$(grep -E '^(inventory|summary)=' "$FL/owinv2.flat" | tr '\n' ' ')"; fi
+# No accounts at all: nothing tagged, so no part, no token, and the object says so.
+: > "$FL/users.tsv"
+fl_run owno --json
+if grep -q '^owasp\.accounts_counted=0$' "$FL/owno.flat" && grep -q '^owasp\.risks=$' "$FL/owno.flat" && ! grep -qE '^(summary|inventory)=.*owasp' "$FL/owno.flat"
+then ok "fleet: a run with no accounts has no owasp part, no token and an empty owasp object"; else bad "fleet: a run with no accounts has no owasp part, no token and an empty owasp object" "$(grep -E '^(owasp|summary|inventory)' "$FL/owno.flat" | tr '\n' ' ')"; fi
+# The Mac: a loader its own process holds is an incident, tagged even when its temp folder could not be
+# looked through in time; a lock another account's process holds is a possible sign, with no tag.
+users "first:$U:$FL/clean:/bin/zsh"
+: > "$FL/sharedtmp/remote_code_loader.lock"
+GIRD_CHECK_FLEET_LSOF="$FL/hold-lsof" GIRD_CHECK_FLEET_FIND="$FL/slow-find" fl_run owmac --json --deadline=60
+GIRD_CHECK_FLEET_LSOF="$FL/other-lsof" fl_run owposs --json
+rm -f "$FL/sharedtmp/remote_code_loader.lock"
+SKIPPING=$FPSSKIP
+if grep -q '^machine\.complete=false$' "$FL/owmac.flat" && grep -q '^machine\.owasp=ASI04$' "$FL/owmac.flat" && grep -q '^owasp\.ASI04\.machine=true$' "$FL/owmac.flat" && grep -qE '^summary=.* owasp=ASI04:0\+mac;counted:1$' "$FL/owmac.flat"
+then ok "fleet: a partly checked Mac still counts its incidents as +mac"; else bad "fleet: a partly checked Mac still counts its incidents as +mac" "$(grep -E '^(machine\.(complete|owasp|incidents)|owasp|summary)' "$FL/owmac.flat" | tr '\n' ' ')"; fi
+SKIPPING=$FSKIP
+if grep -q '^machine\.possible_signs=litellm$' "$FL/owposs.flat" && grep -q '^machine\.owasp=$' "$FL/owposs.flat" && grep -q '^owasp\.risks=$' "$FL/owposs.flat"
+then ok "fleet: the Mac's possible signs carry no tag"; else bad "fleet: the Mac's possible signs carry no tag" "$(grep -E '^(machine\.(possible_signs|owasp)|owasp\.risks)' "$FL/owposs.flat" | tr '\n' ' ')"; fi
+# fl_inv_fit, cut out of gird-fleet.sh: a value of 244 to 250 characters without the token is kept
+# whole, with no token and no +more, since the token never costs an account its content; a short one
+# gets the token.
+sed -n '/^fl_inv_fit() {/,/^}/p' "$FLEETSH" > "$FL/invfit.sh"
+IV_HEAD="v1 review 2026-10-25T09:12Z"; IV_P=" | person: review "; IV_TOK="owasp.ASI03:1; counted 1"
+IV_BAD=""
+for IV_N in 244 245 246 247 248 249 250; do
+  IV_B="$IV_P$(printf 'x%.0s' $(seq 1 $((IV_N - ${#IV_HEAD} - ${#IV_P}))))"
+  IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_B" "$IV_TOK")
+  { [ $(( ${#IV_HEAD} + ${#IV_B} )) -eq "$IV_N" ] && [ "$IV_OUT" = "$IV_HEAD$IV_B" ]; } || IV_BAD="$IV_BAD $IV_N:$IV_OUT"
+done
+if [ -z "$IV_BAD" ]; then ok "fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp token"
+else bad "fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp token" "$IV_BAD"; fi
+IV_S="$IV_P$(printf 'x%.0s' $(seq 1 $((250 - ${#IV_HEAD} - ${#IV_P} - ${#IV_TOK} - 3))))"
+IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_S" "$IV_TOK")
+if [ "$IV_OUT" = "$IV_HEAD$IV_S | $IV_TOK" ] && [ "${#IV_OUT}" -eq 250 ]; then ok "fleet: an inventory value with room for the owasp token gets it, at 250 characters"
+else bad "fleet: an inventory value with room for the owasp token gets it, at 250 characters" "${#IV_OUT} $IV_OUT"; fi
+IV_250="$IV_P$(printf 'x%.0s' $(seq 1 $((250 - ${#IV_HEAD} - ${#IV_P}))))"
+IV_OUT=$(/bin/bash -c '. "$1"; fl_inv_fit "$2" "$3" "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_250" "")
+if [ "$IV_OUT" = "$IV_HEAD$IV_250" ]; then ok "fleet: an inventory value of 250 characters with no token is kept whole"
+else bad "fleet: an inventory value of 250 characters with no token is kept whole" "$IV_OUT"; fi
 # Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 mkdir -p "$FL/inst700"; cp "$SCRIPT" "$FLEETSH" "$FL/inst700/"; chmod 755 "$FL/inst700/gird-check.sh"; chmod 700 "$FL/inst700/gird-fleet.sh"
@@ -5313,6 +5624,134 @@ if chmod +a "everyone allow add_file,delete_child" "$FL/acl" 2>/dev/null; then
   chmod -N "$FL/acl"
   if [ "$RC" -eq 13 ] && [ ! -s "$FL/argv.log" ] && grep -q 'writable by no one else' "$FL/acl.err"; then ok "fleet: a folder whose ACL lets anyone write is refused"; else bad "fleet: a folder whose ACL lets anyone write is refused" "exit $RC"; fi
 else skip "fleet: a folder whose ACL lets anyone write is refused" "chmod +a is not available here"; fi
+# Root checks bash's own reprint of the owasp-derive block against a list of its lines, then runs it
+# with a search path that holds nothing (fl_owasp_kinds, docs/designs/owasp.md). The tests call it
+# through the functions cut from a gird-fleet.sh, with trap programs named like common commands first
+# on PATH: one that runs leaves its name in OWT/hit.
+OWT=$FL/owtrap; mkdir -p "$OWT/bin" "$OWT/hit"
+for _c in id tr sed awk grep cat cut head sort ls env sh bash printf test true tt; do
+  printf '#!/bin/sh\n: > "%s/hit/${0##*/}"\n' "$OWT" > "$OWT/bin/$_c"; chmod 755 "$OWT/bin/$_c"
+done
+ow_lib() { # gird-fleet.sh out-file: the generated blocks and the functions root runs the block with
+  { awk '/^# >>> (owned-walk|incidents|owasp|owasp-derive)[: ]/ { on = 1 } on { print } /^# <<< (owned-walk|incidents|owasp|owasp-derive)$/ { on = 0 }' "$1"
+    sed -n '/^fl_nopath_ok() {/,/^}/p; /^fl_owasp_code_ok() {/,/^}/p; /^fl_owfail() {/,/^}/p; /^fl_owasp_kinds() {/,/^}/p' "$1"; } > "$2"
+}
+cat > "$OWT/run.sh" <<'EOF'
+# run.sh LIB NOPATH OWNER [FA_name=value...]: fl_owasp_kinds, then the block with root's own PATH
+. "$1"; FL_NOPATH=$2; FL_OWNER=$3; shift 3; NL='
+'
+for _a in "$@"; do declare "$_a"; done
+fl_owasp_kinds; printf 'rc=%s fail=%s\n%s\n' "$?" "$FL_OWFAIL" "$FL_OWK"
+printf -- '--\n%s\n' "$(PATH=/usr/bin:/bin:/usr/sbin:/sbin; owasp_kinds)"
+EOF
+ow_call() { # LIB FA_name=value...: run.sh with the traps first on PATH; its output in $OWT/out
+  rm -f "$OWT/hit/"*
+  /usr/bin/env -i PATH="$OWT/bin:/usr/bin:/bin:/usr/sbin:/sbin" /bin/bash "$OWT/run.sh" "$1" /private/var/empty "$U" "${@:2}" > "$OWT/out" 2>&1
+}
+ow_lib "$FLEETSH" "$OWT/lib.sh"
+# Every account-run source in data/owasp.tsv alone, then all at once: a source with a risk gives its
+# line, one with none (such as possible, to_read, tmp_marks and tmp_wiper) gives nothing.
+OW_WHY=""; OW_ALLSET=""; OW_ALLWANT=""; OW_NONE=" "; OW_NL='
+'
+while IFS="$(printf '\t')" read -r _k _r _n _l _s _src _rest; do
+  case "$_k" in '#'*|'') continue ;; esac
+  case "$_src" in machine:*|report) continue ;; esac
+  case "$_r" in -) _want=""; OW_NONE="$OW_NONE$_src " ;; *) _want="$_r|$_k|$_s|$_n|$_l"; OW_ALLWANT="$OW_ALLWANT$_want$OW_NL" ;; esac
+  case "$_src" in incidents:act) _set=FA_incidents=axios ;; incidents:update) _set=FA_incidents=mistral ;; *) _set="FA_$_src=1"; OW_ALLSET="$OW_ALLSET $_set" ;; esac
+  ow_call "$OWT/lib.sh" "$_set"
+  [ "$(cat "$OWT/out")" = "$(printf 'rc=0 fail=\n%s\n--\n%s' "$_want" "$_want")" ] || OW_WHY="$OW_WHY $_src: $(tr '\n' ' ' < "$OWT/out");"
+  [ -z "$(ls "$OWT/hit")" ] || OW_WHY="$OW_WHY $_src ran $(ls "$OWT/hit" | tr '\n' ' ');"
+done < data/owasp.tsv
+# shellcheck disable=SC2086  # one argument per field
+ow_call "$OWT/lib.sh" $OW_ALLSET "FA_incidents=axios mistral"
+_want=${OW_ALLWANT%"$OW_NL"}
+[ "$(cat "$OWT/out")" = "$(printf 'rc=0 fail=\n%s\n--\n%s' "$_want" "$_want")" ] || OW_WHY="$OW_WHY all: $(tr '\n' ' ' < "$OWT/out");"
+[ -z "$(ls "$OWT/hit")" ] || OW_WHY="$OW_WHY all ran $(ls "$OWT/hit" | tr '\n' ' ');"
+[ -n "$OW_ALLWANT" ] || OW_WHY="$OW_WHY no sources with a risk read from data/owasp.tsv;"
+for _src in possible to_read tmp_marks tmp_wiper; do case "$OW_NONE" in *" $_src "*) ;; *) OW_WHY="$OW_WHY the source $_src with no risk was not read;" ;; esac; done
+if [ -z "$OW_WHY" ]; then ok "fleet: the owasp-derive block, with an empty search path, gives each kind's line and runs no command by name"
+else bad "fleet: the owasp-derive block, with an empty search path, gives each kind's line and runs no command by name" "$OW_WHY"; fi
+# Inputs in a scratch copy of root's block: no trap runs, the tags read failed with CAUSE, and a clear
+# account's run reads failed, the account partly checked, with the cause in last.json and its summary.
+# AFTER names the line the input goes after; ASIDE=1 sets the reprint check aside, to test the rest.
+users "first:$U:$FL/clean:/bin/zsh"
+ow_inject() { # CAUSE AFTER TEXT [ASIDE]: 0 when all that holds; else OW_WHY says why
+  rm -rf "$FL/owi"; mkdir -p "$FL/owi"; cp "$SCRIPT" "$FL/owi/"
+  OW_TEXT=$3 OW_AFTER=$2 OW_ASIDE=${4:-0} awk '
+    ENVIRON["OW_ASIDE"] == 1 && $0 == "  fl_owasp_code_ok || { fl_owfail code; _fkf=1; }" { print "  true || { fl_owfail code; _fkf=1; }"; next }
+    { print } $0 == ENVIRON["OW_AFTER"] { print "  " ENVIRON["OW_TEXT"] }' "$FLEETSH" > "$FL/owi/gird-fleet.sh"
+  ow_lib "$FL/owi/gird-fleet.sh" "$OWT/lib-i.sh"
+  OW_WHY=""; grep -qxF -- "  $3" "$OWT/lib-i.sh" || OW_WHY="the edit did not apply;"
+  [ "${4:-0}" = 1 ] && { grep -qxF '  true || { fl_owfail code; _fkf=1; }' "$OWT/lib-i.sh" || OW_WHY="$OW_WHY the check was not set aside;"; }
+  ow_call "$OWT/lib-i.sh" FA_key_files=1
+  [ "$(head -n 1 "$OWT/out")" = "rc=1 fail=$1" ] || OW_WHY="$OW_WHY tags: $(head -n 1 "$OWT/out");"
+  [ -z "$(ls "$OWT/hit")" ] || OW_WHY="$OW_WHY ran $(ls "$OWT/hit" | tr '\n' ' ');"
+  case "$1" in code) _l='no OWASP tags were worked out, as the rule that works them out holds a line root does not run' ;; *) _l='the rule that works out the OWASP tags did not run cleanly' ;; esac
+  FLEETSH="$FL/owi/gird-fleet.sh" fl_run owi
+  grep -q '^13$' "$FL/owi.rc" && grep -q '^outcome=failed$' "$FL/owi.flat" && grep -q '^first\.outcome=not_checked$' "$FL/owi.flat" \
+    && grep -q '^first\.owasp_failed=true$' "$FL/owi.flat" && grep -qxF "  The run failed: $_l." "$FL/owi.out" \
+    && grep -qx "owasp\.failed_because=$1" "$FL/owi.flat" && grep -q "^summary=blindspot failed .* owasp_failed=$1\$" "$FL/owi.flat" \
+    || OW_WHY="$OW_WHY run: $(cat "$FL/owi.rc") $(grep -E '^(outcome|summary|owasp\.failed_because|first\.(outcome|owasp_failed))=' "$FL/owi.flat" | tr '\n' ' ');"
+  [ -z "$OW_WHY" ]
+}
+OW_KF='owasp_kinds() {'; OW_SF='owasp_set() {'
+# A not-found the block hides, and a full-path tool or builtin that finds a command without the search
+# path: bash's reprint shows each, and root refuses it before the block runs.
+if ow_inject code "$OW_SF" ": \"'\" ; [ -z \"\$(id -u 2>/dev/null)\" ] && return 0 ; \"'\""; then ok "fleet: a not-found hidden by quotes and 2>/dev/null in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: a not-found hidden by quotes and 2>/dev/null in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" ": \"'\" ; [ -z \"\$(id -u 2<&-)\" ] && return 0 ; \"'\""; then ok "fleet: a not-found hidden by quotes and 2<&- in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: a not-found hidden by quotes and 2<&- in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" 'command -p id'; then ok "fleet: command -p in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: command -p in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" 'hash -p /usr/bin/true tt; tt'; then ok "fleet: hash -p in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: hash -p in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" '/usr/bin/env -i id'; then ok "fleet: /usr/bin/env -i in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: /usr/bin/env -i in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+if ow_inject code "$OW_SF" '/usr/bin/env -u PATH id'; then ok "fleet: /usr/bin/env -u PATH in the owasp-derive block is refused from bash's reprint, and the run reads failed"
+else bad "fleet: /usr/bin/env -u PATH in the owasp-derive block is refused from bash's reprint, and the run reads failed" "$OW_WHY"; fi
+# With the reprint check set aside: the empty search path, and the checks on what the block does.
+if ow_inject rule "$OW_KF" ": \"'\" ; id ; \"'\"" 1; then ok "fleet: with the reprint check set aside, a command hidden by quotes in the owasp-derive block is not found, and the run reads failed"
+else bad "fleet: with the reprint check set aside, a command hidden by quotes in the owasp-derive block is not found, and the run reads failed" "$OW_WHY"; fi
+if ow_inject rule "$OW_KF" 'case x in *) id ;; esac' 1; then ok "fleet: with the reprint check set aside, a command in a first case arm of the owasp-derive block is not found, and the run reads failed"
+else bad "fleet: with the reprint check set aside, a command in a first case arm of the owasp-derive block is not found, and the run reads failed" "$OW_WHY"; fi
+if ow_inject rule "$OW_KF" '/usr/bin/env id; /bin/sh -c id' 1; then ok "fleet: with the reprint check set aside, /usr/bin/env and /bin/sh -c in the owasp-derive block find no command by name, and the run reads failed"
+else bad "fleet: with the reprint check set aside, /usr/bin/env and /bin/sh -c in the owasp-derive block find no command by name, and the run reads failed" "$OW_WHY"; fi
+if ow_inject rule "$OW_KF" 'return 3' 1; then ok "fleet: with the reprint check set aside, an owasp-derive block that exits non-zero and prints nothing fails its tags"
+else bad "fleet: with the reprint check set aside, an owasp-derive block that exits non-zero and prints nothing fails its tags" "$OW_WHY"; fi
+OW_KFL=$(awk -F '\t' '$1 == "key_files" { print $2 "|" $1 "|" $5 "|" $3 "|" $4 }' data/owasp.tsv)
+if ow_inject rule "$OW_KF" "printf '%s\\n' '$OW_KFL' '$OW_KFL'" 1; then ok "fleet: with the reprint check set aside, an owasp-derive block that prints a kind's line twice fails its tags"
+else bad "fleet: with the reprint check set aside, an owasp-derive block that prints a kind's line twice fails its tags" "$OW_WHY"; fi
+# The search-path folder must be a real folder, root's alone and empty, or the run reads failed. The
+# tests' stand-in for root owns its own folder, which is safe; each fault is then added to one.
+mkdir -p "$FL/nop/ok" "$FL/nop/w" "$FL/nop/full" "$FL/nop/real"; chmod 755 "$FL/nop/ok" "$FL/nop/full" "$FL/nop/real"; chmod 777 "$FL/nop/w"
+ln -s "$FL/nop/real" "$FL/nop/link"; : > "$FL/nop/full/id"; chmod 755 "$FL/nop/full/id"
+NOP=$(cd "$FL/nop" && pwd -P)
+GIRD_CHECK_FLEET_NOPATH="$NOP/ok" fl_run nopok
+if grep -q '^0$' "$FL/nopok.rc" && grep -q '^outcome=clear$' "$FL/nopok.flat" && grep -q '^first\.complete=true$' "$FL/nopok.flat" && grep -q '^owasp\.failed_because=$' "$FL/nopok.flat"; then ok "fleet: an empty search-path folder only root's stand-in can change gives a clear run"
+else bad "fleet: an empty search-path folder only root's stand-in can change gives a clear run" "$(cat "$FL/nopok.rc") $(grep -E '^(outcome|owasp\.failed_because|first\.)' "$FL/nopok.flat" | tr '\n' ' ')"; fi
+nop_fails() { # FOLDER: 0 when a run with it as the search-path folder reads failed and says why; else OW_WHY says why
+  GIRD_CHECK_FLEET_NOPATH=$1 fl_run nop
+  OW_WHY="$(cat "$FL/nop.rc") $(grep -E '^(outcome|owasp\.failed_because|first\.(outcome|owasp_failed))=' "$FL/nop.flat" | tr '\n' ' ')"
+  grep -q '^13$' "$FL/nop.rc" && grep -q '^outcome=failed$' "$FL/nop.flat" && grep -q '^first\.outcome=not_checked$' "$FL/nop.flat" && grep -q '^first\.owasp_failed=true$' "$FL/nop.flat" \
+    && grep -q '^owasp\.failed_because=nopath$' "$FL/nop.flat" && grep -q '^  The run failed: no OWASP tags were worked out, as .* is not an empty folder only root can change\.$' "$FL/nop.out"
+}
+if nop_fails "$NOP/link"; then ok "fleet: a search-path folder that is a link makes the run failed"; else bad "fleet: a search-path folder that is a link makes the run failed" "$OW_WHY"; fi
+if nop_fails "$NOP/w"; then ok "fleet: a search-path folder others can write to makes the run failed"; else bad "fleet: a search-path folder others can write to makes the run failed" "$OW_WHY"; fi
+if nop_fails "$NOP/full"; then ok "fleet: a search-path folder that is not empty makes the run failed"; else bad "fleet: a search-path folder that is not empty makes the run failed" "$OW_WHY"; fi
+# A folder of another account's: a real one on this Mac, empty and readable, as the tests can't make one.
+NOP_OTHER=$(find /private/var -maxdepth 3 -type d -empty ! -user root ! -user "$U" -perm -005 ! -perm -g+w ! -perm -o+w 2>/dev/null | head -n 1)
+if [ -z "$NOP_OTHER" ]; then skip "fleet: a search-path folder that is not root's makes the run failed" "no empty folder of another account's on this machine"
+elif nop_fails "$NOP_OTHER"; then ok "fleet: a search-path folder that is not root's makes the run failed"
+else bad "fleet: a search-path folder that is not root's makes the run failed" "$OW_WHY"; fi
+# Two causes in one run: a refused line and a folder that is not empty. --json and --summary-to-stdout
+# name both, not only the first.
+ow_inject code "$OW_SF" 'command -p id' > /dev/null
+GIRD_CHECK_FLEET_NOPATH="$NOP/full" FLEETSH="$FL/owi/gird-fleet.sh" fl_run two2 --json
+GIRD_CHECK_FLEET_NOPATH="$NOP/full" FLEETSH="$FL/owi/gird-fleet.sh" fl_run two2s --summary-to-stdout
+OW_J=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(" ".join(d["owasp"]["failed_because"]), d["outcome"])' "$FL/two2.out" 2>&1)
+if [ "$OW_J" = "code nopath failed" ] && grep -q ' owasp_failed=code,nopath$' "$FL/two2s.out" && [ "$(grep -c '' "$FL/two2s.out")" -eq 1 ]
+then ok "fleet: tags that fail for two causes name both in --json and --summary-to-stdout"
+else bad "fleet: tags that fail for two causes name both in --json and --summary-to-stdout" "json: $OW_J; summary: $(cat "$FL/two2s.out")"; fi
 }
 SKIPPING=""
 # Root tests a path anyone could make as a link before anything that would follow it.

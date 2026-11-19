@@ -7565,6 +7565,8 @@ $N_LOCKPROJ = $LockProj.Count
 # the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
 # before any token is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
+# The incidents of the files below that are signs of malware, as gird-check.sh's IND_HITS (the OWASP tags).
+$IndHits = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
 # A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
 # is that incident's sign, shown with the extensions ($ExtPersist), never called npm malware, and only
@@ -7663,8 +7665,13 @@ foreach ($x in $xcPend) {
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if ($OnWindows) {
   try {
-    $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
-    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')); if (-not $IndHits.Contains('mastra')) { $IndHits.Add('mastra') } }; $rk.Close() }
+    $nvmp = $null
+    if ($env:GIRD_CHECK_TEST_RUNKEY) { $nvmp = $env:GIRD_CHECK_TEST_RUNKEY }   # tests only: no registry to fake off Windows
+    else {
+      $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
+      if ($rk) { $nvmp = $rk.GetValue('NvmProtocal'); $rk.Close() }
+    }
+    if ($null -ne $nvmp) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')); if (-not $IndHits.Contains('mastra')) { $IndHits.Add('mastra') } }
   } catch { }
 }
 foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }
@@ -7700,6 +7707,33 @@ $Platforms = @(
   @{ Id = 'railway'; Name = 'Railway'; Cmds = @('railway'); Dirs = @(); Files = @((J $HomeDir '.railway/config.json')); Found = 'CLI found'; Advice = 'Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.'; Summary = 'Railway CLI found: rotate secrets stored there' },
   @{ Id = 'zeabur'; Name = 'Zeabur'; Cmds = @('zeabur'); Dirs = @((J $HomeDir '.config/zeabur')); Files = @(); Found = 'CLI found'; Advice = 'Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.'; Summary = 'Zeabur CLI found: rotate secrets stored there' })
 # <<< platforms
+# The OWASP Agentic Top 10 risk of each kind of finding (data/owasp.tsv, docs/designs/owasp.md).
+# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it.
+$OwaspTable = @(
+  ,@('agents_run_without_asking', 'ASI02', 'Tool Misuse and Exploitation', 'run without asking', '01', 'yolo')
+  ,@('agents_run_remote_commands', 'ASI02', 'Tool Misuse and Exploitation', 'remote commands without asking', '01', 'remote')
+  ,@('tools_to_update', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'tools with a security fix', '01', 'tools')
+  ,@('mcp_token_files', 'ASI03', 'Identity and Privilege Abuse', 'tokens in MCP configs', '02', 'mcp_token_files')
+  ,@('authorized_keys_links', 'ASI03', 'Identity and Privilege Abuse', 'links to authorized_keys', '02', 'ak_links')
+  ,@('project_settings_on_open', 'ASI05', 'Unexpected Code Execution', 'settings that act on opening', '02', 'on_open')
+  ,@('scripts_started_like_worms', 'ASI05', 'Unexpected Code Execution', 'scripts started like worms', '02', 'autostart')
+  ,@('key_files', 'ASI03', 'Identity and Privilege Abuse', 'keys in plain text', '03', 'key_files')
+  ,@('history_keys', 'ASI03', 'Identity and Privilege Abuse', 'keys in shell history', '03', 'history_keys')
+  ,@('session_files_with_keys', 'ASI03', 'Identity and Privilege Abuse', 'keys in agent sessions', '03', 'session_files')
+  ,@('ssh_keys_no_passphrase', 'ASI03', 'Identity and Privilege Abuse', 'SSH keys without a passphrase', '03', 'ssh_open')
+  ,@('allow_list_keys', 'ASI03', 'Identity and Privilege Abuse', 'keys in allow lists', '04', 'allow_list_keys')
+  ,@('incidents', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'malware signs', '05', 'incidents:act')
+  ,@('incidents_to_update', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'versions to update', '05', 'incidents:update')
+  ,@('wiper', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'gh-token-monitor', '05', 'wiper')
+  ,@('planted_files', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'files a worm plants', '05', 'planted')
+  ,@('authorized_keys_planted_keys', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'SSH keys malware adds', '05', 'ssh_planted')
+  ,@('lockfile_only_incidents', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'npm malware in a lockfile', '05', 'lock_only')
+  ,@('versions_to_update', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'Python versions to update', '05', 'updates')
+  ,@('extensions_to_remove', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'extensions to remove', '05', 'remove')
+  ,@('platforms_found', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'platforms with a leak', '05', 'platforms')
+  ,@('machine.incidents', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'malware signs', '-', 'machine:incidents')
+)
+# <<< owasp
 $PlatFound = @($Platforms | Where-Object {
   $p = $_; (@($p.Cmds | Where-Object { Has-Command $_ }).Count -gt 0) -or (@($p.Dirs | Where-Object { Is-Dir $_ }).Count -gt 0) -or (@($p.Files | Where-Object { Is-File $_ }).Count -gt 0)
 } | ForEach-Object { $_.Id })
@@ -8522,6 +8556,46 @@ if (-not $OptOffline) {
   if ($rk -and $rk -cmatch '^[1-9][0-9]{0,8}$') { $RANK = $rk }
 }
 
+# The OWASP Agentic Top 10 risks of what was found. gird-check.sh tags from the fields its account
+# run sends root (owasp_set); this is the same rule on this script's own values, with the same table.
+# With nothing tagged every OWASP line is left out, partly checked or not: no line ever says none.
+$NpmActN = @($NpmTags | Where-Object { (Incident-Level $_) -eq 'act' }).Count
+$NpmOtherN = @($NpmTags | Where-Object { (Incident-Level $_) -ne 'act' }).Count
+function Owasp-Set([string]$src) {
+  switch -CaseSensitive ($src) {
+    'incidents:act' { return (($NpmActN -gt 0 -and $MAL_LOCKONLY -eq 0) -or $EXT_HIT -eq 1 -or $PY_HIT -eq 1 -or $IndHits.Count -gt 0) }
+    'incidents:update' { return ($NpmOtherN -gt 0) }
+    'yolo' { return ($N_YOLO -gt 0) }
+    'remote' { return (@($RemoteList).Count -gt 0) }
+    'tools' { return ($N_OLD -gt 0) }
+    'mcp_token_files' { return ($N_MCP_TOKEN -gt 0) }
+    'ak_links' { return ($N_AK -gt 0) }
+    'ssh_planted' { return ($ExtKey.Count -gt 0) }
+    'autostart' { return (($N_WIRED + $N_UHOOK) -gt 0) }
+    'on_open' { return ($N_AUTO -gt 0) }
+    'key_files' { return ($KEY_FILES -gt 0) }
+    'history_keys' { return ($HIST_KEYS -gt 0) }
+    'session_files' { return ($N_SESS -gt 0) }
+    'ssh_open' { return ($N_SSH_OPEN -gt 0) }
+    'allow_list_keys' { return ($N_ALLOW -gt 0) }
+    'wiper' { return ($WIPER_HIT -eq 1) }
+    'planted' { return (($WormHit.Count + $WormRefs.Count) -gt 0) }
+    'lock_only' { return ($MAL_LOCKONLY -eq 1 -and $NpmActN -gt 0) }
+    'updates' { return ($PyUpd.Count -gt 0) }
+    'remove' { return ($ExtUpd.Count -gt 0) }
+    'platforms' { return (@($PlatFound).Count -gt 0) }
+  }
+  return $false
+}
+# Each kind found, as its row of $OwaspTable (kind, risk, name, label, section, source).
+$OwFound = @(foreach ($r in $OwaspTable) { if ($r[5] -like 'machine:*' -or $r[5] -eq 'report') { continue }; if (Owasp-Set $r[5]) { ,$r } })
+$OwCodes = (@($OwFound | ForEach-Object { $_[1] } | Sort-Object -Unique -CaseSensitive)) -join ', '
+function Owasp-Sec([string]$sec) { # one dimmed line under the section's rule for each risk found there, in code order
+  $seen = @{}
+  $lines = @(foreach ($r in $OwFound) { if ($r[4] -eq $sec -and -not $seen.ContainsKey($r[1])) { $seen[$r[1]] = 1; "$($r[1])|$($r[2])" } }) | Sort-Object -CaseSensitive
+  foreach ($l in $lines) { $p = $l.Split('|'); Emit "     ${cDim}OWASP $($p[0]) $($p[1])$cRst" }
+}
+
 # ===========================================================================
 # The report. Every part is built first, then shown: a summary on a console, or
 # every detail with -Full or when the output is redirected. A saved report always
@@ -8570,9 +8644,11 @@ if ($UnreadDirs.Count -gt 0) {
   else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 2 to 5 did not check the files in them" }
   Wrap "$($udText): $(Dir-List $UnreadDirs)." 4 "  $cYel$gBar$cRst " "  $cYel$gBar$cRst " $cYel
 }
+if ($OwCodes) { Blank; Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
 $HeadFull = $HeadShort + (Take-Cap)
 
 Section '01' 'CODING AGENTS' "$N_AG found, $N_IDLE idle"
+Owasp-Sec '01'
 if ($N_AG -eq 0) { Emit '     No coding agents found.' }
 foreach ($r in $AgRows) {
   switch ($r[1]) {
@@ -8621,6 +8697,7 @@ if ($N_OLD_NOFIX -gt 0) {
 }
 $Sec1 = Take-Cap
 Section '02' 'MCP SERVERS' (Plural $N_MCP 'server' 'servers')
+Owasp-Sec '02'
 if ($N_MCP -eq 0 -and $N_MCP_TOKEN -eq 0) { Emit '     No MCP servers configured.' }
 foreach ($r in $McpRows) {
   if ($r.Pl -and -not $r.Tok) { continue }
@@ -8678,6 +8755,7 @@ if ($Sec2Unread.Count -gt 0) {
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
+Owasp-Sec '03'
 # With files that could not be read, this line comes below, with them.
 if ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
 elseif ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
@@ -8745,6 +8823,7 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
 }
 $Sec3 = Take-Cap
 Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
+Owasp-Sec '04'
 if ($N_ALLOW -eq 0 -and $AllowUnread.Count -gt 0) {
   Wrap "No saved commands with keys in the files read, but $(Plural $AllowUnread.Count 'file' 'files') could not be read:" 8 "     $cYel!$cRst  " '        '
   foreach ($f in ($AllowUnread | Select-Object -First 20)) { Emit "        $(Short $f)" }
@@ -8762,6 +8841,7 @@ $Sec4 = Take-Cap
 $ind26 = ' ' * 26
 $N_LEAKS = @($PyIncidents).Count + 3 + @($Platforms).Count   # the Python incidents, npm, editor extensions, GitHub Actions and each platform
 Section '05' 'RECENT KEY LEAKS' "$N_LEAKS checked"
+Owasp-Sec '05'
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
 # advice under a hit: for a bad package in an environment, don't run Python there; for its temp
 # files, the incident's own (data/indicators.tsv); for a version whose malware could not run on this
@@ -9070,6 +9150,7 @@ CLine '02' $G2 'MCP servers' $D2
 CLine '03' $G3 'Keys in plain text' $D3
 CLine '04' $G4 'Allow lists' $D4
 CLine '05' $G5 'Recent leaks' $D5
+if ($OwCodes) { Blank; Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
 if ($SlowFiles.Count -gt 0) { Blank; Wrap "$SlowText, like $(Short $SlowFiles[0])" 5 "   $cYel!$cRst " '     ' }
 if ($ISSUES -gt 0) { Blank; Emit "   ${cBold}What to do, most urgent first$cRst"; Todo-List }
 Blank

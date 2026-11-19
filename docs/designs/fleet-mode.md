@@ -136,10 +136,22 @@ today, and no file paths, file names or key values:
       "history_keys": 1,
       "session_files_with_keys": 0,
       "ssh_keys_no_passphrase": 1,
-      "incidents": [{"id": "tanstack", "level": "act"}]
+      "incidents": [{"id": "tanstack", "level": "act"}],
+      "owasp": ["ASI02", "ASI03", "ASI04"]
     }
   ],
-  "machine": { "complete": true, "agents": [], "incidents": [] }
+  "machine": { "complete": true, "agents": [], "incidents": [], "owasp": [] },
+  "owasp": {
+    "accounts_counted": 1, "accounts_not_checked": 0, "accounts_partly_checked": 0, "failed_because": [],
+    "risks": [
+      {"id": "ASI02", "name": "Tool Misuse and Exploitation", "accounts": 1, "machine": false,
+       "findings": ["agents_run_without_asking"]},
+      {"id": "ASI03", "name": "Identity and Privilege Abuse", "accounts": 1, "machine": false,
+       "findings": ["mcp_token_files", "key_files", "history_keys", "ssh_keys_no_passphrase"]},
+      {"id": "ASI04", "name": "Agentic Supply Chain Vulnerabilities", "accounts": 1, "machine": false,
+       "findings": ["tools_to_update", "incidents"]}
+    ]
+  }
 }
 ```
 
@@ -151,7 +163,12 @@ today, and no file paths, file names or key values:
 - `outcome` is the worst of `failed`, `act`, `not_checked`, `review`, `clear`, in that order, so a
   finding to act on is never hidden by a partial check, and a partial check never reads as clear.
 - The summary line is `blindspot <outcome> accounts=<n> act=<n> review=<n> not_checked=<n>
-  v=<script version> at=<UTC time>`.
+  v=<script version> at=<UTC time>`, then, when a finding is tagged with an OWASP Agentic Top 10
+  risk, ` owasp=<risk>:<accounts>[+mac],...;counted:<n>` with `;not_counted:<n>` and `;partial:<n>`
+  when above 0, and ` owasp_failed=<causes>` when the tags could not be worked out. Each checked account's row and the `machine` object carry an `owasp` list, and the
+  top-level `owasp` object counts accounts counted, not checked and partly checked beside the risks,
+  and lists in `failed_because` each cause the tags could not be worked out for.
+  The mapping and every surface are in [owasp.md](owasp.md).
 - The inventory value is a compact form of the whole result, one line, short enough for an MDM's
   inventory field (each MDM page gives that MDM's limit), with no path, file name or key:
   `v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; run-without-asking claude-code; keys 2
@@ -175,7 +192,9 @@ today, and no file paths, file names or key values:
   account at the same level), and writes them in the order above. Details go before rows: an account
   whose details don't fit keeps its outcome, an `act` one its `wiper` and `incidents` too, and the
   machine's row drops its last parts first, never leaving a `;` at its end. It ends with `+more`;
-  the full result is in the saved file.
+  the full result is in the saved file. The OWASP part
+  (` | owasp.ASI03:1; counted 1`) goes last, only when it fits with every account's part whole, so it
+  never cuts an account's content (`fl_inv_fit`).
 - The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
   `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
   stopped running never shows an old `clear`.
@@ -1102,6 +1121,9 @@ Graph, never a real tenant.
 - Each outcome and exit code from a fixture that produces it, the order between them, and a run
   stopped part-way.
 - An MDM-like environment: no HOME, minimal PATH, working folder `/`, no terminal.
+- The OWASP tags: each row's and the Mac's, the counts of accounts not checked and partly checked,
+  the terminal block, the summary part (kept when the save fails), the inventory token, left out with
+  no cut when a value of 244 to 250 characters has no room for it, and a run with no accounts ([owasp.md](owasp.md), Tests).
 
 ## As built
 

@@ -1,0 +1,60 @@
+# Each kind of finding and the risk of the OWASP Top 10 for Agentic Applications (2026) it is tagged
+# with, as the reports print it. The mapping is Blindspot's own, not OWASP's. The codes and names
+# come from OWASP's announcement of 9 December 2025 and its Q3 2026 exploit round-up (genai.owasp.org);
+# docs/designs/owasp.md has the links and the reasons. One line each, tab separated. After editing,
+# run: bash tools/gen.sh
+#   kind      the field's name in fleet mode's JSON (machine.<field> for the Mac's own), or a name for
+#             what only the person's report shows
+#   risk      ASI01 to ASI10, or - when the kind is not a finding of any risk
+#   name      the risk's name, the same on every line of that risk; - with no risk
+#   label     what the fleet report lists under the risk, at most 32 characters; - with no risk
+#   section   01 to 05, the report section the finding shows in; - for the Mac's own or no risk
+#   source    a key of FL_KEYS in gird-fleet.sh (the account run's lines), incidents:act or
+#             incidents:update for an incident of that level, machine:<field> for a field of the Mac's
+#             own, or report for what only the person's report shows
+#   why       with no risk only: why it carries none
+# Every FL_KEYS key has one line (incidents two: incidents:act and incidents:update), so a new
+# account-run field cannot ship without a decision on its risk.
+agents_run_without_asking	ASI02	Tool Misuse and Exploitation	run without asking	01	yolo	-
+agents_run_remote_commands	ASI02	Tool Misuse and Exploitation	remote commands without asking	01	remote	-
+tools_to_update	ASI04	Agentic Supply Chain Vulnerabilities	tools with a security fix	01	tools	-
+mcp_token_files	ASI03	Identity and Privilege Abuse	tokens in MCP configs	02	mcp_token_files	-
+authorized_keys_links	ASI03	Identity and Privilege Abuse	links to authorized_keys	02	ak_links	-
+project_settings_on_open	ASI05	Unexpected Code Execution	settings that act on opening	02	on_open	-
+scripts_started_like_worms	ASI05	Unexpected Code Execution	scripts started like worms	02	autostart	-
+key_files	ASI03	Identity and Privilege Abuse	keys in plain text	03	key_files	-
+history_keys	ASI03	Identity and Privilege Abuse	keys in shell history	03	history_keys	-
+session_files_with_keys	ASI03	Identity and Privilege Abuse	keys in agent sessions	03	session_files	-
+ssh_keys_no_passphrase	ASI03	Identity and Privilege Abuse	SSH keys without a passphrase	03	ssh_open	-
+allow_list_keys	ASI03	Identity and Privilege Abuse	keys in allow lists	04	allow_list_keys	-
+incidents	ASI04	Agentic Supply Chain Vulnerabilities	malware signs	05	incidents:act	-
+incidents_to_update	ASI04	Agentic Supply Chain Vulnerabilities	versions to update	05	incidents:update	-
+wiper	ASI04	Agentic Supply Chain Vulnerabilities	gh-token-monitor	05	wiper	-
+planted_files	ASI04	Agentic Supply Chain Vulnerabilities	files a worm plants	05	planted	-
+authorized_keys_planted_keys	ASI04	Agentic Supply Chain Vulnerabilities	SSH keys malware adds	05	ssh_planted	-
+lockfile_only_incidents	ASI04	Agentic Supply Chain Vulnerabilities	npm malware in a lockfile	05	lock_only	-
+versions_to_update	ASI04	Agentic Supply Chain Vulnerabilities	Python versions to update	05	updates	-
+extensions_to_remove	ASI04	Agentic Supply Chain Vulnerabilities	extensions to remove	05	remove	-
+platforms_found	ASI04	Agentic Supply Chain Vulnerabilities	platforms with a leak	05	platforms	-
+machine.incidents	ASI04	Agentic Supply Chain Vulnerabilities	malware signs	-	machine:incidents	-
+possible_signs	-	-	-	-	possible	A lead to check, not a sign: a LiteLLM leftover with nothing else of it, or a startup file named like an extension incident's with no such extension.
+files_to_read	-	-	-	-	to_read	A name match only: projects use some of these names too.
+shared_tmp_markers	-	-	-	-	tmp_marks	A lead: another account can link a file into the shared /tmp.
+shared_tmp_wiper_logs	-	-	-	-	tmp_wiper	A lead: another account can link a file into the shared /tmp.
+machine.possible_signs	-	-	-	-	machine:possible_signs	A lead: another account can link a file into the shared /tmp.
+machine.shared_tmp_wiper_logs	-	-	-	-	machine:shared_tmp_wiper_logs	A lead: another account can link a file into the shared /tmp.
+agents	-	-	-	-	agents	What is installed, not a finding.
+machine.agents	-	-	-	-	machine:agents	What is installed, not a finding.
+mcp_servers	-	-	-	-	mcp_servers	A count of servers, not a finding.
+key_providers	-	-	-	-	key_providers	Detail of key_files, which is tagged.
+sessions_partly_checked	-	-	-	-	sessions_partial	Completeness, never a risk.
+files_not_checked	-	-	-	-	not_read	Completeness, never a risk.
+agent_folders_moved	-	-	-	-	moved	Completeness, never a risk.
+protected_folders	-	-	-	-	protected	Completeness, never a risk.
+session_engine	-	-	-	-	engine	Completeness, never a risk.
+v	-	-	-	-	v	A protocol line.
+end	-	-	-	-	end	A protocol line.
+idle_agents	-	-	-	-	report	Housekeeping: an idle agent is not a finding of any risk, and root does not receive it.
+login_files	-	-	-	-	report	A listing, not a finding: no fix, and root does not receive it.
+tools_with_no_fix	-	-	-	-	report	Not counted as a finding (only tools with a fix are), and root does not receive it.
+compromised_actions	-	-	-	-	report	Not tagged yet: the account run does not send it to root (issue #57), and a tag needs that field.

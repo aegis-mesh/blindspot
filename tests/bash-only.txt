@@ -355,3 +355,77 @@ an account-run line not in data/account-run.tsv fails gen.sh --check	tools/gen.s
 gen.sh --check finds the account-run lines at any indentation	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a tool's own script named by a path that is not plain	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a terminal id that is not lowercase	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+owasp: every risk and label in data/owasp.tsv is in README.md and docs/fleet.md	it reads the docs, which neither script prints: one check of the data file against them is enough
+an OWASP risk outside ASI01 to ASI10	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+two names for one OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP line with no risk and no reason	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP label longer than 32 characters	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP line on a bare incidents source	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an account-run key with no OWASP line	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an account-run key with two OWASP lines	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a completeness key with an OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a report-only line with an OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+a Mac field other than incidents with an OWASP risk	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an OWASP risk on a source owasp_set has no arm for	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an indicator of an incident that is not act level	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a bare command in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: the same command by its full path is written into gird-fleet.sh	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: an unquoted here-document in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a <<- here-document in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: $(id) in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a bare command after a quoted <<- here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a redirection inside $( ) in an unquoted here-document of the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a backtick in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a ( that does not close on its line in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a quote that does not close on its line in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a line that ends in a backslash in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a here-document opened after a # in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a quoted here-document that never ends in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read	tools/gen.sh is one bash tool that writes the data files into both scripts, so what it reads and writes is tested once
+gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh	tools/gen.sh is one bash tool that writes the data files into both scripts, so what it reads and writes is tested once
+gen.sh: the committed owasp-derive block passes the guard	tools/gen.sh is one bash tool that writes the data files into both scripts, so what it reads and writes is tested once
+gen.sh: an output redirection in the owasp-derive block is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+fleet: the owasp-derive block, with an empty search path, gives each kind's line and runs no command by name	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: with the reprint check set aside, a command hidden by quotes in the owasp-derive block is not found, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: with the reprint check set aside, a command in a first case arm of the owasp-derive block is not found, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: with the reprint check set aside, /usr/bin/env and /bin/sh -c in the owasp-derive block find no command by name, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a not-found hidden by quotes and 2>/dev/null in the owasp-derive block is refused from bash's reprint, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a not-found hidden by quotes and 2<&- in the owasp-derive block is refused from bash's reprint, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: command -p in the owasp-derive block is refused from bash's reprint, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: hash -p in the owasp-derive block is refused from bash's reprint, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: /usr/bin/env -i in the owasp-derive block is refused from bash's reprint, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: /usr/bin/env -u PATH in the owasp-derive block is refused from bash's reprint, and the run reads failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: with the reprint check set aside, an owasp-derive block that exits non-zero and prints nothing fails its tags	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: with the reprint check set aside, an owasp-derive block that prints a kind's line twice fails its tags	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: tags that fail for two causes name both in --json and --summary-to-stdout	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: an empty search-path folder only root's stand-in can change gives a clear run	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a search-path folder that is a link makes the run failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a search-path folder others can write to makes the run failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a search-path folder that is not empty makes the run failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a search-path folder that is not root's makes the run failed	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+fleet: the account run prints exactly FL_KEYS, in order	it reads gird-fleet.sh's FL_KEYS; the same check for gird-check.ps1 is 'fleet: -AccountRun prints the keys of --account-run, in the same order'
+fleet: an account's findings map to their risks in its row	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a clear account has an empty owasp list and adds to no risk	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a not-checked account has no owasp field and is not counted	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the JSON counts accounts not checked and partly checked apart	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the JSON lists each risk with its accounts and the kinds found	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the terminal block counts checked accounts and names what was found	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the terminal block says how many accounts were not counted	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the terminal block says how many accounts were partly checked	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the terminal block comes before where the result was saved	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the summary line ends with the owasp part, its counts included	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a long inventory value has no owasp token and ends with +more	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a failed save keeps the owasp part in the summary line	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: --json and --hash-accounts carry the owasp object and each row's tags	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: an update-level incident is labelled versions to update, not malware signs	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: each risk in the inventory value carries its own owasp. prefix	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a run with no accounts has no owasp part, no token and an empty owasp object	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: a partly checked Mac still counts its incidents as +mac	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: the Mac's possible signs carry no tag	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp token	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: an inventory value with room for the owasp token gets it, at 250 characters	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: an inventory value of 250 characters with no token is kept whole	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
