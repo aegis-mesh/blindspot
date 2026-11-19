@@ -5,6 +5,46 @@ only) must find the same things and print the same report. A change to one lands
 test in each suite. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules the scripts keep and the review
 checklist; read it first.
 
+## macOS, Linux and Windows stay at par
+
+Every feature must work on macOS, Linux and Windows. That covers the check one person runs, fleet
+mode, the tools an admin uses, every kind of finding, the result formats and the docs. Windows
+means both `gird-check.sh` in Git Bash and `gird-check.ps1` in PowerShell.
+
+- Before you build a feature, write down what each of the three platforms gets.
+- A feature lands on all three in the same pull request. If one platform has to wait, the pull
+  request says which and why, and an issue labelled `parity` is opened for it before the pull
+  request merges. Look at the open `parity` issues before you start.
+- A fix found on one platform is checked on the other two in the same pull request: run its test
+  there, or say why it cannot be tested.
+- A limit is real only when the operating system cannot do the thing: Linux has no Keychain, and
+  WSL cannot read the Windows side's files. A missing tool, a harder port or extra work is a gap,
+  not a limit. When in doubt, open a `parity` issue and say why.
+- For a real limit, say what it is in the docs a person reads, and make the result show what was
+  not checked. Never let it read as clear.
+- When you review a change, check this. A feature for one platform, with no word on the other
+  two, is a major finding.
+- The game that runs during a scan is the one exception. It is for a person running the check by
+  hand in `gird-check.sh`. It is not a feature the other platforms owe, and fleet mode never
+  starts it.
+
+## One home for anything two files share
+
+Each script is one file a person downloads, so the scripts cannot load shared code. What they share
+is kept once and written into them by `tools/gen.sh`.
+
+- A list, table, format or mapping that more than one file needs gets one home: a file in `data/`,
+  or the one script that owns it. `tools/gen.sh` writes it into every other file that needs it,
+  and `tools/gen.sh --check` fails when a generated copy drifts.
+  [CONTRIBUTING.md](CONTRIBUTING.md#lists-live-in-data) says how the lists in `data/` work.
+- Do not type a list into a second file. If you find one that is already typed twice, give it one
+  home in the change that touches it, or open an issue.
+- A format one file writes and another reads gets its words from one home too. Give a new one a
+  single list that the writer and the reader are both generated from.
+- Logic cannot be shared between bash and PowerShell. It is written once in each, and the twin
+  tests hold the two to the same behaviour.
+- Code that needs root lives only in `gird-fleet.sh`, never in `gird-check.sh`.
+
 ## This repository is public
 
 Everything here is published: files, comments, commit messages, pull request descriptions, review
