@@ -2592,7 +2592,8 @@ N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
 # copy is an indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex
 # reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
 # there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
-# with # comments outside strings removed.
+# with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it.
 toml_session_start() { # file: the lines of its SessionStart hook tables, comments removed
   { awk '
     { n = split($0, c, ""); q = ""
@@ -2604,9 +2605,11 @@ toml_session_start() { # file: the lines of its SessionStart hook tables, commen
         printf "%s", ch
       }
       printf "\n" }' < "$1"; } 2>/dev/null | awk '
-    /^[[:space:]]*\[/ { t = $0; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); next }
+    BEGIN { top = 1 }
+    d > 0 { print; d += gsub(/\[/, "[") - gsub(/\]/, "]"); next }
+    /^[[:space:]]*\[/ { t = $0; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); top = 0; next }
     s { print; next }
-    h && /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/ { print }'
+    (h && /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print; d = gsub(/\[/, "[") - gsub(/\]/, "]") }'
 }
 USER_HOOKS=""
 _cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}

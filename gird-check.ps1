@@ -2060,9 +2060,11 @@ $N_WIRED = $WiredP.Count
 # copy is an indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex
 # reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
 # there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
-# with # comments outside strings removed. As gird-check.sh's toml_session_start.
+# with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it. As gird-check.sh's
+# toml_session_start.
 function Toml-SessionStart([string]$t) {
-  $out = New-Object System.Collections.Generic.List[string]; $in = $false; $hk = $false
+  $out = New-Object System.Collections.Generic.List[string]; $in = $false; $hk = $false; $top = $true; $d = 0
   foreach ($line in ($t -split "`n")) {
     $q = ''; $i = 0; $cut = $line.Length
     while ($i -lt $line.Length) {
@@ -2071,9 +2073,11 @@ function Toml-SessionStart([string]$t) {
       else { $k = $line.IndexOfAny([char[]]@('"', '\'), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '\') { $i = $k + 2 } else { $q = ''; $i = $k + 1 } }
     }
     $l = $line.Substring(0, $cut)
-    if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); continue }
+    $br = ($l.Split('[').Count - 1) - ($l.Split(']').Count - 1)
+    if ($d -gt 0) { $out.Add($l); $d += $br; continue }
+    if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); $top = $false; continue }
     if ($in) { $out.Add($l); continue }
-    if ($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') { $out.Add($l) }
+    if (($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') -or ($top -and $l -cmatch '^\s*hooks\.SessionStart\s*=')) { $out.Add($l); $d = $br }
   }
   $out -join "`n"
 }

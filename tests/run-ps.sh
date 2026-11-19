@@ -952,7 +952,12 @@ hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
 # that runs a file from .claude/package or .codex/package is listed too, with or without the file.
 mkdir -p "$WORK/ast/code/w/.claude" "$WORK/ast/code/w/.vscode" "$WORK/ast/code/g/.claude/hooks" "$WORK/ast/code/h/.claude" \
   "$WORK/ast/code/t/.claude" "$WORK/ast/code/t/.vscode" "$WORK/ast/code/n/.claude" "$WORK/ast/.claude" "$WORK/ast/.codex" \
-  "$WORK/ast/code/c/.claude" "$WORK/ast/code/c/.vscode" "$WORK/ast/code/x/.claude" "$WORK/ast/code/x/.vscode"
+  "$WORK/ast/code/c/.claude" "$WORK/ast/code/c/.vscode" "$WORK/ast/code/x/.claude" "$WORK/ast/code/x/.vscode" \
+  "$WORK/ast/code/q1/.claude" "$WORK/ast/code/q1/.vscode" "$WORK/ast/code/q2/.claude" "$WORK/ast/code/q2/.vscode"
+# q1 and q2 only echo text that names the planted file after a ; inside shell quotes.
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s"}]}]}}\n' '\"x;node .claude/setup.mjs\"' > "$WORK/ast/code/q1/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s"}]}]}}\n' "'x;node .claude/setup.mjs'" > "$WORK/ast/code/q2/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' | tee "$WORK/ast/code/q1/.vscode/tasks.json" > "$WORK/ast/code/q2/.vscode/tasks.json"
 # c runs the planted file first in a chain; x runs an index.js from .github, a name planted only in .claude.
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs && node .claude/other.js; echo %s | grep %s"}]}]}}\n' '\"a;b\"' "'x|y'" > "$WORK/ast/code/c/.claude/settings.json"
 printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/c/.vscode/tasks.json"
@@ -977,6 +982,7 @@ hasnot "a hook alone, or with a task that does not run on open, is not worm-shap
 has    "a planted file a chain runs first counts as well" '! ~/code/c A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast.txt"
 has    "and the row names every script in the chain" '~/code/c/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/other\.js and \.claude/setup\.mjs\.' "$WORK/ast.txt"
 hasnot "a planted name in another folder is not worm-shaped" '~/code/x A session-start hook' "$WORK/ast.txt"
+hasnot "a ; inside shell quotes does not split the command" '~/code/q[12] A session-start hook' "$WORK/ast.txt"
 hasnot "a hook on another event names no startup script" '~/code/n/\.claude/settings\.json Set to run commands while the agent works\. Each' "$WORK/ast.txt"
 psrun "$WORK/ast" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast-c.txt"
 has    "the summary row counts the worm-shaped project" '02 . MCP servers .*worm-style startup in 2 projects' "$WORK/ast-c.txt"
@@ -984,6 +990,10 @@ has    "what to do says to read that script" 'Read the script each project in se
 has    "a session hook in your own Claude Code settings that runs a file from .claude/package is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts\. The AntV wave copies its payload there' "$WORK/ast.txt"
 has    "and one in Codex's hooks.json that runs a file from .codex/package" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast.txt"
 hasnot "a commented-out hook in Codex's config.toml, or one on another event, is not" '~/\.codex/config\.toml' "$WORK/ast.txt"
+mkdir -p "$WORK/ast2/.codex"
+printf '[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast2/.codex/config.toml"
+psrun "$WORK/ast2" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast2.txt"
+has    "a SessionStart array over several lines in Codex's config.toml is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast2.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents" "$WORK/mst/AppData/Roaming" "$WORK/mst/AppData/Local/Temp"
