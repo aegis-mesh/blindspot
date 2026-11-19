@@ -44,9 +44,9 @@ end=1/' ;;
   maxed)
     ids=$(grep -v '^#' "$FWL_REPO/data/incidents.tsv" | grep -v '^[[:space:]]*$' | cut -f1 | head -n 40 | paste -sd ' ' -)
     provs=$(grep -v '^#' "$FWL_REPO/data/keys.tsv" | grep -v '^[[:space:]]*$' | cut -f1 | sed 's/_.*//' | awk '!s[$0]++' | paste -sd ' ' -)
-    for l in v=1 agents= "yolo=claude-code codex vs-code-copilot" "tools=amazonq claudecode mcpremote" mcp_servers=0 mcp_token_files=0 key_files=1 "key_providers=$provs" history_keys=0 session_files=0 \
-      sessions_partial=0 allow_list_keys=0 ssh_open=0 ak_links=0 planted=0 "possible=$ids" "incidents=$ids" "platforms=opencode railway zeabur" on_open=0 \
-      to_read=0 "updates=$ids" wiper=1 "lock_only=$ids" "remove=$ids" not_read=0 moved=0 tmp_marks= tmp_wiper=0 protected=ok \
+    for l in v=1 agents= "yolo=claude-code codex vs-code-copilot" "remote=claude-code codex gemini-cli vs-code-copilot roo-code amazon-q" "tools=amazonq claudecode mcpremote" mcp_servers=0 mcp_token_files=0 key_files=1 "key_providers=$provs" history_keys=0 session_files=0 \
+      sessions_partial=0 allow_list_keys=0 ssh_open=0 ak_links=0 ssh_planted=1 planted=0 "possible=$ids" "incidents=$ids" "platforms=opencode railway zeabur" on_open=0 \
+      to_read=0 autostart=1 "updates=$ids" wiper=1 "lock_only=$ids" "remove=$ids" not_read=0 moved=0 tmp_marks= tmp_wiper=0 protected=ok \
       engine=dotnet end=1; do printf '%s\n' "$l"; done ;;
   hold) sleep 120 & echo "$!" > "$FWL_DIR/hold.pid"; echo "$$" > "$FWL_DIR/launcher.pid"
     printf '%s %s %s\n' "$!" "$$" "$(LC_ALL=C date '+%a %b %e %H:%M:%S %Y')" >> "$FWL_DIR/procs"; echo v=1; exec sleep 300 ;;
