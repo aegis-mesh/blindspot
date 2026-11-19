@@ -8701,15 +8701,19 @@ $PLATFORMS
 EOF
 
 SEC5=$CAP; CAP=""
-heading "WHAT TO DO" "most urgent first"
-_i=0
-while IFS= read -r t; do
-  [ -n "$t" ] || continue
-  _i=$((_i + 1)); printf -v _num '%2d' "$_i"
-  wrap "$t" 10 "     ${TEAL}${_num}.${RST}  " "          "
-done <<EOF
+# Every fix, numbered: the full report's list and the summary's.
+todo_list() {
+  _i=0
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    _i=$((_i + 1)); printf -v _num '%2d' "$_i"
+    wrap "$t" 10 "     ${TEAL}${_num}.${RST}  " "          "
+  done <<EOF
 $TODO
 EOF
+}
+heading "WHAT TO DO" "most urgent first"
+todo_list
 [ "$_i" -gt 0 ] && blank
 wrap "Also: set a monthly spend limit on every AI provider key, at the provider." 5 "     " "     "
 
@@ -8874,7 +8878,8 @@ cline 04 "$G4" "Allow lists" "$D4"
 cline 05 "$G5" "Recent leaks" "$D5"
 if [ "$ISSUES" -gt 0 ]; then
   blank
-  wrap "$(printf '%s' "$TODO" | head -n 1)" 14 "   ${B}First fix:${RST} " "              "
+  emit "   ${B}What to do, most urgent first${RST}"
+  todo_list
 fi
 # Argus in two lines, with the same claims as the full report.
 if [ "$OS" = Darwin ]; then
