@@ -25,7 +25,7 @@ Never grant it to `/bin/bash`. Check the result either way: each account's `prot
 ## Install it once
 
 1. Prepare the install script as [docs/fleet.md](../fleet.md#3-add-it-to-your-mdm) says: a tagged
-   release of `gird-check.sh` and `gird-fleet.sh` whose signature you checked, with the options line
+   release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked, with the options line
    starting the second line of `gird-fleet.sh` (`--deadline=1800` for Iru), each pasted between its
    marker lines in the install script. This install step has not yet been run end to end on a real
    Mac.

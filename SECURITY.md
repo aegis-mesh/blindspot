@@ -20,7 +20,6 @@ We acknowledge reports within 2 business days, triage within 5, and fix high-sev
 - It never runs code it finds: no Python, no agents, no MCP servers, no git inside your repos.
 - The report is saved with `umask 077` and noclobber, so it can't follow a planted link.
 - Counts go over https only, with a 5-second timeout, in the background.
-- What you download is only what a maintainer released and signed. Each release's `SHA256SUMS` holds its version and every file's SHA-256, signed with a maintainer's release key, and you can check it with `ssh-keygen` ([README](README.md#check-the-signature)).
 
 ## Supported versions
 
