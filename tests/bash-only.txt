@@ -339,3 +339,20 @@ fleet: a link at the ripgrep path is never followed	gird-check.ps1 has no fleet 
 fleet: a marker folder in the account's own temp folder counts for that account	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 fleet: a marker folder root owns in the shared temp folder is a possible sign for the Mac	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
 a settings read whose awk fails names the file as not read	gird-check.ps1 reads settings with .NET, not awk
+fleet: the trojanized Claude Code extension is its account's incident	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: so are its files alone	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the SSH key it adds	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: each of them makes its account act	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the trojanized extension's accounts exit 10	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the SSH key has a field of its own	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: which is 0 without the key	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and a line in the readable report	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: the trojanized extension's cleanup comes before any rotate	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+fleet: and the key is in the inventory value	gird-check.ps1 has no fleet mode: Windows needs its own design (docs/designs/fleet-mode.md, Not covered)
+a startup file alone of an incident with npm packages	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an SSH key of an incident with no extension	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an SSH key that is not base64	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an SSH key of an unknown type	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension marker with a space	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension marker with an empty string	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an extension registry of one marketplace	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once

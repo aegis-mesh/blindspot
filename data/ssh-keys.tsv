@@ -1,0 +1,14 @@
+# SSH public keys malware adds to ~/.ssh/authorized_keys, a login to the computer for the attacker.
+# One line each, tab separated. After editing, run: bash tools/gen.sh
+#   incident  an id from data/incidents.tsv whose packages are only editor extensions
+#             (data/bad-extensions.tsv): the key is shown with them, as that incident's sign
+#   type      the key's type, as the line writes it before the key (ssh-ed25519, ssh-rsa, ecdsa-sha2-nistp256)
+#   key       the key itself, its base64 text. A line of ~/.ssh/authorized_keys counts when the type and
+#             then the key are two of its fields, whatever options come before them or comment after
+#   note      what the key is, shown under ~/.ssh/authorized_keys
+# These are public keys, published by the sources as signs of the incident, never secrets.
+# Trojanized Claude Code extension (claudeext): StepSecurity's post gives the key, with the comment
+# svc-telemetry; Cursor's security notice and StepSecurity give its fingerprint,
+# SHA256:0Z6R+DF64Do2nwQic8a7kkfDLNNk4IiK+2U2Rci4htk, which ssh-keygen -lf gives for this line.
+# incident	type	key	note
+claudeext	ssh-ed25519	AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P	the SSH key the trojanized Claude Code extension adds for the attacker

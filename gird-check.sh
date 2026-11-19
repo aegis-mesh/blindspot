@@ -1232,12 +1232,12 @@ Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/global
 Continue||$H/.continue|$H/.continue/sessions|continue"
 # <<< agents
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; uipath) printf '%s' 'UiPath npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026' ;; mastra) printf '%s' 'Mastra npm packages, June 2026' ;; antv) printf '%s' 'AntV account takeover, May 2026' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; esac; }
-incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; uipath) printf '%s' 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' ;; mastra) printf '%s' 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' ;; antv) printf '%s' 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' ;; esac; }
+npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; uipath) printf '%s' 'UiPath npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026' ;; mastra) printf '%s' 'Mastra npm packages, June 2026' ;; antv) printf '%s' 'AntV account takeover, May 2026' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; claudeext) printf '%s' 'Trojanized Claude Code extension, October 2026' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2, November 2026' ;; esac; }
+incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; uipath) printf '%s' 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' ;; mastra) printf '%s' 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' ;; antv) printf '%s' 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' ;; claudeext) printf '%s' 'Trojanized Claude Code extension, October 2026: builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel. cursor.com' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2, November 2026: a .pth file started a credential stealer every time Python started. github.com' ;; esac; }
 incident_level() { case "$1" in mistral) printf update ;; uipath) printf update ;; opencode) printf leak ;; railway) printf leak ;; zeabur) printf leak ;; injective) printf update ;; *) printf act ;; esac; }
-incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; uipath) printf '%s' 'UiPath npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; minishai) printf '%s' 'Mini Shai-Hulud worm' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2' ;; mastra) printf '%s' 'Mastra npm packages' ;; antv) printf '%s' 'AntV account takeover' ;; nxconsole) printf '%s' 'Nx Console 18.95.0' ;; redhat) printf '%s' 'Red Hat Cloud Services packages' ;; keyv) printf '%s' 'keyv worm' ;; keyvscope) printf '%s' 'keyv account takeover' ;; keyvspread) printf '%s' 'keyv worm spread' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormzig) printf '%s' 'GlassWorm extensions' ;; glasswormdec) printf '%s' 'GlassWorm native extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; glasswormuni) printf '%s' 'GlassWorm invisible code' ;; glasswasm) printf '%s' 'GlassWASM extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
-incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; uipath) printf '%s' 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; minishai) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' ;; lightning) printf '%s' 'github.com/advisories/GHSA-g4wr-mm54-799x' ;; durabletask) printf '%s' 'github.com/advisories/GHSA-3qf7-886j-9wrc' ;; telnyx) printf '%s' 'github.com/advisories/GHSA-955r-262c-33jc' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; antv) printf '%s' 'osv.dev/vulnerability/MAL-2026-3973' ;; nxconsole) printf '%s' 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' ;; redhat) printf '%s' 'osv.dev/vulnerability/MAL-2026-5111' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; keyvscope) printf '%s' 'github.com/advisories/GHSA-q99r-cjmf-3xrf' ;; keyvspread) printf '%s' 'osv.dev/vulnerability/MAL-2026-11952' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; sandsleep) printf '%s' 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; litellmmar) printf '%s' 'docs.litellm.ai/blog/security-update-march-2026' ;; opencode) printf '%s' 'x.com/opencode/status/2111519637049319818' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormzig) printf '%s' 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' ;; glasswormdec) printf '%s' 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; glasswormuni) printf '%s' 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' ;; glasswasm) printf '%s' 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in uipath) printf '%s' 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' ;; keyvscope) printf '%s' 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' ;; sandworm) printf '%s' 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' ;; glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormzig) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; injective) printf '%s' 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; uipath) printf '%s' 'UiPath npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; minishai) printf '%s' 'Mini Shai-Hulud worm' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2' ;; mastra) printf '%s' 'Mastra npm packages' ;; antv) printf '%s' 'AntV account takeover' ;; nxconsole) printf '%s' 'Nx Console 18.95.0' ;; redhat) printf '%s' 'Red Hat Cloud Services packages' ;; keyv) printf '%s' 'keyv worm' ;; keyvscope) printf '%s' 'keyv account takeover' ;; keyvspread) printf '%s' 'keyv worm spread' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormzig) printf '%s' 'GlassWorm extensions' ;; glasswormdec) printf '%s' 'GlassWorm native extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; glasswormuni) printf '%s' 'GlassWorm invisible code' ;; glasswasm) printf '%s' 'GlassWASM extensions' ;; injective) printf '%s' 'Injective SDK' ;; claudeext) printf '%s' 'Trojanized Claude Code extension' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2' ;; esac; }
+incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; uipath) printf '%s' 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; minishai) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' ;; lightning) printf '%s' 'github.com/advisories/GHSA-g4wr-mm54-799x' ;; durabletask) printf '%s' 'github.com/advisories/GHSA-3qf7-886j-9wrc' ;; telnyx) printf '%s' 'github.com/advisories/GHSA-955r-262c-33jc' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; antv) printf '%s' 'osv.dev/vulnerability/MAL-2026-3973' ;; nxconsole) printf '%s' 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' ;; redhat) printf '%s' 'osv.dev/vulnerability/MAL-2026-5111' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; keyvscope) printf '%s' 'github.com/advisories/GHSA-q99r-cjmf-3xrf' ;; keyvspread) printf '%s' 'osv.dev/vulnerability/MAL-2026-11952' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; sandsleep) printf '%s' 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; litellmmar) printf '%s' 'docs.litellm.ai/blog/security-update-march-2026' ;; opencode) printf '%s' 'x.com/opencode/status/2111519637049319818' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormzig) printf '%s' 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' ;; glasswormdec) printf '%s' 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; glasswormuni) printf '%s' 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' ;; glasswasm) printf '%s' 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; claudeext) printf '%s' 'cursor.com/blog/claude-code-extension-security-notice' ;; agentfw) printf '%s' 'github.com/advisories/GHSA-764m-3ppc-5m73' ;; esac; }
+incident_advice() { case "$1" in uipath) printf '%s' 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' ;; keyvscope) printf '%s' 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' ;; sandworm) printf '%s' 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' ;; glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormzig) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; injective) printf '%s' 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' ;; claudeext) printf '%s' 'First remove what the trojanized Claude Code extension leaves: the line in ~/.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ (its comment may read svc-telemetry), ~/.config/.smt, ~/.config/.smtk and ~/.config/smt.cmd, ~/Library/LaunchAgents/com.apple.sysmond.plist on a Mac, the @reboot line that runs .smt in your crontab on Linux, the .stk_ file in your temp folder, and on Windows ~/.config/smtk, sysmon.cmd in the Startup folder, the scheduled task SysMon and the same key line in administrators_authorized_keys in the ssh folder of ProgramData. End any ssh or autossh process that keeps a tunnel open. Then turn off Remote Login on a Mac (the SSH server on Linux, OpenSSH Server on Windows) if you did not turn it on yourself.' ;; esac; }
 incident_summary() { case "$1" in uipath) printf '%s' 'UiPath builds: update them, UiPath says no risk' ;; injective) printf '%s' 'Injective SDK: move the funds out of its wallets' ;; esac; }
 # <<< incidents
 # >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1277,7 +1277,25 @@ telnyx|linux|startup|no|$H/.config/audiomon/audiomon.py|the backdoor the telnyx 
 telnyx|linux|startup|no|$H/.config/systemd/user/audiomon.service|starts the backdoor the telnyx malware leaves, at login
 telnyx|win|startup|no|$H/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe|the telnyx malware, which Windows starts at every login from the Startup folder
 telnyx|mac|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
-telnyx|linux|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says."
+telnyx|linux|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
+claudeext|mac|startup|no|$H/.config/.smt|the trojanized Claude Code extension's reverse SSH tunnel script
+claudeext|linux|startup|no|$H/.config/.smt|the trojanized Claude Code extension's reverse SSH tunnel script
+claudeext|mac|startup|no|$H/.config/.smtk|a file the trojanized Claude Code extension writes beside .smt
+claudeext|linux|startup|no|$H/.config/.smtk|a file the trojanized Claude Code extension writes beside .smt
+claudeext|all|startup|no|$H/.config/smt.cmd|a script the trojanized Claude Code extension writes to keep its tunnel running
+claudeext|win|startup|no|$H/.config/smtk|a file the trojanized Claude Code extension writes beside smt.cmd
+claudeext|mac|startup|no|$H/Library/LaunchAgents/com.apple.sysmond.plist|a LaunchAgent of the trojanized Claude Code extension, not Apple's
+claudeext|win|startup|no|$H/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sysmon.cmd|starts the trojanized Claude Code extension's tunnel at every login
+agentfw|all|site|no|agent_framework_meta.pth|-
+agentfw|all|site|no|af_runtime_diag.pth|-
+agentfw|all|site|no|af_runtime_diag.py|-"
+IND_ALONE="claudeext|$H/.config/.smt
+claudeext|$H/.config/.smt
+claudeext|$H/.config/.smtk
+claudeext|$H/.config/.smtk
+claudeext|$H/.config/smt.cmd
+claudeext|$H/.config/smtk
+claudeext|$H/Library/LaunchAgents/com.apple.sysmond.plist"
 # <<< indicators
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a malicious agent could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
@@ -1295,6 +1313,7 @@ claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web pa
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.1.38|2.1.163|a malicious repository could run code outside the sandbox|github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|-|2.1.179|a plugin repository could install code that bypasses its pinned hash|github.com/advisories/GHSA-pq7j-f95f-qfcv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.0.68|2.1.260|a stored API key could start sessions without the managed settings of an Enterprise or Team organization|github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
+claudecode|Claude Code|mac|npm|@anthropic-ai/claude-code|-|2.1.251|code a malicious repository runs in its sandbox could make it write files outside the workspace|github.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|npm|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h
@@ -2768,8 +2787,10 @@ durabletask 1.4.1 durabletask linux
 durabletask 1.4.2 durabletask linux
 durabletask 1.4.3 durabletask linux
 telnyx 4.87.1 telnyx none
-telnyx 4.87.2 telnyx all"
-PY_INCIDENTS="litellm litellmmar mistralpy guardrails lightning durabletask telnyx"
+telnyx 4.87.2 telnyx all
+agent_framework 1.26.1 agentfw all
+agent_framework 1.26.2 agentfw all"
+PY_INCIDENTS="litellm litellmmar mistralpy guardrails lightning durabletask telnyx agentfw"
 # <<< bad-pypi
 # A folder the walks below could not enter (find's error), or the folder on the way to a root that can't
 # be read, is printed as "?<TAB>folder" and counted as an environment not read (PY_UNREAD), never as one
@@ -6496,6 +6517,7 @@ rwc-client 0.29.17 keyvspread
 rwc-client 0.29.18 keyvspread
 rwc-client 0.29.19 keyvspread
 server-hemera-mongo 0.0.12 keyvspread
+server-hemera-mongo 0.0.16 keyvspread
 sn-listbox 0.3.3 keyvspread
 tslint-folder-schema 1.0.6 keyvspread
 tslint-folder-schema 1.0.7 keyvspread
@@ -6728,8 +6750,13 @@ vims-vsce.vscode-vim * glasswormdec any mac,win
 vsceue.volar-vscode * glasswormdec any mac,win
 exargd.vsblack 0.0.1 glasswasm openvsx all
 noellee-doc.flint-debug 0.1.1 glasswasm openvsx all
-nrwl.angular-console 18.95.0 nxconsole any all"
+nrwl.angular-console 18.95.0 nxconsole any all
+anthropic.claude-code 2.1.312 claudeext any all 134.209.82.225;svc-telemetry
+anthropic.claude-code 2.1.313 claudeext any all 134.209.82.225;svc-telemetry"
 # <<< bad-extensions
+# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it.
+SSH_PLANTED='claudeext|ssh-ed25519|AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P|the SSH key the trojanized Claude Code extension adds for the attacker'
+# <<< ssh-keys
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
 # bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line,
@@ -7223,7 +7250,9 @@ NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" |
 # dropper targets too (Socket's post of 18 March 2026, Aikido's of April), keeps them in
 # ~/.positron/extensions and its server's in ~/.positron-server/extensions, from Posit's mirror of
 # Open VSX (its product.json). A line whose bad build was only ever on Open VSX (registry openvsx)
-# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A
+# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A line
+# with a marker (a clean build has the same id and version) counts only when the folder's extension.js
+# holds one of its strings, and an extension.js that is missing or can't be read counts in EXT_UNREAD. A
 # folder that can't be read leaves the check not done in full (EXT_UNREAD), never clean, and so does
 # an editor's own folder (~/.windsurf) that can't be opened, which hides its extensions folder.
 ext_roots() { printf '%s\n' "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.devin/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions" "$H/.antigravity-ide/extensions" "$H/.antigravity/extensions" \
@@ -7246,7 +7275,7 @@ _ext_found=$(ext_roots | while IFS= read -r r; do
     case "$r" in ("$H/.vscode/extensions"|"$H/.vscode-insiders/extensions"|"$H/.vscode-server/extensions"|"$H/.vscode-server-insiders/extensions") _rg=marketplace ;; (*) _rg=openvsx ;; esac
     for d in "$r"/*; do [ -d "$d" ] && printf '%s\t%s\n' "$_rg" "$d"; done
   done | BAD_EXT_LIST=$BAD_EXT awk -F '\t' '
-  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4]; os[i] = f[5] } }
+  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4]; os[i] = f[5]; mk[i] = f[6] } }
   { reg = $1; d = substr($0, length($1) + 2); gsub(/[[:cntrl:]]/, "?", d); b = d; sub(/.*\//, "", b); lb = tolower(b)
     # Split as VS Code splits a folder name (its ExtensionKey): the id is the longest start that leaves
     # a version of three numbers, alone or before a -, so oorzc.ssh-tools-2-0.1.0 is oorzc.ssh-tools-2.
@@ -7267,7 +7296,26 @@ _ext_found=$(ext_roots | while IFS= read -r r; do
       if (v[i] == ver) { hit = i; break }
       if (v[i] == "*" && !hit) hit = i
     }
-    if (hit) print d "\t" sp[hit] " " ver "\t" t[hit] "\t" os[hit] }')
+    if (hit) print d "\t" sp[hit] " " ver "\t" t[hit] "\t" os[hit] "\t" mk[hit] }')
+# A line with a marker: the folder is the bad build only when its extension.js holds one of the strings.
+# A folder name with control characters reaches here with them as ?, so its extension.js is not found
+# and counts as not read.
+_ext_kept=""
+while IFS="$TAB" read -r _xd _xv _xt _xo _xm; do
+  [ -n "$_xd" ] || continue
+  if [ -n "$_xm" ]; then
+    _xj="$_xd/extension.js"
+    if [ ! -f "$_xj" ] || [ ! -r "$_xj" ]; then EXT_UNREAD=$((EXT_UNREAD + 1)); continue; fi
+    _xa=(); _oifs=$IFS; IFS=';'; for _xs in $_xm; do _xa+=(-e "$_xs"); done; IFS=$_oifs
+    grep -qF "${_xa[@]}" "$_xj" 2>/dev/null; _xr=$?
+    if [ "$_xr" -eq 1 ]; then continue; elif [ "$_xr" -ne 0 ]; then EXT_UNREAD=$((EXT_UNREAD + 1)); continue; fi
+  fi
+  _ext_kept="$_ext_kept$_xd$TAB$_xv$TAB$_xt$TAB$_xo
+"
+done <<EOF
+$_ext_found
+EOF
+_ext_found=$_ext_kept
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
 # shipped malware means a compromised machine (EXT_ROWS: folder, id and version, incident). Elsewhere it
 # is a malicious extension to remove (EXT_UPD, with the os), with no part in EXT_HIT, the score or the
@@ -7471,14 +7519,42 @@ NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' '
 # packages and Nx Console 18.95.0 leave the same kitty-monitor files) is listed once, by the incident
 # IND_OWNER names: the extension's when it was found and none of the npm incident's packages was found
 # installed (NPM_INST_TAGS): a version only in a lockfile is no sign of what made these files.
-EXT_FOUND=" $(printf '%s\n' "$EXT_ROWS" | cut -f3 | sort -u | tr '\n' ' ')"
+# An SSH key malware adds to ~/.ssh/authorized_keys (data/ssh-keys.tsv) is its incident's sign, shown
+# with that incident's extensions (EXT_KEY). A line counts when the key's type and then the key itself
+# are two of its fields, whatever options come before them or comment after: a comment alone never
+# counts. A file, or a .ssh folder, that can't be read leaves the check not done in full
+# (SSHK_UNREAD), never clean.
+EXT_KEY=""; EXT_KEY_TAGS=""; SSHK_UNREAD=0; _akf="$H/.ssh/authorized_keys"
+if [ ! -e "$_akf" ]; then
+  # Not there, or there and out of reach: a .ssh folder that can't be listed, or that lists the file
+  # but can't be entered, or a link to nothing.
+  if [ -d "$H/.ssh" ]; then
+    if [ ! -r "$H/.ssh" ]; then SSHK_UNREAD=1
+    else for _xe in "$H/.ssh"/authorized_key[s]; do [ "$_xe" = "$H/.ssh/authorized_key[s]" ] || SSHK_UNREAD=1; done; fi
+  fi
+else
+  if [ -d "$_akf" ] || [ ! -r "$_akf" ]; then SSHK_UNREAD=1
+  elif _akh=$(SSHK=$SSH_PLANTED awk '
+      BEGIN { n = split(ENVIRON["SSHK"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, "|"); inc[i] = f[1]; t[i] = f[2]; k[i] = f[3]; nt[i] = f[4] } }
+      { sub(/\r$/, ""); for (j = 2; j <= NF; j++) for (i = 1; i <= n; i++) if ($j == k[i] && $(j - 1) == t[i] && !s[i]++) print inc[i] "\t" nt[i] }' "$_akf" 2>/dev/null); then
+    while IFS="$TAB" read -r _ki _kn; do
+      [ -n "$_ki" ] || continue
+      EXT_KEY="$EXT_KEY$(rowsafe "$_akf")$TAB$_kn
+"; EXT_KEY_TAGS="$EXT_KEY_TAGS$_ki
+"
+    done <<EOF
+$_akh
+EOF
+  else SSHK_UNREAD=1; fi
+fi
+EXT_FOUND=" $( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_KEY_TAGS"; } | grep -v '^$' | sort -u | tr '\n' ' ')"
 IND_OWNER=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v e="$EXT_INCS" -v n="$NPM_INCS" -v f="$EXT_FOUND" -v t="$NPM_INST_TAGS" -v o="$_os" '
   $3 == "startup" && ($2 == "all" || $2 == o) && $5 != "" {
     if (index(e, " " $1 " ") && !index(n, " " $1 " ")) { if (!($5 in xa)) xa[$5] = $1; if (index(f, " " $1 " ") && !($5 in xf)) xf[$5] = $1 }
     else { if (!($5 in m)) m[$5] = $1; if (index(t, " " $1 " ")) nf[$5] = 1 }
   }
   END { for (p in m) if (p in xa) print p "|" ((p in xf) && !(p in nf) ? xf[p] : m[p]) }')
-WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; EXT_CHECK=""; EXT_CHECK_TAGS=""; IND_HITS=""
+WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; EXT_CHECK=""; EXT_CHECK_TAGS=""; _xcpend=""; IND_HITS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   # A Python incident's startup file is shown in its row (PY_START).
@@ -7507,18 +7583,28 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
 "
   elif [ "$_ext" -eq 1 ]; then
-    case "$EXT_FOUND" in
-      *" $_ii "*) EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
+    # A file whose name is the malware's own (data/indicators.tsv's alone) is its sign on its own.
+    _al=0; case "$EXT_FOUND" in *" $_ii "*) _al=1 ;; *) printf '%s\n' "$IND_ALONE" | grep -qxF "$_ii|$_ip" && _al=1 ;; esac
+    if [ "$_al" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
 "; EXT_PERSIST_TAGS="$EXT_PERSIST_TAGS$_ii
-" ;;
-      *) EXT_CHECK="$EXT_CHECK$(rowsafe "$_ip")$TAB$_in
-"; EXT_CHECK_TAGS="$EXT_CHECK_TAGS$_ii
-" ;;
-    esac
+"
+    else _xcpend="$_xcpend$_ii$TAB$(rowsafe "$_ip")$TAB$_in
+"; fi
   else PERSIST="$PERSIST$(rowsafe "$_ip")$TAB$_in
 "; fi
 done <<EOF
 $IND_TABLE
+EOF
+# Beside a file of the same incident that is its sign on its own, a file is its sign too.
+while IFS="$TAB" read -r _ci _cp _cn; do
+  [ -n "$_ci" ] || continue
+  if printf '%s' "$EXT_PERSIST_TAGS" | grep -qxF "$_ci"; then EXT_PERSIST="$EXT_PERSIST$_cp$TAB$_cn
+"
+  else EXT_CHECK="$EXT_CHECK$_cp$TAB$_cn
+"; EXT_CHECK_TAGS="$EXT_CHECK_TAGS$_ci
+"; fi
+done <<EOF
+$_xcpend
 EOF
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if [ "$WIN" -eq 1 ]; then
@@ -7534,12 +7620,13 @@ WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
 MAL_LOCKONLY=0; if [ "$MAL_HIT" -eq 1 ] && [ "$NPM_INST" -eq 0 ] && [ -z "$PERSIST" ] && [ "$WIPER_HIT" -eq 0 ]; then MAL_LOCKONLY=1; fi
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
-# extension incident's startup file next to it is its sign too.
-EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
+# extension incident's startup file next to it is its sign too, and so are a startup file whose name
+# is the malware's own and an SSH key it adds.
+EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ] || [ -n "$EXT_KEY" ]; then EXT_HIT=1; fi
 # The incidents of what EXT_HIT counts (EXT_ACT_TAGS), for their advice and lines, and of the extensions
 # to remove (EXT_UPD_TAGS). EXT_TAGS is both: the account run sends it, so an extension to remove is
 # never left out of an account's row.
-EXT_ACT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST_TAGS"; } | grep -v '^$' | sort -u)
+EXT_ACT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST_TAGS$EXT_KEY_TAGS"; } | grep -v '^$' | sort -u)
 EXT_UPD_TAGS=$(printf '%s\n' "$EXT_UPD" | cut -f3 | grep -v '^$' | sort -u)
 EXT_TAGS=$(printf '%s\n' $EXT_ACT_TAGS $EXT_UPD_TAGS | grep -v '^$' | sort -u)
 ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
@@ -7694,7 +7781,7 @@ if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -
 # or an extension folder could not be read. The headline then says what it can: no findings in the
 # paths checked.
 PARTIAL=0
-if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$SSHK_UNREAD" -eq 1 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -7800,11 +7887,17 @@ if [ "$MAL_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then
   todo 5 "Treat this machine as compromised. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm's cache with npm cache clean --force."
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
-  # Only what section 5 lists: the extensions, the incident's startup file, or both.
-  if [ "$(printf '%s' "$EXT_PERSIST" | grep -c .)" -gt 1 ]; then _edo="Uninstall the extensions listed in section 5, delete the startup files listed there, and"
-  elif [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
-  else _edo="Uninstall the extensions listed in section 5 and"; fi
-  todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
+  # Only what section 5 lists: the extensions, the incident's startup files, an SSH key it adds.
+  _ed=""; _edn=0; _edw="listed in section 5"
+  if [ -n "$EXT_ROWS" ]; then _ed="uninstall the extensions $_edw"; _edn=1; _edw="listed there"; fi
+  case "$(printf '%s' "$EXT_PERSIST" | grep -c .)" in
+    0) ;;
+    1) _ed="${_ed:+$_ed, }delete the startup file $_edw"; _edn=$((_edn + 1)); _edw="listed there" ;;
+    *) _ed="${_ed:+$_ed, }delete the startup files $_edw"; _edn=$((_edn + 1)); _edw="listed there" ;;
+  esac
+  [ -n "$EXT_KEY" ] && { _ed="${_ed:+$_ed, }remove the SSH key $_edw from ~/.ssh/authorized_keys"; _edn=$((_edn + 1)); }
+  if [ "$_edn" -gt 1 ]; then _ed="$_ed, and"; else _ed="$_ed and"; fi
+  todo 5 "Treat this machine as compromised. $(printf '%s' "${_ed:0:1}" | tr 'a-z' 'A-Z')${_ed:1} rotate every key this machine could reach."
 fi
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
@@ -7897,7 +7990,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
   _inc=$(printf '%s\n' $_npm_inc $EXT_ACT_TAGS $PY_HITS $IND_HITS | fleet_ids)
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
-  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
+  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + SSHK_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
   # Planted files that count (WORM_HIT), as the report lists them; one named like them alone is to read.
   _planted=$(( $(count_lines "$WORM_HIT") + $(count_lines "$WORM_REFS") ))
   # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
@@ -7963,6 +8056,7 @@ EOF
     echo "allow_list_keys=$N_ALLOW"
     echo "ssh_open=$N_SSH_OPEN"
     echo "ak_links=$N_AK"
+    echo "ssh_planted=$(count_lines "$EXT_KEY")"
     echo "planted=$_planted"
     echo "possible=$_poss"
     echo "incidents=$_inc"
@@ -8637,7 +8731,7 @@ EOF
     emit "        $(short "$f")"
     emit "          ${p}"
   done <<EOF
-$EXT_PERSIST
+$EXT_PERSIST$EXT_KEY
 EOF
   [ -n "$EXT_UPD" ] && ext_upd_rows
   if [ -n "$EXT_CHECK" ]; then
@@ -8678,14 +8772,19 @@ EOF
   for _t in $EXT_CHECK_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$EXT_UNREAD" -gt 0 ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: $(plural "$EXT_UNREAD" "extension folder" "extension folders") could not be read${RST}"
+elif [ "$SSHK_UNREAD" -eq 1 ]; then
+  pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: ~/.ssh/authorized_keys could not be read${RST}"
 else
   pair "${GRN}✓${RST}" "Editor extensions" 16 "none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
-  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron" 26 "                          " "                          " "$DIM"
+  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron, and ~/.ssh/authorized_keys for an SSH key such malware adds" 26 "                          " "                          " "$DIM"
 fi
 # With findings above, a folder that could not be read still has to be said.
 if [ "$EXT_UNREAD" -gt 0 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [ -n "$EXT_UPD" ]; }; then
   if [ "$EXT_UNREAD" -eq 1 ]; then _xm="An extension folder"; else _xm="Some extension folders"; fi
   wrap "$_xm could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+fi
+if [ "$SSHK_UNREAD" -eq 1 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [ -n "$EXT_UPD" ] || [ "$EXT_UNREAD" -gt 0 ]; }; then
+  wrap "~/.ssh/authorized_keys could not be read, so whether it holds an SSH key such malware adds is not known." 8 "        " "        " "$YEL"
 fi
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
@@ -8863,6 +8962,7 @@ elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not f
 elif [ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ "$NPM_GUNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: folder unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
+elif [ "$SSHK_UNREAD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="SSH logins not fully checked: file unreadable"
 elif [ "$PY_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="Python not fully checked: folder unreadable"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi

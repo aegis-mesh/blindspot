@@ -37,6 +37,12 @@
 # thread on the compromise (Lightning-AI/pytorch-lightning issue 21691) speaks of lightning, which is
 # listed, and neither PyPI nor deps.dev knows a pytorch-lightning 2.6.2 or 2.6.3: no source shows
 # that they were published.
+# agent-framework 1.26.1 and 1.26.2, November 2026: GitHub's malware advisory GHSA-764m-3ppc-5m73
+# (OpenSSF's MAL-2026-20101), Wiz's and Aikido's posts. Each wheel adds a .pth file that starts a
+# credential stealer whenever Python starts. Aikido's post shows it running on Linux, macOS and Windows: all. The
+# wheels are agent_framework-1.26.x-py3-none-any.whl, so the folder is agent_framework-1.26.2.dist-info
+# (OpenSourceMalware's post names it). No source names another package published with them; their .pth
+# and payload files are in data/indicators.tsv.
 # name	version	incident	os
 litellm	1.107.0	litellm	all
 litellm	1.82.7	litellmmar	all
@@ -50,3 +56,5 @@ durabletask	1.4.2	durabletask	linux
 durabletask	1.4.3	durabletask	linux
 telnyx	4.87.1	telnyx	none
 telnyx	4.87.2	telnyx	all
+agent_framework	1.26.1	agentfw	all
+agent_framework	1.26.2	agentfw	all
