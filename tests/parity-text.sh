@@ -25,7 +25,7 @@ for f in "$RUN" "$RUNPS" "$ONLY" "$PAY" "$PSK"; do [ -f "$f" ] || { echo "  pari
 names() { # suite: "N<tab>name" per test, "L<tab>problem" per call it can't count
   LC_ALL=C awk -v pay="$PAY" -v src="$1" '
     BEGIN {
-      split("ok bad skip has hasnot hasi nokeys gen_refuses payload_checks", hl, " ")
+      split("ok bad skip has hasnot hasi nokeys gen_refuses payload_checks nr_is", hl, " ")
       for (i in hl) helper[hl[i]] = 1
       SQ = "\047"; DQ = "\""; st = ""; hd = ""; sp = 0; fn = ""; nr = 0; nb = 0
     }

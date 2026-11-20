@@ -1094,7 +1094,8 @@ has    "and so does one in ''' quotes in a SessionStart array" 'could not be rea
 # that would run them.
 for _p in w-1 w.2 w/p w_3 w9; do mkdir -p "$WORK/wst/code/$_p/.claude" "$WORK/wst/code/$_p/.vscode"; done
 wst() { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$WORK/wst/code/$1/.claude/settings.json"
-  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wst/code/$1/.vscode/tasks.json"; }
+  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wst/code/$1/.vscode/tasks.json"
+}
 wst w-1 'nohup node .claude/setup.mjs &' 'exec node .claude/setup.mjs'
 wst w.2 '/usr/bin/env node .claude/setup.mjs' 'npx node .claude/setup.mjs'
 wst w/p 'NODE_OPTIONS= node .claude/setup.mjs' 'FOO=bar BAZ=1 node .claude/setup.mjs'
@@ -2736,7 +2737,7 @@ SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which 
 has    "so is its LaunchAgent"                         '~/Library/LaunchAgents/com\.apple\.sysmond\.plist a LaunchAgent of the trojanized Claude Code extension, not Apple.s' "$WORK/dz-cxs.txt"
 SKIPPING=""
 hasnot "and none is a file to check"                   'a startup file to check|has the name of a file' "$WORK/dz-cxs.txt"
-has    "its files alone: its fix comes first, then the act-now fix for the files" ' 1\. First remove what the trojanized Claude Code extension leaves: .* 2\. Treat this machine as compromised\. Delete the startup files listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cxs.txt"
+has    "its files alone: its fix comes first, then the act-now fix for the files" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up.* 2\. Treat this machine as compromised\. Delete the startup files listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cxs.txt"
 has    "its files alone: the link names its fix"      '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxs.txt"
 [ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
 has    "on Linux, the extension's tunnel script is its sign too" 'Editor extensions signs of the malware found .*~/\.config/\.smt the trojanized Claude Code extension.s reverse SSH tunnel script' "$WORK/dz-cxs.txt"
@@ -2756,7 +2757,7 @@ printf 'ssh-ed25519 %s svc-telemetry\n' "$CX_KEY" > "$WORK/dz-cxku/.ssh/authoriz
 for k in dz-cxk dz-cxko dz-cxkn dz-cxku; do dzrun "$WORK/$k" | tr -s ' \n' '  ' > "$WORK/$k.txt"; dzrun "$WORK/$k" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/$k-sum.txt"; done
 chmod 600 "$WORK/dz-cxku/.ssh/authorized_keys"
 has    "the attacker's key in authorized_keys is a sign of the trojanized extension" 'Editor extensions signs of the malware found ~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker Trojanized Claude Code extension, October 2026' "$WORK/dz-cxk.txt"
-has    "the key alone: its fix comes first, then removing the key and rotating" ' 1\. First remove what the trojanized Claude Code extension leaves: .* 2\. Treat this machine as compromised\. Remove the SSH key listed in section 5 from ~/\.ssh/authorized_keys and rotate every key this machine could reach\.' "$WORK/dz-cxk.txt"
+has    "the key alone: its fix comes first, then removing the key and rotating" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up.* 2\. Treat this machine as compromised\. Remove the SSH key listed in section 5 from ~/\.ssh/authorized_keys and rotate every key this machine could reach\.' "$WORK/dz-cxk.txt"
 has    "the key alone: the summary row"               'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cxk-sum.txt"
 has    "the key alone: the link names its fix"        '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxk.txt"
 has    "the key after options, with another comment, still counts" '~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker' "$WORK/dz-cxko.txt"

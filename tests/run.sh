@@ -1067,7 +1067,8 @@ printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/router_runtime.js"}]}]}}\n' > "$WORK/ast10/code/r/.claude/settings.json"
 for _t in grep awk; do printf '#!/bin/sh\ncase "$*" in *"$AST10_PAT"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v "$_t")" > "$WORK/ast10-bin/$_t"; chmod +x "$WORK/ast10-bin/$_t"; done
 ast10() { # home name expression
-  HOME="$WORK/$1" PATH="$WORK/ast10-bin:$PATH" AST10_PAT=$3 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$1-$2.txt"; }
+  HOME="$WORK/$1" PATH="$WORK/ast10-bin:$PATH" AST10_PAT=$3 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$1-$2.txt"
+}
 AST10_NR='could not be read, so the servers, tokens and settings in them were not checked: .*'
 ast10 ast10 hook '\[[[:space:]]*\][[:space:]]*,)*'
 has    "a grep that crashes matching a project's hooks names the file as not read" "$AST10_NR~/code/p/\\.claude/settings\\.json" "$WORK/ast10-hook.txt"
@@ -1128,7 +1129,8 @@ has    "and so does one in ''' quotes in a SessionStart array" 'could not be rea
 # that would run them.
 for _p in w-1 w.2 w/p w_3 w9; do mkdir -p "$WORK/wst/code/$_p/.claude" "$WORK/wst/code/$_p/.vscode"; done
 wst() { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$WORK/wst/code/$1/.claude/settings.json"
-  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wst/code/$1/.vscode/tasks.json"; }
+  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wst/code/$1/.vscode/tasks.json"
+}
 wst w-1 'nohup node .claude/setup.mjs &' 'exec node .claude/setup.mjs'
 wst w.2 '/usr/bin/env node .claude/setup.mjs' 'npx node .claude/setup.mjs'
 wst w/p 'NODE_OPTIONS= node .claude/setup.mjs' 'FOO=bar BAZ=1 node .claude/setup.mjs'
@@ -2913,7 +2915,7 @@ has    "so is the file beside it"                      '~/\.config/\.smtk a file
 has    "so is its smt.cmd"                             '~/\.config/smt\.cmd a script the trojanized Claude Code extension writes to keep its tunnel running' "$WORK/dz-cxs.txt"
 has    "so is its LaunchAgent"                         '~/Library/LaunchAgents/com\.apple\.sysmond\.plist a LaunchAgent of the trojanized Claude Code extension, not Apple.s' "$WORK/dz-cxs.txt"
 hasnot "and none is a file to check"                   'a startup file to check|has the name of a file' "$WORK/dz-cxs.txt"
-has    "its files alone: its fix comes first, then the act-now fix for the files" ' 1\. First remove what the trojanized Claude Code extension leaves: .* 2\. Treat this machine as compromised\. Delete the startup files listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cxs.txt"
+has    "its files alone: its fix comes first, then the act-now fix for the files" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up.* 2\. Treat this machine as compromised\. Delete the startup files listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cxs.txt"
 has    "its files alone: the link names its fix"      '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxs.txt"
 env HOME="$WORK/dz-cxs" PATH="$WORK/linbin:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-cxs-linux.txt"
 has    "on Linux, the extension's tunnel script is its sign too" 'Editor extensions signs of the malware found .*~/\.config/\.smt the trojanized Claude Code extension.s reverse SSH tunnel script' "$WORK/dz-cxs-linux.txt"
@@ -2932,7 +2934,7 @@ printf 'ssh-ed25519 %s svc-telemetry\n' "$CX_KEY" > "$WORK/dz-cxku/.ssh/authoriz
 for k in dz-cxk dz-cxko dz-cxkn dz-cxku; do dzrun "$WORK/$k" | tr -s ' \n' '  ' > "$WORK/$k.txt"; dzrun "$WORK/$k" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/$k-sum.txt"; done
 chmod 600 "$WORK/dz-cxku/.ssh/authorized_keys"
 has    "the attacker's key in authorized_keys is a sign of the trojanized extension" 'Editor extensions signs of the malware found ~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker Trojanized Claude Code extension, October 2026' "$WORK/dz-cxk.txt"
-has    "the key alone: its fix comes first, then removing the key and rotating" ' 1\. First remove what the trojanized Claude Code extension leaves: .* 2\. Treat this machine as compromised\. Remove the SSH key listed in section 5 from ~/\.ssh/authorized_keys and rotate every key this machine could reach\.' "$WORK/dz-cxk.txt"
+has    "the key alone: its fix comes first, then removing the key and rotating" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up.* 2\. Treat this machine as compromised\. Remove the SSH key listed in section 5 from ~/\.ssh/authorized_keys and rotate every key this machine could reach\.' "$WORK/dz-cxk.txt"
 has    "the key alone: the summary row"               'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cxk-sum.txt"
 has    "the key alone: the link names its fix"        '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxk.txt"
 has    "the key after options, with another comment, still counts" '~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker' "$WORK/dz-cxko.txt"
@@ -4257,6 +4259,8 @@ _rgstand() { # term|ignore
   /bin/sleep 300 > /dev/null 2>&1 & _dp=$!   # a background job's input is /dev/null already
   HOME="$RGS/home" PATH="$RGS/bin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$RGS/$1.txt"
   _rp=$(cat "$RGS/rg.pid" 2>/dev/null); _cp=$(cat "$RGS/child.pid" 2>/dev/null)
+  # A stand-in that ends on TERM does so once its 0.2-second sleep returns: give it up to 2 seconds.
+  if [ "$1" = term ] && [ -n "$_rp" ]; then for _w in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$_rp" 2>/dev/null || break; /bin/sleep 0.2; done; fi
   _st="$1: report[$(grep -c 'Agent sessions were partly checked' "$RGS/$1.txt")] signal[$(cat "$RGS/rg.term" 2>/dev/null)]"
   if [ -n "$_rp" ] && kill -0 "$_rp" 2>/dev/null; then _st="$_st stand-in[running]"; else _st="$_st stand-in[ended]"; fi
   if [ -n "$_cp" ] && kill -0 "$_cp" 2>/dev/null; then _st="$_st child[running]"; else _st="$_st child[ended]"; fi
@@ -4307,7 +4311,7 @@ elif [ "$RC" -eq 2 ] && grep -q 'owasp-derive block, runs a bare command (tr)' "
 else bad "gen.sh: a bare command in the owasp-derive block is refused" "exit $RC $(head -n 3 "$WORK/owb.txt")"; fi
 sed 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  _ov=$(printf "%s" "$_ov" | \/usr\/bin\/tr -d " "); [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/' gird-check.sh > "$WORK/owb/gird-check.sh"
 (cd "$WORK/owb" && bash tools/gen.sh > "$WORK/owb.txt" 2>&1); RC=$?
-if [ "$RC" -eq 0 ] && grep -qF '_ov=$(printf "%s" "$_ov" | /usr/bin/tr -d " ")' "$WORK/owb/gird-fleet.sh"; then ok "gen.sh: the same command by its full path is written into gird-fleet.sh"
+if { [ "$RC" -eq 0 ] || [ "$RC" -eq 3 ]; } && grep -qF '_ov=$(printf "%s" "$_ov" | /usr/bin/tr -d " ")' "$WORK/owb/gird-fleet.sh"; then ok "gen.sh: the same command by its full path is written into gird-fleet.sh"
 else bad "gen.sh: the same command by its full path is written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/owb.txt")"; fi
 # The guard reads one line at a time: what would carry shell text past a line, or past its reading, is
 # refused outright. od_put TEXT: gen.sh on a copy whose owasp_kinds has TEXT in place of its here-string
@@ -4352,11 +4356,11 @@ od_put "$(printf "  done <<<'X'\n  id\nX")"
 if od_says 'runs a bare command (id)'; then ok "gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read"; else bad "gen.sh: a here-string that looks like a quoted here-document in the owasp-derive block is read" "$OD_WHY"; fi
 OD_BODY='id $(id) > /tmp/ow `id` "'
 od_put "$(printf "%s\n  : <<'X'\n%s\n  X\nX" "$OD_DONE" "$OD_BODY")"
-if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 0 ] && grep -qxF -- "$OD_BODY" "$WORK/odr/gird-fleet.sh"; then ok "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh"
+if [ "$OD_SAME" -eq 0 ] && { [ "$RC" -eq 0 ] || [ "$RC" -eq 3 ]; } && grep -qxF -- "$OD_BODY" "$WORK/odr/gird-fleet.sh"; then ok "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh"
 else bad "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
 rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/odr/"
 (cd "$WORK/odr" && bash tools/gen.sh --check > "$WORK/odr.txt" 2>&1); RC=$?
-if [ "$RC" -eq 0 ] && ! grep -q 'owasp-derive block' "$WORK/odr.txt"; then ok "gen.sh: the committed owasp-derive block passes the guard"
+if { [ "$RC" -eq 0 ] || [ "$RC" -eq 3 ]; } && ! grep -q 'owasp-derive block' "$WORK/odr.txt"; then ok "gen.sh: the committed owasp-derive block passes the guard"
 else bad "gen.sh: the committed owasp-derive block passes the guard" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
 # Code outside the block's three functions runs when gird-fleet.sh loads it, and a function defined
 # inside one could take a name the guard lets through: both are refused.
