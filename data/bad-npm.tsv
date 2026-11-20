@@ -69,8 +69,9 @@
 #     govern; and the packages the worm spread to (keyvspread), from @thiennq/docs-viewer at 09:38 on 4
 #     August, which Socket names, on: every version of every OpenSSF malware entry, not withdrawn, that
 #     names the "self-propagating npm supply-chain worm of 2026-08-04" (OSV's npm export of 25 October
-#     2026): 2249 versions of 432 packages, less the 25 of @servicetitan/suppress-warnings skipped below,
-#     so 2224. GitHub's malware advisories name the same versions for 370 of them and have none for 5;
+#     2026, and server-hemera-mongo 0.0.16, which MAL-2026-11986 and GHSA-rrhh-mxmx-x7xf added on 4
+#     November): 2250 versions of 432 packages, less the 25 of @servicetitan/suppress-warnings skipped
+#     below, so 2225. GitHub's malware advisories name the same versions for 370 of them and have none for 5;
 #     for 56, OpenSSF's entry adds one to five versions GitHub's leaves out; and for the 432nd,
 #     @servicetitan/suppress-warnings, GitHub's advisory names all 342 of its versions (skipped below).
 #   SANDWORM_MODE, February 2026: the 19 malicious packages of Socket's list (sandworm) and the
@@ -3585,6 +3586,7 @@ rwc-client	0.29.17	keyvspread
 rwc-client	0.29.18	keyvspread
 rwc-client	0.29.19	keyvspread
 server-hemera-mongo	0.0.12	keyvspread
+server-hemera-mongo	0.0.16	keyvspread
 sn-listbox	0.3.3	keyvspread
 tslint-folder-schema	1.0.6	keyvspread
 tslint-folder-schema	1.0.7	keyvspread

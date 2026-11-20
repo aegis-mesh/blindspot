@@ -1,5 +1,5 @@
 <#
-Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.2.0 (25 October 2026)
+Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.3.0 (20 November 2026)
 https://gird.ai/blindspot
 
 Shows the AI coding agents and MCP servers on this computer, AI and cloud keys
@@ -20,6 +20,7 @@ the source of truth for every other check.
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -Save      saves the full report as a text file
   powershell -ExecutionPolicy Bypass -File gird-check.ps1 -AllSessions  waits until every agent session is checked
   -NoColor (or NO_COLOR=1)                                            plain text, no colors
+  For IT teams: blindspot-fleet.ps1 checks the signed-in person's account from an MDM (docs/designs/fleet-mode.md, Windows)
 
 Runs on Windows PowerShell 5.1 and PowerShell 7. This file is plain ASCII on purpose:
 Windows PowerShell 5.1 reads a script without a byte order mark as the ANSI code page,
@@ -27,24 +28,54 @@ so every non-ASCII character below is built from its code point.
 #>
 param(
   [switch]$All, [switch]$Full, [switch]$Offline, [switch]$Save, [switch]$NoColor, [switch]$Help, [switch]$AllSessions,
+  [switch]$AccountRun,
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
 )
+# The reduced language (Constrained Language Mode) refuses the .NET calls below. An account run says so
+# in the one line gird-fleet.ps1 reads for it, with statements that language allows.
+if (($AccountRun -or $Rest -contains '--account-run') -and $ExecutionContext.SessionState.LanguageMode -ne 'FullLanguage') { 'language_mode=1'; exit 13 }
 
+$AccountSeconds = ''
 $OptAllSess = [bool]$AllSessions; $OptAll = [bool]$All; $OptFull = [bool]$Full; $OptOffline = [bool]$Offline; $OptSave = [bool]$Save; $OptNoColor = [bool]$NoColor
 foreach ($arg in $Rest) {
   switch ($arg) {
     '--all' { $OptAll = $true } '--full' { $OptFull = $true } '--save' { $OptSave = $true }
     '--offline' { $OptOffline = $true } '--no-color' { $OptNoColor = $true } '--no-game' { } '--all-sessions' { $OptAllSess = $true }
+    '--account-run' { $AccountRun = $true }
+    { $_ -like '--account-seconds=*' } { $AccountSeconds = $_.Substring(18) }
     { $_ -eq '--help' -or $_ -eq '-h' } { $Help = $true }
     default { [Console]::Out.WriteLine("Unknown option: $arg (try -Help)"); exit 2 }
   }
 }
 if ($Help) {
-  $lines = (Get-Content -LiteralPath $PSCommandPath -TotalCount 22) | Select-Object -Skip 1
+  $lines = (Get-Content -LiteralPath $PSCommandPath -TotalCount 23) | Select-Object -Skip 1
   foreach ($l in $lines) { if ($l -notmatch '^#>') { [Console]::Out.WriteLine($l) } }
   exit 0
 }
 if ($env:DO_NOT_TRACK -eq '1') { $OptOffline = $true }
+# An account run: started by gird-fleet.ps1 as the signed-in person. Its only output is the fixed
+# lines gird-fleet.ps1 reads, the same as gird-check.sh --account-run prints, written where the
+# checks end; everything else goes nowhere.
+$OptAcctRun = [bool]$AccountRun; $AcctOut = $null; $AcctEnd = $null; $AcctDeadline = $null
+if ($OptAcctRun) {
+  if ($env:OS -eq 'Windows_NT') {
+    try { if (@('S-1-5-18', 'S-1-5-19', 'S-1-5-20') -contains [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { exit 13 } } catch { exit 13 }
+  }
+  $OptOffline = $true; $OptSave = $false; $OptNoColor = $true; $OptFull = $true; $OptAll = $false; $OptAllSess = $true
+  # The session check is told to stop at three quarters of the time gird-fleet.ps1 gives the run. Its
+  # ripgrep is stopped then even while the rest of the check is still busy, so the run leaves no process
+  # behind when gird-fleet.ps1 stops it. A session check that does not end when told (blocked in a read)
+  # is waited for until the time less a margin (10 seconds, or a tenth of the time when that is more),
+  # and no longer: this run starts later than gird-fleet.ps1's clock, so it must print well before the
+  # limit for what it found to reach gird-fleet.ps1, with the sessions partly checked.
+  if ($AccountSeconds -match '^[0-9]{1,5}$') {
+    $acctS = [int]$AccountSeconds; $acctT0 = [DateTime]::UtcNow
+    $AcctEnd = $acctT0.AddSeconds($acctS * 3 / 4)
+    $AcctDeadline = $acctT0.AddSeconds([Math]::Max($acctS * 3 / 4, $acctS - [Math]::Max(10, $acctS / 10)))
+  }
+  $AcctOut = [Console]::Out
+  [Console]::SetOut([IO.TextWriter]::Null); [Console]::SetError([IO.TextWriter]::Null)
+}
 
 $ScriptVersion = '1'
 $Web = 'https://gird.ai'; if ($env:GIRD_CHECK_WEB) { $Web = $env:GIRD_CHECK_WEB }   # the overrides here are for testing
@@ -78,6 +109,7 @@ if ($TempDirs.Count -eq 0) { $TempDirs.Add([IO.Path]::GetTempPath().TrimEnd('\',
 # ---------------------------------------------------------------------------
 $IsConsole = $false; $InConsole = $false
 try { $IsConsole = -not [Console]::IsOutputRedirected; $InConsole = -not [Console]::IsInputRedirected } catch { }
+if ($OptAcctRun) { $IsConsole = $false; $InConsole = $false }
 $Compact = $IsConsole
 if ($env:GIRD_CHECK_COMPACT -eq '1') { $Compact = $true }
 if ($OptFull) { $Compact = $false }
@@ -100,7 +132,7 @@ if ($Fancy) {
   $gOk = '+'; $gX = 'x'; $gDot = '*'; $gRing = 'o'; $gBul = '-'; $gMid = '.'; $gBar = '|'; $gStar = '*'; $gRuleCh = [char]'-'
 }
 $OldOutEnc = $null
-if ($OnWindows) { try { $OldOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { $OldOutEnc = $null } }
+if ($OnWindows -and -not $OptAcctRun) { try { $OldOutEnc = [Console]::OutputEncoding; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { $OldOutEnc = $null } }
 $Width = 80
 if ($IsConsole) {
   try { $Width = [Console]::WindowWidth } catch { $Width = 80 }
@@ -248,11 +280,17 @@ function Http([string]$method, [string]$url, [int]$seconds, [string]$body, [int]
 # it is never printed, kept or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
-$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm'
-$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+$ALL_KEYS = 'sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+$KEY_PASSES = @('sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}', '(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}==')
+$PROVIDER_IDS = 'anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage'
+$KEY_STARTS = 'sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_(?:(?<![A-Za-z0-9_]hf_)|(?<=\\[ntr]hf_))|pplx-|r8_(?:(?<![A-Za-z0-9+/_-]r8_)|(?<=\\[ntr]r8_))|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi(?:(?<![A-Za-z0-9_-]dapi)|(?<=\\[ntr]dapi))|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.](?:(?<![A-Za-z0-9_.-]SG[.])|(?<=\\[ntr]SG[.]))|pypi-AgEIcHlwaS5vcmc(?:(?<![A-Za-z0-9_-]pypi-AgEIcHlwaS5vcmc)|(?<=\\[ntr]pypi-AgEIcHlwaS5vcmc))|dckr_pat_(?:(?<![A-Za-z0-9_-]dckr_pat_)|(?<=\\[ntr]dckr_pat_))|dop_v1_|doo_v1_|dor_v1_|hvs[.](?:(?<![A-Za-z0-9_.-]hvs[.])|(?<=\\[ntr]hvs[.]))|nvapi-(?:(?<![A-Za-z0-9_-]nvapi-)|(?<=\\[ntr]nvapi-))|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_(?:(?<![A-Za-z0-9_-]sb_secret_)|(?<=\\[ntr]sb_secret_))|ops_eyJ(?:(?<![A-Za-z0-9_-]ops_eyJ)|(?<=\\[ntr]ops_eyJ))|7Q~|8Q~|JQQJ99|[+]ASt|AccountName='
 $KeyProviderFn = @'
+function Key-At([string]$s, [string]$t, [int]$o) { for ($b = 0; $b -le 2; $b++) { if ($s.Length -ge $b + $o + $t.Length -and $s.Substring($b + $o, $t.Length) -ceq $t) { return $true } }; $false }
 function Key-Provider([string]$s) {
+  if ((Key-At $s '7Q~' 3) -or (Key-At $s '8Q~' 3)) { return 'Microsoft Entra' }
+  if (((Key-At $s 'JQQJ99' 52) -and (Key-At $s 'AAAAAZDO' 72))) { return 'Azure DevOps' }
+  if (((Key-At $s 'JQQJ99' 52) -and (Key-At $s 'ACOG' 76))) { return 'Azure AI' }
+  if (((Key-At $s '+ASt' 76) -and (Key-At $s '==' 86)) -or (Key-At $s 'AccountName=' 0)) { return 'Azure Storage' }
   $s = $s -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', ''
   if ($s -cmatch '^(sk-ant-)') { return 'Anthropic' }
   if ($s -cmatch '^(sk-or-v1-)') { return 'OpenRouter' }
@@ -266,14 +304,38 @@ function Key-Provider([string]$s) {
   if ($s -cmatch '^(AKIA|ASIA|ABSK|bedrock-api-key)') { return 'AWS' }
   if ($s -cmatch '^(gh[pousr]_|github_pat_)') { return 'GitHub' }
   if ($s -cmatch '^(npm_)') { return 'npm' }
+  if ($s -cmatch '^(dapi)') { return 'Databricks' }
+  if ($s -cmatch '^(glpat-|gldt-|glrt-|glft-|glsoat-)') { return 'GitLab' }
+  if ($s -cmatch '^(xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com)') { return 'Slack' }
+  if ($s -cmatch '^(sk_live_|rk_live_|whsec_)') { return 'Stripe' }
+  if ($s -cmatch '^(SG[.])') { return 'SendGrid' }
+  if ($s -cmatch '^(pypi-AgEIcHlwaS5vcmc)') { return 'PyPI' }
+  if ($s -cmatch '^(dckr_pat_)') { return 'Docker Hub' }
+  if ($s -cmatch '^(dop_v1_|doo_v1_|dor_v1_)') { return 'DigitalOcean' }
+  if ($s -cmatch '^(hvs[.])') { return 'HashiCorp Vault' }
+  if ($s -cmatch '^(nvapi-)') { return 'NVIDIA' }
+  if ($s -cmatch '^(lsv2_pt_|lsv2_sk_)') { return 'LangSmith' }
+  if ($s -cmatch '^(shpat_|shppa_)') { return 'Shopify' }
+  if ($s -cmatch '^(sntryu_|sntrys_)') { return 'Sentry' }
+  if ($s -cmatch '^(sb_secret_)') { return 'Supabase' }
+  if ($s -cmatch '^(ops_eyJ)') { return '1Password' }
   $null
 }
-function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } default { $null } } }
+function Key-Max([string]$p) { switch -CaseSensitive ($p) { 'GitHub' { 1024 } 'PyPI' { 600 } 'Sentry' { 320 } '1Password' { 1024 } default { 300 } } }
+function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'anthropic' } 'OpenRouter' { 'openrouter' } 'OpenAI' { 'openai' } 'Google' { 'google' } 'Groq' { 'groq' } 'xAI' { 'xai' } 'Hugging Face' { 'huggingface' } 'Perplexity' { 'perplexity' } 'Replicate' { 'replicate' } 'AWS' { 'aws' } 'GitHub' { 'github' } 'npm' { 'npm' } 'Databricks' { 'databricks' } 'GitLab' { 'gitlab' } 'Slack' { 'slack' } 'Stripe' { 'stripe' } 'SendGrid' { 'sendgrid' } 'PyPI' { 'pypi' } 'Docker Hub' { 'dockerhub' } 'DigitalOcean' { 'digitalocean' } 'HashiCorp Vault' { 'vault' } 'NVIDIA' { 'nvidia' } 'LangSmith' { 'langsmith' } 'Shopify' { 'shopify' } 'Sentry' { 'sentry' } 'Supabase' { 'supabase' } '1Password' { 'onepassword' } 'Microsoft Entra' { 'azureentra' } 'Azure DevOps' { 'azuredevops' } 'Azure AI' { 'azureai' } 'Azure Storage' { 'azurestorage' } default { $null } } }
 '@
 # <<< keys
+# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
+$PublicValuesFn = @'
+function Is-Public([string]$k) { $false -or $k.Contains('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u') -or $k.Contains('19874698323-pdFZKVeTuE8sk7oOcBrzbqgy') -or $k.Contains('N7UND0UgjKTVK-Uodkm0Hg') -or $k.Contains('C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5') -or $k.Contains('MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw') -or $k.Contains('5WbX5kEWLlfzsGNjH64I8lOOqUB6e8FH') }
+'@
+# <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
 $TR_KEYS = $ALL_KEYS -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])'
+# One regex for each pass of data/keys.tsv: each is matched on its own, so a key of a later pass
+# never hides one of an earlier pass. $TR_KEYS, all of them in one, is for a yes or no.
+$TR_PASSES = @($KEY_PASSES | ForEach-Object { $_ -replace '\(\^\|\[\^([^\]]*)\]\)', '(^|[^$1]|\\[ntr"])' })
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 # These match what gird-check.sh's patterns match, rewritten so .NET's backtracking
 # stays linear: a name is tried once from its first character, (?>...) never gives
@@ -311,11 +373,16 @@ $P_NOTSECRET = '(?:_PATH|_FILE|_DIR)S?"?[^\S\n]*[:=]|[:=][^\S\n]*"?(?:~|\.\.?/|[
 $RxOpt = [Text.RegularExpressions.RegexOptions]::Multiline
 $RxTimeout = [TimeSpan]::FromSeconds(2)
 if ($env:GIRD_CHECK_REGEX_TIMEOUT_MS -match '^[0-9]{1,6}$' -and [int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS -gt 0) { $RxTimeout = [TimeSpan]::FromMilliseconds([int]$env:GIRD_CHECK_REGEX_TIMEOUT_MS) }
-$RxKeys = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
-$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxOpt, $RxTimeout)
+# The patterns that hold every key type are compiled: .NET reads their long alternation about four
+# times faster compiled, and each is built once.
+$RxKeyOpt = $RxOpt -bor [Text.RegularExpressions.RegexOptions]::Compiled
+$RxKeys = New-Object regex($TR_KEYS, $RxKeyOpt, $RxTimeout)
+$RxKeyPasses = @($TR_PASSES | ForEach-Object { New-Object regex($_, $RxKeyOpt, $RxTimeout) })
+$RxInline = New-Object regex("$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxKeyOpt, $RxTimeout)
+$RxInlines = @(for ($i = 0; $i -lt $TR_PASSES.Count; $i++) { if ($i -eq 0) { New-Object regex("$($TR_PASSES[0])|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET", $RxKeyOpt, $RxTimeout) } else { $RxKeyPasses[$i] } })
 $RxHeaderYaml = New-Object regex($P_HEADERYAML, $RxOpt, $RxTimeout)
 $RxHeaderSq = New-Object regex($P_HEADERSQ, $RxOpt, $RxTimeout)
-$RxCommand = New-Object regex("$TR_KEYS|$P_ASSIGN", $RxOpt, $RxTimeout)
+$RxCommands = @(for ($i = 0; $i -lt $TR_PASSES.Count; $i++) { if ($i -eq 0) { New-Object regex("$($TR_PASSES[0])|$P_ASSIGN", $RxKeyOpt, $RxTimeout) } else { $RxKeyPasses[$i] } })
 $RxPlaceholder = New-Object regex($P_PLACEHOLDER, [Text.RegularExpressions.RegexOptions]::IgnoreCase, $RxTimeout)
 $RxNotSecret = New-Object regex($P_NOTSECRET, $RxOpt, $RxTimeout)
 $SlowFiles = New-Object System.Collections.Generic.List[string]
@@ -390,7 +457,9 @@ function Has-Match([string]$f, [regex]$rx) {
   try { $rx.IsMatch($t) } catch { Mark-Slow $f; $false }
 }
 # A match that is not a placeholder like your-key-here, nor a path ($RxNotSecret).
-function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) }
+# A match that holds a published value (data/public-values.tsv, Is-Public) is not a secret, here as in
+# Made-Up: an emulator's key in an MCP config or a saved command no more than in a .env file.
+function Is-RealMatch([string]$v) { -not $RxPlaceholder.IsMatch($v) -and -not $RxNotSecret.IsMatch($v) -and -not (Is-Public $v) }
 # Codex's env_http_headers name the environment variable each header's value comes from, so they hold
 # no token: a TOML file is read without them, in an inline table, as dotted keys and in a
 # [...env_http_headers] table, which ends at the next table. The same as gird-check.sh's no_env_headers.
@@ -421,24 +490,23 @@ function Yaml-Headers([string]$t) {
   }
   $keep -join "`n"
 }
-function Has-RealMatch([string]$f, [regex]$rx, [switch]$NoEnvHeaders, [switch]$YamlHeaders) {
+function Has-RealMatch([string]$f, [regex[]]$rxs, [switch]$NoEnvHeaders, [switch]$YamlHeaders) {
   if ($SlowFiles.Contains($f)) { return $false }
   $t = Read-Text $f; if ($null -eq $t) { return $false }
   if ($NoEnvHeaders) { $t = No-EnvHeaders $t }
   if ($YamlHeaders) { $t = Yaml-Headers $t }
-  try { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } catch { Mark-Slow $f }
+  try { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($t)) { if (Is-RealMatch $m.Value) { return $true } } } } catch { Mark-Slow $f }
   $false
 }
 # The provider of a matched key (generated above) and whether a key looks made up. Text, so the
 # background session check can load the same functions.
-$KeyFns = $KeyProviderFn + @'
+$KeyFns = $KeyProviderFn + $PublicValuesFn + @'
 function Made-Up([string]$k) {
-  # No key is longer than 300 characters (GitHub's 93-character tokens are the longest fixed
-  # format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens, about 520 with
-  # two dots: a longer run of key characters is data.
-  if ($k.Length -gt 1024 -or ($k.Length -gt 300 -and $k -cnotmatch 'ghs_[A-Za-z0-9_-]+\.')) { return $true }
+  # A match longer than its provider's max in data/keys.tsv (Key-Max, 300 unless the line says more,
+  # as for GitHub's stateless ghs_ tokens of about 520) is a run of data, not a key.
+  if ($k.Length -gt 1024 -or $k.Length -gt (Key-Max (Key-Provider $k))) { return $true }
   $k = $k -replace '^[^A-Za-z]*\\[ntr"]', '' -replace '^[^A-Za-z]+', '' -replace '[^A-Za-z0-9_.-]+$', ''
-  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}') { return $true }
+  if ($k -cmatch 'EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF' -or $k -cmatch '(.)\1{7}' -or (Is-Public $k)) { return $true }
   $set = New-Object 'System.Collections.Generic.HashSet[char]'
   foreach ($c in $k.ToCharArray()) { [void]$set.Add($c) }
   $min = 12; if ($k.Length -lt 30) { $min = 8 }
@@ -466,10 +534,10 @@ function Providers-In([string]$f, [string]$minus = '') {
   if ($SlowFiles.Contains($f)) { return @() }
   $t = Read-Text $f; if ($null -eq $t) { return @() }
   $seen = New-Object System.Collections.Generic.List[string]
-  try { $all = @($RxKeys.Matches($t)) } catch { Mark-Slow $f; return @() }
+  try { $all = @(foreach ($rx in $RxKeyPasses) { $rx.Matches($t) }) } catch { Mark-Slow $f; return @() }
   $skip = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
   if ($minus) {
-    try { foreach ($m in $RxKeys.Matches($minus)) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
+    try { foreach ($m in @(foreach ($rx in $RxKeyPasses) { $rx.Matches($minus) })) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k)) { $skip[$k] = $skip[$k] + 1 } else { $skip[$k] = 1 } } } catch { Mark-Slow $f; return @() }
   }
   foreach ($m in $all) {
     if ($skip.Count -gt 0) { $k = Key-Norm $m.Value; if ($skip.ContainsKey($k) -and $skip[$k] -gt 0) { $skip[$k] = $skip[$k] - 1; continue } }
@@ -485,20 +553,14 @@ function Providers-In([string]$f, [string]$minus = '') {
 # file name or a name you gave an MCP server. gird.ai keeps the same lists and
 # drops anything else, so change all three together.
 # ---------------------------------------------------------------------------
+# MCP apps (data/mcp-clients.tsv), well-known MCP servers and the labels that mean them
+# (data/mcp-servers.tsv), and kinds of file (data/key-places.tsv).
+# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it.
 $MCP_CLIENT_IDS = 'claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other'
-$MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
-  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
-  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
-  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
-  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
-  shadcn deepwiki neon prisma netlify heroku azure huggingface'
-$MCP_ALIASES = 'gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
-  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
-  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
-  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
-  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
-  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface'
+$MCP_KNOWN_IDS = 'github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster shadcn deepwiki neon prisma netlify heroku azure huggingface'
+$MCP_ALIASES = 'gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres sqlite3=sqlite mongo=mongodb browserbasehq=browserbase notionhq=notion figma-dev-mode=figma figma-developer=figma brave=brave-search perplexity-ask=perplexity sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface'
 $KEY_PLACE_IDS = 'shell_rc shell_history env_file mcp_config agent_config project_file other'
+# <<< report-lists
 function Ids([string]$list) { , ($list -split '\s+' | Where-Object { $_ }) }
 
 # The well-known ids among MCP server labels, in list order, and how many labels
@@ -605,7 +667,7 @@ function Ignores-Claude([string]$t, [string]$file) {
 # Whether a .json file's top-level object has this key, its text read as Json-Top reads it.
 function Json-Has([string]$f, [string]$t, [string]$key) {
   $l = $t -replace '[ \t\n\v\f\r]', ''
-  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $false }
+  try { $ms = @($RxJsonTok.Matches($l)) } catch { Mark-Slow $f; return $false }
   $dep = 0; $pend = $null
   foreach ($m in $ms) {
     $x = $m.Value; $c = [string]$x[0]
@@ -664,9 +726,13 @@ function Entries([string]$dir) {
 }
 function Is-Link($info) { ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }
 function Is-DirInfo($info) { ($info.Attributes -band [IO.FileAttributes]::Directory) -ne 0 }
-# Whether this person owns a file, read off Windows (PowerShell 7 adds User to a file's info). A link
-# is judged by what it points at, as bash's -O does, where .NET can resolve it (PowerShell 7.2 and up).
+# Whether this person owns a file: on Windows its owner's SID, off Windows the User PowerShell 7 adds to
+# a file's info. Off Windows a link is judged by what it points at, as bash's -O does, where .NET can
+# resolve it (PowerShell 7.2 and up).
 function Owns-File([string]$p) {
+  if ($OnWindows) {
+    try { return [bool]((Get-Acl -LiteralPath $p -ErrorAction Stop).GetOwner([Security.Principal.SecurityIdentifier]).Value -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) } catch { return $false }
+  }
   try {
     $it = Get-Item -LiteralPath $p -Force -ErrorAction Stop
     $t = $null; try { $t = [IO.File]::ResolveLinkTarget($p, $true) } catch { }
@@ -710,13 +776,15 @@ $LockBin = New-Object System.Collections.Generic.List[string]
 $TaskFiles = New-Object System.Collections.Generic.List[string]
 $WormFiles = New-Object System.Collections.Generic.List[string]
 $AiderFiles = New-Object System.Collections.Generic.List[string]
+# A project's GitHub Actions workflows (section 5): GitHub runs those directly in .github/workflows.
+$Workflows = New-Object System.Collections.Generic.List[string]
 # The project files of data/auto-approve.tsv, every project's .vscode/settings.json (section 2), and
 # links to this user's ~/.ssh/authorized_keys outside ~/.ssh.
 $AaFiles = New-Object System.Collections.Generic.List[string]
 $VscSettings = New-Object System.Collections.Generic.List[string]
 $AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
-# Folders the scan could not read: the files in them were not checked (sections 2 to 5 say so).
+# Folders the scan could not read: the files in them were not checked (sections 1 to 5 say so).
 $UnreadDirs = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
@@ -786,6 +854,38 @@ $AaTable = @(
 )
 $AaProject = @('.codex/config.toml')
 # <<< auto-approve
+# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
+$RcSigs = @(
+  ,@('ssh', 'exact', 'on other machines over SSH')
+  ,@('aws ssm send-command', 'exact', 'on AWS servers')
+  ,@('aws ssm start-session', 'exact', 'on AWS servers')
+  ,@('aws ecs execute-command', 'exact', 'in AWS containers')
+  ,@('gcloud compute ssh', 'exact', 'on Google Cloud servers')
+  ,@('az vm run-command invoke', 'exact', 'on Azure servers')
+  ,@('az ssh vm', 'exact', 'on Azure servers')
+  ,@('kubectl exec', 'exact', 'in Kubernetes containers')
+  ,@('Invoke-Command', 'any', 'on other machines with PowerShell')
+  ,@('Enter-PSSession', 'any', 'on other machines with PowerShell')
+)
+$RcFiles = @(
+  ,@('Claude Code', 'all', 'claude', 'agent', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), '-')
+  ,@('Claude Code', 'all', 'claude', 'local', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.local.json'), 'only in sessions you start in your home folder')
+  ,@('Codex', 'all', 'codex', 'agent', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'rules/*.rules'), '-')
+  ,@('Gemini CLI', 'all', 'gemini-toml', 'agent', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/policies/*.toml'), '-')
+  ,@('Gemini CLI', 'all', 'gemini-json', 'agent', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code/User/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code/User/profiles/*/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code - Insiders/User/settings.json'), '-')
+  ,@('VS Code Copilot', 'all', 'vscode', 'file', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), '-')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code/User/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code/User/profiles/*/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code - Insiders/User/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Code - Insiders/User/profiles/*/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Cursor/User/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Roo Code', 'all', 'roo', 'file', (J $AppData 'Cursor/User/profiles/*/settings.json'), 'while its auto-approve for commands is on')
+  ,@('Amazon Q', 'all', 'amazonq', 'file', (J $HomeDir '.aws/amazonq/cli-agents/*.json'), 'when you use that agent')
+)
+# <<< remote-commands
 function Is-WormFile([string]$parent, [string]$name) { $null -ne (Planted-Note "$parent/$name") }
 # Whether a link ends at a regular file. Off Windows a repo can link a settings file to /dev/zero or
 # /dev/tty, which .NET would read for ever; Unix-Kind is - for a regular file and l for a link, which
@@ -915,6 +1015,19 @@ function Scan-Tox([string]$dir) {
     foreach ($c in $cs) { if ($c.Name -ceq 'pyvenv.cfg' -and -not (Is-Link $c)) { Add-Plain $Found $c } }
   }
 }
+# A project's .github folder 5 or 6 folders down, where the scan stops before its workflows: its
+# workflows folder is listed as the scan would list it (regular files ending in .yml or .yaml), so a repo
+# as deep as ~/src/github.com/org/repo has its workflows read. One that can't be listed is named as a
+# folder not read. As gird-check.sh's scan_home.
+function Scan-Workflows([string]$dir) {
+  try { $wi = Get-Item -LiteralPath $dir -Force -ErrorAction Stop } catch { return }
+  if ((Is-Link $wi) -or -not (Is-DirInfo $wi)) { return }
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
+    if ((Is-Link $e) -or (Is-DirInfo $e)) { continue }
+    if ($e.Name -clike '*.yml' -or $e.Name -clike '*.yaml') { Add-Plain $Workflows $e }
+  }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
@@ -927,6 +1040,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       if ($name -ceq '.tox') { Scan-Tox $path; continue }
       if (Is-Pruned $path $name $d) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
+      if ($name -ceq '.github' -and $d -ge 5) { Scan-Workflows (J $path 'workflows') }
       if ($d -lt 6) { Scan-Home $path $d }
       continue
     }
@@ -954,6 +1068,7 @@ function Scan-Home([string]$dir, [int]$depth) {
     elseif ($name -ceq '.aider.chat.history.md' -or $name -ceq '.aider.input.history') { Add-Plain $AiderFiles $e }
     elseif ($parent -ceq '.vscode' -and $name -ceq 'tasks.json') { Add-Plain $TaskFiles $e }
     elseif (Is-WormFile $parent $name) { Add-Plain $WormFiles $e }
+    elseif ($parent -ceq 'workflows' -and [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($dir)) -ceq '.github' -and ($name -clike '*.yml' -or $name -clike '*.yaml')) { Add-Plain $Workflows $e }
     else {
       if ($parent -ceq '.vscode' -and $name -ceq 'settings.json') { Add-Plain $VscSettings $e }
       if (Is-AaProject $path) { Add-Plain $AaFiles $e }
@@ -996,7 +1111,7 @@ function Show-Banner {
     if ($i -eq 3) { $mark = (& $u ' \u2819\u281b\u283b\u2801 ') + $cGold + (& $u '\u2830\u2806') + $cTeal + (& $u ' \u2880\u28e6\u28e4\u28c4\u2840') } else { $mark = & $u $mk[$i] }
     Emit ("  $cTeal$mark$cRst   $cBold$row$cRst")
   }
-  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
+  Emit ("  $cTeal" + (& $u '    \u2810\u281b\u283f\u283f\u281b\u2803    ') + "$cRst   ${cBold}BLINDSPOT$cRst  ${cDim}v1.3.0 $gMid 20 Nov 2026 $gMid gird.ai/blindspot$cRst")
 }
 
 # ===========================================================================
@@ -1005,7 +1120,7 @@ $Early = $false
 try {
 Blank
 if ($Fancy) { Show-Banner } else {
-Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.2.0 $gMid 25 Oct 2026 $gMid gird.ai/blindspot$cRst")
+Emit ("  $cTeal${cBold}GIRD$cRst  ${cBold}BLINDSPOT$cRst  ${cDim}v1.3.0 $gMid 20 Nov 2026 $gMid gird.ai/blindspot$cRst")
 }
 Blank
 Emit "  ${cDim}Read-only. Prints paths and counts, never a key.$cRst"
@@ -1123,6 +1238,8 @@ $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Objec
 # folder, to a file or a folder, are not followed, as ripgrep and gird-check.sh's perl do not. A
 # pipe, a socket or a device is never listed: opening a pipe waits for a writer, and a device may
 # never end. Text, so the background session check can load it too; it returns the list as one object.
+# Tests only: with GIRD_CHECK_TEST_LIST_HOLD set, a listing waits while that file exists, told to stop
+# or not, as one blocked on a folder that does not answer would.
 $SessListFn = @'
 # A regular file, following a link: what bash's [ -f ] and perl's -f say. PowerShell 7.2 and up
 # say which a file is off Windows (Unix-Kind, from Get-Item); Windows keeps no pipes or devices among
@@ -1147,6 +1264,7 @@ function Empty-Unreadable([string]$p) {
   try { (New-Object IO.FileStream($p, 'Open', 'Read', 'ReadWrite')).Dispose(); $false } catch { $true }
 }
 function Sess-List($roots, $st) {
+  while ($env:GIRD_CHECK_TEST_LIST_HOLD -and (Test-Path -LiteralPath $env:GIRD_CHECK_TEST_LIST_HOLD)) { Start-Sleep -Milliseconds 50 }
   $files = New-Object System.Collections.Generic.List[object]
   $dirs = New-Object System.Collections.Generic.Stack[object]
   foreach ($r in $roots) {
@@ -1187,39 +1305,57 @@ $SessRoots = @(@(foreach ($sessRow in $SessTable) {
 # Runs in its own runspace: lists the files newest first and checks them until told to stop, or
 # lets rg.exe do it. Only "file<tab>provider" leaves it; keys stay inside.
 $SessWorker = {
-  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold)
+  param($roots, $keys, $pre, $rg, $fns, $st, $timeoutMs, $cut, $hold, $stopAt, $graceMs)
   . ([scriptblock]::Create($fns))
   $to = [TimeSpan]::FromMilliseconds($timeoutMs)
-  $rx = New-Object regex($keys, [Text.RegularExpressions.RegexOptions]::Multiline, $to)
+  $rxs = @($keys | ForEach-Object { New-Object regex($_, ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Compiled), $to) })
   $rxPre = New-Object regex($pre, [Text.RegularExpressions.RegexOptions]::None, $to)
-  $rxSep = New-Object regex('[^A-Za-z0-9_.+/=\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
+  # A piece ends after a character no key holds, as in gird-check.sh's perl engine (~ and ; are in
+  # Entra secrets and Storage connection strings).
+  $rxSep = New-Object regex('[^A-Za-z0-9_.+/=~;\\\-]', [Text.RegularExpressions.RegexOptions]::RightToLeft, $to)
   $hit = { param($f, $k)
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
   # Tests only: the .NET engine waits while the file named exists; rg.exe gets it as one more root,
-  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held.
-  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }
+  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held. With
+  # GIRD_CHECK_TEST_SESSIONS_DEAF set it waits on when told to stop, as a check blocked in a read would.
+  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and (-not $st.Stop -or $env:GIRD_CHECK_TEST_SESSIONS_DEAF)) { Start-Sleep -Milliseconds 50 } }
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
-    try {
-      $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $keys)
+    $halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() } catch { }; $gone = $false; try { $gone = $st.Proc.WaitForExit(2000) } catch { }; if (-not $gone) { $st.Hung = $true } }
+    # One run for each pass of data/keys.tsv ($keys), one after the other; RgExit is the worst of
+    # their codes: an error (any code but 0 and 1: a crashed rg.exe's is negative), else 0 when any
+    # found a key. A pass that can't start or be read after an earlier one ran is an error too, -1,
+    # so the sessions read partly checked. The deadline ($stopAt) covers them all.
+    $first = $true; $worst = 1
+    try { foreach ($kp in $keys) {
+      if ($st.Stop) { break }
+      if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+      $pf = [IO.Path]::GetTempFileName(); [IO.File]::WriteAllText($pf, $kp)
       $psi = New-Object Diagnostics.ProcessStartInfo $rg
-      $rgRoots = @($roots); if ($hold) { $rgRoots += $hold }
+      $rgRoots = @($roots); if ($hold -and $first) { $rgRoots += $hold }; $first = $false
       # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
       # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed.
       $psi.Arguments = '-a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null -f ' + (& $q $pf) + ' -- ' + (($rgRoots | ForEach-Object { & $q $_ }) -join ' ')
       $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.CreateNoWindow = $true
       $st.Proc = [Diagnostics.Process]::Start($psi)
+      if ($st.Stop) { & $halt; return }
       # --null ends the file name with a NUL, the one character a path can't hold. ripgrep ends a
       # match with a newline (LF) alone, and its lines are split there only: a carriage return can be
       # the byte before a key, and ReadLine would end the line at it, dropping the key or gluing it to
       # the next file name. So all text after a NUL is the match, and a line without one is a piece
       # of a file name that holds a newline.
       $frag = ''; $sb = New-Object Text.StringBuilder; $cb = New-Object char[] 65536; $so = $st.Proc.StandardOutput
-      while (($got = $so.Read($cb, 0, $cb.Length)) -gt 0) {
+      while ($true) {
+        if ($null -ne $stopAt -and [DateTime]::UtcNow -ge $stopAt) { & $halt; return }
+        $rt = $so.ReadAsync($cb, 0, $cb.Length); $ms = -1
+        if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
+        if (-not $rt.Wait($ms)) { & $halt; return }
+        $got = $rt.Result; if ($got -le 0) { break }
         $s = New-Object string($cb, 0, $got); $at = 0
         while (($nl = $s.IndexOf([char]10, $at)) -ge 0) {
+          if ($null -ne $stopAt -and [DateTime]::UtcNow -ge $stopAt) { & $halt; return }
           [void]$sb.Append($s, $at, $nl - $at); $l = $sb.ToString(); [void]$sb.Clear(); $at = $nl + 1
           $i = $l.IndexOf([char]0)
           if ($i -lt 0) { $frag += $l + '?'; continue }
@@ -1229,8 +1365,14 @@ $SessWorker = {
       }
       $l = $sb.ToString(); $i = $l.IndexOf([char]0)
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
-      $st.Proc.WaitForExit(); if (-not $st.Stop) { $st.RgExit = $st.Proc.ExitCode }
-    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally { if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue } }
+      $ms = $graceMs; if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
+      if (-not $st.Proc.WaitForExit($ms)) { & $halt; return }
+      if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -ne 0 -and $c -ne 1) { $worst = $c } elseif ($c -eq 0 -and $worst -eq 1) { $worst = 0 }; $st.RgExit = $worst }
+    }
+    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } else { $st.RgExit = -1 } } finally {
+      if ($st.Proc) { try { if (-not $st.Proc.HasExited) { & $halt } } catch { } }
+      if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
+    }
     return
   }
   # Stopped while still listing: Listed stays false and the report says the sessions were not all checked.
@@ -1268,9 +1410,9 @@ $SessWorker = {
           $at = $sep.Index + 1
           $carry = $t.Substring($at); $t = $t.Substring(0, $at)
         } else { $carry = '' }
-        if ($rxPre.IsMatch($t)) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } }
+        if ($rxPre.IsMatch($t)) { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($t)) { & $hit $f.FullName $m.Value } } }
       }
-      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } }
+      if ($whole -and $carry.Length -gt 0 -and $rxPre.IsMatch($carry)) { foreach ($rx in $rxs) { foreach ($m in $rx.Matches($carry)) { & $hit $f.FullName $m.Value } } }
       if ($whole) { $st.Done++ }
     } catch {
       # A pattern that ran out of time leaves the file not checked: it is counted as one that took
@@ -1282,7 +1424,8 @@ $SessWorker = {
     } finally { if ($sr) { $sr.Dispose() } }
   }
 }
-$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Slow = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
+$SessGraceMs = 30000; if ($env:GIRD_CHECK_TEST_GRACE_MS -match '^[0-9]{1,6}$') { $SessGraceMs = [int]$env:GIRD_CHECK_TEST_GRACE_MS }   # tests only
+$SessSt = [hashtable]::Synchronized(@{ Stop = $false; Listed = $false; Total = 0; Done = 0; Zst = 0; Unread = 0; Slow = 0; Skipped = 0; Failed = $false; RgExit = $null; Proc = $null; Hung = $false; Hits = [Collections.ArrayList]::Synchronized((New-Object Collections.ArrayList)); Seen = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)) })
 $SessEngine = 'none'
 $rgCmd = Get-Command -Name rg -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($env:GIRD_CHECK_SESSIONS_ENGINE) { $SessEngine = $env:GIRD_CHECK_SESSIONS_ENGINE } elseif ($rgCmd) { $SessEngine = 'rg' } else { $SessEngine = 'net' }
@@ -1293,19 +1436,32 @@ if ($SessRoots.Count -gt 0 -and $SessEngine -ne 'none') {
   $rgPath = $null; if ($SessEngine -eq 'rg') { $rgPath = $rgCmd.Source }
   $cut = $null; if ($env:GIRD_CHECK_SESSIONS_STOP_AFTER -match '^[0-9]+$') { $cut = [int]$env:GIRD_CHECK_SESSIONS_STOP_AFTER }
   $SessPs = [powershell]::Create()
-  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_KEYS).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD)
+  [void]$SessPs.AddScript($SessWorker).AddArgument($SessRoots).AddArgument($TR_PASSES).AddArgument($KEY_STARTS).AddArgument($rgPath).AddArgument($KeyFns + $UnixKindFn + $SessListFn).AddArgument($SessSt).AddArgument([int]$RxTimeout.TotalMilliseconds).AddArgument($cut).AddArgument($env:GIRD_CHECK_SESSIONS_HOLD).AddArgument($AcctEnd).AddArgument($SessGraceMs)
   $SessHandle = $SessPs.BeginInvoke()
 }
-# Stops the check, or waits for it with -AllSessions.
+# Stops the check, or waits for it with -AllSessions. A check that does not end in time (by the end of
+# an account run's time, or within $SessGraceMs by hand) is left behind and its sessions are partly
+# checked. -AllSessions by hand waits in short steps, so Ctrl+C can still stop the run.
 function Sess-Stop([bool]$wait) {
   if ($null -eq $script:SessPs) { return }
   if (-not $wait) {
     $SessSt.Stop = $true
-    if (-not $script:SessHandle.IsCompleted) { $SessSt.Stopped = $true; if ($SessSt.Proc) { try { $SessSt.Proc.Kill() } catch { } } }
+    if (-not $script:SessHandle.IsCompleted) {
+      $SessSt.Stopped = $true; $p = $SessSt.Proc
+      if ($p) { try { $p.Kill() } catch { }; $gone = $false; try { $gone = $p.WaitForExit(2000) } catch { }; if (-not $gone) { $SessSt.Hung = $true } }
+    }
   }
-  [void]$script:SessHandle.AsyncWaitHandle.WaitOne()
+  $done = $false
+  if ($wait -and $null -eq $AcctEnd) { while (-not $done) { $done = $script:SessHandle.AsyncWaitHandle.WaitOne(250) } }
+  else {
+    $ms = $SessGraceMs; if ($null -ne $AcctDeadline) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($AcctDeadline - [DateTime]::UtcNow).TotalMilliseconds)) }
+    $done = $script:SessHandle.AsyncWaitHandle.WaitOne($ms)
+  }
+  if (-not $done) { $SessSt.Stopped = $true; $SessSt.Hung = $true; $script:SessPs = $null; return }
   try { $script:SessPs.EndInvoke($script:SessHandle) | Out-Null } catch { }
   $script:SessPs.Dispose(); $script:SessPs = $null
+  # Disposed only here, after every Kill(): a Kill() after Dispose() would look ripgrep up again by its id.
+  if ($SessSt.Proc) { try { $SessSt.Proc.Dispose() } catch { } }
 }
 
 Scan-Home $HomeDir 0
@@ -1343,9 +1499,9 @@ $ProjectMcp = @(@($Found) + @($LinkFiles) | Where-Object { $n = [IO.Path]::GetFi
 $Venvs = @($Found | Where-Object { [IO.Path]::GetFileName($_) -ceq 'pyvenv.cfg' } | ForEach-Object { [IO.Path]::GetDirectoryName($_) })
 
 # --- 1. Coding agents --------------------------------------------------------
-# name | commands (separated by ;) | install paths | folders that change when it is used | id
-# Windsurf became Devin Desktop on 2 June 2026: the devin-desktop command, and editor data under Devin,
-# not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
+# name | commands (separated by ;) | install paths | folders that change when it is used | id, from
+# data/agents.tsv
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 $Agents = @(
   @('Claude Code', 'claude', @((J $HomeDir '.claude')), @((J $HomeDir '.claude/projects')), 'claude-code'),
   @('Claude Desktop', '', @((J $LocalAppData 'AnthropicClaude'), (J $AppData 'Claude')), @((J $AppData 'Claude')), 'claude-desktop'),
@@ -1358,10 +1514,10 @@ $Agents = @(
   @('OpenCode', 'opencode', @((J $HomeDir '.config/opencode'), (J $HomeDir '.local/share/opencode')), @((J $HomeDir '.local/share/opencode')), 'opencode'),
   @('Goose', 'goose', @((J $AppData 'Block/goose')), @($GooseData), 'goose'),
   @('Aider', 'aider', @(), @(), 'aider'),
-  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')),
-    @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
+  @('Cline', '', @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev')), @((J $AppData 'Code/User/globalStorage/saoudrizwan.claude-dev/tasks'), (J $AppData 'Cursor/User/globalStorage/saoudrizwan.claude-dev/tasks')), 'cline'),
   @('Continue', '', @((J $HomeDir '.continue')), @((J $HomeDir '.continue/sessions')), 'continue')
 )
+# <<< agents
 $AgRows = New-Object System.Collections.Generic.List[object]
 $AgentIds = New-Object System.Collections.Generic.List[string]; $AgNames = New-Object System.Collections.Generic.List[string]
 $IdleNames = New-Object System.Collections.Generic.List[string]; $IdleIds = New-Object System.Collections.Generic.List[string]
@@ -1388,13 +1544,14 @@ $N_AG = $AgentIds.Count; $N_IDLE = $IdleIds.Count
 if ($N_AG -gt 0) { Progress "Found $(Plural $N_AG 'coding agent' 'coding agents'): $(First-Names $AgNames 3)" } else { Progress 'No coding agents found' }
 
 # --- 2. MCP servers ----------------------------------------------------------
-# app | client id, from the fixed list | config file
+# app | client id, from the fixed list | config file (data/mcp-files.tsv)
+# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it.
 $McpFiles = @(
   @('Claude Code', 'claude-code', (J $HomeDir '.claude.json')),
   @('Claude Desktop', 'claude-desktop', (J $AppData 'Claude/claude_desktop_config.json')),
   @('Cursor', 'cursor', (J $HomeDir '.cursor/mcp.json')),
   @('Windsurf', 'windsurf', (J $HomeDir '.codeium/windsurf/mcp_config.json')),
-  @('Devin Desktop', 'windsurf', (J $HomeDir '.codeium/mcp_config.json')),  # Windsurf renamed (docs.devin.ai/desktop/devin-desktop-faq)
+  @('Devin Desktop', 'windsurf', (J $HomeDir '.codeium/mcp_config.json')),
   @('Codex', 'codex', (J $HomeDir '.codex/config.toml')),
   @('Gemini CLI', 'gemini-cli', (J $HomeDir '.gemini/settings.json')),
   @('VS Code', 'vscode', (J $AppData 'Code/User/mcp.json')),
@@ -1405,6 +1562,7 @@ $McpFiles = @(
   @('Goose', 'goose', (J $AppData 'Block/goose/config/config.yaml')),
   @('OpenCode', 'opencode', (J $HomeDir '.config/opencode/opencode.json'))
 )
+# <<< mcp-files
 $McpRows = New-Object System.Collections.Generic.List[object]
 $N_MCP = 0; $N_MCP_TOKEN = 0; $McpTokFirst = ''; $N_MCP_CACHE = 0; $N_MCP_CACHEF = 0
 $McpTally = @{}; $McpNames = New-Object System.Collections.Generic.List[string]; $McpTokIds = New-Object System.Collections.Generic.List[string]
@@ -1433,7 +1591,7 @@ function Mcp-Row([string]$who, [string]$f, [string]$cid) {
   }
   $tok = $false; $toml = $f.EndsWith('.toml')
   $yaml = $f.EndsWith('.yaml') -or $f.EndsWith('.yml')
-  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInline -NoEnvHeaders:$toml)) { $tok = $true }
+  if ((Has-Match $f $RxInline) -and (Has-RealMatch $f $RxInlines -NoEnvHeaders:$toml)) { $tok = $true }
   elseif (($toml -or $yaml) -and (Has-RealMatch $f $RxHeaderSq -NoEnvHeaders:$toml)) { $tok = $true }
   elseif ($yaml -and (Has-RealMatch $f $RxHeaderYaml -YamlHeaders)) { $tok = $true }
   if ($c -eq 0 -and $null -ne $c -and -not $tok) { return }
@@ -1483,7 +1641,12 @@ $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([
 # or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
 # echo that names the file. A rule or a guard that only names the file, or passes it to another
 # script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
-# ./, and must end there. The same expression as gird-check.sh's worm_cmd.
+# ./, and must end there, after the words that run the rest of a command (Cmd-Wrap). The same
+# expression as gird-check.sh's worm_cmd.
+# Cmd-Wrap: those words, as gird-check.sh's cmd_wrap.
+function Cmd-Wrap([string]$cp) {
+  '((nohup|exec|setsid|npx)\s+(-[A-Za-z]+\s+)*|timeout\s+(-[^\s"\\]+\s+([A-Z0-9]+\s+)?)*[0-9.]+[smhd]?\s+|\(\s*|' + $cp + '(env\s+(-[A-Za-z]+\s+)*|(sh|bash|zsh)(\.exe)?\s+(-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*\s+(\\"|''))|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
+}
 function Worm-Cmd([string]$name) {
   if (-not $name) { return $null }
   $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $name + '(\\"|["''\s;&|)])'
@@ -1492,13 +1655,144 @@ function Worm-Cmd([string]$name) {
   # One piece of a command before a separator: a character outside quotes, a JSON escape other than
   # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
   $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
-  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?' + (Cmd-Wrap $cp)
   $ci = '"command"\s*:\s*"' + $cp + '(node|bun|deno|tsx)(\.exe)?"'
   $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $name + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
   New-Object regex(($cs + $cp + '((node|tsx)(\.exe)?\s+(' + $co + ')*|(bun|deno)(\.exe)?\s+(' + $co + ')*(run\s+(' + $co + ')*)?)' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
 }
 $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
+# A script a session-start hook or a folder-open task runs from the project itself, from one of the
+# folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
+# path), so it is named for the person to check, never counted as malware. A command runs one as
+# Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -e or -p, and the code of -c
+# only as Cmd-Wrap reads it), or as the command itself, after the words that run the rest of a
+# command (Cmd-Wrap), or when cat pipes it to sh, bash or zsh. The same expressions as gird-check.sh's
+# START_PATH and START_CMD (start_cmd).
+$StartPath = '\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
+$RxStartPath = New-Object regex($StartPath, $RxOpt, $RxTimeout)
+function Start-Cmd([string]$path, [string]$pre, [switch]$cd) {
+  $cf = '(\\"|'')?' + $pre + $path + '(\\"|["''\s;&|)])'
+  $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
+  $co = '(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^\s"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)\s+'
+  $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?' + (Cmd-Wrap $cp)
+  $cn = '(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
+  $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
+  $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $path + '"'
+  $cb = '([^{}]|\{[^{}]*\})*'
+  $rx = $cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci +
+    '|' + $cs + 'cat\s+(\\"|'')?' + $pre + $path + '(\\"|'')?\s*\|\s*' + $cp + '(sh|bash|zsh)(\.exe)?([\s;&|)"'']|\\)'
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter, npx or a
+  # package manager, or a ./ script, which run a file from there, after at most one of nohup, exec or
+  # setsid: a cd followed by rm or ls runs nothing. Cmd-Wrap's words come before the cd only, as in
+  # gird-check.sh.
+  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*((nohup|exec|setsid)\s+)?(' + $cp + '(' + $cn + '|(npx|npm|pnpm|yarn)(\.cmd|\.exe)?)\s|\.[/\\])' }
+  New-Object regex($rx, $RxOpt, $RxTimeout)
+}
+$RxStartCmd = Start-Cmd $StartPath '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'
+# The elements of every array that is the value of the key $key, from Flat-Text's text: a
+# session-start hook's entries, or each task of a tasks.json. Strings are skipped whole and brackets
+# counted outside them only, so each character is looked at once. As gird-check.sh's json_elems.
+function Json-Elems([string]$t, [string]$key) {
+  $out = New-Object System.Collections.Generic.List[string]
+  $stops = [char[]]@('"', '[', ']', '{', '}', ',', ':')
+  $i = 0; $w = 0; $cap = $false; $d = 0; $st = 0
+  while ($i -lt $t.Length) {
+    $k = $t.IndexOfAny($stops, $i); if ($k -lt 0) { break }
+    if (-not $cap -and $w -gt 0 -and $k -gt $i -and -not [string]::IsNullOrWhiteSpace($t.Substring($i, $k - $i))) { $w = 0 }
+    $c = $t[$k]
+    if ($c -eq '"') {
+      $j = $k + 1
+      while ($true) {
+        $j = $t.IndexOf('"', $j); if ($j -lt 0) { $j = $t.Length; break }
+        $b = 0; while ($j - $b - 1 -gt $k -and $t[$j - $b - 1] -eq '\') { $b++ }
+        if ($b % 2 -eq 0) { break }
+        $j++
+      }
+      if (-not $cap) { if ($t.Substring($k + 1, $j - $k - 1) -ceq $key) { $w = 1 } else { $w = 0 } }
+      $i = $j + 1; continue
+    }
+    $i = $k + 1
+    if (-not $cap) {
+      if ($w -eq 1 -and $c -eq ':') { $w = 2 } elseif ($w -eq 2 -and $c -eq '[') { $cap = $true; $d = 0; $st = $i } else { $w = 0 }
+      continue
+    }
+    if ($c -eq '[' -or $c -eq '{') { $d++ }
+    elseif (($c -eq ']' -or $c -eq '}') -and $d -gt 0) { $d-- }
+    elseif ($d -eq 0 -and ($c -eq ']' -or $c -eq '}' -or $c -eq ',')) {
+      $e = $t.Substring($st, $k - $st).Trim(); if ($e) { $out.Add($e) }
+      $st = $i
+      if ($c -ne ',') { $cap = $false; $w = 0 }
+    }
+  }
+  if ($cap) { $e = $t.Substring($st).Trim(); if ($e) { $out.Add($e) } }
+  ,$out
+}
+# Each part of a command, as "command": "part": the command is split at ;, &, | outside shell quotes
+# ('...' and \"...\"), so each script a chain runs is matched, not only the last. As gird-check.sh's
+# cmd_parts.
+$RxCmdValue = New-Object regex('"command"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+$CmdStops = [char[]]@(';', '&', '|', '\', "'")
+function Cmd-Parts([string]$el) {
+  foreach ($m in $RxCmdValue.Matches($el)) {
+    $v = $m.Groups[1].Value; $sq = $false; $dq = $false; $st = 0; $i = 0; $pp = New-Object System.Collections.Generic.List[string]
+    while ($true) {
+      $k = $v.IndexOfAny($CmdStops, $i); if ($k -lt 0) { break }
+      $c = $v[$k]; $i = $k + 1
+      if ($c -eq '\') { if ($k + 1 -lt $v.Length) { if (-not $sq -and $v[$k + 1] -eq '"') { $dq = -not $dq }; $i = $k + 2 }; continue }
+      if ($c -eq "'") { if (-not $dq) { $sq = -not $sq }; continue }
+      if (-not $sq -and -not $dq) { $pp.Add($v.Substring($st, $k - $st)); $st = $k + 1 }
+    }
+    $pp.Add($v.Substring($st))
+    foreach ($x in $pp) { $x = $x.TrimStart(' '); if ($x) { '"command": "' + $x + '"' } }
+  }
+}
+$RxDepends = New-Object regex('"dependsOn"\s*:\s*(\[[^\]]*\]|"(?:[^"\\]|\\.)*")', $RxOpt, $RxTimeout)
+$RxQuoted = New-Object regex('"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+$RxLabel = New-Object regex('"label"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTimeout)
+# With a filter, a task one of those elements lists in dependsOn by label counts too: one level, so a
+# task the dependency itself depends on does not. As gird-check.sh's start_scripts.
+function Start-Scripts([string]$f, [string]$t, [string]$key, [regex]$filter) {
+  $all = New-Object System.Collections.Generic.List[string]; foreach ($x in (Json-Elems $t $key)) { $all.Add($x) }
+  $sel = New-Object System.Collections.Generic.List[string]
+  foreach ($el in $all) { if (-not $filter -or (Flat-Match $f $el $filter)) { $sel.Add($el) } }
+  if ($filter -and $sel.Count -gt 0) {
+    # A crafted file can make these run out of time, as any regex here can: the file is then partly
+    # checked (Mark-Slow), never a stop of the whole check.
+    try {
+      $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+      foreach ($el in @($sel)) {
+        foreach ($dm in $RxDepends.Matches($el)) { foreach ($lm in $RxQuoted.Matches($dm.Groups[1].Value)) { [void]$want.Add($lm.Groups[1].Value) } }
+      }
+      foreach ($el in $all) {
+        $lb = $RxLabel.Match($el)
+        if ($lb.Success -and $want.Contains($lb.Groups[1].Value) -and -not $sel.Contains($el)) { $sel.Add($el) }
+      }
+    } catch { Mark-Slow $f }
+  }
+  Cmd-Scripts $f $sel $RxStartCmd $RxStartPath
+}
+# The scripts the commands in these elements run: each command whole and each part of it (Cmd-Parts) is
+# matched, and the script is the last path in the match. As gird-check.sh's cmd_scripts.
+function Cmd-Scripts([string]$f, $els, [regex]$rxCmd, [regex]$rxPath) {
+  $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
+  foreach ($el in $els) {
+    try {
+      foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $rxCmd.Matches($_) })) {
+        $ps = @($rxPath.Matches($m.Value))
+        if ($ps.Count -gt 0) { [void]$set.Add(($ps[$ps.Count - 1].Value -replace '[/\\]+', '/')) }
+      }
+    } catch { Mark-Slow $f }
+  }
+  foreach ($x in $set) { $x }
+}
+function In-Words([string[]]$a) {
+  $a = @($a | Where-Object { $_ })
+  if ($a.Count -le 1) { return ($a -join '') }
+  ($a[0..($a.Count - 2)] -join ', ') + ' and ' + $a[$a.Count - 1]
+}
+$StartHooks = New-Object System.Collections.Generic.List[object]; $StartTasks = New-Object System.Collections.Generic.List[object]
 # Keys that make Claude Code run a command: hooks and its helper commands. Claude Code's settings
 # reference lists each as running your own command, set from any settings file. disableAllHooks set to
 # true turns off hooks, the status line, the file suggestion command and the subagent status line, but
@@ -1567,11 +1861,13 @@ function Flat-Match([string]$f, [string]$t, [regex]$rx) { try { $rx.IsMatch($t) 
 # rest only directly inside that object, as Claude Code reads defaultMode only inside permissions. Under
 # the key, a tab and an array's key (each with its quotes), the strings directly inside that array, for
 # a pattern written "key": {"sub": ["text" (Claude Code's permissions.allow). A token is a string, a
-# bracket or the text between them, so one regex pass reads the file.
+# bracket or the text between them, so one regex pass reads the file. Matches finds them only as they are
+# read, so each caller reads them all with @() inside its try: one that hit the time limit in a later loop
+# would stop the script.
 $RxJsonTok = New-Object regex('"(?:[^"\\]|\\.)*"?|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
 function Aa-Keys([string]$f, [string]$l, $keys) {
   $objs = @{}
-  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return $objs }
+  try { $ms = @($RxJsonTok.Matches($l)) } catch { Mark-Slow $f; return $objs }
   $dep = 0; $cur = $null; $key = $null; $pend = $null; $sb = $null; $key2 = $null; $pend2 = $null; $ak = $null
   foreach ($m in $ms) {
     $t = $m.Value; $c = [string]$t[0]
@@ -1613,7 +1909,7 @@ function Aa-Keys([string]$f, [string]$l, $keys) {
 # as in JSON.parse. The same as gird-check.sh's json_top.
 function Json-Top([string]$f, [string]$t, [string]$key) {
   $l = $t -replace '[ \t\n\v\f\r]', ''
-  try { $ms = $RxJsonTok.Matches($l); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  try { $ms = @($RxJsonTok.Matches($l)) } catch { Mark-Slow $f; return '' }
   $dep = 0; $pend = $null; $v = ''
   foreach ($m in $ms) {
     $x = $m.Value; $c = [string]$x[0]
@@ -1631,7 +1927,7 @@ function Json-Top([string]$f, [string]$t, [string]$key) {
 # kept, so a command's words stay apart. The same as gird-check.sh's cc_rules.
 function Cc-Rules([string]$f) {
   $t = Flat-Text $f; if ($null -eq $t) { return '' }
-  try { $ms = $RxJsonTok.Matches($t); [void]$ms.Count } catch { Mark-Slow $f; return '' }
+  try { $ms = @($RxJsonTok.Matches($t)) } catch { Mark-Slow $f; return '' }
   $sb = New-Object System.Text.StringBuilder
   $dep = 0; $key = $null; $pend = $null; $key2 = $null; $pend2 = $null; $perm = $false; $on = $false
   foreach ($m in $ms) {
@@ -1714,6 +2010,456 @@ function Toml-Ml([string]$s, [string]$st) {
   }
   $st
 }
+# --- Saved rules that run commands on other machines (data/remote-commands.tsv) ---------------
+# Every scalar of a .json file, as path<TAB>value: the path is each key the value sits under, each
+# after a [char]28 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
+# The same as gird-check.sh's json_leaves: a string longer than 4096 characters keeps its first 4096
+# and ends in [char]3, read as a rule with more after them, and a chunk of code longer than 64
+# characters is read as its first word, and [char]3 when more follow. Only values within 8 brackets
+# are listed: the rules sit within 4, and the path of a deeper one is never built, as keeping one at
+# each level takes memory in the square of the depth.
+$RxLeafTok = New-Object regex('"(?:[^"\\]|\\.)*("?)|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
+function Json-Leaves([string]$f) {
+  $out = New-Object System.Collections.Generic.List[string]
+  $text = Flat-Text $f; if ($null -eq $text) { return ,$out }
+  try { $ms = @($RxLeafTok.Matches($text)) } catch { Mark-Slow $f; return ,$out }
+  $fs = [string][char]28
+  $P = @{}; $T = @{}; $dep = 0; $ek = $false; $sc = ''; $key = ''
+  foreach ($m in $ms) {
+    $x = $m.Value; $c = [string]$x[0]
+    if ($c -eq '"') {
+      if ($m.Groups[1].Value -ne '"') { continue }
+      $sv = $x.Substring(1, $x.Length - 2)
+      if ($sv.Length -gt 4096) { $sv = $sv.Substring(0, 4096) + [char]3; $x = '"' + $sv + '"' }
+      if ($dep -gt 0 -and $T[$dep] -eq 'o' -and $ek) { $key = $sv; $ek = $false }
+      elseif ($dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $x) }
+      continue
+    }
+    if ($c -eq '{' -or $c -eq '[') {
+      if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+      $np = ''; if ($dep -ge 1 -and $dep -lt 8) { $np = $P[$dep]; if ($T[$dep] -eq 'o') { $np += $fs + $key } else { $np += '[]' } }
+      $dep++; $P[$dep] = $np; if ($c -eq '{') { $T[$dep] = 'o'; $ek = $true } else { $T[$dep] = 'a'; $ek = $false }
+      continue
+    }
+    if ($c -eq '}' -or $c -eq ']') {
+      if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+      if ($dep -gt 0) { $dep-- }; $ek = $false
+      continue
+    }
+    $parts = $x.Split(',')
+    for ($i = 0; $i -lt $parts.Count; $i++) {
+      $a = $parts[$i]
+      if ($i -gt 0) {
+        if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+        if ($dep -gt 0 -and $T[$dep] -eq 'o') { $ek = $true }
+      }
+      $k = $a.IndexOf([char]':')
+      if ($k -ge 0) {
+        if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+        $ek = $false; $a = $a.Substring($k + 1)
+      }
+      if ($sc.Length -lt 64) {
+        if ($a.Length -le 64) { $sc += ($a -replace '\s', '') }
+        else { $mw = [regex]::Match($a, '\S+'); if ($mw.Success) { $sc += $mw.Value; if ($a.Substring($mw.Index + $mw.Length) -match '\S') { $sc += [char]3 } } }
+      }
+    }
+  }
+  if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }
+  ,$out
+}
+# A rule as the words it fixes before its first wildcard, as gird-check.sh's RC_FN reads it.
+function Rc-Unq([string]$v) { $v.Substring(1, $v.Length - 2).Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\') }
+function Rc-Words([string]$s) { (@($s -split '[ \t\n]+') | Where-Object { $_ -ne '' }) -join ' ' }
+function Rc-Opn([string]$w) { if ($w -eq '') { '*' } else { $w + ' *' } }
+# $RcTail is $true when text after the wildcard narrows the rule (Bash(ssh * rm)): such a deny or ask
+# rule does not cover every use of a command, so it never drops a hit.
+$RcTail = $false; $RcNc = $false; $RcRaw = ''; $RcNote = ''; $RcMr = $false
+function Rc-Fixed([string]$s, [string]$sty) {
+  $script:RcTail = $false
+  $cut = $false; if ($s.Length -gt 256) { $s = $s.Substring(0, 256); $cut = $true }
+  if ($cut -and $sty -ne 'rx' -and $sty -ne 'rxfull') { $s = $s -replace '[^ \t]*$', '' }
+  if ($sty -eq 'claude') {
+    if ($s.EndsWith(':*')) { $s = $s.Substring(0, $s.Length - 2) + ' *' }
+    $k = $s.IndexOf([char]'*')
+    if ($k -lt 0) { $w = Rc-Words $s }
+    else {
+      $pre = $s.Substring(0, $k); $w = Rc-Words $pre; if ($pre -eq '' -or $pre -match '[ \t]$') { $w = Rc-Opn $w } else { $w = $w + '*' }
+      if ($s.Substring($k + 1) -match '[^ \t*]') { $script:RcTail = $true }
+    }
+  } elseif ($sty -eq 'prefix') { $w = Rc-Opn (Rc-Words $s) }
+  elseif ($sty -eq 'str') {
+    if ($s -match '^[ \t]*\*[ \t]*$') { $w = '*' } elseif ($s -match '[ \t]$') { $w = Rc-Opn (Rc-Words $s) } else { $w = Rc-Words $s; if ($w -ne '') { $w += '*' } }
+  } else { $w = Rc-Rx $s ($sty -eq 'rx') }
+  if ($cut) { $script:RcTail = $true }
+  if ($cut -and $w -ne '' -and -not $w.EndsWith('*')) { if ($sty -eq 'rx' -or $sty -eq 'rxfull') { $w += '*' } else { $w = Rc-Opn $w } }
+  $w
+}
+function Rc-Rx([string]$r, [bool]$open) {
+  if ($r.StartsWith('^')) { $r = $r.Substring(1) }
+  $lit = ''; $stop = ''; $n = $r.Length; $i = 0
+  for (; $i -lt $n; $i++) {
+    $c = [string]$r[$i]
+    if ($c -eq '\') {
+      $d = ''; if ($i + 1 -lt $n) { $d = [string]$r[$i + 1] }
+      if ($d -ceq 's' -or $d -eq ' ') { $lit += ' '; $i++; if ($d -ceq 's' -and $i + 1 -lt $n -and $r[$i + 1] -eq '+') { $i++ }; continue }
+      if ($d -ceq 'b') { $lit += ' '; $stop = 'w'; break }
+      if ($d -eq '' -or $d -cmatch '^[A-Za-z0-9]$') { $stop = 'm'; break }
+      $lit += $d; $i++; continue
+    }
+    if ('.^$|?*+()[]{}'.Contains($c)) { $stop = $c; break }
+    $lit += $c
+  }
+  if ($stop -eq '') { if ($open) { return (Rc-Opn (Rc-Words $lit)) } else { return (Rc-Words $lit) } }
+  if ($stop -eq '$' -and $i -eq $n - 1) { return (Rc-Words $lit) }
+  if ($stop -eq 'w') { if ($r.Substring([Math]::Min($i + 2, $n)) -notmatch '^\+?(\.[*+])?\$?$') { $script:RcTail = $true } }
+  elseif ($r.Substring($i) -notmatch '^\.[*+]\$?$') { $script:RcTail = $true }
+  if ($stop -eq '?' -or $stop -eq '*' -or $stop -eq '{') { $lit = $lit.Substring(0, $lit.Length - 1) }
+  $w = Rc-Words $lit
+  if ($lit -eq '' -or $lit -match '[ \t]$') { return (Rc-Opn $w) }
+  $w + '*'
+}
+# A regex split at each | outside a group or a class.
+function Rc-Alts([string]$r) {
+  if ($r.Length -gt 256) { $r = $r.Substring(0, 256) }
+  $out = New-Object System.Collections.Generic.List[string]; $s = New-Object System.Text.StringBuilder; $dp = 0; $cl = $false
+  for ($i = 0; $i -lt $r.Length; $i++) {
+    $c = $r[$i]
+    if ($c -eq '\') { [void]$s.Append($c); if ($i + 1 -lt $r.Length) { [void]$s.Append($r[$i + 1]) }; $i++; continue }
+    if ($cl) { if ($c -eq ']') { $cl = $false } }
+    elseif ($c -eq '[') { $cl = $true }
+    elseif ($c -eq '(') { $dp++ }
+    elseif ($c -eq ')') { $dp-- }
+    elseif ($c -eq '|' -and $dp -eq 0) { $out.Add($s.ToString()); [void]$s.Clear(); continue }
+    [void]$s.Append($c)
+  }
+  $out.Add($s.ToString()); ,$out
+}
+# An entry: @(fid, rep, decision, rank, case, kind, words), as gird-check.sh's rc_read prints them.
+# An entry also carries whether it covers no whole command ($RcTail, or $RcNc for the rule), the rule
+# as written ($RcRaw: a regex, or a rule that allows every command), when it applies ($RcNote) and
+# whether $RcRaw is one of a regex's alternatives ($RcMr). $RcTail, $RcRaw and $RcMr are reset for the
+# next entry.
+function Rc-Out($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$kd, [string]$w) {
+  if ($w -ne '') { $list.Add(@($fid, $rep, $d, [Math]::Round($r, 4), $ci, $kd, $w, ($script:RcTail -or $script:RcNc), $script:RcRaw, $script:RcNote, $script:RcMr)) }
+  $script:RcTail = $false; $script:RcRaw = ''; $script:RcMr = $false
+}
+function Rc-OutRx($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$v, [string]$sty, [string]$raw) {
+  $raw = $raw -replace '[\t\r\n]', ' '; if ($raw.Length -gt 256) { $raw = $raw.Substring(0, 256) }
+  $as = Rc-Alts $v
+  foreach ($a in $as) {
+    $w = Rc-Fixed $a $sty
+    if ($as.Count -gt 1) { $script:RcRaw = $a -replace '[\t\r\n]', ' '; $script:RcMr = $true } else { $script:RcRaw = $raw }
+    Rc-Out $list $fid $rep $d $r $ci '' $w
+  }
+}
+function Rc-Trail([string]$s) { $n = 0; for ($i = $s.Length - 1; $i -ge 0 -and $s[$i] -eq '\'; $i--) { $n++ }; $n }
+function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
+  $L = New-Object System.Collections.Generic.List[object]
+  $script:RcCt = $false
+  $cutf = { if (-not $script:RcCt) { $L.Add(@($fid, $rep, 'cut', 0.0, $false, '', '*')) }; $script:RcCt = $true }
+  if ($fmt -eq 'codex') {
+    $t = Read-Text $f; if ($null -eq $t) { return ,$L }
+    $st = @{ on = $false; dp = 0; bd = 0; kw = ''; id = ''; nt = 0; na = 0; fa = $false; stop = $false; dec = 'allow'; cmt = $false; cm = $false; T = @{}; A = @{} }
+    # A rule ends: its words up to its first list, then each of that list, then the words after it,
+    # as gird-check.sh reads them.
+    $done = {
+      $d = switch ($st.dec) { 'prompt' { 'ask' } 'forbidden' { 'deny' } 'allow' { 'allow' } default { '' } }
+      if ($d -eq '') { return }
+      $w = ''; $x = ''; $j = 0
+      for ($k = 1; $k -le $st.nt; $k++) {
+        if ($st.T[$k] -eq [string][char]2) { $j = $k }
+        elseif ($j -gt 0) { $x += ' ' + $st.T[$k] }
+        else { if ($w -ne '') { $w += ' ' }; $w += $st.T[$k] }
+      }
+      if ($j -eq 0) { if ($w -ne '') { Rc-Out $L $fid $rep $d 0 $st.cm '' (Rc-Opn $w) }; return }
+      for ($k = 1; $k -le $st.na; $k++) { $y = $w; if ($y -ne '') { $y += ' ' }; $script:RcTail = $st.stop; Rc-Out $L $fid $rep $d 0 $st.cm '' (Rc-Opn ($y + $st.A[$k] + $x)) }
+    }
+    $codep = $null
+    $codep = {
+      param([string]$s)
+      while (-not $st.on) {
+        $k = $s.IndexOf('prefix_rule(', [StringComparison]::Ordinal); $h = $s.IndexOf([char]'#')
+        if ($h -ge 0 -and ($k -lt 0 -or $h -lt $k)) { $st.cmt = $true; return }
+        if ($k -lt 0) { return }
+        $s = $s.Substring($k + 12); $st.on = $true; $st.dp = 1; $st.bd = 0; $st.kw = ''; $st.id = ''; $st.nt = 0; $st.na = 0; $st.fa = $false; $st.stop = $false; $st.dec = 'allow'; $st.cm = $false; $st.T = @{}; $st.A = @{}
+      }
+      if ($s.Length -gt 1024) { & $cutf; $st.on = $false; return }
+      for ($i = 0; $i -lt $s.Length; $i++) {
+        $c = [string]$s[$i]
+        if ($c -cmatch '^[A-Za-z0-9_]$') { $st.id += $c; continue }
+        if ($c -eq ' ' -or $c -eq "`t") { continue }
+        if ($st.kw -ceq 'canonical_matching' -and $st.bd -eq 0 -and $st.id -ceq 'True') { $st.cm = $true }
+        if ($c -eq '=') { $st.kw = $st.id }
+        elseif ($c -eq '[') { $st.bd++ }
+        elseif ($c -eq ']') { if ($st.kw -ceq 'pattern' -and $st.bd -eq 2) { if ($st.fa) { $st.stop = $true } else { $st.nt++; $st.T[$st.nt] = [string][char]2; $st.fa = $true } }; $st.bd-- }
+        elseif ($c -eq '(') { $st.dp++ }
+        elseif ($c -eq ')') { $st.dp--; if ($st.dp -eq 0) { & $done; $st.on = $false; & $codep $s.Substring($i + 1); return } }
+        elseif ($c -eq ',' -and $st.bd -eq 0) { $st.kw = '' }
+        elseif ($c -eq '#') { $st.cmt = $true; return }
+        elseif ($c -eq "'") { & $cutf; $st.on = $false; return }
+        $st.id = ''
+      }
+    }
+    foreach ($line in $t.Replace("`r", '').Split("`n")) {
+      if (-not $st.on -and $line -match '^[ \t]*#') { continue }
+      if ($line -eq '') { continue }
+      # A string is joined from its pieces once it ends: one piece at a time is quadratic in its escaped
+      # quotes.
+      $q = $line.Split('"'); $sq = 0; $st.cmt = $false; $qa = 0; $qn = 0
+      for ($i = 0; $i -lt $q.Count -and -not $st.cmt; $i++) {
+        if ($sq -eq 0) { & $codep $q[$i]; if ($i -lt $q.Count - 1 -and -not $st.cmt) { $sq = 1; $qa = $i; $qn = 0; $qb = -1 }; continue }
+        if ($qb -lt 0) { $qn += $q[$i].Length + 1; if ($qn -gt 4097) { $qb = $i } }
+        if ($i -lt $q.Count - 1 -and (Rc-Trail $q[$i]) % 2 -eq 1) { continue }
+        $sq = 0
+        if ($st.on -and ($st.kw -ceq 'pattern' -or $st.kw -ceq 'decision')) {
+          # A token longer than 4096 characters keeps its first 4096 and [char]3, so it matches no command word.
+          if ($qb -ge 0) { $sv = [string]::Join('"', $q, $qa + 1, $qb - $qa).Substring(0, 4096) + [char]3 } else { $sv = [string]::Join('"', $q, $qa + 1, $i - $qa) }
+          $v = $sv.Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\') -replace '[ \t]', [string][char]1
+          if ($st.kw -ceq 'pattern' -and $st.bd -eq 1 -and -not $st.stop) { $st.nt++; $st.T[$st.nt] = $v }
+          elseif ($st.kw -ceq 'pattern' -and $st.bd -eq 2 -and -not $st.fa) { $st.na++; $st.A[$st.na] = $v }
+          elseif ($st.kw -ceq 'decision' -and $st.bd -eq 0) { $st.dec = $v }
+        }
+      }
+      if ($sq -eq 1 -and $st.on) { & $cutf; $st.on = $false }
+    }
+    if ($st.on) { & $cutf }
+    return ,$L
+  }
+  if ($fmt -eq 'gemini-toml') {
+    $t = Read-Text $f; if ($null -eq $t) { return ,$L }
+    $g = @{ inr = $false }
+    $strs = {
+      param([string]$v)
+      $vals = New-Object System.Collections.Generic.List[string]; $n = $v.Length; $dp = 0; $i = 0
+      while ($i -lt $n) {
+        $c = $v[$i]
+        if ($c -eq '"') {
+          $s = New-Object System.Text.StringBuilder; $i++
+          while ($i -lt $n) {
+            $c = $v[$i]
+            if ($c -eq '\') { $d = ''; if ($i + 1 -lt $n) { $d = [string]$v[$i + 1] }; if ($d -eq '\' -or $d -eq '"') { [void]$s.Append($d) } else { [void]$s.Append('\').Append($d) }; $i += 2; continue }
+            if ($c -eq '"') { break }
+            [void]$s.Append($c); $i++
+          }
+          $vals.Add($s.ToString()); $i++; continue
+        }
+        if ($c -eq "'") { $s = New-Object System.Text.StringBuilder; $i++; while ($i -lt $n -and $v[$i] -ne "'") { [void]$s.Append($v[$i]); $i++ }; $vals.Add($s.ToString()); $i++; continue }
+        if ($c -eq '[') { $dp++ } elseif ($c -eq ']') { $dp-- } elseif ($c -eq '#') { break }
+        $i++
+      }
+      $g.bal = ($dp -le 0); ,$vals
+    }
+    $endrule = {
+      if (-not $g.inr) { return }; $g.inr = $false
+      if ($g.args -or $g.mcp -or -not $g.shell -or $g.bad) { return }
+      $d = switch -CaseSensitive ($g.dec) { 'allow' { 'allow' } 'deny' { 'deny' } 'ask_user' { 'ask' } default { '' } }
+      if ($d -eq '') { return }
+      # A rule with modes applies only in them, as gird-check.sh reads them.
+      $md = @($g.modes); $df = $md -ccontains 'default'; $ml = ''
+      for ($k = 0; $k -lt $md.Count; $k++) { if ($k -eq 0) { } elseif ($k -eq $md.Count - 1) { $ml += ' and ' } else { $ml += ', ' }; $ml += $md[$k] }
+      if ($md.Count -gt 0 -and -not $df) {
+        if ($d -ne 'allow') { $script:RcNc = $true }
+        elseif ($md.Count -eq 1 -and $md[0] -ceq 'yolo') { return }
+        else { $script:RcNote = 'only in ' + $ml + $(if ($md.Count -gt 1) { ' modes' } else { ' mode' }) }
+      }
+      $r = 4 + $g.pri / 1000
+      if ($g.px.Count -gt 0) { foreach ($x in $g.px) { $w = Rc-Fixed $x 'prefix'; if ($w -eq '*') { $script:RcRaw = $g.tn }; Rc-Out $L $fid $rep $d $r $false '' $w } }
+      elseif ($g.rgx -ne '') { Rc-OutRx $L $fid $rep $d $r $false $g.rgx 'rx' $g.rgx }
+      else { $script:RcRaw = $g.tn; Rc-Out $L $fid $rep $d $r $false '' '*' }
+      $script:RcNc = $false; $script:RcNote = ''
+    }
+    # A rule with a value or a key this does not read is not read, and the file is named as not read
+    # in full, as gird-check.sh reads them. $mls returns the delimiter of a multi-line string the value
+    # opens or holds, and sets $g.ml to it while its lines follow.
+    $cutr = { & $cutf; if ($g.inr) { $g.bad = $true } }
+    $mls = {
+      param([string]$v)
+      $k = $v.IndexOf('"""', [StringComparison]::Ordinal); $n = $v.IndexOf("'''", [StringComparison]::Ordinal)
+      if ($k -lt 0 -and $n -lt 0) { return '' }
+      if ($k -ge 0 -and ($n -lt 0 -or $k -lt $n)) { $d = '"""'; $p = $k } else { $d = "'''"; $p = $n }
+      if ($v.IndexOf($d, $p + 3, [StringComparison]::Ordinal) -lt 0) { $g.ml = $d }
+      $d
+    }
+    $val = {
+      param([string]$k, [string]$v)
+      if ($k -cnotmatch '^(toolName|commandPrefix|commandRegex|decision|priority|argsPattern|mcpName|modes)$') { if ($v.Length -gt 4096 -or ((& $mls $v) -ne '' -and $g.ml -ne '')) { & $cutf }; return }
+      if ($v.Length -gt 4096 -or (& $mls $v) -ne '') { & $cutr; return }
+      $vals = & $strs $v
+      if ($k -ceq 'toolName') { foreach ($x in $vals) { if ($x -ceq 'run_shell_command' -or $x -ceq 'ShellTool') { $g.shell = $true; $g.tn = $x } } }
+      elseif ($k -ceq 'commandPrefix') { $g.px = @($vals) }
+      elseif ($k -ceq 'commandRegex') { $g.rgx = ''; if ($vals.Count -gt 0) { $g.rgx = $vals[0] } }
+      elseif ($k -ceq 'decision') { $g.dec = ''; if ($vals.Count -gt 0) { $g.dec = $vals[0] } }
+      elseif ($k -ceq 'priority') { $mm = [regex]::Match($v, '^[ \t]*([0-9]+)'); if ($mm.Success) { $g.pri = [double]$mm.Groups[1].Value } }
+      elseif ($k -ceq 'argsPattern') { $g.args = $true }
+      elseif ($k -ceq 'mcpName') { $g.mcp = $true }
+      elseif ($k -ceq 'modes') { $g.modes = @($vals | Where-Object { $_ -ne '' }) }
+    }
+    $acc = ''; $ak = ''; $g.ml = ''
+    foreach ($line in $t.Replace("`r", '').Split("`n")) {
+      if ($g.ml -ne '') { if ($line.IndexOf($g.ml, [StringComparison]::Ordinal) -ge 0) { $g.ml = '' }; continue }
+      if ($acc -ne '') { $acc += ' ' + $line; if ($acc.Length -gt 4096) { & $val $ak $acc; $acc = ''; continue }; [void](& $strs $acc); if ($g.bal) { & $val $ak $acc; $acc = '' }; continue }
+      if ($line -match '^[ \t]*#') { continue }
+      if ($line -cmatch '^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$') { & $endrule; $g.inr = $true; $g.shell = $false; $g.px = @(); $g.rgx = ''; $g.dec = ''; $g.pri = 0; $g.args = $false; $g.mcp = $false; $g.modes = @(); $g.bad = $false; $g.tn = ''; continue }
+      if ($line -match '^[ \t]*\[') { & $endrule; continue }
+      $mm = [regex]::Match($line, '^[ \t]*([A-Za-z_]+)[ \t]*=[ \t]*')
+      # A key this does not read: in a rule, a quoted or dotted one may be one of its keys.
+      if (-not $mm.Success) {
+        if ($g.inr -and $line -match '^[ \t]*([A-Za-z0-9_-]+[ \t]*\.|["''])') { & $cutr; [void](& $mls $line) }
+        elseif ((& $mls $line) -ne '' -and $g.ml -ne '') { & $cutf }
+        continue
+      }
+      if (-not $g.inr) { if ((& $mls $line) -ne '' -and $g.ml -ne '') { & $cutf }; continue }
+      $k = $mm.Groups[1].Value; $v = $line.Substring($mm.Length)
+      if ($v.StartsWith('[') -and $v.Length -le 4096) { [void](& $strs $v); if (-not $g.bal) { $acc = $v; $ak = $k; continue } }
+      & $val $k $v
+    }
+    if ($acc -ne '') { & $val $ak $acc }
+    & $endrule
+    return ,$L
+  }
+  $fs = [string][char]28
+  $exe = 'execute_bash'; if ($OnWindows) { $exe = 'execute_cmd' }
+  $qk = $fs + 'toolsSettings' + $fs + $exe + $fs
+  $nar = $false; $core = $false
+  foreach ($ln in (Json-Leaves $f)) {
+    $k = $ln.IndexOf([char]9); $p = $ln.Substring(0, $k); $v = $ln.Substring($k + 1)
+    $str = $v.StartsWith('"') -and $v.Length -ge 2
+    if ($fmt -eq 'claude' -and $str) {
+      $mm = [regex]::Match($p, '^\x1cpermissions\x1c(allow|ask|deny)\[\]$')
+      if (-not $mm.Success) { continue }
+      # Json-Leaves keeps the first 4096 characters of a longer string and ends it in [char]3 ($lg): a
+      # rule is read only as far as its first 256 (Rc-Fixed), as gird-check.sh reads it.
+      $d = $mm.Groups[1].Value; $v = Rc-Unq $v; $lg = $v.EndsWith([string][char]3, [StringComparison]::Ordinal); if ($lg) { $v = $v.Substring(0, $v.Length - 1) }
+      # Bash and PowerShell are two tools (kind), and PowerShell rules match without case.
+      if ($v -ceq 'Bash' -or $v -ceq 'PowerShell') { $script:RcRaw = $v; Rc-Out $L $fid $rep $d 0 $false $v '*' }
+      else { $mm = [regex]::Match($v, '^(Bash|PowerShell)\('); if ($mm.Success -and ($lg -or $v.EndsWith(')'))) { $kd = $mm.Groups[1].Value; $tl = 1; if ($lg) { $tl = 0 }; $w = Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - $tl) 'claude'; if ($w -eq '*') { $script:RcRaw = $v }; Rc-Out $L $fid $rep $d 0 ($kd -ceq 'PowerShell') $kd $w } }
+    } elseif ($fmt -eq 'gemini-json' -and $str) {
+      $v = Rc-Unq $v; $lg = $v.EndsWith([string][char]3, [StringComparison]::Ordinal); if ($lg) { $v = $v.Substring(0, $v.Length - 1) }; $sh = ($v -ceq 'run_shell_command' -or $v -ceq 'ShellTool')
+      if ($p -ceq ($fs + 'tools' + $fs + 'core[]')) { $core = $true }
+      if ($p -ceq ($fs + 'tools' + $fs + 'allowed[]') -or $p -ceq ($fs + 'tools' + $fs + 'core[]')) {
+        $r = 4.3; if ($p -ceq ($fs + 'tools' + $fs + 'core[]')) { $r = 4.25 }
+        if ($sh) { $script:RcRaw = $v; Rc-Out $L $fid $rep 'allow' $r $false '' '*' }
+        else { $mm = [regex]::Match($v, '^(run_shell_command|ShellTool)\('); if ($mm.Success -and ($lg -or $v.EndsWith(')'))) { $tl = 1; if ($lg) { $tl = 0 }; $w = Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - $tl) 'prefix'; if ($w -eq '*') { $script:RcRaw = $v }; Rc-Out $L $fid $rep 'allow' $r $false '' $w; if ($r -eq 4.3) { $nar = $true } } }
+      }
+      if ($p -ceq ($fs + 'tools' + $fs + 'confirmationRequired[]') -and $sh) { Rc-Out $L $fid $rep 'ask' 4.35 $false '' '*' }
+      if ($p -ceq ($fs + 'tools' + $fs + 'exclude[]') -and $sh) { Rc-Out $L $fid $rep 'deny' 4.4 $false '' '*' }
+    } elseif ($fmt -eq 'vscode' -and $p -ceq ($fs + 'chat.tools.terminal.enableAutoApprove') -and $v -ceq 'false') {
+      # chat.tools.terminal.enableAutoApprove set to false turns off every rule of the file.
+      Rc-Out $L $fid $rep 'deny' 0 $false '' '*'
+    } elseif ($fmt -eq 'vscode' -and $p.StartsWith($fs + 'chat.tools.terminal.autoApprove' + $fs, [StringComparison]::Ordinal) -and ($v -ceq 'true' -or $v -ceq 'false')) {
+      $k = $p.Substring(33); $m = $k.IndexOf([char]28)
+      if ($m -ge 0) { if ($k.Substring($m + 1) -cne 'approve') { continue }; $k = $k.Substring(0, $m) }
+      # A regex key cut short has lost its flags: it is not read.
+      if ($k.EndsWith([string][char]3, [StringComparison]::Ordinal)) { $k = $k.Substring(0, $k.Length - 1); if ($k.StartsWith('/')) { & $cutf; continue } }
+      $k = $k.Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\')
+      $d = 'deny'; if ($v -ceq 'true') { $d = 'allow' }
+      if ($k -cmatch '^/.+/[dgimsuvy]*$') { $fl = $k.Substring($k.LastIndexOf('/') + 1); Rc-OutRx $L $fid $rep $d 0 ($fl.Contains('i')) $k.Substring(1, $k.Length - $fl.Length - 2) 'rx' $k }
+      else { Rc-Out $L $fid $rep $d 0 $false '' (Rc-Fixed $k 'prefix') }
+    } elseif ($fmt -eq 'roo' -and $str -and ($p -ceq ($fs + 'roo-cline.allowedCommands[]') -or $p -ceq ($fs + 'roo-cline.deniedCommands[]'))) {
+      $v = Rc-Unq $v; $d = 'deny'; if ($p.Contains('allowed')) { $d = 'allow' }
+      if ($v.EndsWith([string][char]3, [StringComparison]::Ordinal)) { $v = $v.Substring(0, $v.Length - 1) }
+      $w = Rc-Fixed $v 'str'; if ($w -eq '*') { $script:RcRaw = $v }
+      Rc-Out $L $fid $rep $d $v.Length $true '' $w
+    } elseif ($fmt -eq 'amazonq' -and $str -and ($p -ceq ($qk + 'allowedCommands[]') -or $p -ceq ($qk + 'deniedCommands[]'))) {
+      $v = Rc-Unq $v; $d = 'deny'; if ($p.EndsWith('allowedCommands[]')) { $d = 'allow' }
+      if ($v.EndsWith([string][char]3, [StringComparison]::Ordinal)) { $v = $v.Substring(0, $v.Length - 1) }
+      Rc-OutRx $L $fid $rep $d 0 $false $v 'rxfull' $v
+    }
+  }
+  if ($nar) { Rc-Out $L $fid $rep 'deny' 4.29 $false '' '*' }
+  if ($core) { Rc-Out $L $fid $rep 'deny' 4.24 $false '' '*' }
+  ,$L
+}
+# The hits of a set of an agent's files whose rules apply together: @(fid, rule as shown, what it
+# allows), or @(fid, '!cut') for a file not read in full. The same as gird-check.sh's RC_MATCH: a deny
+# or ask rule covers only its own tool's allow rules, a rule that allows every command is reported but
+# for Claude Code's Bash in a file whose rep is b, and a rule is shown only as far as the words it
+# shares with the command.
+$RcSigWords = @(foreach ($s in $RcSigs) { ,@($s[0].Split(' ')) })
+function Rc-Agree([string]$a, [string]$b, [bool]$ci) {
+  if ($ci) { $a = $a.ToLowerInvariant(); $b = $b.ToLowerInvariant() }
+  if ($a.EndsWith('*')) { $a = $a.Substring(0, $a.Length - 1); return ($b.Length -ge $a.Length -and $b.Substring(0, $a.Length) -ceq $a) }
+  $a -ceq $b
+}
+function Rc-Agrees($W, [int]$wn, [int]$j, [bool]$ci) {
+  $S = $RcSigWords[$j]; $m = [Math]::Min($wn, $S.Count)
+  for ($k = 0; $k -lt $m; $k++) { if (-not (Rc-Agree $W[$k] $S[$k] $ci)) { return $false } }
+  $true
+}
+function Rc-Safe([string]$s) {
+  $m = [regex]::Match($s, '[A-Za-z0-9_-]{16}'); if ($m.Success) { $s = $s.Substring(0, $m.Index) + '...' }
+  if ($s.Length -gt 64) { $s = $s.Substring(0, 64) + '...' }
+  $s
+}
+function Rc-Match($entries) {
+  $res = New-Object System.Collections.Generic.List[object]; $cuts = @{}
+  $ov = @{}; $ns = $RcSigs.Count
+  foreach ($e in $entries) {
+    if ($e[2] -eq 'cut') { if (-not $cuts.ContainsKey($e[0])) { $cuts[$e[0]] = 1; $res.Add(@($e[0], '!cut')) }; continue }
+    if ($e[2] -ne 'deny' -and $e[2] -ne 'ask') { continue }
+    $W = @($e[6].Split(' ')); $open = $false
+    if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
+    if (-not $open -or $e[7]) { continue }
+    for ($j = 0; $j -lt $ns; $j++) {
+      $ci = $e[4] -or $RcSigs[$j][1] -eq 'any'; $ok = "$($e[5])`t$j"
+      if ($W.Count -le $RcSigWords[$j].Count -and (Rc-Agrees $W $W.Count $j $ci) -and (-not $ov.ContainsKey($ok) -or $e[3] -gt $ov[$ok])) { $ov[$ok] = $e[3] }
+    }
+  }
+  $seen = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
+  foreach ($e in $entries) {
+    if ($e[2] -ne 'allow' -or ("$($e[1])" -cne '1' -and "$($e[1])" -cne 'b')) { continue }
+    $W = @($e[6].Split(' ')); $open = $false
+    if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
+    # A rule that matches one exact command is never reported, as in gird-check.sh. A rule that allows
+    # every command is, but for Claude Code's Bash in a file section 1 or 2 lists for it (rep b).
+    $wn = $W.Count; if (-not $open) { continue }
+    if ($wn -eq 0 -and ($e[7] -or ("$($e[1])" -ceq 'b' -and $e[5] -ceq 'Bash'))) { continue }
+    $locs = New-Object System.Collections.Generic.List[string]; $sn = 0; $br = $false
+    for ($j = 0; $j -lt $ns; $j++) {
+      $sl = $RcSigWords[$j].Count
+      if (-not (Rc-Agrees $W $wn $j ($e[4] -or $RcSigs[$j][1] -eq 'any'))) { continue }
+      $ok = "$($e[5])`t$j"
+      if ($ov.ContainsKey($ok) -and $ov[$ok] -ge $e[3]) { continue }
+      if (-not $locs.Contains($RcSigs[$j][2])) { $locs.Add($RcSigs[$j][2]) }
+      $m = [Math]::Min($wn, $sl); if ($m -gt $sn) { $sn = $m }
+      if ($wn -lt $sl) { $br = $true }
+    }
+    if ($locs.Count -eq 0) { continue }
+    $lb = $locs[0]; for ($k = 1; $k -lt $locs.Count; $k++) { if ($k -eq $locs.Count - 1) { $lb += ' and ' } else { $lb += ', ' }; $lb += $locs[$k] }
+    # A rule with more after its wildcard allows only some of the commands its words start.
+    if ($wn -eq 0) { $tx = 'allows every command, including ones that run commands ' + $lb }
+    elseif ($br) { if ($e[7]) { $tx = 'allows ' + ($W -join ' ') + ' commands' } else { $tx = 'allows every ' + ($W -join ' ') + ' command' }; $tx += ', including ones that run commands ' + $lb }
+    else { $tx = 'runs commands ' + $lb }
+    if ($e[9] -ne '') { $tx += ', ' + $e[9] }
+    # A rule that allows every command is its tool or a wildcard alone, shown as written.
+    if ($wn -eq 0) {
+      $sh = $e[8]; if ($sh -eq '') { $sh = $e[5] }; if ($sh -eq '') { $sh = '*' }
+      if ($sh.Length -gt 64) { $sh = $sh.Substring(0, 64) + '...' }
+      if ($e[10]) { $sh += ' ...' }
+    } elseif ($e[8] -ne '' -and -not $e[7] -and $wn -eq $sn) { $sh = Rc-Safe $e[8]; if ($e[10]) { $sh += ' ...' } }
+    else {
+      $sh = ($W[0..($sn - 1)]) -join ' '
+      if ($wn -gt $sn -or $e[7] -or $e[8] -ne '') { $sh += ' ...' } elseif ($open -and -not $W[$wn - 1].EndsWith('*')) { $sh += ' *' }
+      if ($e[5] -ne '') { $sh = $e[5] + '(' + $sh + ')' }
+    }
+    $key = "$($e[0])`t$sh"
+    if (-not $seen.ContainsKey($key)) { $seen[$key] = 1; $res.Add(@($e[0], $sh, $tx)) }
+  }
+  ,$res
+}
+# Sets of @(rep, format, file): @(file, rule, labels) for each hit, @(file, '!cut') for each file not
+# read in full.
+function Rc-Run($set) {
+  $entries = New-Object System.Collections.Generic.List[object]
+  for ($i = 0; $i -lt $set.Count; $i++) { foreach ($e in (Rc-Read $set[$i][2] $set[$i][1] ($i + 1) $set[$i][0])) { $entries.Add($e) } }
+  $out = New-Object System.Collections.Generic.List[object]
+  foreach ($h in (Rc-Match $entries)) { $f = $set[$h[0] - 1][2]; if ($h[1] -eq '!cut') { $out.Add(@($f, '!cut')) } else { $out.Add(@($f, $h[1], $h[2])) } }
+  ,$out
+}
+# The person's own Claude Code settings files whose deny and ask rules apply in every project: the
+# agent group's. A local one applies only in its own folder.
+$RcCcUser = @(foreach ($r in $RcFiles) { if ($r[2] -eq 'claude' -and $r[3] -eq 'agent' -and (Is-File $r[4]) -and (Is-RegularFile $r[4]) -and -not (Too-Big $r[4]) -and $null -ne (Read-Text $r[4])) { ,@('0', 'claude', $r[4]) } })
+$RcProj = New-Object System.Collections.Generic.List[object]
 $AaCut = New-Object System.Collections.Generic.List[string]
 function Aa-Hit([string]$f, $pats) {
   $toml = $f.EndsWith('.toml')
@@ -1787,7 +2533,7 @@ function Aa-Hit([string]$f, $pats) {
   for ($i = 0; $i -lt $pp.Count; $i++) { if ($neg[$i] -eq $got[$i]) { return $false } }
   $true
 }
-function Auto-Row([string]$f, [string]$what, [string]$t) {
+function Auto-Row([string]$f, [string]$what, [string]$t, [string]$note = '') {
   # A worm file counts only when a command runs it (Worm-Cmd), and a file projects use too only in a
   # project that counts ($WormProj).
   if (($RxWormAlone -and (Flat-Match $f $t $RxWormAlone)) -or ($RxWormWeak -and $WormProj.Contains((Worm-Project $f)) -and (Flat-Match $f $t $RxWormWeak))) { $WormRefs.Add($f) }
@@ -1802,7 +2548,7 @@ function Auto-Row([string]$f, [string]$what, [string]$t) {
     if ($row.File -match '[/\\]\.claude[/\\]worktrees[/\\]' -and $f -notmatch '[/\\]\.claude[/\\]worktrees[/\\]') { $row.File = $f }
     return
   }
-  $row = @{ File = $f; What = $what; More = 0 }
+  $row = @{ File = $f; What = $(if ($note) { "$what. $note" } else { $what }); More = 0 }
   $AutoSeen[$key] = $row; $AutoRows.Add($row); Progress "Project settings that $($what): $(Short $f)"
 }
 $homeClaude = J $HomeDir '.claude'
@@ -1863,7 +2609,18 @@ foreach ($f in $AllowFiles) {
     if ($null -eq $st) { continue }
     $v = Json-Top $s $st 'disableAllHooks'; if ($v) { $dah = $v; break }
   }
-  if ((Flat-Match $f $t $RxCmdAlways) -or ($dah -ne 'true' -and ((Flat-Match $f $t $RxHookRun) -or (Flat-Match $f $t $RxCmdHooked)))) { $w.Add('run commands while the agent works') }
+  $note = ''
+  if ((Flat-Match $f $t $RxCmdAlways) -or ($dah -ne 'true' -and ((Flat-Match $f $t $RxHookRun) -or (Flat-Match $f $t $RxCmdHooked)))) {
+    $w.Add('run commands while the agent works')
+    if ($dah -ne 'true') {
+      $ss = @(Start-Scripts $f $t 'SessionStart' $null)
+      if ($ss.Count -gt 0) {
+        $note = "Each agent session starts by running this project's $(In-Words $ss)"
+        $pd = [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($f))
+        foreach ($x in $ss) { $StartHooks.Add(@{ Proj = $pd; Script = $x }) }
+      }
+    }
+  }
   if (Flat-Match $f $t $RxMcpAuto) { $w.Add('turn on MCP servers without asking') }
   if (Flat-Match $f $t $RxBaseUrl) { $w.Add('send the agent''s API traffic, key included, to another server') }
   if ((Flat-Match $f $t $RxBypass) -and (Aa-Hit $f @('"permissions": {"defaultMode": "bypassPermissions"'))) { $w.Add('skip permission prompts with bypassPermissions. Claude Code applies it from a project only before version 2.1.257') }
@@ -1871,23 +2628,56 @@ foreach ($f in $AllowFiles) {
   # asking. It applies a project's settings.json allow rules once you trust the folder, and a
   # settings.local.json's (normally your own file) without that step. A rule for some commands
   # (Bash(npm *)) is not one. The test spares the files that never name them.
+  # The note that the folder must be trusted follows the last of the allow rules listed.
+  $ab = $null; $tr = ''
   if ($t.Contains('"Bash"') -or $t.Contains('"Bash(*)"')) {
-    $ab = $null
     if (Aa-Hit $f @('"permissions": {"allow": ["Bash"')) { $ab = 'Bash' } elseif (Aa-Hit $f @('"permissions": {"allow": ["Bash(*)"')) { $ab = 'Bash(*)' }
-    $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
-    if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '' }
-    if ($ab) { $w.Add("run every Bash command without asking, with permissions.allow: $ab$tr") }
+    if ($ab) {
+      if (-not $f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '. Claude Code applies a project''s allow rules once you trust the folder' }
+      $w.Add("run every Bash command without asking, with permissions.allow: $ab")
+    }
   }
-  Auto-Row $f ($w -join ', ') $t
+  # Allow rules for commands that run commands on other machines (data/remote-commands.tsv), with the
+  # person's own deny and ask rules and both of the project's files. A settings.local.json's apply
+  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here. Bash
+  # allowed whole is said above (rep b).
+  if ($t.Contains('"Bash') -or $t.Contains('"PowerShell')) {
+    $set = New-Object System.Collections.Generic.List[object]
+    foreach ($u in $RcCcUser) { $set.Add($u) }
+    $rp = '1'; if ($ab) { $rp = 'b' }
+    foreach ($s in @((J $dir 'settings.json'), (J $dir 'settings.local.json'))) {
+      if ($s -eq $f) { $set.Add(@($rp, 'claude', $s)) } elseif ((Is-File $s) -and (Is-RegularFile $s) -and -not (Too-Big $s) -and $null -ne (Read-Text $s)) { $set.Add(@('0', 'claude', $s)) }
+    }
+    $rh = @(foreach ($h in (Rc-Run $set)) { if ($h[0] -eq $f -and $h[1] -ne '!cut') { ,$h } })
+    if ($rh.Count -gt 0) {
+      if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { foreach ($h in $rh) { $RcProj.Add(@($f, 'Claude Code', "$($h[1]): $($h[2])")) } }
+      else {
+        $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
+        # A rule that allows every command (PowerShell alone) is said as that, as Bash alone is above.
+        $rv = 'run commands on other machines'; if (@($rh | ForEach-Object { $_[2] }) -cmatch '^allows every command,') { $rv = 'run every command' }
+        $w.Add("$rv without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')")
+      }
+    }
+  }
+  Auto-Row $f (($w -join ', ') + $tr) $t $note
 }
 foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/' -or (Too-Big $f)) { continue }
   $t = Flat-Text $f
   if ($null -eq $t) { continue }
   $w = New-Object System.Collections.Generic.List[string]
-  if (Flat-Match $f $t $RxFolderOpen) { $w.Add('run a task when the folder opens in VS Code or Cursor') }
+  $note = ''
+  if (Flat-Match $f $t $RxFolderOpen) {
+    $w.Add('run a task when the folder opens in VS Code or Cursor')
+    $ss = @(Start-Scripts $f $t 'tasks' $RxFolderOpen)
+    if ($ss.Count -gt 0) {
+      $note = "That task runs this project's $(In-Words $ss)"
+      $pd = [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($f))
+      foreach ($x in $ss) { $StartTasks.Add(@{ Proj = $pd; Script = $x }) }
+    }
+  }
   if (Flat-Match $f $t $RxWorktreeTask) { $w.Add('run a task when VS Code creates a worktree of the project') }
-  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t }
+  if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') $t $note }
 }
 # A project's .vscode/settings.json. "chat.permissions.default" set to "autoApprove" or "autopilot"
 # starts new Copilot chats that run every tool call without asking, and the setting
@@ -1917,11 +2707,157 @@ foreach ($f in $VscSettings) {
   }
   if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') ([string](Flat-Text $f)) }
 }
+# In the order gird-check.sh lists them: byte order of the path with / between folders.
+$AutoRows = $AutoRows.ToArray(); [Array]::Sort([Array][string[]]@($AutoRows | ForEach-Object { $_.File.Replace('\', '/') }), [Array]$AutoRows, [Collections.IComparer][StringComparer]::Ordinal)
 $N_AUTO = $AutoRows.Count
 # Row 02 counts projects: the folders holding these settings.
 $AutoProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($r in $AutoRows) { [void]$AutoProj.Add([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($r.File))) }
 $N_AUTO_PROJ = $AutoProj.Count
+# The worms' own wiring (Wiz on Mini Shai-Hulud, SafeDep on the AntV wave): a session-start hook and a
+# folder-open task in one project that both run a planted file (data/planted.tsv: its folder and name)
+# of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
+# compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
+# A worktree is left out when its repo is listed. As gird-check.sh's WIRED.
+$TaskSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($x in $StartTasks) { if ($null -ne (Planted-Note $x.Script)) { [void]$TaskSet.Add($x.Proj + [char]0 + [IO.Path]::GetFileName($x.Script)) } }
+$Wired = New-Object System.Collections.Generic.List[object]
+$WiredSeen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+$WiredProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($x in $StartHooks) {
+  $b = [IO.Path]::GetFileName($x.Script); $k = $x.Proj + [char]0 + $b
+  if ($null -ne (Planted-Note $x.Script) -and $TaskSet.Contains($k) -and $WiredSeen.Add($k)) { $Wired.Add(@{ Proj = $x.Proj; Name = $b }); [void]$WiredProj.Add($x.Proj) }
+}
+$Wired = @($Wired | Where-Object { $r = $_.Proj -replace '[/\\]\.claude[/\\]worktrees[/\\].*$', ''; -not ($r -ne $_.Proj -and $WiredProj.Contains($r)) })
+# In the order gird-check.sh lists them: byte order of the path with / between folders, then the name.
+# The Array overload sorts $Wired itself (a generic one would sort a copy of it).
+$wk = [string[]]@($Wired | ForEach-Object { $_.Proj.Replace('\', '/') + "`t" + $_.Name })
+[Array]::Sort([Array]$wk, [Array]$Wired, [Collections.IComparer][StringComparer]::Ordinal)
+$WiredP = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($x in $Wired) { [void]$WiredP.Add($x.Proj) }
+$N_WIRED = $WiredP.Count
+# The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
+# SessionStart hook that runs it to the Claude Code and Codex settings files it finds (SafeDep). The
+# copy is an indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex
+# reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
+# there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
+# with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it, or in an inline
+# table at the top (hooks = { SessionStart = [ ... ] }), that array alone. As gird-check.sh's
+# toml_session_start.
+# The inline table hooks = { ... }, read over as many lines as it takes, its strings skipped: B and A are
+# its { and [ depths, Q the quote of the string it is in, K the key being read at the level of the table
+# itself (its characters but spaces and tabs, the first 64), On while in the array whose key is
+# SessionStart, which is added a line for each line it is on. As gird-check.sh's inl.
+$TomlInlStops = [char[]]@('"', "'", '\', '{', '}', '[', ']', ',')
+function Toml-Inline([string]$l, $s, $out) {
+  $i = 0; $n = $l.Length; $ps = 0
+  while ($i -lt $n) {
+    $k = $l.IndexOfAny($TomlInlStops, $i); if ($k -lt 0) { $k = $n }
+    if ($k -gt $i -and $s.B -eq 1 -and $s.A -eq 0 -and $s.K.Length -lt 64) { $x = $l.Substring($i, $k - $i) -replace '[ \t\r]', ''; $s.K += $x.Substring(0, [Math]::Min($x.Length, 64 - $s.K.Length)) }
+    if ($k -ge $n) { break }
+    $c = [string]$l[$k]; $i = $k + 1
+    if ($s.Q) {
+      if ($c -eq '\' -and $s.Q -eq '"' -and $k + 1 -lt $n) { $c = $l.Substring($k, 2); $i = $k + 2 }
+      elseif ($c -eq $s.Q) { $s.Q = '' }
+    } elseif ($c -eq '"' -or $c -eq "'") { $s.Q = $c }
+    elseif ($c -ne '\') {
+      if ($c -eq '[' -and -not $s.On -and $s.B -eq 1 -and $s.A -eq 0 -and $s.K -cmatch '^["'']?SessionStart["'']?=$') { $s.On = $true; $ps = $k }
+      if ($c -eq '{') { $s.B++ }
+      elseif ($c -eq '}') { $s.B--; if ($s.B -le 0) { if ($s.On) { $out.Add($l.Substring($ps, $k - $ps + 1)) }; $s.On = $false; $s.Il = $false; return } }
+      elseif ($c -eq '[') { $s.A++ }
+      elseif ($c -eq ']') { $s.A--; if ($s.A -le 0 -and $s.On) { $out.Add($l.Substring($ps, $k - $ps + 1)); $s.On = $false } }
+      $s.K = ''; continue
+    }
+    if ($s.B -eq 1 -and $s.A -eq 0 -and $s.K.Length -lt 64) { $s.K += $c }
+  }
+  if ($s.On) { $out.Add($l.Substring($ps)) }
+}
+function Toml-SessionStart([string]$t) {
+  $out = New-Object System.Collections.Generic.List[string]; $in = $false; $hk = $false; $top = $true; $d = 0; $ml = ''
+  $is = @{ Il = $false; B = 0; A = 0; Q = ''; K = ''; On = $false }
+  foreach ($line in ($t -split "`n")) {
+    # A multi-line string (""" or ''') goes on over lines, # and brackets in it too; $br counts [ less ] outside strings.
+    $q = ''; $i = 0; $cut = $line.Length; $br = 0; $inml = ($ml -ne '')
+    while ($i -lt $line.Length) {
+      if ($ml -ne '') {
+        if ($ml -eq '"""') { $k = $line.IndexOfAny([char[]]@('"', '\'), $i) } else { $k = $line.IndexOf("'", $i) }
+        if ($k -lt 0) { break }
+        if ($line[$k] -eq '\') { $i = $k + 2; continue }
+        if ($k + 3 -le $line.Length -and $line.Substring($k, 3) -ceq $ml) { $i = $k + 3; $e = 0; while ($e -lt 2 -and $i -lt $line.Length -and $line[$i] -eq $ml[0]) { $i++; $e++ }; $ml = '' } else { $i = $k + 1 }
+      }
+      elseif ($q -eq '') {
+        $k = $line.IndexOfAny([char[]]@('#', '"', "'", '[', ']'), $i); if ($k -lt 0) { break }
+        $ch = [string]$line[$k]; $i = $k + 1
+        if ($ch -eq '#') { $cut = $k; break }
+        elseif ($ch -eq '[') { $br++ }
+        elseif ($ch -eq ']') { $br-- }
+        elseif ($k + 3 -le $line.Length -and $line.Substring($k, 3) -ceq ($ch * 3)) { $ml = $ch * 3; $i = $k + 3 }
+        else { $q = $ch }
+      }
+      elseif ($q -eq "'") { $k = $line.IndexOf("'", $i); if ($k -lt 0) { break }; $q = ''; $i = $k + 1 }
+      else { $k = $line.IndexOfAny([char[]]@('"', '\'), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '\') { $i = $k + 2 } else { $q = ''; $i = $k + 1 } }
+    }
+    $l = $line.Substring(0, $cut)
+    if ($is.Il) { Toml-Inline $l $is $out; continue }
+    if ($d -gt 0) { $out.Add($l); $d += $br; continue }
+    if ($inml) { if ($in) { $out.Add($l) }; continue }
+    if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); $top = $false; continue }
+    if ($in) { $out.Add($l); continue }
+    if (($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') -or ($top -and $l -cmatch '^\s*hooks\.SessionStart\s*=')) { $out.Add($l); $d = $br; continue }
+    if ($top -and $l -cmatch '^\s*["'']?hooks["'']?\s*=\s*\{') { $is.B = 0; $is.A = 0; $is.Q = ''; $is.K = ''; $is.On = $false; $is.Il = $true; Toml-Inline $l $is $out }
+  }
+  $out -join "`n"
+}
+# Each command = "..." in these TOML lines, written as JSON writes it ("command": "..."), for
+# Cmd-Scripts: a literal string ('...' or '''...''') with its \ and " escaped, a basic one ("..." or
+# """...""") as it is. As gird-check.sh's toml_cmds.
+$RxTomlCmd = New-Object regex('(^|[^A-Za-z0-9_=-])["'']?command["'']?\s*=\s*("""(("|"")?([^"\\]|\\.))*("|"")?"""|''''''((''|'''')?[^''])*(''|'''')?''''''|"([^"\\]|\\.)*"|''[^'']*'')', $RxOpt, $RxTimeout)
+function Toml-Cmds([string]$f, [string]$t) {
+  $o = New-Object System.Collections.Generic.List[string]
+  try {
+    foreach ($line in $t.Split("`n")) {
+      foreach ($m in $RxTomlCmd.Matches($line)) {
+        $v = $m.Groups[2].Value
+        if ($v.StartsWith("'''")) { $c = $v.Substring(3, $v.Length - 6).Replace('\', '\\').Replace('"', '\"') }
+        elseif ($v.StartsWith("'")) { $c = $v.Substring(1, $v.Length - 2).Replace('\', '\\').Replace('"', '\"') }
+        elseif ($v.StartsWith('"""')) { $c = $v.Substring(3, $v.Length - 6) }
+        else { $c = $v.Substring(1, $v.Length - 2) }
+        $o.Add('"command": "' + $c + '"')
+      }
+    }
+  } catch { Mark-Slow $f }
+  ,$o
+}
+$UserHooks = New-Object System.Collections.Generic.List[object]
+$cxd = Env-Or 'CODEX_HOME' (J $HomeDir '.codex')
+$ccd = Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')
+$UHookFiles = @((J $ccd 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))
+# A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
+# as Start-Cmd reads a command, with any folder before .claude or .codex, or when it cds into the folder
+# and then runs a command: a guard that only tests for the file, or a command that deletes it, does not.
+# As gird-check.sh's UH_PATH and UH_CMD.
+$UhPath = '\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
+$RxUhPath = New-Object regex($UhPath, $RxOpt, $RxTimeout)
+$RxUhCmd = Start-Cmd $UhPath '(([^\s"''\\;&|]|\\\\)*(/|\\\\))?' -cd
+# A command written over several lines (""" or ''' left open on its line) is not read: the file is
+# named as not read in full, never as one with no such hook. As gird-check.sh's TOML_OPEN.
+$RxTomlOpen = New-Object regex('(^|[^A-Za-z0-9_=-])["'']?command["'']?\s*=\s*("""(("|"")?([^"\\]|\\.))*("|"")?\\?|''''''((''|'''')?[^''])*(''|'''')?)$', $RxOpt, $RxTimeout)
+foreach ($uf in @((J $ccd 'settings.json'), (J (J $HomeDir '.claude') 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))) {
+  if (-not (Is-File $uf) -or (Too-Big $uf) -or @($UserHooks | Where-Object { $_.File -eq $uf }).Count -gt 0) { continue }
+  if ($uf.EndsWith('.toml')) {
+    $ut = Read-Text $uf; if ($null -eq $ut) { continue }
+    $ut = Toml-SessionStart ($ut -replace "`r", '')
+    try { foreach ($line in $ut.Split("`n")) { if ($RxTomlOpen.IsMatch($line)) { if (-not $AaCut.Contains($uf)) { $AaCut.Add($uf) }; break } } } catch { Mark-Slow $uf }
+    $els = Toml-Cmds $uf $ut
+  } else {
+    $ft = Flat-Text $uf; if ($null -eq $ft) { continue }
+    $els = Json-Elems $ft 'SessionStart'
+  }
+  $ss = @(Cmd-Scripts $uf $els $RxUhCmd $RxUhPath)
+  if ($ss.Count -gt 0) { $UserHooks.Add(@{ File = $uf; Dir = ($ss[0] -creplace '^\.(claude|codex)/package.*$', '.$1/package') }) }
+}
+$N_UHOOK = $UserHooks.Count
 
 # --- 3. Keys in plain text ---------------------------------------------------
 $DocsRoots = New-Object System.Collections.Generic.List[string]
@@ -2021,7 +2957,11 @@ function Login($paths, [string]$label, [string]$id, [string]$marker = '') {
 }
 Login (J $HomeDir '.aws/credentials') 'AWS keys' 'aws'
 Login @((J $AppData 'gcloud/application_default_credentials.json'), (J $HomeDir '.config/gcloud/application_default_credentials.json')) 'Google Cloud login' 'gcloud'
-Login (J $HomeDir '.azure/msal_token_cache.json') 'Azure login' 'azure'
+# The Azure CLI keeps its logins and a service principal's secret in AZURE_CONFIG_DIR or ~/.azure,
+# encrypted (.bin) on Windows unless it is told not to; the plain-text .json files are listed
+# (learn.microsoft.com, MSAL-based Azure CLI). One signed in with a certificate has no client_secret.
+Login (J (Env-Or 'AZURE_CONFIG_DIR' (J $HomeDir '.azure')) 'msal_token_cache.json') 'Azure login' 'azure'
+Login (J (Env-Or 'AZURE_CONFIG_DIR' (J $HomeDir '.azure')) 'service_principal_entries.json') 'Azure service principal secrets' 'azure-sp' '"client_secret"'
 Login (J $HomeDir '.kube/config') 'Kubernetes logins' 'kube'
 Login (J $HomeDir '.docker/config.json') 'Docker registry logins' 'docker' '"auth"\s*:\s*"[A-Za-z0-9+/=]{8,}'
 Login (J $HomeDir '.npmrc') 'npm token' 'npm' '_authToken'
@@ -2035,6 +2975,24 @@ Login (J $HomeDir '.claude/.credentials.json') 'Claude Code login' 'claude-code'
 Login (J $HomeDir '.gemini/oauth_creds.json') 'Gemini CLI login' 'gemini'
 Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'opencode'
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
+# Data platforms' own files, read where gird-check.sh reads them: Databricks configuration profiles, dbt's
+# profiles.yml (a value taken from env_var is not in the file; a private_key or password may be a YAML
+# block, its value on the next line that is not blank, indented more than the key), and Snowflake's
+# connections.toml and config.toml in the folder Snowflake CLI picks, each listed when a line sets one
+# of the secrets gird-check.sh names.
+Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret|azure_client_secret|password)[ \t]*='
+Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]|^(?<i>[ \t]*)(password|private_key)[ \t]*:[ \t]*[|>][0-9+-]*[ \t]*(#.*)?\r?\n([ \t]*\r?\n)*\k<i>[ \t]+[^ \t\r\n]'
+$sf = $null
+if ($env:SNOWFLAKE_HOME) { if (Is-Dir $env:SNOWFLAKE_HOME) { $sf = $env:SNOWFLAKE_HOME } }
+elseif (Is-Dir (J $HomeDir '.snowflake')) { $sf = J $HomeDir '.snowflake' }
+# Else the system's own folder, as gird-check.sh picks it: LocalAppData on Windows, Application
+# Support on a Mac, XDG_CONFIG_HOME or ~/.config elsewhere.
+if (-not $sf) {
+  if ($OnWindows) { $sf = J $LocalAppData 'snowflake' }
+  elseif ((Get-Variable IsMacOS -ValueOnly -ErrorAction SilentlyContinue)) { $sf = J $HomeDir 'Library/Application Support/snowflake' }
+  else { $sf = J (Env-Or 'XDG_CONFIG_HOME' (J $HomeDir '.config')) 'snowflake' }
+}
+Login @((J $sf 'connections.toml'), (J $sf 'config.toml')) 'Snowflake logins' 'snowflake' '(?m)^[ \t]*(password|token|oauth_client_secret|private_key_raw|private_key_passphrase|private_key_file_pwd)[ \t]*='
 $N_SSH = 0; $N_SSH_OPEN = 0
 $SshDir = J $HomeDir '.ssh'
 if (Is-Dir $SshDir) {
@@ -2068,17 +3026,17 @@ function Unread-Files($files, [bool]$big = $false) {
   ,$out
 }
 $Sec2Unread = Unread-Files @($McpList)
-foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in (Unread-Files (@($AllowFiles) + @($TaskFiles) + @($VscSettings) + @($UHookFiles)) $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $AllowRows = New-Object System.Collections.Generic.List[object]; $N_ALLOW = 0; $N_ALLOW_NPM = 0; $AllowFirst = ''
 $allowAll = @(@($AllowFiles) + @((J $HomeDir '.claude/settings.json'), (J $HomeDir '.claude/settings.local.json')) | Where-Object { $_ } | Sort-Object -Unique -CaseSensitive | Where-Object { -not (Own-Alias $_) })
 $AllowUnread = Unread-Files $allowAll $true
 foreach ($f in $allowAll) {
   if (-not (Is-File $f) -or (Too-Big $f)) { continue }
-  if (-not (Has-RealMatch $f $RxCommand)) { continue }
+  if (-not (Has-RealMatch $f $RxCommands)) { continue }
   # A key in its permission rules (Cc-Rules) is a saved command; one elsewhere, such as its env, is a key
   # in plain text (section 3) and nothing more.
   $rules = Cc-Rules $f; $real = $false
-  try { foreach ($m in $RxCommand.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } } } catch { Mark-Slow $f }
+  try { foreach ($rx in $RxCommands) { foreach ($m in $rx.Matches($rules)) { if (Is-RealMatch $m.Value) { $real = $true; break } }; if ($real) { break } } } catch { Mark-Slow $f }
   if (-not $real) { continue }
   $N_ALLOW++; if (-not $AllowFirst) { $AllowFirst = $f }
   Progress "Saved Claude Code command with a key: $(Short $f)"
@@ -2165,12 +3123,12 @@ foreach ($pv in @([Environment]::GetEnvironmentVariable('POETRY_VIRTUALENVS_PATH
 foreach ($r in @($PyRoots | Select-Object -Unique)) { if (Is-Dir $r) { Find-Sites $r 0 6 $SitesAll } else { $b = Py-Blocked $r; if ($b) { [void]$PyWalkUnread.Add($b) } } }
 $SitesAll = @($SitesAll | Sort-Object -Unique -CaseSensitive)
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'minishai' { 'Mini Shai-Hulud worm, April 2026' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3, May 2026' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2, March 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'antv' { 'AntV account takeover, May 2026' } 'nxconsole' { 'Nx Console 18.95.0, May 2026' } 'redhat' { 'Red Hat Cloud Services packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'keyvspread' { 'keyv worm spread, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormzig' { 'GlassWorm extensions, April 2026' } 'glasswormdec' { 'GlassWorm native extensions, November 2025' } 'glasswormoct' { 'GlassWorm-linked themes, December 2025' } 'glasswormuni' { 'GlassWorm invisible code, March 2026' } 'glasswasm' { 'GlassWASM extensions, June 2026' } 'injective' { 'Injective SDK, July 2026' } default { $t } } }
-function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'uipath' { 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'minishai' { 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' } 'mastra' { 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' } 'antv' { 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' } 'nxconsole' { 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' } 'redhat' { 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'keyvscope' { 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' } 'keyvspread' { 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' } 'glasswormmar' { 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' } 'glasswormzig' { 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' } 'glasswormdec' { 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' } 'glasswormoct' { 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' } 'glasswormuni' { 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' } 'glasswasm' { 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' } 'injective' { 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' } default { $t } } }
+function Npm-Label([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026' } 'tanstack' { 'TanStack worm, May 2026' } 'mistral' { 'Mistral AI npm packages, May 2026' } 'uipath' { 'UiPath npm packages, May 2026' } 'mistralpy' { 'mistralai 2.4.6, May 2026' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026' } 'opensearch' { 'OpenSearch client, May 2026' } 'bitwarden' { 'Bitwarden CLI, April 2026' } 'minishai' { 'Mini Shai-Hulud worm, April 2026' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3, May 2026' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2, March 2026' } 'mastra' { 'Mastra npm packages, June 2026' } 'antv' { 'AntV account takeover, May 2026' } 'nxconsole' { 'Nx Console 18.95.0, May 2026' } 'redhat' { 'Red Hat Cloud Services packages, June 2026' } 'keyv' { 'keyv worm, August 2026' } 'keyvscope' { 'keyv account takeover, August 2026' } 'keyvspread' { 'keyv worm spread, August 2026' } 'sandworm' { 'SANDWORM_MODE worm, February 2026' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026' } 'tensorlake' { 'tensorlake package, October 2026' } 'litellm' { 'LiteLLM 1.107.0, October 2026' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026' } 'opencode' { 'OpenCode Console, October 2026' } 'railway' { 'Railway, October 2026' } 'zeabur' { 'Zeabur, October 2026' } 'glassworm' { 'GlassWorm extensions, January 2026' } 'glasswormmar' { 'GlassWorm extensions, March 2026' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026' } 'glasswormzig' { 'GlassWorm extensions, April 2026' } 'glasswormdec' { 'GlassWorm native extensions, November 2025' } 'glasswormoct' { 'GlassWorm-linked themes, December 2025' } 'glasswormuni' { 'GlassWorm invisible code, March 2026' } 'glasswasm' { 'GlassWASM extensions, June 2026' } 'checkmarxvsx' { 'Checkmarx Open VSX extensions, March 2026' } 'injective' { 'Injective SDK, July 2026' } 'claudeext' { 'Trojanized Claude Code extension, October 2026' } 'agentfw' { 'agent-framework 1.26.1 and 1.26.2, November 2026' } default { $t } } }
+function Incident-Line([string]$t) { switch ($t) { 'axios' { 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' } 'tanstack' { 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' } 'mistral' { 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' } 'uipath' { 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' } 'mistralpy' { 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' } 'guardrails' { 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' } 'opensearch' { 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'bitwarden' { 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' } 'minishai' { 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' } 'lightning' { 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' } 'mastra' { 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' } 'antv' { 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' } 'nxconsole' { 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' } 'redhat' { 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' } 'keyv' { 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' } 'keyvscope' { 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' } 'keyvspread' { 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' } 'sandworm' { 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' } 'sandsleep' { 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' } 'tensorlake' { 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' } 'litellm' { 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' } 'opencode' { 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' } 'railway' { 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' } 'zeabur' { 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' } 'glassworm' { 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' } 'glasswormmar' { 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' } 'glasswormvsix' { 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' } 'glasswormapr' { 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' } 'glasswormzig' { 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' } 'glasswormdec' { 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' } 'glasswormoct' { 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' } 'glasswormuni' { 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' } 'glasswasm' { 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' } 'checkmarxvsx' { 'Checkmarx Open VSX extensions, March 2026: on activation, fetched and ran a credential stealer where cloud credentials were found. wiz.io' } 'injective' { 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' } 'claudeext' { 'Trojanized Claude Code extension, October 2026: builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel. cursor.com' } 'agentfw' { 'agent-framework 1.26.1 and 1.26.2, November 2026: a .pth file started a credential stealer every time Python started. github.com' } default { $t } } }
 function Incident-Level([string]$t) { switch ($t) { 'mistral' { 'update' } 'uipath' { 'update' } 'opencode' { 'leak' } 'railway' { 'leak' } 'zeabur' { 'leak' } 'injective' { 'update' } default { 'act' } } }
-function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'uipath' { 'UiPath npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'minishai' { 'Mini Shai-Hulud worm' } 'lightning' { 'lightning 2.6.2 and 2.6.3' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2' } 'mastra' { 'Mastra npm packages' } 'antv' { 'AntV account takeover' } 'nxconsole' { 'Nx Console 18.95.0' } 'redhat' { 'Red Hat Cloud Services packages' } 'keyv' { 'keyv worm' } 'keyvscope' { 'keyv account takeover' } 'keyvspread' { 'keyv worm spread' } 'sandworm' { 'SANDWORM_MODE worm' } 'sandsleep' { 'SANDWORM_MODE sleeper packages' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormzig' { 'GlassWorm extensions' } 'glasswormdec' { 'GlassWorm native extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'glasswormuni' { 'GlassWorm invisible code' } 'glasswasm' { 'GlassWASM extensions' } 'injective' { 'Injective SDK' } default { $t } } }
-function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'uipath' { 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'minishai' { 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' } 'lightning' { 'github.com/advisories/GHSA-g4wr-mm54-799x' } 'durabletask' { 'github.com/advisories/GHSA-3qf7-886j-9wrc' } 'telnyx' { 'github.com/advisories/GHSA-955r-262c-33jc' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'antv' { 'osv.dev/vulnerability/MAL-2026-3973' } 'nxconsole' { 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' } 'redhat' { 'osv.dev/vulnerability/MAL-2026-5111' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'keyvscope' { 'github.com/advisories/GHSA-q99r-cjmf-3xrf' } 'keyvspread' { 'osv.dev/vulnerability/MAL-2026-11952' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'sandsleep' { 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'litellmmar' { 'docs.litellm.ai/blog/security-update-march-2026' } 'opencode' { 'x.com/opencode/status/2111519637049319818' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormzig' { 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' } 'glasswormdec' { 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'glasswormuni' { 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' } 'glasswasm' { 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } default { $t } } }
-function Incident-Advice([string]$t) { switch ($t) { 'uipath' { 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' } 'keyvscope' { 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' } 'sandworm' { 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' } 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'glasswormvsix' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormapr' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormzig' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'injective' { 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' } default { '' } } }
+function Incident-Name([string]$t) { switch ($t) { 'axios' { 'Axios takeover' } 'tanstack' { 'TanStack worm' } 'mistral' { 'Mistral AI npm packages' } 'uipath' { 'UiPath npm packages' } 'mistralpy' { 'mistralai 2.4.6' } 'guardrails' { 'guardrails-ai 0.10.1' } 'opensearch' { 'OpenSearch client' } 'bitwarden' { 'Bitwarden CLI' } 'minishai' { 'Mini Shai-Hulud worm' } 'lightning' { 'lightning 2.6.2 and 2.6.3' } 'durabletask' { 'durabletask 1.4.1 to 1.4.3' } 'telnyx' { 'telnyx 4.87.1 and 4.87.2' } 'mastra' { 'Mastra npm packages' } 'antv' { 'AntV account takeover' } 'nxconsole' { 'Nx Console 18.95.0' } 'redhat' { 'Red Hat Cloud Services packages' } 'keyv' { 'keyv worm' } 'keyvscope' { 'keyv account takeover' } 'keyvspread' { 'keyv worm spread' } 'sandworm' { 'SANDWORM_MODE worm' } 'sandsleep' { 'SANDWORM_MODE sleeper packages' } 'tensorlake' { 'tensorlake package' } 'litellm' { 'LiteLLM 1.107.0' } 'litellmmar' { 'LiteLLM 1.82.7 and 1.82.8' } 'opencode' { 'OpenCode Console' } 'railway' { 'Railway' } 'zeabur' { 'Zeabur' } 'glassworm' { 'GlassWorm extensions' } 'glasswormmar' { 'GlassWorm extensions' } 'glasswormvsix' { 'GlassWorm sleeper extensions' } 'glasswormapr' { 'GlassWorm sleeper extensions' } 'glasswormzig' { 'GlassWorm extensions' } 'glasswormdec' { 'GlassWorm native extensions' } 'glasswormoct' { 'GlassWorm-linked themes' } 'glasswormuni' { 'GlassWorm invisible code' } 'glasswasm' { 'GlassWASM extensions' } 'checkmarxvsx' { 'Checkmarx Open VSX extensions' } 'injective' { 'Injective SDK' } 'claudeext' { 'Trojanized Claude Code extension' } 'agentfw' { 'agent-framework 1.26.1 and 1.26.2' } default { $t } } }
+function Incident-Source([string]$t) { switch ($t) { 'axios' { 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' } 'tanstack' { 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' } 'mistral' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'uipath' { 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' } 'mistralpy' { 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' } 'guardrails' { 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' } 'opensearch' { 'github.com/advisories/GHSA-298w-vvm4-ww55' } 'bitwarden' { 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' } 'minishai' { 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' } 'lightning' { 'github.com/advisories/GHSA-g4wr-mm54-799x' } 'durabletask' { 'github.com/advisories/GHSA-3qf7-886j-9wrc' } 'telnyx' { 'github.com/advisories/GHSA-955r-262c-33jc' } 'mastra' { 'socket.dev/blog/mastra-npm-packages-compromised' } 'antv' { 'osv.dev/vulnerability/MAL-2026-3973' } 'nxconsole' { 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' } 'redhat' { 'osv.dev/vulnerability/MAL-2026-5111' } 'keyv' { 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' } 'keyvscope' { 'github.com/advisories/GHSA-q99r-cjmf-3xrf' } 'keyvspread' { 'osv.dev/vulnerability/MAL-2026-11952' } 'sandworm' { 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' } 'sandsleep' { 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' } 'tensorlake' { 'github.com/advisories/GHSA-rqxj-g25x-4v9v' } 'litellm' { 'docs.litellm.ai/blog/security-incident-oct-21-2026' } 'litellmmar' { 'docs.litellm.ai/blog/security-update-march-2026' } 'opencode' { 'x.com/opencode/status/2111519637049319818' } 'railway' { 'blog.railway.com/p/security-disclosure-wednesday-october-21st' } 'zeabur' { 'zeabur.com/blogs/october-2026-security-incident' } 'glassworm' { 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' } 'glasswormmar' { 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' } 'glasswormvsix' { 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' } 'glasswormapr' { 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' } 'glasswormzig' { 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' } 'glasswormdec' { 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' } 'glasswormoct' { 'socket.dev/blog/glassworm-vscode-themes' } 'glasswormuni' { 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' } 'glasswasm' { 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' } 'checkmarxvsx' { 'www.wiz.io/blog/teampcp-attack-kics-github-action' } 'injective' { 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' } 'claudeext' { 'cursor.com/blog/claude-code-extension-security-notice' } 'agentfw' { 'github.com/advisories/GHSA-764m-3ppc-5m73' } default { $t } } }
+function Incident-Advice([string]$t) { switch ($t) { 'uipath' { 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' } 'keyvscope' { 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' } 'sandworm' { 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' } 'glassworm' { 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' } 'glasswormvsix' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormapr' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'glasswormzig' { 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' } 'checkmarxvsx' { 'On Linux, also check your systemd user services for one you did not add: off CI, this malware adds one that fetches more code every 50 minutes.' } 'injective' { 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' } 'claudeext' { 'First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up: on a Mac run launchctl bootout gui/UID/com.apple.sysmond, with UID the number id -u prints, and on Windows end and delete the scheduled task SysMon; then end every process whose command line names .smt, .smtk, smt.cmd, sysmon.cmd or a .stk_ file (the loops that start ssh or autossh again about every 60 seconds, and the tunnel itself). Then remove the line in ~/.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ (its comment may read svc-telemetry), ~/.config/.smt, ~/.config/.smtk and ~/.config/smt.cmd, ~/Library/LaunchAgents/com.apple.sysmond.plist on a Mac, the @reboot line that runs .smt in your crontab on Linux, the .stk_ file in your temp folder, and on Windows ~/.config/smtk, sysmon.cmd in the Startup folder and the same key line in administrators_authorized_keys in the ssh folder of ProgramData. Then turn off Remote Login on a Mac (the SSH server on Linux, OpenSSH Server on Windows) if you did not turn it on yourself.' } default { '' } } }
 function Incident-Summary([string]$t) { switch ($t) { 'uipath' { 'UiPath builds: update them, UiPath says no risk' } 'injective' { 'Injective SDK: move the funds out of its wallets' } default { '' } } }
 # <<< incidents
 # >>> bad-pypi: generated from data/bad-pypi.tsv by tools/gen.sh. Edit that file, then run it.
@@ -2187,8 +3145,10 @@ durabletask 1.4.2 durabletask linux
 durabletask 1.4.3 durabletask linux
 telnyx 4.87.1 telnyx none
 telnyx 4.87.2 telnyx all
+agent_framework 1.26.1 agentfw all
+agent_framework 1.26.2 agentfw all
 '@
-$PyIncidents = @('litellm', 'litellmmar', 'mistralpy', 'guardrails', 'lightning', 'durabletask', 'telnyx')
+$PyIncidents = @('litellm', 'litellmmar', 'mistralpy', 'guardrails', 'lightning', 'durabletask', 'telnyx', 'agentfw')
 # <<< bad-pypi
 # >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
 $IndTable = @(
@@ -2229,7 +3189,19 @@ $IndTable = @(
   ,@('telnyx', 'win', 'startup', 'no', (J $HomeDir 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe'), 'the telnyx malware, which Windows starts at every login from the Startup folder')
   ,@('telnyx', 'mac', 'temp', 'yes', '.initd_state', 'Telnyx lists this file as the malware''s state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.')
   ,@('telnyx', 'linux', 'temp', 'yes', '.initd_state', 'Telnyx lists this file as the malware''s state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.')
+  ,@('claudeext', 'mac', 'startup', 'no', (J $HomeDir '.config/.smt'), 'the trojanized Claude Code extension''s reverse SSH tunnel script')
+  ,@('claudeext', 'linux', 'startup', 'no', (J $HomeDir '.config/.smt'), 'the trojanized Claude Code extension''s reverse SSH tunnel script')
+  ,@('claudeext', 'mac', 'startup', 'no', (J $HomeDir '.config/.smtk'), 'a file the trojanized Claude Code extension writes beside .smt')
+  ,@('claudeext', 'linux', 'startup', 'no', (J $HomeDir '.config/.smtk'), 'a file the trojanized Claude Code extension writes beside .smt')
+  ,@('claudeext', 'all', 'startup', 'no', (J $HomeDir '.config/smt.cmd'), 'a script the trojanized Claude Code extension writes to keep its tunnel running')
+  ,@('claudeext', 'win', 'startup', 'no', (J $HomeDir '.config/smtk'), 'a file the trojanized Claude Code extension writes beside smt.cmd')
+  ,@('claudeext', 'mac', 'startup', 'no', (J $HomeDir 'Library/LaunchAgents/com.apple.sysmond.plist'), 'a LaunchAgent of the trojanized Claude Code extension, not Apple''s')
+  ,@('claudeext', 'win', 'startup', 'no', (J $HomeDir 'AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sysmon.cmd'), 'starts the trojanized Claude Code extension''s tunnel at every login')
+  ,@('agentfw', 'all', 'site', 'no', 'agent_framework_meta.pth', '-')
+  ,@('agentfw', 'all', 'site', 'no', 'af_runtime_diag.pth', '-')
+  ,@('agentfw', 'all', 'site', 'no', 'af_runtime_diag.py', '-')
 )
+$IndAlone = @(,@('claudeext', (J $HomeDir '.config/.smt')), @('claudeext', (J $HomeDir '.config/.smt')), @('claudeext', (J $HomeDir '.config/.smtk')), @('claudeext', (J $HomeDir '.config/.smtk')), @('claudeext', (J $HomeDir '.config/smt.cmd')), @('claudeext', (J $HomeDir '.config/smtk')), @('claudeext', (J $HomeDir 'Library/LaunchAgents/com.apple.sysmond.plist')))
 # <<< indicators
 if ($OnWindows) { $IndOs = 'win' } elseif (Is-Dir '/System/Library/CoreServices') { $IndOs = 'mac' } else { $IndOs = 'linux' }
 $IndOn = @($IndTable | Where-Object { $_[1] -eq 'all' -or $_[1] -eq $IndOs })
@@ -5827,6 +6799,7 @@ rwc-client 0.29.17 keyvspread
 rwc-client 0.29.18 keyvspread
 rwc-client 0.29.19 keyvspread
 server-hemera-mongo 0.0.12 keyvspread
+server-hemera-mongo 0.0.16 keyvspread
 sn-listbox 0.3.3 keyvspread
 tslint-folder-schema 1.0.6 keyvspread
 tslint-folder-schema 1.0.7 keyvspread
@@ -6062,8 +7035,17 @@ vsceue.volar-vscode * glasswormdec any mac,win
 exargd.vsblack 0.0.1 glasswasm openvsx all
 noellee-doc.flint-debug 0.1.1 glasswasm openvsx all
 nrwl.angular-console 18.95.0 nxconsole any all
+anthropic.claude-code 2.1.312 claudeext any all 134.209.82.225;svc-telemetry
+anthropic.claude-code 2.1.313 claudeext any all 134.209.82.225;svc-telemetry
+checkmarx.ast-results 2.53.0 checkmarxvsx openvsx all
+checkmarx.cx-dev-assist 1.7.0 checkmarxvsx openvsx all
 '@
 # <<< bad-extensions
+# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it.
+$SshPlanted = @(
+  ,@('claudeext', 'ssh-ed25519', 'AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P', 'the SSH key the trojanized Claude Code extension adds for the attacker')
+)
+# <<< ssh-keys
 $NpmBad = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)); $NpmAny = (New-Object Collections.Hashtable ([StringComparer]::Ordinal)); $NpmNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal); $N_BAD_NPM = 0
 foreach ($l in ($BadNpm -split "`r?`n")) {
   $p = $l -split ' '; if ($p.Count -lt 3) { continue }
@@ -6339,6 +7321,7 @@ $OutTable = @(
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '2.1.38', '2.1.163', 'a malicious repository could run code outside the sandbox', 'github.com/advisories/GHSA-7835-87q9-rgvv')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '-', '2.1.179', 'a plugin repository could install code that bypasses its pinned hash', 'github.com/advisories/GHSA-pq7j-f95f-qfcv')
   ,@('claudecode', 'Claude Code', 'all', 'npm', '@anthropic-ai/claude-code', '2.0.68', '2.1.260', 'a stored API key could start sessions without the managed settings of an Enterprise or Team organization', 'github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw')
+  ,@('claudecode', 'Claude Code', 'mac', 'npm', '@anthropic-ai/claude-code', '-', '2.1.251', 'code a malicious repository runs in its sandbox could make it write files outside the workspace', 'github.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
   ,@('mcpremote', 'mcp-remote', 'all', 'mcparg', 'mcp-remote', '0.0.5', '0.1.16', 'a hostile MCP server could run commands', 'github.com/advisories/GHSA-6xpm-ggf7-wc3p')
   ,@('mcpremote', 'mcp-remote', 'all', 'npm', 'mcp-remote', '0.1.16', '!0.1.38', 'a hostile server could open an internal address in your browser', 'github.com/advisories/GHSA-v65w-6crh-cp3h')
@@ -6392,6 +7375,68 @@ $N_YOLO_AG = $yoloAg.Count
 foreach ($f in (Unread-Files $aaTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 foreach ($f in $AaCut) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 if ($N_YOLO -gt 0) { Progress "Agents set to run commands without asking: $($AaList[0].Agent)" }
+# Saved rules that let an agent run commands on other machines without asking (data/remote-commands.tsv):
+# the person's own files of each agent, read together or each file alone as the data file's group
+# says, then the projects' Claude Code settings.local.json files section 2 read. The same as
+# gird-check.sh.
+function Rc-Expand([string]$p) {
+  $pp = $p -replace '\\', '/'
+  if ($pp.Contains('/*/')) { return @(Aa-Glob $p) }
+  $leaf = $pp.Substring($pp.LastIndexOf('/') + 1)
+  if ($leaf.StartsWith('*.')) {
+    $ext = $leaf.Substring(1)
+    try { return @(([IO.DirectoryInfo]$pp.Substring(0, $pp.LastIndexOf('/'))).GetFiles() | Where-Object { -not $_.Name.StartsWith('.') -and $_.Name.EndsWith($ext, [StringComparison]::Ordinal) } | Sort-Object -Property Name -CaseSensitive | ForEach-Object { $_.FullName }) } catch { return @() }
+  }
+  if (Exists $p) { return @($p) }
+  @()
+}
+$RemoteList = New-Object System.Collections.Generic.List[object]; $rcTried = New-Object System.Collections.Generic.List[string]
+$rcSeen = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal); $rcCuts = New-Object System.Collections.Generic.List[string]
+$rcFileNote = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
+$rcAgents = New-Object System.Collections.Generic.List[string]
+foreach ($r in $RcFiles) { if (-not $rcAgents.Contains($r[0])) { $rcAgents.Add($r[0]) } }
+foreach ($ag in $rcAgents) {
+  # The sets: the agent group's files together, each file of the file group alone, and each local one
+  # with the agent group's, whose deny and ask rules apply over it while its own reach only it. A
+  # file's rep is b when section 1 lists it for this agent, which says there that Bash is allowed whole.
+  $agSet = New-Object System.Collections.Generic.List[object]; $fileSets = New-Object System.Collections.Generic.List[object]
+  $locals = New-Object System.Collections.Generic.List[object]
+  foreach ($r in $RcFiles) {
+    if ($r[0] -ne $ag) { continue }
+    if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
+    foreach ($f in (Rc-Expand $r[4])) {
+      if (-not $rcTried.Contains($f)) { $rcTried.Add($f) }
+      if (-not (Is-File $f) -or -not (Is-RegularFile $f) -or (Too-Big $f) -or $null -eq (Read-Text $f)) { continue }
+      $rp = '1'; foreach ($y in $AaList) { if ($y.File -ceq $f -and $y.Agent -ceq $ag) { $rp = 'b'; break } }
+      if ($r[5] -ne '-') { $rcFileNote[$f] = $r[5] }
+      $ent = @($rp, $r[2], $f)
+      if ($r[3] -eq 'file') { $fileSets.Add(@(,$ent)) } elseif ($r[3] -eq 'local') { $locals.Add($ent) } else { $agSet.Add($ent) }
+    }
+  }
+  $sets = New-Object System.Collections.Generic.List[object]
+  if ($agSet.Count -gt 0) { $sets.Add($agSet.ToArray()) }
+  foreach ($x in $fileSets) { $sets.Add($x) }
+  foreach ($x in $locals) { $one = New-Object System.Collections.Generic.List[object]; foreach ($y in $agSet) { $one.Add(@('0', $y[1], $y[2])) }; $one.Add($x); $sets.Add($one.ToArray()) }
+  foreach ($set in $sets) {
+    foreach ($h in (Rc-Run $set)) {
+      if ($h[1] -eq '!cut') { $rcCuts.Add($h[0]); continue }
+      $st = "$($h[1]): $($h[2])"; if ($rcFileNote.ContainsKey($h[0])) { $st += ", $($rcFileNote[$h[0]])" }
+      $k = "$($h[0])`t$ag`t$st"
+      if (-not $rcSeen.ContainsKey($k)) { $rcSeen[$k] = 1; $RemoteList.Add(@{ File = $h[0]; Agent = $ag; Rule = $st }) }
+    }
+  }
+}
+foreach ($h in $RcProj) { $k = "$($h[0])`t$($h[1])`t$($h[2])"; if (-not $rcSeen.ContainsKey($k)) { $rcSeen[$k] = 1; $RemoteList.Add(@{ File = $h[0]; Agent = $h[1]; Rule = $h[2] }) } }
+# A file there but not read, too big to, or not read in full is named in section 2 with the others,
+# one by one: Unread-Files returns its list whole.
+foreach ($f in (Unread-Files $rcTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in $rcCuts) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+$N_REMOTE = $RemoteList.Count
+# Row 01 counts agents.
+$remoteAg = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+foreach ($r in $RemoteList) { [void]$remoteAg.Add($r.Agent) }
+$N_REMOTE_AG = $remoteAg.Count
+if ($N_REMOTE -gt 0) { Progress "Allowed to run commands on other machines: $($RemoteList[0].Agent)" }
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
 function Ver-Ok([string]$v) { $v -cmatch '^[0-9]+(\.[0-9]+)*$' }
@@ -6523,7 +7568,9 @@ $NpmRows.Sort($byWhere); $NpmCacheRows.Sort($byWhere); $NpmRows.AddRange($NpmCac
 # dropper targets too (Socket's post of 18 March 2026, Aikido's of April), keeps them in
 # ~/.positron/extensions and its server's in ~/.positron-server/extensions, from Posit's mirror of
 # Open VSX (its product.json). A line whose bad build was only ever on Open VSX (registry openvsx)
-# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A
+# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A line
+# with a marker (a clean build has the same id and version) counts only when the folder's extension.js
+# holds one of its strings, and an extension.js that is missing or can't be read counts in $ExtUnread. A
 # folder that can't be read leaves the check not done in full ($ExtUnread), never clean, and so does
 # an editor's own folder (~/.windsurf) that can't be opened, which hides its extensions folder.
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
@@ -6556,6 +7603,14 @@ foreach ($er in @('.vscode/extensions', '.cursor/extensions', '.windsurf/extensi
       if (-not $m.Groups[1].Value.Equals($x[0], [StringComparison]::OrdinalIgnoreCase)) { continue }
       if ($x[1] -ceq $m.Groups[2].Value) { $hit = $x; break }
       if ($x[1] -ceq '*' -and $null -eq $hit) { $hit = $x }
+    }
+    if ($null -ne $hit -and $hit.Count -ge 6 -and $hit[5] -ne '') {
+      # A line with a marker: the folder is the bad build only when its extension.js holds one of the strings.
+      $xj = J $e.FullName 'extension.js'; $xt = $null
+      if ((Is-File $xj) -and (Is-SafeToRead $xj)) { try { $xt = [IO.File]::ReadAllText($xj) } catch { $xt = $null } }
+      if ($null -eq $xt) { $ExtUnread++; continue }
+      $xin = $false; foreach ($xs in ($hit[5] -split ';')) { if ($xs -ne '' -and $xt.Contains($xs)) { $xin = $true } }
+      if (-not $xin) { continue }
     }
     if ($null -ne $hit) {
       if ($hit[4] -eq 'all' -or @($hit[4] -split ',') -contains $IndOs) { $ExtRows.Add(@($e.FullName, "$($hit[0]) $($m.Groups[2].Value)", $hit[2])) }
@@ -6719,6 +7774,8 @@ $N_LOCKPROJ = $LockProj.Count
 # the keyv wave it evaluates a handler string the attacker supplied, Socket), so it must be stopped
 # before any token is revoked. A file in the shared /tmp counts only if this person owns it; Windows has no /tmp.
 $Wiper = New-Object System.Collections.Generic.List[string]
+# The incidents of the files below that are signs of malware, as gird-check.sh's IND_HITS (the OWASP tags).
+$IndHits = New-Object System.Collections.Generic.List[string]
 $Persist = New-Object System.Collections.Generic.List[object]
 # A startup file of an incident whose packages are editor extensions only (GlassWorm's LaunchAgent)
 # is that incident's sign, shown with the extensions ($ExtPersist), never called npm malware, and only
@@ -6727,13 +7784,44 @@ $Persist = New-Object System.Collections.Generic.List[object]
 # file to check ($ExtCheck), not a compromised machine.
 $ExtPersist = New-Object System.Collections.Generic.List[object]; $ExtPersistTags = New-Object System.Collections.Generic.List[string]
 $ExtCheck = New-Object System.Collections.Generic.List[object]; $ExtCheckTags = New-Object System.Collections.Generic.List[string]
+# $IndHits: the incidents of the startup files in $Persist, which an account run sends.
+$IndHits = New-Object System.Collections.Generic.List[string]
 $ExtIncs = @($BadExtRows | ForEach-Object { $_[2] })
 $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 # A file an npm incident's line and an editor extension incident's line both name (the AntV wave's
 # packages and Nx Console 18.95.0 leave the same kitty-monitor files) is listed once, by the incident
 # $IndOwner names: the extension's when it was found and none of the npm incident's packages was found
 # installed ($NpmInstTags): a version only in a lockfile is no sign of what made these files.
-$ExtFound = @($ExtRows | ForEach-Object { $_[2] })
+# An SSH key malware adds to ~/.ssh/authorized_keys (data/ssh-keys.tsv) is its incident's sign, shown
+# with that incident's extensions ($ExtKey). A line counts when the key's type and then the key itself
+# are two of its fields, whatever options come before them or comment after: a comment alone never
+# counts. A file, or a .ssh folder, that can't be read leaves the check not done in full
+# ($SshkUnread), never clean.
+$ExtKey = New-Object System.Collections.Generic.List[object]; $ExtKeyTags = New-Object System.Collections.Generic.List[string]; $SshkUnread = 0
+$sshDir = J $HomeDir '.ssh'; $akf = J $sshDir 'authorized_keys'; $akt = $null
+if (Exists $akf) {
+  # A pipe or device (Is-Special) and a file over ReadMax are not read either, as in gird-check.sh.
+  if ((Is-Dir $akf) -or (Is-Special $akf) -or (Too-Big $akf)) { $SshkUnread = 1 } else { try { $akt = [IO.File]::ReadAllText($akf) } catch { $SshkUnread = 1 } }
+} elseif (Is-Dir $sshDir) {
+  # Not there, or there and out of reach: a .ssh folder that can't be listed, or that lists the file
+  # but can't be entered, or a link to nothing.
+  try { if (@([IO.Directory]::GetFileSystemEntries($sshDir, 'authorized_keys')).Count -gt 0) { $SshkUnread = 1 } } catch { $SshkUnread = 1 }
+}
+if ($null -ne $akt) {
+  $akSeen = @{}
+  foreach ($akLine in ($akt -split "`n")) {
+    $af = @($akLine.TrimEnd("`r") -split '[ \t]+' | Where-Object { $_ -ne '' })
+    for ($j = 1; $j -lt $af.Count; $j++) {
+      for ($i = 0; $i -lt $SshPlanted.Count; $i++) {
+        $k = $SshPlanted[$i]
+        if ($af[$j] -ceq $k[2] -and $af[$j - 1] -ceq $k[1] -and -not $akSeen.ContainsKey($i)) {
+          $akSeen[$i] = $true; $ExtKey.Add(@($akf, $k[3])); if (-not $ExtKeyTags.Contains($k[0])) { $ExtKeyTags.Add($k[0]) }
+        }
+      }
+    }
+  }
+}
+$ExtFound = @(@($ExtRows | ForEach-Object { $_[2] }) + @($ExtKeyTags))
 $IndOwner = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
 $ownXa = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ownXf = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
 $ownM = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ownNf = New-Object Collections.Hashtable ([StringComparer]::Ordinal)
@@ -6750,11 +7838,18 @@ foreach ($r in $IndOn) {
 foreach ($p in @($ownM.Keys)) {
   if ($ownXa.ContainsKey($p)) { if ($ownXf.ContainsKey($p) -and -not $ownNf.ContainsKey($p)) { $IndOwner[$p] = $ownXf[$p] } else { $IndOwner[$p] = $ownM[$p] } }
 }
+$xcPend = New-Object System.Collections.Generic.List[object]
 foreach ($r in $IndOn) {
   if ($r[2] -ne 'wiper' -and $r[2] -ne 'startup') { continue }
   # A Python incident's startup file is shown in its row ($PyStart).
   if ($r[2] -eq 'startup' -and $PyIncidents -contains $r[0]) { continue }
   $m = $r[4]; if (-not $m -or -not (Exists $m)) { continue }
+  # In %ProgramData% any account can create a file, but on NTFS a standard account cannot give one to
+  # another owner. An account run counts a marker there only under its one name and owned by this
+  # person; gird-fleet.ps1 judges every other one for the PC.
+  if ($OptAcctRun -and $env:ProgramData -and $m.StartsWith($env:ProgramData.TrimEnd('\', '/') + $Sep, $PathCmp)) {
+    if ((Multi-Name $m) -or -not (Owns-File $m)) { continue }
+  }
   if ($r[3] -eq 'yes') {
     if ($OnWindows) { continue }
     # Only under its one name, outside the home folder: a link, symbolic or hard, could put another
@@ -6764,16 +7859,29 @@ foreach ($r in $IndOn) {
   if ($r[2] -eq 'startup' -and $IndOwner.ContainsKey($m) -and $IndOwner[$m] -cne $r[0]) { continue }
   if ($r[2] -eq 'wiper') { $Wiper.Add($m) }
   elseif ($ExtIncs -contains $r[0] -and -not ($NpmIncs -contains $r[0])) {
-    if ($ExtFound -ccontains $r[0]) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
-    else { $ExtCheck.Add(@($m, $r[5])); if (-not $ExtCheckTags.Contains($r[0])) { $ExtCheckTags.Add($r[0]) } }
+    # A file whose name is the malware's own (data/indicators.tsv's alone) is its sign on its own.
+    $alone = $ExtFound -ccontains $r[0]
+    if (-not $alone) { foreach ($iaRow in $IndAlone) { if ($iaRow[0] -ceq $r[0] -and $iaRow[1] -ceq $m) { $alone = $true } } }
+    if ($alone) { $ExtPersist.Add(@($m, $r[5])); if (-not $ExtPersistTags.Contains($r[0])) { $ExtPersistTags.Add($r[0]) } }
+    else { $xcPend.Add(@($r[0], $m, $r[5])) }
   }
-  else { $Persist.Add(@($m, $r[5])) }
+  else { $Persist.Add(@($m, $r[5])); if (-not $IndHits.Contains($r[0])) { $IndHits.Add($r[0]) } }
+}
+# Beside a file of the same incident that is its sign on its own, a file is its sign too.
+foreach ($x in $xcPend) {
+  if ($ExtPersistTags.Contains($x[0])) { $ExtPersist.Add(@($x[1], $x[2])) }
+  else { $ExtCheck.Add(@($x[1], $x[2])); if (-not $ExtCheckTags.Contains($x[0])) { $ExtCheckTags.Add($x[0]) } }
 }
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if ($OnWindows) {
   try {
-    $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
-    if ($rk) { if ($null -ne $rk.GetValue('NvmProtocal')) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')) }; $rk.Close() }
+    $nvmp = $null
+    if ($env:GIRD_CHECK_TEST_RUNKEY) { $nvmp = $env:GIRD_CHECK_TEST_RUNKEY }   # tests only: no registry to fake off Windows
+    else {
+      $rk = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
+      if ($rk) { $nvmp = $rk.GetValue('NvmProtocal'); $rk.Close() }
+    }
+    if ($null -ne $nvmp) { $Persist.Add(@('NvmProtocal in your startup programs', 'starts the Mastra malware at login')); if (-not $IndHits.Contains('mastra')) { $IndHits.Add('mastra') } }
   } catch { }
 }
 foreach ($f in $WormHit) { $Persist.Add(@($f, (Planted-Note (Planted-Rel $f)))) }
@@ -6782,11 +7890,12 @@ $WIPER_HIT = 0; if ($Wiper.Count -gt 0) { $WIPER_HIT = 1 }
 $MAL_HIT = 0; if ($NPM_HIT -eq 1 -or $Persist.Count -gt 0 -or $WIPER_HIT -eq 1) { $MAL_HIT = 1 }
 $MAL_LOCKONLY = 0; if ($MAL_HIT -eq 1 -and $NpmInst -eq 0 -and $Persist.Count -eq 0 -and $WIPER_HIT -eq 0) { $MAL_LOCKONLY = 1 }
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
-# extension incident's startup file next to it is its sign too.
-$EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0) { $EXT_HIT = 1 }
+# extension incident's startup file next to it is its sign too, and so are a startup file whose name
+# is the malware's own and an SSH key it adds.
+$EXT_HIT = 0; if ($ExtRows.Count -gt 0 -or $ExtPersist.Count -gt 0 -or $ExtKey.Count -gt 0) { $EXT_HIT = 1 }
 # The incidents of what EXT_HIT counts ($ExtTags), for their advice and lines, and of the extensions to
 # remove ($ExtUpdTags).
-$ExtTags = @((@(foreach ($r in $ExtRows) { $r[2] }) + @($ExtPersistTags)) | Sort-Object -Unique -CaseSensitive)
+$ExtTags = @((@(foreach ($r in $ExtRows) { $r[2] }) + @($ExtPersistTags) + @($ExtKeyTags)) | Sort-Object -Unique -CaseSensitive)
 $ExtUpdTags = @(@(foreach ($r in $ExtUpd) { $r[2] }) | Sort-Object -Unique -CaseSensitive)
 $ANY_MAL = 0; if ($MAL_HIT -eq 1 -or $EXT_HIT -eq 1) { $ANY_MAL = 1 }
 # MAL_SIGN: npm or extension malware found on this machine. npm malware found only in a lockfile is not
@@ -6808,6 +7917,33 @@ $Platforms = @(
   @{ Id = 'railway'; Name = 'Railway'; Cmds = @('railway'); Dirs = @(); Files = @((J $HomeDir '.railway/config.json')); Found = 'CLI found'; Advice = 'Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.'; Summary = 'Railway CLI found: rotate secrets stored there' },
   @{ Id = 'zeabur'; Name = 'Zeabur'; Cmds = @('zeabur'); Dirs = @((J $HomeDir '.config/zeabur')); Files = @(); Found = 'CLI found'; Advice = 'Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.'; Summary = 'Zeabur CLI found: rotate secrets stored there' })
 # <<< platforms
+# The OWASP Agentic Top 10 risk of each kind of finding (data/owasp.tsv, docs/designs/owasp.md).
+# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it.
+$OwaspTable = @(
+  ,@('agents_run_without_asking', 'ASI02', 'Tool Misuse and Exploitation', 'run without asking', '01', 'yolo')
+  ,@('agents_run_remote_commands', 'ASI02', 'Tool Misuse and Exploitation', 'remote commands without asking', '01', 'remote')
+  ,@('tools_to_update', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'tools with a security fix', '01', 'tools')
+  ,@('mcp_token_files', 'ASI03', 'Identity and Privilege Abuse', 'tokens in MCP configs', '02', 'mcp_token_files')
+  ,@('authorized_keys_links', 'ASI03', 'Identity and Privilege Abuse', 'links to authorized_keys', '02', 'ak_links')
+  ,@('project_settings_on_open', 'ASI05', 'Unexpected Code Execution', 'settings that act on opening', '02', 'on_open')
+  ,@('scripts_started_like_worms', 'ASI05', 'Unexpected Code Execution', 'scripts started like worms', '02', 'autostart')
+  ,@('key_files', 'ASI03', 'Identity and Privilege Abuse', 'keys in plain text', '03', 'key_files')
+  ,@('history_keys', 'ASI03', 'Identity and Privilege Abuse', 'keys in shell history', '03', 'history_keys')
+  ,@('session_files_with_keys', 'ASI03', 'Identity and Privilege Abuse', 'keys in agent sessions', '03', 'session_files')
+  ,@('ssh_keys_no_passphrase', 'ASI03', 'Identity and Privilege Abuse', 'SSH keys without a passphrase', '03', 'ssh_open')
+  ,@('allow_list_keys', 'ASI03', 'Identity and Privilege Abuse', 'keys in allow lists', '04', 'allow_list_keys')
+  ,@('incidents', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'malware signs', '05', 'incidents:act')
+  ,@('incidents_to_update', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'versions to update', '05', 'incidents:update')
+  ,@('wiper', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'gh-token-monitor', '05', 'wiper')
+  ,@('planted_files', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'files a worm plants', '05', 'planted')
+  ,@('authorized_keys_planted_keys', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'SSH keys malware adds', '05', 'ssh_planted')
+  ,@('lockfile_only_incidents', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'npm malware in a lockfile', '05', 'lock_only')
+  ,@('versions_to_update', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'Python versions to update', '05', 'updates')
+  ,@('extensions_to_remove', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'extensions to remove', '05', 'remove')
+  ,@('platforms_found', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'platforms with a leak', '05', 'platforms')
+  ,@('machine.incidents', 'ASI04', 'Agentic Supply Chain Vulnerabilities', 'malware signs', '-', 'machine:incidents')
+)
+# <<< owasp
 $PlatFound = @($Platforms | Where-Object {
   $p = $_; (@($p.Cmds | Where-Object { Has-Command $_ }).Count -gt 0) -or (@($p.Dirs | Where-Object { Is-Dir $_ }).Count -gt 0) -or (@($p.Files | Where-Object { Is-File $_ }).Count -gt 0)
 } | ForEach-Object { $_.Id })
@@ -6816,15 +7952,137 @@ $PlatFix = Join-Or @($Platforms | Where-Object { $PlatFound -contains $_.Id } | 
 # The report's fixed fields opencode and railway.
 $OC = 0; if ($PlatFound -contains 'opencode') { $OC = 1 }
 $RW = 0; if ($PlatFound -contains 'railway') { $RW = 1 }
+# Workflows that name a GitHub Action whose code was replaced by malware for a time (data/actions.tsv),
+# as gird-check.sh reads them. A uses: line names owner/repo[/path]@ref. A ref of 40 hex digits is a
+# pin to a commit: it matches a malicious commit the source lists, or any pin but a known-good one
+# when the source says pins ran it too. Any other ref matches the line's patterns. A match is a project to check.
+# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it.
+$ActTable = @(
+  ,@('tj-actions/changed-files', 'tj-actions/changed-files', 'v[1-9] v[1-9].* v[1-3][0-9]* v4[0-4]* v45 v45.0.[0-7]', '0e58ed8671d6b60d0890c21b07f8835ace038e67', '-', 'safe', 'on 14 and 15 March 2025', 'github.com', 'Its tags were restored after the attack. Pin it to a full commit SHA.')
+  ,@('tj-actions/eslint-changed-files', 'tj-actions/eslint-changed-files', 'v8.[1-6] v9* v1[0-9]* v2[0-4]* v25 v25.[0-3].* !v18 !v18.3.* !v19.0.[01] !v25.3.[1-9]*', '-', '7adb8a5909bfca3634cd850d891fe1d4a3d1fbe6,375e1e762440d560bdeec981b5caebb0f9d187d0,137bb2bffdbdc04bc3a50b58f2eef7de9a3ec8fd,ff7ef55105504caae0ac003e73fb0b5297e6805f,4fd6e147e9cf0d5904c9f9cff85735e1a2a31e1f,0cfcd35949a961d13e964a7c2a4971c0e89b68fc,536c35c8184b8bbd361d3703aa63439e0895c340', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025', 'wiz.io', 'It ran reviewdog/action-setup@v1 and, from v9, tj-actions/changed-files by tag, both compromised then. Pin it to the full commit SHA of v25.3.2 or later, which pins both by commit.')
+  ,@('reviewdog/action-shellcheck', 'reviewdog/action-shellcheck', '*', '-', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-composite-template', 'reviewdog/action-composite-template', '*', '-', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-staticcheck', 'reviewdog/action-staticcheck', '*', '-', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-ast-grep', 'reviewdog/action-ast-grep', '*', '-', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-typos', 'reviewdog/action-typos', '*', '-', '-', 'unsafe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.')
+  ,@('reviewdog/action-setup', 'reviewdog/action-setup', 'v1', 'f0d342d24037bb11d26b9bd8496e0808ba32e9ec', '-', 'safe', 'on 11 March 2025, 18:42 to 20:31 UTC', 'github.com', 'Its v1 tag was restored after the attack. Pin it to a full commit SHA.')
+  ,@('xygeni/xygeni-action', 'xygeni/xygeni-action', 'v5', '4bf1d4e19ad81a3e8d4063755ae0f482dd3baf12', '-', 'safe', 'from about 3 to 10 March 2026', 'github.com', 'Pin it to 13c6ed2797df7d85749864e2cbcf09c893f43b23, its v6.4.0, as Xygeni advises.')
+  ,@('aquasecurity/trivy-action', 'aquasecurity/trivy-action', '0.* !0.35.0', '-', '76071ef0d7ec797419534a183b498b4d6366cf37,dc5a429b52fcf669ce959baa2c2dd26090d2a6c4,f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808,b6643a29fecd7f34b3597bc6acb0a98b03d33ff8,c1824fd6edce30d7ab345a9989de00bbd46ef284,e368e328979b113139d6f9068e03accaed98a518,97e0b3872f55f89b95b2f65b3dbab56962816478,57a97c7e7821a5776cebc9bb87c984fa69cba8f1,ed142fd0673e97e23eac54620cfb913e5ce36c25', 'unsafe', 'on 19 and 20 March 2026', 'github.com', 'Pin it to the full commit SHA of v0.35.0 or v0.36.0. A pin to a commit from before 9 April 2025 ran the compromised setup-trivy then too; the advisory calls a pin to a later commit of the action safe.')
+  ,@('aquasecurity/setup-trivy', 'aquasecurity/setup-trivy', 'v0.2.*', '-', '-', 'safe', 'on 19 March 2026, about 17:43 to 21:44 UTC', 'github.com', 'Pin it to the full commit SHA of v0.2.6 or later, published again with safe code.')
+  ,@('checkmarx/kics-github-action', 'Checkmarx/kics-github-action', 'v1 v1.0 v1.1 v1.2 v1.3 v1.4 v1.5 v1.6 v1.6.1 v1.6.2 v1.6.3 v1.7.0 v2 v2.0.0 v2.1.0 v2.1.1 v2.1.2 v2.1.3 v2.1.4 v2.1.5 v2.1.6 v2.1.7 v2.1.8 v2.1.9 v2.1.10 v2.1.11 v2.1.12 v2.1.13 v2.1.14 v2.1.15 v2.1.16 v2.1.17 v2.1.18 v2.1.19 v2.1.20', '0e22ec8d1e0dda3c62bf4beffcd4a8a5db1abda1,45f3749467a6017cb4fb749054b498d149dd5924,8e20c7a67bb95632e2040327a355fb97e6014d29,93de85c910d859b759cf9185aa78d5a23a4b7000,0e7343ba084735863db92b6f8ba2fa9dee604f7c,2dc0fa613f6f4c15f26ad98225ad253475681616,f00191dd3352c0cd83c6cce4e6bf04b628214dd0,e0359b1a253ee66c8018586c3225e6e9cd2d8a4f,dc6dbf358998c0c64da83edc8fcd581c12656b19,08b9ea97eb292d5e1f9ac2d8e21c0ba32f0fdff0,005fb0837553de722f8bf11d98e905dbdde19861,a5471d37c656ecd4560e8e0b3977910f27025618,3d49875ed47c6b8b4c8b50e0421418cf6b9f35f4,121c38fb49c9fc82160245fb6e2a9119db636e4d,1e9eeaba37fe0032deba133f598e74dab0ceb3b7,c5c07508527fc6a125855eebfb533e64f675bd8e,c999dbb9cc904e23675f9929f7e0e51d132879cf,4ebf62dd8ff318412b38d19841fc3c8650e294bf,3ae9f0d6f8139964635d411149f9b3e0a6eb935e,96a0e8eb31c3cce6c495c9a49dd49c881cd17934,31fbf5831a2e52429738fdc0cbaa20e57872b6fc,fca3a20afcb8ec7f9932c060a236d2a9021fdd2b,0f81f132f9f09bb4976d403914a44a1a1eb6158d,c0e23718a5074f3b8ad286f37b532e02057af35f,d66f0657133bc42f8264458063999bf1910490db,e35c9d6a5faffc1c5b3450d0bf09006aa9b9e906,2eee333d70fb6e14ce1d4aa73f12058bc5d70193,f9641eb512f5c6530d13275903e8a97baf0925f1,e8754eebc822b5122e96a6142b28dbc0e179c91c,69b3f020390222a9fcb6029ba56533b2fb12f103,db942a0dd7e9d1aeac72bc675bdb67f39a688b63,208813bf5feca5df9a935363cd426bc914614d0b,3fdeadb81fbeddc1453163cc87bc173911fd47e2,310734c0ffd29438f6195a24e2cbbacfdc33c9ab,b974e53df1e3a2cd22ea90f0ec01882394feede4', '-', 'safe', 'on 23 March 2026, 12:58 to 16:50 UTC', 'wiz.io', 'Pin it to the full commit SHA of a release published after the attack.')
+  ,@('actions-cool/issues-helper', 'actions-cool/issues-helper', 'v3.8.0 v3.7.6 v3.7.5 v3.7.4 v3.7.3 v3.7.2 v3.7.1 v3.7.0 v3.6.3 v3.6.2 v3.6.1 v3.6.0 v3.5.2 v3.5.1 v3.5.0 v3.4.0 v3.3.3 v3.3.2 v3.3.1 v3.3.0 v3.2.1 v3.2.0 v3.1.0 v3.0.1 v3.0.0 v3 v2.5.0 v2.4.3 v2.4.2 v2.4.1 v2.4.0 v2.3.1 v2.3.0 v2.2.1 v2.2.0 v2.1.2 v2.1.1 v2.1.0 v2.0.0 v2 v1.12 v1.11 v1.10 v1.9 v1.8 v1.7 v1.6 v1.5 v1.4 v1.3 v1.2 v1.1 v1', '1c9e803c80cc7fed000022d4c94f4b5bc2e90062,f0448c62fc57b8a5ce23d8acd6e795cdd76a3b6c,abc4310e6b8520aff6af79a4880217917cd1436b,aea87833045e38098e64310e962b897ae8aaba33,aeb05195dbd618afce6f22ca4937e46940d86be1,4b10341e231301a86c66f6c09e3e4de76d8719fe,8a3a7c2960ff3a4e3fd1481cfd1eb31301e16337,aa44b5492c787fbc4c51edb8d98d88b668fe89d1,03bbf452b52fb318196d9c193fd178a79a6d7f9b,257849272e291fb74ff4bee4d3be4796dd35fbbb,4bb72d31eaee87562b70a0cf1b93579bb2b14c23,e0585c10366288eeec3117d65ed24240ccbf1f47,419b34c603623ea8749a98b7153df20e389dd0ec,8cc2629c5681d794c494b79283d23aa3ce78749c,4b69521f9829a1114b94d74fdc1a38f2291d8c34,dc5687b71897e8b57bc9743e325ac72cee763c9c,3846bd4230da36f68a4cc1527298ca9ab2652fb9,459b0cfc4dd708b6218b72a7a01dda6c6a7ab0c0,fa6a4ca487f2dc699d428126ea2b18e9d0d15c9d,15c89f718cd325833aad8000d3ec72e2660f6584,a7d3c46a35564fa85321f3557700f6ea0c0616a9,85c9d842e1c0f41f8805f17600c25237e08a0224,64ed6d61b6eee8744417e1d1cc651665a8bce236,d9b1764cbe78ec9b12f01a66b2d2c902b15981b6,b9c83f01929e190cda300e76f688bf7ea7e37a7a,147337a919d92f4bf42f02843682d694650f1e22,e9631d2e615d95a19111c272049444fb073a99be,91b26b99c50ad890f98c2184d251bd3a16f5b1b1,3f4d6804812734dfe945bbe8ef619f151e4b27f6,46eff1378ad0faee27c017ebd97f605548777098,071e169dfb36005b3262b3853c9894698b8b303b,55253d49c68133ae52e791a3f1f8242b191f5e91,edf8cf78d6feeb5a73cda9317af5ddfc4da6c5fd,a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d,896379edfaac994ff214a3097c6c82e21be16066,9bd6ce03e0c279f347b519548b87d26699ad31c9,d2877f69bae9d8dcbadb06b3214ebf0789ed566e,601e1296a5a0853b5e109f9820151c72619e11e4,75fb02043af24e6f3eaf534464de338173993629,3480e51eec2be03a70d6fe17507413a96fe5b57d,67716d94ad07d7fe793cabc6f6d1ffe24f77bdf7,cd96d6518c6338f8510638bce764c7abd7194983,6a538e928b8856062de61103ed5a08f0ea0faee9,9793761b1bc3dde7ad1ccb9be6211919e20a3f01,8a64710bb8fee9f5c92eb1a816e016ed00fbcce0,710ff89debb143f6859cf8d54c0e8739224ff6c1,3904fe935f1a18fee5dbad6db46a66c9dcffde01,cfbd14ccc97afd3baa822bd231df8460e4f02f29,15dc537110a44b0625622e82b7d6ca95583f276a,e778a401e233bf0a416f3fe2a52d9039949b30a6,203671479d663755cb5bf8ffbeca6d2b685af7ae,a7156495f3403674cafe3796382bded1d9af8931,5c267592a87e92c2b005b338bd0d2724c2f64acb', '-', 'safe', 'from 18 May 2026', 'stepsecurity.io', 'Remove it. Every tag was moved to a malicious commit, and in September 2026 the tags still ran it.')
+  ,@('actions-cool/maintain-one-comment', 'actions-cool/maintain-one-comment', 'v3.3.0 v3.2.1 v3.2.0 v3.1.1 v3.1.0 v3 v2.0.2 v2.0.1 v2.0.0 v2 v1.2.1 v1.2.0 v1.1.0 v1.0.0 v0.0.1-wip', '7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b', '-', 'safe', 'from 18 May 2026', 'stepsecurity.io', 'Remove it. Every tag was moved to a malicious commit.')
+)
+# <<< actions
+# A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
+# indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
+# after the { or a , on a line that has one, a # comment cut off first: a # after a space or tab,
+# outside quotes. A , that ends a value is a flow mapping's written over several lines. As
+# gird-check.sh's act_uses.
+function Act-Use([string]$v) {
+  if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
+    $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { return }; $v = $v.Substring(0, $i)
+  } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' -replace '[ \t]*,$', '' }
+  $at = $v.IndexOf('@'); if ($at -lt 0) { return }
+  $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
+  if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { return }
+  $p = $a.Split('/'); ,@(($p[0] + '/' + $p[1]).ToLowerInvariant(), $r)
+}
+function Act-Uses([string]$t) {
+  $nx = 0
+  foreach ($line in $t.Split("`n")) {
+    $line = $line -replace "`r$", ''
+    if ($nx -gt 0) {
+      if ($line -match '^[ \t]*(#|$)') { continue }
+      $w = $nx; $nx = 0; $ind = [regex]::Match($line, '^[ \t]*').Length
+      if ($ind -ge $w) { Act-Use $line.Substring($ind); continue }
+    }
+    $m = [regex]::Match($line, '^[ \t]*(-[ \t]+)?["'']?uses["'']?[ \t]*:[ \t]*')
+    if ($m.Success) {
+      $v = $line.Substring($m.Length)
+      if ($v -match '^(#.*)?$' -or $v -match '^[|>][0-9+-]*[ \t]*(#.*)?$') { $nx = [regex]::Match($line, '^[ \t]*(-[ \t]+)?').Length + 1; continue }
+      Act-Use $v; continue
+    }
+    if ($line.IndexOf('{') -lt 0 -or $line -match '^[ \t]*#') { continue }
+    # The line before its comment: each quote and # found in one pass. A quote opens a string only
+    # outside the other kind and where a value starts (the last character before it that is not a
+    # space or a tab: none, or one of { [ , : -), or right after the same quote closed one ('' inside
+    # single quotes); any other quote, as in Don't, is part of plain text. As gird-check.sh's nocmt.
+    $s = $line; $q = ''; $i = 0; $cl = -2
+    while (($i = $s.IndexOfAny([char[]]'"''#', $i)) -ge 0) {
+      $c = [string]$s[$i]
+      if ($q) { if ($c -eq $q) { $q = ''; $cl = $i } }
+      elseif ($c -ne '#') {
+        $b = $i - 1; while ($b -ge 0 -and ($s[$b] -eq ' ' -or $s[$b] -eq "`t")) { $b-- }
+        if ($b -lt 0 -or '{[,:-'.IndexOf($s[$b]) -ge 0 -or ($c -eq "'" -and $cl -eq $i - 1 -and $s[$cl] -eq "'")) { $q = $c }
+      }
+      elseif ($i -gt 0 -and ($s[$i - 1] -eq ' ' -or $s[$i - 1] -eq "`t")) { $s = $s.Substring(0, $i - 1); break }
+      $i++
+    }
+    $c = $s.Split('{')
+    for ($i = 1; $i -lt $c.Length; $i++) {
+      foreach ($d in $c[$i].Split(',')) {
+        $m = [regex]::Match($d, '^[ \t]*["'']?uses["'']?[ \t]*:[ \t]*')
+        if ($m.Success) { $v = $d.Substring($m.Length); $k = $v.IndexOf('}'); if ($k -ge 0) { $v = $v.Substring(0, $k) }; Act-Use $v }
+      }
+    }
+  }
+}
+$ActHits = New-Object System.Collections.Generic.List[object]; $ActSeen = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ActUnread = 0; $N_WF = 0
+# In the order gird-check.sh reads them: byte order of the path with / between folders.
+$WfSorted = $Workflows.ToArray(); [Array]::Sort([string[]]@($WfSorted | ForEach-Object { $_.Replace('\', '/') }), $WfSorted, [StringComparer]::Ordinal)
+foreach ($wf in $WfSorted) {
+  if (-not (Is-SafeToRead $wf) -or (Too-Big $wf)) { $ActUnread++; continue }
+  $t = $null; try { $t = [IO.File]::ReadAllText($wf) } catch { $t = $null }
+  if ($null -eq $t) { $ActUnread++; continue }
+  $wfBad = 0
+  foreach ($u in @(Act-Uses $t)) {
+    $ur = $u[1]; $sha = ''
+    if ($ur.Length -eq 40 -and $ur -match '^[0-9a-fA-F]+$') { $sha = $ur.ToLowerInvariant() }
+    foreach ($row in $ActTable) {
+      if ($row[0] -cne $u[0]) { continue }
+      $kind = ''
+      if ($sha) {
+        if ((",$($row[3]),").Contains(",$sha,")) { $kind = 'commit' } elseif (-not (",$($row[4]),").Contains(",$sha,") -and $row[5] -ceq 'unsafe') { $kind = 'pin' }
+      } else {
+        $in = $false; $out = $false
+        # A pattern -clike throws on, such as [9-1], which tools/gen.sh refuses, matches nothing, as in
+        # bash's case, and leaves the workflow not read: never a stopped report.
+        foreach ($pt in $row[2].Split(' ')) {
+          try { if ($pt.StartsWith('!')) { if ($ur -clike $pt.Substring(1)) { $out = $true } } elseif ($ur -clike $pt) { $in = $true } } catch { $wfBad = 1 }
+        }
+        if ($in -and -not $out) { $kind = 'ref' }
+      }
+      if (-not $kind) { continue }
+      $shown = $ur; if ($sha) { $shown = $sha }
+      $key = "$wf`t$($row[1])`t$shown`t$kind"
+      if ($ActSeen.ContainsKey($key)) { continue }; $ActSeen[$key] = 1
+      $ActHits.Add(@($wf, $row[1], $shown, $kind, $row[6], $row[7], $row[8]))
+    }
+  }
+  if ($wfBad) { $ActUnread++ } else { $N_WF++ }
+}
+$N_ACT = $ActHits.Count
+$N_ACT_PROJ = @($ActHits | ForEach-Object { [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($_[0]))) } | Sort-Object -Unique).Count
+if ($N_ACT -gt 0) { Progress "A project's workflows use a GitHub Action that was compromised" }
+elseif ($ActUnread -gt 0 -or $HOME_PARTIAL -eq 1) { Progress 'GitHub Actions workflows not fully checked' }
+elseif ($N_WF -gt 0) { Progress "No compromised GitHub Actions in $(Plural $N_WF 'workflow file' 'workflow files')" }
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless -AllSessions asked to wait.
-Sess-Stop $OptAllSess
+if ($env:GIRD_CHECK_TEST_PAUSE_MS -match '^[0-9]{1,6}$') { Start-Sleep -Milliseconds ([int]$env:GIRD_CHECK_TEST_PAUSE_MS) }   # tests only
+if ($null -ne $AcctEnd -and $null -ne $SessPs) {
+  $sessMs = [int][Math]::Max(0, [Math]::Min(2147483647, ($AcctEnd - [DateTime]::UtcNow).TotalMilliseconds))
+  Sess-Stop ([bool]$SessHandle.AsyncWaitHandle.WaitOne($sessMs))
+} else { Sess-Stop $OptAllSess }
 # SESS_DONE counts the files read to the end; SESS_UNREAD the folders that could not be read (-1:
 # some, rg.exe gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
 # looked at, because there is none or the check could not start.
 $SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst; $SESS_UNREAD = [int]$SessSt.Skipped; $SESS_UNREAD_FILES = [int]$SessSt.Unread; $SESS_NOTRUN = 0
-if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
+# An account run whose session check was stopped before it ended does not list the files again here
+# ($sessCut): a listing that held the check up would hold the run past its time. They are partly checked.
+$sessCut = $OptAcctRun -and $SessSt.Stopped -and ($SessEngine -ne 'net' -or -not $SessSt.Listed)
+if (-not $sessCut -and ($SessEngine -ne 'net' -or -not $SessSt.Listed)) {
   $cnt = @{ Skipped = 0; Stop = $false }
   $sessAll = Sess-List $SessRoots $cnt
   $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.Name.EndsWith('.zst') -or $_.Name.EndsWith('.gz') }).Count; $SESS_UNREAD = [int]$cnt.Skipped
@@ -6843,11 +8101,10 @@ if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
 $sessClosed = @(@(foreach ($sessRow in $SessTable) { if ($sessRow[0] -eq 'read' -or $sessRow[0] -eq 'db') { Closed-Folder $sessRow[2] } }) | Where-Object { $_ } | Select-Object -Unique)
 if ($SESS_UNREAD -ge 0) { $SESS_UNREAD += $sessClosed.Count }
 $sessHits = New-Object System.Collections.Generic.List[string]
-foreach ($h in $SessSt.Hits) { $sessHits.Add([string]$h) }
+foreach ($h in $SessSt.Hits.ToArray()) { $sessHits.Add([string]$h) }
 # Aider keeps its chat and the prompts typed into it (.aider.chat.history.md, .aider.input.history)
 # in each project, found by the home scan, and they are checked here. One counts as read once the
 # pattern has run through it: one that took too long ($SESS_SLOW) was not checked to the end.
-$rxTr = New-Object regex($TR_KEYS, $RxOpt, $RxTimeout)
 # A session file whose pattern ran out of time in the check above is one of them too. It is counted,
 # not listed: a session file's path can spell out a project folder (see Sess-Where below).
 $SESS_SLOW = [int]$SessSt.Slow
@@ -6856,7 +8113,7 @@ foreach ($f in $AiderFiles) {
   $t = Read-Text $f; if ($null -eq $t) { $SESS_UNREAD_FILES++; continue }
   $seenA = @{}
   try {
-    foreach ($m in $rxTr.Matches($t)) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
+    foreach ($m in @(foreach ($rx in $RxKeyPasses) { $rx.Matches($t) })) { $p = Key-Provider $m.Value; if ($p -and -not (Made-Up $m.Value) -and -not $seenA.ContainsKey($p)) { $seenA[$p] = 1; $sessHits.Add("$f`t$p") } }
     if ($SESS_DONE -ge 0) { $SESS_DONE++ }
   } catch { Mark-Slow $f; $SESS_SLOW++ }
 }
@@ -6886,8 +8143,8 @@ $SessPlaces.Sort([Comparison[string]]{ param($x, $y) if ($sessPlaceN[$x] -ne $se
 $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
-# check was stopped), or a folder that could not be read.
-$SESS_PARTIAL = ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
+# check was stopped), a folder that could not be read, or a check or ripgrep that did not end when told to.
+$SESS_PARTIAL = $SessSt.Hung -or $sessCut -or ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
 # The encrypted .pb files in those folders, by agent. A folder that holds none (Antigravity's newer
 # conversations are SQLite, read above) is never named.
 $SessSealedAg = New-Object System.Collections.Generic.List[string]; $SessSealedN = 0
@@ -6971,10 +8228,14 @@ Add-Advice 'first'
 # then the malware is removed, as GitHub's malware advisories say.
 if ($MAL_HIT -eq 1 -and $MAL_LOCKONLY -eq 0) { Add-Todo 5 'Treat this machine as compromised. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm''s cache with npm cache clean --force.' }
 if ($EXT_HIT -eq 1) {
-  # Only what section 5 lists: the extensions, the incident's startup file, or both.
-  if ($ExtPersist.Count -gt 1) { $edo = 'Uninstall the extensions listed in section 5, delete the startup files listed there, and' }
-  elseif ($ExtPersist.Count -gt 0) { $edo = 'Uninstall the extensions listed in section 5, delete the startup file listed there, and' }
-  else { $edo = 'Uninstall the extensions listed in section 5 and' }
+  # Only what section 5 lists: the extensions, the incident's startup files, an SSH key it adds.
+  $ed = @(); $edw = 'listed in section 5'
+  if ($ExtRows.Count -gt 0) { $ed += "uninstall the extensions $edw"; $edw = 'listed there' }
+  if ($ExtPersist.Count -gt 1) { $ed += "delete the startup files $edw"; $edw = 'listed there' }
+  elseif ($ExtPersist.Count -gt 0) { $ed += "delete the startup file $edw"; $edw = 'listed there' }
+  if ($ExtKey.Count -gt 0) { $ed += "remove the SSH key $edw from ~/.ssh/authorized_keys" }
+  $edo = $ed -join ', '; if ($ed.Count -gt 1) { $edo += ', and' } else { $edo += ' and' }
+  $edo = $edo.Substring(0, 1).ToUpperInvariant() + $edo.Substring(1)
   Add-Todo 5 "Treat this machine as compromised. $edo rotate every key this machine could reach."
 }
 if ($PyHits.Count -gt 1) { $adv = 'each advisory in section 5' } else { $adv = "$PyShort's advisory" }
@@ -6991,11 +8252,26 @@ if ($MAL_LOCKONLY -eq 1) {
   if ($N_LOCKPROJ -eq 1) { $lp = 'the project'; $ll = 'its lockfile' } else { $lp = 'the projects'; $ll = 'their lockfiles' }
   Add-Todo 5 "If you ran an install in $lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $ll to a version without the malware."
 }
-if ($ExtCheck.Count -gt 0) { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
+# A startup file named like one of an incident whose own fix starts with "First" (what it leaves must
+# go before any key is rotated, as claudeext's sysmon.cmd on Windows): that fix comes ahead of the rotate.
+if ($ExtCheck.Count -gt 0) {
+  $xf = New-Object System.Collections.Generic.List[string]
+  foreach ($t in ($ExtCheckTags | Sort-Object -CaseSensitive)) { $a = Incident-Advice $t; if ($a.StartsWith('First ', [StringComparison]::Ordinal) -and -not $xf.Contains($a)) { $xf.Add($a) } }
+  if ($xf.Count -gt 0) {
+    $xf[0] = 'f' + $xf[0].Substring(1)
+    Add-Todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, $($xf -join ' ') After that, treat this machine as compromised: delete it and rotate every key this machine could reach."
+  } else { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
+}
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 Add-Advice 'lock'
 Add-Advice 'update'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
+# Opening a project in an editor or an agent runs its worm-style startup and the settings section 2
+# marks (a folder-open task), so reading those scripts and settings comes before the fixes that open
+# projects to move or rotate keys.
+if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
+if ($N_UHOOK -gt 0) { Add-Todo 2 'Check the session hooks section 2 lists in your own agent settings. If you didn''t add them, delete them and read what is in the folder they run from.' }
+if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
@@ -7005,9 +8281,9 @@ if ($N_MCP_TOKEN -gt 0) { Add-Todo 2 'Replace tokens written into MCP configs wi
 if ($N_ALLOW -gt 0) { Add-Todo 4 'Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys.' }
 if ($N_SSH_OPEN -gt 0) { Add-Todo 3 'Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file.' }
 if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox.' }
+if ($N_REMOTE -gt 0) { Add-Todo 1 'Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first.' }
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
-if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
@@ -7018,6 +8294,7 @@ if (($MAL_HIT -eq 0 -or $MAL_LOCKONLY -eq 1) -and $UpdFix) { Add-Todo 5 'Update 
 if ($PY_UPD_HIT -eq 1) { Add-Todo 5 'Update the Python packages listed in section 5 to a version without the malware.' }
 if ($EXT_HIT -eq 0 -and $ExtUpd.Count -gt 0) { Add-Todo 5 'Uninstall the editor extensions listed in section 5. Their malware could not run on this system.' }
 if ($PlatFound.Count -gt 0) { Add-Todo 5 "If you used $PlatFix, rotate the keys stored there, even if nothing above looks wrong." }
+if ($N_ACT -gt 0) { Add-Todo 5 'If the workflows section 5 lists ran while their GitHub Action was compromised, check their run logs from then, rotate the secrets they could read, and check the repository''s history for commits by github-actions[bot] that you didn''t make. Then pin or remove each action as section 5 says.' }
 $ISSUES = $Todo.Count
 
 $SCORE = 100
@@ -7035,6 +8312,425 @@ if ($SCORE -ge 90) { $GRADE = 'A' } elseif ($SCORE -ge 78) { $GRADE = 'B' } else
 $SCAN_SECS = [int][Math]::Floor(([DateTime]::UtcNow - $ScanT0).TotalSeconds)
 Progress-Clear
 
+# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it.
+$FolderVarsAgent = @('CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'CODEX_SQLITE_HOME', 'GEMINI_CLI_HOME', 'QWEN_HOME', 'COPILOT_HOME', 'CLINE_DIR', 'CLINE_DATA_DIR', 'CLINE_SESSION_DATA_DIR', 'CONTINUE_GLOBAL_DIR', 'GOOSE_PATH_ROOT', 'KIRO_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME')
+$FolderVarsTool = @('NVM_DIR', 'VOLTA_HOME', 'BUN_INSTALL', 'BUN_INSTALL_GLOBAL_DIR', 'N_PREFIX', 'ASDF_DATA_DIR', 'MISE_DATA_DIR', 'MISE_INSTALLS_DIR', 'MAMBA_ROOT_PREFIX', 'PIPX_HOME', 'PIPX_GLOBAL_HOME', 'WORKON_HOME', 'UV_CACHE_DIR', 'UV_TOOL_DIR', 'UV_PYTHON_INSTALL_DIR', 'POETRY_CACHE_DIR', 'POETRY_VIRTUALENVS_PATH', 'HATCH_DATA_DIR', 'XDG_CACHE_HOME', 'npm_config_prefix', 'NPM_CONFIG_PREFIX', 'npm_config_userconfig', 'NPM_CONFIG_USERCONFIG', 'CLINE_PROVIDER_SETTINGS_PATH', 'QWEN_RUNTIME_DIR', 'PNPM_HOME')
+$FolderVarsDefault = @{ 'XDG_CONFIG_HOME' = @((J $HomeDir '.config')); 'XDG_DATA_HOME' = @((J $HomeDir '.local/share')); 'NVM_DIR' = @((J $HomeDir '.nvm')); 'VOLTA_HOME' = @((J $LocalAppData 'Volta'), (J $HomeDir '.volta')); 'BUN_INSTALL' = @((J $HomeDir '.bun')); 'N_PREFIX' = @((J $HomeDir 'n')); 'ASDF_DATA_DIR' = @((J $HomeDir '.asdf')); 'MISE_DATA_DIR' = @((J $LocalAppData 'mise')); 'MAMBA_ROOT_PREFIX' = @((J $HomeDir 'micromamba')); 'PIPX_HOME' = @((J $HomeDir '.local/pipx'), (J $HomeDir 'pipx'), (J $LocalAppData 'pipx')); 'WORKON_HOME' = @((J $HomeDir '.virtualenvs'), (J $HomeDir 'Envs')); 'UV_CACHE_DIR' = @((J $LocalAppData 'uv/cache'), (J $HomeDir '.cache/uv')); 'POETRY_CACHE_DIR' = @((J $LocalAppData 'pypoetry/Cache')); 'POETRY_VIRTUALENVS_PATH' = @((J $LocalAppData 'pypoetry/Cache/virtualenvs')); 'HATCH_DATA_DIR' = @((J $LocalAppData 'hatch')); 'npm_config_prefix' = @((J $AppData 'npm'), (J $HomeDir '.npm-global')); 'PNPM_HOME' = @((J $LocalAppData 'pnpm')) }
+$FolderVarsScripts = @{ 'NVM_DIR' = @('nvm.sh', 'bash_completion'); 'BUN_INSTALL' = @('_bun'); 'ASDF_DATA_DIR' = @('asdf.sh', 'asdf.fish', 'completions/asdf.bash') }
+$FolderVarsOwn = @('/opt/homebrew/opt/nvm/nvm.sh', '/usr/local/opt/nvm/nvm.sh', '$(brew --prefix)/opt/nvm/nvm.sh', '$(brew --prefix nvm)/nvm.sh', '$HOMEBREW_PREFIX/opt/nvm/nvm.sh', '${HOMEBREW_PREFIX}/opt/nvm/nvm.sh', '/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm', '/usr/local/opt/nvm/etc/bash_completion.d/nvm', '$(brew --prefix)/opt/nvm/etc/bash_completion.d/nvm', '$(brew --prefix nvm)/etc/bash_completion.d/nvm', '$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm', '${HOMEBREW_PREFIX}/opt/nvm/etc/bash_completion.d/nvm', '/opt/homebrew/opt/asdf/libexec/asdf.sh', '/usr/local/opt/asdf/libexec/asdf.sh', '$(brew --prefix)/opt/asdf/libexec/asdf.sh', '$(brew --prefix asdf)/libexec/asdf.sh', '$HOMEBREW_PREFIX/opt/asdf/libexec/asdf.sh', '${HOMEBREW_PREFIX}/opt/asdf/libexec/asdf.sh')
+# <<< folder-vars
+# An account run's lines: only numbers and ids from the fixed lists, in gird-check.sh --account-run's
+# order. gird-fleet.ps1 checks every line again and builds the row itself. On Windows protected is
+# always ok (no folder needs a grant like Full Disk Access), tmp_marks empty and tmp_wiper 0 (Windows
+# has no shared /tmp), and engine dotnet where gird-check.sh has perl.
+if ($OptAcctRun) {
+  function Fleet-Ids($ids) {
+    $o = New-Object System.Collections.Generic.List[string]
+    foreach ($x in @($ids)) { foreach ($y in ([string]$x -split ' ')) { if ($y -cmatch '^[a-z0-9-]+$' -and -not $o.Contains($y)) { $o.Add($y) } } }
+    $o -join ' '
+  }
+  function Fleet-AgentId([string]$n) {
+    foreach ($a in $Agents) { if ($a[0] -ceq $n) { return $a[4] } }
+    ($n.ToLowerInvariant() -replace ' ', '-') -replace '[^a-z0-9-]', ''
+  }
+  $fNpm = @($NpmTags); $fLock = @()
+  if ($MAL_LOCKONLY -eq 1) {
+    $fLock = @($NpmTags | Where-Object { (Incident-Level $_) -eq 'act' })
+    $fNpm = @($NpmTags | Where-Object { (Incident-Level $_) -ne 'act' })
+  }
+  $fPoss = @(); if ($LitePyc.Count -gt 0 -and $LITELLM_HIT -eq 0) { $fPoss = @('litellm') }
+  # Every file or folder not read in full, each once whichever lists hold it (a project's unreadable
+  # settings.local.json is in three), as gird-check.sh counts each line of FLEET_NR and SEC2_UNREAD once,
+  # then the counts: ~/.ssh/authorized_keys and the workflows not read among them.
+  $fNrSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($fl in $KeyUnread, $Sec2Unread, $AllowUnread, $LockUnread, $SlowFiles, $UnreadDirs, $NmUnread) { foreach ($f in $fl) { if ($f) { [void]$fNrSet.Add([string]$f) } } }
+  $fNr = $fNrSet.Count + $NpmUnread + $NpmSlow + $ExtUnread + $PyUnread + $SshkUnread + $ActUnread
+  $fEngine = $SessEngine; if ($fEngine -eq 'net') { $fEngine = 'dotnet' }
+  $fSp = 0; if ($SESS_PARTIAL) { $fSp = 1 }
+  # The run starts with -NoProfile, so a variable a profile sets is not followed. The profiles are read
+  # as text, never run, and so is every file they source, to any depth: `. file`, `source file`, a
+  # sourcing loop over a folder's files, and in PowerShell `& file.ps1`, Import-Module of a .ps1, .psm1
+  # or .psd1 file and a module manifest's RootModule. A line that names a variable of
+  # data/folder-vars.tsv other than to read it moves a folder, and the account is partly checked,
+  # unless it is one of the plain assignments below of the value this run sees. A variable unset here
+  # is seen as the folder this check reads without it (FolderVarsDefault).
+  # Only an existing regular file on a local disk is read: never a link, a network path, a device or
+  # pipe, a cloud file not on the disk, or one over ReadMax. At most 64 files and 16 MiB in all are
+  # read. A file that exists but can't be followed or read, or a cap reached, counts only when some
+  # file read names a variable of the list: an ordinary setup sources completion scripts and plugin
+  # files by the dozen, and one that names none of the variables gives no reason to think the rest moves
+  # one. When unsure, the account reads partly checked, never clear: a shell path with a command in it,
+  # a nested ${...} or a zsh glob qualifier other than (N), (.) and (.N) can't be followed. A path built
+  # from a loop's or a function's own variable, or from an argument, does not count inside that loop
+  # or function: it names whatever the loop or function is given. A tool's own script sourced from its
+  # own folder (FolderVarsScripts, such as nvm.sh), or by its whole path from Homebrew's prefix
+  # (FolderVarsOwn, such as $HOMEBREW_PREFIX/opt/nvm/nvm.sh), is not read: it sets the tool's variable
+  # its own way. What a command prints (`eval "$(...)"`, `source <(...)`,
+  # `... | Invoke-Expression`) and a module imported by name are not followed.
+  $fMvFiles = New-Object System.Collections.Generic.List[string]
+  foreach ($f in $ShellRc) { $fMvFiles.Add($f) }
+  foreach ($d in $DocsRoots) { $fMvFiles.Add((J $d 'WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1')) }
+  if ($OnWindows) {
+    foreach ($d in @((J $env:SystemRoot 'System32/WindowsPowerShell/v1.0'), (J $env:ProgramFiles 'PowerShell/7'), (J $env:ProgramFiles 'PowerShell/7-preview'))) {
+      foreach ($pf in @('profile.ps1', 'Microsoft.PowerShell_profile.ps1', 'Microsoft.VSCode_profile.ps1', 'Microsoft.PowerShellISE_profile.ps1')) { $fMvFiles.Add((J $d $pf)) }
+    }
+  }
+  $fMvMaxFiles = 64; $fMvMaxBytes = [long]16777216
+  $fMvSt = @{ Named = $false; Lost = $false; Files = 0; Bytes = [long]0 }
+  $fMvQ = New-Object System.Collections.Generic.Queue[string]
+  $fMvCmp = [StringComparer]::Ordinal; if ($OnWindows) { $fMvCmp = [StringComparer]::OrdinalIgnoreCase }
+  $fMvDone = New-Object 'System.Collections.Generic.HashSet[string]' ($fMvCmp)
+  $fMvVars = @{}
+  function Fleet-MvNorm([string]$p) { ($p -replace '[\\/]+', [string]$Sep).TrimEnd($Sep) }
+  function Fleet-MvValue([string]$v, [bool]$sh) {
+    $v = $v.Trim()
+    if ($v -match "^'([^']*)'") { return $Matches[1] }
+    if ($v -match '^"([^"]*)"') { $x = $Matches[1] } elseif ($v -match '^([^\s;)}#,]+)') { $x = $Matches[1] } else { return $null }
+    if ($sh -and $x -match '^~(?=[\\/]|$)') { $x = $HomeDir + $x.Substring(1) }
+    foreach ($t in @(@('\$\{?env:USERPROFILE\}?', $HomeDir), @('\$\{?env:LOCALAPPDATA\}?', $LocalAppData), @('\$\{?env:APPDATA\}?', $AppData), @('\$\{?HOME\}?', $HomeDir))) {
+      $x = [regex]::Replace($x, $t[0] + '(?![A-Za-z0-9_])', $t[1].Replace('$', '$$'), 'IgnoreCase')
+    }
+    if ($x -match '[$`(]') { return $null }
+    $x
+  }
+  function Fleet-MvSeen([string]$n) {
+    $cur = [Environment]::GetEnvironmentVariable($n)
+    if ($cur) { return @($cur) }
+    if ($FolderVarsDefault.ContainsKey($n)) { return @($FolderVarsDefault[$n]) }
+    @()
+  }
+  function Fleet-MvUnder([string]$p, [string]$dir) {
+    $p = Fleet-MvNorm $p; $dir = Fleet-MvNorm $dir
+    $dir.Length -gt 0 -and $p.Length -gt $dir.Length + 1 -and $p.StartsWith($dir + $Sep, $PathCmp)
+  }
+  $fMvAlt = (@(@($FolderVarsAgent) + @($FolderVarsTool) | ForEach-Object { [regex]::Escape($_) }) -join '|')
+  $fMvName = New-Object regex (('(?<![A-Za-z0-9_])(?:' + $fMvAlt + ')(?![A-Za-z0-9_])'), 'IgnoreCase')
+  $fMvRead = New-Object regex (('(?:(?<e>\$\{?env:)|(?<b>\$\{#?)|\$|%|GetEnvironmentVariable\(\s*[''"]|Test-Path\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?)$'), 'IgnoreCase')
+  $fMvArg = '(?<p>"[^"]*"|''[^'']*''|(?:\$\{[^}]*\}|\$\([^)]*\)|[^\s;&|)}])+)'
+  $fMvSrcRx = New-Object regex (('(?:^|[;&|{(]|\b(?:then|else|do)|\bfor\s+[A-Za-z_][A-Za-z0-9_]*\s*\((?:[^()]|\([^()]*\))*\))\s*\\?(?:\.|source)\s+' + $fMvArg), 'IgnoreCase')
+  $fMvAmpRx = New-Object regex ('(?:^|[;|{(=])\s*&\s*' + $fMvArg)
+  $fMvImpRx = New-Object regex (('\b(?:Import-Module|ipmo)(?:\s+-(?:Force|Global|DisableNameChecking|PassThru|Name|Scope\s+\w+))*\s+' + $fMvArg), 'IgnoreCase')
+  $fMvRootRx = New-Object regex ('^\s*(?:RootModule|ModuleToProcess)\s*=\s*(?:''(?<p>[^'']+)''|"(?<p>[^"]+)")', 'IgnoreCase')
+  $fMvForRx = New-Object regex ('\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<g>[^;]*?)\s*(?:;|$)|\bfor\s+(?<v>[A-Za-z_][A-Za-z0-9_]*)\s*\((?<g>(?:[^()]|\([^()]*\))*)\)')
+  # A function's own variables: PowerShell's param() and foreach variables, bound in Fleet-MvWalk.
+  $fMvPsFnRx = New-Object regex ('\b(?:param\s*\((?<l>[^)]*)\)|foreach\s*\(\s*\$(?<n>\w+)\s+in\b)', 'IgnoreCase')
+  $fMvGciRx = New-Object regex ('(?:\bforeach\s*\(\s*\$(?<v>\w+)\s+in\s+\(?\s*)?(?<![\w-])(?:Get-ChildItem|gci|dir|ls)(?:\s+-(?:Path|LiteralPath|File|Recurse|Force))*\s+(?<g>"[^"]*"|''[^'']*''|[^\s;|)}-][^\s;|)}]*)', 'IgnoreCase')
+  $fMvSAsgRx = New-Object regex ('^\s*(?:export\s+|local\s+|readonly\s+)?(?<n>[A-Za-z_][A-Za-z0-9_]*)=(?<v>"[^"]*"|''[^'']*''|[^\s;''"]*)\s*(?:;|$)')
+  $fMvPAsgRx = New-Object regex ('^\s*\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<v>"[^"]*"|''[^'']*''|[^\s;''"]+)\s*;?\s*$', 'IgnoreCase')
+  $fMvHereRx = New-Object regex ('^\s*\$(?<n>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*\(?\s*Split-Path\s+(?:-Parent\s+)?\$(?:MyInvocation\.MyCommand\.(?:Definition|Path)|PSCommandPath)(?:\s+-Parent)?\s*\)?\s*;?\s*$', 'IgnoreCase')
+  $fMvExport = New-Object regex ('^\s*export(?:\s+[A-Za-z_][A-Za-z0-9_]*)+\s*;?\s*(?:#.*)?$')
+  $fMvV = '(?<v>''[^'']*''|"[^"]*"|[^\s;''"#,)]+)'; $fMvT = '\s*;?\s*(?:#.*)?$'
+  $fMvSet = @(
+    ('^\s*\$(?:\{env:(?<n>' + $fMvAlt + ')\}|env:(?<n>' + $fMvAlt + '))\s*=\s*' + $fMvV + $fMvT),
+    ('^\s*\[(?:System\.)?Environment\]::SetEnvironmentVariable\(\s*[''"](?<n>' + $fMvAlt + ')[''"]\s*,\s*' + $fMvV + '\s*(?:,[^)]*)?\)' + $fMvT),
+    ('^\s*(?:Set-Item|New-Item|si|ni)\s+(?:-(?:Literal)?Path\s+)?[''"]?env:\\?(?<n>' + $fMvAlt + ')[''"]?\s+(?:-Value\s+)?' + $fMvV + $fMvT),
+    ('^\s*(?:export\s+)?(?<n>' + $fMvAlt + ')=' + $fMvV + $fMvT),
+    ('^\s*set\s+-[A-Za-z]*x[A-Za-z]*\s+(?<n>' + $fMvAlt + ')\s+' + $fMvV + $fMvT)
+  ) | ForEach-Object { New-Object regex ($_, 'IgnoreCase') }
+  # A line without its comment: from a # outside quotes that starts a word.
+  function Fleet-MvCode([string]$l, [bool]$ps) {
+    if ($l.IndexOf('#') -lt 0) { return $l }
+    $q = [char]0; $esc = [char]'\'; if ($ps) { $esc = [char]'`' }
+    for ($i = 0; $i -lt $l.Length; $i++) {
+      $c = $l[$i]
+      if ($q -eq [char]"'") { if ($c -eq [char]"'") { $q = [char]0 } }
+      elseif ($q -eq [char]'"') { if ($c -eq [char]'"') { $q = [char]0 } elseif ($c -eq $esc) { $i++ } }
+      elseif ($c -eq [char]"'" -or $c -eq [char]'"') { $q = $c }
+      elseif ($c -eq $esc) { $i++ }
+      elseif ($c -eq [char]'#' -and ($i -eq 0 -or " `t;(){|&".IndexOf($l[$i - 1]) -ge 0) -and ($ps -or -not ($i -gt 1 -and $l[$i - 1] -eq [char]'(' -and " `t;(){|&".IndexOf($l[$i - 2]) -lt 0))) { return $l.Substring(0, $i) }
+    }
+    $l
+  }
+  # A variable's value as the file would see it: one set earlier in a file read, else the run's own,
+  # else for a listed variable the folder the check reads. $null when it can't be told.
+  function Fleet-MvVar([string]$n, [bool]$isEnv, [bool]$ps, [string]$from) {
+    if ($ps -and -not $isEnv) {
+      if ($n -eq 'HOME') { return $HomeDir }
+      if ($n -eq 'PSScriptRoot') { return [IO.Path]::GetDirectoryName($from) }
+      if ($n -eq 'PSCommandPath') { return $from }
+      if ($fMvVars.ContainsKey("ps:$n")) { return $fMvVars["ps:$n"] }
+      return $null
+    }
+    if ($fMvVars.ContainsKey("env:$n")) { return $fMvVars["env:$n"] }
+    if (-not $ps -and $n -ceq 'HOME') { return $HomeDir }
+    if ((@($FolderVarsAgent) + @($FolderVarsTool)) -contains $n) { $s = @(Fleet-MvSeen $n); if ($s.Count) { return [string]$s[0] } }
+    $v = [Environment]::GetEnvironmentVariable($n); if ($v) { return $v }
+    $null
+  }
+  # A path as written in a file, with its variables and ~ replaced: $null when one can't be told or a
+  # command builds it.
+  function Fleet-MvExpand([string]$raw, [string]$from, [bool]$ps) {
+    if ($raw -match "^'([^']*)'$") { $x = $Matches[1] } else {
+      if ($raw -match '\$\{[^}]*\$(?![A-Za-z_])') { return $null }
+      $bad = @{ B = $false }
+      $x = [regex]::Replace($raw.Replace('"', ''), '\$\{(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)(?::?-(?<d>[^}]*))?\}|\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)', [Text.RegularExpressions.MatchEvaluator] {
+        param($m)
+        $v = Fleet-MvVar $m.Groups['n'].Value $m.Groups['e'].Success $ps $from
+        if ($null -eq $v -and $m.Groups['d'].Success) { $v = Fleet-MvExpand $m.Groups['d'].Value $from $ps }
+        if ($null -eq $v) { $bad.B = $true; return '' }
+        $v
+      }, 'IgnoreCase')
+      if ($bad.B) { return $null }
+    }
+    if ($x -match '^~(?=[\\/]|$)') { $x = $HomeDir + $x.Substring(1) }
+    if ($OnWindows -and $x -match '^/([A-Za-z])(?=/|$)') { $x = $Matches[1] + ':\' + $x.Substring(2) }
+    if ($x -match '[$`]' -or $x.StartsWith('(') -or (-not $ps -and $x -match '[()]')) { return $null }
+    $x
+  }
+  function Fleet-MvLocal([string]$p) {
+    if ($p -match '^[\\/]{2}') { return $false }
+    if (-not $OnWindows) { return $p.StartsWith('/') }
+    if ($p -notmatch '^[A-Za-z]:[\\/]') { return $false }
+    try { $t = [string](New-Object IO.DriveInfo ($p.Substring(0, 1))).DriveType } catch { return $false }
+    @('Fixed', 'Removable', 'Ram') -contains $t
+  }
+  # Whether a path, or a folder on its way, is a link or junction, or a cloud file or folder not on the
+  # disk. Off Windows, where only the tests run this, folders above the home are not asked about.
+  function Fleet-MvLinked([string]$p) {
+    try {
+      $q = [IO.Path]::GetFullPath($p); $first = $true
+      while ($q) {
+        if (-not $OnWindows -and -not $first -and -not (Fleet-MvUnder $q $HomeDir)) { break }
+        $a = [IO.File]::GetAttributes($q)
+        if (([int]$a -band 0x441000) -ne 0) { return $true }
+        if (($a -band [IO.FileAttributes]::ReparsePoint) -ne 0 -and (Get-Item -LiteralPath $q -Force -ErrorAction Stop).LinkType) { return $true }
+        $first = $false; $q = [IO.Path]::GetDirectoryName($q)
+      }
+    } catch { return $true }
+    $false
+  }
+  # Queues a file a line sources: nothing for one that is not there or a tool's own script; Lost for
+  # one that is there but is not a regular file on a local disk, or can't be told.
+  function Fleet-MvAdd([string]$p) {
+    try { if (-not [IO.Path]::IsPathRooted($p)) { $fMvSt.Lost = $true; return }; $p = [IO.Path]::GetFullPath((Fleet-MvNorm $p)) } catch { $fMvSt.Lost = $true; return }
+    foreach ($k in $FolderVarsScripts.Keys) {
+      foreach ($d in (Fleet-MvSeen $k)) { foreach ($s in $FolderVarsScripts[$k]) { if ($fMvCmp.Equals($p, (Fleet-MvNorm (J $d $s)))) { return } } }
+    }
+    if (-not (Fleet-MvLocal $p)) { $fMvSt.Lost = $true; return }
+    try { $a = [IO.File]::GetAttributes($p) } catch { if (Behind-Closed $p) { $fMvSt.Lost = $true }; return }
+    if (($a -band [IO.FileAttributes]::Directory) -ne 0) { return }
+    if ((([int]$a -band 0x40) -ne 0) -or (Fleet-MvLinked $p)) { $fMvSt.Lost = $true; return }
+    $fMvQ.Enqueue($p)
+  }
+  # Every file a glob names, or every file in a folder; only the last part of the path may hold * or ?.
+  function Fleet-MvGlob([string]$p) {
+    $p = Fleet-MvNorm $p
+    if (-not (Fleet-MvLocal $p)) { $fMvSt.Lost = $true; return }
+    if (Is-Dir $p) { $p = J $p '*' } elseif ($p -notmatch '[*?]') { Fleet-MvAdd $p; return }
+    $dir = [IO.Path]::GetDirectoryName($p); $pat = [IO.Path]::GetFileName($p)
+    if (-not $dir -or $dir -match '[*?\[]' -or $pat -match '\[' -or (Fleet-MvLinked $dir)) { $fMvSt.Lost = $true; return }
+    if (-not (Is-Dir $dir)) { if (Behind-Closed $dir) { $fMvSt.Lost = $true }; return }
+    try { $fs = @([IO.Directory]::GetFiles($dir, $pat) | Sort-Object) } catch { $fMvSt.Lost = $true; return }
+    foreach ($x in $fs) { Fleet-MvAdd $x }
+  }
+  # Whether a path is built, in a way the reader understands, from a variable of the loop or function
+  # the line is in, or from an argument inside a function.
+  function Fleet-MvBound([string]$raw, $sc, [bool]$ps) {
+    $x = ($raw -replace '["'']', '') -replace '\$\{?(?:(?:env:)?[A-Za-z_][A-Za-z0-9_]*|[0-9@*#])\}?', ''
+    if ($x -match '[$`]' -or (-not $ps -and $x -match '[()]')) { return $false }
+    if ($raw -match '\$\{?(?:[0-9@*#]|args\b|_\b|PSItem\b)' -and (Fleet-MvInner $sc (-not $ps))) { return $true }
+    foreach ($m in [regex]::Matches($raw, '\$\{?(?:env:)?([A-Za-z_][A-Za-z0-9_]*)')) { if (Fleet-MvIsB $sc $m.Groups[1].Value) { return $true } }
+    $false
+  }
+  # Where a function or a loop begins and ends, as far as the words of a line tell: a name it binds
+  # counts as bound only inside it. A } or done at the start of a line ends every one.
+  function Fleet-MvSan([string]$l, [bool]$ps) {
+    $o = New-Object Text.StringBuilder; $q = [char]0; $d = 0; $esc = [char]'\'; if ($ps) { $esc = [char]'`' }
+    for ($i = 0; $i -lt $l.Length; $i++) {
+      $c = $l[$i]
+      if ($d -gt 0) { if ($c -eq [char]'{' -or $c -eq [char]'(') { $d++ } elseif ($c -eq [char]'}' -or $c -eq [char]')') { $d-- }; [void]$o.Append('_'); continue }
+      if ($q -ne [char]0) { if ($c -eq $q) { $q = [char]0 } elseif ($c -eq $esc -and $q -ne [char]"'" -and $i -lt $l.Length - 1) { [void]$o.Append('_'); $i++ }; [void]$o.Append('_'); continue }
+      if ($c -eq [char]"'" -or $c -eq [char]'"' -or (-not $ps -and $c -eq [char]'`')) { $q = $c; [void]$o.Append('_'); continue }
+      if ($c -eq $esc -and $i -lt $l.Length - 1) { [void]$o.Append('_').Append($l[$i + 1]); $i++; continue }
+      if ($c -eq [char]'$' -and $i -lt $l.Length - 1 -and ($l[$i + 1] -eq [char]'{' -or $l[$i + 1] -eq [char]'(')) { $d = 1; [void]$o.Append('__'); $i++; continue }
+      [void]$o.Append($c)
+    }
+    $o.ToString()
+  }
+  function Fleet-MvPush($sc, [string]$k) { $sc.Sid++; $sc.Stk.Add($sc.Sid); $sc.Kind[$sc.Sid] = $k; $sc.Act[$sc.Sid] = $true; $sc.Sid }
+  function Fleet-MvPop($sc, [string]$k) {
+    while ($sc.Stk.Count -gt 0) { $id = $sc.Stk[$sc.Stk.Count - 1]; $sc.Stk.RemoveAt($sc.Stk.Count - 1); $sc.Act[$id] = $false; if ($sc.Kind[$id] -eq $k -or ($k -eq 'b' -and $sc.Kind[$id] -eq 'f')) { return } }
+  }
+  function Fleet-MvBind($sc, [string]$n, $id) { if ($id) { if (-not $sc.Bnd.ContainsKey($n)) { $sc.Bnd[$n] = New-Object System.Collections.Generic.List[int] }; $sc.Bnd[$n].Add($id) } }
+  function Fleet-MvInner($sc, [bool]$fn) { for ($i = $sc.Stk.Count - 1; $i -ge 0; $i--) { $id = $sc.Stk[$i]; if ($sc.Act[$id] -and (-not $fn -or $sc.Kind[$id] -eq 'f')) { return $id } }; 0 }
+  function Fleet-MvIsB($sc, [string]$n) { if ($sc.Bnd.ContainsKey($n)) { foreach ($id in $sc.Bnd[$n]) { if ($sc.Act[$id]) { return $true } } }; $false }
+  function Fleet-MvWalk([string]$l, [string]$from, [bool]$ps, $loops, $sc, $srcs) {
+    $s = Fleet-MvSan $l $ps; $sc.Nr++; $nr = $sc.Nr
+    $tk = New-Object System.Collections.Generic.List[object]
+    if ($ps) {
+      foreach ($m in [regex]::Matches($s, '[{}]')) { $tk.Add(@($m.Index, $m.Value, $null)) }
+      foreach ($m in $fMvPsFnRx.Matches($l)) { if ($m.Groups['n'].Success) { $tk.Add(@($m.Index, 'foreach', $m.Groups['n'].Value)) } else { $tk.Add(@($m.Index, 'param', $m.Groups['l'].Value)) } }
+      $tk.Sort([Comparison[object]] { param($x, $y) $x[0].CompareTo($y[0]) })
+    } else { foreach ($m in [regex]::Matches($s, '[;&|()]|[^\s;&|()]+')) { $tk.Add(@($m.Index, $m.Value, $null)) } }
+    $si = 0; $cmd = $true
+    for ($k = 0; $k -lt $tk.Count; $k++) {
+      $t = [string]$tk[$k][1]
+      while ($si -lt $srcs.Count -and $srcs[$si][0] -le $tk[$k][0]) { Fleet-MvFollow $srcs[$si][1] $from $ps $srcs[$si][2] $loops $sc; $si++ }
+      if ($ps) {
+        if ($t -eq '{') { $id = Fleet-MvPush $sc 'b'; if ($sc.Pfor -and $nr - $sc.Pfl -le 1) { Fleet-MvBind $sc $sc.Pfor $id; $sc.Pfor = '' } }
+        elseif ($t -eq '}') { Fleet-MvPop $sc 'b' }
+        elseif ($t -eq 'foreach') { $sc.Pfor = [string]$tk[$k][2]; $sc.Pfl = $nr }
+        else { $id = Fleet-MvInner $sc $false; foreach ($x in [regex]::Matches([string]$tk[$k][2], '\$(\w+)')) { Fleet-MvBind $sc $x.Groups[1].Value $id } }
+        continue
+      }
+      if ($t -match '^[;&|()]$') { $cmd = $true; continue }
+      if (-not $cmd) { continue }
+      $cmd = $false
+      if ($t -eq '{') { if ($sc.Pfn -and $nr - $sc.Pfn -le 1) { [void](Fleet-MvPush $sc 'f'); $sc.Pfn = 0 } else { $id = Fleet-MvPush $sc 'b'; if ($sc.Pfor -and $nr - $sc.Pfl -le 1) { Fleet-MvBind $sc $sc.Pfor $id; $sc.Pfor = '' } }; $cmd = $true }
+      elseif ($t -eq '}') { Fleet-MvPop $sc 'b'; $cmd = $true }
+      elseif ($t -eq 'do') { $id = Fleet-MvPush $sc 'd'; if ($sc.Pfor -and $nr - $sc.Pfl -le 1) { Fleet-MvBind $sc $sc.Pfor $id; $sc.Pfor = '' }; $cmd = $true }
+      elseif ($t -eq 'done') { Fleet-MvPop $sc 'd'; $cmd = $true }
+      elseif ($t -cmatch '^(?:then|else|elif|if|while|until|!|builtin|command|time)$') { $cmd = $true }
+      elseif ($t -eq 'for' -and $k + 1 -lt $tk.Count -and [string]$tk[$k + 1][1] -match '^[A-Za-z_][A-Za-z0-9_]*$') {
+        $k++; $nm = [string]$tk[$k][1]; $sc.Pfor = $nm; $sc.Pfl = $nr
+        if ($k + 1 -lt $tk.Count -and $tk[$k + 1][1] -eq '(') {
+          $d = 0; for ($j = $k + 1; $j -lt $tk.Count; $j++) { if ($tk[$j][1] -eq '(') { $d++ } elseif ($tk[$j][1] -eq ')') { $d--; if ($d -eq 0) { break } } }
+          if ($j + 1 -lt $tk.Count -and [string]$tk[$j + 1][1] -notmatch '^(?:;|do|\{)$') { Fleet-MvBind $sc $nm (Fleet-MvPush $sc 'l'); $sc.Pfor = '' }
+          $k = $j; $cmd = $true
+        }
+      }
+      elseif ($t -ceq 'function' -and $k + 1 -lt $tk.Count) { $k++; $sc.Pfn = $nr; $cmd = $true }
+      elseif ($k + 2 -lt $tk.Count -and $tk[$k + 1][1] -eq '(' -and $tk[$k + 2][1] -eq ')') { $sc.Pfn = $nr; $k += 2; $cmd = $true }
+      elseif ($t -ceq 'local') { $id = Fleet-MvInner $sc $true; for ($j = $k + 1; $j -lt $tk.Count -and [string]$tk[$j][1] -notmatch '^[;&|()]$'; $j++) { $nm = [string]$tk[$j][1] -replace '=.*', ''; if ($id -and $nm -match '^[A-Za-z_][A-Za-z0-9_]*$') { Fleet-MvBind $sc $nm $id } }; $k = $j - 1 }
+      elseif ($t -match '^([A-Za-z_][A-Za-z0-9_]*)=') { $nm = $Matches[1]; $id = Fleet-MvInner $sc $true; if ($id -and $l.Substring($tk[$k][0] + $nm.Length + 1) -match '^["'']?\$\{?[0-9@*]') { Fleet-MvBind $sc $nm $id }; $cmd = $true }
+    }
+    while ($si -lt $srcs.Count) { Fleet-MvFollow $srcs[$si][1] $from $ps $srcs[$si][2] $loops $sc; $si++ }
+    while ($sc.Stk.Count -gt 0 -and $sc.Kind[$sc.Stk[$sc.Stk.Count - 1]] -eq 'l') { Fleet-MvPop $sc 'l' }
+    if ($s -match '^(?:\}|done)(?:[ \t;]|$)') { while ($sc.Stk.Count -gt 0) { Fleet-MvPop $sc 'x' } }
+  }
+  # What a source line names. KIND is dot for . and source, amp for &, imp for Import-Module: those two
+  # run a command or a module by name unless they name a PowerShell file.
+  function Fleet-MvFollow([string]$raw, [string]$from, [bool]$ps, [string]$kind, $loops, $sc) {
+    if ($raw.StartsWith('<') -or $raw -eq '-' -or $raw.StartsWith('{')) { return }
+    $bare = ($raw -replace '["'']', '') -replace '\\', '/'
+    foreach ($o in $FolderVarsOwn) { if ($fMvCmp.Equals($bare, $o)) { return } }
+    $lv = [regex]::Match($raw, '^"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?(?:\.(?:FullName|PSPath|Path))?"?$')
+    if ($lv.Success -and $loops.ContainsKey($lv.Groups[1].Value)) {
+      foreach ($g in $loops[$lv.Groups[1].Value]) { $x = Fleet-MvExpand $g $from $ps; if ($null -eq $x) { $fMvSt.Lost = $true } else { Fleet-MvGlob $x } }
+      return
+    }
+    $p = Fleet-MvExpand $raw $from $ps
+    if ($kind -ne 'dot' -and ($null -eq $p -or $p -notmatch '[\\/]') -and $raw -notmatch '[\\/]|\.ps[dm]?1\b') { return }
+    if ($null -eq $p) { if (-not (Fleet-MvBound $raw $sc $ps)) { $fMvSt.Lost = $true }; return }
+    if ($p -match '\.(?:exe|dll|com|bat|cmd)$' -or ($kind -ne 'dot' -and $p -notmatch '\.ps[dm]?1$')) { return }
+    if ($p -match '[*?]') { Fleet-MvGlob $p } else { Fleet-MvAdd $p }
+  }
+  # Values a file sets that a later path may use, and the files a loop goes over.
+  function Fleet-MvTrack([string]$l, [string]$from, [bool]$ps, $loops) {
+    if ($ps) {
+      $m = $fMvPAsgRx.Match($l)
+      if ($m.Success) { $k = 'ps:'; if ($m.Groups['e'].Success) { $k = 'env:' }; $fMvVars[$k + $m.Groups['n'].Value] = Fleet-MvExpand $m.Groups['v'].Value $from $true }
+      $m = $fMvHereRx.Match($l)
+      if ($m.Success) { $fMvVars['ps:' + $m.Groups['n'].Value] = [IO.Path]::GetDirectoryName($from) }
+      $m = $fMvGciRx.Match($l)
+      if ($m.Success) { $v = '_'; if ($m.Groups['v'].Success) { $v = $m.Groups['v'].Value }; $loops[$v] = @($m.Groups['g'].Value) }
+    } else {
+      $m = $fMvSAsgRx.Match($l)
+      if ($m.Success) { $fMvVars['env:' + $m.Groups['n'].Value] = Fleet-MvExpand $m.Groups['v'].Value $from $false }
+      # zsh's glob qualifiers N and . (as in *.zsh(N) and *.zsh(.N)) come off a loop's globs; any other
+      # stays, and the path can't be told.
+      foreach ($m in $fMvForRx.Matches($l)) { $loops[$m.Groups['v'].Value] = @($m.Groups['g'].Value -split '\s+' | Where-Object { $_ } | ForEach-Object { if ($_ -match '[*?][^()]*\([N.]+\)$') { $_ -replace '\([N.]+\)$', '' } else { $_ } }) }
+    }
+  }
+  function Fleet-MvScan([string]$f, [string]$t) {
+    $ps = $f -match '\.ps[dm]?1$'
+    if ($ps) { $t = [regex]::Replace($t, '<#[\s\S]*?#>', [Text.RegularExpressions.MatchEvaluator] { param($m) $m.Value -replace '[^\n]', '' }) }
+    $loops = @{}
+    $sc = @{ Stk = (New-Object System.Collections.Generic.List[int]); Kind = @{}; Act = @{}; Bnd = @{}; Sid = 0; Pfn = 0; Pfor = ''; Pfl = 0; Nr = 0 }
+    foreach ($l0 in ($t -split "`r?`n")) {
+      $l = Fleet-MvCode $l0 $ps
+      if ($l -notmatch '\S') { continue }
+      Fleet-MvTrack $l $f $ps $loops
+      $w = 0
+      foreach ($m in $fMvName.Matches($l)) {
+        $fMvSt.Named = $true
+        $r = $fMvRead.Match($l.Substring(0, $m.Index)); $post = $l.Substring($m.Index + $m.Length)
+        if (-not $r.Success -or ($r.Groups['e'].Success -and $post -match '^\}?\s*(?:[-+*/%.?]|\?\?)?=(?!=)') -or ($r.Groups['b'].Success -and $post -match '^:?=')) { $w++ }
+      }
+      $srcs = New-Object System.Collections.Generic.List[object]
+      foreach ($m in $fMvSrcRx.Matches($l)) { $srcs.Add(@($m.Groups['p'].Index, $m.Groups['p'].Value, 'dot')) }
+      if ($ps) {
+        foreach ($m in $fMvAmpRx.Matches($l)) { $srcs.Add(@($m.Groups['p'].Index, $m.Groups['p'].Value, 'amp')) }
+        foreach ($m in $fMvImpRx.Matches($l)) { $srcs.Add(@($m.Groups['p'].Index, $m.Groups['p'].Value, 'imp')) }
+        $srcs.Sort([Comparison[object]] { param($x, $y) $x[0].CompareTo($y[0]) })
+      }
+      Fleet-MvWalk $l $f $ps $loops $sc $srcs
+      if ($ps) {
+        $m = $fMvRootRx.Match($l)
+        if ($m.Success -and $f -match '\.psd1$' -and $m.Groups['p'].Value -match '\.ps[m]?1$') {
+          $rm = $m.Groups['p'].Value; if (-not [IO.Path]::IsPathRooted($rm)) { $rm = J ([IO.Path]::GetDirectoryName($f)) $rm }; Fleet-MvAdd $rm
+        }
+      }
+      if ($w -eq 0 -or $fMvExport.IsMatch($l)) { continue }
+      if ($w -gt 1) { return 1 }
+      $hit = $null
+      for ($ri = 0; $ri -lt $fMvSet.Count; $ri++) { $hit = $fMvSet[$ri].Match($l); if ($hit.Success) { break } }
+      if (-not $hit.Success) { return 1 }
+      $val = Fleet-MvValue $hit.Groups['v'].Value ($ri -ge 3)
+      $seen = @(Fleet-MvSeen $hit.Groups['n'].Value)
+      if ($null -eq $val -or -not (@($seen | Where-Object { [string]::Equals((Fleet-MvNorm $_), (Fleet-MvNorm $val), $PathCmp) }).Count)) { return 1 }
+    }
+    0
+  }
+  function Fleet-Moved {
+    foreach ($f in $fMvFiles) { if (Is-File $f) { $fMvQ.Enqueue($f) } }
+    while ($fMvQ.Count -gt 0) {
+      $f = $fMvQ.Dequeue()
+      $k = $f; try { $k = [IO.Path]::GetFullPath($f) } catch { }
+      if (-not $fMvDone.Add((Fleet-MvNorm $k))) { continue }
+      if (-not (Is-File $f)) { continue }
+      if (-not (Is-SafeToRead $f) -or (Too-Big $f)) { $fMvSt.Lost = $true; continue }
+      $len = [long]0; try { $len = ([IO.FileInfo]$f).Length } catch { }
+      if ($fMvSt.Files -ge $fMvMaxFiles -or $fMvSt.Bytes + $len -gt $fMvMaxBytes) { $fMvSt.Lost = $true; break }
+      $t = Read-Text $f
+      if ($null -eq $t) { $fMvSt.Lost = $true; continue }
+      $fMvSt.Files++; $fMvSt.Bytes += $len
+      if ((Fleet-MvScan $f $t) -eq 1) { return 1 }
+    }
+    if ($fMvSt.Lost -and $fMvSt.Named) { return 1 }
+    0
+  }
+  $fMoved = Fleet-Moved
+  $fl = @(
+    'v=1'
+    "agents=$(Fleet-Ids $AgentIds)"
+    "yolo=$(Fleet-Ids @($AaList | ForEach-Object { Fleet-AgentId $_.Agent }))"
+    "remote=$(Fleet-Ids @($RemoteList | ForEach-Object { Fleet-AgentId $_.Agent }))"
+    "tools=$(Fleet-Ids @($OldList | Where-Object { $null -ne $_.Fixed } | ForEach-Object { $_.Id }))"
+    "mcp_servers=$N_MCP"
+    "mcp_token_files=$N_MCP_TOKEN"
+    "key_files=$KEY_FILES"
+    "key_providers=$(Fleet-Ids $ProvIds)"
+    "history_keys=$HIST_KEYS"
+    "session_files=$N_SESS"
+    "sessions_partial=$fSp"
+    "allow_list_keys=$N_ALLOW"
+    "ssh_open=$N_SSH_OPEN"
+    "ak_links=$N_AK"
+    "ssh_planted=$($ExtKey.Count)"
+    "planted=$($WormHit.Count + $WormRefs.Count)"
+    "possible=$(Fleet-Ids (@($fPoss) + @($ExtCheckTags)))"
+    "incidents=$(Fleet-Ids (@($fNpm) + @($ExtTags) + @($PyHits) + @($IndHits)))"
+    "platforms=$(Fleet-Ids $PlatFound)"
+    "on_open=$N_AUTO"
+    "to_read=$N_LOOK"
+    "autostart=$($N_WIRED + $N_UHOOK)"
+    "updates=$(Fleet-Ids @($PyUpd | ForEach-Object { $_[0] }))"
+    "wiper=$WIPER_HIT"
+    "lock_only=$(Fleet-Ids $fLock)"
+    "remove=$(Fleet-Ids $ExtUpdTags)"
+    "not_read=$fNr"
+    "moved=$fMoved"
+    'tmp_marks='
+    'tmp_wiper=0'
+    'protected=ok'
+    "engine=$fEngine"
+    'end=1'
+  )
+  $AcctOut.Write((($fl -join "`n") + "`n"))
+  $AcctOut.Flush()
+  exit 0
+}
 # ---------------------------------------------------------------------------
 # Counts for GIRD's research, sent once when the scan is done unless -Offline or
 # DO_NOT_TRACK=1, with the same fields as gird-check.sh. Never a path, a file name,
@@ -7090,9 +8786,17 @@ switch (([string]$archRaw).ToUpperInvariant()) { 'ARM64' { $ARCH_ID = 'arm64' } 
 $MODEL = ''
 if ($env:WT_SESSION) { $TERMAPP = 'windows-terminal' }
 else {
-  switch ($env:TERM_PROGRAM) {
-    'vscode' { $TERMAPP = 'vscode' } 'WezTerm' { $TERMAPP = 'wezterm' } 'Hyper' { $TERMAPP = 'hyper' } 'tmux' { $TERMAPP = 'tmux' }
-    'Apple_Terminal' { $TERMAPP = 'terminal' } 'iTerm.app' { $TERMAPP = 'iterm2' } 'WarpTerminal' { $TERMAPP = 'warp' } 'ghostty' { $TERMAPP = 'ghostty' }
+  switch -CaseSensitive ($env:TERM_PROGRAM) {
+# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it.
+    'Apple_Terminal' { $TERMAPP = 'terminal' }
+    'iTerm.app' { $TERMAPP = 'iterm2' }
+    'vscode' { $TERMAPP = 'vscode' }
+    'WarpTerminal' { $TERMAPP = 'warp' }
+    'ghostty' { $TERMAPP = 'ghostty' }
+    'WezTerm' { $TERMAPP = 'wezterm' }
+    'Hyper' { $TERMAPP = 'hyper' }
+    'tmux' { $TERMAPP = 'tmux' }
+# <<< term-programs
     default { if ($env:TERM_PROGRAM) { $TERMAPP = 'other' } elseif ($OnWindows) { $TERMAPP = 'conhost' } else { $TERMAPP = 'unknown' } }
   }
 }
@@ -7125,6 +8829,46 @@ if (-not $OptOffline) {
   if ($rk -and $rk -cmatch '^[1-9][0-9]{0,8}$') { $RANK = $rk }
 }
 
+# The OWASP Agentic Top 10 risks of what was found. gird-check.sh tags from the fields its account
+# run sends root (owasp_set); this is the same rule on this script's own values, with the same table.
+# With nothing tagged every OWASP line is left out, partly checked or not: no line ever says none.
+$NpmActN = @($NpmTags | Where-Object { (Incident-Level $_) -eq 'act' }).Count
+$NpmOtherN = @($NpmTags | Where-Object { (Incident-Level $_) -ne 'act' }).Count
+function Owasp-Set([string]$src) {
+  switch -CaseSensitive ($src) {
+    'incidents:act' { return (($NpmActN -gt 0 -and $MAL_LOCKONLY -eq 0) -or $EXT_HIT -eq 1 -or $PY_HIT -eq 1 -or $IndHits.Count -gt 0) }
+    'incidents:update' { return ($NpmOtherN -gt 0) }
+    'yolo' { return ($N_YOLO -gt 0) }
+    'remote' { return ($N_REMOTE -gt 0) }
+    'tools' { return ($N_OLD -gt 0) }
+    'mcp_token_files' { return ($N_MCP_TOKEN -gt 0) }
+    'ak_links' { return ($N_AK -gt 0) }
+    'ssh_planted' { return ($ExtKey.Count -gt 0) }
+    'autostart' { return (($N_WIRED + $N_UHOOK) -gt 0) }
+    'on_open' { return ($N_AUTO -gt 0) }
+    'key_files' { return ($KEY_FILES -gt 0) }
+    'history_keys' { return ($HIST_KEYS -gt 0) }
+    'session_files' { return ($N_SESS -gt 0) }
+    'ssh_open' { return ($N_SSH_OPEN -gt 0) }
+    'allow_list_keys' { return ($N_ALLOW -gt 0) }
+    'wiper' { return ($WIPER_HIT -eq 1) }
+    'planted' { return (($WormHit.Count + $WormRefs.Count) -gt 0) }
+    'lock_only' { return ($MAL_LOCKONLY -eq 1 -and $NpmActN -gt 0) }
+    'updates' { return ($PyUpd.Count -gt 0) }
+    'remove' { return ($ExtUpd.Count -gt 0) }
+    'platforms' { return (@($PlatFound).Count -gt 0) }
+  }
+  return $false
+}
+# Each kind found, as its row of $OwaspTable (kind, risk, name, label, section, source).
+$OwFound = @(foreach ($r in $OwaspTable) { if ($r[5] -like 'machine:*' -or $r[5] -eq 'report') { continue }; if (Owasp-Set $r[5]) { ,$r } })
+$OwCodes = (@($OwFound | ForEach-Object { $_[1] } | Sort-Object -Unique -CaseSensitive)) -join ', '
+function Owasp-Sec([string]$sec) { # one dimmed line under the section's rule for each risk found there, in code order
+  $seen = @{}
+  $lines = @(foreach ($r in $OwFound) { if ($r[4] -eq $sec -and -not $seen.ContainsKey($r[1])) { $seen[$r[1]] = 1; "$($r[1])|$($r[2])" } }) | Sort-Object -CaseSensitive
+  foreach ($l in $lines) { $p = $l.Split('|'); Emit "     ${cDim}OWASP $($p[0]) $($p[1])$cRst" }
+}
+
 # ===========================================================================
 # The report. Every part is built first, then shown: a summary on a console, or
 # every detail with -Full or when the output is redirected. A saved report always
@@ -7134,7 +8878,7 @@ if (-not $OptOffline) {
 # checked, a key file, part of npm's cache, a Python environment or an extension folder could not
 # be read, or a file took too long. The headline then says what it can: no findings in the paths
 # checked.
-$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0 -or $PyUnread -gt 0)
+$Partial = [bool]($HOME_PARTIAL -eq 1 -or $SESS_PARTIAL -or $KeyUnread.Count -gt 0 -or $Sec2Unread.Count -gt 0 -or $AllowUnread.Count -gt 0 -or $NpmUnread -gt 0 -or $LockUnread.Count -gt 0 -or $NpmSlow -gt 0 -or $SlowFiles.Count -gt 0 -or $ExtUnread -gt 0 -or $SshkUnread -eq 1 -or $PyUnread -gt 0 -or $ActUnread -gt 0)
 if ($PY_HIT -eq 1 -or $ANY_MAL -eq 1) { $Sev = $cRed }
 elseif ($KEY_FILES -gt 0 -or $N_ALLOW -gt 0 -or $N_MCP_TOKEN -gt 0 -or $N_AK -gt 0) { $Sev = $cRed }
 elseif ($ISSUES -gt 0 -or $Partial) { $Sev = $cYel } else { $Sev = $cGrn }
@@ -7166,16 +8910,18 @@ if ($Act) {
 }
 $HeadShort = Take-Cap
 Wrap $Stats 4 "  $Sev$gBar$cRst " "  $Sev$gBar$cRst " $cDim
-# Folders the home scan could not read, so sections 2 to 5 did not read the files in them.
+# Folders the home scan could not read, so sections 1 to 5 did not read the files in them.
 function Dir-List($dirs) { $da = @($dirs); $dl = (@($da | Select-Object -First 3 | ForEach-Object { Short $_ })) -join ', '; if ($da.Count -gt 3) { $dl += " and $($da.Count - 3) more" }; $dl }
 if ($UnreadDirs.Count -gt 0) {
-  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 2 to 5 did not check the files in it' }
-  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 2 to 5 did not check the files in them" }
+  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 1 to 5 did not check the files in it' }
+  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 1 to 5 did not check the files in them" }
   Wrap "$($udText): $(Dir-List $UnreadDirs)." 4 "  $cYel$gBar$cRst " "  $cYel$gBar$cRst " $cYel
 }
+if ($OwCodes) { Blank; Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
 $HeadFull = $HeadShort + (Take-Cap)
 
 Section '01' 'CODING AGENTS' "$N_AG found, $N_IDLE idle"
+Owasp-Sec '01'
 if ($N_AG -eq 0) { Emit '     No coding agents found.' }
 foreach ($r in $AgRows) {
   switch ($r[1]) {
@@ -7190,6 +8936,18 @@ if ($N_YOLO -gt 0) {
   Emit "     ${cBold}Agents set to run commands without asking$cRst"
   foreach ($r in $AaList) { Pair "$cYel!$cRst" ('{0,-16} {1}' -f $r.Agent, (Short $r.File)) 46 $r.Setting }
   Wrap 'A prompt injection in anything the agent reads can then run commands on this computer. Turn it off unless the agent runs in a sandbox.' 8 '        ' '        ' $cDim
+}
+if ($N_REMOTE -gt 0) {
+  Blank
+  Emit "     ${cBold}Allowed to run commands on other machines without asking$cRst"
+  # A line for each file, then its rules under it.
+  $pf = ''
+  foreach ($r in $RemoteList) {
+    if ("$($r.Agent)`t$($r.File)" -ne $pf) { Pair "$cYel!$cRst" $r.Agent 16 (Short $r.File) }
+    $pf = "$($r.Agent)`t$($r.File)"
+    Wrap $r.Rule 8 '        ' '        '
+  }
+  Wrap 'A prompt injection in anything the agent reads can then run commands on those machines.' 8 '        ' '        ' $cDim
 }
 if ($N_OLD -gt 0) {
   Blank
@@ -7212,6 +8970,7 @@ if ($N_OLD_NOFIX -gt 0) {
 }
 $Sec1 = Take-Cap
 Section '02' 'MCP SERVERS' (Plural $N_MCP 'server' 'servers')
+Owasp-Sec '02'
 if ($N_MCP -eq 0 -and $N_MCP_TOKEN -eq 0) { Emit '     No MCP servers configured.' }
 foreach ($r in $McpRows) {
   if ($r.Pl -and -not $r.Tok) { continue }
@@ -7221,6 +8980,22 @@ foreach ($r in $McpRows) {
 }
 if ($N_MCP_CACHE -gt 0) {
   Pair "$cDim$gMid$cRst" 'Plugin folders' 46 "$cDim$(Plural $N_MCP_CACHE 'server' 'servers') in $(Plural $N_MCP_CACHEF 'file' 'files'), not counted above$cRst"
+}
+if ($N_WIRED -gt 0) {
+  Blank
+  Emit "     ${cBold}Projects that start a script the way worms do$cRst"
+  foreach ($r in $Wired) {
+    Emit "     $cYel!$cRst  $(Short $r.Proj)"
+    Wrap "A session-start hook and a folder-open task both run $($r.Name) from this project, the way some npm worms do. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 '        ' '        ' $cDim
+  }
+}
+if ($N_UHOOK -gt 0) {
+  Blank
+  Emit "     ${cBold}Session hooks in your own agent settings$cRst"
+  foreach ($r in $UserHooks) {
+    Emit "     $cYel!$cRst  $(Short $r.File)"
+    Wrap "Set to run a file from $($r.Dir) each time a session starts. The AntV wave copies its payload there and adds a hook like this one. If you didn't add it, delete the hook and read what is in that folder." 8 '        ' '        ' $cDim
+  }
 }
 if ($N_AUTO -gt 0) {
   Blank
@@ -7236,7 +9011,7 @@ if ($N_LOOK -gt 0) {
   Emit "     ${cBold}Files named like the ones worms plant$cRst"
   foreach ($f in $WormLook) {
     Emit "     $cYel!$cRst  $(Short $f)"
-    Wrap "Named like $(Planted-Note (Planted-Rel $f)), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
+    Wrap "Named like $(Planted-Note (Planted-Rel $f)), but no file that only the malware uses is beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
   }
 }
 if ($N_AK -gt 0) {
@@ -7253,6 +9028,7 @@ if ($Sec2Unread.Count -gt 0) {
 }
 $Sec2 = Take-Cap
 Section '03' 'KEYS IN PLAIN TEXT' (Plural $KEY_FILES 'file' 'files')
+Owasp-Sec '03'
 # With files that could not be read, this line comes below, with them.
 if ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0 -and $HOME_PARTIAL -eq 1) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read.' 8 "     $cYel!$cRst  " '        ' }
 elseif ($KEY_FILES -eq 0 -and $KeyUnread.Count -eq 0) { Wrap 'No AI or cloud keys in shell profiles, history, agent configs or .env files.' 8 "     $cGrn$gOk$cRst  " '        ' }
@@ -7320,6 +9096,7 @@ if ($SESS_TOTAL -gt 0 -or $SESS_UNREAD -ne 0 -or $SessSealedN -gt 0) {
 }
 $Sec3 = Take-Cap
 Section '04' 'KEYS IN CLAUDE CODE ALLOW LISTS' (Plural $N_ALLOW 'file' 'files')
+Owasp-Sec '04'
 if ($N_ALLOW -eq 0 -and $AllowUnread.Count -gt 0) {
   Wrap "No saved commands with keys in the files read, but $(Plural $AllowUnread.Count 'file' 'files') could not be read:" 8 "     $cYel!$cRst  " '        '
   foreach ($f in ($AllowUnread | Select-Object -First 20)) { Emit "        $(Short $f)" }
@@ -7335,8 +9112,9 @@ foreach ($r in $AllowRows) {
 if ($N_ALLOW -gt 0 -and $AllowUnread.Count -gt 0) { Wrap "$(Plural $AllowUnread.Count 'file' 'files') could not be read, so this is not the full list." 8 "     $cYel!$cRst  " '        ' }
 $Sec4 = Take-Cap
 $ind26 = ' ' * 26
-$N_LEAKS = @($PyIncidents).Count + 2 + @($Platforms).Count   # the Python incidents, npm, editor extensions and each platform
+$N_LEAKS = @($PyIncidents).Count + 3 + @($Platforms).Count   # the Python incidents, npm, editor extensions, GitHub Actions and each platform
 Section '05' 'RECENT KEY LEAKS' "$N_LEAKS checked"
+Owasp-Sec '05'
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
 # advice under a hit: for a bad package in an environment, don't run Python there; for its temp
 # files, the incident's own (data/indicators.tsv); for a version whose malware could not run on this
@@ -7469,6 +9247,7 @@ if ($EXT_HIT -eq 1) {
   Pair "$cRed$gX$cRst" 'Editor extensions' 16 "${cRed}signs of the malware found$cRst"
   foreach ($r in $ExtRows) { Emit "        $(Short $r[0])"; Emit "          $($r[1]) ${cDim}($(Npm-Label $r[2])), installed$cRst" }
   foreach ($r in $ExtPersist) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
+  foreach ($r in $ExtKey) { Emit "        $(Short $r[0])"; Emit "          $($r[1])" }
   if ($ExtUpd.Count -gt 0) { Ext-Upd-Rows }
   if ($ExtCheck.Count -gt 0) {
     foreach ($r in $ExtCheck) { Emit "        $(Short $r[0])"; Emit "          has the name of a file that $($r[1])" }
@@ -7490,14 +9269,23 @@ if ($EXT_HIT -eq 1) {
   foreach ($t in $ExtCheckTags) { Wrap (Incident-Line $t) 8 '        ' '        ' $cDim }
 } elseif ($ExtUnread -gt 0) {
   Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}not fully checked: $(Plural $ExtUnread 'extension folder' 'extension folders') could not be read$cRst"
+} elseif ($SshkUnread -eq 1) {
+  Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}not fully checked: ~/.ssh/authorized_keys could not be read$cRst"
 } else {
-  Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
-  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' 26 $ind26 $ind26 $cDim
+  # A startup file of an extension incident (~/.config/.smt) is looked for by its path: under a folder
+  # in the home that could not be read, whether it is there can't be told, as the Python rows say.
+  $xNone = "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
+  if ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" 'Editor extensions' 16 "$xNone, but some folders in your home were not read" }
+  else { Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 $xNone }
+  Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron, and ~/.ssh/authorized_keys for an SSH key such malware adds' 26 $ind26 $ind26 $cDim
 }
 # With findings above, a folder that could not be read still has to be said.
 if ($ExtUnread -gt 0 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0 -or $ExtUpd.Count -gt 0)) {
   if ($ExtUnread -eq 1) { $xmsg = 'An extension folder' } else { $xmsg = 'Some extension folders' }
   Wrap "$xmsg could not be read, so this is not the full list." 8 '        ' '        ' $cYel
+}
+if ($SshkUnread -eq 1 -and ($EXT_HIT -eq 1 -or $ExtCheck.Count -gt 0 -or $ExtUpd.Count -gt 0 -or $ExtUnread -gt 0)) {
+  Wrap '~/.ssh/authorized_keys could not be read, so whether it holds an SSH key such malware adds is not known.' 8 '        ' '        ' $cYel
 }
 foreach ($p in $Platforms) {
   if ($PlatFound -contains $p.Id) {
@@ -7508,11 +9296,34 @@ foreach ($p in $Platforms) {
     Pair "$cDim$gMid$cRst" $p.Name 16 "$cDim$w$cRst"
   }
 }
+# Projects whose workflows use a compromised GitHub Action, each use under its workflow file.
+if ($N_ACT -gt 0) {
+  Pair "$cYel!$cRst" 'GitHub Actions' 16 "$cYel$(Plural $N_ACT_PROJ 'project uses' 'projects use') an action that was compromised$cRst"
+  $lw = $null
+  foreach ($h in $ActHits) {
+    if ($h[0] -cne $lw) { Emit "        $(Short $h[0])" }; $lw = $h[0]
+    $ur = [regex]::Replace($h[2], '[\x00-\x1f\x7f-\x9f]', '?')
+    if ($h[3] -ceq 'commit') { $t = "Uses $($h[1]) pinned to a commit the source lists as malicious, compromised $($h[4])." }
+    elseif ($h[3] -ceq 'pin') { $t = "Uses $($h[1]) pinned to a commit, compromised $($h[4])." }
+    else { $t = "Uses $($h[1])@$ur, compromised $($h[4])." }
+    Wrap "$t $($h[6]) ($($h[5]))" 10 '          ' '          ' $cDim
+  }
+  Wrap (Rotate-Wait "If these workflows ran in the window shown for each, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions[bot] that you didn't make.") 8 '        ' '        '
+  if ($ActUnread -gt 0) { Wrap "$(Plural $ActUnread 'workflow file' 'workflow files') could not be read, so this is not the full list." 8 '        ' '        ' $cYel }
+}
+elseif ($ActUnread -gt 0) { Pair "$cYel!$cRst" 'GitHub Actions' 16 "${cYel}not fully checked: $(Plural $ActUnread 'workflow file' 'workflow files') could not be read$cRst" }
+elseif ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" 'GitHub Actions' 16 "${cYel}not fully checked: some folders were not read$cRst" }
+elseif ($N_WF -eq 0) { Pair "$cDim$gMid$cRst" 'GitHub Actions' 16 "${cDim}no workflow files found$cRst" }
+else { Pair "$cGrn$gOk$cRst" 'GitHub Actions' 16 "none of $(@($ActTable).Count) compromised actions in $(Plural $N_WF 'workflow file' 'workflow files')" }
 $Sec5 = Take-Cap
+# Every fix, numbered: the full report's list and the summary's.
+function Todo-List {
+  $i = 0
+  foreach ($t in $Todo) { $i++; Wrap $t 10 "     $cTeal$($i.ToString().PadLeft(2)).$cRst  " '          ' }
+}
 Heading 'WHAT TO DO' 'most urgent first'
-$i = 0
-foreach ($t in $Todo) { $i++; Wrap $t 10 "     $cTeal$($i.ToString().PadLeft(2)).$cRst  " '          ' }
-if ($i -gt 0) { Blank }
+Todo-List
+if ($Todo.Count -gt 0) { Blank }
 Wrap 'Also: set a monthly spend limit on every AI provider key, at the provider.' 5 '     ' '     '
 $SecTodo = Take-Cap
 # Argus is a Mac app, so on Windows it is one line, as gird-check.sh says off a Mac.
@@ -7546,14 +9357,24 @@ function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
 # An update-level incident with a fix of its own has a summary for row 05 (data/incidents.tsv).
 $UpdSum = ''
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
+# A settings or rules file section 1 reads for its findings that is there but was not read, or a rules
+# file not read in full: section 2 names it, and row 01 does not read clean over it.
+$ruleUnread = New-Object System.Collections.Generic.List[string]
+foreach ($f in (Unread-Files (@($aaTried) + @($rcTried)) $true)) { if (-not $ruleUnread.Contains($f)) { $ruleUnread.Add($f) } }
+foreach ($f in $rcCuts) { if ($f -and -not $ruleUnread.Contains($f)) { $ruleUnread.Add($f) } }
+$N_RULE_UNREAD = $ruleUnread.Count
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
+elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_REMOTE_AG can run commands on other machines" }
+elseif ($N_RULE_UNREAD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, but $(Plural $N_RULE_UNREAD 'settings file' 'settings files') could not be read" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }
 if ($N_AK -gt 0) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, $(Plural $N_AK 'file links' 'files link') to your SSH logins" }
 elseif ($N_MCP_TOKEN -gt 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, tokens in $N_MCP_TOKEN files, like $(Short $McpTokFirst)" }
 elseif ($N_MCP_TOKEN -eq 1) { $G2 = "$cRed$gX$cRst"; $D2 = "$McpSum, a token in $(Short $McpTokFirst)" }
+elseif ($N_WIRED -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, worm-style startup in $(Plural $N_WIRED 'project' 'projects')" }
+elseif ($N_UHOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_UHOOK 'session hook' 'session hooks') to check" }
 elseif ($N_AUTO -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_AUTO_PROJ 'project acts' 'projects act') on opening" }
 elseif ($N_LOOK -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, $(Plural $N_LOOK 'project file' 'project files') to read" }
 elseif ($Sec2Unread.Count -gt 0) { $G2 = "$cYel!$cRst"; $D2 = "$McpSum, but $(Plural $Sec2Unread.Count 'file' 'files') could not be read" }
@@ -7588,6 +9409,7 @@ elseif ($ExtUpd.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'an editor extension t
 elseif ($NPM_UPD -eq 1 -and $PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'npm and Python packages to update, see section 5' }
 elseif ($NPM_UPD -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'an npm package to update, see section 5' }
 elseif ($PY_UPD_HIT -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'a Python package to update, see section 5' }
+elseif ($N_ACT -gt 0) { $G5 = "$cYel!$cRst"; $D5 = "$(Plural $N_ACT_PROJ 'project uses' 'projects use') a compromised GitHub Action" }
 elseif ($leaks.Count -ge 2) {
   $G5 = "$cYel!$cRst"
   $names = @($leaks | ForEach-Object { $_.Name })
@@ -7601,6 +9423,8 @@ elseif ($LockUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not 
 elseif ($NpmUnread - $NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: cache unreadable' }
 elseif ($NpmGUnread.Count -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'npm packages not fully checked: folder unreadable' }
 elseif ($ExtUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'extensions not fully checked: folder unreadable' }
+elseif ($SshkUnread -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'SSH logins not fully checked: file unreadable' }
+elseif ($ActUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'workflows not fully checked: files unreadable' }
 elseif ($PyUnread -gt 0) { $G5 = "$cYel!$cRst"; $D5 = 'Python not fully checked: folder unreadable' }
 elseif ($HOME_PARTIAL -eq 1) { $G5 = "$cYel!$cRst"; $D5 = 'none found, but some folders were not read' }
 else { $G5 = "$cGrn$gOk$cRst"; $D5 = "none of the $N_LEAKS recent leaks or malware it checks" }
@@ -7610,8 +9434,9 @@ CLine '02' $G2 'MCP servers' $D2
 CLine '03' $G3 'Keys in plain text' $D3
 CLine '04' $G4 'Allow lists' $D4
 CLine '05' $G5 'Recent leaks' $D5
+if ($OwCodes) { Blank; Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
 if ($SlowFiles.Count -gt 0) { Blank; Wrap "$SlowText, like $(Short $SlowFiles[0])" 5 "   $cYel!$cRst " '     ' }
-if ($ISSUES -gt 0) { Blank; Wrap $Todo[0] 14 "   ${cBold}First fix:$cRst " (' ' * 14) }
+if ($ISSUES -gt 0) { Blank; Emit "   ${cBold}What to do, most urgent first$cRst"; Todo-List }
 Blank
 Wrap $ArgusLine 2 '  ' '  ' $cDim
 if ($ISSUES -eq 0) {

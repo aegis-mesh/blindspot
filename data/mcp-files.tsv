@@ -1,0 +1,24 @@
+# MCP configs at home: the app, its id in data/mcp-clients.tsv, and where its config is. A project's
+# own configs (.mcp.json, .cursor/mcp.json, .vscode/mcp.json) are found by the home scan. One line each,
+# tab separated. After editing, run: bash tools/gen.sh
+# Devin Desktop, Windsurf renamed, keeps its MCP config in ~/.codeium (docs.devin.ai/desktop/devin-desktop-faq).
+#   app     the app's name in the report
+#   client  its id in data/mcp-clients.tsv
+#   sh      the config for gird-check.sh: from ~, {AS} (Application Support, or the place the OS
+#           keeps it) or {GOOSE_CFG}
+#   ps      the config for gird-check.ps1: from ~, {APPDATA} or {LOCALAPPDATA}
+# app	client	sh	ps
+Claude Code	claude-code	~/.claude.json	~/.claude.json
+Claude Desktop	claude-desktop	{AS}/Claude/claude_desktop_config.json	{APPDATA}/Claude/claude_desktop_config.json
+Cursor	cursor	~/.cursor/mcp.json	~/.cursor/mcp.json
+Windsurf	windsurf	~/.codeium/windsurf/mcp_config.json	~/.codeium/windsurf/mcp_config.json
+Devin Desktop	windsurf	~/.codeium/mcp_config.json	~/.codeium/mcp_config.json
+Codex	codex	~/.codex/config.toml	~/.codex/config.toml
+Gemini CLI	gemini-cli	~/.gemini/settings.json	~/.gemini/settings.json
+VS Code	vscode	{AS}/Code/User/mcp.json	{APPDATA}/Code/User/mcp.json
+Cline	cline	{AS}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json	{APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+Cline in Cursor	cline	{AS}/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json	{APPDATA}/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
+Continue	continue	~/.continue/config.json	~/.continue/config.json
+Continue	continue	~/.continue/config.yaml	~/.continue/config.yaml
+Goose	goose	{GOOSE_CFG}/config.yaml	{APPDATA}/Block/goose/config/config.yaml
+OpenCode	opencode	~/.config/opencode/opencode.json	~/.config/opencode/opencode.json

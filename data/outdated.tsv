@@ -27,12 +27,14 @@
 # database and OSV: a repository can publish one that neither of the other two lists.
 # Cursor is read on macOS only: its version file on the other systems was not verified. Its newest fix
 # with a version is 3.1.2, for Cursor on macOS (GHSA-p9g2-cr55-cw9c, of the 33 advisories in
-# cursor/cursor). Claude Code: anthropics/claude-code publishes 31 advisories for the npm package, and
-# two of them are not in GitHub's global database; OSV has them only as CVE records, CVE-2026-103012 and
-# CVE-2026-103435, outside its npm records. The newest fix is 2.1.260, from 2.0.68
-# (GHSA-gfvf-j8jh-jxxw, one of the two); below 2.0.68 the highest fix is 2.1.179 (GHSA-pq7j-f95f-qfcv),
-# in its range, so the row says 2.1.260 there too. GHSA-9f65-56v6-gxw7 and the sandbox escape
-# GHSA-7835-87q9-rgvv have lines for what their holes allow. Claude Code's native installer keeps each
+# cursor/cursor). Claude Code: anthropics/claude-code publishes 32 advisories for the npm package (read
+# again in November 2026), and two of them are not in GitHub's global database; OSV has them only as CVE
+# records, CVE-2026-103012 and CVE-2026-103435, outside its npm records. The newest fix is 2.1.260, from
+# 2.0.68 (GHSA-gfvf-j8jh-jxxw, one of the two); below 2.0.68 the highest fix is 2.1.179
+# (GHSA-pq7j-f95f-qfcv), or 2.1.251 on a Mac (GHSA-5xjx-9qx6-jcrv), both in its range, so the row says
+# 2.1.260 there too. GHSA-9f65-56v6-gxw7, the sandbox escape GHSA-7835-87q9-rgvv and GHSA-5xjx-9qx6-jcrv
+# have lines for what their holes allow; the advisory describes GHSA-5xjx-9qx6-jcrv's race on macOS
+# only, so its line is mac. Claude Code's native installer keeps each
 # version as a file in ~/.local/share/claude/versions and links ~/.local/bin/claude to the one in use
 # (Claude Code's setup page): no kind reads that, and the highest version kept need not be the one in
 # use. Claude Desktop: anthropics/claude-code also publishes four advisories for it. Its version is read on
@@ -94,6 +96,7 @@ claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=0.2.116 <1.0.24	a web
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=2.1.38 <2.1.163	a malicious repository could run code outside the sandbox	https://github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	<2.1.179	a plugin repository could install code that bypasses its pinned hash	https://github.com/advisories/GHSA-pq7j-f95f-qfcv
 claudecode	Claude Code	all	npm	@anthropic-ai/claude-code	>=2.0.68 <2.1.260	a stored API key could start sessions without the managed settings of an Enterprise or Team organization	https://github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
+claudecode	Claude Code	mac	npm	@anthropic-ai/claude-code	<2.1.251	code a malicious repository runs in its sandbox could make it write files outside the workspace	https://github.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv
 mcpremote	mcp-remote	all	npm	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote	mcp-remote	all	mcparg	mcp-remote	>=0.0.5 <0.1.16	a hostile MCP server could run commands	https://github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote	mcp-remote	all	npm	mcp-remote	>=0.1.16 <=0.1.38	a hostile server could open an internal address in your browser	https://github.com/advisories/GHSA-v65w-6crh-cp3h

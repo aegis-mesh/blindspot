@@ -30,6 +30,7 @@ WORK=$(mktemp -d 2>/dev/null || mktemp -d -t blindspot)
 MOCK_PID=""
 trap '[ -n "$MOCK_PID" ] && { kill "$MOCK_PID"; wait "$MOCK_PID"; } 2>/dev/null; rm -rf "$WORK"' EXIT
 . tests/lib.sh
+PATH=$(hide_platform_clis "$WORK/hostpath")
 command -v python3 >/dev/null 2>&1 || { echo "tests/run-ps.sh needs python3: it builds fixtures and runs the local mock with it"; exit 1; }
 
 # A Windows-shaped copy of tests/make-fixture.sh's home: the same planted keys, with
@@ -212,7 +213,7 @@ SKIPPING=""
 # A long-term key holds + and /, and a 1 MB read must not end just after one of them, inside the key.
 BRS="bedrock-api-key-""YmVkcm9jay5hbWF6b25hd3MuY29t"
 mkdir -p "$SE/brn/.claude/projects/p" "$SE/brk/.claude/projects/p" "$SE/brl/.claude/projects/p"
-cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
+cat "$BASH_SCRIPT" "$SCRIPT" gird-fleet.sh data/keys.tsv data/public-values.tsv > "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 printf '{"t":"the start %s alone"}\n' "$BRS" >> "$SE/brn/.claude/projects/p/read-the-scripts.jsonl"
 # A real key's next 104 characters are fixed as well (the base64 of /?Action=CallWithBearerToken&...
 # &X-Amz-Credential=): quoted only that far, it is not a key.
@@ -358,6 +359,14 @@ SKIPPING=$NORG
 psrun "$SE/unread" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
 has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
 SKIPPING=""
+# A later pass whose ripgrep can't start, after the first ran: a stand-in that finds nothing and
+# deletes itself. That pass's keys were not looked for, so the sessions are partly checked.
+mkdir -p "$SE/pass2/.claude/projects/p" "$SE/pass2/AppData/Roaming" "$SE/pass2/AppData/Local/Temp" "$SE/pass2bin"; printf '{}\n' > "$SE/pass2/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash\n[ "$1" = --version ] && { echo "ripgrep 14.1.0"; exit 0; }\n/bin/rm -f "$0"; exit 1\n' > "$SE/pass2bin/rg"; chmod +x "$SE/pass2bin/rg"
+psrun "$SE/pass2" PATH="$WORK/bin:$SE/pass2bin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/pass2.txt"
+if [ -e "$SE/pass2bin/rg" ]; then bad "rg: a later pass that can't start leaves the sessions partly checked" "the stand-in never ran"
+elif grep -q 'Agent sessions were partly checked' "$SE/pass2.txt" && ! grep -q 'No keys in' "$SE/pass2.txt"; then ok "rg: a later pass that can't start leaves the sessions partly checked"
+else bad "rg: a later pass that can't start leaves the sessions partly checked" "$(grep -o 'No keys in [^.]*\.' "$SE/pass2.txt")"; fi
 # A long token that crosses a 1 MB piece is not mistaken for a key.
 for D in piece esc esc2; do mkdir -p "$SE/$D/.claude/projects/p" "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
@@ -371,6 +380,16 @@ for E in net rg; do
   has    "$E: a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece-$E.txt"
   psrun "$SE/esc" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/esc-$E.txt" 2>&1
   has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
+done
+SKIPPING=""
+# Two keys on adjacent lines of a raw-text session file: the first key's boundary takes the line
+# break, and the second, at the start of its line, is found all the same, as grep and ripgrep find it.
+mkdir -p "$SE/adj/.claude/paste-cache" "$SE/adj/AppData/Roaming" "$SE/adj/AppData/Local/Temp"
+printf '%s\n%s\n' "h""f_$(rnd 36)" "AK""IA$(upper 16)" > "$SE/adj/.claude/paste-cache/a.txt"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$SE/adj" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/adj-$E.txt" 2>&1
+  has    "$E: two keys on adjacent lines of a raw-text session file are both found" 'Claude Code +1 file: (Hugging Face, AWS|AWS, Hugging Face)$' "$SE/adj-$E.txt"
 done
 SKIPPING=""
 # Keys at the start of a line (after a newline, not only at the start of a file), in the middle
@@ -921,7 +940,7 @@ printf 'console.log("tool ready")\n' > "$WORK/msx/code/tool/.claude/execution.js
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/execution.js"}]}]}}\n' > "$WORK/msx/code/tool/.claude/settings.json"
 psrun "$WORK/msx" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/msx.txt"
 hasnot "a lone .claude/execution.js that is not the payload is not malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/msx.txt"
-has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool/\.claude/execution\.js Named like a file the Mini Shai-Hulud worm plants, with nothing else of theirs beside it\.' "$WORK/msx.txt"
+has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool/\.claude/execution\.js Named like a file the Mini Shai-Hulud worm plants, but no file that only the malware uses is beside it\.' "$WORK/msx.txt"
 _es=$("$PWSH" -NoProfile -NonInteractive -Command "$(grep '^function Planted-Sha' "$SCRIPT"); Planted-Sha '.claude/execution.js'" 2>&1)
 if [ "$_es" = 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' ]; then ok "execution.js counts by the three SHA-256 values Wiz publishes for its payload"
 else bad "execution.js counts by the three SHA-256 values Wiz publishes for its payload" "got: $_es"; fi
@@ -942,8 +961,238 @@ has    "the AntV wave's kitty-monitor service is a sign of its malware" '~/\.con
 has    "and its LaunchAgent"                           '~/Library/LaunchAgents/com\.user\.kitty-monitor\.plist starts the AntV wave.s kitty-monitor backdoor at login' "$WORK/akm.txt"
 has    "and the backdoor they start"                   '~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor, which its service starts at login' "$WORK/akm.txt"
 has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
-has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
+has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, but no file that only the malware uses is beside it\.' "$WORK/akm.txt"
 hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
+# A project can run its own script when an agent session starts or the folder opens, as popular projects
+# do: the report names the script, to check, never as malware. A session-start hook and a folder-open task
+# that both run a script named like a planted one is how the worms start themselves (SafeDep on the AntV
+# wave, Wiz on Mini Shai-Hulud), listed on its own, still as a check: the files here are empty markers whose
+# SHA-256 no source publishes. A hook the AntV wave adds to the person's own Claude Code or Codex settings
+# that runs a file from .claude/package or .codex/package is listed too, with or without the file.
+mkdir -p "$WORK/ast/code/w/.claude" "$WORK/ast/code/w/.vscode" "$WORK/ast/code/g/.claude/hooks" "$WORK/ast/code/h/.claude" \
+  "$WORK/ast/code/t/.claude" "$WORK/ast/code/t/.vscode" "$WORK/ast/code/n/.claude" "$WORK/ast/.claude" "$WORK/ast/.codex" \
+  "$WORK/ast/code/c/.claude" "$WORK/ast/code/c/.vscode" "$WORK/ast/code/x/.claude" "$WORK/ast/code/x/.vscode" \
+  "$WORK/ast/code/q1/.claude" "$WORK/ast/code/q1/.vscode" "$WORK/ast/code/q2/.claude" "$WORK/ast/code/q2/.vscode"
+# q1 and q2 only echo text that names the planted file after a ; inside shell quotes.
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s"}]}]}}\n' '\"x;node .claude/setup.mjs\"' > "$WORK/ast/code/q1/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s"}]}]}}\n' "'x;node .claude/setup.mjs'" > "$WORK/ast/code/q2/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' | tee "$WORK/ast/code/q1/.vscode/tasks.json" > "$WORK/ast/code/q2/.vscode/tasks.json"
+# c runs the planted file first in a chain; x runs an index.js from .github, a name planted only in .claude.
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs && node .claude/other.js; echo %s | grep %s"}]}]}}\n' '\"a;b\"' "'x|y'" > "$WORK/ast/code/c/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/c/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .github/scripts/index.js"}]}]}}\n' > "$WORK/ast/code/x/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .github/scripts/index.js","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/x/.vscode/tasks.json"
+: > "$WORK/ast/code/w/.claude/setup.mjs"; : > "$WORK/ast/code/w/.vscode/setup.mjs"; : > "$WORK/ast/code/g/.claude/hooks/nvm-path.sh"
+printf '{\n  "hooks": {\n    "SessionStart": [\n      { "matcher": "*", "hooks": [ { "type": "command", "command": "node .claude/setup.mjs" } ] }\n    ]\n  }\n}\n' > "$WORK/ast/code/w/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"lint","command":"npm run lint"},{"label":"env","type":"shell","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/w/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash .claude/hooks/nvm-path.sh"}]}]}}\n' > "$WORK/ast/code/g/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' | tee "$WORK/ast/code/h/.claude/settings.json" > "$WORK/ast/code/t/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup.mjs"},{"label":"open","command":"echo hi","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast/code/t/.vscode/tasks.json"
+printf '{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"node .github/check.js"}]}],"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$WORK/ast/code/n/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node %s/.claude/package/index.js"}]}]}}\n' "$WORK/ast" > "$WORK/ast/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"bun run ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast/.codex/hooks.json"
+printf '# [[hooks.SessionStart]]\n# command = "node ~/.codex/package/index.js"\nmodel = "x"\n[[hooks.Stop]]\ncommand = "node ~/.codex/package/index.js"\n[[hooks.SessionStart]]\ncommand = "echo hi" # node ~/.codex/package/index.js\n' > "$WORK/ast/.codex/config.toml"
+psrun "$WORK/ast" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast.txt"
+has    "a session-start hook and a folder-open task that run a planted name are listed as worm-shaped" '! ~/code/w A session-start hook and a folder-open task both run setup\.mjs from this project, the way some npm worms do\.' "$WORK/ast.txt"
+hasnot "and a worm-shaped project is a check, not malware" 'ACT NOW|Treat this machine as compromised|runs a file a worm plants' "$WORK/ast.txt"
+has    "a project's session-start hook names the script it runs" '~/code/g/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/hooks/nvm-path\.sh\.' "$WORK/ast.txt"
+has    "a folder-open task names the script it runs" '~/code/w/\.vscode/tasks\.json Set to run a task when the folder opens in VS Code or Cursor\. That task runs this project.s \.claude/setup\.mjs\.' "$WORK/ast.txt"
+hasnot "a hook alone, or with a task that does not run on open, is not worm-shaped" '~/code/(g|h|t|n) A session-start hook' "$WORK/ast.txt"
+has    "a planted file a chain runs first counts as well" '! ~/code/c A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast.txt"
+has    "and the row names every script in the chain" '~/code/c/\.claude/settings\.json Set to run commands while the agent works\. Each agent session starts by running this project.s \.claude/other\.js and \.claude/setup\.mjs\.' "$WORK/ast.txt"
+hasnot "a planted name in another folder is not worm-shaped" '~/code/x A session-start hook' "$WORK/ast.txt"
+hasnot "a ; inside shell quotes does not split the command" '~/code/q[12] A session-start hook' "$WORK/ast.txt"
+hasnot "a hook on another event names no startup script" '~/code/n/\.claude/settings\.json Set to run commands while the agent works\. Each' "$WORK/ast.txt"
+psrun "$WORK/ast" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast-c.txt"
+has    "the summary row counts the worm-shaped project" '02 . MCP servers .*worm-style startup in 2 projects' "$WORK/ast-c.txt"
+has    "what to do says to read that script" 'Read the script each project in section 2 starts the way worms do' "$WORK/ast.txt"
+has    "a session hook in your own Claude Code settings that runs a file from .claude/package is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts\. The AntV wave copies its payload there' "$WORK/ast.txt"
+has    "and one in Codex's hooks.json that runs a file from .codex/package" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast.txt"
+hasnot "a commented-out hook in Codex's config.toml, or one on another event, is not" '~/\.codex/config\.toml' "$WORK/ast.txt"
+mkdir -p "$WORK/ast2/.codex"
+printf '[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast2/.codex/config.toml"
+psrun "$WORK/ast2" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast2.txt"
+has    "a SessionStart array over several lines in Codex's config.toml is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast2.txt"
+mkdir -p "$WORK/ast3/.codex" "$WORK/ast4/.codex"
+# Root reads a file with no read permission, so this case can only be checked as another user.
+SKIPPING=""; [ "${EUID:-$(id -u)}" -eq 0 ] && SKIPPING="running as root, which reads a file with no read permission"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' > "$WORK/ast3/.codex/hooks.json"; chmod 000 "$WORK/ast3/.codex/hooks.json"
+psrun "$WORK/ast3" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3.txt"
+has    "a Codex hooks.json that can't be read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast3.txt"
+psrun "$WORK/ast3" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast3-c.txt"
+has    "and the summary row says a file could not be read" '02 . MCP servers .*but 1 file could not be read' "$WORK/ast3-c.txt"
+chmod 644 "$WORK/ast3/.codex/hooks.json"
+SKIPPING=""
+printf '[hooks]\nSessionStart = [\n  { command = "echo ]" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast4/.codex/config.toml"
+psrun "$WORK/ast4" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast4.txt"
+has    "a bracket inside a quoted string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast4.txt"
+mkdir -p "$WORK/ast5/a/.claude" "$WORK/ast5/a/.vscode" "$WORK/ast5/d/.claude" "$WORK/ast5/d/.vscode" "$WORK/ast5/e/.claude" "$WORK/ast5/e/.vscode"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' | tee "$WORK/ast5/a/.claude/settings.json" "$WORK/ast5/d/.claude/settings.json" > "$WORK/ast5/e/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node","args":["--x",".claude/setup.mjs"],"runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast5/a/.vscode/tasks.json"
+printf '{"tasks":[{"label":"open","command":"echo hi","dependsOn":["env"],"runOptions":{"runOn":"folderOpen"}},{"label":"env","command":"node .claude/setup.mjs"}]}\n' > "$WORK/ast5/d/.vscode/tasks.json"
+printf '{"tasks":[{"label":"open","command":"echo hi","dependsOn":"gone","runOptions":{"runOn":"folderOpen"}},{"label":"env","command":"node .claude/setup.mjs"}]}\n' > "$WORK/ast5/e/.vscode/tasks.json"
+psrun "$WORK/ast5" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast5.txt"
+has    "a folder-open task that runs the planted script as a later argument is joined to the hook" '! ~/a A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
+has    "and one that depends on a task that runs it is joined too" '! ~/d A session-start hook and a folder-open task both run setup\.mjs' "$WORK/ast5.txt"
+hasnot "a task that depends on a task with another label is not" '! ~/e A session-start hook' "$WORK/ast5.txt"
+# A hooks file too big to read, Codex's or the settings.json in CLAUDE_CONFIG_DIR, is named as not read, never clean.
+mkdir -p "$WORK/ast6/.codex" "$WORK/ast6/cc" "$WORK/ast7/.codex" "$WORK/ast8/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' | tee "$WORK/ast6/.codex/hooks.json" > "$WORK/ast6/cc/settings.json"
+for _f in "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"; do dd if=/dev/zero of="$_f" bs=1 count=0 seek=17000000 2>/dev/null; done
+psrun "$WORK/ast6" CLAUDE_CONFIG_DIR="$WORK/ast6/cc" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast6.txt"
+rm -f "$WORK/ast6/.codex/hooks.json" "$WORK/ast6/cc/settings.json"
+has    "a Codex hooks.json too big to read is named as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/hooks\.json' "$WORK/ast6.txt"
+has    "and so is a settings.json in CLAUDE_CONFIG_DIR too big to read" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/cc/settings\.json' "$WORK/ast6.txt"
+# A TOML multi-line string goes on over lines: a ] in it does not end the SessionStart array, and a table
+# header in it is not one.
+printf '[hooks]\nSessionStart = [\n  { command = """echo ]\n# [\n""" },\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast7/.codex/config.toml"
+printf "notes = '''\n[[hooks.SessionStart]]\ncommand = \"node ~/.codex/package/index.js\"\n'''\n" > "$WORK/ast8/.codex/config.toml"
+psrun "$WORK/ast7" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast7.txt"
+psrun "$WORK/ast8" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast8.txt"
+has    "a ] inside a multi-line string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast7.txt"
+hasnot "a table header inside a multi-line string in config.toml is not a SessionStart hook" '~/\.codex/config\.toml' "$WORK/ast8.txt"
+# A session-start hook in your own settings counts only when it runs a file from .claude/package or
+# .codex/package, as the script an interpreter runs or as the command itself: a guard that tests for the
+# file, or a cleanup that deletes the folder, is not one. A word before the interpreter (nohup, VAR=), a
+# folder before the file ($HOME, a Windows path in a TOML literal string) and a SessionStart array in an
+# inline hooks table in Codex's config.toml are read; a hook on another event there is not.
+mkdir -p "$WORK/uhk1/.claude" "$WORK/uhk1/.codex" "$WORK/uhk2/.claude" "$WORK/uhk2/.codex" "$WORK/uhk3/.codex" "$WORK/uhk4/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"test -e ~/.claude/package/index.js && echo AntV payload found"}]}]}}\n' > "$WORK/uhk1/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"rm -rf ~/.codex/package/"}]}]}}\n' > "$WORK/uhk1/.codex/hooks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"nohup node \\"$HOME/.claude/package/index.js\\" &"}]}]}}\n' > "$WORK/uhk2/.claude/settings.json"
+printf 'model = "x"\nhooks = { SessionStart = [ { command = "node ~/.codex/package/index.js" } ] }\n' > "$WORK/uhk2/.codex/config.toml"
+printf 'hooks = { Stop = [ { command = "node ~/.codex/package/index.js" } ], SessionStart = [ { command = "echo hi" } ] }\n' > "$WORK/uhk3/.codex/config.toml"
+printf '[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = "command"\ncommand = %s\n' "'NODE_OPTIONS= node C:\\Users\\x\\.codex\\package\\index.js'" > "$WORK/uhk4/.codex/config.toml"
+for _h in uhk1 uhk2 uhk3 uhk4; do psrun "$WORK/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+hasnot "a guard or a cleanup that only names .claude/package or .codex/package is not a session hook to check" 'Session hooks in your own agent settings' "$WORK/uhk1.txt"
+has    "a hook that runs a file from .claude/package after nohup, from \$HOME, is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts' "$WORK/uhk2.txt"
+has    "and so is a SessionStart array in an inline hooks table in Codex's config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk2.txt"
+hasnot "but not a hook on another event in that inline table" '~/\.codex/config\.toml' "$WORK/uhk3.txt"
+has    "a TOML literal string with VAR= and a Windows path is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk4.txt"
+# A hook that cds into .claude/package or .codex/package and then runs a command runs it from there, so it
+# is listed too; one that only names the folder, or cds into it and runs nothing after, is not.
+mkdir -p "$WORK/uhk5/.claude" "$WORK/uhk5/.codex" "$WORK/uhk6/.claude" "$WORK/uhk6/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"cd ~/.claude/package && node index.js"}]}]}}\n' > "$WORK/uhk5/.claude/settings.json"
+printf '[[hooks.SessionStart]]\ncommand = %s\n' "'cd \"\$HOME/.codex/package\"; bun index.js'" > "$WORK/uhk5/.codex/config.toml"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"ls ~/.claude/package; echo ok"}]}]}}\n' > "$WORK/uhk6/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"test -d ~/.codex/package && cd ~/.codex/package"}]}]}}\n' > "$WORK/uhk6/.codex/hooks.json"
+# A SessionStart command written over several lines in config.toml (""" or ''') is not read: the file is
+# named as not read in full, never as one with no such hook.
+mkdir -p "$WORK/uhk7/.codex" "$WORK/uhk8/.codex"
+printf '[[hooks.SessionStart]]\ncommand = """\nnode ~/.codex/package/index.js\n"""\n' > "$WORK/uhk7/.codex/config.toml"
+printf "[hooks]\nSessionStart = [\n  { command = '''node ~/.codex/package/index.js\n''' },\n]\n" > "$WORK/uhk8/.codex/config.toml"
+for _h in uhk5 uhk6 uhk7 uhk8; do psrun "$WORK/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+has    "a hook that cds into .claude/package and runs a command there is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts' "$WORK/uhk5.txt"
+has    "and so is one in config.toml that cds into \$HOME/.codex/package" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk5.txt"
+hasnot "a hook that only names the folder, or cds into it and runs nothing after, is not" 'Session hooks in your own agent settings' "$WORK/uhk6.txt"
+has    "a SessionStart command over several lines in config.toml names the file as not read in full" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/config\.toml' "$WORK/uhk7.txt"
+has    "and so does one in ''' quotes in a SessionStart array" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/config\.toml' "$WORK/uhk8.txt"
+# The words that run the rest of a command count before the interpreter in your own hooks too: the start
+# of the code of bash -c or sh -c, a subshell, timeout, setsid, and cat piping the file to bash; and a
+# cd into the folder then a ./ script. An echo in bash -c's code, cat piping the
+# file to another command, and a cd into the folder to delete or list what is there run nothing.
+mkdir -p "$WORK/uhk9/.claude" "$WORK/uhk9/.codex" "$WORK/uhk10/.claude" "$WORK/uhk10/.codex" "$WORK/uhk11/.claude" "$WORK/uhk11/.codex" "$WORK/uhk12/.claude" "$WORK/uhk12/.codex"
+uhj() { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$WORK/$1"; }
+uhj uhk9/.claude/settings.json "bash -c 'node ~/.claude/package/index.js'"
+uhj uhk9/.codex/hooks.json '(node ~/.codex/package/index.js &)'
+uhj uhk9/.codex/settings.json 'cat ~/.codex/package/index.sh | bash'
+uhj uhk10/.claude/settings.json 'timeout 30 setsid node ~/.claude/package/index.js'
+uhj uhk10/.codex/hooks.json 'sh -c \"exec node ~/.codex/package/index.js\"'
+uhj uhk10/.codex/settings.json 'cd ~/.codex/package && ./run.sh'
+uhj uhk11/.claude/settings.json "bash -c 'echo node ~/.claude/package/index.js'"
+uhj uhk11/.codex/hooks.json 'cat ~/.codex/package/index.sh | shasum'
+uhj uhk12/.claude/settings.json 'cd ~/.claude/package && rm -rf ./*'
+uhj uhk12/.codex/hooks.json 'cd ~/.codex/package && ls'
+for _h in uhk9 uhk10 uhk11 uhk12; do psrun "$WORK/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+has    "a hook that runs a file from .claude/package in bash -c's code is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts' "$WORK/uhk9.txt"
+has    "and so is one in a subshell" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts' "$WORK/uhk9.txt"
+has    "and one where cat pipes the file to bash" '! ~/\.codex/settings\.json Set to run a file from \.codex/package each time a session starts' "$WORK/uhk9.txt"
+has    "and one after timeout and setsid" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts' "$WORK/uhk10.txt"
+has    "and one after exec in sh -c's code" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts' "$WORK/uhk10.txt"
+has    "and one that cds into the folder and runs a ./ script there" '! ~/\.codex/settings\.json Set to run a file from \.codex/package each time a session starts' "$WORK/uhk10.txt"
+hasnot "an echo in bash -c's code, or cat piping the file to another command, is not a session hook to check" 'Session hooks in your own agent settings' "$WORK/uhk11.txt"
+hasnot "a hook that cds into the folder to delete or list what is there is not a session hook to check" 'Session hooks in your own agent settings' "$WORK/uhk12.txt"
+# A cd into the folder, then the file run through nohup, exec or setsid, npx, or a package manager runs it
+# too; a cd then nohup and a command that is not one of those runs nothing.
+mkdir -p "$WORK/uhk13/.claude" "$WORK/uhk13/.codex" "$WORK/uhk14/.claude"
+uhj uhk13/.claude/settings.json 'cd ~/.claude/package && nohup node index.js &'
+uhj uhk13/.codex/hooks.json 'cd ~/.codex/package && npx tsx index.ts'
+uhj uhk13/.codex/settings.json 'cd ~/.codex/package && npm start'
+uhj uhk14/.claude/settings.json 'cd ~/.claude/package && nohup touch x'
+for _h in uhk13 uhk14; do psrun "$WORK/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+has    "and one that cds into the folder and runs the file through nohup there" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts' "$WORK/uhk13.txt"
+has    "or through npx" '! ~/\.codex/hooks\.json Set to run a file from \.codex/package each time a session starts' "$WORK/uhk13.txt"
+has    "or through npm" '! ~/\.codex/settings\.json Set to run a file from \.codex/package each time a session starts' "$WORK/uhk13.txt"
+hasnot "a hook that cds into the folder and runs a command that is not one of those after nohup is not a session hook to check" 'Session hooks in your own agent settings' "$WORK/uhk14.txt"
+# A hook and a task that run the planted file after a word that runs the rest of the command (nohup, exec,
+# /usr/bin/env, npx, VAR=value) are worm-style startup too; an echo of those words is not. The projects are
+# listed in byte order of their paths, as both scripts sort them, and What to do says to read those
+# scripts before it says to move and rotate a key one of those projects holds: opening the project to do
+# that would run them.
+for _p in w-1 w.2 w/p w_3 w9; do mkdir -p "$WORK/wst/code/$_p/.claude" "$WORK/wst/code/$_p/.vscode"; done
+wst() { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$WORK/wst/code/$1/.claude/settings.json"
+  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wst/code/$1/.vscode/tasks.json"
+}
+wst w-1 'nohup node .claude/setup.mjs &' 'exec node .claude/setup.mjs'
+wst w.2 '/usr/bin/env node .claude/setup.mjs' 'npx node .claude/setup.mjs'
+wst w/p 'NODE_OPTIONS= node .claude/setup.mjs' 'FOO=bar BAZ=1 node .claude/setup.mjs'
+wst w_3 'node .claude/setup.mjs' 'node .claude/setup.mjs'
+wst w9 'echo nohup node .claude/setup.mjs' 'echo exec node .claude/setup.mjs'
+printf 'GITHUB_TOKEN=%s\n' "gh""p_$(rnd 36)" > "$WORK/wst/code/w_3/.env"
+psrun "$WORK/wst" -- -Offline > "$WORK/wst-raw.txt" 2>&1
+tr -s ' \n' '  ' < "$WORK/wst-raw.txt" > "$WORK/wst.txt"; sed -n '/WHAT TO DO/,$p' "$WORK/wst-raw.txt" | tr -s ' \n' '  ' > "$WORK/wst-todo.txt"
+has    "a hook after nohup and a task after exec that run a planted file are worm-style startup" '! ~/code/w-1 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+has    "and so are ones after /usr/bin/env and npx" '! ~/code/w\.2 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+has    "and ones after VAR=value" '! ~/code/w/p A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+hasnot "an echo that names those words runs nothing" '~/code/w9 A session-start hook' "$WORK/wst.txt"
+has    "the worm-style startup projects are listed in byte order of their paths" '! ~/code/w-1 A session-start hook.* ! ~/code/w\.2 A session-start hook.* ! ~/code/w/p A session-start hook.* ! ~/code/w_3 A session-start hook' "$WORK/wst.txt"
+has    "What to do says to read those scripts before it says to move and rotate keys" 'Read the script each project in section 2 starts the way worms do.*Move keys out of shell profiles, history and \.env files' "$WORK/wst-todo.txt"
+has    "and to read the settings section 2 marks before that too" 'Read the settings marked in section 2 before an agent or editor opens those folders.*Move keys out of shell profiles, history and \.env files' "$WORK/wst-todo.txt"
+sed -n '/Project settings that act/,/^ *$/p' "$WORK/wst-raw.txt" | tr -s ' \n' '  ' > "$WORK/wst-auto.txt"
+has    "the project settings that act on opening are listed in byte order of their paths" '! ~/code/w-1/\.claude/settings\.json .*! ~/code/w-1/\.vscode/tasks\.json .*! ~/code/w\.2/\.claude/settings\.json .*! ~/code/w\.2/\.vscode/tasks\.json .*! ~/code/w/p/\.claude/settings\.json .*! ~/code/w/p/\.vscode/tasks\.json .*! ~/code/w9/\.claude/settings\.json .*! ~/code/w9/\.vscode/tasks\.json .*! ~/code/w_3/\.claude/settings\.json .*! ~/code/w_3/\.vscode/tasks\.json ' "$WORK/wst-auto.txt"
+# The same words before a planted file make worm-style startup in a project: a hook in a subshell and a
+# task in bash -c's code, and a hook after timeout and a task after setsid.
+mkdir -p "$WORK/wsw/code/s1/.claude" "$WORK/wsw/code/s1/.vscode" "$WORK/wsw/code/s2/.claude" "$WORK/wsw/code/s2/.vscode"
+wsw() { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$WORK/wsw/code/$1/.claude/settings.json"
+  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wsw/code/$1/.vscode/tasks.json"
+}
+wsw s1 '(node .claude/setup.mjs &)' "bash -c 'node .claude/setup.mjs'"
+wsw s2 'timeout 60 node .claude/setup.mjs' 'setsid node .claude/setup.mjs'
+psrun "$WORK/wsw" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/wsw.txt"
+has    "a hook in a subshell and a task in bash -c's code that run a planted file are worm-style startup" '! ~/code/s1 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wsw.txt"
+has    "and so are ones after timeout and setsid" '! ~/code/s2 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wsw.txt"
+# A session-start hook of 5,000 commands, each running a script (225 KB): every script is named, in time
+# that grows with the size of the file (a grep for each command took three minutes on macOS).
+mkdir -p "$WORK/ssbig/code/p/.claude"
+python3 - "$WORK/ssbig/code/p/.claude/settings.json" <<'PY3'
+import sys
+hooks = ','.join('{"type":"command","command":".claude/a%d.sh"}' % i for i in range(5000))
+open(sys.argv[1], 'w').write('{"hooks":{"SessionStart":[{"hooks":[' + hooks + ']}]}}\n')
+PY3
+T0=$(date +%s); psrun "$WORK/ssbig" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ssbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "a session-start hook of 5,000 commands names every script they run" 'starts by running this project.s \.claude/a0\.sh, .*\.claude/a4999\.sh' "$WORK/ssbig.txt"
+if [ "$T" -le 60 ]; then ok "and in time that grows with the file, not with its commands" "${T}s"; else bad "and in time that grows with the file, not with its commands" "took ${T}s"; fi
+# A tasks.json whose folder-open task holds 150,000 dependsOn lists that never close (2 MB): a regex for
+# each can take as long as the file, and gird-check.ps1's then runs out of time. The report is still
+# printed to its end, and the file is read or named as partly checked, never as clean.
+mkdir -p "$WORK/dpo/code/p/.vscode"
+python3 - "$WORK/dpo/code/p/.vscode/tasks.json" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('{"tasks":[{"label":"a","command":"node .vscode/x.js","runOptions":{"runOn":"folderOpen"},' + '"dependsOn":[' * 150000 + '\n')
+PY3
+psrun "$WORK/dpo" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dpo.txt"
+has    "a tasks.json of 150,000 dependsOn lists left open still gets a report to its end" 'Your AI Exposure Check' "$WORK/dpo.txt"
+has    "and that file is read, or named as partly checked" '~/code/p/\.vscode/tasks\.json Set to run a task when the folder opens|took too long to check ~/code/p/\.vscode/tasks\.json' "$WORK/dpo.txt"
+# A Codex config.toml whose multi-line string holds a line of 1.6 MB, a SessionStart hook after it: read
+# whole, in time that grows with the line (it took a minute on macOS's awk).
+mkdir -p "$WORK/tmlbig/.codex"
+python3 - "$WORK/tmlbig/.codex/config.toml" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('notes = """\n' + 'a"' * 800000 + '\n"""\n[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js" },\n]\n')
+PY3
+T0=$(date +%s); psrun "$WORK/tmlbig" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tmlbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "a Codex config.toml with a 1.6 MB line in a multi-line string is read whole" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/tmlbig.txt"
+if [ "$T" -le 60 ]; then ok "and in time that grows with that line" "${T}s"; else bad "and in time that grows with that line" "took ${T}s"; fi
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents" "$WORK/mst/AppData/Roaming" "$WORK/mst/AppData/Local/Temp"
@@ -967,6 +1216,13 @@ printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","co
 printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo \\"blocked: x; node .claude/router_runtime.js\\" >&2; exit 2"}]}]}}\n' > "$WORK/grd/p/g5/.claude/settings.json"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/router_runtime.js"}]}]}}\n' > "$WORK/grd/p/h1/.claude/settings.json"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo %s; node .claude/router_runtime.js"}]}]}}\n' "'start'" > "$WORK/grd/p/h2/.claude/settings.json"
+# A hook that runs the worm file after a word that runs the rest of a command (nohup, the code of
+# bash -c, a subshell after timeout) runs it too; an echo of it in bash -c's code does not.
+mkdir -p "$WORK/grd/p/h3/.claude" "$WORK/grd/p/h4/.claude" "$WORK/grd/p/h5/.claude" "$WORK/grd/p/g6/.claude"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"nohup node .claude/router_runtime.js &"}]}]}}\n' > "$WORK/grd/p/h3/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash -c %s"}]}]}}\n' "'node .claude/router_runtime.js'" > "$WORK/grd/p/h4/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"(timeout 60 node .claude/router_runtime.js &)"}]}]}}\n' > "$WORK/grd/p/h5/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash -c %s"}]}]}}\n' "'echo node .claude/router_runtime.js'" > "$WORK/grd/p/g6/.claude/settings.json"
 psrun "$WORK/grd" -- -Offline > "$WORK/grd.txt" 2>&1
 sed -n '/05  RECENT KEY LEAKS/,/WHAT TO DO/p' "$WORK/grd.txt" | tr -s ' \n' '  ' > "$WORK/grd-05.txt"
 hasnot "a node -e guard naming a worm file is not malware" 'p/g1/' "$WORK/grd-05.txt"
@@ -978,6 +1234,10 @@ hasnot "a guard that echoes a worm file's name after a ; in quotes is not malwar
 hasnot "nor one whose text is in escaped double quotes" 'p/g5/' "$WORK/grd-05.txt"
 has    "a hook that runs node on a worm file is malware" '~/p/h1/\.claude/settings\.json runs a file a worm plants' "$WORK/grd-05.txt"
 has    "and so is one that runs it after a ; that follows quoted text" '~/p/h2/\.claude/settings\.json runs a file a worm plants' "$WORK/grd-05.txt"
+has    "a hook that runs a worm file after nohup is malware" '~/p/h3/\.claude/settings\.json runs a file a worm plants' "$WORK/grd-05.txt"
+has    "and so is one that runs it in bash -c's code" '~/p/h4/\.claude/settings\.json runs a file a worm plants' "$WORK/grd-05.txt"
+has    "and one that runs it in a subshell after timeout" '~/p/h5/\.claude/settings\.json runs a file a worm plants' "$WORK/grd-05.txt"
+hasnot "an echo of a worm file in bash -c's code is not malware" 'p/g6/' "$WORK/grd-05.txt"
 # setup.mjs is a name projects use too: alone it is a file to read, in section 2, and the hook that
 # runs it is not malware either.
 mkdir -p "$WORK/stp/code/site/.vscode" "$WORK/stp/code/tool/.claude" "$WORK/stp/AppData/Roaming" "$WORK/stp/AppData/Local/Temp"
@@ -986,7 +1246,7 @@ printf 'console.log("project ready")\n' > "$WORK/stp/code/tool/.claude/setup.mjs
 printf '{\n  "hooks": {\n    "SessionStart": [{"hooks": [{"type": "command", "command": "node .claude/setup.mjs"}]}]\n  }\n}\n' > "$WORK/stp/code/tool/.claude/settings.json"
 psrun "$WORK/stp" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp.txt"
 hasnot "a setup.mjs alone is not called malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/stp.txt"
-has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant, with nothing else of theirs beside it\.' "$WORK/stp.txt"
+has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant, but no file that only the malware uses is beside it\.' "$WORK/stp.txt"
 has    "section 2 lists it as a file to read (2)" '! ~/code/tool/\.claude/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/stp.txt"
 has    "with a fix to read it"                        'Read the files section 2 lists as named like files worms plant, and delete any you' "$WORK/stp.txt"
 rm -rf "$WORK/stp/code/tool"
@@ -1241,7 +1501,7 @@ has    "a linked .vscode/settings.json is read" '~/p/lnk/\.vscode/settings\.json
 has    "a .claude folder that is a link is read through" '~/p/cdir/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hid.txt"
 has    "and a worm file in it is found" '~/p/cdir/\.claude/router_runtime\.js a file the TanStack and Mini Shai-Hulud worms plant' "$WORK/hid.txt"
 has    "a .vscode folder that is a link is read through" '~/p/vdir/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
-has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
+has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 1 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
 hasnot "a .claude link to nothing reads as nothing" 'p/gone/' "$WORK/hid.txt"
 # VS Code reads a task's runOn without case, and runs worktreeCreated tasks when it creates a worktree
 # of the project. Its JSON scanner ends a // comment at U+2028 and U+2029 too, and reads a no-break
@@ -1346,7 +1606,9 @@ has    "a settings file of 100,000 backslashes is read whole" 'p/\.claude/settin
 has    "a lockfile line of 100,000 letters does not hide the next" 'axios 1\.14\.1 \(Axios takeover' "$WORK/longln.txt"
 if [ "$T" -le 60 ]; then ok "and both in reasonable time" "${T}s"; else bad "and both in reasonable time" "took ${T}s"; fi
 awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
-if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
+# Opening a project to delete a saved command runs its folder-open task, so reading the settings
+# section 2 marks comes first, ahead of that fix's rotate.
+if awk '{ a = index($0, "Read the settings marked"); b = index($0, "Delete the saved Claude Code commands"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "the settings fix comes before the allow-list fix, which rotates keys"; else bad "the settings fix comes before the allow-list fix, which rotates keys"; fi
 # The clean line, against gird-check.sh's count, and a folder of npm's cache that can't be read.
 cp -R "$WORK/clean" "$WORK/npmok"; mkdir -p "$WORK/npmok/.npm/_cacache/index-v5/aa"
 psrun "$WORK/npmok" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/npmok.txt"
@@ -1380,6 +1642,14 @@ psrun "$WORK/wlad" OS=Windows_NT -- -Offline -Full > "$WORK/wlad.txt" 2>&1
 tr -s ' \n' '  ' < "$WORK/wlad.txt" > "$WORK/wlad1.txt"
 has    "Windows: gh-token-monitor's folder in LOCALAPPDATA is a waiting wiper" 'a wiper is waiting ~/AppData/Local/gh-token-monitor Don' "$WORK/wlad1.txt"
 has    "Windows: the stop deletes its scheduled task first" 'one command at a time: schtasks /Delete /TN gh-token-monitor /F Get-CimInstance' "$WORK/wlad1.txt"
+# The Mastra malware's Run key, on a Windows home with nothing else: a sign of the Mastra incident, ASI04.
+# There is no registry off Windows, so GIRD_CHECK_TEST_RUNKEY stands in for the value.
+mkdir -p "$WORK/wmk/AppData/Local/Temp"
+psrun "$WORK/wmk" OS=Windows_NT -- -Offline -Full > "$WORK/wmk0.txt" 2>&1
+psrun "$WORK/wmk" OS=Windows_NT 'GIRD_CHECK_TEST_RUNKEY=C:\Users\me\AppData\Local\nvm\protocal.cjs' -- -Offline -Full > "$WORK/wmk1.txt" 2>&1
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$WORK/wmk1.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && grep -aq 'NvmProtocal in your startup programs' "$WORK/wmk1.txt" && ! grep -aq 'OWASP\|NvmProtocal' "$WORK/wmk0.txt"
+then ok "owasp: the Mastra Run key on Windows tags section 05 with ASI04"; else bad "owasp: the Mastra Run key on Windows tags section 05 with ASI04" "$OW_ONE"; fi
 _u=$(unwaited "$WORK/wlad.txt")
 if grep -q 'ACT NOW: REMOVE GH-TOKEN-MONITOR' "$WORK/wlad.txt" && grep -q 'rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm.s cache with npm cache clean --force\. Only once gh-token-monitor' "$WORK/wlad1.txt" && [ -z "$_u" ]; then
   ok "Windows: with the wiper in LOCALAPPDATA, no rotate or revoke goes without the wait"
@@ -1622,7 +1892,8 @@ has    "it is a version to update instead"           'npm malware a bad version 
 has    "with the vendor's own explanation"           'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file\. docs\.mistral\.ai' "$WORK/mis.txt"
 has    "and a fix to update it"                      'Update the npm packages listed in section 5 to a version without the malware' "$WORK/mis.txt"
 has    "the summary row says so in yellow"           'Recent leaks an npm package to update' "$WORK/mis-c.txt"
-hasnot "it does not outrank moving keys out of plain text" 'First fix: Update the npm packages' "$WORK/mis-c.txt"
+hasnot "it does not outrank moving keys out of plain text" 'most urgent first 1\. Update the npm packages' "$WORK/mis-c.txt"
+has    "moving keys out of plain text comes first" 'most urgent first 1\. Move keys out of shell profiles' "$WORK/mis-c.txt"
 has    "the link does not call it npm malware"       '&nm=0&py=0&ex=0&wp=0&lo=0&fi=( |$)' "$WORK/mis.txt"
 hasnot "a Mistral hit does not get Injective's wallet fix" '[Mm]ove the funds' "$WORK/mis.txt"
 # The @keyv 6.0.0 builds published without the install hook and SANDWORM_MODE's sleeper packages are
@@ -1692,7 +1963,7 @@ psrun "$WORK/sw" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sw.txt"
 psrun "$WORK/sw" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/sw-sum.txt"
 has    "SANDWORM_MODE's fix: remove its git hooks and MCP servers first" ' 1\. First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init\.templateDir names and in the \.git/hooks and \.husky folders of your repositories, and MCP servers you did not add to your AI assistants\. Its pre-push hook sends npm tokens out on every push\. 2\. Treat this machine as compromised\.' "$WORK/sw.txt"
 has    "ahead of an incident's own advice to rotate"  'Its pre-push hook sends npm tokens out on every push\. .*Rotate the secrets this machine held from another computer' "$WORK/sw.txt"
-has    "and the summary's first fix is to remove them" 'First fix: First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
+has    "and the summary's first fix is to remove them" 'most urgent first 1\. First find and remove what the SANDWORM_MODE worm leaves' "$WORK/sw-sum.txt"
 has    "and the result link names it, so the page removes them first too" '&nm=1&.*&lo=0&fi=sandworm( |$)' "$WORK/sw.txt"
 # wot-api 0.8.5, published an hour after 0.8.4, is malware by OpenSSF's entry, which Wiz's list leaves out.
 rm -rf "$WORK/npw"; mkdir -p "$WORK/npw/code/w" "$WORK/npw/AppData/Roaming" "$WORK/npw/AppData/Local/Temp"
@@ -1802,6 +2073,29 @@ has    "on Linux, managed.pyz in the temp folder is durabletask's sign" 'durable
 SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
 has    "on a Mac, durabletask 1.4.2 is a version to update" 'durabletask 1\.4\.1 to 1\.4\.3 +a bad version to update ~/code/venv/lib/site-packages: durabletask 1\.4\.2 Its malware runs on Linux only, so it did not run here\.' "$WORK/dtk.txt"
 SKIPPING=""
+# agent-framework 1.26.1 and 1.26.2 (GitHub's malware advisory GHSA-764m-3ppc-5m73, Wiz, Aikido): a .pth file
+# starts a stealer at every Python start, on any OS. Each version's .pth file and 1.26.2's stealer count on
+# their own. 1.26.0, the version to pin, is not one of them, and its agent_framework_meta folder is no sign.
+AFS="$WORK/afw/code/venv/lib/site-packages"; AF1="$WORK/afw/code/v1/lib/site-packages"
+cp -R "$WORK/clean" "$WORK/afw"; mkdir -p "$AFS/agent_framework-1.26.2.dist-info" "$AF1/agent_framework-1.26.1.dist-info"
+printf 'import af_runtime_diag\n' > "$AFS/af_runtime_diag.pth"; printf 'def _start(): pass\n' > "$AFS/af_runtime_diag.py"
+printf 'import agent_framework_meta\n' > "$AF1/agent_framework_meta.pth"
+cp -R "$WORK/clean" "$WORK/afw0"; mkdir -p "$WORK/afw0/code/venv/lib/site-packages/agent_framework-1.26.0.dist-info" "$WORK/afw0/code/venv/lib/site-packages/agent_framework_meta"
+: > "$WORK/afw0/code/venv/lib/site-packages/agent_framework_meta/__init__.py"
+cp -R "$WORK/clean" "$WORK/afwp"; mkdir -p "$WORK/afwp/code/venv/lib/site-packages"
+printf 'import agent_framework_meta\n' > "$WORK/afwp/code/venv/lib/site-packages/agent_framework_meta.pth"
+psrun "$WORK/afw" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/afw.txt"
+psrun "$WORK/afw0" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/afw0.txt"
+psrun "$WORK/afwp" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/afwp.txt"
+has    "agent-framework 1.26.2 is an act-now row of its own" 'agent-framework 1\.26\.1 and 1\.26\.2 +signs of the malware found .*~/code/venv/lib/site-packages: agent_framework 1\.26\.2' "$WORK/afw.txt"
+has    "and 1.26.1 is in it"                            '~/code/v1/lib/site-packages: agent_framework 1\.26\.1' "$WORK/afw.txt"
+has    "with the .pth file and the stealer 1.26.2 adds" 'site-packages: [^~]*af_runtime_diag\.pth' "$WORK/afw.txt"
+has    "and the stealer itself"                         'site-packages: [^~]*af_runtime_diag\.py' "$WORK/afw.txt"
+has    "and the .pth file 1.26.1 adds"                  '~/code/v1/lib/site-packages: [^~]*agent_framework_meta\.pth' "$WORK/afw.txt"
+has    "with GitHub's malware advisory"                 'Advisory: github\.com/advisories/GHSA-764m-3ppc-5m73' "$WORK/afw.txt"
+has    "and its fix, naming agent-framework"            "Treat this machine as compromised\. Don't run Python in the affected environments\. .*follow agent-framework's advisory" "$WORK/afw.txt"
+hasnot "agent-framework 1.26.0 and its agent_framework_meta folder are not flagged" 'agent-framework 1\.26\.1 and 1\.26\.2 +signs|agent_framework 1\.26\.0|agent_framework_meta' "$WORK/afw0.txt"
+has    "1.26.1's .pth file alone is a sign of it"       'agent-framework 1\.26\.1 and 1\.26\.2 +signs of the malware found .*site-packages: agent_framework_meta\.pth' "$WORK/afwp.txt"
 # litellm 1.82.7 and 1.82.8, March 2026 (OpenSSF's MAL-2026-2144, GitHub's GHSA-5mg7-485q-xm76), on any OS: a row
 # of their own beside LiteLLM 1.107.0's, with the litellm_init.pth 1.82.8 leaves (LiteLLM's post). 1.82.6, the
 # version LiteLLM says to pin, is not one of them. With both LiteLLM incidents found, row 05 says LiteLLM once.
@@ -1953,12 +2247,15 @@ for label in 'Coding agents' 'MCP servers' 'Keys in plain text' 'Allow lists' 'R
   has "one summary line for $label" "^   0[1-5] .*$label" "$OUT"
 done
 has    "the keys line names the first file"    'Keys in plain text +5 files, like ~/\.zshrc \(Anthropic, OpenAI\)' "$OUT"
-has    "the summary leads with the first fix"  'First fix: Don.t revoke any GitHub token yet' "$OUT"
+has    "the summary leads with the first fix"  '^ +1\.  Don.t revoke any GitHub token yet' "$OUT"
 hasnot "the summary leaves out the other key files" '~/\.zsh_history +GitHub' "$OUT"
 hasnot "the summary has no section tables"     'KEYS IN PLAIN TEXT' "$OUT"
 hasnot "the summary shows no letter grade"     'GRADE [ABCDF]|[Gg]rade [ABCDF]\b' "$OUT"
 nokeys "the summary never prints a planted key" "$WORK/keys.txt" "$OUT"
 psrun "$WORK/home" GIRD_CHECK_COMPACT=1 -- -Offline -Full > "$WORK/full.txt" 2>&1
+LAST=$(grep -aE '^ +[0-9]+\.  ' "$OUT" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr -d ' ')
+FLAST=$(grep -aE '^ +[0-9]+\.  ' "$WORK/full.txt" | tail -n 1 | grep -aoE '^ +[0-9]+' | tr -d ' ')
+if [ -n "$LAST" ] && [ "${LAST:-0}" -gt 1 ] && [ "$LAST" = "$FLAST" ]; then ok "the summary lists every fix, numbered" "$LAST"; else bad "the summary lists every fix, numbered" "summary ends at $LAST, full report at $FLAST"; fi
 has    "-Full prints every section in full"    'KEYS IN PLAIN TEXT' "$WORK/full.txt"
 has    "-Full lists every key file"            '~/\.zsh_history +GitHub' "$WORK/full.txt"
 
@@ -2021,12 +2318,17 @@ chmod 000 "$WORK/ud/code/locked"
 psrun "$WORK/ud" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud.txt"
 psrun "$WORK/ud" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-c.txt"
 chmod 755 "$WORK/ud/code/locked"
-has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
+has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 1 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
 has    "and the npm row is not green"                 'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud.txt"
 has    "and the keys row is not green"                'Keys in plain text none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
+# A rules file section 1 reads, there but unreadable: row 01, where its findings show, is not green.
+rm -rf "$WORK/ur"; cp -R "$WORK/clean" "$WORK/ur"; mkdir -p "$WORK/ur/.codex/rules"
+printf 'prefix_rule(pattern = ["ls"], decision = "allow")\n' > "$WORK/ur/.codex/rules/default.rules"; chmod 000 "$WORK/ur/.codex/rules/default.rules"
+psrun "$WORK/ur" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ur-c.txt"; chmod 644 "$WORK/ur/.codex/rules/default.rules"
+has    "an unreadable rules file: the agents row is not green" 'Coding agents +[0-9]+ found, but 1 settings file could not be read' "$WORK/ur-c.txt"
 # Poetry's and Hatch's own folders of environments under LOCALAPPDATA, and pipenv's off Windows, which
 # the home scan does not enter, are read: each holds a bad version here. A site-packages folder that
 # can't be read is not counted as an environment checked: the Python rows, the headline and row 05 say so.
@@ -2129,7 +2431,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 12 recent leaks or malware it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 14 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -2140,7 +2442,7 @@ hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftove
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +12 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +14 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -2339,7 +2641,7 @@ printf '{"lockfileVersion":3,"packages":{"node_modules/@injectivelabs/sdk-ts":{"
 psrun "$WORK/dz-inj" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj.txt"
 psrun "$WORK/dz-inj" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-inj-sum.txt"
 has    "Injective's wallet fix comes first, ahead of moving keys out of plain text" ' 1\. From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21, into a new wallet\. 2\. Move keys out of shell profiles' "$WORK/dz-inj.txt"
-has    "and it is the summary's first fix"             'First fix: From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21' "$WORK/dz-inj-sum.txt"
+has    "and it is the summary's first fix"             'most urgent first 1\. From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1\.20\.21' "$WORK/dz-inj-sum.txt"
 has    "row 05 names the wallets"                      'Recent leaks +Injective SDK: move the funds out of its wallets' "$WORK/dz-inj-sum.txt"
 dzrun() { _h=$1; shift; psrun "$_h" "$@" -- -Offline 2>&1; }
 has    "an extension hit is not npm malware in the link" '&nm=0&py=0&ex=1&wp=0' "$D"
@@ -2440,6 +2742,117 @@ has    "beside an AntV version only in a lockfile, they stay with the extension"
 has    "and the headline names only the extension's malware" 'ACT NOW: SIGNS OF MALWARE IN AN EDITOR EXTENSION' "$WORK/dz-nxkl.txt"
 has    "alone, the backdoor is the AntV wave's npm malware" 'npm malware signs of the malware found ~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor' "$WORK/dz-nxk0.txt"
 hasnot "and not a file to check as well"                'a startup file to check|Nx Console 18\.95\.0 installed' "$WORK/dz-nxk0.txt"
+# The trojanized Claude Code extension (Cursor's notice, StepSecurity, October 2026): anthropic.claude-code
+# 2.1.312 and 2.1.313 whose extension.js holds the loader (the attacker's address, or the comment of the
+# SSH key it adds), in any editor's folder. Open VSX's 2.1.312 is clean, so the same id and version without
+# the loader is not flagged, nor another version whose extension.js names the address.
+rm -rf "$WORK/dz-cx"; cp -R "$WORK/clean" "$WORK/dz-cx"
+CX_X="$WORK/dz-cx/.cursor/extensions/anthropic.claude-code-2.1.313-darwin-arm64"; CX_W="$WORK/dz-cx/.windsurf/extensions/anthropic.claude-code-2.1.312-win32-x64"
+mkdir -p "$CX_X" "$CX_W" "$WORK/dz-cx/.vscode/extensions/anthropic.claude-code-2.1.312" "$WORK/dz-cx/.cursor/extensions/anthropic.claude-code-2.1.314"
+printf 'void 0;const h="134.209.82.225";\nmodule.exports={};\n' > "$CX_X/extension.js"
+printf 'const c="svc-telemetry";\nmodule.exports={};\n' > "$CX_W/extension.js"
+printf 'module.exports={};\n' > "$WORK/dz-cx/.vscode/extensions/anthropic.claude-code-2.1.312/extension.js"
+printf 'const h="134.209.82.225";\n' > "$WORK/dz-cx/.cursor/extensions/anthropic.claude-code-2.1.314/extension.js"
+dzrun "$WORK/dz-cx" | tr -s ' \n' '  ' > "$WORK/dz-cx.txt"
+dzrun "$WORK/dz-cx" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/dz-cx-sum.txt"
+has    "Claude Code 2.1.313 whose extension.js holds the attacker's address is the trojanized extension" 'Editor extensions signs of the malware found .*~/\.cursor/extensions/anthropic\.claude-code-2\.1\.313-darwin-arm64 anthropic\.claude-code 2\.1\.313 \(Trojanized Claude Code extension, October 2026\), installed' "$WORK/dz-cx.txt"
+has    "and 2.1.312 whose extension.js holds the key's comment, in another editor's folder" '~/\.windsurf/extensions/anthropic\.claude-code-2\.1\.312-win32-x64 anthropic\.claude-code 2\.1\.312 \(Trojanized Claude Code extension, October 2026\), installed' "$WORK/dz-cx.txt"
+has    "with the trojanized extension's sourced line" 'Trojanized Claude Code extension, October 2026: builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel\. cursor\.com' "$WORK/dz-cx.txt"
+hasnot "the same version without the loader is Anthropic's clean build" '\.vscode/extensions/anthropic\.claude-code' "$WORK/dz-cx.txt"
+hasnot "another version in Cursor's folder is not flagged" 'claude-code-2\.1\.314|claude-code 2\.1\.314' "$WORK/dz-cx.txt"
+hasnot "and the check is done in full"                 'not fully checked|could not be read' "$WORK/dz-cx.txt"
+has    "its fix to remove what it leaves comes first" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up: .* Then remove the line in ~/\.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ \(its comment may read svc-telemetry\), ~/\.config/\.smt, ~/\.config/\.smtk and ~/\.config/smt\.cmd, ~/Library/LaunchAgents/com\.apple\.sysmond\.plist on a Mac, the @reboot line that runs \.smt in your crontab on Linux, the \.stk_ file in your temp folder, and on Windows ~/\.config/smtk, sysmon\.cmd in the Startup folder and the same key line in administrators_authorized_keys in the ssh folder of ProgramData\. Then turn off Remote Login on a Mac .* 2\. Treat this machine as compromised\. Uninstall the extensions listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cx.txt"
+has    "and it first stops the loop that starts the tunnel again" 'starting with what keeps its tunnel up: on a Mac run launchctl bootout gui/UID/com\.apple\.sysmond, with UID the number id -u prints, and on Windows end and delete the scheduled task SysMon; then end every process whose command line names \.smt, \.smtk, smt\.cmd, sysmon\.cmd or a \.stk_ file \(the loops that start ssh or autossh again about every 60 seconds, and the tunnel itself\)\. Then remove' "$WORK/dz-cx.txt"
+has    "the extension's summary row"                  'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cx-sum.txt"
+has    "the extension's first fix in the summary"     'most urgent first 1\. First remove what the trojanized Claude Code extension leaves' "$WORK/dz-cx-sum.txt"
+has    "the result link names the extension's fix that comes first" '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cx.txt"
+# An extension.js of those versions that is missing or can't be read leaves the check not done in full,
+# and is never taken for the trojanized build.
+rm -rf "$WORK/dz-cxj"; cp -R "$WORK/clean" "$WORK/dz-cxj"
+CX_J="$WORK/dz-cxj/.cursor/extensions/anthropic.claude-code-2.1.313-darwin-arm64"
+mkdir -p "$WORK/dz-cxj/.cursor/extensions/anthropic.claude-code-2.1.312-darwin-arm64" "$CX_J"
+printf 'const h="134.209.82.225";\n' > "$CX_J/extension.js"; chmod 000 "$CX_J/extension.js"
+dzrun "$WORK/dz-cxj" | tr -s ' \n' '  ' > "$WORK/dz-cxj.txt"
+chmod 644 "$CX_J/extension.js"
+has    "a 2.1.312 without its extension.js, and a 2.1.313 whose extension.js can't be read, are not fully checked" 'Editor extensions not fully checked: 2 extension folders could not be read' "$WORK/dz-cxj.txt"
+hasnot "and neither is called the trojanized extension" 'Trojanized Claude Code extension, October 2026\), installed' "$WORK/dz-cxj.txt"
+# Every rotate in a section waits for that cleanup: only the full fix list, which puts it first, goes without.
+# This home has no platform row, which says to rotate: Railway's CLI config gives it one.
+mkdir -p "$WORK/dz-cx/.railway"; printf '{}\n' > "$WORK/dz-cx/.railway/config.json"
+psrun "$WORK/dz-cx" -- -Offline -Full -AllSessions 2>&1 | tr -s ' \n' '  ' > "$WORK/dz-cx-full.txt"
+_u=$(python3 -I -c '
+import re, sys
+t = re.sub(r"\x1b\[[0-9;]*m", "", open(sys.argv[1], encoding="utf-8", errors="replace").read())
+t = t[:t.rfind("WHAT TO DO")] if "WHAT TO DO" in t else t
+s = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", t))
+for i, x in enumerate(s):
+    if re.search(r"[Rr]otate|[Rr]evoke", x) and not x.startswith("First") and not any(n.startswith("Only once") for n in s[i + 1:i + 3]): print(x)' "$WORK/dz-cx-full.txt")
+if [ -z "$_u" ] && grep -q 'Only once what the Trojanized Claude Code extension leaves is removed: What to do starts with it' "$WORK/dz-cx-full.txt"; then ok "with the trojanized extension, every section's rotate waits for its cleanup"
+else bad "with the trojanized extension, every section's rotate waits for its cleanup" "$(printf '%s' "${_u:-no wait in the report}" | head -n 3 | tr '\n' '|')"; fi
+# Its files alone, with the extension gone (Cursor removed the builds): their names are the malware's own,
+# so each is a sign of it, never a file to check.
+rm -rf "$WORK/dz-cxs"; cp -R "$WORK/clean" "$WORK/dz-cxs"; mkdir -p "$WORK/dz-cxs/.config" "$WORK/dz-cxs/Library/LaunchAgents"
+: > "$WORK/dz-cxs/.config/.smt"; : > "$WORK/dz-cxs/.config/.smtk"; : > "$WORK/dz-cxs/Library/LaunchAgents/com.apple.sysmond.plist"; : > "$WORK/dz-cxs/.config/smt.cmd"
+dzrun "$WORK/dz-cxs" | tr -s ' \n' '  ' > "$WORK/dz-cxs.txt"
+has    "the extension's tunnel script alone is its sign" 'Editor extensions signs of the malware found .*~/\.config/\.smt the trojanized Claude Code extension.s reverse SSH tunnel script' "$WORK/dz-cxs.txt"
+has    "so is the file beside it"                      '~/\.config/\.smtk a file the trojanized Claude Code extension writes beside \.smt' "$WORK/dz-cxs.txt"
+has    "so is its smt.cmd"                             '~/\.config/smt\.cmd a script the trojanized Claude Code extension writes to keep its tunnel running' "$WORK/dz-cxs.txt"
+SKIPPING=""; [ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS, which gird-check.ps1 knows by /System/Library/CoreServices"
+has    "so is its LaunchAgent"                         '~/Library/LaunchAgents/com\.apple\.sysmond\.plist a LaunchAgent of the trojanized Claude Code extension, not Apple.s' "$WORK/dz-cxs.txt"
+SKIPPING=""
+hasnot "and none is a file to check"                   'a startup file to check|has the name of a file' "$WORK/dz-cxs.txt"
+has    "its files alone: its fix comes first, then the act-now fix for the files" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up.* 2\. Treat this machine as compromised\. Delete the startup files listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cxs.txt"
+has    "its files alone: the link names its fix"      '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxs.txt"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
+has    "on Linux, the extension's tunnel script is its sign too" 'Editor extensions signs of the malware found .*~/\.config/\.smt the trojanized Claude Code extension.s reverse SSH tunnel script' "$WORK/dz-cxs.txt"
+hasnot "and its macOS LaunchAgent is not looked for there" 'com\.apple\.sysmond\.plist a LaunchAgent' "$WORK/dz-cxs.txt"
+SKIPPING=""
+# The key it adds to ~/.ssh/authorized_keys, found by the key itself: on its own line, after options with
+# another comment, but never a different key that carries its comment.
+CX_KEY='AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P'
+CX_OTHER="AAAAC3NzaC1lZDI1NTE5AAAAI$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 43)"
+for k in dz-cxk dz-cxko dz-cxkn dz-cxku; do rm -rf "${WORK:?}/$k"; cp -R "$WORK/clean" "$WORK/$k"; mkdir -p "$WORK/$k/.ssh"; done
+# Without OpenCode's files, whose platform row would outrank a partial check in row 05.
+rm -rf "$WORK/dz-cxku/.local/share/opencode"
+printf 'ssh-ed25519 %s me@laptop\nssh-ed25519 %s svc-telemetry\n' "$CX_OTHER" "$CX_KEY" > "$WORK/dz-cxk/.ssh/authorized_keys"
+printf 'from="10.0.0.1",no-pty ssh-ed25519 %s backup@host\r\n' "$CX_KEY" > "$WORK/dz-cxko/.ssh/authorized_keys"
+printf 'ssh-ed25519 %s svc-telemetry\n# ssh-ed25519 notes %s\n' "$CX_OTHER" "${CX_KEY}x" > "$WORK/dz-cxkn/.ssh/authorized_keys"
+printf 'ssh-ed25519 %s svc-telemetry\n' "$CX_KEY" > "$WORK/dz-cxku/.ssh/authorized_keys"; chmod 000 "$WORK/dz-cxku/.ssh/authorized_keys"
+for k in dz-cxk dz-cxko dz-cxkn dz-cxku; do dzrun "$WORK/$k" | tr -s ' \n' '  ' > "$WORK/$k.txt"; dzrun "$WORK/$k" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/$k-sum.txt"; done
+chmod 600 "$WORK/dz-cxku/.ssh/authorized_keys"
+has    "the attacker's key in authorized_keys is a sign of the trojanized extension" 'Editor extensions signs of the malware found ~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker Trojanized Claude Code extension, October 2026' "$WORK/dz-cxk.txt"
+has    "the key alone: its fix comes first, then removing the key and rotating" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up.* 2\. Treat this machine as compromised\. Remove the SSH key listed in section 5 from ~/\.ssh/authorized_keys and rotate every key this machine could reach\.' "$WORK/dz-cxk.txt"
+has    "the key alone: the summary row"               'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cxk-sum.txt"
+has    "the key alone: the link names its fix"        '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cxk.txt"
+has    "the key after options, with another comment, still counts" '~/\.ssh/authorized_keys the SSH key the trojanized Claude Code extension adds for the attacker' "$WORK/dz-cxko.txt"
+hasnot "another key with its comment is not flagged"  'trojanized Claude Code|Trojanized Claude Code' "$WORK/dz-cxkn.txt"
+has    "and leaves the extensions row green"          'Editor extensions +none of [0-9]+ bad versions' "$WORK/dz-cxkn.txt"
+has    "an authorized_keys it can't read is not fully checked" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxku.txt"
+has    "and row 05 says authorized_keys was not fully checked" 'Recent leaks +SSH logins not fully checked: file unreadable' "$WORK/dz-cxku-sum.txt"
+rm -rf "$WORK/dz-cxkd"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkd"; chmod 000 "$WORK/dz-cxkd/.ssh"
+dzrun "$WORK/dz-cxkd" | tr -s ' \n' '  ' > "$WORK/dz-cxkd.txt"; chmod 700 "$WORK/dz-cxkd/.ssh"
+has    "a .ssh folder it can't open is not fully checked either" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkd.txt"
+# A pipe at authorized_keys is never read, as a read of one waits for ever, and one over the size every
+# file read is held to (16 MiB) is not read either: each is named not fully checked. The run gets 60 s
+# and is killed and failed after.
+rm -rf "$WORK/dz-cxkp" "$WORK/dz-cxkb"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkp"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkb"
+rm -f "$WORK/dz-cxkp/.ssh/authorized_keys"; mkfifo "$WORK/dz-cxkp/.ssh/authorized_keys"
+python3 -c 'import sys; f = open(sys.argv[1], "r+b"); f.truncate(16777217)' "$WORK/dz-cxkb/.ssh/authorized_keys"
+dzrun "$WORK/dz-cxkp" > "$WORK/dz-cxkp-raw.txt" &
+BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/dz-cxkp-raw.txt"; fi
+wait "$BP" 2>/dev/null
+tr -s ' \n' '  ' < "$WORK/dz-cxkp-raw.txt" > "$WORK/dz-cxkp.txt"
+dzrun "$WORK/dz-cxkb" | tr -s ' \n' '  ' > "$WORK/dz-cxkb.txt"
+has    "a pipe at authorized_keys does not hold up the check" 'Your AI Exposure Check' "$WORK/dz-cxkp.txt"
+has    "and is not fully checked"                       'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkp.txt"
+has    "an authorized_keys over 16 MiB is not fully checked" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkb.txt"
+# The extension's startup files are looked for by their paths: with ~/.config closed, whether .smt is
+# there can't be told, so the row is not green.
+rm -rf "$WORK/dz-cxkc"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkc"; rm -f "$WORK/dz-cxkc/.ssh/authorized_keys"
+mkdir -p "$WORK/dz-cxkc/.config"; : > "$WORK/dz-cxkc/.config/.smt"; chmod 000 "$WORK/dz-cxkc/.config"
+dzrun "$WORK/dz-cxkc" | tr -s ' \n' '  ' > "$WORK/dz-cxkc.txt"; chmod 755 "$WORK/dz-cxkc/.config"
+has    "with a home folder not read, the extensions row says so" '! Editor extensions none of [0-9]+ bad versions or [0-9]+ bad extensions, but some folders in your home were not read' "$WORK/dz-cxkc.txt"
 # GlassWorm's LaunchAgent next to another incident's extension (Nx Console) is a file to check, not
 # GlassWorm's sign: people name their own LaunchAgents that way.
 rm -rf "$WORK/dz-nxgw"; cp -R "$WORK/dz-nx" "$WORK/dz-nxgw"; mkdir -p "$WORK/dz-nxgw/Library/LaunchAgents"; : > "$WORK/dz-nxgw/Library/LaunchAgents/com.user.nodestart.plist"
@@ -2460,6 +2873,18 @@ hasnot "a version of it the post does not name is not flagged" 'quartz-markdown-
 has    "a GlassWASM clone in an Open VSX editor's folder is malware" '~/\.cursor/extensions/exargd\.vsblack-0\.0\.1 exargd\.vsblack 0\.0\.1 \(GlassWASM extensions, June 2026\), installed' "$WORK/dz-gw2.txt"
 has    "with Socket's sourced line"                   'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage\. socket\.dev' "$WORK/dz-gw2.txt"
 hasnot "the clean Marketplace original in VS Code's own folder is not flagged" 'noellee-doc' "$WORK/dz-gw2.txt"
+# Checkmarx's Open VSX extensions (Wiz, March 2026): the two builds published to Open VSX, in an Open VSX
+# editor's folder, with Wiz's sourced line and the incident's advice; not in VS Code's own folder, where Wiz
+# says the Marketplace's versions appear unaffected, nor at another version.
+rm -rf "$WORK/dz-cmx"; cp -R "$WORK/clean" "$WORK/dz-cmx"
+mkdir -p "$WORK/dz-cmx/.cursor/extensions/checkmarx.ast-results-2.53.0" "$WORK/dz-cmx/.windsurf/extensions/checkmarx.cx-dev-assist-1.7.0" \
+  "$WORK/dz-cmx/.vscode/extensions/checkmarx.ast-results-2.53.0" "$WORK/dz-cmx/.cursor/extensions/checkmarx.ast-results-2.52.0"
+dzrun "$WORK/dz-cmx" | tr -s ' \n' '  ' > "$WORK/dz-cmx.txt"
+has    "Checkmarx's ast-results 2.53.0 in an Open VSX editor's folder is malware" '~/\.cursor/extensions/checkmarx\.ast-results-2\.53\.0 checkmarx\.ast-results 2\.53\.0 \(Checkmarx Open VSX extensions, March 2026\), installed' "$WORK/dz-cmx.txt"
+has    "and its cx-dev-assist 1.7.0"                   '~/\.windsurf/extensions/checkmarx\.cx-dev-assist-1\.7\.0 checkmarx\.cx-dev-assist 1\.7\.0 \(Checkmarx Open VSX extensions, March 2026\), installed' "$WORK/dz-cmx.txt"
+has    "with Wiz's sourced line for the Checkmarx extensions" 'Checkmarx Open VSX extensions, March 2026: on activation, fetched and ran a credential stealer where cloud credentials were found\. wiz\.io' "$WORK/dz-cmx.txt"
+has    "and the advice on the service they add"        'On Linux, also check your systemd user services for one you did not add: off CI, this malware adds one that fetches more code every 50 minutes\.' "$WORK/dz-cmx.txt"
+hasnot "the same version in VS Code's own folder is not flagged, nor another version" '\.vscode/extensions/checkmarx|ast-results-2\.52\.0|ast-results 2\.52\.0' "$WORK/dz-cmx.txt"
 # Codex reads a trusted project's .codex/config.toml above the user's file, and a project may set its approvals
 # and sandbox (its docs and config loader): the same settings count there. ~/.codex/config.toml is the person's own.
 rm -rf "$WORK/cxp"; mkdir -p "$WORK/cxp/.codex" "$WORK/cxp/code/p/.codex" "$WORK/cxp/code/q/.codex" "$WORK/cxp/code/r/.codex" "$WORK/cxp/AppData/Roaming" "$WORK/cxp/AppData/Local/Temp"
@@ -2642,6 +3067,22 @@ done
 has    "Claude Code past 2.1.179 is told the newest fix, with its hole" '! Claude Code 2\.1\.259, update to 2\.1\.260 or later A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-' "$WORK/dz-cc2.1.259.txt"
 has    "below the newest fix's range the row still names it, not 2.1.179, which has a hole of its own" '! Claude Code 2\.0\.67, update to 2\.1\.260 or later A plugin repository could install code that bypasses its pinned hash\. github\.com/advisories/GHSA-pq7j-f95f-qfcv' "$WORK/dz-cc2.0.67.txt"
 hasnot "and it does not show the newest fix's hole, which that version does not have" 'A stored API key could start sessions' "$WORK/dz-cc2.0.67.txt"
+# GHSA-5xjx-9qx6-jcrv, below 2.1.251: the Edit tool race its advisory describes on macOS. On a Mac, 2.1.250 has
+# that hole beside the newest fix's; 2.1.251 does not; on Linux it is not listed.
+for V in 2.1.250 2.1.251; do
+  rm -rf "$WORK/dz-cc$V"; cp -R "$WORK/clean" "$WORK/dz-cc$V"; mkdir -p "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code"
+  printf '{\n  "name": "@anthropic-ai/claude-code",\n  "version": "%s"\n}\n' "$V" > "$WORK/dz-cc$V/.npm-global/lib/node_modules/@anthropic-ai/claude-code/package.json"
+  dzrun "$WORK/dz-cc$V" | tr -s ' \n' '  ' > "$WORK/dz-cc$V-mac.txt"
+done
+cp "$WORK/dz-cc2.1.250-mac.txt" "$WORK/dz-cc2.1.250-linux.txt"
+[ "$(uname -s)" = Darwin ] || SKIPPING="needs pwsh on macOS"
+has    "on a Mac, Claude Code below 2.1.251 shows the Edit tool race" '! Claude Code 2\.1\.250, update to 2\.1\.260 or later A stored API key could start sessions without the managed settings of an Enterprise or Team organization\. github\.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-[a-z0-9]+ Code a malicious repository runs in its sandbox could make it write files outside the workspace\. github\.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv' "$WORK/dz-cc2.1.250-mac.txt"
+SKIPPING=""
+has    "2.1.251, its fix, shows only the newest fix's hole" '! Claude Code 2\.1\.251, update to 2\.1\.260 or later A stored API key' "$WORK/dz-cc2.1.251-mac.txt"
+hasnot "and not the Edit tool race"                    'write files outside the workspace' "$WORK/dz-cc2.1.251-mac.txt"
+[ "$(uname -s)" = Linux ] || SKIPPING="needs pwsh on Linux, as in CI"
+hasnot "on Linux the Edit tool race is not listed"     'write files outside the workspace' "$WORK/dz-cc2.1.250-linux.txt"
+SKIPPING=""
 mkdir -p "$WORK/dz-os/.cursor/extensions/littensy-studio.magical-icons-1.0.61"
 dzrun "$WORK/dz-os" | tr -s ' \n' '  ' > "$WORK/dz-os2.txt"
 has    "next to malware that could run here, it is listed with why" 'Editor extensions signs of the malware found ~/\.cursor/extensions/littensy-studio\.magical-icons-1\.0\.61 .*~/\.vscode/extensions/microsoftvs\.microsoftvs-1\.0\.2 microsoftvs\.microsoftvs 1\.0\.2 \(GlassWorm-linked themes, December 2025\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/dz-os2.txt"
@@ -2902,6 +3343,240 @@ has    "and its older autoApprove"                     '! ~/code/i/\.vscode/sett
 hasnot "near miss: manual approvals in a project are not listed" 'code/f/' "$WORK/s4.txt"
 has    "a project's bypass settings for Claude Code's VS Code extension, which it applied before 2.1.225" '! ~/code/g/\.vscode/settings\.json Set to start Claude Code.s VS Code extension in bypassPermissions, with claudeCode\.initialPermissionMode and claudeCode\.allowDangerouslySkipPermissions\. The extension applies them from a project only before version 2\.1\.225\.' "$WORK/s4.txt"
 hasnot "near miss: initialPermissionMode without the allow setting is not listed" 'code/h/' "$WORK/s4.txt"
+# Saved rules that let an agent run commands on other machines without asking (data/remote-commands.tsv):
+# a rule hits a command when its fixed words and the command's agree as far as the shorter goes, and a
+# deny or ask rule the agent applies over it drops the hit. One hit and one near miss per format.
+rm -rf "$WORK/rc"; cp -R "$WORK/clean" "$WORK/rc"
+mkdir -p "$WORK/rc/.claude" "$WORK/rc/code/p1/.claude" "$WORK/rc/code/p2/.claude" "$WORK/rc/.codex/rules" "$WORK/rc/.gemini/policies" "$WORK/rc/AppData/Roaming/Code/User" "$WORK/rc/.aws/amazonq/cli-agents"
+printf '{"permissions": {"allow": ["Bash", "Bash(aws ssm send-command:*)", "Bash(ssh *)", "PowerShell(invoke-command *)", "Bash(aws s3 ls *)", "Bash(ssh-keygen:*)", "Bash(git:*)", "Bash(echo \\"],[\\" *)", "Bash(az ssh vm *)"],\n  "ask": ["Bash(az ssh *)", "Bash(az vm run-command invoke *)"], "deny": ["Bash(kubectl *)"]}}\n' > "$WORK/rc/.claude/settings.json"
+printf '{"permissions": {"allow": ["Bash(aws:*)", "Bash(kubectl exec *)", "Bash(gcloud compute ssh*)"]}}\n' > "$WORK/rc/code/p1/.claude/settings.local.json"
+printf '{"permissions": {"deny": ["Bash(aws ssm *)"]}}\n' > "$WORK/rc/code/p1/.claude/settings.json"
+printf '{"permissions": {"allow": ["Bash(ssh*)"]}}\n' > "$WORK/rc/code/p2/.claude/settings.json"
+printf 'prefix_rule(pattern=["kubectl", "exec"], decision="allow")\nprefix_rule(pattern=["git", "status"], decision="allow")\n' > "$WORK/rc/.codex/rules/default.rules"
+printf "prefix_rule(pattern=['ssh'], decision='allow')\n" > "$WORK/rc/.codex/rules/hand.rules"
+printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = [ "ssh", "ls" ]\ndecision = "allow"\npriority = 950\n\n[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "ssh"\ndecision = "deny"\npriority = 100\n\n[[rule]]\ntoolName = "run_shell_command"\ncommandRegex = "git (status|log)"\ndecision = "allow"\npriority = 950\n' > "$WORK/rc/.gemini/policies/auto-saved.toml"
+printf '{"tools": {"allowed": ["run_shell_command(aws ecs execute-command)", "run_shell_command(npm test)"]}}\n' > "$WORK/rc/.gemini/settings.json"
+printf '{\n  // terminal\n  "chat.tools.terminal.autoApprove": {"/^SSH\\\\b/i": true, "npm": true, "kubectl": {"approve": true}, "kubectl exec": false},\n  "roo-cline.allowedCommands": ["Aws ecs", "kubectl", "npm test"],\n  "roo-cline.deniedCommands": ["kubectl exec"]\n}\n' > "$WORK/rc/AppData/Roaming/Code/User/settings.json"
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["ssh .*", "git status"]}}}\n' > "$WORK/rc/.aws/amazonq/cli-agents/dev.json"
+dzrun "$WORK/rc" | tr -s ' \n' '  ' > "$WORK/rc.txt"
+has    "remote commands: an allow rule for aws ssm send-command is listed" 'Allowed to run commands on other machines without asking ! Claude Code ~/\.claude/settings\.json Bash\(aws ssm send-command \*\): runs commands on AWS servers' "$WORK/rc.txt"
+has    "remote commands: and one for ssh" 'Bash\(ssh \*\): runs commands on other machines over SSH' "$WORK/rc.txt"
+has    "remote commands: a PowerShell rule matches without case" 'PowerShell\(invoke-command \*\): runs commands on other machines with PowerShell' "$WORK/rc.txt"
+hasnot "remote commands: near miss: aws s3, ssh-keygen and git are not listed" 'Bash\((aws s3|ssh-keygen|git)' "$WORK/rc.txt"
+hasnot "remote commands: a rule with escaped quotes and brackets is read, and allows nothing remote" 'Bash\(echo' "$WORK/rc.txt"
+hasnot "remote commands: an allow rule an ask rule covers is not listed" 'Bash\(az ssh' "$WORK/rc.txt"
+hasnot "remote commands: a rule only in ask is not listed" 'Bash\(az vm' "$WORK/rc.txt"
+hasnot "remote commands: an allow rule for every command is left to the list above" ' Bash(\([* :]*\))?: (runs|allows)' "$WORK/rc.txt"
+has    "remote commands: a project's local rule for aws lists what a project deny leaves" '! Claude Code ~/code/p1/\.claude/settings\.local\.json Bash\(aws \*\): allows every aws command, including ones that run commands in AWS containers Bash\(gcloud compute ssh\*\): runs commands on Google Cloud servers' "$WORK/rc.txt"
+hasnot "remote commands: a user deny drops a project's allow rule" 'Bash\(kubectl exec' "$WORK/rc.txt"
+has    "remote commands: a shared project file is listed as applying once trusted" '! ~/code/p2/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: Bash\(ssh\*\)\. Claude Code applies a project.s allow rules once you trust the folder\.' "$WORK/rc.txt"
+has    "remote commands: a Codex rule is listed" '! Codex ~/\.codex/rules/default\.rules kubectl exec \*: runs commands in Kubernetes containers !' "$WORK/rc.txt"
+hasnot "remote commands: near miss: a Codex rule for git is not" 'git status \*: runs' "$WORK/rc.txt"
+has    "remote commands: a Codex file it can't read in full is named as not read" 'could not be read, so the servers, tokens and settings in them were not checked: .*\.codex/rules/hand\.rules' "$WORK/rc.txt"
+has    "remote commands: a Gemini CLI policy is listed, over a deny of lower priority" '! Gemini CLI ~/\.gemini/policies/auto-saved\.toml ssh \*: runs commands on other machines over SSH !' "$WORK/rc.txt"
+has    "remote commands: and Gemini CLI's tools.allowed" '! Gemini CLI ~/\.gemini/settings\.json aws ecs execute-command \*: runs commands in AWS containers' "$WORK/rc.txt"
+hasnot "remote commands: near miss: Gemini CLI rules for ls, git and npm are not" '(ls \*|git \(status\|log\)|npm test \*): (runs|allows)' "$WORK/rc.txt"
+has    "remote commands: a VS Code regex with the i flag is listed" "! VS Code Copilot ~/AppData/Roaming/Code/User/settings\.json /\^SSH\\\\b/i: runs commands on other machines over SSH !" "$WORK/rc.txt"
+hasnot "remote commands: near miss: VS Code's false wins over true" 'kubectl \*: (runs|allows)' "$WORK/rc.txt"
+has    "remote commands: a Roo Code entry matches without case" "! Roo Code ~/AppData/Roaming/Code/User/settings\.json Aws ecs\*: allows every Aws ecs\* command, including ones that run commands in AWS containers, while its auto-approve for commands is on" "$WORK/rc.txt"
+hasnot "remote commands: near miss: a longer Roo Code deny wins" 'kubectl\*: (runs|allows)' "$WORK/rc.txt"
+has    "remote commands: an Amazon Q agent's allowed command is listed" '! Amazon Q ~/\.aws/amazonq/cli-agents/dev\.json ssh \.\*: runs commands on other machines over SSH, when you use that agent' "$WORK/rc.txt"
+has    "remote commands: the fix says to remove the rules or ask first" 'Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first\.' "$WORK/rc.txt"
+rm -rf "$WORK/rc1"; cp -R "$WORK/clean" "$WORK/rc1"; mkdir -p "$WORK/rc1/.codex/rules"
+printf 'prefix_rule(pattern=["ssh"])\n' > "$WORK/rc1/.codex/rules/default.rules"
+dzrun "$WORK/rc1" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/rc1-c.txt"
+has    "remote commands: row 01 counts the agents" 'Coding agents [0-9]+ found, 1 can run commands on other machines' "$WORK/rc1-c.txt"
+# A deny or ask rule drops a hit only when nothing narrows it after its wildcard; a rule with no
+# wildcard counts only with more words than the command; an open rule shorter than the command
+# allows every such command.
+rm -rf "$WORK/rcm"; cp -R "$WORK/clean" "$WORK/rcm"; mkdir -p "$WORK/rcm/.claude" "$WORK/rcm/AppData/Roaming/Code/User"
+printf '{"permissions": {"allow": ["Bash(ssh:*)", "Bash(aws:*)", "Bash(kubectl:*)", "Bash(gcloud compute ssh)", "Bash(az ssh vm --ip 10.0.0.1)"],\n  "deny": ["Bash(* --force)", "Bash(ssh * rm)", "Bash(aws * delete*)", "Bash(kubectl exec*)"]}}\n' > "$WORK/rcm/.claude/settings.json"
+printf '{"chat.tools.terminal.autoApprove": {"kubectl exec": true, "/^kubectl exec .* rm$/": false}}\n' > "$WORK/rcm/AppData/Roaming/Code/User/settings.json"
+dzrun "$WORK/rcm" | tr -s ' \n' '  ' > "$WORK/rcm.txt"
+has    "remote commands: a deny with text after its wildcard does not drop a rule" 'Bash\(ssh \*\): runs commands on other machines over SSH' "$WORK/rcm.txt"
+has    "remote commands: an open rule shorter than the command allows every such command" 'Bash\(aws \*\): allows every aws command, including ones that run commands on AWS servers and in AWS containers' "$WORK/rcm.txt"
+hasnot "remote commands: a deny ending in a glued wildcard drops a rule" 'Bash\(kubectl' "$WORK/rcm.txt"
+hasnot "remote commands: an exact rule with no more words than the command is not listed" 'Bash\(gcloud' "$WORK/rcm.txt"
+has    "remote commands: a VS Code false regex with text after its wildcard does not drop a rule" 'kubectl exec \*: runs commands in Kubernetes containers' "$WORK/rcm.txt"
+# Codex rules as its README writes them, spaces around = and across lines, and its prompt and forbidden rules.
+rm -rf "$WORK/rcx"; cp -R "$WORK/clean" "$WORK/rcx"; mkdir -p "$WORK/rcx/.codex/rules"
+printf 'prefix_rule(\n    pattern = ["aws", "ecs"],\n    decision = "allow",\n)\nprefix_rule(pattern = ["kubectl", "exec"], decision = "allow")\nprefix_rule(pattern = ["ssh"], decision = "allow")\nprefix_rule(pattern = ["ssh"], decision = "prompt")\nprefix_rule(pattern = ["gcloud", "compute"], decision = "allow")\nprefix_rule(pattern = ["gcloud"], decision = "forbidden")\n' > "$WORK/rcx/.codex/rules/default.rules"
+dzrun "$WORK/rcx" | tr -s ' \n' '  ' > "$WORK/rcx.txt"
+has    "remote commands: a Codex rule written across lines with spaces around = is listed" 'aws ecs \*: allows every aws ecs command, including ones that run commands in AWS containers' "$WORK/rcx.txt"
+has    "remote commands: and one on one line" 'kubectl exec \*: runs commands in Kubernetes containers' "$WORK/rcx.txt"
+hasnot "remote commands: a Codex prompt rule drops an allow rule" 'ssh \*: ' "$WORK/rcx.txt"
+hasnot "remote commands: a Codex forbidden rule drops an allow rule" 'gcloud compute \*' "$WORK/rcx.txt"
+# Gemini CLI: priorities, ask_user, tools.exclude, a regex shown as written, and modes.
+rm -rf "$WORK/rcg"; cp -R "$WORK/clean" "$WORK/rcg"; mkdir -p "$WORK/rcg/.gemini/policies"
+{ printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "kubectl exec"\ndecision = "allow"\npriority = 300\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "ssh"\ndecision = "allow"\npriority = 950\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "ssh"\ndecision = "ask_user"\npriority = 960\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandRegex = "az ssh vm .*"\ndecision = "allow"\npriority = 950\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "gcloud compute ssh"\ndecision = "allow"\npriority = 950\nmodes = ["yolo"]\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "aws ecs execute-command"\ndecision = "allow"\npriority = 950\nmodes = ["autoEdit", "yolo"]\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "az vm run-command invoke"\ndecision = "allow"\npriority = 950\n\n'
+  printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "az vm run-command invoke"\ndecision = "deny"\npriority = 999\nmodes = ["yolo"]\n'; } > "$WORK/rcg/.gemini/policies/a.toml"
+printf '{"tools": {"exclude": ["run_shell_command"]}}\n' > "$WORK/rcg/.gemini/settings.json"
+dzrun "$WORK/rcg" | tr -s ' \n' '  ' > "$WORK/rcg.txt"
+hasnot "remote commands: Gemini CLI's tools.exclude drops a policy of lower priority" 'kubectl' "$WORK/rcg.txt"
+hasnot "remote commands: a Gemini CLI ask_user rule of higher priority drops an allow rule" 'ssh \*: ' "$WORK/rcg.txt"
+has    "remote commands: a Gemini CLI regex is shown as written" 'az ssh vm \.\*: runs commands on Azure servers' "$WORK/rcg.txt"
+hasnot "remote commands: a Gemini CLI rule for yolo mode alone is not listed" 'gcloud' "$WORK/rcg.txt"
+has    "remote commands: a Gemini CLI deny for yolo mode alone does not drop an allow rule" 'az vm run-command invoke \*: runs commands on Azure servers' "$WORK/rcg.txt"
+has    "remote commands: a Gemini CLI rule for other modes says so" 'aws ecs execute-command \*: runs commands in AWS containers, only in autoEdit and yolo modes' "$WORK/rcg.txt"
+# Amazon Q: deniedCommands, and execute_cmd, the tool's name on Windows only.
+rm -rf "$WORK/rcq"; cp -R "$WORK/clean" "$WORK/rcq"; mkdir -p "$WORK/rcq/.aws/amazonq/cli-agents"
+KF="tok$(upper 24)"
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["kubectl exec .*", "az ssh vm .*", "ssh .* TOKEN=%s"], "deniedCommands": ["kubectl .*", "az ssh vm .* --rm"]}, "execute_cmd": {"allowedCommands": ["ssh .*"]}}}\n' "$KF" > "$WORK/rcq/.aws/amazonq/cli-agents/a.json"
+dzrun "$WORK/rcq" | tr -s ' \n' '  ' > "$WORK/rcq.txt"
+hasnot "remote commands: an Amazon Q denied command drops an allowed one" 'kubectl' "$WORK/rcq.txt"
+has    "remote commands: an Amazon Q denied command with more after its .* does not" 'az ssh vm \.\*: runs commands on Azure servers' "$WORK/rcq.txt"
+has    "remote commands: a regex with more after its command's words is shown only as far as them" 'ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rcq.txt"
+hasnot "remote commands: and the key in it is not printed" "$KF" "$WORK/rcq.txt"
+hasnot "remote commands: off Windows, Amazon Q's execute_cmd is not read" 'ssh \.\*: ' "$WORK/rcq.txt"
+rm -rf "$WORK/rcw"; cp -R "$WORK/rcq" "$WORK/rcw"
+dzrun "$WORK/rcw" OS=Windows_NT | tr -s ' \n' '  ' > "$WORK/rcw.txt"
+has    "remote commands: on Windows, Amazon Q's execute_cmd is read" 'ssh \.\*: runs commands on other machines over SSH' "$WORK/rcw.txt"
+hasnot "remote commands: and its execute_bash is not" 'az ssh vm' "$WORK/rcw.txt"
+# A rule that matches one exact command is never listed; a prefix rule with a host is.
+rm -rf "$WORK/rce"; cp -R "$WORK/clean" "$WORK/rce"; mkdir -p "$WORK/rce/.claude" "$WORK/rce/.codex/rules"
+printf '{"permissions": {"allow": ["Bash(ssh -T git@github.com)", "Bash(ssh prod-1)", "Bash(kubectl exec --help)", "Bash(az ssh vm --ip 10.0.0.1)"]}}\n' > "$WORK/rce/.claude/settings.json"
+printf 'prefix_rule(pattern=["ssh", "prod"])\n' > "$WORK/rce/.codex/rules/default.rules"
+dzrun "$WORK/rce" | tr -s ' \n' '  ' > "$WORK/rce.txt"
+hasnot "remote commands: a Claude Code rule for one exact command is not listed" 'Bash\((ssh|kubectl|az)' "$WORK/rce.txt"
+has    "remote commands: a Codex prefix rule with a host is listed" '! Codex ~/\.codex/rules/default\.rules ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rce.txt"
+# An Amazon Q regex literal to its end is one exact command, its words apart by a space, \s or an escaped space.
+rm -rf "$WORK/rcr"; cp -R "$WORK/clean" "$WORK/rcr"; mkdir -p "$WORK/rcr/.aws/amazonq/cli-agents"
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["^ssh prod$", "^ssh\\\\sprod$", "^ssh\\\\ -T\\\\ git@github\\\\.com$", "^ssh\\\\s.*"]}}}\n' > "$WORK/rcr/.aws/amazonq/cli-agents/a.json"
+dzrun "$WORK/rcr" | tr -s ' \n' '  ' > "$WORK/rcr.txt"
+hasnot "remote commands: an Amazon Q regex for one exact command is not listed" '\^ssh( prod|\\sprod|\\ -T)' "$WORK/rcr.txt"
+has    "remote commands: an Amazon Q regex with a space class then .* is listed" '\^ssh\\s\.\*: runs commands on other machines over SSH' "$WORK/rcr.txt"
+# ~/.claude/settings.local.json is the home folder's local file: Claude Code reads it only in sessions
+# started there. Its deny rules leave the person's own allow rules and the projects', and its own allow
+# rules are listed for the home folder, under the deny rules of ~/.claude/settings.json.
+rm -rf "$WORK/rch"; cp -R "$WORK/clean" "$WORK/rch"; mkdir -p "$WORK/rch/.claude" "$WORK/rch/code/p1/.claude"
+printf '{"permissions": {"allow": ["Bash(ssh *)"], "deny": ["Bash(az *)"]}}\n' > "$WORK/rch/.claude/settings.json"
+printf '{"permissions": {"allow": ["Bash(gcloud compute ssh *)", "Bash(az ssh vm *)"], "deny": ["Bash(ssh *)", "Bash(kubectl *)"]}}\n' > "$WORK/rch/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["Bash(kubectl exec *)"]}}\n' > "$WORK/rch/code/p1/.claude/settings.local.json"
+dzrun "$WORK/rch" | tr -s ' \n' '  ' > "$WORK/rch.txt"
+has    "remote commands: a deny in ~/.claude/settings.local.json leaves the person's own allow rule" '! Claude Code ~/\.claude/settings\.json Bash\(ssh \*\): runs commands on other machines over SSH' "$WORK/rch.txt"
+has    "remote commands: and a project's" '! Claude Code ~/code/p1/\.claude/settings\.local\.json Bash\(kubectl exec \*\): runs commands in Kubernetes containers' "$WORK/rch.txt"
+has    "remote commands: an allow rule in ~/.claude/settings.local.json is listed for the home folder" '! Claude Code ~/\.claude/settings\.local\.json Bash\(gcloud compute ssh \*\): runs commands on Google Cloud servers, only in sessions you start in your home folder' "$WORK/rch.txt"
+hasnot "remote commands: under the deny rules of ~/.claude/settings.json" 'Bash\(az ssh' "$WORK/rch.txt"
+# Claude Code's Bash and PowerShell are two tools: a deny of one leaves the other's allow rules.
+# PowerShell rules match without case, and two that differ only in case are each listed. A rule with
+# more after its wildcard is shown with ..., and in section 2 the note that a project's allow rules wait
+# for trust follows the last of them.
+rm -rf "$WORK/rct"; cp -R "$WORK/clean" "$WORK/rct"; mkdir -p "$WORK/rct/.claude" "$WORK/rct/code/p/.claude" "$WORK/rct/code/q/.claude"
+printf '{"permissions": {"allow": ["Bash(ssh *)", "PowerShell(Invoke-Command *)", "PowerShell(invoke-command *)", "PowerShell(Kubectl Exec *)", "Bash(KUBECTL exec *)", "PowerShell(aws ssm *)", "Bash(az ssh vm * --rm)"],\n  "deny": ["PowerShell(ssh *)", "Bash(Invoke-Command *)", "PowerShell(AWS *)"]}}\n' > "$WORK/rct/.claude/settings.json"
+printf '{"permissions": {"allow": ["PowerShell(gcloud compute ssh *)", "Bash(kubectl exec *)"], "deny": ["Bash"]}}\n' > "$WORK/rct/code/p/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["Bash", "PowerShell(Enter-PSSession *)"]}}\n' > "$WORK/rct/code/q/.claude/settings.json"
+dzrun "$WORK/rct" | tr -s ' \n' '  ' > "$WORK/rct.txt"
+has    "remote commands: a PowerShell deny leaves a Bash allow rule" 'Bash\(ssh \*\): runs commands on other machines over SSH' "$WORK/rct.txt"
+has    "remote commands: and a Bash deny a PowerShell one, listed with its twin in another case" 'PowerShell\(Invoke-Command \*\): runs commands on other machines with PowerShell PowerShell\(invoke-command \*\): runs commands on other machines with PowerShell' "$WORK/rct.txt"
+has    "remote commands: a PowerShell rule matches a command without case" 'PowerShell\(Kubectl Exec \*\): runs commands in Kubernetes containers' "$WORK/rct.txt"
+hasnot "remote commands: near miss: a Bash rule matches with case" 'Bash\(KUBECTL' "$WORK/rct.txt"
+hasnot "remote commands: a PowerShell deny matches without case too" 'PowerShell\(aws' "$WORK/rct.txt"
+has    "remote commands: a rule with more after its wildcard is shown with ..." 'Bash\(az ssh vm \.\.\.\): runs commands on Azure servers' "$WORK/rct.txt"
+has    "remote commands: a deny of Bash alone leaves PowerShell's rules" '! Claude Code ~/code/p/\.claude/settings\.local\.json PowerShell\(gcloud compute ssh \*\): runs commands on Google Cloud servers' "$WORK/rct.txt"
+hasnot "remote commands: and drops Bash's" 'Bash\(kubectl exec' "$WORK/rct.txt"
+has    "remote commands: the note that a project's rules wait for trust follows the last of them" '! ~/code/q/\.claude/settings\.json Set to run every Bash command without asking, with permissions\.allow: Bash, run commands on other machines without asking, with permissions\.allow: PowerShell\(Enter-PSSession \*\)\. Claude Code applies a project.s allow rules once you trust the folder\.' "$WORK/rct.txt"
+# A rule that allows every command is listed, in every format: but Claude Code's Bash allowed whole in a
+# file section 1 or 2 lists for it, which says so there. One with text after its wildcard is not.
+# chat.tools.terminal.enableAutoApprove set to false turns off a VS Code settings file's rules.
+rm -rf "$WORK/rca"; cp -R "$WORK/clean" "$WORK/rca"
+mkdir -p "$WORK/rca/.claude" "$WORK/rca/code/a/.claude" "$WORK/rca/code/b/.claude" "$WORK/rca/.gemini/policies" "$WORK/rca/AppData/Roaming/Code/User" "$WORK/rca/AppData/Roaming/Code - Insiders/User" "$WORK/rca/.aws/amazonq/cli-agents"
+printf '{"permissions": {"allow": ["PowerShell", "Bash(* --version)"]}}\n' > "$WORK/rca/.claude/settings.json"
+printf '{"permissions": {"allow": ["Bash"]}}\n' > "$WORK/rca/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["PowerShell(*)"]}}\n' > "$WORK/rca/code/a/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["PowerShell"]}}\n' > "$WORK/rca/code/b/.claude/settings.json"
+printf '{"tools": {"allowed": ["run_shell_command"]}}\n' > "$WORK/rca/.gemini/settings.json"
+printf '[[rule]]\ntoolName = "run_shell_command"\ndecision = "allow"\npriority = 100\n' > "$WORK/rca/.gemini/policies/a.toml"
+printf '{"roo-cline.allowedCommands": ["*"], "chat.tools.terminal.autoApprove": {"/.*/": true}}\n' > "$WORK/rca/AppData/Roaming/Code/User/settings.json"
+printf '{"chat.tools.terminal.enableAutoApprove": false, "chat.tools.terminal.autoApprove": {"kubectl exec": true}}\n' > "$WORK/rca/AppData/Roaming/Code - Insiders/User/settings.json"
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": [".*"]}}}\n' > "$WORK/rca/.aws/amazonq/cli-agents/a.json"
+dzrun "$WORK/rca" | tr -s ' \n' '  ' > "$WORK/rca.txt"
+has    "remote commands: PowerShell allowed whole is listed as allowing every command" '! Claude Code ~/\.claude/settings\.json PowerShell: allows every command, including ones that run commands on other machines over SSH' "$WORK/rca.txt"
+hasnot "remote commands: near miss: a rule with text after its wildcard alone is not" '\* --version' "$WORK/rca.txt"
+has    "remote commands: and Bash in ~/.claude/settings.local.json, which section 1 does not list" '! Claude Code ~/\.claude/settings\.local\.json Bash: allows every command, including ones that run commands on other machines over SSH' "$WORK/rca.txt"
+has    "remote commands: and PowerShell(*) in a project's local file" '! Claude Code ~/code/a/\.claude/settings\.local\.json PowerShell\(\*\): allows every command' "$WORK/rca.txt"
+has    "remote commands: and PowerShell in a project's shared file, in section 2" '! ~/code/b/\.claude/settings\.json Set to run every command without asking, with permissions\.allow: PowerShell\. Claude Code applies' "$WORK/rca.txt"
+has    "remote commands: Gemini CLI's shell tool allowed whole" '! Gemini CLI ~/\.gemini/settings\.json run_shell_command: allows every command' "$WORK/rca.txt"
+has    "remote commands: and a Gemini CLI policy with no command" '! Gemini CLI ~/\.gemini/policies/a\.toml run_shell_command: allows every command' "$WORK/rca.txt"
+has    "remote commands: a VS Code regex for every command" "! VS Code Copilot ~/AppData/Roaming/Code/User/settings\.json /\.\*/: allows every command" "$WORK/rca.txt"
+has    "remote commands: Roo Code's * alone" "! Roo Code ~/AppData/Roaming/Code/User/settings\.json \*: allows every command, including" "$WORK/rca.txt"
+has    "remote commands: Amazon Q's .* alone" '! Amazon Q ~/\.aws/amazonq/cli-agents/a\.json \.\*: allows every command, including' "$WORK/rca.txt"
+hasnot "remote commands: VS Code's enableAutoApprove set to false turns off the file's rules" 'kubectl exec \*: ' "$WORK/rca.txt"
+# Codex: canonical_matching=True matches without case, and the words after a list follow each of it.
+rm -rf "$WORK/rcc"; cp -R "$WORK/clean" "$WORK/rcc"; mkdir -p "$WORK/rcc/.codex/rules"
+printf 'prefix_rule(pattern=["Kubectl", "Exec"], canonical_matching=True)\nprefix_rule(pattern=["GCLOUD", "compute", "ssh"])\nprefix_rule(pattern=["kubectl", "exec"])\nprefix_rule(pattern=["kubectl", ["exec", "cp"], "-n", "prod"], decision="forbidden")\nprefix_rule(pattern=[["az", "oc"], "ssh", "vm"])\n' > "$WORK/rcc/.codex/rules/default.rules"
+dzrun "$WORK/rcc" | tr -s ' \n' '  ' > "$WORK/rcc.txt"
+has    "remote commands: a Codex rule with canonical_matching matches without case" 'Kubectl Exec \*: runs commands in Kubernetes containers' "$WORK/rcc.txt"
+hasnot "remote commands: near miss: one without it matches with case" 'GCLOUD' "$WORK/rcc.txt"
+has    "remote commands: a Codex deny with words after its list covers only those" 'kubectl exec \*: runs commands in Kubernetes containers' "$WORK/rcc.txt"
+has    "remote commands: a Codex list is read with the words after it" 'az ssh vm \*: runs commands on Azure servers' "$WORK/rcc.txt"
+# Gemini CLI: a rule with a key or a string this does not read is not taken as a rule with no command,
+# which a deny would make cover every command, and its file is named as not read in full.
+rm -rf "$WORK/rcn"; cp -R "$WORK/clean" "$WORK/rcn"; mkdir -p "$WORK/rcn/.gemini/policies"
+printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "ssh"\ndecision = "allow"\npriority = 500\n\n[[rule]]\ntoolName = "run_shell_command"\n"commandPrefix" = "rm"\ndecision = "deny"\npriority = 900\n' > "$WORK/rcn/.gemini/policies/a.toml"
+printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "kubectl exec"\ndecision = "allow"\npriority = 500\n\n[[rule]]\ntoolName = "run_shell_command"\ncommandRegex = """\nrm .*"""\ndecision = "deny"\npriority = 900\n' > "$WORK/rcn/.gemini/policies/b.toml"
+dzrun "$WORK/rcn" | tr -s ' \n' '  ' > "$WORK/rcn.txt"
+has    "remote commands: a Gemini CLI deny with a quoted key is not read as a deny of every command" 'ssh \*: runs commands on other machines over SSH' "$WORK/rcn.txt"
+has    "remote commands: nor one with a multi-line string" 'kubectl exec \*: runs commands in Kubernetes containers' "$WORK/rcn.txt"
+has    "remote commands: and both files are named as not read in full" 'could not be read, so the servers, tokens and settings in them were not checked: ~/\.gemini/policies/a\.toml ~/\.gemini/policies/b\.toml' "$WORK/rcn.txt"
+# A regex is shown only as far as the words it shares with the command when more follows, so no part of
+# a key in it is printed, whatever characters split the key.
+rm -rf "$WORK/rck"; cp -R "$WORK/clean" "$WORK/rck"; mkdir -p "$WORK/rck/.aws/amazonq/cli-agents" "$WORK/rck/.gemini/policies"
+K1=$(upper 10); K2=$(upper 10); K3=$(upper 10); K4=$(upper 10); E1=$(upper 5); E2=$(upper 6)
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["kubectl exec .* --secret %s/%s+%s/%s"]}}}\n' "$K1" "$K2" "$K3" "$K4" > "$WORK/rck/.aws/amazonq/cli-agents/a.json"
+printf '[[rule]]\ntoolName = "run_shell_command"\ncommandRegex = "az ssh vm .* -p %s~%s.%s~%s"\ndecision = "allow"\npriority = 500\n' "$E1" "$E2" "$K3" "$K4" > "$WORK/rck/.gemini/policies/a.toml"
+dzrun "$WORK/rck" | tr -s ' \n' '  ' > "$WORK/rck.txt"
+has    "remote commands: an Amazon Q regex with a key after its command's words is listed" '! Amazon Q ~/\.aws/amazonq/cli-agents/a\.json kubectl exec \.\.\.: runs commands in Kubernetes containers' "$WORK/rck.txt"
+has    "remote commands: and a Gemini CLI one" '! Gemini CLI ~/\.gemini/policies/a\.toml az ssh vm \.\.\.: runs commands on Azure servers' "$WORK/rck.txt"
+hasnot "remote commands: and no part of either key is printed" "$K1|$K2|$K3|$K4|$E1~|$E2" "$WORK/rck.txt"
+# Two rule files that can't be read are each named as not read, and counted.
+rm -rf "$WORK/rcu"; cp -R "$WORK/clean" "$WORK/rcu"; mkdir -p "$WORK/rcu/.codex/rules" "$WORK/rcu/.gemini/policies"
+printf 'prefix_rule(pattern=["ssh"])\n' > "$WORK/rcu/.codex/rules/a.rules"; printf '[[rule]]\n' > "$WORK/rcu/.gemini/policies/b.toml"
+chmod 000 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
+dzrun "$WORK/rcu" | tr -s ' \n' '  ' > "$WORK/rcu.txt"
+chmod 644 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
+has    "remote commands: two rule files that can't be read are each named as not read" '2 config or settings files could not be read, so the servers, tokens and settings in them were not checked: ~/\.codex/rules/a\.rules ~/\.gemini/policies/b\.toml' "$WORK/rcu.txt"
+# Rules read in linear time: a project's settings file and a Codex rules file of 800 KB, each a string
+# of escaped quotes, and one of spaces between two strings. They took over a minute.
+rm -rf "$WORK/rcbig"; cp -R "$WORK/clean" "$WORK/rcbig"; mkdir -p "$WORK/rcbig/code/x/.claude" "$WORK/rcbig/.codex/rules"
+python3 - "$WORK/rcbig" <<'PY3'
+import sys
+h = sys.argv[1]; q = '\\"' * 400000
+open(h + '/code/x/.claude/settings.json', 'w').write('{"permissions": {"allow": ["Bash(ssh *)", "' + q + '"]}}\n')
+open(h + '/code/x/.claude/settings.local.json', 'w').write('{"permissions": {"allow": ["Bash(kubectl exec *)",' + ' ' * 800000 + '"x"]}}\n')
+open(h + '/.codex/rules/big.rules', 'w').write('prefix_rule(pattern=["ssh", "' + q + '"])\n')
+PY3
+T0=$(date +%s); dzrun "$WORK/rcbig" | tr -s ' \n' '  ' > "$WORK/rcbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "remote commands: a rule beside 800 KB of escaped quotes is read" '! ~/code/x/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: Bash\(ssh \*\)' "$WORK/rcbig.txt"
+has    "remote commands: and one before 800 KB of spaces" '! Claude Code ~/code/x/\.claude/settings\.local\.json Bash\(kubectl exec \*\): runs' "$WORK/rcbig.txt"
+has    "remote commands: and a Codex rule with a token of 800 KB of them" '! Codex ~/\.codex/rules/big\.rules ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rcbig.txt"
+if [ "$T" -le 60 ]; then ok "remote commands: and in linear time" "${T}s"; else bad "remote commands: and in linear time" "took ${T}s"; fi
+# Deep brackets cost memory in proportion: only values within 8 brackets are listed, so a settings
+# file of 30,000 nested arrays (60 KB, which took 1 GB in bash and 1.8 GB in PowerShell) costs about
+# what a small one does, and the rule beside them is still read.
+PEAK_PY='import resource, subprocess, sys
+subprocess.run(sys.argv[2:], stdin=subprocess.DEVNULL, stdout=open(sys.argv[1], "w"), stderr=subprocess.STDOUT)
+r = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+print(r // (1048576 if sys.platform == "darwin" else 1024))'
+for _d in 0 30000; do
+  rm -rf "$WORK/rcdeep$_d"; cp -R "$WORK/clean" "$WORK/rcdeep$_d"; mkdir -p "$WORK/rcdeep$_d/code/x/.claude"
+  python3 -c 'import sys; d = int(sys.argv[2]); open(sys.argv[1], "w").write("{\"permissions\": {\"allow\": [\"Bash(ssh *)\", " + "[" * d + "\"x\"" + "]" * d + "]}}\n")' "$WORK/rcdeep$_d/code/x/.claude/settings.json" "$_d"
+done
+for _d in 0 30000; do
+  _h="$WORK/rcdeep$_d"
+  _m=$(python3 -c "$PEAK_PY" "$WORK/rcdeep$_d.txt" /usr/bin/env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$_h" APPDATA="$_h/AppData/Roaming" \
+    LOCALAPPDATA="$_h/AppData/Local" TEMP="$_h/AppData/Local/Temp" LANG=en_US.UTF-8 "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline)
+  if [ "$_d" = 0 ]; then M0=$_m; else M1=$_m; fi
+done
+tr -s ' \n' '  ' < "$WORK/rcdeep30000.txt" > "$WORK/rcdeep.txt"
+has    "remote commands: a rule beside 30,000 nested brackets is read" '! ~/code/x/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: Bash\(ssh \*\)' "$WORK/rcdeep.txt"
+if [ "$((M1 - M0))" -le 150 ]; then ok "remote commands: and the brackets cost about what a small file does" "${M0} MB, ${M1} MB"
+else bad "remote commands: and the brackets cost about what a small file does" "${M0} MB, then ${M1} MB"; fi
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/AppData/Roaming/Code/User" "$WORK/dz-unr/AppData/Roaming/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/AppData/Roaming/Code/User/settings.json" > "$WORK/dz-unr/AppData/Roaming/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.
@@ -2946,6 +3621,131 @@ dz_blocks() { grep -aoE 'Agents set to run commands without asking.*02 MCP SERVE
 if [ -n "$(dz_blocks "$WORK/dz-hit-flat.txt")" ] && [ "$(dz_blocks "$WORK/dz-hit-flat.txt")" = "$(dz_blocks "$WORK/dz-b-flat.txt")" ]; then ok "sections 1 and 2 read the same as gird-check.sh's"
 else bad "sections 1 and 2 read the same as gird-check.sh's"; diff <(dz_blocks "$WORK/dz-b-flat.txt" | tr '!' '\n') <(dz_blocks "$WORK/dz-hit-flat.txt" | tr '!' '\n') | head -n 6; fi
 
+echo "GitHub Actions that were compromised"
+# Workflows in a home of their own (tests/make-fixture.sh has none), built as harmless YAML: a use of a
+# listed action by a tag the source names, by a tag it does not, pinned to a malicious commit, pinned to
+# another commit, and pinned where the source says pins ran it too.
+GA=$WORK/ga; rm -rf "$GA"; mkdir -p "$GA/code/hit/.github/workflows" "$GA/code/pin/.github/workflows" "$GA/code/rd/.github/workflows" "$GA/code/ok/.github/workflows/old" "$GA/AppData/Roaming" "$GA/AppData/Local/Temp"
+GA_BAD=a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d; GA_OTHER=$(printf '%040d' 7)
+printf 'jobs:\n  close:\n    steps:\n      - uses: actions/checkout@v4\n      - name: close\n        uses: actions-cool/issues-helper@v3   # close inactive\n      # - uses: xygeni/xygeni-action@v5\n      - uses: "tj-actions/changed-files@v44.5.1"\n      - uses: tj-actions/changed-files@v46\n      - uses: '"'"'Aquasecurity/trivy-action@0.28.0'"'"'\n      - uses: aquasecurity/trivy-action@0.35.0\n      - uses: actions-cool/issues-helper-next@v3\n' > "$GA/code/hit/.github/workflows/issues.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: actions-cool/issues-helper@%s # v2.2.1\n      - uses: actions-cool/maintain-one-comment@%s\n' "$GA_BAD" "$GA_OTHER" > "$GA/code/pin/.github/workflows/ci.yaml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: reviewdog/action-shellcheck@%s\n' "$GA_OTHER" > "$GA/code/rd/.github/workflows/lint.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4\n' > "$GA/code/ok/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: xygeni/xygeni-action@v5\n' > "$GA/code/ok/.github/workflows/old/kept.yml"
+# A CRLF workflow, a commit written in capitals twice (one row), a reusable workflow, the pin the trivy-action
+# advisory names safe, and a kics-github-action tag published after the attack.
+mkdir -p "$GA/code/crlf/.github/workflows" "$GA/code/more/.github/workflows"
+printf 'jobs:\r\n  a:\r\n    steps:\r\n      - uses: aquasecurity/setup-trivy@v0.2.3\r\n' > "$GA/code/crlf/.github/workflows/w.yml"
+GA_UP=$(printf '%s' "$GA_BAD" | tr 'a-f' 'A-F')
+printf 'jobs:\n  a:\n    uses: tj-actions/changed-files/.github/workflows/x.yml@v45\n  b:\n    steps:\n      - uses: actions-cool/issues-helper@%s\n      - uses: actions-cool/issues-helper@%s\n      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1\n      - uses: Checkmarx/kics-github-action@v2.2.1\n' "$GA_UP" "$GA_BAD" > "$GA/code/more/.github/workflows/w.yml"
+GA_N=$(grep -v '^#' data/actions.tsv | grep -c .)
+GA_RUN() { if [ -n "${3:-}" ]; then psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline; else psrun "$1" -- -Offline; fi 2>&1 | tr -s ' \n' '  ' > "$2"; }
+GA_RUN "$GA" "$GA/out.txt"; GA_RUN "$GA" "$GA/sum.txt" compact
+has    "a listed action used by a tag the source names is a project to check" 'GitHub Actions +5 projects use an action that was compromised ~/code/crlf/\.github/workflows/w\.yml Uses aquasecurity/setup-trivy@v0\.2\.3, .* ~/code/hit/\.github/workflows/issues\.yml Uses actions-cool/issues-helper@v3, compromised from 18 May 2026\.' "$GA/out.txt"
+has    "a quoted use is read"                           'Uses tj-actions/changed-files@v44\.5\.1, compromised on 14 and 15 March 2025\.' "$GA/out.txt"
+has    "the owner and name are compared without case"   'Uses aquasecurity/trivy-action@0\.28\.0, compromised on 19 and 20 March 2026\.' "$GA/out.txt"
+hasnot "a tag the source does not name is not flagged"  'changed-files@v46|trivy-action@0\.35\.0' "$GA/out.txt"
+hasnot "a longer name that starts with a listed one is not flagged" 'issues-helper-next' "$GA/out.txt"
+hasnot "a commented-out use is not read"                'xygeni' "$GA/out.txt"
+has    "a CRLF workflow is read"                         '~/code/crlf/\.github/workflows/w\.yml Uses aquasecurity/setup-trivy@v0\.2\.3, compromised on 19 March 2026, about 17:43 to 21:44 UTC\.' "$GA/out.txt"
+has    "a reusable workflow of a listed repository is read" 'Uses tj-actions/changed-files@v45, compromised on 14 and 15 March 2025' "$GA/out.txt"
+# One row in ~/code/pin and one in ~/code/more, where the commit is written twice.
+if [ "$(grep -o 'Uses actions-cool/issues-helper pinned to a commit the source lists' "$GA/out.txt" | grep -c .)" -eq 2 ]; then ok "the same commit written in capitals and in lowercase is one row"
+else bad "the same commit written in capitals and in lowercase is one row"; fi
+hasnot "a pin to the release the source names safe is not flagged" 'trivy-action pinned' "$GA/out.txt"
+hasnot "a tag published after the attack is not flagged" 'kics-github-action' "$GA/out.txt"
+has    "a pin to a commit the source lists is flagged"  '~/code/pin/\.github/workflows/ci\.yaml Uses actions-cool/issues-helper pinned to a commit the source lists as malicious' "$GA/out.txt"
+hasnot "a pin to any other commit is not flagged"       'maintain-one-comment' "$GA/out.txt"
+has    "a pin is flagged where the source says pins ran it too" '~/code/rd/\.github/workflows/lint\.yml Uses reviewdog/action-shellcheck pinned to a commit, compromised on 11 March 2025' "$GA/out.txt"
+has    "it says what to check if the workflows ran then" "If these workflows ran in the window shown for each, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions\[bot\] that you didn't make\." "$GA/out.txt"
+has    "and adds a fix to What to do"                   'If the workflows section 5 lists ran while their GitHub Action was compromised, check their run logs from then, rotate the secrets' "$GA/out.txt"
+hasnot "it never calls the machine compromised"         'ACT NOW|Treat this machine as compromised|signs of' "$GA/out.txt"
+has    "row 05 names the projects"                      'Recent leaks +5 projects use a compromised GitHub Action' "$GA/sum.txt"
+rm -rf "$GA/code/hit" "$GA/code/pin" "$GA/code/rd" "$GA/code/crlf" "$GA/code/more"
+GA_RUN "$GA" "$GA/clean.txt"
+has    "workflows with no listed action read clean, a subfolder's workflow not read" "GitHub Actions +none of $GA_N compromised actions in 1 workflow file" "$GA/clean.txt"
+chmod 000 "$GA/code/ok/.github/workflows/ci.yml"
+GA_RUN "$GA" "$GA/unread.txt"; GA_RUN "$GA" "$GA/unread-sum.txt" compact
+chmod 644 "$GA/code/ok/.github/workflows/ci.yml"
+has    "a workflow file that cannot be read is not called clean" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$GA/unread.txt"
+has    "and row 05 says so"                             'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
+mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
+GA_RUN "$GA" "$GA/partial.txt"
+chmod 755 "$GA/code/locked"
+has    "a folder the scan cannot read leaves the row not fully checked" 'GitHub Actions +not fully checked: some folders were not read' "$GA/partial.txt"
+# Tags and pins the sources set apart: every tag of tj-actions/changed-files was moved, the -sec ones too,
+# and two came out after the attack; tj-actions/eslint-changed-files ran it in the versions that used
+# reviewdog/action-setup@v1 or a tag of changed-files, not in those that pinned both or came after; and a
+# trivy-action pin to a release from after 9 April 2025 fetched no compromised setup-trivy.
+GT=$WORK/ga-tags; rm -rf "$GT"; mkdir -p "$GT/AppData/Roaming" "$GT/AppData/Local/Temp"
+for _p in sec late es esok tv tvold; do mkdir -p "$GT/code/$_p/.github/workflows"; done
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v35-sec\n' > "$GT/code/sec/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v45.0.8\n      - uses: tj-actions/changed-files@v45.0.9\n' > "$GT/code/late/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/eslint-changed-files@v24\n      - uses: tj-actions/eslint-changed-files@74f98653675512158746d3136cd2d9326fbfb6e1\n' > "$GT/code/es/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/eslint-changed-files@v18.3.2\n      - uses: tj-actions/eslint-changed-files@v25.3.2\n      - uses: tj-actions/eslint-changed-files@536c35c8184b8bbd361d3703aa63439e0895c340\n' > "$GT/code/esok/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.31.0\n      - uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # v0.34.0\n      - uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478 # 0.34.2\n' > "$GT/code/tv/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0\n' > "$GT/code/tvold/.github/workflows/ci.yml"
+GA_RUN "$GT" "$GT/out.txt"
+has    "a -sec tag of tj-actions/changed-files is flagged" '~/code/sec/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35-sec, compromised on 14 and 15 March 2025\.' "$GT/out.txt"
+hasnot "its two releases after the attack are not"       'changed-files@v45\.0\.[89]' "$GT/out.txt"
+has    "tj-actions/eslint-changed-files by a tag that ran it is flagged" '~/code/es/\.github/workflows/ci\.yml Uses tj-actions/eslint-changed-files@v24, compromised on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025\.' "$GT/out.txt"
+has    "and pinned to a release that ran it"             'Uses tj-actions/eslint-changed-files pinned to a commit, compromised on 11 March 2025, 18:42 to 20:31 UTC' "$GT/out.txt"
+hasnot "but not by a release that pinned both, nor one from after the attack" '~/code/esok/' "$GT/out.txt"
+hasnot "a trivy-action pin to a release from after 9 April 2025 is not flagged" '~/code/tv/' "$GT/out.txt"
+has    "a trivy-action pin to an earlier release is"     '~/code/tvold/\.github/workflows/ci\.yml Uses aquasecurity/trivy-action pinned to a commit, compromised on 19 and 20 March 2026\.' "$GT/out.txt"
+# A flow-style step ({uses: ...}), a uses: with its value on the next line, a step in a flow sequence, and
+# the workflows of a repo 4 or 5 folders down (the scan reads the workflows of every .github folder it
+# reaches) are read; a flow-style step in a comment, and a repo 6 folders down, past the scan, are not. A
+# workflows folder down there that can't be read leaves the row not fully checked.
+GB=$WORK/gb; rm -rf "$GB"; mkdir -p "$GB/code/a/.github/workflows" "$GB/src/github.com/org/repo/.github/workflows" "$GB/a/b/c/d/repo/.github/workflows" \
+  "$GB/a/b/c/d/e/repo/.github/workflows" "$GB/AppData/Roaming" "$GB/AppData/Local/Temp"
+printf 'jobs:\n  a:\n    steps:\n      - {uses: tj-actions/changed-files@v40, name: x}\n      - {name: y, uses: "tj-actions/changed-files@v41"}\n      - uses:\n          tj-actions/changed-files@v42\n      # - {uses: tj-actions/changed-files@v43}\n  b:\n    steps: [{uses: actions/checkout@v4}, {uses: tj-actions/changed-files@v44}]\n' > "$GB/code/a/.github/workflows/ci.yml"
+# A # inside a quoted name is not a comment, a quote written twice included, and a flow mapping written
+# over several lines ends its value with a comma; a flow-style step after a quoted name in a comment
+# is still not read.
+printf 'jobs:\n  a:\n    steps:\n      - {name: "Check #1", uses: tj-actions/changed-files@v31}\n      - {name: %s, uses: tj-actions/changed-files@v32}\n      - {name: "x"} # {uses: tj-actions/changed-files@v33}\n      - {\n          name: "Check #3",\n          uses: tj-actions/changed-files@v45.0.7,\n        }\n' "'it''s #2'" > "$GB/code/a/.github/workflows/q.yml"
+for _d in src/github.com/org/repo:v35:yml a/b/c/d/repo:v36:yaml a/b/c/d/e/repo:v37:yml; do
+  printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@%s\n' "$(echo "$_d" | cut -d: -f2)" > "$GB/${_d%%:*}/.github/workflows/ci.$(echo "$_d" | cut -d: -f3)"
+done
+GA_RUN "$GB" "$GB/out.txt"
+has    "a flow-style step is read"                      'Uses tj-actions/changed-files@v40, compromised on 14 and 15 March 2025' "$GB/out.txt"
+has    "and one whose uses: comes after its name"       'Uses tj-actions/changed-files@v41, compromised' "$GB/out.txt"
+has    "a uses: with its value on the next line is read" 'Uses tj-actions/changed-files@v42, compromised' "$GB/out.txt"
+hasnot "a flow-style step in a comment is not read"     'changed-files@v43' "$GB/out.txt"
+has    "a # inside a quoted name does not cut off the uses: after it" 'Uses tj-actions/changed-files@v31, compromised' "$GB/out.txt"
+has    "nor one in single quotes with a quote written twice" 'Uses tj-actions/changed-files@v32, compromised' "$GB/out.txt"
+hasnot "a flow-style step after a quoted name, in a comment, is not read" 'changed-files@v33' "$GB/out.txt"
+has    "a flow mapping over several lines: the comma after the value is not in the ref" 'Uses tj-actions/changed-files@v45\.0\.7, compromised' "$GB/out.txt"
+# An apostrophe in a plain name is plain text: the comment after it is still a comment, and a uses:
+# before a comment on such a line is still read.
+GD=$WORK/gd; rm -rf "$GD"; mkdir -p "$GD/code/a/.github/workflows" "$GD/AppData/Roaming" "$GD/AppData/Local/Temp"
+printf "jobs:\n  a:\n    steps:\n      - {name: Don't cache, uses: actions/checkout@v4} # was: {uses: tj-actions/changed-files@v38}\n      - {name: it's ok, uses: tj-actions/changed-files@v39} # note\n" > "$GD/code/a/.github/workflows/ci.yml"
+GA_RUN "$GD" "$GD/out.txt"
+hasnot "an apostrophe in a plain name does not hide the comment after it" 'changed-files@v38' "$GD/out.txt"
+has    "and a uses: before a comment on such a line is read" 'Uses tj-actions/changed-files@v39, compromised' "$GD/out.txt"
+has    "a step in a flow sequence is read"              'Uses tj-actions/changed-files@v44, compromised' "$GB/out.txt"
+has    "the workflows of a repo 4 folders down are read" '~/src/github\.com/org/repo/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35' "$GB/out.txt"
+has    "and those of a repo 5 folders down"             '~/a/b/c/d/repo/\.github/workflows/ci\.yaml Uses tj-actions/changed-files@v36' "$GB/out.txt"
+hasnot "a repo 6 folders down, past the scan, is not read" 'changed-files@v37' "$GB/out.txt"
+SKIPPING=""; [ "${EUID:-$(id -u)}" -eq 0 ] && SKIPPING="running as root, which reads a folder with no read permission"
+rm -rf "$GB/code/a" "$GB/a"; chmod 000 "$GB/src/github.com/org/repo/.github/workflows"
+GA_RUN "$GB" "$GB/deep.txt"
+chmod 755 "$GB/src/github.com/org/repo/.github/workflows"
+has    "a workflows folder that far down that can't be read leaves the row not fully checked" 'GitHub Actions +not fully checked' "$GB/deep.txt"
+SKIPPING=""
+# A ref pattern with a range that runs down, such as v[9-1], which tools/gen.sh refuses, put in a copy
+# of the script: PowerShell's -clike throws on it, and gird-check.ps1 reads it as matching nothing and
+# counts the workflow as not read; bash's case reads it as matching nothing. Either way a use another
+# pattern of the line matches is flagged, and the report reaches its end.
+GR=$WORK/ga-rev; rm -rf "$GR"; mkdir -p "$GR/code/r/.github/workflows" "$GR/code/s/.github/workflows" "$GR/AppData/Roaming" "$GR/AppData/Local/Temp"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@0.28.0\n' > "$GR/code/r/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@v5\n' > "$GR/code/s/.github/workflows/ci.yml"
+sed "s#^\(  ,@('aquasecurity/trivy-action', 'aquasecurity/trivy-action', '\)#\1v[9-1] #" "$SCRIPT" > "$WORK/ga-rev.ps1"
+env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$GR" APPDATA="$GR/AppData/Roaming" LOCALAPPDATA="$GR/AppData/Local" TEMP="$GR/AppData/Local/Temp" \
+  LANG=en_US.UTF-8 "$PWSH" -NoProfile -NonInteractive -File "$WORK/ga-rev.ps1" -Offline 2>&1 | tr -s ' \n' '  ' > "$GR/out.txt"
+has    "a ref pattern with a range that runs down: a use another pattern matches is flagged, and the report ends" 'Uses aquasecurity/trivy-action@0\.28\.0, compromised.*Your AI Exposure Check' "$GR/out.txt"
+has    "and the workflows it is tried on: bash reads them, PowerShell counts them as not read" 'GitHub Actions .*2 workflow files could not be read' "$GR/out.txt"
+
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
 # package to a copy's data files and runs gen.sh there; it fails if any code changed.
@@ -2959,7 +3759,7 @@ mups() { # home out [compact]
 mups "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +14 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +16 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -2968,7 +3768,7 @@ has    "made-up Python package: the link flags it"    '&ll=0&.*&py=1&' "$WORK/mu
 has    "made-up planted file and its note"            '~/code/made/\.vscode/madeplant\.js a file the Made worm plants' "$WORK/mu.txt"
 has    "a hook that runs it, with the general note"   '~/code/made/\.claude/settings\.json runs a file a worm plants' "$WORK/mu.txt"
 has    "a made-up planted file with its published SHA-256 counts on its own" '~/code/made/hash/\.claude/madeboot\.mjs a file the Made worm plants' "$WORK/mu.txt"
-has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, with nothing else of theirs beside it' "$WORK/mu.txt"
+has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, but no file that only the malware uses is beside it' "$WORK/mu.txt"
 has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/AppData/Local/Temp/\.madepy_1 ' "$WORK/mu.txt"
 has    "made-up Python incident: its startup file is in its row, with its note" 'Madepkg 9\.9\.9 +signs of the malware found .*~/\.config/madepy/boot\.py the Madepkg backdoor, started at login' "$WORK/mu.txt"
 if [ "$(grep -o 'madepy/boot\.py' "$WORK/mu.txt" | grep -c .)" -eq 1 ]; then ok "and it is not listed as npm malware too"; else bad "and it is not listed as npm malware too"; fi
@@ -2983,7 +3783,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
 mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 14 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 16 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
@@ -3002,6 +3802,7 @@ has    "made-up agent set to run without asking"      '! Made Agent ~/\.madeagen
 has    "made-up agent setting in a folder for each profile" '! Made Agent ~/\.madeagent/profiles/p1/config\.json madeMode profile' "$WORK/mu.txt"
 has    "made-up tool with a security fix"             '! Made Tool 1\.5\.0, update to 3\.0\.0 or later A made-up hole for the tests\. example\.com/madetool A second made-up hole\. example\.com/madetool2' "$WORK/mu.txt"
 has    "made-up extension that shipped malware"       '~/\.vscode/extensions/made\.ext-1\.0\.0 made\.ext 1\.0\.0 \(Made extension, October 2026\), installed' "$WORK/mu.txt"
+has    "made-up compromised GitHub Action"           '~/code/made/\.github/workflows/made\.yml Uses Made-Org/made-action@v1\.2, compromised in October 2026\. Remove it\. \(example\.com\)' "$WORK/mu.txt"
 has    "a made-up extension whose malware runs on Windows only is one to remove here" '~/\.cursor/extensions/made\.winext-2\.0\.0 made\.winext 2\.0\.0 \(Made extension, October 2026\), installed Its malware runs on Windows only, so it did not run here\. Uninstall it\.' "$WORK/mu.txt"
 # A Python incident's temp file alone: stop and delete, not "don't run Python".
 rm -rf "$WORK/mu-tmp"; cp -R "$WORK/clean" "$WORK/mu-tmp"; mkdir -p "$WORK/mu-tmp/AppData/Local/Temp"; : > "$WORK/mu-tmp/AppData/Local/Temp/.madepy_1"
@@ -3009,6 +3810,201 @@ mups "$WORK/mu-tmp" "$WORK/mu-tmp.txt"
 has    "a temp file alone: the incident's own advice, in section 5" 'Stop any process started from these files, then delete them\. Advisory: example\.com' "$WORK/mu-tmp.txt"
 has    "and in the fix"                               "Stop any process started from the files listed in section 5\. From another computer, rotate every key the machine could reach, then delete those files and follow Madepkg's advisory" "$WORK/mu-tmp.txt"
 hasnot "no environment to stop running Python in"    "Don't run Python" "$WORK/mu-tmp.txt"
+
+echo "key patterns"
+# gird-check.ps1 matches the key types with one compiled .NET regex for each pass of data/keys.tsv:
+# compiled, each must find just what the plain one finds, over the fixture home and a corpus of every
+# key type and its near misses in many contexts.
+KP=$WORK/kp; mkdir -p "$KP"
+python3 -I tests/make-keys.py corpus "$KP/corpus" 400 "$$"
+grep -E '^\$KEY_PASSES = |^\$TR_PASSES = ' "$SCRIPT" > "$KP/keys.ps1"
+find "$KP/corpus" "$WORK/home" -type f | sort > "$KP/files.txt"
+cat > "$KP/cmp.ps1" <<'PSEOF'
+. $args[0]; $o = [Text.RegularExpressions.RegexOptions]::Multiline
+$plain = @($TR_PASSES | ForEach-Object { New-Object regex($_, $o) }); $comp = @($TR_PASSES | ForEach-Object { New-Object regex($_, ($o -bor [Text.RegularExpressions.RegexOptions]::Compiled)) })
+$latin = [Text.Encoding]::GetEncoding(28591); $n = 0; $m = 0; $diff = 0
+foreach ($f in [IO.File]::ReadAllLines($args[1])) {
+  $t = [IO.File]::ReadAllText($f, $latin); $n++
+  $a = @($plain | ForEach-Object { $_.Matches($t) } | ForEach-Object { "$($_.Index):$($_.Value)" }); $b = @($comp | ForEach-Object { $_.Matches($t) } | ForEach-Object { "$($_.Index):$($_.Value)" })
+  $m += $a.Count; if (($a -join "`n") -cne ($b -join "`n")) { $diff++ }
+}
+"$n $m $diff"
+PSEOF
+"$PWSH" -NoProfile -NonInteractive -File "$KP/cmp.ps1" "$KP/keys.ps1" "$KP/files.txt" > "$KP/net.txt" 2>&1
+read -r _n _m _d < "$KP/net.txt"
+if [ "${_n:-0}" -gt 400 ] && [ "${_m:-0}" -gt 0 ] && [ "${_d:-x}" = 0 ]; then ok "net: the session engine finds what one plain alternation of the key patterns finds" "$_n files, $_m matches"
+else bad "net: the session engine finds what one plain alternation of the key patterns finds" "$(head -c 300 "$KP/net.txt")"; fi
+# ripgrep reads every session folder once a pass: count its runs, so a change that adds one shows.
+SKIPPING=$NORG
+if [ -z "$SKIPPING" ]; then
+  mkdir -p "$KP/rgshim" "$KP/rglog"
+  printf '#!/bin/bash\n[ "$1" = --version ] || /usr/bin/mktemp "%s/r.XXXXXX" > /dev/null\nexec %s "$@"\n' "$KP/rglog" "$RG" > "$KP/rgshim/rg"; chmod +x "$KP/rgshim/rg"
+  psrun "$WORK/home" PATH="$WORK/bin:$KP/rgshim" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions > "$KP/rgshim.txt" 2>&1
+  _nr=$(find "$KP/rglog" -name 'r.*' | grep -c .); _np=$(sed -n "s/^\$KEY_PASSES = @(\(.*\))\$/\1/p" "$SCRIPT" | grep -o "', '" | grep -c .); _np=$((_np + 1))
+fi
+if [ -n "$SKIPPING" ] || { [ "${_nr:-0}" -eq "${_np:-x}" ] 2>/dev/null; }; then ok "ripgrep runs once for each pass" "${_nr:-} runs, ${_np:-} passes"
+else bad "ripgrep runs once for each pass" "${_nr:-?} runs, ${_np:-?} passes"; fi
+SKIPPING=""
+
+# The new key types, case by case through the script's own Providers-In: each found and named at a
+# line start, mid-line, after an escaped newline and in an escaped quote; and not a key one character
+# short or long, with a wrong marker, as a vendor's published example, inside base64 or glued to a
+# word, unless what makes it a key is its own text (a connection string, a signed address).
+PIDS=$(sed -n "s/^\$PROVIDER_IDS = '\(.*\)'\$/\1/p" "$SCRIPT")
+{ awk '/^# >>> keys/ { on = 1 } on { print } /^# <<< public-values/ { on = 0 }' "$SCRIPT"
+  grep -E '^\$TR_KEYS = |^\$TR_PASSES = |^\$RxOpt = |^\$RxTimeout = |^\$RxKeyOpt = |^\$RxKeys = |^\$RxKeyPasses = ' "$SCRIPT"
+  awk '/^\$KeyFns = / { on = 1 } on { print } on && /^\. \(\[scriptblock\]::Create\(\$KeyFns\)\)/ { exit }' "$SCRIPT"
+  grep -E '^function Key-Norm' "$SCRIPT"
+  awk '/^function Providers-In/ { on = 1 } on { print } on && /^}/ { exit }' "$SCRIPT"
+  cat <<'PSEOF'
+$SlowFiles = New-Object System.Collections.Generic.List[string]
+function Mark-Slow([string]$f) { }
+function Read-Text([string]$f) { [IO.File]::ReadAllText($f) }
+foreach ($l in [IO.File]::ReadAllLines($args[0])) {
+  $c = $l.Split("`t")[0]
+  "$c`t" + ((Providers-In (Join-Path $args[1] "code/$c/.env")) -join ', ')
+}
+PSEOF
+} > "$KP/fns.ps1"
+python3 -I tests/make-keys.py cases "$KP/nk" "$KP/nk-man.txt" "$KP/nk-keys.txt" "$PIDS" data/public-values.tsv
+"$PWSH" -NoProfile -NonInteractive -File "$KP/fns.ps1" "$KP/nk-man.txt" "$KP/nk" > "$KP/nk-found.txt" 2>&1
+if python3 -I tests/make-keys.py check "$KP/nk-man.txt" "$KP/nk-found.txt" > "$KP/nk-check.txt"; then ok "each new key type is found and named, and its near misses are not keys" "$(grep -c . < "$KP/nk-man.txt") cases"
+else bad "each new key type is found and named, and its near misses are not keys" "$(head -n 6 "$KP/nk-check.txt" | tr '\n' '|')"; fi
+# And through the whole script: one .env file for each new key type, and all of them in one Claude
+# Code session, read by each session engine.
+python3 -I tests/make-keys.py home "$KP/nh" "$KP/nh-keys.txt" "$PIDS" .claude/projects/p/s.jsonl > "$KP/nh-names.txt"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$KP/nh" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$KP/nh-$E.txt" 2>&1
+  _miss=""; while IFS= read -r _nm; do
+    _id=$(awk -F '\t' -v n="$_nm" '$2 == n { print $1 }' data/keys.tsv)
+    grep -aqE "^ +. +~[/\\\\]code[/\\\\]${_id}[/\\\\]\\.env +$_nm\$" "$KP/nh-$E.txt" || _miss="$_miss $_nm(.env)"
+    sed -n '/Keys in agent sessions/,/^$/p' "$KP/nh-$E.txt" | tr -s ' \n' '  ' | grep -aqF "$_nm" || _miss="$_miss $_nm(session)"
+  done < "$KP/nh-names.txt"
+  if [ -s "$KP/nh-names.txt" ] && [ -z "$_miss" ]; then ok "$E: each new key type is found in a .env file and an agent session"
+  else bad "$E: each new key type is found in a .env file and an agent session" "missing:$_miss"; fi
+  if grep -aqF -f "$KP/nh-keys.txt" "$KP/nh-$E.txt"; then bad "$E: and no new key is printed"; else ok "$E: and no new key is printed"; fi
+done
+SKIPPING=""
+
+echo "data platform login files"
+# Login files are listed by name when they hold a secret, never shown. Built from pieces at run time.
+LG=$WORK/lg; _sec=$(rnd 32)
+mkdir -p "$LG"; for _h in has none env sys oth; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/has/.azure" "$LG/has/.dbt" "$LG/has/.snowflake" "$LG/none/.azure" "$LG/none/.dbt" "$LG/none/.snowflake" \
+  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf"
+printf '[{"client_id": "%s", "tenant": "t", "client_secret": "%s"}]\n' "$(rnd 8)" "$_sec" > "$LG/has/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\ntoken = %s\n' "$_sec" > "$LG/has/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n' "$_sec" > "$LG/has/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nuser = "u"\npassword = "%s"\n' "$_sec" > "$LG/has/.snowflake/connections.toml"
+printf '[{"client_id": "%s", "tenant": "t", "certificate": "/home/me/sp.pem"}]\n' "$(rnd 8)" > "$LG/none/.azure/service_principal_entries.json"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nauth_type = databricks-cli\n' > "$LG/none/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n      private_key_path: /home/me/rsa_key.p8\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\nprivate_key_file = "/home/me/rsa_key.p8"\ntoken_file_path = "/home/me/token"\n' > "$LG/none/.snowflake/connections.toml"
+cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
+# The system's own folder, as gird-check.sh picks it: Application Support on a Mac, ~/.config on Linux.
+# One home holds the file there and one in the other system's folder, which is not read.
+case "$(uname -s)" in
+  Darwin) _sfsys="Library/Application Support/snowflake"; _sfoth=".config/snowflake" ;;
+  *) _sfsys=".config/snowflake"; _sfoth="Library/Application Support/snowflake" ;;
+esac
+mkdir -p "$LG/sys/$_sfsys" "$LG/oth/$_sfoth"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/$_sfsys/config.toml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/oth/$_sfoth/config.toml"
+for _h in has none sys oth; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+psrun "$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
+_want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
+has    "lists the Azure, Databricks, dbt and Snowflake login files that hold a secret" "$_want" "$LG/has.txt"
+hasnot "but not one with only a certificate, a host, a key file's path, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
+has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
+has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
+hasnot "but not in another system's folder"           'Snowflake logins' "$LG/oth.txt"
+# The other secrets each tool's docs name, one home for each run: Databricks' azure_client_secret
+# (an Entra service principal) and password, dbt's inline private_key (a key pair with no passphrase),
+# and Snowflake's OAuth token, oauth_client_secret, private_key_raw and private_key_file_pwd.
+_pk="-----BEGIN ""PRIVATE KEY-----\\n$(rnd 64)\\n-----END ""PRIVATE KEY-----"
+for _h in s1 s2 s3 s4; do mkdir -p "$LG/$_h/.snowflake" "$LG/$_h/AppData/Roaming" "$LG/$_h/AppData/Local/Temp"; done
+mkdir -p "$LG/s1/.dbt"
+printf '[DEFAULT]\nhost = https://example.azuredatabricks.net\nazure_client_id = %s\nazure_client_secret = %s\n' "$(rnd 8)" "$_sec" > "$LG/s1/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: "%s"\n' "$_pk" > "$LG/s1/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "oauth"\ntoken = "%s"\n' "$_sec" > "$LG/s1/.snowflake/connections.toml"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nusername = me\npassword = %s\n' "$_sec" > "$LG/s2/.databrickscfg"
+printf '[default]\naccount = "a"\noauth_client_secret = "%s"\n' "$_sec" > "$LG/s2/.snowflake/connections.toml"
+printf '[default]\naccount = "a"\nprivate_key_raw = "%s"\n' "$_pk" > "$LG/s3/.snowflake/connections.toml"
+printf '[default]\naccount = "a"\nprivate_key_file = "/home/me/rsa_key.p8"\nprivate_key_file_pwd = "%s"\n' "$_sec" > "$LG/s4/.snowflake/connections.toml"
+for _h in s1 s2 s3 s4; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "lists Databricks' azure_client_secret, dbt's inline private_key and Snowflake's OAuth token" 'Databricks logins.*dbt warehouse passwords.*Snowflake logins' "$LG/s1.txt"
+has    "lists Databricks' password and Snowflake's OAuth client secret" 'Databricks logins.*Snowflake logins' "$LG/s2.txt"
+has    "lists Snowflake's inline private key"            'Snowflake logins' "$LG/s3.txt"
+has    "lists the password of Snowflake's key file"      'Snowflake logins' "$LG/s4.txt"
+if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt" "$LG/s1.txt" "$LG/s2.txt" "$LG/s4.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
+# A dbt password in single quotes is one too, and Snowflake's Windows folder is not read off Windows.
+for _h in sq win; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG/sq/.dbt" "$LG/win/AppData/Local/snowflake"
+printf "app:\n  outputs:\n    dev:\n      type: postgres\n      password: '%s'\n" "$_sec" > "$LG/sq/.dbt/profiles.yml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connections.toml"
+for _h in sq win; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
+hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
+# A dbt private_key or password written as a YAML block (| or >), as a key's PEM lines usually are: its
+# value is on the next line that is not blank, indented more than the key. A block with nothing indented
+# under it holds no secret.
+_pb="-----BEGIN ""PRIVATE KEY-----"; _pe="-----END ""PRIVATE KEY-----"
+for _h in blk blp bln; do cp -R "$WORK/clean" "$LG/$_h"; mkdir -p "$LG/$_h/.dbt"; done
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: |\n        %s\n        %s\n        %s\n' "$_pb" "$(rnd 64)" "$_pe" > "$LG/blk/.dbt/profiles.yml"
+printf 'app:\r\n  outputs:\r\n    dev:\r\n      type: postgres\r\n      password: >-\r\n\r\n        %s\r\n' "$_sec" > "$LG/blp/.dbt/profiles.yml"
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: |\n      private_key_path: /home/me/rsa_key.p8\n' > "$LG/bln/.dbt/profiles.yml"
+for _h in blk blp bln; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "a dbt private_key written as a YAML block is listed" 'dbt warehouse passwords' "$LG/blk.txt"
+has    "and a password in a folded block, its value after a blank line" 'dbt warehouse passwords' "$LG/blp.txt"
+hasnot "but not a YAML block with nothing indented under it" 'dbt warehouse passwords' "$LG/bln.txt"
+psrun "$LG/win" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/winon.txt"
+has    "Windows: Snowflake's file is read from LOCALAPPDATA" 'Snowflake logins' "$LG/winon.txt"
+
+echo "shared access signatures"
+# A shared access signature is not a key type: GitHub hands out short-lived signed links to its own
+# storage (container registry blobs, Actions artifacts) that turn up in docker and curl output, and
+# the text alone can't tell one from a signature for storage the person owns.
+SA=$WORK/sas; mkdir -p "$SA"; cp -R "$WORK/clean" "$SA/h"
+mkdir -p "$SA/h/code/blob" "$SA/h/.claude/projects/p"
+printf 'BLOB_URL=https://acct.blob.core.windows.net/c?sv=2024-11-04&sp=r&se=2099-01-01&sig=%s%%2B%s%%3D\n' "$(rnd 40)" "$(rnd 3)" > "$SA/h/code/blob/.env"
+printf '{"t":"curl -L https://pkg-containers.githubusercontent.com/ghcr1/blobs/sha256:%s?se=2099-01-01T00%%3A00%%3A00Z&sig=%s%%3D&sp=r&spr=https&sr=b&sv=2019-12-12"}\n' "$(rnd 64)" "$(rnd 43)" > "$SA/h/.claude/projects/p/s.jsonl"
+psrun "$SA/h" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SA/h.txt"
+has    "a shared access signature is not a key, in a .env file or an agent session: the check ran" 'KEYS IN PLAIN TEXT' "$SA/h.txt"
+hasnot "and names none" 'Azure Storage|shared access signature|code[/\\]blob[/\\]\.env' "$SA/h.txt"
+
+echo "published values in every section"
+# Azurite's published account key (data/public-values.tsv) is not a key wherever a key is judged: in
+# a .env file (section 3), in an MCP config (section 2) and in a Claude Code allow rule (section 4).
+# The same files with a Storage key of the same shape in its place are flagged in all three.
+PV=$WORK/pv; mkdir -p "$PV"
+_azp=$(awk -F '\t' '$1 == "azurestorage" { print $2; exit }' data/public-values.tsv)
+for _v in pub real; do
+  cp -R "$WORK/clean" "$PV/$_v"; mkdir -p "$PV/$_v/code/az/.claude"
+  if [ "$_v" = pub ]; then _k="$_azp$(rnd 46)=="; else _k="$(rnd 86)=="; fi
+  _cs="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account""Key=$_k;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;"
+  printf 'AZURE_STORAGE_CONNECTION_STRING=%s\n' "$_cs" > "$PV/$_v/code/az/.env"
+  printf '{"mcpServers":{"az":{"command":"npx","args":["-y","@azure/mcp"],"env":{"AZURE_STORAGE_CONNECTION_STRING":"%s"}}}}\n' "$_cs" > "$PV/$_v/code/az/.mcp.json"
+  printf '{"permissions":{"allow":["Bash(az storage blob list --connection-string %s)"]}}\n' "$_cs" > "$PV/$_v/code/az/.claude/settings.local.json"
+  psrun "$PV/$_v" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$PV/$_v.txt"
+done
+_d='[/\\]'
+hasnot "Azurite's published key is not a key in plain text"  "~${_d}code${_d}az${_d}\\.env Azure Storage" "$PV/pub.txt"
+has    "and a Storage key in its place is"                   "~${_d}code${_d}az${_d}\\.env Azure Storage" "$PV/real.txt"
+hasnot "nor a token in an MCP config"                       "~${_d}code${_d}az${_d}\\.mcp\\.json 1 server, token in the file" "$PV/pub.txt"
+has    "where a Storage key in its place is one"             "~${_d}code${_d}az${_d}\\.mcp\\.json 1 server, token in the file" "$PV/real.txt"
+hasnot "nor a saved command with a key in an allow rule"     "~${_d}code${_d}az${_d}\\.claude${_d}settings\\.local\\.json A saved command contains a key" "$PV/pub.txt"
+has    "where a Storage key in its place is one too"         "~${_d}code${_d}az${_d}\\.claude${_d}settings\\.local\\.json A saved command contains a key" "$PV/real.txt"
+
+echo "stopping processes"
+# gird-check.ps1 stops ripgrep through the Process object it started, $SessSt.Proc: that process alone,
+# by the handle .NET holds, never by an id it looked up and never as a tree. It does so in two places:
+# the session check's own $halt, which holds the state as $st, and Sess-Stop, as $p = $SessSt.Proc.
+_k=$(grep -n 'taskkill\|Stop-Process\|\.Kill(\|Kill(\$true)' "$SCRIPT" | grep -v '^[0-9]*:[[:space:]]*#')
+if [ "$(printf '%s\n' "$_k" | grep -c .)" = 2 ] && [ "$(printf '%s\n' "$_k" | grep -cF '$halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() }')" = 1 ] &&
+   [ "$(printf '%s\n' "$_k" | grep -cF 'if ($p) { try { $p.Kill() }')" = 1 ] && [ "$(grep -cF '$p = $SessSt.Proc' "$SCRIPT")" = 1 ] &&
+   grep -qF '$SessSt.Proc.Dispose()' "$SCRIPT"; then ok "the script stops only processes it started"
+else bad "the script stops only processes it started" "$(printf '%s' "$_k" | head -n 3 | tr '\n' '|')"; fi
 
 echo "MCP configs in plugin folders"
 cp -R "$WORK/clean" "$WORK/mcp-pl"
@@ -3057,10 +4053,15 @@ hasnot "no file is skipped"                    'skipped: took too long' "$WORK/s
 has    "the real key next to them is found"    '~/code/s/\.env +Groq' "$WORK/slow.txt"
 # With a limit too short for a large file, the file is listed, not taken as clean.
 python3 -c "import sys; open(sys.argv[1], 'w').write(('sk-' + 'a' * 40 + ' ') * 150000)" "$WORK/slow/code/s/.env.big"
+# The limit is per search for the next match, so each file is a long run of near misses with no match
+# (.env.big's keys are a few characters short): one search reads the whole file.
 mkdir -p "$WORK/slow/.npm/_cacache/index-v5/aa"
-python3 -c "import sys; open(sys.argv[1], 'w').write('pkg-name@1.2.3 /pkg-name/-/pkg-name-1.2.3.tgz ' * 200000)" "$WORK/slow/.npm/_cacache/index-v5/aa/big"
+python3 -c "import sys; open(sys.argv[1], 'w').write('pkg-name@x /pkg-name/-/pkg-name-1.2.3.tgx ' * 200000)" "$WORK/slow/.npm/_cacache/index-v5/aa/big"
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 -- -Offline > "$WORK/slow-to.txt" 2>&1
 psrun "$WORK/slow" GIRD_CHECK_REGEX_TIMEOUT_MS=1 GIRD_CHECK_COMPACT=1 -- -Offline > "$WORK/slow-to-c.txt" 2>&1
+hasnot "a search that hits the time limit never stops the run" 'Regex engine has timed out' "$WORK/slow-to.txt"
+# Matches finds its results only as they are read, so a time limit is caught only where they are read.
+hasnot "every regex's matches are read inside the try that catches its time limit" '\$[A-Za-z]+ = \$[A-Za-z]+\.Matches\(' "$SCRIPT"
 has    "a file that hits the time limit is listed" '[0-9]+ files? skipped: took too long to check' "$WORK/slow-to.txt"
 has    "with its path"                         '^ +~/code/s/\.env\.big$' "$WORK/slow-to.txt"
 has    "and the summary says so"               'skipped: took too long to check, like' "$WORK/slow-to-c.txt"
@@ -3213,6 +4214,9 @@ hasnot "the percentile line carries no count"  'of 1,234 AI builders' "$OUT"
 if python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1]) if l.strip()]' "$WORK/received.log" 2>/dev/null; then ok "the report is valid JSON"; else bad "the report is valid JSON"; fi
 has    "the device ID is a 64-character hash or empty" '"device_id":"([0-9a-f]{64})?"' "$WORK/report-ps.json"
 if grep -aqF "\"$(id -un)\"" "$WORK/received.log"; then bad "the report holds no username"; else ok "the report holds no username"; fi
+# The run shows its OWASP tags, and the shared counts carry none of them, nor does the result link.
+if grep -aq '^   OWASP Agentic Top 10: ' "$OUT" && ! grep -aqiE 'owasp|ASI[0-9]' "$WORK/received.log" && ! grep -aE 'blindspot/card/' "$OUT" | grep -aqiE 'owasp|ASI[0-9]'
+then ok "owasp: the shared counts carry no OWASP field"; else bad "owasp: the shared counts carry no OWASP field"; fi
 RID=$(grep -oE '"run_id":"[0-9a-f]{16}"' "$WORK/report-ps.json" | cut -d'"' -f4)
 has    "the result link carries the percentile" 'blindspot/card/#v=2&s=[0-9]+&g=[ABCDF]&.*&pc=72&pn=1234' "$OUT"
 has    "the link carries the report's run ID, the rank and key counts" "blindspot/card/#v=2&.*&u=${RID:-no-run-id}&r=142&sk=2&hk=2&ag=[a-z0-9.-]*&nm=[01]&py=[01]&ex=[01]&wp=[01]&lo=[01]&fi=[a-z0-9.-]*\$" "$OUT"
@@ -3376,6 +4380,116 @@ hasnot "no report holds a file name" '\.zshrc|zsh_history|python_history|bash_pr
 hasnot "no report holds a path"                        '/(Users|home|private|tmp|var)/|~/|AppData' "$WORK/received.log"
 nokeys "no report holds the extra planted keys" "$WORK/keys-places.txt" "$WORK/received.log"
 
+echo "OWASP Agentic Top 10 tags"
+# The twins of tests/run.sh's: gird-check.ps1 derives its tags from its own values, a second
+# implementation of owasp_set, so the home with every finding kind must give the same lines.
+OW=$WORK/ow; mkdir -p "$OW"
+bash tests/make-fixture.sh "$OW/all" "$OW/keys-all.txt" owasp > /dev/null; winify "$OW/all" "$OW/keys-all.txt"
+psrun "$OW/all" -- -Offline > "$OW/all.txt" 2>&1
+psrun "$OW/all" GIRD_CHECK_COMPACT=1 -- -Offline > "$OW/all-compact.txt" 2>&1
+psrun "$OW/all" GIRD_CHECK_COMPACT=1 -- -Offline -Full > "$OW/all-full.txt" 2>&1
+OW_WANT='01|     OWASP ASI02 Tool Misuse and Exploitation
+01|     OWASP ASI04 Agentic Supply Chain Vulnerabilities
+02|     OWASP ASI03 Identity and Privilege Abuse
+02|     OWASP ASI05 Unexpected Code Execution
+03|     OWASP ASI03 Identity and Privilege Abuse
+04|     OWASP ASI03 Identity and Privilege Abuse
+05|     OWASP ASI04 Agentic Supply Chain Vulnerabilities'
+OW_GOT=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s "|" $0 }' "$OW/all.txt")
+if [ "$OW_GOT" = "$OW_WANT" ]; then ok "owasp: a home with every finding kind gets exactly the section lines of its risks"
+else bad "owasp: a home with every finding kind gets exactly the section lines of its risks" "$(printf '%s' "$OW_GOT" | tr '\n' ';')"; fi
+if awk '/^  01  CODING AGENTS/ { s = 1 } /^  02  MCP SERVERS/ { s = 2 } /^  03  / { s = 3 }
+  s == 1 && /OWASP ASI02/ { a = NR } s == 1 && /OWASP ASI04/ { b = NR } s == 2 && /OWASP ASI03/ { c = NR } s == 2 && /OWASP ASI05/ { d = NR }
+  END { exit !(a && b && c && d && a < b && c < d) }' "$OW/all.txt"; then ok "owasp: two risks in one section print in code order"
+else bad "owasp: two risks in one section print in code order"; fi
+if awk '/^   05  / { r = NR } /^   OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR } /^   What to do, most urgent first/ { f = NR } END { exit !(r && o && f && r < o && o < f) }' "$OW/all-compact.txt"
+then ok "owasp: the summary lists every risk found, in code order, after row 05"; else bad "owasp: the summary lists every risk found, in code order, after row 05" "$(grep -a 'OWASP' "$OW/all-compact.txt")"; fi
+if awk '/^   0[1-5]  / { n[++k] = NR } /^   OWASP Agentic Top 10:/ { o = NR } END { exit !(k == 5 && n[5] - n[1] == 4 && o == n[5] + 2) }' "$OW/all-compact.txt"
+then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; else bad "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; fi
+if awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all.txt" \
+  && awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all-full.txt"
+then ok "owasp: --full and piped output carry the line at the end of the header"; else bad "owasp: --full and piped output carry the line at the end of the header"; fi
+for _f in "$OW/all.txt" "$OW/all-full.txt"; do
+  if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$_f"
+  then ok "owasp: --full and piped output set the line apart from the stats lines by a blank line"; else bad "owasp: --full and piped output set the line apart from the stats lines by a blank line" "$_f"; fi
+done
+if awk '/OWASP/ { n++; if (length($0) > 60) w = 1 } END { exit !(n >= 8 && !w) }' "$OW/all.txt"; then ok "owasp: every OWASP line fits the narrowest report, 60 columns"
+else bad "owasp: every OWASP line fits the narrowest report, 60 columns" "$(awk '/OWASP/ && length($0) > 60' "$OW/all.txt")"; fi
+# One kind each, as in tests/run.sh. Keys come from the fixture's random ones.
+mkdir -p "$OW/key"; printf 'export OPENAI_API_KEY=%s\n' "$(sed -n 2p "$WORK/keys.txt")" > "$OW/key/.zshrc"
+mkdir -p "$OW/yolo/.codex"; printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n' > "$OW/yolo/.codex/config.toml"
+mkdir -p "$OW/open/code/x/.claude"; printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"make setup"}]}]}}\n' > "$OW/open/code/x/.claude/settings.json"
+mkdir -p "$OW/lock/code/l"; printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$OW/lock/code/l/package-lock.json"
+mkdir -p "$OW/upd/code/m"; printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.2","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.2.tgz"}}}\n' > "$OW/upd/code/m/package-lock.json"
+mkdir -p "$OW/none"
+mkdir -p "$OW/part/code/locked"
+cp -R "$OW/key" "$OW/partf"; mkdir -p "$OW/partf/code/locked"
+mkdir -p "$OW/worm/code/p/.claude"; printf 'console.log("my own setup")\n' > "$OW/worm/code/p/.claude/setup.mjs"
+mkdir -p "$OW/login/.aws"; printf '[default]\nregion = eu-west-1\n' > "$OW/login/.aws/credentials"
+for h in key yolo open lock upd none part partf worm login; do mkdir -p "$OW/$h/AppData/Roaming" "$OW/$h/AppData/Local/Temp"; done
+chmod 000 "$OW/part/code/locked" "$OW/partf/code/locked"
+for h in key yolo open lock upd none part partf worm login; do psrun "$OW/$h" -- -Offline > "$OW/$h.txt" 2>&1; done
+chmod 755 "$OW/part/code/locked" "$OW/partf/code/locked"
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/key.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI03;03 ASI03;" ]; then ok "owasp: a key in plain text tags section 03 with ASI03"; else bad "owasp: a key in plain text tags section 03 with ASI03" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/yolo.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: run without asking tags section 01 with ASI02"; else bad "owasp: run without asking tags section 01 with ASI02" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/open.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: project settings that act on opening tag section 02 with ASI05"; else bad "owasp: project settings that act on opening tag section 02 with ASI05" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/lock.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && grep -aq 'LOCKFILE LISTS NPM MALWARE' "$OW/lock.txt"; then ok "owasp: npm malware in a lockfile alone tags section 05 with ASI04"; else bad "owasp: npm malware in a lockfile alone tags section 05 with ASI04" "$OW_ONE"; fi
+OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/upd.txt" | tr '\n' ';')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && ! grep -aq 'ACT NOW' "$OW/upd.txt"; then ok "owasp: an update-level incident alone tags section 05 with ASI04"; else bad "owasp: an update-level incident alone tags section 05 with ASI04" "$OW_ONE"; fi
+hasnot "owasp: a home with no findings has no OWASP line" 'OWASP' "$OW/none.txt"
+if grep -aq 'in your home could not be read' "$OW/part.txt" && ! grep -aq 'OWASP' "$OW/part.txt"; then ok "owasp: a partly checked home with no findings has no OWASP line and never says none"
+else bad "owasp: a partly checked home with no findings has no OWASP line and never says none" "$(grep -a 'OWASP\|could not be read' "$OW/part.txt" | head -n 3)"; fi
+if grep -aq 'in your home could not be read' "$OW/partf.txt" && grep -aq '^   OWASP Agentic Top 10: ASI03$' "$OW/partf.txt" && grep -aq '^     OWASP ASI03 Identity and Privilege Abuse$' "$OW/partf.txt"
+then ok "owasp: a partly checked home with findings keeps its tags"; else bad "owasp: a partly checked home with findings keeps its tags"; fi
+if grep -aq 'code/p/\.claude/setup\.mjs' "$OW/worm.txt" && ! grep -aq 'OWASP' "$OW/worm.txt"; then ok "owasp: a file named like a worm's, alone, carries no tag"
+else bad "owasp: a file named like a worm's, alone, carries no tag" "$(grep -a 'setup\.mjs\|OWASP' "$OW/worm.txt" | head -n 3)"; fi
+if grep -aq 'AWS keys' "$OW/login.txt" && ! grep -aq 'OWASP' "$OW/login.txt"; then ok "owasp: login files alone carry no tag"
+else bad "owasp: login files alone carry no tag" "$(grep -a 'AWS keys\|OWASP' "$OW/login.txt" | head -n 3)"; fi
+# One kind of finding per home, for the kinds the home above does not hold alone (tests/owasp-kind.sh),
+# so a wrong arm for one kind in either script fails its own test. A key in shell history is always a
+# key in a file too, so it has no home of its own.
+ow_kind() { # kind: builds its home (tests/owasp-kind.sh), runs the script on it, sets OW_ONE
+  bash tests/owasp-kind.sh "$OW/k-$1" "$1" "$WORK/keys.txt"
+  psrun "$OW/k-$1" -- -Offline > "$OW/k-$1.txt" 2>&1
+  OW_ONE=$(awk '/^  0[1-5]  [A-Z]/ { s = $1 } /^     OWASP / { print s " " $2 } /^   OWASP Agentic Top 10:/ { sub(/^   OWASP Agentic Top 10: /, ""); print "top " $0 }' "$OW/k-$1.txt" | tr '\n' ';')
+}
+ow_kind tools
+if [ "$OW_ONE" = "top ASI04;01 ASI04;" ]; then ok "owasp: a tool with a security fix alone tags section 01 with ASI04"; else bad "owasp: a tool with a security fix alone tags section 01 with ASI04" "$OW_ONE"; fi
+ow_kind ak_links
+if [ "$OW_ONE" = "top ASI03;02 ASI03;" ]; then ok "owasp: a link to authorized_keys alone tags section 02 with ASI03"; else bad "owasp: a link to authorized_keys alone tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind mcp_token
+if [ "$OW_ONE" = "top ASI03;02 ASI03;03 ASI03;" ]; then ok "owasp: a token in an MCP config tags section 02 with ASI03"; else bad "owasp: a token in an MCP config tags section 02 with ASI03" "$OW_ONE"; fi
+ow_kind sessions
+if [ "$OW_ONE" = "top ASI03;03 ASI03;" ]; then ok "owasp: a key in an agent session alone tags section 03 with ASI03"; else bad "owasp: a key in an agent session alone tags section 03 with ASI03" "$OW_ONE"; fi
+ow_kind wiper
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: gh-token-monitor alone tags section 05 with ASI04"; else bad "owasp: gh-token-monitor alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind planted
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a file a worm plants alone tags section 05 with ASI04"; else bad "owasp: a file a worm plants alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind remove
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an extension to remove alone tags section 05 with ASI04"; else bad "owasp: an extension to remove alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind platforms
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a platform with a leak alone tags section 05 with ASI04"; else bad "owasp: a platform with a leak alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind remote
+if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: a rule that runs commands on other machines alone tags section 01 with ASI02"; else bad "owasp: a rule that runs commands on other machines alone tags section 01 with ASI02" "$OW_ONE"; fi
+ow_kind autostart
+if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05"; else bad "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05" "$OW_ONE"; fi
+ow_kind ssh_planted
+# The key is also the incident of the extension that adds it, which tags section 05 with ASI04 by
+# itself, so the kind's own arm in Owasp-Set is run too, read out of the script by PowerShell's own
+# parser: with $ExtKey alone set, then empty.
+_osp=$(BS_PS1=$SCRIPT "$PWSH" -NoProfile -NonInteractive -Command '$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:BS_PS1, [ref]$null, [ref]$null); $f = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Owasp-Set" }, $true); . ([scriptblock]::Create($f.Extent.Text)); $ExtKey = @("k"); $a = Owasp-Set "ssh_planted"; $ExtKey = @(); $b = Owasp-Set "ssh_planted"; "$a $b"' 2>&1)
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && [ "$_osp" = "True False" ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE, arm: $_osp"; fi
+# The account run (-AccountRun) keeps only ids of lowercase letters, digits and - (Fleet-Ids): a key id it
+# would drop is lost from the fleet result without a word. Its function, run on $PROVIDER_IDS, read out of
+# the script by PowerShell's own parser.
+_fids=$(BS_PS1=$SCRIPT "$PWSH" -NoProfile -NonInteractive -Command '$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:BS_PS1, [ref]$null, [ref]$null); $f = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Fleet-Ids" }, $true); $a = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq ([char]36 + "PROVIDER_IDS") }, $true); . ([scriptblock]::Create($f.Extent.Text)); $ids = . ([scriptblock]::Create($a.Right.Extent.Text)); $ids + "|" + (Fleet-Ids $ids)' 2>&1)
+if [ -n "${_fids%%|*}" ] && [ "${_fids%%|*}" = "${_fids#*|}" ]; then ok "every key id passes the fleet id filter"
+else bad "every key id passes the fleet id filter" "$_fids"; fi
+
 echo "a Windows profile"
 # The profile tests/run.sh builds for Git Bash, with OS=Windows_NT so gird-check.ps1 takes the
 # Windows paths. The Windows version can't be faked here: gird-check.ps1 reads it from .NET.
@@ -3465,6 +4579,25 @@ mkdir -p "$WP/.vscode-oss/extensions/oorzc.mind-map-1.0.61"
 winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-jan.txt"
 rm -rf "$WP/.vscode-oss"
 has    "Windows: a January GlassWorm extension, whose malware runs on macOS only, is one to remove" 'Editor extensions a malicious extension to remove ~/\.vscode-oss/extensions/oorzc\.mind-map-1\.0\.61 oorzc\.mind-map 1\.0\.61 \(GlassWorm extensions, January 2026\), installed Its malware runs on macOS only, so it did not run here\. Uninstall it\.' "$WORK/win-jan.txt"
+# The trojanized Claude Code extension's files on Windows: sysmon.cmd in the Startup folder alone is a file
+# to check (Sysinternals' Sysmon shares the name); beside smt.cmd or smtk, names only that malware uses, it
+# is a sign too. Its macOS LaunchAgent and its .smt, the macOS and Linux name, are not looked for.
+WSU="${WP:?}/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+mkdir -p "${WP:?}/.config" "$WSU" "${WP:?}/Library/LaunchAgents"; : > "$WSU/sysmon.cmd"
+winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-cx0.txt"
+: > "${WP:?}/.config/smt.cmd"; : > "${WP:?}/.config/smtk"; : > "${WP:?}/.config/.smt"; : > "${WP:?}/Library/LaunchAgents/com.apple.sysmond.plist"
+winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-cx.txt"
+rm -f "${WP:?}/.config/smt.cmd" "${WP:?}/.config/smtk" "${WP:?}/.config/.smt" "$WSU/sysmon.cmd" "${WP:?}/Library/LaunchAgents/com.apple.sysmond.plist"
+has    "Windows: sysmon.cmd alone is a file to check" 'Startup/sysmon\.cmd has the name of a file that starts the trojanized Claude Code extension.s tunnel at every login' "$WORK/win-cx0.txt"
+hasnot "Windows: and not a sign of the malware"        'Editor extensions signs of the malware found' "$WORK/win-cx0.txt"
+# Its own fix, to remove what it leaves, comes before any rotate even here: if you did not set it up.
+has    "Windows: sysmon.cmd alone: the fix removes what the extension leaves before the rotate" 'Open the startup file listed in section 5 and check what it starts at login\. If you did not set it up yourself, first remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up: .* if you did not turn it on yourself\. After that, treat this machine as compromised: delete it and rotate every key this machine could reach\.' "$WORK/win-cx0.txt"
+has    "Windows: the trojanized extension's smt.cmd is its sign" 'Editor extensions signs of the malware found .*~/\.config/smt\.cmd a script the trojanized Claude Code extension writes to keep its tunnel running' "$WORK/win-cx.txt"
+has    "Windows: and so is its smtk"                  '~/\.config/smtk a file the trojanized Claude Code extension writes beside smt\.cmd' "$WORK/win-cx.txt"
+hasnot "Windows: its macOS and Linux tunnel script is not looked for" '~/\.config/\.smt the trojanized' "$WORK/win-cx.txt"
+has    "Windows: beside them, sysmon.cmd is its sign too" 'Startup/sysmon\.cmd starts the trojanized Claude Code extension.s tunnel at every login' "$WORK/win-cx.txt"
+hasnot "Windows: and not a file to check"              'has the name of a file that starts the trojanized' "$WORK/win-cx.txt"
+hasnot "Windows: its macOS LaunchAgent is not looked for" 'com\.apple\.sysmond\.plist a LaunchAgent' "$WORK/win-cx.txt"
 # boulderzitunnel.vscode-buddies loads its installer on win32 and darwin only (Socket): on Windows it is malware.
 mkdir -p "$WP/.vscode-oss/extensions/boulderzitunnel.vscode-buddies-1.35.3"
 winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-mw.txt"
@@ -3516,6 +4649,1119 @@ report_of "$WORK/report-winprof.json" winprof GIRD_CHECK_API="$API" --
 has    "Windows: key_places puts PowerShell's profiles in shell_rc" '"shell_rc":2' "$WORK/report-winprof.json"
 hasnot "Windows: the report holds no Windows path or file name" 'AppData|PSReadLine|ConsoleHost|Users/me|winp|_netrc' "$WORK/report-win.json"
 
+echo "fleet mode on Windows (gird-fleet.ps1)"
+# The suites run off Windows. GIRD_CHECK_FLEET_TEST lets gird-fleet.ps1 run there, GIRD_CHECK_FLEET_POWERSHELL
+# stands in for Windows PowerShell, and GIRD_CHECK_FLEET_LAUNCH names tests/fleet-launch-ps.sh, which records
+# what gird-fleet.ps1 starts and can make the account run misbehave ($FW/mode). gird-fleet.ps1 reads them only
+# off Windows. The account is the person running the tests.
+FW=$WORK/fleetw; mkdir -p "$FW"
+# GIRD_CHECK_FLEET_PS stands in for ps, the process list gird-fleet.ps1 reads after it stops an account
+# run: the processes in $FW/procs that still run. Windows keeps a process's parent id after the parent
+# ends; macOS and Linux give the process a new parent, so the list is kept here as Windows would show it.
+cat > "$FW/ps" <<'SH'
+#!/bin/bash
+[ -f "$FWL_DIR/procs" ] || exit 0
+while read -r p rest; do kill -0 "$p" 2>/dev/null && printf '%s %s\n' "$p" "$rest"; done < "$FWL_DIR/procs"
+exit 0
+SH
+chmod +x "$FW/ps"
+FLEETPS=$PWD/gird-fleet.ps1; FWL=$PWD/tests/fleet-launch-ps.sh; FWFLAT=$PWD/tests/fleet-flat.py
+FA=$(id -un); printf '%s' "$FA" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' || FA=invalid-name
+WINONLY=""; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) ;; *) WINONLY="needs Windows" ;; esac
+fw_home() { mkdir -p "$FW/$1/AppData/Local/Temp" "$FW/$1/AppData/Roaming"; }
+fw_run() { # out-prefix home [env...] -- args...: a run of gird-fleet.ps1; stdout, stderr, exit code, flat JSON
+  _p=$1; _h=$2; shift 2; _e=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
+  : > "$FW/argv.log"; : > "$FW/env.log"; rm -f "$FW/procs"
+  env -i PATH="${FW_PATH:-$WORK/bin}" HOME="$WORK/pshome" USERPROFILE="$_h" APPDATA="$_h/AppData/Roaming" LOCALAPPDATA="$_h/AppData/Local" \
+    TEMP="$_h/AppData/Local/Temp" LANG=en_US.UTF-8 GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" \
+    GIRD_CHECK_FLEET_LAUNCH="$FWL" GIRD_CHECK_FLEET_PS="$FW/ps" FWL_DIR="$FW" FWL_REPO="$PWD" ${_e[@]+"${_e[@]}"} \
+    "$PWSH" -NoProfile -NonInteractive -File "${FW_SCRIPT:-$FLEETPS}" "$@" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+  python3 "$FWFLAT" "$_h/AppData/Local/Blindspot/last.json" > "$FW/$_p.flat" 2>/dev/null || : > "$FW/$_p.flat"
+}
+INVRX='^v1 (failed|act|not_checked|review|clear) ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}Z)( other_profiles=([0-9]{1,4}))?( reason=([a-z0-9_]{1,40}))?(( \| [^|]+)*)$'
+cp -R "$WORK/home" "$FW/asha"; fw_home asha
+for h in clean upd; do fw_home "$h"; done
+mkdir -p "$FW/upd/.ssh"; printf -- '-----BEGIN OPENSSH ''PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH ''PRIVATE KEY-----\n' > "$FW/upd/.ssh/id_ed25519"
+
+# The same lines as gird-check.sh --account-run, key for key.
+env -i PATH=/usr/bin:/bin HOME="$WORK/home" bash "$BASH_SCRIPT" --account-run 2> /dev/null | cut -d= -f1 > "$FW/keys-sh.txt"
+psrun "$WORK/home" -- -AccountRun 2> /dev/null | cut -d= -f1 > "$FW/keys-ps.txt"
+if [ -s "$FW/keys-sh.txt" ] && cmp -s "$FW/keys-sh.txt" "$FW/keys-ps.txt"; then ok "fleet: -AccountRun prints the keys of --account-run, in the same order"
+else bad "fleet: -AccountRun prints the keys of --account-run, in the same order" "$(diff "$FW/keys-sh.txt" "$FW/keys-ps.txt" | head -n 4)"; fi
+
+fw_run two "$FW/asha" -- --json --mac-exit-codes
+# The Windows-shaped home holds one key file more than the Mac one: PowerShell's history.
+has    "fleet: each account's row holds its own findings" "^$FA\\.key_files=5\$" "$FW/two.flat"
+if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$FW/two.out" 2>/dev/null; then ok "fleet: --json prints one JSON document and nothing else"; else bad "fleet: --json prints one JSON document and nothing else" "$(head -c 300 "$FW/two.out")"; fi
+hasnot "fleet: the JSON holds no path or file name" '/(Users|home|private|tmp|var)/|~/|AppData|\.zshrc|zsh_history|\.env|settings(\.local)?\.json|mcp\.json' "$FW/two.out"
+nokeys "fleet: the JSON holds no planted key" "$WORK/keys.txt" "$FW/two.out"
+has    "fleet: act exits 10" '^10$' "$FW/two.rc"
+if diff -q <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FW/two.out") <(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), sort_keys=True))' "$FW/asha/AppData/Local/Blindspot/last.json") > /dev/null 2>&1
+then ok "fleet: the saved file is the JSON printed"; else bad "fleet: the saved file is the JSON printed"; fi
+has    "fleet: the JSON names where to learn more" '^learn_more=https://gird.ai/argus$' "$FW/two.flat"
+has    "fleet: the JSON names the platforms found" "^$FA\\.platforms_found=opencode\$" "$FW/two.flat"
+has    "fleet: the JSON says how many other people have a profile on the PC" '^other_profiles=0$' "$FW/two.flat"
+if grep -qE "^/.* -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $FW/asha/AppData/Local/Blindspot/[0-9.]+/gird-check\\.ps1 -AccountRun --account-seconds=[0-9]+\$" "$FW/argv.log" && [ ! -s "$FW/env.log" ]
+then ok "fleet: the account run is PowerShell by full path, with -NoProfile and no GIRD_CHECK_ setting"; else bad "fleet: the account run is PowerShell by full path, with -NoProfile and no GIRD_CHECK_ setting" "$(cat "$FW/argv.log" "$FW/env.log")"; fi
+if cmp -s "$FW/asha/AppData/Local/Blindspot/$(sed -n 's/^script=//p' "$FW/two.flat")/gird-check.ps1" "$SCRIPT"; then ok "fleet: the check it unpacks is gird-check.ps1, byte for byte"; else bad "fleet: the check it unpacks is gird-check.ps1, byte for byte"; fi
+sed -n 's/^inventory=//p' "$FW/two.flat" > "$FW/two.inv"
+has    "fleet: the inventory value has the header the admin tool reads" "$INVRX" "$FW/two.inv"
+fw_run twoz "$FW/asha" -- --exit-zero --summary-to-stdout --mac-exit-codes
+has    "fleet: --exit-zero exits 0 on act" '^0$' "$FW/twoz.rc"
+if [ "$(grep -c '' "$FW/twoz.out")" -eq 1 ] && grep -qE '^blindspot act accounts=1 act=1 review=0 not_checked=0 other_profiles=[0-9]+ v=[0-9]+\.[0-9]+\.[0-9]+ at=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FW/twoz.out"
+then ok "fleet: --summary-to-stdout prints the one summary line"; else bad "fleet: --summary-to-stdout prints the one summary line" "$(cat "$FW/twoz.out")"; fi
+hasnot "fleet: the summary and the inventory value hold no path, file name or key" '/|~|AppData|\.zshrc|\.env|sk-|AKIA|ghp_' "$FW/twoz.out" "$FW/two.inv"
+
+# An account run cannot speak for anyone else: any line out of place refuses its whole output.
+fw_run clear "$FW/clean" -- --mac-exit-codes
+grep '^machine\.' "$FW/clear.flat" > "$FW/m-ok.txt"
+for M in other-row machine oversize malformed; do
+  printf '%s\n' "$M" > "$FW/mode"
+  fw_run "forge-$M" "$FW/upd"
+  grep '^machine\.' "$FW/forge-$M.flat" > "$FW/m-$M.txt"
+  has "fleet: $M output makes that account not checked" "^$FA\\.not_checked=bad_output\$" "$FW/forge-$M.flat"
+  if [ -s "$FW/m-ok.txt" ] && diff -q "$FW/m-ok.txt" "$FW/m-$M.txt" > /dev/null; then ok "fleet: $M output changes no other row"; else bad "fleet: $M output changes no other row" "$(diff "$FW/m-ok.txt" "$FW/m-$M.txt" | head -n 4)"; fi
+done
+hasnot "fleet: nothing an account run sent reaches the result" 'forged|99999' "$FW/forge-malformed.flat"
+has    "fleet: the default exit codes: 1 unless the outcome is clear" '^1$' "$FW/forge-malformed.rc"
+printf 'endless\n' > "$FW/mode"
+T0=$SECONDS; fw_run endless "$FW/upd" -- --deadline=60; T1=$((SECONDS - T0))
+if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/endless.flat" && [ "$T1" -lt 30 ]; then ok "fleet: root reads a set number of bytes, then stops the run" "${T1}s"; else bad "fleet: root reads a set number of bytes, then stops the run" "${T1}s $(grep "^$FA" "$FW/endless.flat")"; fi
+printf 'empty\n' > "$FW/mode"; fw_run empty "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/empty.flat" && grep -q '^reason=no_output$' "$FW/empty.flat" && grep -q '^13$' "$FW/empty.rc" && grep -qE "$INVRX" "$FW/empty.out" && grep -q ' reason=no_output |' "$FW/empty.out"
+then ok "fleet: an account run that prints nothing is failed, reason=no_output"; else bad "fleet: an account run that prints nothing is failed, reason=no_output" "$(cat "$FW/empty.rc" "$FW/empty.out")"; fi
+printf 'clm\n' > "$FW/mode"; fw_run clmrun "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/clmrun.flat" && grep -q '^reason=language_mode$' "$FW/clmrun.flat" && grep -q '^13$' "$FW/clmrun.rc" && grep -qE "$INVRX" "$FW/clmrun.out"
+then ok "fleet: an account run in the reduced language is failed, reason=language_mode"; else bad "fleet: an account run in the reduced language is failed, reason=language_mode" "$(cat "$FW/clmrun.rc" "$FW/clmrun.out")"; fi
+# The reduced language, set for a session here: gird-check.ps1 says so in its one line, and
+# gird-fleet.ps1's own result keeps the form each option asks for.
+fw_clm() { # out-prefix script args...: the script run in a session set to the reduced language
+  _p=$1; _s=$2; shift 2
+  env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" GIRD_CHECK_FLEET_TEST=1 \
+    "$PWSH" -NoProfile -NonInteractive -Command "\$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'; & '$_s' $*; exit \$LASTEXITCODE" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+}
+fw_clm clmac "$SCRIPT" --account-run
+if [ "$(cat "$FW/clmac.out")" = language_mode=1 ] && grep -q '^13$' "$FW/clmac.rc"; then ok "fleet: -AccountRun in the reduced language prints only language_mode=1"; else bad "fleet: -AccountRun in the reduced language prints only language_mode=1" "$(cat "$FW/clmac.rc" "$FW/clmac.out" | head -c 300)"; fi
+fw_clm clmv "$FLEETPS"; fw_clm clms "$FLEETPS" --summary-to-stdout; fw_clm clmj "$FLEETPS" --json --mac-exit-codes
+if grep -qE "$INVRX" "$FW/clmv.out" && grep -qE '^v1 failed [0-9T:-]+Z other_profiles=0 reason=language_mode \| ' "$FW/clmv.out" && grep -q '^1$' "$FW/clmv.rc" \
+  && grep -qE '^blindspot failed accounts=1 act=0 review=0 not_checked=1 other_profiles=0 v=unknown at=[0-9T:-]+Z reason=language_mode$' "$FW/clms.out" \
+  && python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d["outcome"] == "failed" and d["reason"] == "language_mode" and d["other_profiles"] == 0 else 1)' "$FW/clmj.out" 2>/dev/null && grep -q '^13$' "$FW/clmj.rc"
+then ok "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode"; else bad "fleet: in the reduced language the value, the summary and the JSON each say failed, reason=language_mode" "$(cat "$FW/clmv.out" "$FW/clms.out" | head -c 300)"; fi
+
+# A run that holds its output open past its limit, with a process of its own that keeps running.
+# gird-fleet.ps1 stops the run and nothing else: that process is reported, and left alone.
+printf 'hold\n' > "$FW/mode"; rm -f "$FW/hold.pid" "$FW/launcher.pid"
+T0=$SECONDS; fw_run hold "$FW/upd" -- --deadline=40 --summary-to-stdout --mac-exit-codes; T1=$((SECONDS - T0))
+if [ "$T1" -lt 40 ] && grep -q '^12$' "$FW/hold.rc" && grep -q '^blindspot not_checked ' "$FW/hold.out"; then ok "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s"; else bad "fleet: a stuck account run is stopped and the MDM's output closes" "${T1}s, $(cat "$FW/hold.rc" "$FW/hold.out")"; fi
+has    "fleet: that account is partly checked" "^$FA\\.not_checked=time_limit\$" "$FW/hold.flat"
+if [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null; then ok "fleet: the account run itself is stopped"; else bad "fleet: the account run itself is stopped"; fi
+has    "fleet: a process that outlives the stop is reported" "^$FA\\.processes_left=true\$" "$FW/hold.flat"
+if [ -s "$FW/hold.pid" ] && kill -0 "$(cat "$FW/hold.pid")" 2>/dev/null; then ok "fleet: and that process is not stopped by gird-fleet.ps1"; else bad "fleet: and that process is not stopped by gird-fleet.ps1"; fi
+kill "$(cat "$FW/hold.pid" 2>/dev/null)" 2>/dev/null
+# A stuck run with no process of its own: nothing is reported left.
+printf 'stuck\n' > "$FW/mode"; rm -f "$FW/launcher.pid"; fw_run stuck "$FW/upd" -- --deadline=40
+if grep -q "^$FA\\.not_checked=time_limit\$" "$FW/stuck.flat" && [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null && ! grep -q processes_left "$FW/stuck.flat"
+then ok "fleet: a stopped run that left nothing running reports no process left"; else bad "fleet: a stopped run that left nothing running reports no process left" "$(grep "^$FA" "$FW/stuck.flat" | tr '\n' ' ')"; fi
+# The process list could not be read: a process may be left, and the account says so.
+rm -f "$FW/launcher.pid"; fw_run stucknops "$FW/upd" GIRD_CHECK_FLEET_PS="$FW/no-such-program" -- --deadline=40
+if grep -q "^$FA\\.not_checked=time_limit\$" "$FW/stucknops.flat" && grep -q "^$FA\\.processes_left=true\$" "$FW/stucknops.flat"; then ok "fleet: a process list that can't be read reports processes left, never none"
+else bad "fleet: a process list that can't be read reports processes left, never none" "$(grep "^$FA" "$FW/stucknops.flat" | tr '\n' ' ')"; fi
+# Output past the limit stops the run as a stuck one does.
+printf 'bighold\n' > "$FW/mode"; rm -f "$FW/launcher.pid"
+fw_run bighold "$FW/upd" -- --deadline=40
+if grep -q "^$FA\\.not_checked=bad_output\$" "$FW/bighold.flat" && [ -s "$FW/launcher.pid" ] && ! kill -0 "$(cat "$FW/launcher.pid")" 2>/dev/null && ! grep -q processes_left "$FW/bighold.flat"
+then ok "fleet: output past the limit stops the run"; else bad "fleet: output past the limit stops the run" "$(grep "^$FA" "$FW/bighold.flat" | tr '\n' ' ')"; fi
+# A tool the account run starts that never finishes: a stand-in for ripgrep. The account run stops it
+# itself, at three quarters of the 26 seconds it is given here, and ends before its limit with the sessions
+# partly checked.
+rm -f "$FW/mode" "$FW/rg.pid"; fw_home slowrg; mkdir -p "$FW/slowrg/.claude/projects/p" "$FW/slowrgbin"; printf '{}\n' > "$FW/slowrg/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash\necho "$$" > "$FWL_DIR/rg.pid"\nexec /bin/sleep 300\n' > "$FW/slowrgbin/rg"; chmod +x "$FW/slowrgbin/rg"
+T0=$SECONDS; FW_PATH="$FW/slowrgbin:$WORK/bin" fw_run slowrg "$FW/slowrg" -- --deadline=40; T1=$((SECONDS - T0))
+if [ -s "$FW/rg.pid" ] && ! kill -0 "$(cat "$FW/rg.pid")" 2>/dev/null && [ "$T1" -ge 15 ] && [ "$T1" -lt 26 ] && grep -q "^$FA\\.session_engine=rg\$" "$FW/slowrg.flat" \
+  && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowrg.flat" && ! grep -qE "^$FA\\.(not_checked|stopped|processes_left)=" "$FW/slowrg.flat"
+then ok "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s"
+else bad "fleet: a slow tool the account run started is stopped by the account run itself, before its limit" "${T1}s $(grep -E "^$FA\\.(session|not_checked|stopped|processes)" "$FW/slowrg.flat" | tr '\n' ' ')"; kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null; fi
+# An account run run directly, given 8 seconds: its ripgrep (a stand-in) is stopped at three quarters
+# of that, 6 seconds after the run starts, while the rest of the check is held 20 seconds before it
+# would stop the session check itself (GIRD_CHECK_TEST_PAUSE_MS, tests only), so the run ends at least
+# 14 seconds after that stop is due. The stand-in leaves a watcher that writes the second it saw the
+# stand-in end. One stand-in never prints; one prints all the time, so output is always waiting. The
+# bounds are generous, so load does not fail them: the stand-in ended no sooner than 6 seconds after
+# the run was started, and at least 6 seconds before the run ended.
+fw_home rgstop; mkdir -p "$FW/rgstop/.claude/projects/p" "$FW/rgquiet" "$FW/rgloud"; printf '{}\n' > "$FW/rgstop/.claude/projects/p/a.jsonl"
+_w='#!/bin/bash\necho "$$" > "$RGT_DIR/rg.pid"; me=$$\n( while kill -0 "$me" 2>/dev/null; do /bin/sleep 0.2; done; /bin/date +%%s > "$RGT_DIR/rg.end" ) < /dev/null > /dev/null 2>&1 &\n'
+printf "$_w"'exec /bin/sleep 300\n' > "$FW/rgquiet/rg"
+printf "$_w"'exec %s -e '\''print "f\\0nokey\\n" while 1'\''\n' "$(command -v perl)" > "$FW/rgloud/rg"; chmod +x "$FW/rgquiet/rg" "$FW/rgloud/rg"
+for _m in quiet loud; do
+  rm -f "$FW/rg.pid" "$FW/rg.end"; _t0=$(date +%s)
+  psrun "$FW/rgstop" PATH="$FW/rg$_m:$WORK/bin" RGT_DIR="$FW" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_TEST_PAUSE_MS=20000 -- -AccountRun --account-seconds=8 > "$FW/rg$_m.out" 2> /dev/null; _rc=$?
+  _t2=$(date +%s); for _i in $(seq 1 25); do [ -s "$FW/rg.end" ] && break; sleep 0.2; done   # safety ceiling for the watcher's last write
+  _rgend=$(cat "$FW/rg.end" 2>/dev/null); _rgend=${_rgend:-$((_t2 + 999))}
+  if [ "$_rc" -eq 0 ] && [ "$_rgend" -ge $((_t0 + 6)) ] && [ "$_rgend" -le $((_t2 - 6)) ] && grep -q '^sessions_partial=1$' "$FW/rg$_m.out" && grep -q '^engine=rg$' "$FW/rg$_m.out"
+  then ok "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "ended at $((_rgend - _t0))s of $((_t2 - _t0))s"
+  else bad "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "exit $_rc, ended at $((_rgend - _t0))s of $((_t2 - _t0))s, $(grep -E '^(sessions_partial|engine)=' "$FW/rg$_m.out" | tr '\n' ' ')"; fi
+  kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
+done
+# A session check that does not end when told, as one blocked in a read would (the .NET engine held
+# with GIRD_CHECK_TEST_SESSIONS_DEAF, tests only): the account run waits for it only until its time
+# less a margin, so its lines, with the key it found and the sessions partly checked, are printed
+# inside the 40 seconds it is given, which gird-fleet.ps1 counts from before this run starts. 120
+# seconds is a safety ceiling.
+fw_home deaf; mkdir -p "$FW/deaf/.claude/projects/p" "$FW/deaf/code/app"; printf '{}\n' > "$FW/deaf/.claude/projects/p/a.jsonl"
+printf 'AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$FW/deaf/code/app/.env"; : > "$FW/deafhold"; _t0=$(date +%s)
+psrun "$FW/deaf" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$FW/deafhold" GIRD_CHECK_TEST_SESSIONS_DEAF=1 -- -AccountRun --account-seconds=40 > "$FW/deaf.out" 2> /dev/null &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done; _t1=$(date +%s)
+kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/null; rm -f "$FW/deafhold"
+if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$FW/deaf.out" && grep -q '^sessions_partial=1$' "$FW/deaf.out" && grep -q '^end=1$' "$FW/deaf.out"
+then ok "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40"
+else bad "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$FW/deaf.out" | tr '\n' ' ')"; fi
+# A session listing that does not end, in the check and when the run would list the files again
+# (GIRD_CHECK_TEST_LIST_HOLD, tests only, as a folder that does not answer would hold it): an account
+# run whose session check was stopped does not list them again, so it prints inside its time, with the
+# key it found and the sessions partly checked. 120 seconds is a safety ceiling.
+fw_home lhold; mkdir -p "$FW/lhold/.claude/projects/p" "$FW/lhold/code/app"; printf '{}\n' > "$FW/lhold/.claude/projects/p/a.jsonl"
+printf 'AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$FW/lhold/code/app/.env"; : > "$FW/lholdf"; _t0=$(date +%s)
+psrun "$FW/lhold" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_TEST_LIST_HOLD="$FW/lholdf" -- -AccountRun --account-seconds=40 > "$FW/lhold.out" 2> /dev/null &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done; _t1=$(date +%s)
+kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/null; rm -f "$FW/lholdf"
+if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$FW/lhold.out" && grep -q '^sessions_partial=1$' "$FW/lhold.out" && grep -q '^end=1$' "$FW/lhold.out"
+then ok "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40"
+else bad "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$FW/lhold.out" | tr '\n' ' ')"; fi
+# A ripgrep that closes its output and never ends does not hold up a run by hand, even with
+# -AllSessions: it gets a while (GIRD_CHECK_TEST_GRACE_MS, tests only) and is stopped, and the
+# sessions are partly checked. 120 seconds is a safety ceiling.
+mkdir -p "$FW/rgshut"; printf '#!/bin/bash\necho "$$" > "$RGT_DIR/rg.pid"\nexec >&-\nexec /bin/sleep 300\n' > "$FW/rgshut/rg"; chmod +x "$FW/rgshut/rg"; rm -f "$FW/rg.pid"
+psrun "$FW/rgstop" PATH="$FW/rgshut:$WORK/bin" RGT_DIR="$FW" GIRD_CHECK_SESSIONS_ENGINE=rg GIRD_CHECK_TEST_GRACE_MS=2000 -- -Offline -AllSessions > "$FW/rgshut.out" 2>&1 &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done
+if kill -0 "$_bp" 2>/dev/null; then kill -9 "$_bp" 2>/dev/null; bad "a ripgrep that never ends after its output does not hold up -AllSessions" "still running after 120 s"
+elif kill -0 "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null; then bad "a ripgrep that never ends after its output does not hold up -AllSessions" "the stand-in is still running"
+else has "a ripgrep that never ends after its output does not hold up -AllSessions" 'Agent sessions were partly checked' "$FW/rgshut.out"; fi
+wait "$_bp" 2>/dev/null; kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
+# -AllSessions waiting on a session check that never ends can still be stopped with Ctrl+C (SIGINT
+# here). The signal is sent once the check has long reached that wait: twice as long as the same run
+# takes without the held check, plus 5 seconds. 30 seconds is a safety ceiling.
+: > "$FW/hold"; _t0=$SECONDS; psrun "$FW/rgstop" GIRD_CHECK_SESSIONS_ENGINE=net -- -Offline > /dev/null 2>&1; _d=$((SECONDS - _t0))
+# A job started in the background ignores SIGINT; the run is started with it restored.
+"$(command -v python3)" -c 'import os, signal, sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' /usr/bin/env -i PATH="$WORK/bin" \
+  HOME="$WORK/pshome" USERPROFILE="$FW/rgstop" APPDATA="$FW/rgstop/AppData/Roaming" LOCALAPPDATA="$FW/rgstop/AppData/Local" TEMP="$FW/rgstop/AppData/Local/Temp" \
+  LANG=en_US.UTF-8 GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$FW/hold" "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline -AllSessions > /dev/null 2>&1 &
+_bp=$!; sleep $((2 * _d + 5)); kill -INT "$_bp" 2>/dev/null
+for _i in $(seq 1 150); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done
+if kill -0 "$_bp" 2>/dev/null; then kill -9 "$_bp" 2>/dev/null; bad "Ctrl+C stops -AllSessions waiting on a session check that never ends" "still running 30 s after the signal"
+else ok "Ctrl+C stops -AllSessions waiting on a session check that never ends"; fi
+wait "$_bp" 2>/dev/null; rm -f "$FW/hold"
+# When ripgrep has not ended 2 seconds after it is told to stop, the check says the sessions were
+# partly checked. $halt is run on its own, with a process that never ends.
+cat > "$FW/fn-halt.ps1" <<'PS'
+param([string]$File)
+$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+$a = $ast.Find({ param($x) $x -is [Management.Automation.Language.AssignmentStatementAst] -and $x.Left.Extent.Text -ceq '$halt' }, $true)
+$halt = [scriptblock]::Create($a.Right.Extent.Text.Trim().TrimStart('{').TrimEnd('}'))
+$out = foreach ($ends in @($false, $true)) {
+  $o = New-Object PSObject; $o | Add-Member ScriptMethod Kill { }; $o | Add-Member NoteProperty Ends $ends; $o | Add-Member ScriptMethod WaitForExit { param($ms) $this.Ends }
+  $st = @{ Proc = $o; Stop = $false; Stopped = $false; Hung = $false }
+  & $halt; "$($st.Stopped)/$($st.Hung)"
+}
+$p = $ast.Find({ param($x) $x -is [Management.Automation.Language.AssignmentStatementAst] -and $x.Left.Extent.Text -ceq '$SESS_PARTIAL' }, $true)
+$out += [string]($p.Right.Extent.Text.StartsWith('$SessSt.Hung -or '))
+$out -join ' '
+PS
+_h=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-halt.ps1" "$SCRIPT" 2>&1 | tr -d '\r')
+if [ "$_h" = 'True/True True/False True' ]; then ok "a ripgrep still running after it was stopped leaves the sessions partly checked"
+else bad "a ripgrep still running after it was stopped leaves the sessions partly checked" "$_h"; fi
+printf 'tmpmarks\n' > "$FW/mode"; fw_run tmpmarks "$FW/upd"
+has    "fleet: an account run that names markers in a shared /tmp is refused on Windows" "^$FA\\.not_checked=bad_output\$" "$FW/tmpmarks.flat"
+rm -f "$FW/mode"
+fw_run late "$FW/upd" -- --deadline=1 --mac-exit-codes
+if grep -q "^$FA\\.not_checked=deadline\$" "$FW/late.flat" && grep -q '^deadline_reached=true$' "$FW/late.flat" && grep -q '^12$' "$FW/late.rc"; then ok "fleet: a run stopped by its deadline is not_checked"; else bad "fleet: a run stopped by its deadline is not_checked" "$(head -n 5 "$FW/late.flat")"; fi
+has    "fleet: not_checked exits 12" '^12$' "$FW/late.rc"
+
+# What an account run reads.
+KEYX="AK""IA$(head -c 4096 /dev/urandom | LC_ALL=C tr -dc 'A-Z0-9' | head -c 16)"; printf '%s\n' "$KEYX" > "$FW/keys-x.txt"
+fw_home linker; mkdir -p "$FW/keeper/private"; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FW/keeper/private/zshrc"; chmod 000 "$FW/keeper/private"
+ln -s "$FW/keeper/private/zshrc" "$FW/linker/.zshrc"; ln -s /etc/hosts "$FW/linker/.bash_profile"; ln -s "$FW/keeper/private" "$FW/linker/.config"
+fw_run links "$FW/linker"
+chmod 755 "$FW/keeper/private"
+if grep -q "^$FA\\.key_files=0\$" "$FW/links.flat" && grep -q "^$FA\\.history_keys=0\$" "$FW/links.flat"; then ok "fleet: links to another home or a system file are read with the account's own rights"; else bad "fleet: links to another home or a system file are read with the account's own rights" "$(grep "^$FA" "$FW/links.flat" | tr '\n' ' ')"; fi
+nokeys "fleet: and the key behind them is never in the result" "$FW/keys-x.txt" "$FW/linker/AppData/Local/Blindspot/last.json"
+fw_home odd; mkfifo "$FW/odd/.zsh_history"; ln -s /dev/zero "$FW/odd/.bash_history"
+python3 -c "import sys; open(sys.argv[1], 'w').write('export OPENAI_API_KEY=x\n' + '#' * 17000000 + '\n')" "$FW/odd/.zshrc"
+T0=$SECONDS; fw_run odd "$FW/odd" -- --deadline=120; T1=$((SECONDS - T0)); rm -f "$FW/odd/.zshrc"
+if grep -q "^$FA\\.files_not_checked=3\$" "$FW/odd.flat" && grep -q "^$FA\\.key_files=0\$" "$FW/odd.flat" && [ "$T1" -lt 60 ]; then ok "fleet: a fifo, a link to a device and an oversized file are not read, and are counted"; else bad "fleet: a fifo, a link to a device and an oversized file are not read, and are counted" "${T1}s $(grep "^$FA" "$FW/odd.flat" | tr '\n' ' ')"; fi
+has    "fleet: so the account is not_checked, never clear" "^$FA\\.outcome=not_checked\$" "$FW/odd.flat"
+fw_home closed; mkdir -p "$FW/closed/.cursor"; printf '{"mcpServers":{}}\n' > "$FW/closed/.cursor/mcp.json"; chmod 000 "$FW/closed/.cursor"
+fw_run closedf "$FW/closed"; chmod 755 "$FW/closed/.cursor"
+has    "fleet: a config behind a folder the account can't enter counts as not read" "^$FA\\.files_not_checked=[1-9]" "$FW/closedf.flat"
+has    "fleet: so that account is never clear"        "^$FA\\.outcome=not_checked\$" "$FW/closedf.flat"
+fw_home devnull; ln -s /dev/null "$FW/devnull/.zsh_history"
+fw_run devnull "$FW/devnull"
+has    "fleet: a history file linked to /dev/null is not counted as not read" "^$FA\\.files_not_checked=0\$" "$FW/devnull.flat"
+fw_home unread; mkdir -p "$FW/unread/code/locked"; printf 'export OPENAI_API_KEY=x\n' > "$FW/unread/.zshrc"; chmod 000 "$FW/unread/.zshrc" "$FW/unread/code/locked"
+fw_run unread "$FW/unread"
+chmod 755 "$FW/unread/code/locked"; chmod 644 "$FW/unread/.zshrc"
+if grep -qE "^$FA\\.files_not_checked=([2-9]|[1-9][0-9]+)\$" "$FW/unread.flat" && grep -q "^$FA\\.outcome=not_checked\$" "$FW/unread.flat"; then ok "fleet: a file or folder the account can't read is not checked, never clear"; else bad "fleet: a file or folder the account can't read is not checked, never clear" "$(grep "^$FA" "$FW/unread.flat" | tr '\n' ' ')"; fi
+NR=$FW/nr; mkdir -p "$NR"
+nr_of() { psrun "$NR/$1" -- -AccountRun 2> /dev/null | sed -n 's/^not_read=//p'; }
+# Each file not read in full counts once in an account run's not_read, however many checks read it,
+# and gird-check.sh and gird-check.ps1 count the same: a Codex rule its reader gives up on (single
+# quotes), a user hook file, ~/.ssh/authorized_keys and a workflow that can't be read, and all of them
+# with a project's settings.local.json that can't be read, which three checks read.
+for _n in cut hook ak wf all; do rm -rf "${NR:?}/$_n"; mkdir -p "$NR/$_n" "$NR/$_n/AppData/Roaming" "$NR/$_n/AppData/Local/Temp"; done
+for _n in cut all; do mkdir -p "$NR/$_n/.codex/rules"; printf "prefix_rule(pattern = ['ssh'], decision = 'allow')\n" > "$NR/$_n/.codex/rules/default.rules"; done
+for _n in hook all; do mkdir -p "$NR/$_n/.codex"; printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' > "$NR/$_n/.codex/hooks.json"; chmod 000 "$NR/$_n/.codex/hooks.json"; done
+for _n in ak all; do mkdir -p "$NR/$_n/.ssh"; printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI%s me@laptop\n' "$(rnd 43)" > "$NR/$_n/.ssh/authorized_keys"; chmod 000 "$NR/$_n/.ssh/authorized_keys"; done
+for _n in wf all; do mkdir -p "$NR/$_n/code/app/.github/workflows"; printf 'on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n' > "$NR/$_n/code/app/.github/workflows/ci.yml"; chmod 000 "$NR/$_n/code/app/.github/workflows/ci.yml"; done
+mkdir -p "$NR/all/code/p/.claude"; printf '{"permissions":{"allow":["Bash(ls)"]}}\n' > "$NR/all/code/p/.claude/settings.local.json"; chmod 000 "$NR/all/code/p/.claude/settings.local.json"
+# A ~/.ssh that can't be opened: the folder, and the authorized_keys it may hold, as gird-check.sh counts.
+rm -rf "${NR:?}/sshc"; mkdir -p "$NR/sshc/.ssh" "$NR/sshc/AppData/Roaming" "$NR/sshc/AppData/Local/Temp"; printf 'x\n' > "$NR/sshc/.ssh/id_ed25519"; chmod 000 "$NR/sshc/.ssh"
+nr_is() { # name want home
+  _g=$(nr_of "$3"); if [ "$_g" = "$2" ]; then ok "$1"; else bad "$1" "not_read=$_g, want $2"; fi
+}
+nr_is "fleet: not_read counts a rules file read only in part" 1 cut
+nr_is "fleet: not_read counts a user hook file it can't read" 1 hook
+nr_is "fleet: not_read counts an authorized_keys it can't read" 1 ak
+nr_is "fleet: not_read counts a workflow it can't read" 1 wf
+nr_is "fleet: not_read counts each file once, however many checks read it" 5 all
+nr_is "fleet: not_read counts a ~/.ssh it can't open and the authorized_keys it may hold" 2 sshc
+# And every value of the two account runs on those homes, not only their keys, but the engine (perl or
+# dotnet). gird-check.sh's account run reads BSD stat, so this runs on a Mac.
+if [ "$(uname -s)" = Darwin ]; then
+  for _n in all sshc; do
+    env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$NR/$_n" /bin/bash "$BASH_SCRIPT" --account-run 2> /dev/null < /dev/null | grep -v '^engine=' > "$NR/$_n-sh.txt"
+    psrun "$NR/$_n" -- -AccountRun 2> /dev/null | grep -v '^engine=' > "$NR/$_n-ps.txt"
+  done
+  if grep -q '^not_read=5$' "$NR/all-sh.txt" && cmp -s "$NR/all-sh.txt" "$NR/all-ps.txt" && grep -q '^not_read=2$' "$NR/sshc-sh.txt" && cmp -s "$NR/sshc-sh.txt" "$NR/sshc-ps.txt"
+  then ok "fleet: -AccountRun prints the values of --account-run on a home with files it can't read"
+  else bad "fleet: -AccountRun prints the values of --account-run on a home with files it can't read" "$(diff "$NR/all-sh.txt" "$NR/all-ps.txt" | head -n 6 | tr '\n' ' ') $(diff "$NR/sshc-sh.txt" "$NR/sshc-ps.txt" | head -n 6 | tr '\n' ' ')"; fi
+else skip "fleet: -AccountRun prints the values of --account-run on a home with files it can't read" "gird-check.sh --account-run reads BSD stat: macOS only"; fi
+chmod 755 "$NR/sshc/.ssh"; chmod -R u+rw "$NR"
+fw_home cut; mkdir -p "$FW/cut/code/evil/.codex"
+python3 -c "import sys; open(sys.argv[1], 'w').write('args = [' + '\"a\",' * 17000 + '\"\"\"x\"\"\"]\napproval_policy = \"never\"\nsandbox_mode = \"danger-full-access\"\n')" "$FW/cut/code/evil/.codex/config.toml"
+fw_run cut "$FW/cut" -- --json
+has    "fleet: a settings file read only in part leaves the account partly checked" "^$FA\\.complete=false\$" "$FW/cut.flat"
+has    "fleet: and counts as a file not checked" "^$FA\\.files_not_checked=[1-9]" "$FW/cut.flat"
+
+# Each outcome, its exit code, and the order between them.
+if grep -q '^outcome=clear$' "$FW/clear.flat" && grep -q '^0$' "$FW/clear.rc"; then ok "fleet: clear exits 0"; else bad "fleet: clear exits 0" "$(cat "$FW/clear.rc"; head -n 4 "$FW/clear.flat")"; fi
+fw_run upd "$FW/upd" -- --mac-exit-codes
+if grep -q '^outcome=review$' "$FW/upd.flat" && grep -q '^11$' "$FW/upd.rc"; then ok "fleet: review exits 11"; else bad "fleet: review exits 11" "$(cat "$FW/upd.rc")"; fi
+cp -R "$FW/upd" "$FW/updnr"; printf 'x\n' > "$FW/updnr/.zshrc"; chmod 000 "$FW/updnr/.zshrc"
+fw_run order1 "$FW/updnr"; chmod 644 "$FW/updnr/.zshrc"
+has    "fleet: not_checked comes before review" '^outcome=not_checked$' "$FW/order1.flat"
+fw_home actnr; printf 'export AWS_ACCESS_KEY_ID=%s\n' "$KEYX" > "$FW/actnr/.bashrc"; printf 'x\n' > "$FW/actnr/.zshrc"; chmod 000 "$FW/actnr/.zshrc"
+fw_run order2 "$FW/actnr"; chmod 644 "$FW/actnr/.zshrc"
+has    "fleet: act comes before not_checked" '^outcome=act$' "$FW/order2.flat"
+fw_run clearz "$FW/clean"
+has    "fleet: and clear exits 0 with the default codes" '^0$' "$FW/clearz.rc"
+
+# Nothing it runs comes from PATH, and nothing reaches the network, a browser or a saved report.
+FAKE=$FW/fakebin; mkdir -p "$FAKE"
+# Not rg: the account run uses the person's own ripgrep, as a run by hand does (docs/designs/fleet-mode.md).
+for t in ps pgrep pwsh powershell powershell.exe taskkill taskkill.exe sh bash env open xdg-open; do
+  printf '#!/bin/sh\necho %s >> "%s/fake-ran"\nexit 1\n' "$t" "$FW" > "$FAKE/$t"; chmod +x "$FAKE/$t"
+done
+rm -f "$FW/fake-ran"; mkdir -p "$FW/cwd"; : > "$WORK/received.log"; : > "$WORK/gets.log"
+( cd "$FW/cwd" && FW_PATH="$FAKE:$WORK/bin" fw_run net "$FW/upd" FWL_API="$API" GIRD_CHECK_SESSIONS_ENGINE=none -- --mac-exit-codes )
+if [ ! -s "$WORK/received.log" ] && [ ! -s "$WORK/gets.log" ] && grep -q '^11$' "$FW/net.rc"; then ok "fleet: makes no network request"; else bad "fleet: makes no network request" "exit $(cat "$FW/net.rc")"; fi
+if [ ! -e "$FW/fake-ran" ] && [ -z "$(ls "$FW/cwd")" ] && [ -z "$(find "$FW/upd" -name 'gird-ai-key-check-*' 2>/dev/null)" ]; then ok "fleet: opens no browser and saves no report"; else bad "fleet: opens no browser and saves no report" "$(ls "$FW/cwd"; cat "$FW/fake-ran" 2>/dev/null)"; fi
+if [ ! -e "$FW/fake-ran" ]; then ok "fleet: runs no program it finds on PATH"; else bad "fleet: runs no program it finds on PATH" "$(cat "$FW/fake-ran")"; fi
+if [ ! -s "$FW/env.log" ] && grep -q "^$FA\\.session_engine=dotnet\$" "$FW/net.flat"; then ok "fleet: a test-only GIRD_CHECK_ setting in the person's environment changes nothing"; else bad "fleet: a test-only GIRD_CHECK_ setting in the person's environment changes nothing" "$(cat "$FW/env.log"; grep session_engine "$FW/net.flat")"; fi
+# An MDM-like run: no HOME, a minimal PATH, / as the working folder, no terminal.
+( cd / && env -i PATH=/usr/bin:/bin USERPROFILE="$FW/upd" APPDATA="$FW/upd/AppData/Roaming" LOCALAPPDATA="$FW/upd/AppData/Local" TEMP="$FW/upd/AppData/Local/Temp" \
+    GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" "$PWSH" -NoProfile -NonInteractive -File "$FLEETPS" --summary-to-stdout < /dev/null > "$FW/mdm.out" 2>&1 )
+has    "fleet: runs with no HOME, a minimal PATH and / as its folder" '^blindspot review accounts=1 ' "$FW/mdm.out"
+# A PowerShell profile that would print or change something does not run, for the account run either.
+mkdir -p "$WORK/pshome/.config/powershell"
+printf '[Console]::Out.WriteLine("agents=from-a-profile"); Set-Content -LiteralPath "%s/profile-ran" -Value 1\n' "$FW" > "$WORK/pshome/.config/powershell/Microsoft.PowerShell_profile.ps1"
+fw_run prof "$FW/upd"
+rm -f "$WORK/pshome/.config/powershell/Microsoft.PowerShell_profile.ps1"
+if [ ! -e "$FW/profile-ran" ] && grep -q '^outcome=review$' "$FW/prof.flat"; then ok "fleet: a profile that would print or change something does not run"; else bad "fleet: a profile that would print or change something does not run" "$(head -n 3 "$FW/prof.flat")"; fi
+
+# The saved result's folder, in the person's own profile.
+fw_home slink; mkdir -p "$FW/elsewhere"; ln -s "$FW/elsewhere" "$FW/slink/AppData/Local/Blindspot"
+fw_run slink "$FW/slink"
+if [ -d "$FW/slink/AppData/Local/Blindspot" ] && [ ! -L "$FW/slink/AppData/Local/Blindspot" ] && [ -f "$FW/slink/AppData/Local/Blindspot/last.json" ] && [ -z "$(ls "$FW/elsewhere")" ]; then ok "fleet: a saved-result folder that is a link is made again"; else bad "fleet: a saved-result folder that is a link is made again" "$(ls -la "$FW/slink/AppData/Local" "$FW/elsewhere" 2>&1 | head -n 6)"; fi
+fw_home swrite; mkdir -p "$FW/swrite/AppData/Local/Blindspot"; printf 'keep\n' > "$FW/target"; ln -s "$FW/target" "$FW/swrite/AppData/Local/Blindspot/last.json"
+fw_run swrite "$FW/swrite"
+if [ "$(cat "$FW/target")" = keep ] && [ -f "$FW/swrite/AppData/Local/Blindspot/last.json" ] && [ ! -L "$FW/swrite/AppData/Local/Blindspot/last.json" ]; then ok "fleet: the result is written to a new file and renamed into place"; else bad "fleet: the result is written to a new file and renamed into place"; fi
+# An unpacked check that is not the one this run carries is written again before it runs.
+fw_home rehash; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/rehash/AppData/Local/Blindspot/$_v"
+printf 'Write-Output "v=1"\n' > "$FW/rehash/AppData/Local/Blindspot/$_v/gird-check.ps1"
+fw_run rehash "$FW/rehash"
+if cmp -s "$FW/rehash/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && grep -q '^outcome=clear$' "$FW/rehash.flat"; then ok "fleet: an unpacked check whose SHA-256 differs is written again before it runs"; else bad "fleet: an unpacked check whose SHA-256 differs is written again before it runs" "$(head -n 3 "$FW/rehash.flat")"; fi
+# Without gird-check.ps1 next to it or packed inside, nothing can run: failed, never clear.
+mkdir -p "$FW/alone"; cp "$FLEETPS" "$FW/alone/"
+FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone "$FW/clean" -- --mac-exit-codes
+if grep -q '^outcome=failed$' "$FW/alone.flat" && grep -q '^reason=unpack$' "$FW/alone.flat" && grep -q '^13$' "$FW/alone.rc" && grep -qE "$INVRX" "$FW/alone.out"; then ok "fleet: without gird-check.ps1 next to it or packed inside, the run is failed"; else bad "fleet: without gird-check.ps1 next to it or packed inside, the run is failed" "$(cat "$FW/alone.rc" "$FW/alone.out")"; fi
+FW_SCRIPT="$FW/alone/gird-fleet.ps1" fw_run alone1 "$FW/clean"
+has    "fleet: and failed exits 1 with the default codes" '^1$' "$FW/alone1.rc"
+# A saved-result folder that can't be made: failed, reason=save, and the JSON still printed.
+fw_home save; chmod 555 "$FW/save/AppData/Local"; : > "$FW/argv.log"
+fw_run save "$FW/save" -- --json --mac-exit-codes; chmod 755 "$FW/save/AppData/Local"
+if python3 -c 'import json,sys; d = json.load(open(sys.argv[1])); sys.exit(0 if d["outcome"] == "failed" and d["reason"] == "save" else 1)' "$FW/save.out" 2>/dev/null && grep -q '^13$' "$FW/save.rc" && [ ! -s "$FW/argv.log" ]
+then ok "fleet: a result it can't save is failed, reason=save"; else bad "fleet: a result it can't save is failed, reason=save" "exit $(cat "$FW/save.rc") $(head -c 300 "$FW/save.out")"; fi
+fw_run start "$FW/clean" GIRD_CHECK_FLEET_LAUNCH="$FW/no-such-program" -- --mac-exit-codes
+if grep -q '^13$' "$FW/start.rc" && grep -qE "$INVRX" "$FW/start.out" && grep -q ' reason=start | ' "$FW/start.out"; then ok "fleet: an account run that can't be started is failed, reason=start"
+else bad "fleet: an account run that can't be started is failed, reason=start" "exit $(cat "$FW/start.rc") $(cat "$FW/start.out")"; fi
+# The file it starts is hashed again just before it starts: one it could not write again is never started.
+fw_home rehold; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/rehold/AppData/Local/Blindspot/$_v"
+printf 'Write-Output "v=1"\n' > "$FW/rehold/AppData/Local/Blindspot/$_v/gird-check.ps1"; chmod 555 "$FW/rehold/AppData/Local/Blindspot/$_v"; : > "$FW/argv.log"
+fw_run rehold "$FW/rehold" -- --mac-exit-codes; chmod 755 "$FW/rehold/AppData/Local/Blindspot/$_v"
+if grep -q '^reason=unpack$' "$FW/rehold.flat" && grep -q '^13$' "$FW/rehold.rc" && [ ! -s "$FW/argv.log" ]; then ok "fleet: an unpacked check it could not write again is never started, reason=unpack"
+else bad "fleet: an unpacked check it could not write again is never started, reason=unpack" "$(cat "$FW/rehold.rc" "$FW/argv.log"; head -n 6 "$FW/rehold.flat")"; fi
+
+# The inventory value, cut to what Intune keeps.
+printf 'maxed\n' > "$FW/mode"; fw_run maxed "$FW/clean"; rm -f "$FW/mode"
+sed -n 's/^inventory=//p' "$FW/maxed.flat" > "$FW/maxed.inv"
+has    "fleet: a long inventory value ends with +more" ' \+more$' "$FW/maxed.inv"
+if [ "$(tr -d '\n' < "$FW/maxed.inv" | wc -c)" -le 2047 ] && cmp -s "$FW/maxed.inv" "$FW/maxed.out"; then ok "fleet: and still fits"; else bad "fleet: and still fits" "$(wc -c < "$FW/maxed.inv")"; fi
+has    "fleet: and keeps the accounts that need attention" "\\| $FA: act" "$FW/maxed.inv"
+has    "fleet: a value cut short keeps an act account's wiper and incidents, and every account" "\\| $FA: act wiper; incidents [a-z0-9,]+ \\+more\$" "$FW/maxed.inv"
+has    "fleet: and ends with +more, since details were cut" ' \+more$' "$FW/maxed.inv"
+has    "fleet: the cut value has the header the admin tool reads" "$INVRX" "$FW/maxed.inv"
+if [ "$(tr -d '\n' < "$FW/two.inv" | wc -c)" -le 2047 ] && ! grep -qE '/|AppData|\.zshrc|\.env' "$FW/two.inv"; then ok "fleet: the inventory value fits and holds no path or file name"; else bad "fleet: the inventory value fits and holds no path or file name"; fi
+
+# Possible signs and the account's own temp folder.
+fw_home gw; mkdir -p "$FW/gw/Library/LaunchAgents"; : > "$FW/gw/Library/LaunchAgents/com.user.nodestart.plist"
+fw_run gw "$FW/gw"
+has    "fleet: a startup file named like GlassWorm's, with no GlassWorm extension, is a possible sign" "^$FA\\.possible_signs=glassworm\$" "$FW/gw.flat"
+has    "fleet: and its account is to review, not act now" "^$FA\\.outcome=review\$" "$FW/gw.flat"
+fw_home tm; : > "$FW/tm/AppData/Local/Temp/remote_code_loader.lock"
+fw_run tm "$FW/tm"
+has    "fleet: a malware marker in the account's own temp folder counts for that account" "^$FA\\.incidents=litellm\$" "$FW/tm.flat"
+hasnot "fleet: and not for the Mac" '^machine\.incidents=.*litellm' "$FW/tm.flat"
+fw_home tmd; mkdir -p "$FW/tmd/AppData/Local/Temp/.pc_sq_abc123"
+fw_run tmd "$FW/tmd"
+has    "fleet: a marker folder in the account's own temp folder counts for that account" "^$FA\\.incidents=litellm\$" "$FW/tmd.flat"
+# %ProgramData%, where any account can create a file but a standard account can't give one to another
+# owner: the owner decides. GIRD_CHECK_FLEET_PROGRAMDATA is the folder the PC's own check reads.
+fw_home pd; mkdir -p "$FW/progdata/NodePackages"; : > "$FW/progdata/NodePackages/protocal.cjs"
+fw_run pd "$FW/pd" ProgramData="$FW/progdata" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/progdata"
+if grep -q '^machine\.possible_signs=$' "$FW/pd.flat" && grep -q '^machine\.incidents=$' "$FW/pd.flat"; then ok "fleet: a marker the person owns in %ProgramData% is not the PC's"; else bad "fleet: a marker the person owns in %ProgramData% is not the PC's" "$(grep '^machine' "$FW/pd.flat" | tr '\n' ' ')"; fi
+ln "$FW/progdata/NodePackages/protocal.cjs" "$FW/progdata/second-name"
+fw_run pdh "$FW/pd" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/progdata"
+if grep -q '^machine\.possible_signs=mastra$' "$FW/pdh.flat" && grep -q '^machine\.incidents=$' "$FW/pdh.flat"; then ok "fleet: a marker the person owns under two names in %ProgramData% is a possible sign for the PC"
+else bad "fleet: a marker the person owns under two names in %ProgramData% is a possible sign for the PC" "$(grep '^machine' "$FW/pdh.flat" | tr '\n' ' ')"; fi
+rm -rf "$FW/progdata"
+# Windows PowerShell on a Windows PC, with a fixture home's folders and the rest of the PC's own environment.
+fw_runwin() { # out-prefix home [env...] -- args...
+  _p=$1; _h=$2; shift 2; _e=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do _e+=("$1"); shift; done; shift
+  env USERPROFILE="$(cygpath -w "$_h")" APPDATA="$(cygpath -w "$_h/AppData/Roaming")" LOCALAPPDATA="$(cygpath -w "$_h/AppData/Local")" \
+    TEMP="$(cygpath -w "$_h/AppData/Local/Temp")" TMP="$(cygpath -w "$_h/AppData/Local/Temp")" ${_e[@]+"${_e[@]}"} \
+    "$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" "$@" > "$FW/$_p.out" 2> "$FW/$_p.err" < /dev/null
+  echo "$?" > "$FW/$_p.rc"
+  python3 "$FWFLAT" "$_h/AppData/Local/Blindspot/last.json" > "$FW/$_p.flat" 2>/dev/null || : > "$FW/$_p.flat"
+}
+# A marker owned by someone else: administrator rights on Windows, or passwordless sudo elsewhere, give it away.
+fw_give() { # file owner(root|other): exit 0 when the file now has that owner
+  if [ -z "$WINONLY" ]; then [ "$2" = root ] && icacls "$(cygpath -w "$1")" /setowner '*S-1-5-32-544' > /dev/null 2>&1; return; fi
+  if [ "$2" = root ]; then sudo -n chown root "$1" 2> /dev/null; else sudo -n chown nobody "$1" 2> /dev/null; fi
+}
+fw_mark() { # out-prefix owner: a marker that owner owns, as the PC's own check classes it
+  mkdir -p "$FW/pd-$1/NodePackages"; : > "$FW/pd-$1/NodePackages/protocal.cjs"
+  if ! fw_give "$FW/pd-$1/NodePackages/protocal.cjs" "$2"; then sudo -n rm -rf "$FW/pd-$1" 2> /dev/null; rm -rf "$FW/pd-$1" 2> /dev/null; return 1; fi
+  if [ -z "$WINONLY" ]; then fw_runwin "$1" "$FW/pd" ProgramData="$(cygpath -w "$FW/pd-$1")" --; else fw_run "$1" "$FW/pd" GIRD_CHECK_FLEET_PROGRAMDATA="$FW/pd-$1"; fi
+  sudo -n rm -rf "$FW/pd-$1" 2> /dev/null; rm -rf "$FW/pd-$1" 2> /dev/null; return 0
+}
+if fw_mark pdm root; then
+  if grep -q '^machine\.incidents=mastra$' "$FW/pdm.flat" && grep -q '^machine\.outcome=act$' "$FW/pdm.flat" && grep -q '^outcome=act$' "$FW/pdm.flat"; then ok "fleet: one Administrators or SYSTEM own is a finding for the PC"
+  else bad "fleet: one Administrators or SYSTEM own is a finding for the PC" "$(grep '^machine' "$FW/pdm.flat" | tr '\n' ' ')"; fi
+else skip "fleet: one Administrators or SYSTEM own is a finding for the PC" "giving a file to Administrators takes administrator rights on Windows, and to root passwordless sudo elsewhere, as CI runners have"; fi
+if [ -n "$WINONLY" ] && fw_mark pdo other; then
+  if grep -q '^machine\.possible_signs=mastra$' "$FW/pdo.flat" && grep -q '^machine\.incidents=$' "$FW/pdo.flat"; then ok "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding"
+  else bad "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "$(grep '^machine' "$FW/pdo.flat" | tr '\n' ' ')"; fi
+else skip "fleet: a marker in %ProgramData% owned by an ordinary account is a possible sign, not a finding" "needs a second ordinary account on Windows, or passwordless sudo elsewhere, as CI runners have"; fi
+if [ -n "$WINONLY" ]; then
+  skip "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "$WINONLY: the only marker data/indicators.tsv lists in %ProgramData% is for Windows, so an account run elsewhere never looks for it"
+  skip "fleet: a stale unpacked check marked read-only is written again" "$WINONLY: off Windows a read-only file can be deleted from a folder its owner can write"
+else
+  fw_home pdw; mkdir -p "$FW/pdw-data/NodePackages"; : > "$FW/pdw-data/NodePackages/protocal.cjs"
+  if [ "$(powershell.exe -NoProfile -Command "(Get-Acl -LiteralPath '$(cygpath -w "$FW/pdw-data/NodePackages/protocal.cjs")').GetOwner([Security.Principal.SecurityIdentifier]).Value -eq [Security.Principal.WindowsIdentity]::GetCurrent().User.Value" | tr -d '\r')" != True ]; then
+    skip "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "a file this account creates is not its own here (an administrator's new files can belong to Administrators)"
+  else
+    fw_runwin pdw "$FW/pdw" ProgramData="$(cygpath -w "$FW/pdw-data")" --
+    if grep -q "^$FA\\.incidents=mastra\$" "$FW/pdw.flat" && grep -q "^$FA\\.outcome=act\$" "$FW/pdw.flat" && grep -q '^machine\.incidents=$' "$FW/pdw.flat" && grep -q '^machine\.possible_signs=$' "$FW/pdw.flat"
+    then ok "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level"; else bad "fleet: a marker the person owns in %ProgramData% is a finding on their row, at its incident's level" "$(grep -E "^($FA|machine)\\.(incidents|outcome|possible_signs)" "$FW/pdw.flat" | tr '\n' ' ')"; fi
+  fi
+  rm -rf "$FW/pdw-data"
+  fw_home ro; _v=$(sed -n 's/^script=//p' "$FW/clear.flat"); mkdir -p "$FW/ro/AppData/Local/Blindspot/$_v"
+  printf 'Write-Output "v=1"\n' > "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1"; attrib.exe +R "$(cygpath -w "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1")"
+  fw_runwin ro "$FW/ro" --
+  if cmp -s "$FW/ro/AppData/Local/Blindspot/$_v/gird-check.ps1" "$SCRIPT" && ! grep -q '^reason=' "$FW/ro.flat"; then ok "fleet: a stale unpacked check marked read-only is written again"; else bad "fleet: a stale unpacked check marked read-only is written again" "$(head -n 6 "$FW/ro.flat")"; fi
+fi
+# The decisions themselves, from gird-fleet.ps1's own functions: which marker goes where, which
+# profiles are people's, and how the account run is stopped.
+cat > "$FW/fn.ps1" <<'PS'
+param([string]$File, [string]$Names, [string]$Code)
+$ast = [Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
+foreach ($f in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] }, $true)) { if (($Names -split ',') -contains $f.Name) { . ([scriptblock]::Create($f.Extent.Text)) } }
+. ([scriptblock]::Create([IO.File]::ReadAllText($Code)))
+PS
+fw_fn() { "$PWSH" -NoProfile -NonInteractive -File "$FW/fn.ps1" "$FLEETPS" "$1" "$2" 2>&1 | tr -d '\r'; }
+cat > "$FW/fn-mark.ps1" <<'PS'
+(@(@('person', ''), @('person', 'HardLink'), @('machine', ''), @('machine', 'HardLink'), @('machine', 'unknown'), @('other', ''), @('unknown', '')) | ForEach-Object { $_[0] + '/' + $_[1] + '=' + (Mark-Kind $_[0] $_[1]) }) -join ' '
+PS
+if [ "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")" = 'person/=account person/HardLink=possible machine/=incident machine/HardLink=possible machine/unknown=possible other/=possible unknown/=possible' ]
+then ok "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says"; else bad "fleet: a marker whose owner can't be read is a possible sign for the PC, and each other owner goes where the design says" "$(fw_fn Mark-Kind "$FW/fn-mark.ps1")"; fi
+cat > "$FW/fn-mach.ps1" <<'PS'
+$FlIncidents = @{ 'mastra' = 'act'; 'litellm' = 'review' }
+$a = [string[]]@('mastra'); $l = [string[]]@('litellm'); $p = [string[]]@('mastra'); $n = [string[]]@()
+(@(@($n, $n, $true), @($n, $p, $true), @($n, $n, $false), @($n, $p, $false), @($l, $n, $false), @($a, $p, $false)) | ForEach-Object { Machine-Outcome $_[0] $_[1] $_[2] }) -join ' '
+PS
+if [ "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")" = 'clear review not_checked not_checked not_checked act' ]
+then ok "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act"; else bad "fleet: a marker whose owner can't be read leaves the PC partly checked, never fully checked, unless a finding already says act" "$(fw_fn Machine-Outcome "$FW/fn-mach.ps1")"; fi
+# The same through the marker scan itself, with the owner lookup made to fail: the PC's row says it
+# was not fully checked, in the JSON and in the inventory value.
+mkdir -p "$FW/pdu/NodePackages"; : > "$FW/pdu/NodePackages/protocal.cjs"
+cat > "$FW/fn-scan.ps1" <<PS
+\$Sep = [IO.Path]::DirectorySeparatorChar
+\$FlIncidents = @{ 'mastra' = 'act' }; \$FlProgramData = @(,@('mastra', 'NodePackages/protocal.cjs'))
+function Owner-Kind([string]\$p) { 'unknown' }
+\$st = Scan-Markers '$FW/pdu'; \$o = Machine-Outcome \$st.Inc \$st.Poss \$st.Complete
+(Machine-Json \$st \$o @()) + (Machine-Part \$st \$o)
+PS
+_fs=$(fw_fn Scan-Markers,Machine-Outcome,Machine-Json,Machine-Part,Mark-Kind,J,Is-Reparse,Json-Bool,Json-List,Json-Incidents,Commas "$FW/fn-scan.ps1")
+if [ "$_fs" = '{"complete":false,"outcome":"not_checked","agents":[],"possible_signs":["mastra"],"incidents":[]} | machine: not_checked; possible mastra' ]
+then ok "fleet: a marker whose owner can't be read leaves the PC's row not complete and not_checked in the JSON and the inventory value"; else bad "fleet: a marker whose owner can't be read leaves the PC's row not complete and not_checked in the JSON and the inventory value" "$_fs"; fi
+rm -rf "$FW/pdu"
+cat > "$FW/fn-prof.ps1" <<'PS'
+(@(@('S-1-5-21-11-22-33-500', 'C:\Users\Administrator'), @('S-1-5-21-11-22-33-503', 'C:\Users\DefaultAccount'), @('S-1-5-21-11-22-33-1001', 'C:\Users\asha'),
+  @('S-1-5-21-11-22-33-1002', 'C:\Users\defaultuser0'), @('S-1-12-1-11-22-33-44', 'C:\Users\bob'), @('S-1-5-18', 'C:\Windows\system32\config\systemprofile'),
+  @('S-1-5-21-11-22-33-1003', '')) | ForEach-Object { [string](Is-PersonProfile $_[0] $_[1]) }) -join ' '
+PS
+if [ "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")" = 'False False True False True False False' ]; then ok "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's"
+else bad "fleet: other_profiles counts people's profiles, not built-in accounts or Windows setup's" "$(fw_fn Is-PersonProfile "$FW/fn-prof.ps1")"; fi
+# Each script stops only a process it started, through the handle it got when it started it, and never
+# a process by its id: an id Windows has given to another process would stop that one. gird-fleet.ps1
+# stops the account run; gird-check.ps1 stops its ripgrep. Read by parsing both scripts.
+cat > "$FW/fn-kills.ps1" <<'PS'
+param([string]$Fleet, [string]$Check)
+$Start = '[Diagnostics.Process]::Start($psi)'
+# The only Kill() calls allowed: file, where it is (the function, or the variable holding the script
+# block), the process object it is called on, and what that object is assigned from there.
+$Sites = @(
+  @('fleet', 'Stop-Run', '$proc', 'Stop-Run $proc in Run-Account'),
+  @('check', '$halt', '$st.Proc', $Start),
+  @('check', 'Sess-Stop', '$p', '$SessSt.Proc'))
+# Where each script disposes of the process objects it kills: after every Kill() on them.
+$Disposed = @(@('fleet', 'Run-Account', '$proc', @('$proc')), @('check', 'Sess-Stop', '$SessSt.Proc', @('$st.Proc', '$p', '$SessSt.Proc')))
+$bad = New-Object System.Collections.Generic.List[string]
+function Where-In($a) {
+  for ($x = $a.Parent; $x; $x = $x.Parent) {
+    if ($x -is [Management.Automation.Language.FunctionDefinitionAst]) { return $x.Name }
+    if ($x -is [Management.Automation.Language.ScriptBlockExpressionAst] -and $x.Parent -is [Management.Automation.Language.CommandExpressionAst] -and $x.Parent.Parent -is [Management.Automation.Language.AssignmentStatementAst]) { return $x.Parent.Parent.Left.Extent.Text }
+  }
+  ''
+}
+function Site-Ast($ast, [string]$name) {
+  $ast.Find({ param($a) ($a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -ceq $name) -or ($a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq $name -and $a.Right.Extent.Text.StartsWith('{')) }, $true)
+}
+function Sets($ast, [string]$var) { @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -ceq $var }, $true)) }
+$Asts = @{}
+foreach ($f in @(@('fleet', $Fleet), @('check', $Check))) {
+  $tag = $f[0]; $ast = [Management.Automation.Language.Parser]::ParseFile($f[1], [ref]$null, [ref]$null); $Asts[$tag] = $ast
+  foreach ($c in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] }, $true)) {
+    if ([string]$c.GetCommandName() -match '^(Stop-Process|spps|kill|killall|pkill|taskkill(\.exe)?|tskill(\.exe)?|wmic(\.exe)?|Stop-Computer|Restart-Computer|shutdown(\.exe)?|Invoke-CimMethod|Invoke-WmiMethod|Remove-CimInstance|Remove-WmiObject|Invoke-Expression|iex|Get-Process|gps|ps)$') { $bad.Add("$tag $($c.Extent.Text)") }
+  }
+  # A string naming a way to stop a process, handed to a command, a method or a program to start.
+  foreach ($x in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.StringConstantExpressionAst] -or $a -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
+    if ($x.Value -notmatch '(?i)terminate|taskkill|tskill|wmic|Stop-Process') { continue }
+    $prev = $x
+    for ($u = $x.Parent; $u -and -not ($u -is [Management.Automation.Language.StatementBlockAst] -or $u -is [Management.Automation.Language.NamedBlockAst] -or $u -is [Management.Automation.Language.ScriptBlockAst]); $u = $u.Parent) {
+      if ($u -is [Management.Automation.Language.CommandAst] -or ($u -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $prev -ne $u.Expression -and $prev -ne $u.Member) -or ($u -is [Management.Automation.Language.AssignmentStatementAst] -and $u.Left.Extent.Text -match '(?i)\.(FileName|Arguments)$')) { $bad.Add("$tag $($x.Extent.Text)"); break }
+      $prev = $u
+    }
+  }
+  $members = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true))
+  foreach ($m in $members) {
+    $n = [string]$m.Member.Extent.Text
+    if ($n -match '(?i)^(GetProcessById|GetProcesses|GetProcessesByName|Terminate)$') { $bad.Add("$tag $($m.Extent.Text)"); continue }
+    if ($n -match '(?i)^(Close|Dispose)$') {
+      $v = $m.Expression.Extent.Text
+      foreach ($k in $members) { if ([string]$k.Member.Extent.Text -match '(?i)^Kill$' -and $k.Expression.Extent.Text -ceq $v -and $k.Extent.StartOffset -gt $m.Extent.StartOffset) { $bad.Add("$tag $v disposed before $($k.Extent.Text)") } }
+    }
+    if ($n -notmatch '(?i)^Kill$') { continue }
+    $w = Where-In $m; $v = $m.Expression.Extent.Text
+    $row = @($Sites | Where-Object { $_[0] -ceq $tag -and $_[1] -ceq $w -and $_[2] -ceq $v })
+    if ($row.Count -ne 1 -or ($null -ne $m.Arguments -and $m.Arguments.Count -ne 0)) { $bad.Add("$tag $($m.Extent.Text) in $w") }
+  }
+}
+foreach ($s in $Sites) {
+  $ast = $Asts[$s[0]]; $site = Site-Ast $ast $s[1]
+  if (-not $site) { $bad.Add("$($s[0]) has no $($s[1])"); continue }
+  $k = @($site.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'Kill' -and $a.Expression.Extent.Text -ceq $s[2] }, $true))
+  if ($k.Count -ne 1) { $bad.Add("$($k.Count) Kill calls on $($s[2]) in $($s[1])") }
+  if ($s[3] -ceq $Start) {
+    $sets = Sets $ast $s[2]
+    if ($sets.Count -lt 1 -or @($sets | Where-Object { $_.Right.Extent.Text -cne $Start }).Count -gt 0) { $bad.Add("$($s[2]) is set other than by starting a process") }
+  } elseif ($s[3] -ceq '$SessSt.Proc') {
+    $sets = Sets $site $s[2]
+    if ($sets.Count -lt 1 -or @($sets | Where-Object { $_.Right.Extent.Text -cne $s[3] }).Count -gt 0) { $bad.Add("$($s[2]) in $($s[1]) is set other than from $($s[3])") }
+    # $SessSt is the table the check gives its worker as $st, and its Proc is set only there.
+    if ((Sets $ast '$SessSt.Proc').Count -ne 0 -or $ast.Extent.Text.IndexOf('.AddArgument($SessSt)') -lt 0) { $bad.Add('$SessSt.Proc is not the worker''s $st.Proc') }
+  } else {
+    # Stop-Run's process is the one Run-Account started, and nothing else in Run-Account names $proc.
+    $ra = Site-Ast $ast 'Run-Account'
+    $calls = @($ast.FindAll({ param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.GetCommandName() -ceq 'Stop-Run' }, $true))
+    $sets = Sets $ast '$proc'
+    if ($calls.Count -ne 1 -or $calls[0].CommandElements[1].Extent.Text -cne '$proc' -or -not $ra -or $ra.Extent.Text.IndexOf($calls[0].Extent.Text) -lt 0) { $bad.Add('Stop-Run is called other than once, with the started process') }
+    if ($sets.Count -ne 1 -or $sets[0].Right.Extent.Text -cne $Start) { $bad.Add('$proc is set other than by starting the account run') }
+  }
+}
+foreach ($d in $Disposed) {
+  $ast = $Asts[$d[0]]; $last = -1
+  foreach ($m in $ast.FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
+    $n = [string]$m.Member.Extent.Text; $v = $m.Expression.Extent.Text
+    if ($d[3] -cnotcontains $v) { continue }
+    if ($n -ceq 'Kill' -and $m.Extent.EndOffset -gt $last) { $last = $m.Extent.EndOffset }
+    if ($n -match '(?i)^(Close|Dispose)$' -and -not ((Where-In $m) -ceq $d[1] -and $v -ceq $d[2])) { $bad.Add("$($d[0]) $($m.Extent.Text) in $(Where-In $m)") }
+  }
+  $ds = @((Site-Ast $ast $d[1]).FindAll({ param($a) $a -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $a.Member.Extent.Text -ceq 'Dispose' -and $a.Expression.Extent.Text -ceq $d[2] }, $true))
+  if ($ds.Count -ne 1 -or $ds[0].Extent.StartOffset -lt $last) { $bad.Add("$($d[2]) is not disposed once in $($d[1]), after every Kill() on it") }
+}
+if ($bad.Count -eq 0) { 'none' } else { 'refused (a guard against slips, not proof: a command name held in a variable cannot be ruled out): ' + ($bad -join ' | ') }
+PS
+_k=$("$PWSH" -NoProfile -NonInteractive -File "$FW/fn-kills.ps1" "$FLEETPS" "$SCRIPT" 2>&1 | tr -d '\r')
+if [ "$_k" = none ]; then ok "fleet: gird-fleet.ps1 and gird-check.ps1 stop no process by id, only the ones they started, through their own handles"
+else bad "fleet: gird-fleet.ps1 and gird-check.ps1 stop no process by id, only the ones they started, through their own handles" "$_k"; fi
+# After the stop, the process list is only read, to report. A process counts as left when it names the
+# account run (100, run from 1000 to 2000) as its parent and started while the run ran, or when its
+# start time or the run's can't be read. The process tables of the earlier stop's reviews: a child
+# whose parent id was reused (it started before the run), one a later holder of the run's id started
+# (after the run ended), the clock set back, a grandchild, and no child at all.
+cat > "$FW/fn-left.ps1" <<'PS'
+$out = @()
+$out += Left-Running @(,@(101, 100, [long]1100)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]900)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]2500)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]-1)) 100 1000 2000
+$out += Left-Running @(,@(101, 100, [long]1100)) 100 -1 2000
+$out += Left-Running @(@(101, 7, [long]1100), @(102, 101, [long]1200)) 100 1000 2000
+$out += Left-Running @(,@(100, 100, [long]1000)) 100 1000 2000
+$out += Left-Running @() 100 1000 2000
+$out -join ' '
+PS
+_l=$(fw_fn Left-Running "$FW/fn-left.ps1")
+if [ "$_l" = 'True False False True True False False False' ]; then ok "fleet: a process left is reported from one read of the process list, and the list is never used to stop one"
+else bad "fleet: a process left is reported from one read of the process list, and the list is never used to stop one" "$_l"; fi
+# The stop through Stop-Run itself: the run is stopped, and a list that can't be read is unknown, so
+# processes are reported left; an empty list reports none. The stop ends within its time.
+cat > "$FW/fn-stop.ps1" <<'PS'
+$script:FlStopSecs = 3; $OnWindows = $false; $FlTest = $false
+$ps = (Get-Process -Id $PID).Path
+function Proc-Rows([int]$secs) { if ($script:none) { return $null }; , (New-Object System.Collections.Generic.List[object]) }
+$out = @()
+foreach ($none in @($true, $false)) {
+  $script:none = $none
+  $p = [Diagnostics.Process]::Start($ps, '-NoProfile -NonInteractive -Command Start-Sleep 60')
+  $w = [Diagnostics.Stopwatch]::StartNew()
+  $r = Stop-Run $p ([long]$p.StartTime.ToUniversalTime().Ticks)
+  $out += "$r/$($p.HasExited)/$($w.Elapsed.TotalSeconds -le 4)"
+}
+$out -join ' '
+PS
+_s=$(fw_fn Stop-Run,Left-Running "$FW/fn-stop.ps1")
+if [ "$_s" = 'True/True/True False/True/True' ]; then ok "fleet: a process list that can't be read in time is unknown, not none"
+else bad "fleet: a process list that can't be read in time is unknown, not none" "$_s"; fi
+cat > "$FW/fn-fit.ps1" <<'PS'
+$h = 'v1 review 2026-01-01T00:00Z other_profiles=0'; $t = ' | machine: review; possible mastra'
+$fill = { param($n) 'asha: review to-read 1; possible ' + ('a' * ($n - ($h.Length + 3 + 'asha: review to-read 1; possible '.Length + $t.Length))) }
+$a = Fit-Value $h (& $fill 2047) 'asha: review' 'asha: review' $t
+$b = Fit-Value $h (& $fill 2048) 'asha: review' 'asha: review' $t
+"$($a.Length) $($a.EndsWith(' +more')) $($b.Length -le 2047) $($b.EndsWith(' +more'))"
+PS
+if [ "$(fw_fn Fit-Value "$FW/fn-fit.ps1")" = '2047 False True True' ]; then ok "fleet: an inventory value is at most 2,047 characters, and one cut ends with +more"
+else bad "fleet: an inventory value is at most 2,047 characters, and one cut ends with +more" "$(fw_fn Fit-Value "$FW/fn-fit.ps1")"; fi
+cat > "$FW/fn-name.ps1" <<'PS'
+(@('asha', 'machine', 'Machine', 'a b', '.x', 'machine2') | ForEach-Object { Shown-Name $_ }) -join ' '
+PS
+if [ "$(fw_fn Shown-Name "$FW/fn-name.ps1")" = 'asha invalid-name invalid-name invalid-name invalid-name machine2' ]; then ok "fleet: an account named machine shows as invalid-name, apart from the PC's row"
+else bad "fleet: an account named machine shows as invalid-name, apart from the PC's row" "$(fw_fn Shown-Name "$FW/fn-name.ps1")"; fi
+_tk=$(awk '/^[[:space:]]*#/ { next } /taskkill|\/T /' "$FLEETPS")
+if [ -z "$_tk" ]; then ok "fleet: no process is stopped by its tree alone (no taskkill /T)"; else bad "fleet: no process is stopped by its tree alone (no taskkill /T)" "$_tk"; fi
+skip "fleet: run as SYSTEM, it is failed, reason=system_account" "needs a PowerShell started as SYSTEM on a Windows PC, which takes administrator rights"
+if [ -n "$WINONLY" ]; then
+  skip "fleet: a session in Constrained Language Mode is failed, reason=language_mode" "$WINONLY: Windows PowerShell's reduced language"
+  skip "fleet: a 32-bit PowerShell is failed, reason=host_32bit" "$WINONLY: its 32-bit Windows PowerShell"
+  skip "fleet: run as root, the test settings are ignored" "$WINONLY: off Windows gird-fleet.ps1 runs for tests only, and reads them"
+else
+  _wps="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
+  __PSLockdownPolicy=4 "$_wps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" > "$FW/clm.out" 2>&1; RC=$?
+  if [ "$RC" -eq 1 ] && grep -qE '^v1 failed [0-9T:-]+Z reason=language_mode' "$FW/clm.out"; then ok "fleet: a session in Constrained Language Mode is failed, reason=language_mode"; else bad "fleet: a session in Constrained Language Mode is failed, reason=language_mode" "exit $RC $(head -c 200 "$FW/clm.out")"; fi
+  "$SYSTEMROOT/SysWOW64/WindowsPowerShell/v1.0/powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" --summary-to-stdout > "$FW/w32.out" 2>&1; RC=$?
+  if [ "$RC" -eq 1 ] && grep -qE '^blindspot failed .* reason=host_32bit$' "$FW/w32.out"; then ok "fleet: a 32-bit PowerShell is failed, reason=host_32bit"; else bad "fleet: a 32-bit PowerShell is failed, reason=host_32bit" "exit $RC $(head -c 200 "$FW/w32.out")"; fi
+  USERPROFILE="$(cygpath -w "$FW/clean")" LOCALAPPDATA="$(cygpath -w "$FW/clean/AppData/Local")" GIRD_CHECK_FLEET_PROFILES=9999 GIRD_CHECK_FLEET_POWERSHELL=nothing-here \
+    "$_wps" -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$FLEETPS")" --summary-to-stdout > "$FW/wtest.out" 2>&1
+  if grep -q '^blindspot clear ' "$FW/wtest.out" && ! grep -q 'other_profiles=9999' "$FW/wtest.out"; then ok "fleet: run as root, the test settings are ignored"; else bad "fleet: run as root, the test settings are ignored" "$(head -c 200 "$FW/wtest.out")"; fi
+fi
+fw_home pf; mkdir -p "$FW/progfiles/cursor"
+fw_run pf "$FW/pf" GIRD_CHECK_FLEET_PROGRAMFILES="$FW/progfiles" GIRD_CHECK_FLEET_PROFILES=2
+has    "fleet: an agent installed under %ProgramFiles% is the PC's" '^machine\.agents=cursor$' "$FW/pf.flat"
+if grep -q '^other_profiles=2$' "$FW/pf.flat" && grep -qE '^v1 clear [0-9T:-]+Z other_profiles=2 \| ' "$FW/pf.out"; then ok "fleet: the summary and the inventory value carry other_profiles"; else bad "fleet: the summary and the inventory value carry other_profiles" "$(cat "$FW/pf.out")"; fi
+
+# Findings reach the account's row as they reach the person's own report.
+for h in proj upd2 wip wip1 mrf mrn msx lk; do fw_home "$h"; done
+mkdir -p "$FW/proj/code/p/.claude" "$FW/proj/code/q/.claude" "$FW/upd2/code/venv/lib/site-packages/telnyx-4.87.1.dist-info" "$FW/wip/Library/LaunchAgents" \
+  "$FW/wip/AppData/Roaming/npm/node_modules/@tanstack/router-core" "$FW/wip1/.config/gh-token-monitor"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}\n' > "$FW/proj/code/p/.claude/settings.json"
+: > "$FW/proj/code/q/.claude/setup.mjs"; : > "$FW/wip/Library/LaunchAgents/com.user.gh-token-monitor.plist"
+printf '{"name":"@tanstack/router-core","version":"1.169.5"}\n' > "$FW/wip/AppData/Roaming/npm/node_modules/@tanstack/router-core/package.json"
+fw_run proj "$FW/proj"
+has    "fleet: project settings that act when a folder opens reach the account's row" "^$FA\\.project_settings_on_open=1\$" "$FW/proj.flat"
+has    "fleet: and a file named like the ones worms plant" "^$FA\\.files_to_read=1\$" "$FW/proj.flat"
+has    "fleet: so that account is to review" "^$FA\\.outcome=review\$" "$FW/proj.flat"
+fw_run upd2 "$FW/upd2"
+has    "fleet: a package version to update reaches the account's row" "^$FA\\.versions_to_update=telnyx\$" "$FW/upd2.flat"
+has    "fleet: and that account is to review too" "^$FA\\.outcome=review\$" "$FW/upd2.flat"
+fw_run wip "$FW/wip"
+has    "fleet: the gh-token-monitor wiper reaches the account's row" "^$FA\\.wiper=true\$" "$FW/wip.flat"
+fw_run wip1 "$FW/wip1"
+if grep -q "^$FA\\.wiper=true\$" "$FW/wip1.flat" && grep -q "^$FA\\.incidents=\$" "$FW/wip1.flat" && grep -q "^$FA\\.outcome=act\$" "$FW/wip1.flat"; then ok "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm"
+else bad "fleet: gh-token-monitor alone is the wiper, to act on, not the TanStack worm" "$(grep "^$FA\\." "$FW/wip1.flat" | tr '\n' ' ')"; fi
+for h in mrf mrn; do mkdir -p "$FW/$h/AppData/Roaming/npm/node_modules/mcp-remote"; done
+printf '{"name":"mcp-remote","version":"0.1.10"}\n' > "$FW/mrf/AppData/Roaming/npm/node_modules/mcp-remote/package.json"
+printf '{"name":"mcp-remote","version":"0.1.20"}\n' > "$FW/mrn/AppData/Roaming/npm/node_modules/mcp-remote/package.json"
+fw_run mrf "$FW/mrf"; fw_run mrn "$FW/mrn"
+has    "fleet: a tool with a fix to install reaches the account's tools" "^$FA\\.tools_to_update=mcpremote\$" "$FW/mrf.flat"
+has    "fleet: one with a published hole and no fixed version does not" "^$FA\\.tools_to_update=\$" "$FW/mrn.flat"
+mkdir -p "$FW/msx/.vscode/extensions/microsoftvs.microsoftvs-1.0.2"
+fw_run msx "$FW/msx"
+has    "fleet: an extension whose malware runs only on another system is one to remove" "^$FA\\.extensions_to_remove=glasswormoct\$" "$FW/msx.flat"
+has    "fleet: so its account is to review, not act" "^$FA\\.outcome=review\$" "$FW/msx.flat"
+# Worm-style startup: a project whose session-start hook and folder-open task run one file worms plant,
+# and a session hook in the person's own settings that runs the AntV wave's copied payload.
+for h in ast uhk rmt cxe cxs cxk; do fw_home "$h"; done
+mkdir -p "$FW/ast/code/w/.claude" "$FW/ast/code/w/.vscode" "$FW/uhk/.claude"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$FW/ast/code/w/.claude/settings.json"
+printf '{"version":"2.0.0","tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$FW/ast/code/w/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.claude/package/index.js"}]}]}}\n' > "$FW/uhk/.claude/settings.json"
+fw_run ast "$FW/ast"; fw_run uhk "$FW/uhk"
+has    "fleet: a project that starts a script the way worms do reaches the account's row" "^$FA\\.scripts_started_like_worms=1\$" "$FW/ast.flat"
+has    "fleet: and so does an account with none" "^$FA\\.scripts_started_like_worms=0\$" "$FW/proj.flat"
+has    "fleet: a session hook in the account's own settings counts alone" "^$FA\\.scripts_started_like_worms=1\$" "$FW/uhk.flat"
+has    "fleet: and makes that account one to review" "^$FA\\.outcome=review\$" "$FW/uhk.flat"
+# A saved rule that lets an agent run commands on other machines without asking.
+mkdir -p "$FW/rmt/.codex/rules"; printf 'prefix_rule(pattern=["kubectl", "exec"])\n' > "$FW/rmt/.codex/rules/default.rules"
+fw_run rmt "$FW/rmt"
+has    "fleet: an agent allowed to run commands on other machines reaches the account's row" "^$FA\\.agents_run_remote_commands=codex\$" "$FW/rmt.flat"
+# The trojanized Claude Code extension: its extension, its files alone and the SSH key it adds.
+mkdir -p "$FW/cxe/.cursor/extensions/anthropic.claude-code-2.1.313" "$FW/cxs/.config" "$FW/cxk/.ssh"; : > "$FW/cxs/.config/smt.cmd"
+printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P svc-telemetry\n' > "$FW/cxk/.ssh/authorized_keys"
+printf 'const h="134.209.82.225";\n' > "$FW/cxe/.cursor/extensions/anthropic.claude-code-2.1.313/extension.js"
+for h in cxe cxs; do fw_run "$h" "$FW/$h"; done; fw_run cxk "$FW/cxk" -- --mac-exit-codes
+has    "fleet: the trojanized Claude Code extension is its account's incident" "^$FA\\.incidents=claudeext\$" "$FW/cxe.flat"
+has    "fleet: so are its files alone" "^$FA\\.incidents=claudeext\$" "$FW/cxs.flat"
+has    "fleet: and the SSH key it adds" "^$FA\\.incidents=claudeext\$" "$FW/cxk.flat"
+if [ "$(cat "$FW/cxe.flat" "$FW/cxs.flat" "$FW/cxk.flat" | grep -cE "^$FA\\.outcome=act\$")" -eq 3 ]; then ok "fleet: each of them makes its account act"; else bad "fleet: each of them makes its account act" "$(grep -h 'outcome' "$FW/cxe.flat" "$FW/cxs.flat" "$FW/cxk.flat" | tr '\n' ' ')"; fi
+has    "fleet: the trojanized extension's accounts exit 10" '^10$' "$FW/cxk.rc"
+has    "fleet: the SSH key has a field of its own" "^$FA\\.authorized_keys_planted_keys=1\$" "$FW/cxk.flat"
+has    "fleet: which is 0 without the key" "^$FA\\.authorized_keys_planted_keys=0\$" "$FW/cxe.flat"
+has    "fleet: and the key is in the inventory value" "^inventory=.*$FA: act incidents claudeext; ssh-planted 1( |\$)" "$FW/cxk.flat"
+mkdir -p "$FW/lk/code/app"
+printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$FW/lk/code/app/package-lock.json"
+fw_run lk "$FW/lk"
+has    "fleet: a bad npm version only in a lockfile is its own field" "^$FA\\.lockfile_only_incidents=axios\$" "$FW/lk.flat"
+has    "fleet: not one of the incidents" "^$FA\\.incidents=\$" "$FW/lk.flat"
+# A session check that would never end on its own is stopped in time, and what it found still counts.
+printf 'slowsess\n' > "$FW/mode"; fw_run slowsess "$FW/asha" -- --deadline=30; rm -f "$FW/mode" "$FW/sesshold"
+if grep -q "^$FA\\.outcome=act\$" "$FW/slowsess.flat" && grep -q "^$FA\\.sessions_partly_checked=true\$" "$FW/slowsess.flat" && ! grep -q "^$FA\\.not_checked=" "$FW/slowsess.flat"; then ok "fleet: a session check that runs long is stopped in time, and the findings still count"
+else bad "fleet: a session check that runs long is stopped in time, and the findings still count" "$(grep -E "^$FA\\.(outcome|sessions|not_checked|stopped)" "$FW/slowsess.flat" | tr '\n' ' ')"; fi
+
+# The account run starts with -NoProfile: a variable a profile sets to move an agent's folders is not
+# followed, so the profile is read as text and the account is partly checked.
+fw_prof() { # home lines...: the home's PowerShell profile, holding those lines
+  fw_home "$1"; mkdir -p "$FW/$1/Documents/PowerShell"; _h=$1; shift; printf '%s\n' "$@" > "$FW/$_h/Documents/PowerShell/Microsoft.PowerShell_profile.ps1"
+}
+fw_prof moved '$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-work"'
+fw_run moved "$FW/moved" -- --json
+if grep -q "^$FA\\.agent_folders_moved=true\$" "$FW/moved.flat" && grep -q "^$FA\\.outcome=not_checked\$" "$FW/moved.flat" && grep -qE "\\| $FA: not_checked partial\$" "$FW/moved.flat"
+then ok "fleet: a profile that moves an agent's folders leaves the account partly checked"; else bad "fleet: a profile that moves an agent's folders leaves the account partly checked" "$(grep "^$FA\\." "$FW/moved.flat" | tr '\n' ' ')"; fi
+fw_prof dflt '$env:NVM_DIR = "$env:USERPROFILE\.nvm"' '${env:PNPM_HOME} = "$env:LOCALAPPDATA\pnpm\"' "[Environment]::SetEnvironmentVariable('BUN_INSTALL', 'D:\\bun', 'User')" '# $env:CODEX_HOME = "D:\codex"' 'if ($env:CLAUDE_CONFIG_DIR -eq "x") { }'
+fw_run dflt "$FW/dflt" 'BUN_INSTALL=D:\bun'
+has    "fleet: a profile that sets a tool's folder to its default moves nothing" "^$FA\\.agent_folders_moved=false\$" "$FW/dflt.flat"
+fw_prof toolmv '$env:WORKON_HOME = "D:\envs"'
+fw_run toolmv "$FW/toolmv"
+has    "fleet: one that sets it elsewhere leaves the account partly checked" "^$FA\\.agent_folders_moved=true\$" "$FW/toolmv.flat"
+fw_prof pnmv 'Set-Item -Path env:PNPM_HOME -Value "$env:USERPROFILE\.cache\pnpm"'
+mkdir -p "$FW/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios"
+printf '{"name":"axios","version":"1.14.1"}\n' > "$FW/pnmv/.cache/pnpm/global/5/node_modules/.pnpm/axios@1.14.1/node_modules/axios/package.json"
+fw_run pnmv "$FW/pnmv"
+has    "fleet: and so does one that moves pnpm's folder (PNPM_HOME)" "^$FA\\.agent_folders_moved=true\$" "$FW/pnmv.flat"
+hasnot "fleet: so a bad package only there never reads clear" "^$FA\\.outcome=clear\$" "$FW/pnmv.flat"
+fw_home gbash; printf 'export CODEX_HOME=/d/codex\n' > "$FW/gbash/.bashrc"
+fw_run gbash "$FW/gbash"
+has    "fleet: a Git Bash profile that moves an agent's folders counts too" "^$FA\\.agent_folders_moved=true\$" "$FW/gbash.flat"
+# A line that names a listed variable other than to read it counts, unless it is a plain assignment of
+# the value the run sees: forms the reader does not know fail safe. Each case is its own home.
+MV=$WORK/mv; mkdir -p "$MV"
+mv_case() { # name file lines...: an -AccountRun on a home holding that file; prints its moved= value
+  _n=$1; _f=$2; shift 2; mkdir -p "$MV/$_n/AppData/Local/Temp" "$MV/$_n/AppData/Roaming" "$(dirname "$MV/$_n/$_f")"
+  printf '%s\n' "$@" > "$MV/$_n/$_f"
+  printf '%s=%s\n' "$_n" "$(psrun "$MV/$_n" ${MVENV:+"$MVENV"} -- -AccountRun 2> /dev/null | sed -n 's/^moved=//p')"
+}
+PSP=Documents/PowerShell/Microsoft.PowerShell_profile.ps1
+{ mv_case pluseq "$PSP" '$env:CODEX_HOME += "\codex"'
+  mv_case newitem "$PSP" 'New-Item -Path Env: -Name CODEX_HOME -Value "D:\codex"'
+  mv_case setcontent "$PSP" 'Set-Content env:CODEX_HOME "D:\codex"'
+  mv_case indirect "$PSP" '$n = "CODEX_HOME"; [Environment]::SetEnvironmentVariable($n, "D:\codex")'
+  mv_case remove "$PSP" 'Remove-Item env:NVM_DIR'
+  mv_case exportmulti .bashrc 'export A=1 CODEX_HOME=/d/codex'
+  mv_case declare .bashrc 'declare -x CODEX_HOME=/d/codex'
+  mv_case default .bashrc ': "${CODEX_HOME:=/d/codex}"'
+  mv_case ise Documents/WindowsPowerShell/Microsoft.PowerShellISE_profile.ps1 '$env:CODEX_HOME = "D:\codex"'
+} > "$MV/forms.txt"
+if [ "$(grep -c '=1$' "$MV/forms.txt")" -eq 9 ]; then ok "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved"
+else bad "fleet: a profile line that names an agent's variable in a form the reader does not know counts as moved" "$(grep -v '=1$' "$MV/forms.txt" | tr '\n' ' ')"; fi
+# What installers write: nvm (and its own nvm.sh, which sets NVM_DIR its own way), pnpm, conda (and
+# the conda.sh it sources), oh-my-posh and starship, and a profile that reads a variable.
+mkdir -p "$MV/nvm/.nvm"; printf '%s\n' 'if [ -z "${NVM_DIR-}" ]; then' '  NVM_DIR="$(nvm_cd "$(dirname "${NVM_SCRIPT_SOURCE:-$0}")" >/dev/null && \pwd)"' '  export NVM_DIR' 'fi' > "$MV/nvm/.nvm/nvm.sh"
+mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='/opt/conda/bin/conda'" "export _CE_M=''" '__conda_exe() (' '    "$CONDA_EXE" $_CE_M "$@"' ')' > "$MV/conda/miniconda3/etc/profile.d/conda.sh"
+{ mv_case nvm .bashrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm' '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"'
+  mv_case pnpm .bashrc '# pnpm' 'export PNPM_HOME="$HOME/AppData/Local/pnpm"' 'case ":$PATH:" in' '  *":$PNPM_HOME:"*) ;;' '  *) export PATH="$PNPM_HOME:$PATH" ;;' 'esac' '# pnpm end'
+  mv_case conda .bashrc '# >>> conda initialize >>>' '__conda_setup="$('"'"'/opt/conda/bin/conda'"'"' '"'"'shell.bash'"'"' '"'"'hook'"'"' 2> /dev/null)"' 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then' '        . "$HOME/miniconda3/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' '# <<< conda initialize <<<'
+  mv_case condaps "$PSP" '#region conda initialize' 'If (Test-Path "C:\Users\u\miniconda3\Scripts\conda.exe") {' '    (& "C:\Users\u\miniconda3\Scripts\conda.exe" "shell.powershell" "hook") | Out-String | ?{$_} | Invoke-Expression' '}' '#endregion'
+  mv_case omp "$PSP" 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression'
+  mv_case starship "$PSP" 'Invoke-Expression (&starship init powershell)' '$ENV:STARSHIP_CONFIG = "$HOME\.config\starship.toml"'
+  mv_case starsh .bashrc 'eval "$(starship init bash)"' 'eval "$(oh-my-posh init bash)"' 'source /usr/share/bash-completion/bash_completion'
+  mv_case reads "$PSP" 'if ($env:CLAUDE_CONFIG_DIR) { Write-Host $env:CLAUDE_CONFIG_DIR }' 'if ([Environment]::GetEnvironmentVariable("CODEX_HOME")) { }' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+} > "$MV/plain.txt"
+if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 8 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
+else bad "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing" "$(grep -v '=0$' "$MV/plain.txt" | tr '\n' ' ')"; fi
+# A file a profile sources is read too, to any depth, wherever it is on a local disk. One that is there
+# but can't be followed or read counts only where some file read names a listed variable.
+mkdir -p "$MV/follow/Documents/PowerShell" "$MV/outside"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/follow/Documents/PowerShell/env.ps1"
+mkdir -p "$MV/link"; printf 'alias x=y\n' > "$MV/outside/env.sh"; ln -s "$MV/outside/env.sh" "$MV/link/.env.sh"
+mkdir -p "$MV/nested"; printf '%s\n' 'echo "$CODEX_HOME"' '. ~/.env2.sh' > "$MV/nested/.env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/nested/.env2.sh"
+mkdir -p "$MV/aliases"; printf 'alias ll="ls -l"\n' > "$MV/aliases/.bash_aliases"
+mkdir -p "$MV/unread"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/unread/.secret.sh"; chmod 000 "$MV/unread/.secret.sh"
+{ mv_case follow "$PSP" '. "$PSScriptRoot\env.ps1"'
+  mv_case link .bashrc 'echo "$NVM_DIR"' '. ~/.env.sh'
+  mv_case nested .bashrc '. ~/.env.sh'
+  mv_case unread .bashrc 'echo "$NVM_DIR"' '. ~/.secret.sh'
+} > "$MV/src1.txt"
+{ mv_case aliases .bashrc '[ -f ~/.bash_aliases ] && . ~/.bash_aliases'
+  mv_case plainsrc .bashrc '. /nonexistent/blindspot/env.sh'
+  mv_case elsewhere .bashrc 'export NVM_DIR="$HOME/.nvm"' '. /nonexistent/blindspot/env.sh'
+} > "$MV/src0.txt"
+chmod 600 "$MV/unread/.secret.sh"
+if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
+else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# A path whose default names plain variables, as XDG's usual form does, is followed with
+# XDG_CONFIG_HOME unset, as the account's shell starts: a file there that moves nothing moves nothing.
+# A default with anything else in it ($1 here) can't be told and counts.
+for _n in xdgsrc xdgsrcmv; do mkdir -p "$MV/$_n/.config/sh"; done
+printf 'alias ll="ls -l"\n' > "$MV/xdgsrc/.config/sh/env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/xdgsrcmv/.config/sh/env.sh"
+_xs=$({ mv_case xdgsrc .bashrc '. "${XDG_CONFIG_HOME:-$HOME/.config}/sh/env.sh"'
+  mv_case xdgsrcmv .bashrc '. "${XDG_CONFIG_HOME:-$HOME/.config}/sh/env.sh"'
+  mv_case xdgsrcarg .bashrc '. "${XDG_CONFIG_HOME:-$1}/sh/env.sh"'; } | tr '\n' ' ')
+if [ "$_xs" = "xdgsrc=0 xdgsrcmv=1 xdgsrcarg=1 " ]; then ok "fleet: a file sourced through XDG_CONFIG_HOME's usual default is read, and a default it can't tell counts"
+else bad "fleet: a file sourced through XDG_CONFIG_HOME's usual default is read, and a default it can't tell counts" "$_xs"; fi
+# Each way a profile can reach a file that moves a folder: from outside the home, two files down, by
+# & or Import-Module of a path, through a module's manifest, in a loop over a folder's files, and a
+# file placed in a tool's own folder that is not the tool's own script.
+mkdir -p "$MV/ext"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ext/env.sh"
+mkdir -p "$MV/twodeep"; printf '. ~/.b.sh\n' > "$MV/twodeep/.a.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/twodeep/.b.sh"
+mkdir -p "$MV/impmod/Documents/PowerShell/Modules/corp"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/impmod/Documents/PowerShell/Modules/corp/corp.psm1"
+mkdir -p "$MV/amp/Documents/PowerShell"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/amp/Documents/PowerShell/setenv.ps1"
+mkdir -p "$MV/psd1/tools/corp"; printf '%s\n' '@{' "  RootModule = 'corp.psm1'" "  ModuleVersion = '1.0'" '}' > "$MV/psd1/tools/corp/corp.psd1"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/psd1/tools/corp/corp.psm1"
+mkdir -p "$MV/loop/.bashrc.d"; printf 'alias k=kubectl\n' > "$MV/loop/.bashrc.d/00-alias.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/loop/.bashrc.d/10-codex.sh"
+mkdir -p "$MV/psloop/Documents/PowerShell/profile.d"; printf '%s\n' '$env:CODEX_HOME = "D:\codex"' > "$MV/psloop/Documents/PowerShell/profile.d/codex.ps1"
+mkdir -p "$MV/ownfolder/.nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/ownfolder/.nvm/extra.sh"
+{ mv_case outside .bashrc ". '$MV/ext/env.sh'"
+  mv_case twodeep .bashrc '. ~/.a.sh'
+  mv_case impmod "$PSP" 'Import-Module "$env:USERPROFILE\Documents\PowerShell\Modules\corp\corp.psm1"'
+  mv_case amp "$PSP" '& "$PSScriptRoot\setenv.ps1"'
+  mv_case psd1 "$PSP" 'Import-Module -Force "$HOME\tools\corp\corp.psd1"'
+  mv_case loop .bashrc 'for f in ~/.bashrc.d/*.sh; do . "$f"; done'
+  mv_case psloop "$PSP" 'Get-ChildItem "$PSScriptRoot\profile.d\*.ps1" | ForEach-Object { . $_.FullName }'
+  mv_case ownfolder .bashrc '[ -s "$NVM_DIR/extra.sh" ] && . "$NVM_DIR/extra.sh"'
+} > "$MV/reach.txt"
+if [ "$(grep -c '=1$' "$MV/reach.txt")" -eq 8 ]; then ok "fleet: a folder moved in a file sourced from outside the home, two files down, by & or Import-Module, or in a sourcing loop counts"
+else bad "fleet: a folder moved in a file sourced from outside the home, two files down, by & or Import-Module, or in a sourcing loop counts" "$(grep -v '=1$' "$MV/reach.txt" | tr '\n' ' ')"; fi
+# What reads partly checked on an ordinary PC for no reason: a tool's folder set to the folder the check
+# reads, a listed name in a comment, asdf 0.16's lines, source <(...), a file sourced from outside the
+# home beside a line that only reads a listed variable, and files that source each other.
+mkdir -p "$MV/Program Files/Corp"; printf '%s\n' 'Set-Alias k kubectl' '$env:CORP_TOOLS = "C:\Corp\bin"' > "$MV/Program Files/Corp/init.ps1"
+mkdir -p "$MV/cycle"; printf '%s\n' '. ~/.bashrc' 'echo "$NVM_DIR"' > "$MV/cycle/.a.sh"
+{ mv_case bun .bashrc '# bun' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case volta "$PSP" '$env:VOLTA_HOME = "$env:LOCALAPPDATA\Volta"'
+  mv_case voltash .bashrc 'export VOLTA_HOME="$HOME/.volta"' 'export PATH="$VOLTA_HOME/bin:$PATH"'
+  mv_case npmpfx "$PSP" '$env:NPM_CONFIG_PREFIX = "$env:APPDATA\npm"'
+  mv_case npmpfxsh .bashrc 'export NPM_CONFIG_PREFIX=~/.npm-global' 'export PATH=~/.npm-global/bin:$PATH'
+  mv_case comment .bashrc "alias ll='ls -l'  # CODEX_HOME stays where it is"
+  mv_case pscomment "$PSP" 'Set-Alias g git # sets nothing, not even CLAUDE_CONFIG_DIR' '<#' '$env:CODEX_HOME = "D:\old"' '#>'
+  mv_case xdg .bashrc 'export XDG_CONFIG_HOME="$HOME/.config"'
+  mv_case asdf16 .bashrc 'export PATH="${ASDF_DATA_DIR:-$HOME/.asdf}/shims:$PATH"' '. <(asdf completion bash)'
+  mv_case procsub .bashrc 'source <(kubectl completion bash)' 'echo "$NVM_DIR"'
+  mv_case progfiles "$PSP" ". '$MV/Program Files/Corp/init.ps1'" '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case cycle .bashrc '. ~/.a.sh'
+} > "$MV/quiet.txt"
+if [ "$(grep -c '=0$' "$MV/quiet.txt")" -eq 12 ]; then ok "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing"
+else bad "fleet: default folders, a listed name in a comment, asdf 0.16, source <(...) and a file sourced from outside the home move nothing" "$(grep -v '=0$' "$MV/quiet.txt" | tr '\n' ' ')"; fi
+# What the tools write into a profile, or a profile written for them.
+mkdir -p "$MV/bunzsh/.bun"; printf 'export BUN_INSTALL=/elsewhere\n' > "$MV/bunzsh/.bun/_bun"
+mkdir -p "$MV/asdf15/.asdf/completions"; printf '%s\n' 'export ASDF_DIR="${ASDF_DIR:-$HOME/.asdf}"' 'ASDF_DATA_DIR=/elsewhere' > "$MV/asdf15/.asdf/asdf.sh"; printf 'complete -F _asdf asdf\n' > "$MV/asdf15/.asdf/completions/asdf.bash"
+mkdir -p "$MV/uv/.local/bin"; printf '%s\n' '#!/bin/sh' 'case ":${PATH}:" in' '    *:"$HOME/.local/bin":*)' '        ;;' '    *)' '        export PATH="$HOME/.local/bin:$PATH"' '        ;;' 'esac' > "$MV/uv/.local/bin/env"
+mkdir -p "$MV/choco/ProgramData/chocolatey/helpers/functions"; printf '%s\n' '$thisDirectory = (Split-Path -parent $MyInvocation.MyCommand.Definition);' '. $thisDirectory\functions\Update-SessionEnvironment.ps1' '. $thisDirectory\ChocolateyTabExpansion.ps1' 'Set-Alias refreshenv Update-SessionEnvironment' > "$MV/choco/ProgramData/chocolatey/helpers/chocolateyProfile.psm1"
+printf '%s\n' 'function Update-SessionEnvironment {' '  $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Machine")' '}' > "$MV/choco/ProgramData/chocolatey/helpers/functions/Update-SessionEnvironment.ps1"
+printf '%s\n' 'function script:chocoCommands { choco -h }' > "$MV/choco/ProgramData/chocolatey/helpers/ChocolateyTabExpansion.ps1"
+{ mv_case nvmwin "$PSP" 'if ($env:NVM_SYMLINK) { $env:PATH = "$env:NVM_SYMLINK;$env:PATH" }'
+  mv_case fnm "$PSP" 'fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression'
+  mv_case fnmsh .bashrc 'eval "$(fnm env --use-on-cd --shell bash)"'
+  mv_case bunzsh .bashrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case mise "$PSP" '(&mise activate pwsh) | Out-String | Invoke-Expression'
+  mv_case misesh .bashrc 'eval "$(~/.local/bin/mise activate bash)"'
+  mv_case asdf15 .bashrc '. "$HOME/.asdf/asdf.sh"' '. "$HOME/.asdf/completions/asdf.bash"'
+  mv_case uv .bashrc '. "$HOME/.local/bin/env"' 'eval "$(uv generate-shell-completion bash)"'
+  mv_case uvps "$PSP" '(& uv generate-shell-completion powershell) | Out-String | Invoke-Expression'
+  mv_case pipx .bashrc 'eval "$(register-python-argcomplete pipx)"' 'export PATH="$PATH:/c/Users/u/.local/bin"'
+  mv_case poetry "$PSP" '$env:Path += ";$env:APPDATA\Python\Scripts"' 'poetry completions powershell | Out-String | Invoke-Expression'
+  mv_case poshgit "$PSP" 'Import-Module posh-git' '$GitPromptSettings.DefaultPromptAbbreviateHomeDirectory = $true' "Import-Module 'C:\tools\poshgit\dahlbyk-posh-git-9bda399\src\posh-git.psd1'"
+  mv_case psrl "$PSP" 'Import-Module PSReadLine' 'Set-PSReadLineOption -PredictionSource History -EditMode Windows' 'Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete' 'Set-PSReadLineOption -HistorySavePath "$env:APPDATA\PSReadLine\history.txt"'
+  MVENV="ChocolateyInstall=$MV/choco/ProgramData/chocolatey" mv_case choco "$PSP" '# Import the Chocolatey Profile that contains the necessary code to enable' '# tab-completions to function for `choco`.' '$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"' 'if (Test-Path($ChocolateyProfile)) {' '  Import-Module "$ChocolateyProfile"' '}' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case vsdev "$PSP" 'Import-Module "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"' 'Enter-VsDevShell 3f2a1b0c -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"' "& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64"
+  mv_case corp "$PSP" '$env:HTTPS_PROXY = "http://proxy.example.com:8080"' '$env:NO_PROXY = "localhost,127.0.0.1,.example.com"' 'function prompt { "[$env:USERNAME@$env:COMPUTERNAME] $(Get-Location)> " }' '. "\\fileserver\it$\profile\corp.ps1"' 'Set-Location $HOME'
+} > "$MV/tools.txt"
+if [ "$(grep -c '=0$' "$MV/tools.txt")" -eq 16 ]; then ok "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing"
+else bad "fleet: what nvm-windows, fnm, bun, mise, asdf, uv, pipx, Poetry, posh-git, PSReadLine, Chocolatey, the Visual Studio shell and a corporate profile write moves nothing" "$(grep -v '=0$' "$MV/tools.txt" | tr '\n' ' ')"; fi
+# Ordinary profiles that name a listed variable beside a line the reader can't follow: the tools' own
+# scripts where Homebrew puts them (data/tool-scripts.tsv), from Homebrew's prefix as their caveats
+# write it, Oh My Zsh's loader as it ships, and a plugin loader whose paths come from a loop's or a
+# function's own variable, inside that loop or function.
+# pnpm's folder on a Mac is not its folder on Windows: another listed variable at its default here.
+MVPNPM='export NVM_DIR="$HOME/.nvm"'
+# Oh My Zsh's oh-my-zsh.sh, cut to how it loads files: lib, plugins and the theme through a function
+# given the path, and every custom/*.zsh in a loop.
+mv_omz() { mkdir -p "$1/.oh-my-zsh/lib" "$1/.oh-my-zsh/custom"; printf '%s\n' 'if [[ -z "$ZSH_CUSTOM" ]]; then' '    ZSH_CUSTOM="$ZSH/custom"' 'fi' \
+  '_omz_source() {' '  local context filepath="$1"' '  if [[ -f "$ZSH_CUSTOM/$filepath" ]]; then' '    source "$ZSH_CUSTOM/$filepath"' '  elif [[ -f "$ZSH/$filepath" ]]; then' '    source "$ZSH/$filepath"' '  fi' '}' \
+  'for lib_file ("$ZSH"/lib/*.zsh); do' '  _omz_source "lib/${lib_file:t}"' 'done' 'for plugin ($plugins); do' '  _omz_source "plugins/$plugin/$plugin.plugin.zsh"' 'done' \
+  'for config_file ("$ZSH_CUSTOM"/*.zsh(N)); do' '  source "$config_file"' 'done' 'unset config_file' \
+  'if [[ -n "$ZSH_THEME" ]]; then' '  if is_theme "$ZSH_CUSTOM" "$ZSH_THEME"; then' '    source "$ZSH_CUSTOM/$ZSH_THEME.zsh-theme"' '  else' '    source "$ZSH/themes/$ZSH_THEME.zsh-theme"' '  fi' 'fi' > "$1/.oh-my-zsh/oh-my-zsh.sh"; }
+for h in omzship omzbun; do mv_omz "$MV/$h"; done
+mkdir -p "$MV/loader/.zsh"; printf '%s\n' 'load_plugin() {' '  local name=$1' '  source "$ZSH_PLUGINS/$name/$name.zsh"' '}' 'for p ($plugins); do source $HOME/.zsh/plugins/$p/init.zsh; done' 'load_one() { . "$1"; }' > "$MV/loader/.zsh/loader.zsh"
+mkdir -p "$MV/bunr/.bun"; printf '#compdef bun\n_bun() { :; }\n' > "$MV/bunr/.bun/_bun"
+{ mv_case brewnvm .zshrc 'export NVM_DIR="$HOME/.nvm"' '[ -s "$HOMEBREW_PREFIX/opt/nvm/nvm.sh" ] && \. "$HOMEBREW_PREFIX/opt/nvm/nvm.sh"  # This loads nvm' '[ -s "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm" ] && \. "$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm"'
+  mv_case brewasdf .zshrc '. $(brew --prefix)/opt/asdf/libexec/asdf.sh' "$MVPNPM"
+  mv_case brewasdfcmd .zshrc '. $(brew --prefix asdf)/libexec/asdf.sh' "$MVPNPM"
+  mv_case omzship .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' "$MVPNPM"
+  mv_case omzbun .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' '[ -s "/Users/x/.bun/_bun" ] && source "/Users/x/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case loader .zshrc 'plugins=(git)' 'source ~/.zsh/loader.zsh' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case pyenvnvm .zshrc 'export PYENV_ROOT="$HOME/.pyenv"' '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' 'eval "$(pyenv init - zsh)"' 'export BUN_INSTALL="$HOME/.bun"'
+  mv_case rbenvdirenv .zshrc 'eval "$(rbenv init - zsh)"' 'eval "$(direnv hook zsh)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case starnvm .zshrc 'eval "$(starship init zsh)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case misepnpm .zshrc 'eval "$(/opt/homebrew/bin/mise activate zsh)"' "$MVPNPM"
+  mv_case condanvm .bash_profile "__conda_setup=\"\$('/opt/homebrew/Caskroom/miniconda/base/bin/conda' 'shell.bash' 'hook' 2> /dev/null)\"" 'if [ $? -eq 0 ]; then' '    eval "$__conda_setup"' 'else' '    if [ -f "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh" ]; then' '        . "/opt/homebrew/Caskroom/miniconda/base/etc/profile.d/conda.sh"' '    fi' 'fi' 'unset __conda_setup' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case sdkpnpm .zshrc 'export SDKMAN_DIR="$HOME/.sdkman"' '[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"' "$MVPNPM"
+  mv_case brewnvmenv .zprofile 'eval "$(/opt/homebrew/bin/brew shellenv)"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case bunr .zshrc '# bun completions' '[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"' 'export BUN_INSTALL="$HOME/.bun"' 'export PATH="$BUN_INSTALL/bin:$PATH"'
+  mv_case fpathpnpm .zshrc 'fpath=(~/.zfunc $fpath)' 'autoload -Uz compinit && compinit' 'source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh' "$MVPNPM"
+} > "$MV/ordinary.txt"
+if [ "$(grep -c '=0$' "$MV/ordinary.txt")" -eq 15 ]; then ok "fleet: nvm and asdf from Homebrew, Oh My Zsh, a plugin loader, pyenv, rbenv, direnv, starship, mise, conda, SDKMAN!, Homebrew, bun and pnpm as written move nothing"
+else bad "fleet: nvm and asdf from Homebrew, Oh My Zsh, a plugin loader, pyenv, rbenv, direnv, starship, mise, conda, SDKMAN!, Homebrew, bun and pnpm as written move nothing" "$(grep -v '=0$' "$MV/ordinary.txt" | tr '\n' ' ')"; fi
+# zsh's glob qualifiers in a sourcing loop, (N) and (.N), and a plain path in braces, are followed.
+for h in zq1 zq2 zq3 zq4; do mkdir -p "$MV/$h/.zshrc.d"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.zshrc.d/x.zsh"; done
+mkdir -p "$MV/zbrace"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/zbrace/.zsh_env_extra"
+{ mv_case zq1 .zshrc 'for f (~/.zshrc.d/*.zsh(N)) source $f'
+  mv_case zq2 .zshrc 'for f in ~/.zshrc.d/*.zsh(N); do source $f; done'
+  mv_case zq3 .zshrc 'for f in ~/.zshrc.d/*.zsh(.N); do . "$f"; done'
+  mv_case zq4 .zshrc 'for f ($HOME/.zshrc.d/*(N)) source $f'
+  mv_case zbrace .zshrc 'source ${HOME}/.zsh_env_extra'
+} > "$MV/zqual.txt"
+if [ "$(grep -c '=1$' "$MV/zqual.txt")" -eq 5 ]; then ok "fleet: a sourcing loop over a zsh glob with a qualifier, and a path in braces, is followed"
+else bad "fleet: a sourcing loop over a zsh glob with a qualifier, and a path in braces, is followed" "$(grep -v '=1$' "$MV/zqual.txt" | tr '\n' ' ')"; fi
+# Never a false clear: a file named like a tool's own script anywhere but Homebrew's prefix is read; Oh
+# My Zsh as it ships reads custom/*.zsh; a zsh glob qualifier the reader does not parse leaves the loop
+# unfollowed; and a function's or a loop's own variable is bound only inside it.
+mkdir -p "$MV/stuffnvm/stuff/opt/nvm"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/stuffnvm/stuff/opt/nvm/nvm.sh"
+mv_case stuffnvm .zshrc 'source ~/stuff/opt/nvm/nvm.sh' > "$MV/stuffnvm.txt"
+has    "fleet: a file named like a tool's own script outside Homebrew's prefix is read" '^stuffnvm=1$' "$MV/stuffnvm.txt"
+mv_omz "$MV/omzcustom"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/omzcustom/.oh-my-zsh/custom/env.zsh"
+mv_case omzcustom .zshrc 'export ZSH="$HOME/.oh-my-zsh"' 'ZSH_THEME="robbyrussell"' 'plugins=(git)' 'source $ZSH/oh-my-zsh.sh' > "$MV/omzcustom.txt"
+has    "fleet: Oh My Zsh as it ships is read, and a custom file of it that moves a folder counts" '^omzcustom=1$' "$MV/omzcustom.txt"
+for h in zqq zqd; do mkdir -p "$MV/$h/.zshrc.d"; printf 'alias k=kubectl\n' > "$MV/$h/.zshrc.d/x.zsh"; done
+{ mv_case zqq .zshrc 'for f in ~/.zshrc.d/*.zsh(#q.N); do source $f; done' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case zqd .zshrc 'for f (~/.zshrc.d/*.zsh(N-.)) source $f' 'export NVM_DIR="$HOME/.nvm"'
+} > "$MV/zqq.txt"
+if [ "$(grep -c '=1$' "$MV/zqq.txt")" -eq 2 ]; then ok "fleet: a sourcing loop over a zsh glob qualifier the reader does not parse counts where a listed variable is named"
+else bad "fleet: a sourcing loop over a zsh glob qualifier the reader does not parse counts where a listed variable is named" "$(grep -v '=1$' "$MV/zqq.txt" | tr '\n' ' ')"; fi
+{   mv_case psparam "$PSP" 'function Load-One {' '  param($Path)' '  . "$Path\init.ps1"' '}' '. "$Path\x.ps1"' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case psforeach "$PSP" 'foreach ($m in @("a", "b")) { . "$HOME\$m.ps1" }' '. "$m\x.ps1"' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
+  mv_case fnscope .zshrc 'load() {' '  local p=$1' '  source "$p/init.zsh"' '}' '. "$p/env.sh"' 'export NVM_DIR="$HOME/.nvm"'
+  mv_case loopscope .bashrc 'for d in ~/.a ~/.b; do . "$d/init.sh"; done' '. "$d/env.sh"' 'export NVM_DIR="$HOME/.nvm"'
+} > "$MV/scope.txt"
+if [ "$(grep -c '=1$' "$MV/scope.txt")" -eq 4 ]; then ok "fleet: a function's or a loop's own variable does not hide a source line outside it"
+else bad "fleet: a function's or a loop's own variable does not hide a source line outside it" "$(grep -v '=1$' "$MV/scope.txt" | tr '\n' ' ')"; fi
+# The caps: 64 files and 16 MiB read in all, and no file over 16 MiB. Past one, moved is 1 only where a
+# file read names a listed variable.
+for h in chain chainn; do mkdir -p "$MV/$h/.c"; for i in $(seq 1 70); do printf '. ~/.c/%s.sh\n' "$((i + 1))" > "$MV/$h/.c/$i.sh"; done; printf 'export CODEX_HOME=/d/codex\n' > "$MV/$h/.c/71.sh"; done
+for h in big bign; do mkdir -p "$MV/$h"; for f in a b; do awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 9437; i++) print s }' > "$MV/$h/.$f.sh"; done; done
+for h in huge hugen; do mkdir -p "$MV/$h"; awk 'BEGIN { s = sprintf("%1000s", ""); for (i = 0; i < 17000; i++) print s }' > "$MV/$h/.h.sh"; done
+{ mv_case chain .bashrc '. ~/.c/1.sh'
+  mv_case big .bashrc '. ~/.a.sh' '. ~/.b.sh'
+  mv_case huge .bashrc '. ~/.h.sh'
+} > "$MV/cap0.txt"
+{ mv_case chainn .bashrc 'echo "$NVM_DIR"' '. ~/.c/1.sh'
+  mv_case bign .bashrc 'echo "$NVM_DIR"' '. ~/.a.sh' '. ~/.b.sh'
+  mv_case hugen .bashrc 'echo "$NVM_DIR"' '. ~/.h.sh'
+} > "$MV/cap1.txt"
+rm -rf "$MV/big" "$MV/bign" "$MV/huge" "$MV/hugen"
+if [ "$(grep -c '=0$' "$MV/cap0.txt")" -eq 3 ] && [ "$(grep -c '=1$' "$MV/cap1.txt")" -eq 3 ]; then ok "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named"
+else bad "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named" "$(cat "$MV/cap0.txt" "$MV/cap1.txt" | tr '\n' ' ')"; fi
+
+# blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
+mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$FW/bf/"
+if (cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh > /dev/null 2>&1) && [ -f "$FW/bf/blindspot-fleet.ps1" ] && [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 204800 ]; then ok "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ') bytes"
+else bad "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" 2>/dev/null)"; fi
+fw_home bfh; mkdir -p "$FW/bfrun"; cp "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/"
+FW_SCRIPT="$FW/bfrun/blindspot-fleet.ps1" fw_run bfrun "$FW/bfh"
+_v=$(sed -n 's/^script=//p' "$FW/bfrun.flat")
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SCRIPT" "$FW/bf/stripped.ps1" > /dev/null 2>&1
+if [ -n "$_v" ] && [ -s "$FW/bf/stripped.ps1" ] && cmp -s "$FW/bfh/AppData/Local/Blindspot/$_v/gird-check.ps1" "$FW/bf/stripped.ps1" && grep -q '^outcome=clear$' "$FW/bfrun.flat"; then ok "fleet: and the check it unpacks and runs is gird-check.ps1 without its comments, byte for byte"
+else bad "fleet: and the check it unpacks and runs is gird-check.ps1 without its comments, byte for byte" "$(head -n 3 "$FW/bfrun.flat")"; fi
+sed "s/^\\\$PackedSha = '[0-9a-f]*'\$/\$PackedSha = '$(printf '0%.0s' $(seq 64))'/" "$FW/bf/blindspot-fleet.ps1" > "$FW/bfrun/blindspot-bad.ps1"
+fw_home bfbad; : > "$FW/argv.log"
+FW_SCRIPT="$FW/bfrun/blindspot-bad.ps1" fw_run bfbad "$FW/bfbad"
+if ! cmp -s "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/blindspot-bad.ps1" && grep -qE ' reason=unpack \| ' "$FW/bfbad.out" && [ ! -s "$FW/argv.log" ]; then ok "fleet: a packed check whose SHA-256 differs is never started, reason=unpack"
+else bad "fleet: a packed check whose SHA-256 differs is never started, reason=unpack" "$(cat "$FW/bfbad.out" "$FW/argv.log")"; fi
+# The 80% warning (size_ok in tools/gen.sh, as for blindspot-fleet.sh), both ways: the build as it is
+# (under 80% today, so no warning), and a copy whose
+# gird-fleet.ps1 carries comment lines that put blindspot-fleet.ps1 at about 190,000 bytes.
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1); _rc=$?
+_sz=$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ')
+mkdir -p "$FW/bf90"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$FW/bf90/"
+python3 -c "import sys; n = 190000 - int(sys.argv[2]); open(sys.argv[1], 'a').write(('# ' + 'x' * 97 + '\n') * (n // 100))" "$FW/bf90/gird-fleet.ps1" "$_sz"
+(cd "$FW/bf90" && PWSH="$PWSH" bash tools/gen.sh > "$FW/bf90.log" 2>&1); _rc90=$?
+_sz90=$(wc -c < "$FW/bf90/blindspot-fleet.ps1" 2> /dev/null | tr -d ' ')
+if [ "$_rc" -eq 0 ] && { { [ "$_sz" -lt 163840 ] && ! grep -q 'blindspot-fleet.ps1 is .* past 80%' "$FW/bf-check.log"; } || { [ "$_sz" -ge 163840 ] && grep -q 'blindspot-fleet.ps1 is .* past 80%' "$FW/bf-check.log"; }; } \
+  && [ "$_rc90" -eq 0 ] && [ "${_sz90:-0}" -ge 163840 ] && [ "$_sz90" -lt 204800 ] && grep -q "^warning: blindspot-fleet.ps1 is $_sz90 bytes, past 80% of the 204,800 Intune takes\$" "$FW/bf90.log"
+then ok "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 80% of 200 KB" "$_sz and $_sz90 bytes"
+else bad "fleet: tools/gen.sh warns when blindspot-fleet.ps1 passes 80% of 200 KB" "as built: exit $_rc, $_sz bytes, $(grep -c 'blindspot-fleet.ps1 is .* past 80%' "$FW/bf-check.log") warnings; inflated: exit $_rc90, $_sz90 bytes, $(head -n 2 "$FW/bf90.log")"; fi
+# blindspot-fleet.ps1 packs gird-check.ps1 without its comments (tools/strip-comments.ps1): it must
+# parse and run as gird-check.ps1 does, and nothing but comments may go.
+SC=$WORK/strip; mkdir -p "$SC"
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SCRIPT" "$SC/check.ps1" > "$SC/sha.txt" 2> "$SC/err.txt"; _rc=$?
+"$PWSH" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$SC/check.ps1', [ref]\$null, [ref]\$e); \$e.Count" > "$SC/parse.txt" 2>&1
+if [ "$_rc" -eq 0 ] && [ -s "$SC/check.ps1" ] && [ "$(cat "$SC/parse.txt")" = 0 ] && [ "$(wc -c < "$SC/check.ps1")" -lt "$(wc -c < "$SCRIPT")" ]; then ok "strip-comments: gird-check.ps1 without its comments parses" "$(wc -c < "$SC/check.ps1" | tr -d ' ') bytes"
+else bad "strip-comments: gird-check.ps1 without its comments parses" "exit $_rc, $(cat "$SC/err.txt" "$SC/parse.txt" | head -n 3)"; fi
+psrun "$WORK/home" -- -AccountRun > "$SC/ar-orig.txt" 2> /dev/null
+SCRIPT="$SC/check.ps1" psrun "$WORK/home" -- -AccountRun > "$SC/ar-strip.txt" 2> /dev/null
+if grep -qE '^key_files=[1-9]' "$SC/ar-orig.txt" && cmp -s "$SC/ar-orig.txt" "$SC/ar-strip.txt"; then ok "strip-comments: without its comments, -AccountRun prints the same lines"
+else bad "strip-comments: without its comments, -AccountRun prints the same lines" "$(diff "$SC/ar-orig.txt" "$SC/ar-strip.txt" | head -n 4)"; fi
+for _fx in home clean; do
+  psrun "$WORK/$_fx" -- -Offline -Full -NoColor > "$SC/full-orig-$_fx.txt" 2>&1
+  SCRIPT="$SC/check.ps1" psrun "$WORK/$_fx" -- -Offline -Full -NoColor > "$SC/full-strip-$_fx.txt" 2>&1
+done
+if [ -s "$SC/full-orig-home.txt" ] && cmp -s "$SC/full-orig-home.txt" "$SC/full-strip-home.txt" && cmp -s "$SC/full-orig-clean.txt" "$SC/full-strip-clean.txt"; then ok "strip-comments: without its comments, the -Offline -Full report is the same"
+else bad "strip-comments: without its comments, the -Offline -Full report is the same" "$(diff "$SC/full-orig-home.txt" "$SC/full-strip-home.txt" | head -n 4; diff "$SC/full-orig-clean.txt" "$SC/full-strip-clean.txt" | head -n 4)"; fi
+# gird-check.ps1's strings, here-strings and tables, token for token: every token but comments and blank lines.
+"$PWSH" -NoProfile -NonInteractive -Command "foreach (\$p in @(@('$SCRIPT', '$SC/orig.tokens'), @('$SC/check.ps1', '$SC/strip.tokens'))) { \$t = \$null; [void][Management.Automation.Language.Parser]::ParseFile(\$p[0], [ref]\$t, [ref]\$null)
+  [IO.File]::WriteAllLines(\$p[1], [string[]]@(\$t | Where-Object { \$_.Kind -ne 'Comment' -and \$_.Kind -ne 'NewLine' } | ForEach-Object { \"\$(\$_.Kind) \$(\$_.Text)\" })) }" > /dev/null 2>&1
+if [ -s "$SC/orig.tokens" ] && cmp -s "$SC/orig.tokens" "$SC/strip.tokens" && grep -q '^HereString' "$SC/orig.tokens"; then ok "strip-comments: gird-check.ps1's strings, here-strings and tables are unchanged token for token" "$(grep -c '' "$SC/orig.tokens") lines"
+else bad "strip-comments: gird-check.ps1's strings, here-strings and tables are unchanged token for token" "$(diff "$SC/orig.tokens" "$SC/strip.tokens" 2>&1 | head -n 4)"; fi
+# A small script: a # in a string, a here-string and a regex, comments of every kind, a <# inside a
+# word (an argument, not a comment), #requires, and a line continued with a backtick before a comment line.
+cat > "$SC/t.ps1" <<'PS'
+<#
+The header stays.
+#>
+$a = 'single # quoted'   # end of line
+$b = "double # $a"
+# a whole line
+$c = @'
+# in a here-string
+'@
+$d = @"
+# in an expandable here-string: $b
+"@
+<# a block
+   of two lines #>
+#requires -Version 5.1
+$e = 'x#1' -match '^x#\d$'
+$f = [regex]::Replace('a#b', '#', '-')
+Write-Output $a $b $c $d $e $f<#in a word#>'next'
+Write-Output 'x'<#gone#>'y' <#gone too#> 'z'
+Write-Output one `
+  two
+Write-Output three `
+# after a continuation
+'four'
+PS
+"$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 "$SC/t.ps1" "$SC/t-strip.ps1" > /dev/null 2> "$SC/t-err.txt"; _rc=$?
+"$PWSH" -NoProfile -NonInteractive -File "$SC/t.ps1" > "$SC/t-orig.out" 2>&1
+"$PWSH" -NoProfile -NonInteractive -File "$SC/t-strip.ps1" > "$SC/t-strip.out" 2>&1
+if [ "$_rc" -eq 0 ] && grep -qF -- "'single # quoted'" "$SC/t-strip.ps1" && grep -qxF -- '# in a here-string' "$SC/t-strip.ps1" && grep -qxF -- '# in an expandable here-string: $b' "$SC/t-strip.ps1" \
+  && grep -qF -- "'^x#\\d\$'" "$SC/t-strip.ps1" && grep -qF -- "'a#b', '#'" "$SC/t-strip.ps1" && grep -qF 'The header stays.' "$SC/t-strip.ps1" \
+  && grep -qF "\$f<#in a word#>'next'" "$SC/t-strip.ps1" \
+  && ! grep -qE 'end of line|a whole line|a block|of two lines|gone|after a continuation' "$SC/t-strip.ps1" && [ -s "$SC/t-orig.out" ] && cmp -s "$SC/t-orig.out" "$SC/t-strip.out"
+then ok "strip-comments: a # in a string, a here-string or a regex stays, and the script runs the same"
+else bad "strip-comments: a # in a string, a here-string or a regex stays, and the script runs the same" "exit $_rc $(cat "$SC/t-err.txt"; diff "$SC/t-orig.out" "$SC/t-strip.out" | head -n 4)"; fi
+if grep -qx '#requires -Version 5.1' "$SC/t-strip.ps1"; then ok "strip-comments: #requires is kept"; else bad "strip-comments: #requires is kept" "$(head -n 20 "$SC/t-strip.ps1")"; fi
+# The SHA-256 blindspot-fleet.ps1 checks before every start is that copy's, as the tool prints it.
+_ps=$(sed -n "s/^\\\$PackedSha = '\\([0-9a-f]*\\)'\$/\\1/p" "$FW/bf/blindspot-fleet.ps1")
+if [ -n "$_ps" ] && [ "$_ps" = "$(cat "$SC/sha.txt")" ] && [ "$_ps" = "$( (shasum -a 256 "$SC/check.ps1" 2> /dev/null || sha256sum "$SC/check.ps1") | cut -c1-64)" ]; then ok "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments"
+else bad "fleet: blindspot-fleet.ps1 carries the SHA-256 of gird-check.ps1 without its comments" "packed '$_ps', tool '$(cat "$SC/sha.txt")'"; fi
+# The self-check above is made with the PowerShell that builds the release. Windows PowerShell 5.1 must
+# parse the copy too, and the 5.1 command the design gives must print the same SHA-256.
+if [ -n "$WINONLY" ]; then skip "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256" "$WINONLY: Windows PowerShell 5.1 runs only on Windows"
+else
+  _w51="$SYSTEMROOT/System32/WindowsPowerShell/v1.0/powershell.exe"
+  "$_w51" -NoProfile -NonInteractive -Command "\$e = \$null; [void][Management.Automation.Language.Parser]::ParseFile('$(cygpath -w "$SC/check.ps1")', [ref]\$null, [ref]\$e); \$e.Count; \$PSVersionTable.PSVersion.Major" < /dev/null > "$SC/parse51.txt" 2>&1
+  "$_w51" -NoProfile -ExecutionPolicy Bypass -File 'tools\strip-comments.ps1' gird-check.ps1 < /dev/null > "$SC/sha51.txt" 2>&1; _rc=$?
+  if [ "$(tr -d '\r' < "$SC/parse51.txt" | tr '\n' ' ')" = '0 5 ' ] && [ "$_rc" -eq 0 ] && [ -s "$SC/sha.txt" ] && [ "$(tr -d '\r\n' < "$SC/sha51.txt")" = "$(tr -d '\r\n' < "$SC/sha.txt")" ]
+  then ok "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256"
+  else bad "strip-comments: Windows PowerShell 5.1 parses the copy and prints the same SHA-256" "parse: $(tr '\r\n' '  ' < "$SC/parse51.txt"); exit $_rc: $(head -c 200 "$SC/sha51.txt"); pwsh: $(cat "$SC/sha.txt")"; fi
+fi
+# A packed copy edited by hand, its SHA-256 left as built, fails --check.
+{ cat "$SC/check.ps1"; printf 'Write-Output edited\n'; } | gzip -9 -n -c | base64 | tr -d '\n\r' > "$SC/edited.b64"
+cp "$FW/bf/blindspot-fleet.ps1" "$SC/built.ps1"
+sed "s|^\\\$PackedCheck = '[A-Za-z0-9+/=]*'\$|\$PackedCheck = '$(sed 's/[|&]/\\&/g' "$SC/edited.b64")'|" "$SC/built.ps1" > "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/edited-check.log" 2>&1); _rc=$?
+cp "$SC/built.ps1" "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/built-check.log" 2>&1); _rc2=$?
+if [ "$_rc" -ne 0 ] && grep -q 'blindspot-fleet.ps1 is out of date .* or was edited' "$SC/edited-check.log" && [ "$_rc2" -eq 0 ]; then ok "fleet: a hand-edited packed copy fails tools/gen.sh --check"
+else bad "fleet: a hand-edited packed copy fails tools/gen.sh --check" "edited: exit $_rc $(head -n 2 "$SC/edited-check.log"); as built: exit $_rc2 $(head -n 2 "$SC/built-check.log")"; fi
+# A line added inside the packed block, beside its two lines, fails --check too.
+awk '{ print } /^\$PackedSha = / { print "[Console]::Out.WriteLine(\"injected\")" }' "$SC/built.ps1" > "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/inj-check.log" 2>&1); _rc=$?
+cp "$SC/built.ps1" "$FW/bf/blindspot-fleet.ps1"
+if [ "$_rc" -ne 0 ] && grep -q 'blindspot-fleet.ps1 is out of date .* or was edited' "$SC/inj-check.log"; then ok "fleet: a line added inside the packed block fails tools/gen.sh --check"
+else bad "fleet: a line added inside the packed block fails tools/gen.sh --check" "exit $_rc $(head -n 2 "$SC/inj-check.log")"; fi
+
+# Refusals, and the rules a reader checks in the file itself.
+fw_run all "$FW/clean" -- --all
+if grep -q '^13$' "$FW/all.rc" && grep -q -- '-All is refused' "$FW/all.err" && [ ! -s "$FW/argv.log" ]; then ok "fleet: --all with --all-users is refused"; else bad "fleet: --all with --all-users is refused" "exit $(cat "$FW/all.rc")"; fi
+fw_run js "$FW/clean" -- --json --summary-to-stdout
+if grep -q '^2$' "$FW/js.rc" && grep -q 'choose -Json or -Summary, not both' "$FW/js.err" && [ ! -s "$FW/js.out" ] && [ ! -s "$FW/argv.log" ]; then ok "fleet: -Json with -Summary is refused"; else bad "fleet: -Json with -Summary is refused" "exit $(cat "$FW/js.rc")"; fi
+_dl=""
+for d in 0 abc 100000 -5 1.5 ' 60' 060; do
+  fw_run dl "$FW/clean" -- "--deadline=$d"
+  grep -q '^2$' "$FW/dl.rc" && grep -q -- '-Deadline takes a number of seconds' "$FW/dl.err" && [ ! -s "$FW/argv.log" ] || _dl="$_dl [$d]"
+done
+fw_run dlp "$FW/clean" -- -Deadline abc
+grep -q '^2$' "$FW/dlp.rc" || _dl="$_dl [-Deadline abc]"
+if [ -z "$_dl" ]; then ok "fleet: a -Deadline that is not 1 to 99999 seconds is refused"; else bad "fleet: a -Deadline that is not 1 to 99999 seconds is refused" "$_dl"; fi
+# Run by a relative path from the script's folder; from standard input it can't read gird-check.ps1 next to it.
+( cd "$(dirname "$FLEETPS")" && FW_SCRIPT=gird-fleet.ps1 fw_run rel "$FW/upd" -- --summary-to-stdout )
+has    "fleet: runs by a relative path from the script's folder" '^blindspot review accounts=1 act=0 review=1 not_checked=0 ' "$FW/rel.out"
+( cd / && env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" GIRD_CHECK_FLEET_TEST=1 GIRD_CHECK_FLEET_POWERSHELL="$PWSH" \
+    "$PWSH" -NoProfile -NonInteractive -Command '$s = [Console]::In.ReadToEnd(); Invoke-Expression $s' < "$FLEETPS" > "$FW/stdin.out" 2> "$FW/stdin.err" ); RC=$?
+if [ "$RC" -eq 1 ] && grep -q 'run it from a file: gird-fleet.ps1 reads gird-check.ps1 from its own folder' "$FW/stdin.err" && grep -qE "$INVRX" "$FW/stdin.out" && grep -q ' reason=unpack | ' "$FW/stdin.out"
+then ok "fleet: from standard input it fails, and says why"; else bad "fleet: from standard input it fails, and says why" "exit $RC $(cat "$FW/stdin.err" "$FW/stdin.out")"; fi
+env -i PATH=/usr/bin:/bin USERPROFILE="$FW/clean" LOCALAPPDATA="$FW/clean/AppData/Local" "$PWSH" -NoProfile -NonInteractive -File "$FLEETPS" > "$FW/notwin.out" 2> "$FW/notwin.err"; RC=$?
+if [ "$RC" -eq 13 ] && [ ! -s "$FW/notwin.out" ] && grep -q 'run gird-fleet.sh' "$FW/notwin.err"; then ok "fleet: off Windows it exits 13 and points to gird-fleet.sh"; else bad "fleet: off Windows it exits 13 and points to gird-fleet.sh" "exit $RC"; fi
+_unguarded=$(awk '/^[[:space:]]*#/ { next } /GIRD_CHECK_FLEET_/ && !/\$FlTest -and/ && !/^  if \(\$env:GIRD_CHECK_FLEET_TEST -ne .1.\) \{ Fl-Usage / { print NR ": " $0 }' "$FLEETPS")
+if [ -z "$_unguarded" ]; then ok "fleet: every test setting is read only off Windows"; else bad "fleet: every test setting is read only off Windows" "$_unguarded"; fi
+if LC_ALL=C grep -q '[^ -~	]' "$FLEETPS"; then bad "fleet: gird-fleet.ps1 is plain ASCII"; else ok "fleet: gird-fleet.ps1 is plain ASCII"; fi
+sed -e 's/#.*$//' -e "s/'[^']*'//g" -e 's/"[^"]*"//g' "$FLEETPS" > "$WORK/fleet-code.txt"
+hasnot "fleet: gird-fleet.ps1 uses nothing PowerShell 7 alone has" '\?\?|\?\.|&&|\|\||-Parallel|-AsHashtable|\$Is(Windows|MacOS|Linux)\b| \? [^ ]+ : ' "$WORK/fleet-code.txt"
+# The reduced language allows only some statements: the check of it comes before any other.
+if awk '/LanguageMode -ne .FullLanguage./ { f = NR } /\[(Environment|IO\.|Security|Diagnostics|Convert|Text\.|Console\]::Out)/ && !c { c = NR } END { exit !(f && c && f < c) }' "$FLEETPS"; then ok "fleet: the language mode is checked before any .NET call"; else bad "fleet: the language mode is checked before any .NET call"; fi
+if psrun "$WORK/home" -- -Help | grep -q 'blindspot-fleet.ps1 checks the signed-in'; then ok "-Help names blindspot-fleet.ps1 for IT teams"; else bad "-Help names blindspot-fleet.ps1 for IT teams"; fi
+
 # The Worker's own validation. It must keep the Windows values as sent, not turn
 # them into 'other', and they must be the plan's values.
 WORKER=${GIRD_CHECK_WORKER:-}
@@ -3535,5 +5781,8 @@ JS
 else
   skip "the Worker accepts the report and keeps every field" "needs GIRD_CHECK_WORKER pointing at the site's report validation (worker/check-stats.js), and node"
 fi
+
+# gird-intune.ps1, against a local stand-in for Microsoft Graph.
+. tests/intune.sh
 
 finish

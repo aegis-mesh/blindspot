@@ -4,9 +4,9 @@ When the script starts, it asks `https://gird.ai/api/check/stats` for public **t
 
 When the script finishes, it sends one **report** to `https://gird.ai/api/check` and waits up to 3 seconds for the reply, which says how your result compares. If you use the menu at the end, it sends one more small **actions** event when you quit, in the background with a 5-second timeout. Everything goes over https. If a request fails, nothing happens and nothing is retried.
 
-Turn all of it off, the totals request included, with `--offline` or `DO_NOT_TRACK=1`. `gird-fleet.sh`, the check IT runs as root on every account ([docs/fleet.md](docs/fleet.md)), makes no request at all, and nor do the account checks it starts: its result stays on the Mac for the MDM to read.
+Turn all of it off, the totals request included, with `--offline` or `DO_NOT_TRACK=1`. `gird-fleet.sh`, the check IT runs as root on every account ([docs/fleet.md](docs/fleet.md)), makes no request at all, and nor do the account checks it starts: its result stays on the Mac for the MDM to read. On Windows, `blindspot-fleet.ps1` ([docs/fleet.md](docs/fleet.md#windows)) and the account check it starts make none either: its result stays in the person's `%LOCALAPPDATA%\Blindspot` for the MDM to read. The admin report, `gird-report.ps1`, reads only the export you give it and makes no request. Intune's optional helper, `gird-intune.ps1`, talks only to Microsoft Graph in your own tenant, signed in as you, and sends nothing to gird.ai.
 
-Everything is built in one place near the end of [`gird-check.sh`](gird-check.sh), so you can read exactly what goes. Every field is a number or comes from a fixed list or a strict pattern. The fixed lists of MCP apps, well-known MCP servers and kinds of file are in one block in the script, under "Fixed lists for the case-study counts". The server applies the same rules and drops anything else.
+Everything is built in one place near the end of [`gird-check.sh`](gird-check.sh), so you can read exactly what goes. Every field is a number or comes from a fixed list or a strict pattern. The fixed lists of agents, MCP apps, well-known MCP servers, kinds of file and the terminals named by `TERM_PROGRAM` are files in [`data/`](data/) (`agents.tsv`, `mcp-clients.tsv`, `mcp-servers.tsv`, `key-places.tsv`, `term-programs.tsv`), which `tools/gen.sh` writes into both scripts. The server applies the same rules and drops anything else.
 
 ## Never sent
 
@@ -22,7 +22,7 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | `script` | `"1"` | Script version |
 | `os`, `arch`, `model` | `"macOS 26.4"`, `"arm64"`, `"MacBookPro18,1"` | macOS version, `"Linux"`, or `"Windows 10"` / `"Windows 11"` (build 22000 and up is 11; `"Windows"` when the build is unknown). Processor type: `arm64`, `x86_64` or `other`. Mac model identifier, empty elsewhere |
 | `terminal`, `tmux` | `"iterm2"`, `0` | Terminal app, from a fixed list (on Windows also `windows-terminal` and `conhost`), and whether tmux is running |
-| `shell`, `bash` | `"zsh"`, `3` | Your login shell, from a fixed list (the PowerShell version sends `pwsh`, `powershell` or `cmd`), and the bash major version running the script |
+| `shell`, `bash` | `"zsh"`, `3` | Your login shell, from a fixed list (the PowerShell version sends `pwsh` or `powershell`), and the bash major version running the script |
 | `lang` | `"en_IN"` | Language and region setting |
 | `via` | `"none"` | `claude-code` when the script runs inside Claude Code |
 | `grade`, `score` | `"C"`, `64` | The result. The grade is for research counts only; the script shows how you compare instead |
@@ -31,12 +31,12 @@ File paths, file names, keys, key fragments, MCP server names that aren't on the
 | `mcp_servers`, `mcp_configs`, `mcp_token_files` | `6`, `3`, `1` | MCP servers, config files with servers, and configs with a token written in. Configs inside plugin folders and caches are not counted in the first two |
 | `mcp_clients`, `mcp_token_clients` | `{"claude-code":4,"codex":2}`, `["codex"]` | How many MCP servers each app has, and which apps keep a token written in their config. Apps from a fixed list |
 | `mcp_known`, `mcp_other` | `["github","playwright"]`, `3` | Which well-known MCP servers you have, from a fixed list, and how many others. Any other server name is never sent |
-| `key_files`, `key_providers`, `history_keys` | `4`, `["anthropic","aws"]`, `1` | Files with keys in plain text, which providers from a fixed list, and how many shell history files hold keys |
+| `key_files`, `key_providers`, `history_keys` | `4`, `["anthropic","aws"]`, `1` | Files with keys in plain text, which providers from a fixed list, and how many shell history files hold keys. The list: `anthropic`, `openrouter`, `openai`, `google`, `groq`, `xai`, `huggingface`, `perplexity`, `replicate`, `aws`, `github`, `npm`, `databricks`, `gitlab`, `slack`, `stripe`, `sendgrid`, `pypi`, `dockerhub`, `digitalocean`, `vault`, `nvidia`, `langsmith`, `shopify`, `sentry`, `supabase`, `onepassword`, `azureentra`, `azuredevops`, `azureai`, `azurestorage` |
 | `key_places` | `{"shell_rc":1,"shell_history":1,"env_file":2}` | Where those files sit, by kind of file: shell config, shell history, .env files, MCP configs, agent settings, project files or other. Each file counts once |
 | `provider_files` | `{"anthropic":3,"aws":1}` | How many files hold each provider's keys |
 | `env_files` | `12` | `.env` files scanned |
 | `allow_list_files`, `allow_list_keys`, `allow_list_npm` | `2`, `1`, `1` | Claude Code settings files, how many hold a saved command with a key, and how many an npm publish would ship |
-| `login_files` | `["aws","ssh"]` | Kinds of login files present, from a fixed list |
+| `login_files` | `["aws","ssh"]` | Kinds of login files present, from a fixed list: `aws`, `gcloud`, `azure`, `azure-sp`, `kube`, `docker`, `npm`, `netrc`, `git-credentials`, `gh`, `pypi`, `codex`, `claude-code`, `gemini`, `opencode`, `railway`, `databricks`, `dbt`, `snowflake`, `ssh` |
 | `ssh_keys`, `ssh_no_passphrase` | `2`, `1` | SSH private keys, and how many have no passphrase |
 | `python_envs`, `litellm_installed`, `litellm_found` | `6`, `2`, `0` | Python environments checked, LiteLLM installs, and whether 1.107.0 malware signs were found |
 | `opencode`, `railway` | `1`, `0` | Whether the OpenCode and Railway tools are installed |

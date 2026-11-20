@@ -1,0 +1,11 @@
+# Values published as examples or built into emulators: they match a key pattern, but they are
+# public and give no access to anything. A match that holds one is not a key. One line each, tab
+# separated: the key id (data/keys.tsv), a part of the value, at least 20 characters and never one
+# its key pattern matches alone, and where the vendor publishes it. After editing, run: bash tools/gen.sh
+# id	part	source
+azurestorage	Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u	https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string
+slack	19874698323-pdFZKVeTuE8sk7oOcBrzbqgy	https://docs.slack.dev/reference/methods/oauth.v2.access
+supabase	N7UND0UgjKTVK-Uodkm0Hg	https://github.com/supabase/cli/blob/develop/packages/stack/src/Defaults.ts
+azurestorage	C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5	https://learn.microsoft.com/en-us/azure/cosmos-db/emulator
+stripe	MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw	https://docs.svix.com/receiving/verifying-payloads/how-manual
+stripe	5WbX5kEWLlfzsGNjH64I8lOOqUB6e8FH	https://docs.svix.com/receiving/verifying-payloads/how-manual

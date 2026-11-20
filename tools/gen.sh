@@ -1,16 +1,33 @@
 #!/usr/bin/env bash
-# Writes the data files into gird-check.sh and gird-check.ps1 (and the tables root reads into
-# gird-fleet.sh, with gird-check.sh's agents table), between each block's "# >>> <name>"
-# and "# <<< <name>" markers: key types (data/keys.tsv), agent session locations
+# Writes the data files into gird-check.sh and gird-check.ps1 (and the tables the fleet scripts read
+# into gird-fleet.sh and gird-fleet.ps1), between each block's "# >>> <name>"
+# and "# <<< <name>" markers: key types (data/keys.tsv), published example and emulator values
+# that are not keys (data/public-values.tsv), agent session locations
 # (data/sessions.tsv), bad npm packages (data/bad-npm.tsv), incidents (data/incidents.tsv), bad
 # Python packages (data/bad-pypi.tsv), files malware leaves on disk (data/indicators.tsv), files
 # worms plant in a project (data/planted.tsv), hosted platforms that leaked stored secrets
 # (data/platforms.tsv), agents set to run commands without asking (data/auto-approve.tsv), agent
-# versions with a published fix (data/outdated.tsv) and extensions that shipped malware
-# (data/bad-extensions.tsv). The scripts stay single files people can download and check.
+# versions with a published fix (data/outdated.tsv), extensions that shipped malware
+# (data/bad-extensions.tsv), SSH keys malware adds to authorized_keys (data/ssh-keys.tsv), GitHub
+# Actions that were compromised (data/actions.tsv), commands that run commands on other machines,
+# with the agent files whose saved rules can allow them (data/remote-commands.tsv), variables that
+# move an agent's or a tool's folders (data/folder-vars.tsv), tools' own scripts a profile sources
+# (data/tool-scripts.tsv), coding agents (data/agents.tsv), the fixed lists the report sends
+# (data/mcp-clients.tsv, data/mcp-servers.tsv, data/key-places.tsv), the terminal ids TERM_PROGRAM
+# names (data/term-programs.tsv), MCP configs (data/mcp-files.tsv), the lines an account run prints
+# (data/account-run.tsv, written into the fleet scripts, and checked against what gird-check.sh and
+# gird-check.ps1 print), the OWASP Agentic Top 10 risk of each kind of finding (data/owasp.tsv), and the
+# MITRE references and NIST CSF outcomes gird-report.ps1 shows (data/mitre.tsv), with gird-report.ps1's
+# shared block copied into gird-intune.ps1. The
+# scripts stay single files people can download and check. It also writes the lists in
+# docs/checks.md, between "<!-- >>> checks" and "<!-- <<< checks -->".
 #
-#   bash tools/gen.sh           rewrite the blocks
-#   bash tools/gen.sh --check   exit 1 if a block differs from the data files
+#   bash tools/gen.sh           rewrite the blocks, and build blindspot-fleet.sh and blindspot-fleet.ps1
+#   bash tools/gen.sh --check   exit 1 if a block differs from the data files, or a one-file build
+#                               would not be under its MDM's size limit or is not what gen.sh builds
+#
+# Building blindspot-fleet.ps1 needs PowerShell: pwsh on PATH, or PWSH=/path/to/pwsh. Without it the
+# blocks and blindspot-fleet.sh are still written or checked, and the exit code is 3 when they are right.
 set -eu
 cd "$(dirname "$0")/.."
 CHECK=0; [ "${1:-}" = --check ] && CHECK=1
@@ -28,6 +45,13 @@ PY_IDS=" $( { rows data/bad-pypi.tsv | cut -f3; rows data/indicators.tsv | awk -
 # What to do shows an incident's advice only for a package or extension found (bad-npm, bad-pypi,
 # bad-extensions), so advice on any other incident would never be shown: it is refused.
 PKG_IDS=" $(cat data/bad-npm.tsv data/bad-pypi.tsv data/bad-extensions.tsv | grep -v '^#' | awk -F '\t' 'NF >= 3 { printf "%s ", $3 }')"
+# The incidents whose packages are only editor extensions: their startup files and SSH keys are shown
+# with the extensions, as their signs.
+XONLY_IDS=" $(awk -F '\t' 'FNR == 1 { f++ } /^#/ || NF < 3 { next } f == 1 { n[$3] = 1 } f == 2 && !($3 in n) && !s[$3]++ { printf "%s ", $3 }' data/bad-npm.tsv data/bad-extensions.tsv)"
+# The finding words gird-report.ps1 reads, from its $Items table, their one home: every one needs an attack
+# line, an atlas line and a csf line in data/mitre.tsv.
+ITEM_LINES=$(awk '/^\$Items = @\($/ { on = 1; next } on && /^\)$/ { exit } on { print }' gird-report.ps1)
+MITRE_WORDS=" $(printf '%s\n' "$ITEM_LINES" | sed -n "s/^  @{ Word = '\([a-z][a-z-]*\)'.*/\1/p" | tr '\n' ' ')"
 # A path for a file check: ~, an absolute path or one of the tokens sh() and ps() below translate
 # first ({AS}, {LOCALAPPDATA}, {XDG_DATA}, {GOOSE_DATA}, {GOOSE_STATE}, {PROGRAMDATA}, or
 # {ENV:NAME:fallback} whose fallback is ~ or a path), at least one folder or file after it (an ENV
@@ -52,12 +76,64 @@ PATH_OK='function path_ok(p,   r, k, v) {
     else return 0
     return r ~ /^\/[^\/]/
   }'
+# A key line: id, name, starts, pattern, at and max (see data/keys.tsv).
+# The id travels in the shared counts, the result link and gird-fleet.sh's output, and fleet_ids in
+# gird-check.sh keeps only ids of lowercase letters, digits and -: any other id would be dropped there
+# without a word, so it is refused here. A start is plain characters and one-character choices such
+# as [.], so it reads the same in awk, perl and .NET and the perl and .NET pre-filter stays a quick
+# search for fixed text. A pattern runs in grep -E (BSD and GNU), ripgrep, perl and .NET: no POSIX
+# class or \s-style escape, and no count above 255, which BSD grep refuses.
+KEYS_OK='function starts_ok(s,   i, c, inb, n) {
+    if (s == "" || s ~ /[\047"`\/]/) return 0
+    inb = 0; n = 0
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (inb) { if (c == "]") { if (n == 0) return 0; inb = 0 } else if (c == "^" || c == "[") return 0; else n++; continue }
+      if (c == "[") { inb = 1; n = 0; continue }
+      if (c == "|") { if (i == 1 || i == length(s) || substr(s, i - 1, 1) == "|") return 0; continue }
+      if (c !~ /[A-Za-z0-9_~=:-]/) return 0
+    }
+    return !inb
+  }
+  # An in line names each start as TEXT@N: fixed text, its one-character choices single characters
+  # such as [+], and where it is in the key; TEXT@N&TEXT@N needs all its parts. A start line names none.
+  function marks_ok(s, inl,   n, a, i, t, m, b, j) {
+    n = split(s, a, "|")
+    for (i = 1; i <= n; i++) {
+      if (!inl) { if (a[i] ~ /[@&]/) return 0; continue }
+      m = split(a[i], b, "&")
+      for (j = 1; j <= m; j++) {
+        if (b[j] !~ /^[^@]+@[0-9]+$/) return 0
+        t = b[j]; sub(/@[0-9]+$/, "", t)
+        if (!starts_ok(t) || t ~ /\[[^]][^]]+\]/) return 0
+      }
+    }
+    return 1
+  }
+  function pattern_ok(p,   s, b, q) {
+    if (p == "" || p ~ /[\047`]/ || index(p, "[:") > 0 || p ~ /\\[sdwtSDWT]/) return 0
+    s = p
+    while (match(s, /\{[0-9]+(,[0-9]*)?\}/)) {
+      b = substr(s, RSTART + 1, RLENGTH - 2); split(b, q, ",")
+      if (q[1] + 0 > 255 || q[2] + 0 > 255) return 0
+      s = substr(s, RSTART + RLENGTH)
+    }
+    return 1
+  }
+  function plain(s) { gsub(/@[0-9]+/, "", s); gsub(/&[^|]*/, "", s); return s }
+  function key_ok() {
+    return NF == 6 && $1 ~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/ && $2 != "" && $2 !~ /[\047"`$\\]/ && starts_ok(plain($3)) && marks_ok($3, $5 == "in") && pattern_ok($4) &&
+      $5 ~ /^(start|in)$/ && ($6 == "-" || ($6 ~ /^[0-9]+$/ && $6 + 0 >= 20 && $6 + 0 <= 1024))
+  }'
 # No regex intervals ({n}) in the awk programs: older mawk (Ubuntu 22.04) does not support them.
 # Characters that would break the generated bash, awk or PowerShell are refused, and so is an
-# incident id no line of data/incidents.tsv has. A key id is lowercase letters, digits and _, and
-# names its provider once: gird.ai's counts are keyed on it. The regexes spell out counts
+# incident id no line of data/incidents.tsv has. A key id names its provider once: gird.ai's counts
+# are keyed on it. The regexes spell out counts
 # ([0-9][0-9][0-9][0-9], not [0-9]{4}): Debian 12's mawk has no {n} intervals and would refuse every line.
-bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[$1]++ || $2 ~ /[\047"`$\\]/ || $3 ~ /[\047"`\/]/ || $4 ~ /[\047`]/ { print "data/keys.tsv: " $0 }'
+bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line with no key line before it"; last = 1; next } /^#/ || !NF { next } { rows = 1; last = 0 } END { if (last) print "data/keys.tsv: a #pass line with no key line after it" }' data/keys.tsv
+      rows data/keys.tsv | awk -F '\t' "$KEYS_OK"'
+        { if (!key_ok() || seen[$1]++ || ($5 == "start" && inl)) print "data/keys.tsv: " $0; n++; if ($5 == "in") inl = 1 }
+        END { if (n > 40) print "data/keys.tsv: " n " key types, more than the 40 gird-fleet.sh takes from one account (fl_ids_ok)" }'
       rows data/incidents.tsv | awk -F '\t' -v pkg="$PKG_IDS" -v plat="$PLAT_IDS" '(NF < 6 || NF > 8) || ($6 == "leak") != (index(plat, " " $1 " ") > 0) || (NF >= 7 && ($7 == "" || $7 ~ /[\047"`$|\\]/ || index(pkg, " " $1 " ") == 0 || ($7 ~ /^First / && ($6 != "act" || $7 ~ /[Rr]otate|[Rr]evoke/)))) || (NF == 8 && ($6 != "update" || $8 == "" || $8 ~ /[\047"`$|\\]/ || length($8) > 49)) || $1 !~ /^[a-z0-9]+$/ || $2 ~ /[\047"`$|\\]/ || $3 !~ /^[A-Z][a-z]+ [0-9][0-9][0-9][0-9]$/ || $4 ~ /[\047"`$\\]/ || $5 !~ /^https:\/\/[^ \047"`$]+$/ || $6 !~ /^(act|update|leak)$/ || seen[$1]++ { print "data/incidents.tsv: " $0 }'
       # npm's placeholder for a removed package (0.0.1-security, or 0.0.1-security.0 for a few names) is never malware, and the scripts skip it.
       rows data/bad-npm.tsv | awk -F '\t' -v ids="$IDS" -v leaks="$LEAK_IDS" 'NF != 3 || index(leaks, " " $3 " ") > 0 || $1 !~ /^(@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/ || $2 !~ /^(\*|[0-9][0-9A-Za-z.+-]*)$/ || $2 ~ /^0\.0\.1-security(\.[0-9]+)?$/ || $3 !~ /^[a-z0-9]+$/ || index(ids, " " $3 " ") == 0 { print "data/bad-npm.tsv: " $0 }'
@@ -71,14 +147,16 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       # temp lines); wiper and site lines carry -. PowerShell gets the note quoted, so it may hold a quote.
       # A Python incident's startup file is shown in its row in section 5, checked before the ownership
       # rules: it must be in the home folder, the person's own, with owner no.
-      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" -v leaks="$LEAK_IDS" -v py="$PY_IDS" "$PATH_OK"'
-        { ok = NF == 6 && index(ids, " " $1 " ") > 0 && index(leaks, " " $1 " ") == 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
+      rows data/indicators.tsv | awk -F '\t' -v ids="$IDS" -v acts="$ACT_IDS" -v leaks="$LEAK_IDS" -v py="$PY_IDS" -v xonly="$XONLY_IDS" "$PATH_OK"'
+        { ok = (NF == 6 || (NF == 7 && $7 == "alone" && $3 == "startup" && index(xonly, " " $1 " ") > 0)) && index(ids, " " $1 " ") > 0 && index(leaks, " " $1 " ") == 0 && $2 ~ /^(all|mac|linux|win)$/ && $3 ~ /^(wiper|startup|site|temp)$/ && $4 ~ /^(yes|no)$/
           if ($3 ~ /^(wiper|startup)$/) ok = ok && path_ok($5)
           if ($3 == "wiper") ok = ok && $5 ~ /gh-token-monitor/
           if ($3 == "startup" && index(py, " " $1 " ") > 0) ok = ok && $4 == "no" && $5 ~ /^~\//
           if ($3 == "site") ok = ok && $5 ~ /^[A-Za-z0-9._-]+$/
           if ($3 == "temp") ok = ok && $5 ~ /^[A-Za-z0-9._-]+\*?$/
-          if ($3 ~ /^(site|temp)$/) ok = ok && $5 !~ /^\.+\*?$/ && index(acts, " " $1 " ") > 0
+          if ($3 ~ /^(site|temp)$/) ok = ok && $5 !~ /^\.+\*?$/
+          # Every file here is a sign of malware, act level: fleet mode tags those of the Mac as malware signs.
+          ok = ok && index(acts, " " $1 " ") > 0
           if ($3 ~ /^(startup|temp)$/) ok = ok && $6 != "-" && $6 != "" && $6 !~ /["`$|\\]/; else ok = ok && $6 == "-"
           if ($3 == "temp") { if (($1 in tn) && tn[$1] != $6) ok = 0; tn[$1] = $6 }
           if (!ok) print "data/indicators.tsv: " $0 }'
@@ -117,11 +195,132 @@ bad=$(rows data/keys.tsv | awk -F '\t' 'NF != 4 || $1 !~ /^[a-z0-9_]+$/ || seen[
       rows data/bad-extensions.tsv | awk -F '\t' -v ids="$ACT_IDS" '
         function os_ok(s,   n, a, i, got) { if (s == "all") return 1; n = split(s, a, ","); if (n < 1 || n > 2) return 0
           for (i = 1; i <= n; i++) { if (a[i] !~ /^(mac|linux|win)$/ || (a[i] in got)) return 0; got[a[i]] = 1 }; return 1 }
-        NF != 5 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || !os_ok($5) || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+        # A marker is fixed strings separated by ;, each of characters both scripts carry as they are.
+        (NF != 5 && NF != 6) || (NF == 6 && $6 !~ /^[A-Za-z0-9._:@\/+=-]+(;[A-Za-z0-9._:@\/+=-]+)*$/) || $1 !~ /^[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9._-]*$/ || $2 !~ /^(\*|[0-9]+(\.[0-9]+)*)$/ || index(ids, " " $3 " ") == 0 || $4 !~ /^(openvsx|any)$/ || !os_ok($5) || seen[tolower($1) " " $2]++ { print "data/bad-extensions.tsv: " $0 }'
+      # A planted SSH key: its type, and its base64 text, which a line of authorized_keys holds as one field.
+      rows data/ssh-keys.tsv | awk -F '\t' -v ids="$XONLY_IDS" '
+        NF != 4 || index(ids, " " $1 " ") == 0 || $2 !~ /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)$/ ||
+        $3 !~ /^AAAA[A-Za-z0-9+\/]+=*$/ || $4 == "" || $4 ~ /[\047"`$|\\]/ || seen[$3]++ { print "data/ssh-keys.tsv: " $0 }'
+      # A compromised action: owner/repo once (GitHub ignores case), refs as shell patterns of the
+      # characters a tag or branch name uses, full 40-character SHAs, and plain text the scripts quote.
+      # A [ ] in a ref pattern is one whole set or range, such as [1-9]: PowerShell's -clike throws on
+      # one left open, where bash reads it as text. A range runs up, in byte order: -clike throws on
+      # [9-1] too, where bash's case matches nothing.
+      rows data/actions.tsv | awk -F '\t' '
+        function up(p,   o, s, j) { o = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+          while (match(p, /\[[A-Za-z0-9_.-]+\]/)) { s = substr(p, RSTART + 1, RLENGTH - 2); p = substr(p, RSTART + RLENGTH)
+            for (j = 1; j + 2 <= length(s); j++) if (substr(s, j + 1, 1) == "-") { if (index(o, substr(s, j, 1)) > index(o, substr(s, j + 2, 1))) return 0; j += 2 } }
+          return 1 }
+        function refs_ok(s,   n, a, i, b) { n = split(s, a, " "); if (n < 1) return 0; for (i = 1; i <= n; i++) { b = a[i]; gsub(/\[[A-Za-z0-9_.-]+\]/, "", b); if (a[i] !~ /^!?[]A-Za-z0-9_.*?\/[-]+$/ || index(b, "[") || index(b, "]") || !up(a[i]) || a[i] ~ /^!?\*$/ && n > 1) return 0 }; return 1 }
+        function shas_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ","); for (i = 1; i <= n; i++) if (a[i] !~ /^[0-9a-f]+$/ || length(a[i]) != 40) return 0; return 1 }
+        function text_ok(s) { return s != "" && s !~ /[\047"`$|\\]/ }
+        function apart(b, g,   n, a, i) { if (g == "-") return 1; n = split(g, a, ","); for (i = 1; i <= n; i++) if (index("," b ",", "," a[i] ",")) return 0; return 1 }
+        NF != 8 || $1 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || seen[tolower($1)]++ || !refs_ok($2) || !shas_ok($3) || !shas_ok($4) || !apart($3, $4) || $5 !~ /^(safe|unsafe)$/ ||
+        !text_ok($6) || $7 !~ /^https:\/\/[^ \047"`$|\\]+$/ || !text_ok($8) { print "data/actions.tsv: " $0 }'
       rows data/platforms.tsv | awk -F '\t' -v ids="$LEAK_IDS" "$PATH_OK"'
         function paths_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (!path_ok(a[i])) return 0; return 1 }
         NF != 7 || index(ids, " " $1 " ") == 0 || $2 == "" || $2 ~ /[\047"`$|\\]/ || $3 !~ /^(-|[A-Za-z0-9_][A-Za-z0-9._+-]*( [A-Za-z0-9_][A-Za-z0-9._+-]*)*)$/ ||
-        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }')
+        !paths_ok($4) || $5 !~ /^(installed|CLI found)$/ || $6 == "" || $6 ~ /["`$|\\]/ || $7 == "" || $7 ~ /["`$|\\]/ || seen[$1]++ { print "data/platforms.tsv: " $0 }'
+      # A cmd line's words are plain words, one space apart; a file line's path may hold one * folder or
+      # end in a *.ext file name, which the scripts expand, and a * anywhere else is refused.
+      rows data/remote-commands.tsv | awk -F '\t' "$PATH_OK"'
+        function txt(s) { return s != "" && s !~ /[\047"`$|\\]/ }
+        { if ($1 == "cmd") ok = NF == 5 && $2 ~ /^[A-Za-z0-9][A-Za-z0-9.-]*( [A-Za-z0-9][A-Za-z0-9.-]*)*$/ && $3 ~ /^(exact|any)$/ && txt($4) && $5 ~ /^https:\/\/[^ \047"`$|\\]+$/ && !seen[tolower($2)]++
+          else if ($1 == "file") {
+            ok = NF == 7 && txt($2) && $3 ~ /^(all|mac|linux|win)$/ && $4 ~ /^(claude|codex|gemini-toml|gemini-json|vscode|roo|amazonq)$/ && $5 ~ /^(agent|file|local)$/ && txt($7)
+            p = $6; g = gsub(/\/\*\//, "/x/", p); g += sub(/\/\*\.[A-Za-z0-9]+$/, "/x.y", p); ok = ok && g <= 1 && path_ok(p)
+          } else ok = 0
+          if (!ok) print "data/remote-commands.tsv: " $0 }'
+      # A folder is from ~ (or, for Windows, {LOCALAPPDATA} or {APPDATA}), below it, and holds nothing a
+      # shell or PowerShell string would read as code; a script is a path below the tool's folder.
+      rows data/folder-vars.tsv | awk -F '\t' '
+        function dirs_ok(s, win,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) {
+            if (a[i] ~ /[\047"`$\\*?;]/ || a[i] ~ /\/\.\.?(\/|$)/ || a[i] ~ /\/$/) return 0
+            if (a[i] !~ /^~\/[^\/]/ && !(win && a[i] ~ /^\{(LOCALAPPDATA|APPDATA)\}\/[^\/]/)) return 0 }
+          return 1 }
+        function scripts_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) if (a[i] !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/) return 0; return 1 }
+        NF != 5 || $1 !~ /^[A-Za-z_][A-Za-z0-9_]*$/ || $2 !~ /^(agent|tool)$/ || !dirs_ok($3, 0) || !dirs_ok($4, 1) || !scripts_ok($5) || seen[$1]++ { print "data/folder-vars.tsv: " $0 }'
+      rows data/term-programs.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[A-Za-z0-9._-]+$/ || $2 !~ /^[a-z0-9-]+$/ || seen[$1]++ { print "data/term-programs.tsv: " $0 }'
+      rows data/tool-scripts.tsv | awk -F '\t' 'NF != 3 || $1 !~ /^[a-z0-9][a-z0-9_.@+-]*$/ || $2 !~ /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/ || $3 == "" || seen[$1 "/" $2]++ { print "data/tool-scripts.tsv: " $0 }'
+      # A path is a token or ~, then folders and files made of plain characters; - is none.
+      rows data/agents.tsv | awk -F '\t' '
+        function paths_ok(s, toks,   n, a, i, t) { if (s == "-") return 1; n = split(s, a, ";"); for (i = 1; i <= n; i++) {
+            if (a[i] ~ /^\{[A-Z_]+\}/) { t = substr(a[i], 2, index(a[i], "}") - 2); if (index(" " toks " ", " " t " ") == 0) return 0; r = substr(a[i], length(t) + 3) }
+            else if (a[i] ~ /^~\//) r = substr(a[i], 2); else return 0
+            if (r != "" && r !~ /^(\/[A-Za-z0-9 ._-]+)+$/) return 0
+            if (r == "" && a[i] ~ /^~/) return 0 }
+          return 1 }
+        NF != 7 || $1 == "" || $1 ~ /[\047"`$|\\;]/ || $2 !~ /^(-|[a-z0-9._-]+(;[a-z0-9._-]+)*)$/ ||
+        !paths_ok($3, "AS GOOSE_CFG GOOSE_DATA APP_CLAUDE APP_CURSOR APP_WINDSURF APP_DEVIN APP_ANTIGRAVITY") || !paths_ok($4, "AS GOOSE_CFG GOOSE_DATA") ||
+        !paths_ok($5, "LOCALAPPDATA APPDATA GOOSE_DATA") || !paths_ok($6, "LOCALAPPDATA APPDATA GOOSE_DATA") ||
+        $7 !~ /^[a-z0-9-]+$/ || seen[$7]++ { print "data/agents.tsv: " $0 }'
+      # other, for any other file, is the last client and the only one no config of data/mcp-files.tsv names.
+      rows data/mcp-clients.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[a-z0-9-]+$/ || $2 == "" || seen[$1]++ { print "data/mcp-clients.tsv: " $0 } { last = $1 } END { if (last != "other") print "data/mcp-clients.tsv: other is not the last line" }'
+      rows data/mcp-servers.tsv | awk -F '\t' '{ n = split($2, a, ","); ok = NF == 2 && $1 ~ /^[a-z0-9-]+$/ && !seen[$1]++ && ($2 == "-" || n > 0)
+          if ($2 != "-") for (i = 1; i <= n; i++) { if (a[i] !~ /^[a-z0-9-]+$/ || (a[i] in seen) || (a[i] in al)) ok = 0; al[a[i]] = 1 }
+          if (!ok) print "data/mcp-servers.tsv: " $0 }
+        END { for (x in al) if (x in seen) print "data/mcp-servers.tsv: " x " is an id and an alias" }'
+      rows data/key-places.tsv | awk -F '\t' 'NF != 2 || $1 !~ /^[a-z_]+$/ || $2 == "" || seen[$1]++ { print "data/key-places.tsv: " $0 }'
+      _cl=" $(rows data/mcp-clients.tsv | cut -f1 | tr '\n' ' ')"
+      rows data/mcp-files.tsv | awk -F '\t' -v cl="$_cl" '
+        function path_ok(p, toks,   t, r) {
+          if (p ~ /^\{[A-Z_]+\}\//) { t = substr(p, 2, index(p, "}") - 2); if (index(" " toks " ", " " t " ") == 0) return 0; r = substr(p, length(t) + 3) }
+          else if (p ~ /^~\//) r = substr(p, 2); else return 0
+          return r ~ /^(\/[A-Za-z0-9 ._-]+)+$/ }
+        NF != 4 || $1 == "" || $1 ~ /[\047"`$|\\;]/ || $2 == "other" || index(cl, " " $2 " ") == 0 || !path_ok($3, "AS GOOSE_CFG") || !path_ok($4, "APPDATA LOCALAPPDATA") { print "data/mcp-files.tsv: " $0 }'
+      rows data/account-run.tsv | awk -F '\t' 'NF != 1 || $1 !~ /^[a-z_]+$/ || seen[$1]++ { print "data/account-run.tsv: " $0 }
+        NR == 1 { first = $1 } { last = $1 } END { if (first != "v" || last != "end") print "data/account-run.tsv: the first key is not v or the last not end" }'
+      # A none line stands alone for its word and framework; a technique keeps one name and one set of
+      # tactics, and its url is the page its id names.
+      [ "$MITRE_WORDS" != " " ] || echo "gird-report.ps1: no \$Items table, so data/mitre.tsv cannot be checked"
+      # Each $Items line has exactly this form, so a word with a mistyped argument form or level is refused
+      # here rather than read by nothing.
+      printf '%s\n' "$ITEM_LINES" | awk '
+        { ok = $0 ~ /^  @\{ Word = \047[a-z][a-z-]*\047; Arg = \047(none|count|list|keys)\047; Level = \047(act|review|partial)\047; Label = \047[A-Za-z][A-Za-z0-9 ,_():.&-]*\047 \}$/
+          w = $0; sub(/^  @\{ Word = \047/, "", w); sub(/\047.*/, "", w)
+          if (!ok || seen[w]++) print "gird-report.ps1: an $Items line it cannot read, or a word twice: " $0 }'
+      for _v in attack atlas csf; do grep -Eq "^# $_v-version: v?[0-9]+\.[0-9]+$" data/mitre.tsv || echo "data/mitre.tsv: no \"# $_v-version:\" line"; done
+      # A csf line names a CSF 2.0 Subcategory, its Function (the one its id starts with) and Category, and
+      # NIST's publication; its relation is only ever supports, for every computer with the finding. A file
+      # finding supports nothing under Govern, Respond or Recover, which are what an organization decides and
+      # does. cat holds the Categories data/mitre.tsv uses, named as CSWP 29 names them: add one here first.
+      rows data/mitre.tsv | awk -F '\t' -v ids="$IDS" -v words="$MITRE_WORDS" '
+        function safe(s) { return s != "" && s !~ /[\047"`$|\\<>&]/ }
+        BEGIN { fn["ID"] = "Identify"; fn["PR"] = "Protect"; fn["DE"] = "Detect"
+                cat["ID.RA"] = "Risk Assessment"; cat["PR.PS"] = "Platform Security"; cat["DE.CM"] = "Continuous Monitoring" }
+        { ok = NF == 10 && index(words, " " $1 " ") > 0 && $2 ~ /^(all|mac|win)$/ && $4 ~ /^(attack|atlas|csf)$/
+          if ($3 != "all") { ok = ok && $1 ~ /^(incidents|lockfile|update|remove)$/ && $4 != "csf"; n = split($3, a, ","); for (i = 1; i <= n; i++) if (index(ids, " " a[i] " ") == 0) ok = 0 }
+          if ($8 == "none") ok = ok && $2 == "all" && $3 == "all" && $5 == "-" && $6 == "-" && $7 == "-" && $9 == "-" && $10 != "-" && safe($10)
+          else if ($4 == "csf") {
+            n = split($7, t, ",")
+            ok = ok && $2 == "all" && $8 == "supports" && $10 == "-" && safe($6) && $5 ~ /^(ID|PR|DE)\.[A-Z][A-Z]-[0-9][0-9]$/ && n == 2 &&
+              t[1] == fn[substr($5, 1, 2)] && (substr($5, 1, 5) in cat) && t[2] == cat[substr($5, 1, 5)] && $9 == "https://doi.org/10.6028/NIST.CSWP.29"
+            k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7
+          }
+          else {
+            ok = ok && $8 ~ /^(exposure|indicator)$/ && $10 == "-" && safe($6) && $7 ~ /^[A-Z][A-Za-z ]*(,[A-Z][A-Za-z ]*)*$/
+            if ($4 == "attack") { u = $5; sub(/^T/, "", u); gsub(/\./, "/", u); ok = ok && $5 ~ /^T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://attack.mitre.org/techniques/T" u "/" }
+            else ok = ok && $5 ~ /^AML\.T[0-9][0-9][0-9][0-9](\.[0-9][0-9][0-9])?$/ && $9 == "https://atlas.mitre.org/techniques/" $5
+            k = $4 " " $5; if ((k in nm) && (nm[k] != $6 || tc[k] != $7)) ok = 0; nm[k] = $6; tc[k] = $7
+          }
+          wf = $1 " " $4
+          if ($8 == "none") { if (wf in has) ok = 0; nonewf[wf] = 1 } else if (wf in nonewf) ok = 0
+          has[wf] = 1
+          if (seen[$1 " " $2 " " $3 " " $4 " " $5]++) ok = 0
+          if (!ok) print "data/mitre.tsv: " $0 }
+        END { n = split(words, w, " "); for (i = 1; i <= n; i++) { if (!((w[i] " attack") in has)) print "data/mitre.tsv: no attack line for the finding word " w[i]
+                                                                   if (!((w[i] " atlas") in has)) print "data/mitre.tsv: no atlas line for the finding word " w[i]
+                                                                   if (!((w[i] " csf") in has)) print "data/mitre.tsv: no csf line for the finding word " w[i] } }')
+# A published value names a key type of data/keys.tsv and holds only key characters. It is a part of
+# the value, never one its key pattern matches by itself: the list must not hold a whole key.
+KEY_IDS=" $(rows data/keys.tsv | cut -f1 | tr '\n' ' ')"
+_pv=$(rows data/public-values.tsv | awk -F '\t' -v ids="$KEY_IDS" 'NF != 3 || index(ids, " " $1 " ") == 0 || $2 !~ /^[A-Za-z0-9+\/=%._-]+$/ || length($2) < 20 || $3 !~ /^https:\/\/[^ \047"`$|\\]+$/ || seen[$2]++ { print "data/public-values.tsv: " $0 }'
+  rows data/public-values.tsv | while IFS="$(printf '\t')" read -r _i _v _s; do
+    _re=$(rows data/keys.tsv | awk -F '\t' -v i="$_i" '$1 == i { print $4 }')
+    [ -n "$_re" ] && printf '%s\n' "$_v" | grep -qE -- "$_re" && printf 'data/public-values.tsv: %s is a whole %s key\n' "$_v" "$_i"
+  done || :)
+bad="$bad${bad:+${_pv:+
+}}$_pv"
 # The scripts are ASCII only (PowerShell 5.1 reads a file without a BOM as the ANSI code page).
 _na=$(LC_ALL=C grep -n '[^ -~	]' data/*.tsv | sed 's/^/not ASCII (or a CRLF line end): /')
 bad="$bad${bad:+${_na:+
@@ -131,6 +330,105 @@ bad="$bad${bad:+${_na:+
 _nn=$(rows data/bad-npm.tsv | grep -c .)
 [ "$_nn" -le 4000 ] || bad="${bad:+$bad
 }data/bad-npm.tsv: $_nn lines, more than the 4,000 gird-check.sh hands to awk (BAD_NPM_P1 to BAD_NPM_P4)"
+# data/owasp.tsv: every kind of finding and its risk. Every key the account run sends (FL_KEYS in
+# gird-fleet.sh) has one line, incidents two (incidents:act and incidents:update, split by level), and
+# every field of the Mac's own (MACHINE in gird-fleet.sh, but for complete, outcome and owasp) one, so a
+# new field cannot ship without a decision on its risk. A completeness or protocol key, a report-only
+# line (root never sees it, so the two reports would disagree) and any Mac field but incidents (the one
+# root tags) never carry a risk. A source with a risk needs an arm in owasp_set (gird-check.sh's
+# owasp-derive block), or it would never be tagged.
+OW_SED_KEYS='s/^FL_KEYS="\([a-z_ ]*\)"$/\1/p'
+OW_SED_MF='s/^  MACHINE="{\(.*\)}"$/\1/p'
+OW_SED_ARMS='s/^    \([a-z_:|]*\))\( .*\)\{0,1\}$/\1/p'
+OW_KEYS=" $(sed -n "$OW_SED_KEYS" gird-fleet.sh 2>/dev/null) "
+OW_MF=" $(sed -n "$OW_SED_MF" gird-fleet.sh 2>/dev/null | grep -oE '\\"[a-z_]+\\":' | tr -d '\\":' | grep -vxE 'complete|outcome|owasp' | tr '\n' ' ')"
+OW_ARMS=" $(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive$/ { on = 0 } on && /^owasp_set/ { in_set = 1 } in_set && /^}/ { in_set = 0 } in_set' gird-check.sh |
+  sed -n "$OW_SED_ARMS" | tr '|' '\n' | tr '\n' ' ')"
+[ "$OW_KEYS" != "  " ] || bad="${bad:+$bad
+}data/owasp.tsv: gird-fleet.sh has no FL_KEYS line to check it against"
+# gird-check.ps1 tags by its own rule, Owasp-Set: a source with a risk needs its arm there too.
+OW_PSARMS=" $(awk '/^function Owasp-Set\(/ { on = 1; next } on && /^}/ { on = 0 } on' gird-check.ps1 |
+  sed -n "s/^    '\([a-z_:]*\)' {.*/\1/p" | tr '\n' ' ')"
+_ow=$(rows data/owasp.tsv | awk -F '\t' -v keys="$OW_KEYS" -v mf="$OW_MF" -v arms="$OW_ARMS" -v psarms="$OW_PSARMS" '
+  function has(list, x) { return index(list, " " x " ") > 0 }
+  { ok = NF == 7 && $1 ~ /^[a-z0-9_.]+$/ && !seen[$1]++ && $2 ~ /^(ASI0[1-9]|ASI10|-)$/
+    if ($2 == "-") ok = ok && $3 == "-" && $4 == "-" && $5 == "-" && $7 != "-" && $7 != "" && $7 !~ /["`$|\\]/
+    else {
+      ok = ok && $3 ~ /^[A-Za-z0-9][A-Za-z0-9 -]*[A-Za-z0-9]$/ && $4 ~ /^[A-Za-z0-9][A-Za-z0-9 ,._-]*[A-Za-z0-9]$/ && length($4) <= 32 && $7 == "-"
+      if (($2 in nm) && nm[$2] != $3) ok = 0; nm[$2] = $3
+      ok = ok && (($6 ~ /^machine:/) ? $5 == "-" : $5 ~ /^0[1-5]$/)
+      ok = ok && $6 !~ /^(v|end|sessions_partial|not_read|moved|protected|engine|report)$/
+      if ($6 ~ /^machine:/) ok = ok && $6 == "machine:incidents"; else ok = ok && has(arms, $6)
+      if ($6 !~ /^machine:/ && !has(psarms, $6)) print "data/owasp.tsv: Owasp-Set in gird-check.ps1 has no arm for the source " $6 ": " $0
+    }
+    if ($6 ~ /^machine:/) ok = ok && has(mf, substr($6, 9)) && $1 == "machine." substr($6, 9)
+    else ok = ok && ($6 == "report" || $6 == "incidents:act" || $6 == "incidents:update" || ($6 != "incidents" && has(keys, $6)))
+    if (!ok) print "data/owasp.tsv: " $0
+    src[$6]++ }
+  END {
+    n = split(keys, k, " "); for (i = 1; i <= n; i++) if (k[i] == "incidents") { if (src["incidents:act"] != 1 || src["incidents:update"] != 1) print "data/owasp.tsv: incidents needs one incidents:act line and one incidents:update line" }
+      else if (src[k[i]] != 1) print "data/owasp.tsv: the account-run key " k[i] " needs exactly one line"
+    n = split(mf, k, " "); for (i = 1; i <= n; i++) if (src["machine:" k[i]] != 1) print "data/owasp.tsv: the Mac field " k[i] " needs exactly one line"
+  }')
+bad="$bad${bad:+${_ow:+
+}}$_ow"
+# owasp_kinds runs as root in gird-fleet.sh's copy. This guard is an early warning at build time. It
+# refuses a command word in the block that is not a builtin, a keyword, a function the generated
+# blocks define or a full path, and a > outside single quotes (the block writes no file). It reads one
+# line at a time, so it also refuses what would carry shell text past that line or past its reading: an
+# unquoted or <<- here-document, a backtick, a quote or a ( that does not close on its line, a line
+# that ends in \, a here-document after a # or with no end line. The body of a quoted here-document
+# (<<'X', <<"X", <<\X) is skipped to the line that is exactly X. A line outside the functions
+# owasp_set, owasp_kinds and incident_level, and a function defined inside one, are refused. Single-quoted text is skipped; each
+# command word after ; & | ( { $( and the shell keywords is checked; a ) only closes what is before it.
+# It reads text, not the shell's grammar, so it does not catch everything: a command between quotes it
+# pairs wrongly (: "'" ; id ; "'"), a command in the first arm of a case (case x in *) id ;; esac), a
+# full-path tool (/usr/bin/env -i id) and a builtin such as command or hash all pass it. The run is
+# what refuses them: before it runs the block, gird-fleet.sh reads bash's own reprint of its functions
+# and refuses any line not on its list (fl_owasp_code_ok), and the run reads failed
+# (docs/designs/owasp.md).
+# bash 3.2 miscounts the parentheses of a program inside $( ), so the program is set apart first.
+OD_AWK='
+  BEGIN { split("case esac for in do done while until if then else elif fi return printf read continue break [ test : true false local shift unset incident_level owasp_set owasp_kinds", a, " "); for (i in a) okw[a[i]] = 1 }
+  function no(n, why, src) { print "gird-check.sh line " base + n ", owasp-derive block, " why ": " src }
+  function words(l, src,   m, j, w, x, seg, wd) {
+    gsub(/\047[^\047]*\047/, "Q", l); gsub(/"/, " ", l)
+    sub(/^[[:space:]]*[^[:space:]()]*\)/, ";", l)
+    gsub(/\)/, " ", l); gsub(/\$\(|&&|\|\||;;|[;|&{}(]/, ";", l)
+    m = split(l, seg, ";")
+    for (j = 1; j <= m; j++) {
+      w = split(seg[j], wd, " "); x = 1
+      while (x <= w && (wd[x] ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || wd[x] ~ /^(!|then|do|else|elif|if|while|until)$/)) x++
+      if (x > w) continue
+      if (!(wd[x] in okw) && wd[x] !~ /^\//) no(NR, "runs a bare command (" wd[x] "): root runs this block, so call a builtin or a full path", src)
+    } }
+  hd != "" { if ($0 == hd) hd = ""; next }
+  /^[[:space:]]*#/ { next }
+  # Only the three functions: a line outside them runs when gird-fleet.sh loads the block, and a function
+  # defined inside one could take the name of a command the checks below let through (printf, read).
+  !inf { if ($0 ~ /^(owasp_set|owasp_kinds|incident_level)\(\) \{$/) { inf = 1; next }
+    if ($0 !~ /^[[:space:]]*$/) no(NR, "has code outside its functions: root runs this block when it loads, so every line is inside owasp_set, owasp_kinds or incident_level", $0)
+    next }
+  /^}$/ { inf = 0; next }
+  /^[[:space:]]*(function[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)/ { no(NR, "defines a function inside a function: root runs this block, so it defines only owasp_set, owasp_kinds and incident_level", $0) }
+  { l = $0
+    if (match(l, /(^|[^<])<<[[:space:]]*(\047[A-Za-z_][A-Za-z0-9_]*\047|"[A-Za-z_][A-Za-z0-9_]*"|\\[A-Za-z_][A-Za-z0-9_]*)[[:space:]]*$/)) {
+      k = RSTART + index(substr(l, RSTART), "<<") - 1
+      hd = substr(l, k + 2); gsub(/[[:space:]\047"\\]/, "", hd); hl = NR; l = substr(l, 1, k - 1) }
+    t = l; gsub(/\047[^\047]*\047/, "Q", t); u = t; gsub(/\\"/, "", u); gsub(/<<</, "", u)
+    if (u ~ /<</) no(NR, "has an unquoted or <<- here-document: root runs this block, so a here-document is quoted (<<\047X\047) and ends at a line that is exactly X", $0)
+    if (hd != "" && t ~ /#/) no(NR, "opens a here-document after a #: root runs this block, so a here-document opens on a line with no comment", $0)
+    if (t ~ /\047/ || gsub(/"/, "", u) % 2) no(NR, "has a quote that does not close on its line: root runs this block, so each quote closes on the line it opens", $0)
+    if (t ~ /`/) no(NR, "has a backtick: root runs this block, so write $( ) instead", $0)
+    if (t ~ /\\$/) no(NR, "continues onto the next line (\\): root runs this block, so each command is on one line", $0)
+    if (gsub(/\(/, "(", t) > gsub(/\)/, ")", t)) no(NR, "opens a ( that does not close on its line: root runs this block, so each ( closes on the line it opens", $0)
+    if (t ~ />/) no(NR, "redirects output (>): root runs this block, so it writes no file", $0)
+    words(l, $0) }
+  END { if (hd != "") no(hl, "has a here-document that never ends (" hd "): root runs this block, so each here-document ends at a line that is exactly its marker", "") }'
+OD_BASE=$(awk '/^# >>> owasp-derive[: ]/ { print NR; exit }' gird-check.sh)
+_od=$(awk '/^# >>> owasp-derive[: ]/ { on = 1; next } /^# <<< owasp-derive$/ { on = 0 } on' gird-check.sh | awk -v base="${OD_BASE:-0}" "$OD_AWK")
+bad="$bad${bad:+${_od:+
+}}$_od"
 if [ -n "$bad" ]; then printf 'Lines with a field gen.sh cannot write safely:\n%s\n' "$bad" >&2; exit 2; fi
 
 # Path tokens (see data/sessions.tsv) as bash and as PowerShell. A trailing / is kept in bash.
@@ -164,48 +462,169 @@ PATH_PS='function ps(p,   v, fb, rest, k, base) {
   function psq(s) { gsub(/\047/, "\047\047", s); return "\047" s "\047" }'
 
 # --- keys -------------------------------------------------------------------
-rows data/keys.tsv | awk -F '\t' '
-  { id[NR] = $1; nm[NR] = $2; st[NR] = $3; pat[NR] = $4; n = NR }
+# ALL_KEYS is every pattern joined into one regex, for a yes or no. A line #pass in data/keys.tsv
+# starts the next pass: each pass is matched on its own, so a key of a later pass never hides one of
+# an earlier pass (KEY_PASSES, one regex a pass, for ripgrep and .NET). KEY_ALTS is the patterns cut
+# at each top-level |, one a line, an empty line between passes: grep gets one -e each and perl one
+# regex each, because BSD grep and perl read one long alternation many times slower than its parts
+# one by one. PASS_FIXED is each pass's starts as fixed strings, one a line, an empty line between
+# passes: grep skips a later pass in a file that holds none of them. KEY_STARTS is every start once,
+# as one regex, which the session engines test a piece of a file against before its patterns; a
+# start keeps its pattern's boundary there where it can (prestart), so SG. in MSG. starts nothing.
+# A match is named by the in lines
+# first, each start tested at its place in the whole match (at() and Key-At, which allow the one or
+# two characters in front of a key), then by the start lines, tested against the start of the match
+# as in 1.2.0; max is the longest match kept for that provider (- for 300).
+KPASS=$(awk -F '\t' '/^#pass$/ { p++; next } /^#/ || !NF { next } { printf "%d ", p + 1 }' data/keys.tsv)
+KEYS_GEN='function alts(p,   n, i, c, d, inb, cl, neg, cur, o) {
+    n = 0; d = 0; inb = 0; cur = ""; o = ""
+    for (i = 1; i <= length(p); i++) {
+      c = substr(p, i, 1)
+      if (c == "\\") { cur = cur c substr(p, i + 1, 1); i++; continue }
+      if (inb) { cur = cur c; if (c == "^" && cl == 0 && !neg) { neg = 1; continue }; if (c == "]" && cl > 0) inb = 0; cl++; continue }
+      if (c == "[") { inb = 1; cl = 0; neg = 0; cur = cur c; continue }
+      if (c == "(") d++; else if (c == ")") d--
+      if (c == "|" && d == 0) { o = o (n++ ? "\n" : "") cur; cur = ""; continue }
+      cur = cur c
+    }
+    return o (n ? "\n" : "") cur
+  }
+  BEGIN { split(kp, ps, " ") }
+  { id[NR] = $1; nm[NR] = $2; mk[NR] = $3; st[NR] = $3; gsub(/@[0-9]+/, "", st[NR]); gsub(/&[^|]*/, "", st[NR]); pat[NR] = $4; at[NR] = $5; mx[NR] = $6; n = NR }
+  # The fixed strings a start stands for: [abc] is a, b or c.
+  function fixed(s,   o, a, k, i, j, b, e, pre, post, m, c) {
+    o = ""; k = split(s, a, "|")
+    for (i = 1; i <= k; i++) {
+      b = index(a[i], "[")
+      if (!b) { o = o a[i] "\n"; continue }
+      e = index(a[i], "]"); pre = substr(a[i], 1, b - 1); post = substr(a[i], e + 1); m = substr(a[i], b + 1, e - b - 1)
+      for (j = 1; j <= length(m); j++) o = o fixed(pre substr(m, j, 1) post) 
+    }
+    return o
+  }
+  # For an in line: one test a start, TEXT at its place N, as the at() call (bash) or Key-At (.NET).
+  function marks(r, ps1,   o, k, a, i, t, pos, m, b, j, c) {
+    o = ""; k = split(mk[r], a, "|")
+    for (i = 1; i <= k; i++) {
+      c = ""; m = split(a[i], b, "&")
+      for (j = 1; j <= m; j++) {
+        t = b[j]; pos = t; sub(/@[0-9]+$/, "", t); sub(/^.*@/, "", pos); gsub(/[][]/, "", t)
+        if (ps1) c = c (c == "" ? "" : " -and ") "(Key-At $s \047" t "\047 " pos ")"
+        else c = c (c == "" ? "" : " && ") "at(s, \"" t "\", " pos ")"
+      }
+      if (m > 1) c = "(" c ")"
+      o = o (o == "" ? "" : (ps1 ? " -or " : " || ")) c
+    }
+    return o
+  }
+  # A start for KEY_STARTS: a start that is one fixed text, of a pattern that is one alternative behind
+  # a boundary (^|[^...]), is tested after the start, by looking back: not after a character of that
+  # class, or after an escape \n, \t or \r, as a session reads the boundary. Written after the
+  # start, the start stays fixed text that perl and .NET look for fast.
+  function prestart(i,   j, s) {
+    s = st[i]
+    if (at[i] != "start" || index(s, "|") || index(alts(pat[i]), "\n") || substr(pat[i], 1, 5) != "(^|[^") return s
+    j = index(pat[i], "])"); if (!j) return s
+    return s "(?:(?<![" substr(pat[i], 6, j - 6) "]" s ")|(?<=\\\\[ntr]" s "))"
+  }
+  function allstarts(   i, o, s, seen) {
+    o = ""
+    for (i = 1; i <= n; i++) { s = prestart(i); if (s in seen) continue; seen[s] = 1; o = o (o == "" ? "" : "|") s }
+    return o
+  }
+  # PASS_FIXED: each fixed string once in its pass.
+  function passfixed(   i, o, k, a, j, seen) {
+    o = ""
+    for (i = 1; i <= n; i++) {
+      if (i > 1 && ps[i] != ps[i - 1]) { o = o "\n"; split("", seen) }
+      k = split(fixed(st[i]), a, "\n")
+      for (j = 1; j <= k; j++) if (a[j] != "" && !(a[j] in seen)) { seen[a[j]] = 1; o = o a[j] "\n" }
+    }
+    sub(/\n$/, "", o); return o
+  }
+  function passes(q,   i, o, cur) {
+    o = ""; cur = ""
+    for (i = 1; i <= n; i++) {
+      if (i > 1 && ps[i] != ps[i - 1]) { o = o cur q; cur = "" }
+      cur = cur (cur == "" ? "" : "|") pat[i]
+    }
+    return o cur
+  }'
+rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
   END {
     print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
-    all = ""; ids = ""; starts = ""
-    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i] }
+    all = ""; ids = ""; ka = ""
+    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; ka = ka (i > 1 ? (ps[i] != ps[i - 1] ? "\n\n" : "\n") : "") alts(pat[i]) }
     print "ALL_KEYS=\047" all "\047"
+    print "KEY_PASSES=\047" passes("\n") "\047"
+    print "KEY_ALTS=\047" ka "\047"
     print "PROVIDER_IDS=\"" ids "\""
-    print "KEY_STARTS=\047" starts "\047"
+    print "KEY_STARTS=\047" allstarts() "\047"
+    print "PASS_FIXED=\047" passfixed() "\047"
     print "PROV_AWK=\047"
+    print "function at(s, t, o,   b) { for (b = 0; b <= 2; b++) if (substr(s, b + o + 1, length(t)) == t) return 1; return 0 }"
     print "function prov(s) {"
+    for (i = 1; i <= n; i++) if (at[i] == "in") print "  if (" marks(i, 0) ") return \"" nm[i] "\""
     print "  sub(/^[^A-Za-z]*\\\\[ntr\"]/, \"\", s); sub(/^[^A-Za-z]+/, \"\", s)"
-    for (i = 1; i <= n; i++) print "  if (s ~ /^(" st[i] ")/) return \"" nm[i] "\""
+    for (i = 1; i <= n; i++) if (at[i] == "start") print "  if (s ~ /^(" st[i] ")/) return \"" nm[i] "\""
     print "  return \"\""
-    print "}\047"
+    print "}"
+    printf "function pmax(p) {"
+    for (i = 1; i <= n; i++) if (mx[i] != "-") printf " if (p == \"%s\") return %s;", nm[i], mx[i]
+    print " return 300 }\047"
     printf "prov_id() { case \"$1\" in"
     for (i = 1; i <= n; i++) printf " \"%s\") printf %s ;;", nm[i], id[i]
     print " esac; }"
     print "# <<< keys"
   }' > "$WORK/keys.sh"
 
-rows data/keys.tsv | awk -F '\t' '
-  { id[NR] = $1; nm[NR] = $2; st[NR] = $3; pat[NR] = $4; n = NR }
+rows data/keys.tsv | awk -F '\t' -v kp="$KPASS" "$KEYS_GEN"'
   END {
     print "# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it."
-    all = ""; ids = ""; starts = ""
-    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; starts = starts (i > 1 ? "|" : "") st[i] }
+    all = ""; ids = ""
+    for (i = 1; i <= n; i++) { all = all (i > 1 ? "|" : "") pat[i]; ids = ids (i > 1 ? " " : "") id[i]; }
     print "$ALL_KEYS = \047" all "\047"
+    print "$KEY_PASSES = @(\047" passes("\047, \047") "\047)"
     print "$PROVIDER_IDS = \047" ids "\047"
-    print "$KEY_STARTS = \047" starts "\047"
+    print "$KEY_STARTS = \047" allstarts() "\047"
     print "$KeyProviderFn = @\047"
+    print "function Key-At([string]$s, [string]$t, [int]$o) { for ($b = 0; $b -le 2; $b++) { if ($s.Length -ge $b + $o + $t.Length -and $s.Substring($b + $o, $t.Length) -ceq $t) { return $true } }; $false }"
     print "function Key-Provider([string]$s) {"
+    for (i = 1; i <= n; i++) if (at[i] == "in") print "  if (" marks(i, 1) ") { return \047" nm[i] "\047 }"
     print "  $s = $s -replace \047^[^A-Za-z]*\\\\[ntr\"]\047, \047\047 -replace \047^[^A-Za-z]+\047, \047\047"
-    for (i = 1; i <= n; i++) print "  if ($s -cmatch \047^(" st[i] ")\047) { return \047" nm[i] "\047 }"
+    for (i = 1; i <= n; i++) if (at[i] == "start") print "  if ($s -cmatch \047^(" st[i] ")\047) { return \047" nm[i] "\047 }"
     print "  $null"
     print "}"
+    printf "function Key-Max([string]$p) { switch -CaseSensitive ($p) {"
+    for (i = 1; i <= n; i++) if (mx[i] != "-") printf " \047%s\047 { %s }", nm[i], mx[i]
+    print " default { 300 } } }"
     printf "function Provider-Id([string]$n) { switch -CaseSensitive ($n) {"
     for (i = 1; i <= n; i++) printf " \047%s\047 { \047%s\047 }", nm[i], id[i]
     print " default { $null } } }"
     print "\047@"
     print "# <<< keys"
   }' > "$WORK/keys.ps1"
+
+# --- published values -----------------------------------------------------------
+# public(k) in sess_filter's madeup and Is-Public in gird-check.ps1's Made-Up: a match that holds a
+# published value is not a key.
+rows data/public-values.tsv | awk -F '\t' '
+  { v[NR] = $2; n = NR }
+  END {
+    print "# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it."
+    print "PUBLIC_AWK=\047"
+    printf "function public(k) { return 0"
+    for (i = 1; i <= n; i++) printf " || index(k, \"%s\")", v[i]
+    print " }\047"
+    print "# <<< public-values"
+    print "# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it." > "/dev/stderr"
+    print "$PublicValuesFn = @\047" > "/dev/stderr"
+    printf "function Is-Public([string]$k) { $false" > "/dev/stderr"
+    for (i = 1; i <= n; i++) printf " -or $k.Contains(\047%s\047)", v[i] > "/dev/stderr"
+    print " }" > "/dev/stderr"
+    print "\047@" > "/dev/stderr"
+    print "# <<< public-values" > "/dev/stderr"
+  }' > "$WORK/public-values.sh" 2> "$WORK/public-values.ps1"
 
 # --- sessions ---------------------------------------------------------------
 rows data/sessions.tsv | awk -F '\t' "$PATH_SH"'
@@ -285,13 +704,15 @@ rows data/bad-npm.tsv | awk -F '\t' '
 rows data/indicators.tsv | awk -F '\t' "$PATH_SH"'
   BEGIN { print "# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it."
           printf "IND_TABLE=\"" }
-  { printf "%s%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? $5 : sh($5)), $6 }
-  END { print "\""; print "# <<< indicators" }' > "$WORK/indicators.sh"
+  { printf "%s%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? $5 : sh($5)), $6
+    if ($7 == "alone") al = al (al == "" ? "" : "\n") $1 "|" sh($5) }
+  END { print "\""; print "IND_ALONE=\"" al "\""; print "# <<< indicators" }' > "$WORK/indicators.sh"
 rows data/indicators.tsv | awk -F '\t' "$PATH_PS"'
   BEGIN { print "# >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it."
           print "$IndTable = @(" }
-  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, %s, %s)\n", $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? "\047" $5 "\047" : ps($5)), psq($6) }
-  END { print ")"; print "# <<< indicators" }' > "$WORK/indicators.ps1"
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, %s, %s)\n", $1, $2, $3, $4, ($3 ~ /^(site|temp)$/ ? "\047" $5 "\047" : ps($5)), psq($6)
+    if ($7 == "alone") al = al (al == "" ? "" : ", ") "@(\047" $1 "\047, " ps($5) ")" }
+  END { print ")"; print "$IndAlone = @(" (al == "" ? "" : "," al) ")"; print "# <<< indicators" }' > "$WORK/indicators.ps1"
 
 # --- files planted in a project ----------------------------------------------
 # PLANTED_ERE matches the planted paths. WORM_RUN_ALONE matches, in either folder, the names only a
@@ -369,6 +790,19 @@ rows data/auto-approve.tsv | awk -F '\t' "$PATH_PS"'
     if ($3 ~ /^\{PROJECT\}\//) { q = substr($3, 11); if (!(q in pj)) { pj[q] = 1; po = po (po == "" ? "" : ", ") "\047" q "\047" } } }
   END { print ")"; print "$AaProject = @(" po ")"; print "# <<< auto-approve" }' > "$WORK/auto-approve.ps1"
 
+# --- saved rules that run commands on other machines ---------------------------------
+# RC_SIGS rows are words|case|label; RC_FILES rows agent|os|format|group|path|note.
+rows data/remote-commands.tsv | awk -F '\t' "$PATH_SH"'
+  $1 == "cmd" { sg = sg (sg == "" ? "" : "\n") $2 "|" $3 "|" $4 }
+  $1 == "file" { fl = fl (fl == "" ? "" : "\n") $2 "|" $3 "|" $4 "|" $5 "|" sh($6) "|" $7 }
+  END { print "# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it."
+        print "RC_SIGS=\047" sg "\047"; print "RC_FILES=\"" fl "\""; print "# <<< remote-commands" }' > "$WORK/remote-commands.sh"
+rows data/remote-commands.tsv | awk -F '\t' "$PATH_PS"'
+  $1 == "cmd" { sg = sg "  ,@(\047" $2 "\047, \047" $3 "\047, \047" $4 "\047)\n" }
+  $1 == "file" { fl = fl "  ,@(\047" $2 "\047, \047" $3 "\047, \047" $4 "\047, \047" $5 "\047, " ps($6) ", \047" $7 "\047)\n" }
+  END { print "# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it."
+        printf "$RcSigs = @(\n%s)\n", sg; printf "$RcFiles = @(\n%s)\n", fl; print "# <<< remote-commands" }' > "$WORK/remote-commands.ps1"
+
 # --- agent versions with a published fix -----------------------------------------
 # Rows are id|name|os|kind|where|first|fixed|hole|advisory, first - when the range has none, fixed !last
 # for an advisory that no version fixes (>=first <=last), and the advisory without https://.
@@ -386,16 +820,373 @@ rows data/outdated.tsv | awk -F '\t' "$PATH_PS"'
   END { print ")"; print "# <<< outdated" }' > "$WORK/outdated.ps1"
 
 # --- extensions that shipped malware ------------------------------------------------
-# Rows are "id version incident registry os", registry openvsx or any and os where the malware could
-# run (see the data file).
+# Rows are "id version incident registry os [marker]", registry openvsx or any, os where the malware
+# could run and the optional marker (see the data file).
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; printf "BAD_EXT=\"" }
-  { printf "%s%s %s %s %s %s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, $5 }
+  { printf "%s%s %s %s %s %s%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4, $5, (NF == 6 ? " " $6 : "") }
   END { print "\""; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.sh"
 rows data/bad-extensions.tsv | awk -F '\t' '
   BEGIN { print "# >>> bad-extensions: generated from data/bad-extensions.tsv by tools/gen.sh. Edit that file, then run it."; print "$BadExt = @\047" }
-  { print $1 " " $2 " " $3 " " $4 " " $5 }
+  { print $1 " " $2 " " $3 " " $4 " " $5 (NF == 6 ? " " $6 : "") }
   END { print "\047@"; print "# <<< bad-extensions" }' > "$WORK/bad-extensions.ps1"
+
+# --- docs/checks.md: the lists, for people to read ------------------------------
+# One block of docs/checks.md, written from the same data files (and gird-check.sh's agents table),
+# so the page never lists less or more than the scripts look for.
+awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
+  on { sub(/^AGENTS="/, ""); sub(/"$/, ""); split($0, a, "|"); print a[1] "\t" a[2] }' gird-check.sh > "$WORK/agent-names.tsv"
+{ for f in incidents keys sessions auto-approve remote-commands outdated planted bad-pypi indicators platforms bad-extensions ssh-keys actions bad-npm; do
+    rows "data/$f.tsv" | awk -v f="$f" '{ print f "\t" $0 }'
+  done; awk '{ print "agents\t" $0 }' "$WORK/agent-names.tsv"; } | awk -F '\t' '
+  function esc(s) { gsub(/\\/, "\\\\", s); gsub(/[*_<>|`\[\]]/, "\\\\&", s); return s }
+  function code(s) { return "`" s "`" }
+  function oss(s) { if (s == "all") return ""; if (s == "none") return "none"; gsub(/mac/, "macOS", s); gsub(/linux/, "Linux", s); gsub(/win/, "Windows", s); sub(/,/, " and ", s); return s }
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  function plural(n, w) { return n " " w (n == 1 ? "" : "s") }
+  function range(s,   n, r) { n = split(s, r, " ")
+    if (n == 1) return "below " substr(r[1], 2)
+    if (r[2] ~ /^<=/) return substr(r[1], 3) " to " substr(r[2], 3) ", no fixed version yet"
+    return substr(r[1], 3) " to below " substr(r[2], 2) }
+  function add(list, item) { return list == "" ? item : list ", " item }
+  $1 == "incidents" { ni++; iid[ni] = $2; inm[$2] = $3; iwh[$2] = $4; iim[$2] = $5; isrc[$2] = $6; ilv[$2] = $7; next }
+  $1 == "agents" { na++; an[na] = $2; ac[na] = $3; next }
+  $1 == "keys" { nk++; kn[nk] = $3; ks[nk] = $4; next }
+  $1 == "sessions" { if (!($4 in sa)) { sa[$4] = 1; so[++ns] = $4 }
+    p = code($5); if ($3 == "db") p = p " (SQLite files)"; if ($3 == "sealed") p = p " (encrypted: counted and named as not checked)"
+    if ($2 != "all") p = p " (" oss($2) " only)"; sp[$4] = add(sp[$4], p); next }
+  $1 == "remote-commands" && $2 == "cmd" { nrc++; rcw[nrc] = $3; rcl[nrc] = $5; rcu[nrc] = $6; next }
+  $1 == "remote-commands" && $2 == "file" { k = $3; if (!(k in rfa)) { rfa[k] = 1; rfo[++nrf] = k; rf1[k] = $8 } else if ($8 != rf1[k]) rfd[k] = 1
+    w = code($7); if ($4 != "all") w = w " (" oss($4) " only)"; if ($8 != "-") rfn[k] = esc($8)
+    rff[k] = add(rff[k], w); rfp[k] = add(rfp[k], w ($8 != "-" ? " (" esc($8) ")" : "")); next }
+  $1 == "auto-approve" { k = $2 "\t" $5; if (!(k in aa)) { aa[k] = 1; ao[++nao] = k }; af[k] = add(af[k], code($4)); next }
+  $1 == "outdated" { k = $2 "\t" $7 "\t" $8; if (!(k in oo)) { oo[k] = 1; ok[++no] = k; onm[k] = $3; orng[k] = range($7); ohole[k] = $8; oadv[k] = $9 }
+    w = $5 == "plist" ? "the app" : $5 == "folder" ? "its version folder" : $5 == "npm" ? "npm installs" : "MCP configs"
+    if (index(", " owh[k] ", ", ", " w ", ") == 0) owh[k] = add(owh[k], w)
+    s = $4 == "all" ? "all" : oss($4); if (index(", " oos[k] ", ", ", " s ", ") == 0) oos[k] = add(oos[k], s); next }
+  $1 == "planted" { npl++; pp[npl] = $2 "/" $3; pin[npl] = $4; pnt[npl] = $5; pal[npl] = $6; psh[npl] = $7; cnt[$4, "files"]++; next }
+  $1 == "bad-pypi" { npy++; yn[npy] = $2; yv[npy] = $3; yi[npy] = $4; yo[npy] = $5; cnt[$4, "py"]++; next }
+  $1 == "indicators" { k = $2 "\t" $4 "\t" $6; if (k in xx) { j = xx[k]; if (xo[j] != "all") xo[j] = $3 == "all" ? "all" : xo[j] "," $3; next }
+    nind++; xx[k] = nind; xi[nind] = $2; xo[nind] = $3; xk[nind] = $4; xw[nind] = $5; xp[nind] = $6; xn[nind] = $7; if ($4 != "wiper") cnt[$2, "files"]++; next }
+  $1 == "platforms" { npf++; fi[npf] = $2; fnm[npf] = $3; fc[npf] = $4; fpth[npf] = $5; fadv[npf] = $7; cnt[$2, "plat"]++; next }
+  $1 == "bad-extensions" { k = $4; if (!(k in eg)) { eg[k] = 1 }; ev = $3 == "*" ? "every version" : $3
+    e = code($2) " " ev " (" ($5 == "openvsx" ? "Open VSX editors only" : "every editor") (oss($6) == "" ? "" : "; its malware runs on " oss($6)) ")"
+    el[k] = el[k] "- " e "\n"; cnt[k, "ext"]++; next }
+  $1 == "actions" { nac++; aca[nac] = $2; acr[nac] = $3; acs[nac] = $4; acg[nac] = $5; acp[nac] = $6; acw[nac] = $7; acu[nac] = $8; next }
+  $1 == "ssh-keys" { nsh++; shi[nsh] = $2; sht[nsh] = $3; shk[nsh] = $4; shn[nsh] = $5; cnt[$2, "ssh"]++; next }
+  $1 == "bad-npm" { k = $4; v = $3 == "*" ? "every version" : $3
+    if (!((k, $2) in nv)) { nq[k] = nq[k] (nq[k] == "" ? "" : "\t") $2; cnt[k, "pkg"]++ }
+    nv[k, $2] = add(nv[k, $2], v); cnt[k, "npm"]++; next }
+  END {
+    print "<!-- >>> checks: generated from data/*.tsv and the agents table in gird-check.sh by tools/gen.sh. Edit those, then run it. -->"
+    print "_This part of the page is written by `tools/gen.sh` from the files in [`data/`](../data) and the agents table in `gird-check.sh`, the same sources the scripts are built from. Edit those, not this page._"
+    print ""
+    print "Paths: `~` is your home folder, `{AS}` the app data folder (Application Support on a Mac, `%APPDATA%` on Windows, `XDG_CONFIG_HOME` or `~/.config` on Linux), `{LOCALAPPDATA}` `%LOCALAPPDATA%` on Windows, `{XDG_DATA}` `XDG_DATA_HOME` or `~/.local/share`, `{GOOSE_DATA}` and `{GOOSE_STATE}` Goose'"'"'s data and state folders, `{PROGRAMDATA}` `%ProgramData%` on Windows, `{PROJECT}` each project folder the home scan finds, and `{ENV:NAME:fallback}` the folder the variable `NAME` names, or the fallback. A path marked for one system is looked for there only."
+    print ""
+    print "## 1. Coding agents"
+    print ""
+    print "### Agents it looks for"
+    print ""
+    for (i = 1; i <= na; i++) { c = an[i]; if (ac[i] != "") { m = ac[i]; gsub(/;/, "`, `", m); c = c " (`" m "`)" }; print "- " c }
+    print ""
+    print "### Settings that run commands without asking"
+    print ""
+    for (i = 1; i <= nao; i++) { split(ao[i], pa, "\t"); print "- " pa[1] ", " esc(pa[2]) ": " af[ao[i]] }
+    print ""
+    print "### Rules that run commands on other machines"
+    print ""
+    print "A saved rule that lets an agent run one of these commands without asking:"
+    print ""
+    for (i = 1; i <= nrc; i++) print "- " code(rcw[i]) ": runs commands " esc(rcl[i]) " ([source](" rcu[i] "))"
+    print ""
+    print "Read in these files:"
+    print ""
+    # An agent whose files have one note shows it once, after them; one whose notes differ, each after its file.
+    for (i = 1; i <= nrf; i++) print "- " esc(rfo[i]) ": " (rfo[i] in rfd ? rfp[rfo[i]] : rff[rfo[i]] (rfo[i] in rfn ? " (" rfn[rfo[i]] ")" : ""))
+    print ""
+    print "### Versions with a published security fix"
+    print ""
+    print "| Tool | Versions | What the hole allows | Read from | Advisory |"
+    print "|---|---|---|---|---|"
+    for (i = 1; i <= no; i++) { k = ok[i]; s = oos[k] == "all" ? "" : " (" oos[k] ")"; a = oadv[k]; t = a; sub(/\/$/, "", t); sub(/.*\//, "", t)
+      print "| " esc(onm[k]) s " | " esc(orng[k]) " | " esc(ohole[k]) " | " owh[k] " | [" t "](" a ") |" }
+    print ""
+    print "## 2. MCP servers and project settings"
+    print ""
+    print "### Files worms plant in a project"
+    print ""
+    for (i = 1; i <= npl; i++) {
+      w = pal[i] == "yes" ? "Counts wherever it is found." : "Counts beside a file only a worm uses" (psh[i] == "-" ? "" : ", or when its SHA-256 matches one its sources publish") "; otherwise listed as a file to read."
+      print "- " code(pp[i]) ": " esc(pnt[i]) " (" esc(inm[pin[i]]) "). " w }
+    print ""
+    print "## 3. Keys in plain text"
+    print ""
+    print "### Key types"
+    print ""
+    print "| Provider | Starts with (as a pattern) |"
+    print "|---|---|"
+    for (i = 1; i <= nk; i++) { s = ks[i]; gsub(/\|/, "`, `", s); print "| " esc(kn[i]) " | `" s "` |" }
+    print ""
+    print "### Agent session transcripts"
+    print ""
+    for (i = 1; i <= ns; i++) print "- **" esc(so[i]) "**: " sp[so[i]]
+    print ""
+    print "## 5. Recent key leaks"
+    print ""
+    print "### Incidents"
+    print ""
+    print "Level: **act** means treat the machine as compromised, **update** means update the version (the machine is not compromised), **leak** means rotate what was stored on that platform."
+    print ""
+    print "| Incident | When | What it did | Level | Looked for | Source |"
+    print "|---|---|---|---|---|---|"
+    for (i = 1; i <= ni; i++) { d = iid[i]; l = ""
+      if (cnt[d, "npm"]) l = add(l, "npm: " plural(cnt[d, "npm"], "version") " of " plural(cnt[d, "pkg"], "package"))
+      if (cnt[d, "py"]) l = add(l, "Python: " plural(cnt[d, "py"], "version"))
+      if (cnt[d, "ext"]) l = add(l, plural(cnt[d, "ext"], "extension"))
+      if (cnt[d, "files"]) l = add(l, plural(cnt[d, "files"], "file"))
+      if (cnt[d, "ssh"]) l = add(l, plural(cnt[d, "ssh"], "SSH key"))
+      if (cnt[d, "plat"]) l = add(l, "its CLI or app")
+      print "| " esc(inm[d]) " | " iwh[d] " | " esc(iim[d]) " | " ilv[d] " | " l " | [" host(isrc[d]) "](" isrc[d] ") |" }
+    print ""
+    print "### Python packages"
+    print ""
+    print "| Package | Version | Incident | Its malware runs on |"
+    print "|---|---|---|---|"
+    for (i = 1; i <= npy; i++) { o = oss(yo[i]); if (o == "") o = "any system"; if (o == "none") o = "none: a version to update"
+      print "| " code(yn[i]) " | " yv[i] " | " esc(inm[yi[i]]) " | " o " |" }
+    print ""
+    print "### Files malware leaves on disk"
+    print ""
+    print "gh-token-monitor, the wiper: stop it before you revoke any GitHub token."
+    print ""
+    for (i = 1; i <= nind; i++) if (xk[i] == "wiper") print "- " code(xp[i]) (xo[i] == "all" ? "" : " (" oss(xo[i]) " only)") (xw[i] == "yes" ? " (counts only when it is yours)" : "")
+    for (j = 1; j <= ni; j++) { d = iid[j]; h = 0; tn = ""
+      for (i = 1; i <= nind; i++) { if (xi[i] != d || xk[i] == "wiper") continue
+        if (!h++) { print ""; print esc(inm[d]) ", " iwh[d] ":"; print "" }
+        w = xk[i] == "startup" ? esc(xn[i]) : xk[i] == "site" ? "in a Python environment'"'"'s site-packages" : "in the temp folder"
+        if (xk[i] == "temp") tn = xn[i]
+        print "- " code(xp[i]) ": " w (xo[i] == "all" ? "" : " (" oss(xo[i]) " only)") (xw[i] == "yes" ? " (counts only when it is yours)" : "") }
+      if (tn != "") { print ""; print "If found: " esc(tn) } }
+    print ""
+    print "### Hosted platforms that leaked stored secrets"
+    print ""
+    for (i = 1; i <= npf; i++) { w = ""
+      if (fc[i] != "-") { m = fc[i]; gsub(/ /, "`, `", m); w = "the `" m "` command" }
+      if (fpth[i] != "-") { m = fpth[i]; gsub(/;/, "`, `", m); w = w == "" ? "`" m "`" : w " or `" m "`" }
+      print "- **" esc(fnm[i]) "**, found by " w ": " esc(fadv[i]) }
+    print ""
+    print "### Editor extensions that shipped malware"
+    print ""
+    for (j = 1; j <= ni; j++) { d = iid[j]; if (!cnt[d, "ext"]) continue
+      print "<details><summary>" esc(inm[d]) ", " iwh[d] ": " plural(cnt[d, "ext"], "extension") "</summary>"; print ""; printf "%s", el[d]; print ""; print "</details>"; print "" }
+    print "### SSH keys malware adds to `~/.ssh/authorized_keys`"
+    print ""
+    print "A line counts when the key type and then the key are two of its fields, whatever options come before them."
+    print ""
+    for (i = 1; i <= nsh; i++) print "- " esc(inm[shi[i]]) ": `" sht[i] " " shk[i] "`, " esc(shn[i])
+    print ""
+    print "### GitHub Actions that were compromised"
+    print ""
+    print "A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of these in a `uses:` line is listed as a project to check, never as a compromised machine: whether it was hit depends on whether its workflows ran in the window, which no file shows."
+    print ""
+    print "| Action | Compromised | Refs that ran it | A pin to a commit | Source |"
+    print "|---|---|---|---|---|"
+    for (i = 1; i <= nac; i++) { zn = split(acr[i], zrr, " "); zr = ""; zx = ""; zm = 0
+      for (j = 1; j <= zn; j++) if (zrr[j] ~ /^!/) zx = add(zx, code(substr(zrr[j], 2))); else { zm++; zr = add(zr, code(zrr[j])) }
+      if (acr[i] == "*") zr = "every ref"; else if (zm > 6) zr = plural(zm, "tag") " the source lists"
+      if (zx != "") zr = zr ", except " zx
+      zq = acp[i] == "unsafe" ? "flagged" (acg[i] == "-" ? "" : ", except the commits listed as not affected") : acs[i] == "-" ? "not flagged" : "flagged only at a commit the source lists"
+      print "| " code(aca[i]) " | " esc(acw[i]) " | " zr " | " zq " | [" host(acu[i]) "](" acu[i] ") |" }
+    print ""
+    print "### npm packages"
+    print ""
+    for (j = 1; j <= ni; j++) { d = iid[j]; if (!cnt[d, "npm"]) continue
+      print "<details><summary>" esc(inm[d]) ", " iwh[d] ": " plural(cnt[d, "npm"], "version") " of " plural(cnt[d, "pkg"], "package") "</summary>"; print ""
+      n = split(nq[d], q, "\t"); for (i = 1; i <= n; i++) print "- " code(q[i]) " " nv[d, q[i]]
+      print ""; print "</details>"; print "" }
+    print "<!-- <<< checks -->"
+  }' > "$WORK/checks.md"
+# --- SSH keys malware adds to authorized_keys -----------------------------------------
+# Rows are "incident|type|key|note".
+rows data/ssh-keys.tsv | awk -F '\t' '
+  BEGIN { print "# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it."; printf "SSH_PLANTED=\047" }
+  { printf "%s%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, $3, $4 }
+  END { print "\047"; print "# <<< ssh-keys" }' > "$WORK/ssh-keys.sh"
+rows data/ssh-keys.tsv | awk -F '\t' '
+  BEGIN { print "# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it."; print "$SshPlanted = @(" }
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", $1, $2, $3, $4 }
+  END { print ")"; print "# <<< ssh-keys" }' > "$WORK/ssh-keys.ps1"
+# --- GitHub Actions that were compromised --------------------------------------------
+# Rows are "owner/repo in lowercase|owner/repo|refs|shas|good|pin|window|source's site|fix".
+rows data/actions.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; printf "ACT_TABLE=\"" }
+  { printf "%s%s|%s|%s|%s|%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
+  END { print "\""; print "# <<< actions" }' > "$WORK/actions.sh"
+rows data/actions.tsv | awk -F '\t' '
+  function host(u) { sub(/^https:\/\//, "", u); sub(/\/.*/, "", u); sub(/^www\./, "", u); return u }
+  BEGIN { print "# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it."; print "$ActTable = @(" }
+  { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", tolower($1), $1, $2, $3, $4, $5, $6, host($7), $8 }
+  END { print ")"; print "# <<< actions" }' > "$WORK/actions.ps1"
+# --- variables that move an agent's or a tool's folders, for an account run ---------------
+# gird-check.sh gets the list of each kind, fleet_dflt, the folders of the sh column, fleet_scripts,
+# the tools' own scripts, and _mv_own, the whole paths of data/tool-scripts.tsv; gird-check.ps1 the lists, the
+# folders of the windows column and the tools' own scripts of both files. Windows reads a variable's name in any case, so a PowerShell table keeps a name's first line
+# (npm_config_prefix's).
+# Each script of data/tool-scripts.tsv as a profile writes its whole path from Homebrew's prefix.
+OWN_ALL=$(rows data/tool-scripts.tsv | awk -F '\t' '{ for (i = 1; i <= 2; i++) print (i == 1 ? "/opt/homebrew" : "/usr/local") "/opt/" $1 "/" $2
+  print "$(brew --prefix)/opt/" $1 "/" $2; print "$(brew --prefix " $1 ")/" $2; print "$HOMEBREW_PREFIX/opt/" $1 "/" $2; print "${HOMEBREW_PREFIX}/opt/" $1 "/" $2 }')
+OWN_PS=$(printf '%s\n' "$OWN_ALL" | sed "s/.*/'&'/" | paste -sd, - | sed 's/,/, /g')
+rows data/folder-vars.tsv | OWN="$OWN_ALL" awk -F '\t' '
+  { L[$2] = L[$2] (L[$2] == "" ? "" : "|") $1
+    if ($3 != "-") { n = split($3, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " \"$H" substr(a[i], 2) "\""; D = D "      " $1 ") printf \047%s\\n\047" d " ;;\n" }
+    if ($5 != "-") { n = split($5, a, ";"); d = ""; for (i = 1; i <= n; i++) d = d " " a[i]; S = S "      " $1 ") printf \047%s\\n\047" d " ;;\n" } }
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it."
+        print "  _mv_agent=\047" L["agent"] "\047"; print "  _mv_tool=\047" L["tool"] "\047"; print "  _mv_own=\047" ENVIRON["OWN"] "\047"
+        print "  fleet_dflt() { # variable: the folders the run reads when it is not set"; print "    case \"$1\" in"; printf "%s", D; print "    esac"; print "  }"
+        print "  fleet_scripts() { # variable: its tool\047s own scripts in its folder, which set it to that folder"; print "    case \"$1\" in"; printf "%s", S; print "    esac"; print "  }"
+        print "# <<< folder-vars" }' > "$WORK/folder-vars.sh"
+rows data/folder-vars.tsv | awk -F '\t' -v own="$OWN_PS" '
+  function ps(p) { if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"; if (p ~ /^\{LOCALAPPDATA\}/) return "(J $LocalAppData \047" substr(p, 16) "\047)"; return "(J $AppData \047" substr(p, 11) "\047)" }
+  function list(s, f,   n, a, i, o) { n = split(s, a, ";"); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") (f ? ps(a[i]) : "\047" a[i] "\047"); return "@(" o ")" }
+  { L[$2] = L[$2] (L[$2] == "" ? "" : ", ") "\047" $1 "\047"
+    if ($4 != "-" && !(tolower($1) in w)) W = W (W == "" ? "" : "; ") "\047" $1 "\047 = " list($4, 1)
+    w[tolower($1)] = 1
+    if ($5 != "-") S = S (S == "" ? "" : "; ") "\047" $1 "\047 = " list($5, 0) }
+  END { print "# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it."
+        print "$FolderVarsAgent = @(" L["agent"] ")"; print "$FolderVarsTool = @(" L["tool"] ")"
+        print "$FolderVarsDefault = @{ " W " }"; print "$FolderVarsScripts = @{ " S " }"; print "$FolderVarsOwn = @(" own ")"; print "# <<< folder-vars" }' > "$WORK/folder-vars.ps1"
+
+# --- coding agents -------------------------------------------------------------
+# Rows are name|commands|install paths|folders that change when it is used|id, paths separated by ;.
+rows data/agents.tsv | awk -F '\t' '
+  function sh(s,   n, a, i, o, p) { if (s == "-") return ""; n = split(s, a, ";"); o = ""
+    for (i = 1; i <= n; i++) { p = a[i]; if (p ~ /^~/) p = "$H" substr(p, 2); else { sub(/^\{/, "$", p); sub(/\}/, "", p) }; o = o (i > 1 ? ";" : "") p }
+    return o }
+  BEGIN { print "# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it."; printf "AGENTS=\"" }
+  { printf "%s%s|%s|%s|%s|%s", (NR > 1 ? "\n" : ""), $1, ($2 == "-" ? "" : $2), sh($3), sh($4), $7 }
+  END { print "\""; print "# <<< agents" }' > "$WORK/agents.sh"
+rows data/agents.tsv | awk -F '\t' '
+  function ps(p,   r) {
+    if (p == "{GOOSE_DATA}") return "$GooseData"
+    if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"
+    if (p ~ /^\{LOCALAPPDATA\}\//) return "(J $LocalAppData \047" substr(p, 16) "\047)"
+    return "(J $AppData \047" substr(p, 11) "\047)" }
+  function list(s,   n, a, i, o) { if (s == "-") return "@()"; n = split(s, a, ";"); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") ps(a[i]); return "@(" o ")" }
+  { r[NR] = sprintf("  @(\047%s\047, \047%s\047, %s, %s, \047%s\047)", $1, ($2 == "-" ? "" : $2), list($5), list($6), $7); n = NR }
+  END { print "# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it."; print "$Agents = @("
+        for (i = 1; i <= n; i++) print r[i] (i < n ? "," : ""); print ")"; print "# <<< agents" }' > "$WORK/agents.ps1"
+
+# --- the fixed lists the report sends ------------------------------------------------
+# MCP apps (data/mcp-clients.tsv), well-known MCP servers and their aliases (data/mcp-servers.tsv),
+# and kinds of file (data/key-places.tsv), as space-separated strings, aliases as alias=id.
+{ rows data/mcp-clients.tsv | awk -F '\t' '{ print "C\t" $1 }'; rows data/mcp-servers.tsv | awk -F '\t' '{ print "S\t" $1 "\t" $2 }'
+  rows data/key-places.tsv | awk -F '\t' '{ print "P\t" $1 }'; } | awk -F '\t' '
+  $1 == "C" { c = c (c == "" ? "" : " ") $2 }
+  $1 == "P" { pl = pl (pl == "" ? "" : " ") $2 }
+  $1 == "S" { k = k (k == "" ? "" : " ") $2; if ($3 != "-") { n = split($3, a, ","); for (i = 1; i <= n; i++) al = al (al == "" ? "" : " ") a[i] "=" $2 } }
+  END {
+    print "# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it."
+    print "MCP_CLIENT_IDS=\"" c "\""; print "MCP_KNOWN_IDS=\"" k "\""; print "MCP_ALIASES=\"" al "\""; print "KEY_PLACE_IDS=\"" pl "\""
+    print "# <<< report-lists"
+    print "# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it." > "/dev/stderr"
+    print "$MCP_CLIENT_IDS = \047" c "\047" > "/dev/stderr"; print "$MCP_KNOWN_IDS = \047" k "\047" > "/dev/stderr"
+    print "$MCP_ALIASES = \047" al "\047" > "/dev/stderr"; print "$KEY_PLACE_IDS = \047" pl "\047" > "/dev/stderr"
+    print "# <<< report-lists" > "/dev/stderr"
+  }' > "$WORK/report-lists.sh" 2> "$WORK/report-lists.ps1"
+
+# --- MCP configs at home --------------------------------------------------------------
+rows data/mcp-files.tsv | awk -F '\t' '
+  BEGIN { print "# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it."; printf "MCP_FILES=\"" }
+  { p = $3; if (p ~ /^~/) p = "$H" substr(p, 2); else { sub(/^\{/, "$", p); sub(/\}/, "", p) }
+    printf "%s%s|%s|%s", (NR > 1 ? "\n" : ""), $1, $2, p }
+  END { print "\""; print "# <<< mcp-files" }' > "$WORK/mcp-files.sh"
+rows data/mcp-files.tsv | awk -F '\t' '
+  function ps(p) {
+    if (p ~ /^~\//) return "(J $HomeDir \047" substr(p, 3) "\047)"
+    if (p ~ /^\{LOCALAPPDATA\}\//) return "(J $LocalAppData \047" substr(p, 16) "\047)"
+    return "(J $AppData \047" substr(p, 11) "\047)" }
+  { r[NR] = sprintf("  @(\047%s\047, \047%s\047, %s)", $1, $2, ps($4)); n = NR }
+  END { print "# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it."; print "$McpFiles = @("
+        for (i = 1; i <= n; i++) print r[i] (i < n ? "," : ""); print ")"; print "# <<< mcp-files" }' > "$WORK/mcp-files.ps1"
+
+# --- the terminal ids TERM_PROGRAM names (data/term-programs.tsv) ---------------------------
+rows data/term-programs.tsv | awk -F '\t' '
+  BEGIN { print "# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it." }
+  { print "       " $1 ") TERMAPP=" $2 " ;;" } END { print "# <<< term-programs" }' > "$WORK/term-programs.sh"
+rows data/term-programs.tsv | awk -F '\t' '
+  BEGIN { print "# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it." }
+  { print "    \047" $1 "\047 { $TERMAPP = \047" $2 "\047 }" } END { print "# <<< term-programs" }' > "$WORK/term-programs.ps1"
+
+# --- the lines an account run prints, for the readers -----------------------------------
+FL_KEYS_LIST=$(rows data/account-run.tsv | cut -f1 | tr '\n' ' ' | sed 's/ $//')
+printf '# >>> account-run-keys: generated from data/account-run.tsv by tools/gen.sh. Edit that file, then run it.\nFL_KEYS="%s"\n# <<< account-run-keys\n' "$FL_KEYS_LIST" > "$WORK/account-run-keys.sh"
+# The printers are code: --check fails when the keys gird-check.sh and gird-check.ps1 print, in order,
+# are not those of data/account-run.tsv.
+# A printer line is found at any indentation.
+_ar_sh=$(awk '/^[ \t]*echo "v=1"[ \t]*$/ { on = 1 } on && /^[ \t]*echo "[a-z_]+=/ { k = $2; sub(/^"/, "", k); sub(/=.*/, "", k); printf "%s ", k } on && /^[ \t]*echo "end=1"[ \t]*$/ { exit }' gird-check.sh | sed 's/ $//')
+_ar_ps=$(awk '/^[ \t]*[\047"]v=1[\047"][ \t]*$/ { on = 1 } on && /^[ \t]*[\047"][a-z_]+=/ { k = $1; sub(/^[\047"]/, "", k); sub(/=.*/, "", k); printf "%s ", k } on && /^[ \t]*[\047"]end=1[\047"][ \t]*$/ { exit }' gird-check.ps1 | sed 's/ $//')
+AR_RC=0
+[ "$_ar_sh" = "$FL_KEYS_LIST" ] || { echo "gird-check.sh --account-run prints \"$_ar_sh\", not the keys of data/account-run.tsv"; AR_RC=1; }
+[ "$_ar_ps" = "$FL_KEYS_LIST" ] || { echo "gird-check.ps1 -AccountRun prints \"$_ar_ps\", not the keys of data/account-run.tsv"; AR_RC=1; }
+
+# --- the ids gird-fleet.ps1 checks an account run's lines against ---------------------
+# Every incident with its level, the key providers, the agents of data/auto-approve.tsv and of
+# data/remote-commands.tsv's file lines, the tools of
+# data/outdated.tsv and the platforms, as Windows sees them, and the markers data/indicators.tsv puts in
+# %ProgramData%, which the PC's own check looks at by name.
+{ rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $6 }'; rows data/keys.tsv | awk -F '\t' '{ print "K\t" $1 }'
+  rows data/auto-approve.tsv | awk -F '\t' '$2 == "all" || $2 == "win" { print "A\t" $1 }'
+  rows data/remote-commands.tsv | awk -F '\t' '$1 == "file" && ($3 == "all" || $3 == "win") { print "R\t" $2 }'
+  rows data/outdated.tsv | awk -F '\t' '$3 == "all" || $3 == "win" { print "O\t" $1 }'; rows data/platforms.tsv | awk -F '\t' '{ print "P\t" $1 }'
+  rows data/indicators.tsv | awk -F '\t' '($2 == "all" || $2 == "win") && $5 ~ /^\{PROGRAMDATA\}\// { print "D\t" $1 "\t" substr($5, 15) }'; } | awk -F '\t' -v keys="$FL_KEYS_LIST" '
+  function add(k, v) { if (!((k, v) in seen)) { seen[k, v] = 1; L[k] = L[k] (L[k] == "" ? "" : (k == "I" ? "; " : ", ")) v } }
+  $1 == "I" { add("I", "\047" $2 "\047 = \047" $3 "\047") } $1 == "K" { k = k (k == "" ? "" : " ") $2 }
+  $1 == "A" { add("A", "\047" $2 "\047") } $1 == "R" { add("R", "\047" $2 "\047") } $1 == "O" { add("O", "\047" $2 "\047") } $1 == "P" { add("P", "\047" $2 "\047") }
+  $1 == "D" { d = d "  ,@(\047" $2 "\047, \047" $3 "\047)\n" }
+  END {
+    print "# >>> fleet-tables: generated from data/ by tools/gen.sh. Edit those files, then run it."
+    print "$FlIncidents = @{ " L["I"] " }"
+    print "$FlProviders = \047" k "\047"
+    print "$FlYoloNames = @(" L["A"] ")"
+    print "$FlRemoteNames = @(" L["R"] ")"
+    print "$FlTools = @(" L["O"] ")"
+    print "$FlPlatforms = @(" L["P"] ")"
+    printf "$FlProgramData = @(\n%s)\n", d
+    n = split(keys, ka, " "); o = ""; for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") "\047" ka[i] "\047"
+    print "$FlKeys = @(" o ")"
+    print "# <<< fleet-tables"
+  }' > "$WORK/fleet-tables.ps1"
+# --- the OWASP Agentic Top 10 risk of each kind of finding ------------------------------
+# Rows are kind|risk|name|label|section|source, the kinds with a risk only, in the data file's order.
+rows data/owasp.tsv | awk -F '\t' '
+  BEGIN { print "# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it."; printf "OWASP_TABLE=\"" }
+  $2 != "-" { printf "%s%s|%s|%s|%s|%s|%s", (n++ ? "\n" : ""), $1, $2, $3, $4, $5, $6 }
+  END { print "\""; print "# <<< owasp" }' > "$WORK/owasp.sh"
+rows data/owasp.tsv | awk -F '\t' '
+  BEGIN { print "# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it."; print "$OwaspTable = @(" }
+  $2 != "-" { printf "  ,@(\047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047, \047%s\047)\n", $1, $2, $3, $4, $5, $6 }
+  END { print ")"; print "# <<< owasp" }' > "$WORK/owasp.ps1"
+# --- MITRE references, for gird-report.ps1 ------------------------------------------------
+# One hashtable per line, then the names of the incidents a scope names, so the report can say which.
+{ rows data/incidents.tsv | awk -F '\t' '{ print "I\t" $1 "\t" $2 }'; rows data/mitre.tsv | awk -F '\t' '{ print "M\t" $0 }'; } | awk -F '\t' \
+  -v av="$(sed -n 's/^# attack-version: //p' data/mitre.tsv)" -v lv="$(sed -n 's/^# atlas-version: //p' data/mitre.tsv)" \
+  -v cv="$(sed -n 's/^# csf-version: //p' data/mitre.tsv)" '
+  function list(s, sep,   a, k, i, o) { if (s == "all" || s == "-") return "@()"; k = split(s, a, sep); for (i = 1; i <= k; i++) o = o (i > 1 ? ", " : "") "\047" a[i] "\047"; return "@(" o ")" }
+  function dash(s) { return s == "-" ? "" : s }
+  $1 == "I" { inc[$2] = $3; next }
+  { n++; ln[n] = sprintf("  @{ Word = \047%s\047; Os = \047%s\047; Scope = %s; Fw = \047%s\047; Id = \047%s\047; Name = \047%s\047; Tactics = %s; Rel = \047%s\047; Url = \047%s\047; Note = \047%s\047 }",
+      $2, $3, list($4, ","), $5, dash($6), dash($7), list($8, ","), $9, dash($10), dash($11))
+    if ($4 != "all") { k = split($4, a, ","); for (i = 1; i <= k; i++) if (!(a[i] in want)) { want[a[i]] = 1; wo[++m] = a[i] } } }
+  END {
+    print "# >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it."
+    print "$MitreAttackVersion = \047" av "\047"
+    print "$MitreAtlasVersion = \047" lv "\047"
+    print "$CsfVersion = \047" cv "\047"
+    print "$MitreRows = @("; for (i = 1; i <= n; i++) print ln[i]; print ")"
+    printf "$MitreIncidentNames = @{"; for (i = 1; i <= m; i++) printf "%s\047%s\047 = \047%s\047", (i > 1 ? "; " : " "), wo[i], inc[wo[i]]; print " }"
+    print "# <<< mitre"
+  }' > "$WORK/mitre.ps1"
 
 # --- splice -----------------------------------------------------------------
 splice() { # file block-name generated-file
@@ -405,25 +1196,124 @@ splice() { # file block-name generated-file
     !skip { print }
     END { if (!found) { print "no \"# >>> " name "\" marker" > "/dev/stderr"; exit 3 } }' "$1"
 }
-# --- the agents table and the ownership walk, for gird-fleet.sh ---------------------
-# Their home is gird-check.sh; root in gird-fleet.sh runs the same copies.
-awk '/^# >>> agents[: ]/ { on = 1; print "# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
-  on { print } /^# <<< agents$/ { exit }' gird-check.sh > "$WORK/agents.sh"
-grep -q '^# <<< agents$' "$WORK/agents.sh" || { echo "gird-check.sh has no agents block"; exit 1; }
+# --- the ownership walk and the OWASP tagging, for gird-fleet.sh ---------------------
+# Their home is gird-check.sh; root in gird-fleet.sh runs the same copies. The agents table both fleet
+# scripts read is written into them from data/agents.tsv, as into the checks.
+awk '/^# >>> shared[: ]/ { on = 1; print "# >>> shared: copied from gird-report.ps1 by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< shared$/ { exit }' gird-report.ps1 > "$WORK/shared.ps1"
+grep -q '^# <<< shared$' "$WORK/shared.ps1" || { echo "gird-report.ps1 has no shared block"; exit 1; }
 awk '/^# >>> owned-walk[: ]/ { on = 1; print "# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
   on { print } /^# <<< owned-walk$/ { exit }' gird-check.sh > "$WORK/owned-walk.sh"
 grep -q '^# <<< owned-walk$' "$WORK/owned-walk.sh" || { echo "gird-check.sh has no owned-walk block"; exit 1; }
+awk '/^# >>> owasp-derive[: ]/ { on = 1; print "# >>> owasp-derive: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it."; next }
+  on { print } /^# <<< owasp-derive$/ { exit }' gird-check.sh > "$WORK/owasp-derive.sh"
+grep -q '^# <<< owasp-derive$' "$WORK/owasp-derive.sh" || { echo "gird-check.sh has no owasp-derive block"; exit 1; }
 
-RC=0
-for f in gird-check.sh gird-check.ps1 gird-fleet.sh; do
-  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve agents incidents indicators outdated platforms"
-  else blocks="keys sessions planted auto-approve incidents bad-pypi indicators bad-npm bad-extensions outdated platforms"; fi
+RC=$AR_RC
+for f in gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1; do
+  if [ "$f" = gird-fleet.sh ]; then blocks="owned-walk keys auto-approve remote-commands agents incidents indicators outdated platforms account-run-keys owasp owasp-derive"
+  elif [ "$f" = gird-fleet.ps1 ]; then blocks="agents fleet-tables"
+  elif [ "$f" = gird-report.ps1 ]; then blocks="mitre"
+  elif [ "$f" = gird-intune.ps1 ]; then blocks="shared"
+  else blocks="keys public-values sessions planted auto-approve remote-commands incidents bad-pypi indicators bad-npm bad-extensions ssh-keys outdated platforms actions folder-vars agents report-lists mcp-files term-programs owasp"; fi
   ext=${f##*.}; cp "$f" "$WORK/b"
   for blk in $blocks; do
     splice "$WORK/b" "$blk" "$WORK/$blk.$ext" > "$WORK/a" && mv "$WORK/a" "$WORK/b" || { RC=1; continue 2; }
   done
   if [ "$CHECK" -eq 1 ]; then
-    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh, with gird-check.sh): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
+    if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/ (or, for gird-fleet.sh, with gird-check.sh's ownership walk): run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
   elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
 done
+# docs/checks.md: a copy of the scripts without docs/ (as the tests make) has no page to write.
+if [ -d docs ]; then
+  f=docs/checks.md
+  if [ ! -f "$f" ]; then echo "$f is missing: it needs the lines <!-- >>> checks --> and <!-- <<< checks -->"; RC=1
+  elif awk -v gen="$WORK/checks.md" '
+      /^<!-- >>> checks[: ]/ { while ((getline l < gen) > 0) print l; skip = 1; found = 1; next }
+      skip && /^<!-- <<< checks -->$/ { skip = 0; next }
+      !skip { print }
+      END { if (!found || skip) exit 3 }' "$f" > "$WORK/b"; then
+    if [ "$CHECK" -eq 1 ]; then
+      if ! cmp -s "$f" "$WORK/b"; then echo "$f is out of date with data/: run bash tools/gen.sh"; diff "$f" "$WORK/b" | head -n 8; RC=1; fi
+    elif ! cmp -s "$f" "$WORK/b"; then cat "$WORK/b" > "$f"; echo "updated $f"; fi
+  else echo "$f has no <!-- >>> checks --> ... <!-- <<< checks --> block"; RC=1; fi
+fi
+
+if command -v sha256sum > /dev/null 2>&1; then sha() { sha256sum | cut -c1-64; }; else sha() { shasum -a 256 | cut -c1-64; }; fi
+# --- the size rule both one-file builds follow ----------------------------------
+# size_ok FILE BYTES LIMIT LIMIT-WRITTEN-OUT LIMIT-IN-WORDS WHO: fails at LIMIT bytes or more, the
+# tightest limit an MDM documents for the file, and warns from 80% of it, to keep 20% for growth.
+size_ok() {
+  if [ "$2" -ge "$3" ]; then echo "$1 is $2 bytes: $6 takes a script of under $5 ($4 bytes)"; return 1; fi
+  if [ "$2" -ge $(( $3 * 8 / 10 )) ]; then echo "warning: $1 is $2 bytes, past 80% of the $4 $6 takes"; fi
+  return 0
+}
+
+# --- blindspot-fleet.sh, the one file an MDM runs on a Mac -------------------------
+# gird-fleet.sh with gird-check.sh after its last line, without the game (the lines from "# >>> game"
+# to "# <<< game", nothing else changed), and that copy's SHA-256 in FL_PACKED_SHA. bash never reaches
+# those lines: the file's own copy writes them out (fl_unpack in gird-fleet.sh). Built from the files as
+# they are here and never checked in. Intune takes a macOS script of under 1 MB, so --check fails at
+# 1,000,000 bytes, when the copy it unpacks is not gird-check.sh without its game byte for byte, and
+# when its first line is not #!/bin/bash -p.
+# A blindspot-fleet.sh already here must be that build.
+if ! awk '/^# >>> game$/ { if (g || n) exit 1; g = 1; n = 1; next } /^# <<< game$/ { if (!g) exit 1; g = 0; next }
+    g && /^# >>> / { exit 1 } !g { print > out } END { if (g || n != 1) exit 1 }' out="$WORK/nogame.sh" gird-check.sh; then
+  echo "blindspot-fleet.sh not built: gird-check.sh needs one game block, \"# >>> game\" to \"# <<< game\", with no other block inside it"; RC=1
+elif grep -qE '^# (>>>|<<<) packed-' "$WORK/nogame.sh"; then
+  echo "blindspot-fleet.sh not built: gird-check.sh holds a packed- marker line, which would end the copy early"; RC=1
+else
+  _shs=$(sha < "$WORK/nogame.sh")
+  printf '# >>> packed-sha: written into blindspot-fleet.sh by tools/gen.sh.\nFL_PACKED_SHA=\047%s\047\n# <<< packed-sha\n' "$_shs" > "$WORK/packed-sha.sh"
+  { printf '# >>> packed-check: gird-check.sh without its game, written in by tools/gen.sh. bash stops at the exit above and never runs it here.\n'
+    cat "$WORK/nogame.sh"; printf '# <<< packed-check\n'; } > "$WORK/packed-check.sh"
+  splice gird-fleet.sh packed-sha "$WORK/packed-sha.sh" > "$WORK/bf1.sh" && splice "$WORK/bf1.sh" packed-check "$WORK/packed-check.sh" > "$WORK/blindspot-fleet.sh" || RC=1
+  _szs=$(wc -c < "$WORK/blindspot-fleet.sh" | tr -d ' ')
+  size_ok blindspot-fleet.sh "$_szs" 1000000 1,000,000 "1 MB" "Intune for macOS" || RC=1
+  unpacked_sh() { awk '/^# >>> packed-check[: ]/ && !s { s = 1; next } s { if (n) print p; p = $0; n = 1 } END { exit !(s && p == "# <<< packed-check") }' "$1" | sha; }
+  [ "$(unpacked_sh "$WORK/blindspot-fleet.sh")" = "$_shs" ] || { echo "blindspot-fleet.sh does not unpack to gird-check.sh without its game"; RC=1; }
+  [ "$(head -n 1 "$WORK/blindspot-fleet.sh")" = '#!/bin/bash -p' ] || { echo "blindspot-fleet.sh must start with #!/bin/bash -p"; RC=1; }
+  if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.sh ] && ! cmp -s blindspot-fleet.sh "$WORK/blindspot-fleet.sh"; then
+    echo "blindspot-fleet.sh is out of date with gird-fleet.sh and gird-check.sh, or was edited: run bash tools/gen.sh"; RC=1
+  fi
+  if [ "$CHECK" -eq 0 ] && [ "$RC" -eq 0 ] && ! cmp -s "$WORK/blindspot-fleet.sh" blindspot-fleet.sh; then cat "$WORK/blindspot-fleet.sh" > blindspot-fleet.sh; echo "built blindspot-fleet.sh ($_szs bytes)"; fi
+fi
+
+# --- blindspot-fleet.ps1, the one file an MDM runs ------------------------------
+# gird-fleet.ps1 with gird-check.ps1 packed inside it, without its comments (tools/strip-comments.ps1,
+# which needs PowerShell), gzip-compressed and base64-encoded, and the SHA-256 of that copy. Built from
+# the files as they are here and never checked in: tools/gen.sh builds it for each release. Intune
+# takes a script of under 200 KB, so --check builds it and fails at 200 KB or more (size_ok), or when the check
+# it unpacks is not gird-check.ps1 without its comments byte for byte. A blindspot-fleet.ps1 already
+# here must be that build too, apart from how gzip compressed it.
+PWSH=${PWSH:-$(command -v pwsh 2> /dev/null || true)}
+if [ -z "$PWSH" ] || [ ! -x "$PWSH" ]; then
+  echo "blindspot-fleet.ps1 not built: removing gird-check.ps1's comments needs PowerShell. Put pwsh on PATH or set PWSH=/path/to/pwsh." >&2
+  [ "$RC" -eq 0 ] && RC=3
+  exit "$RC"
+fi
+if ! "$PWSH" -NoProfile -NonInteractive -File tools/strip-comments.ps1 gird-check.ps1 "$WORK/stripped.ps1" > /dev/null; then
+  echo "blindspot-fleet.ps1 not built: tools/strip-comments.ps1 could not remove gird-check.ps1's comments"; exit 1
+fi
+gzip -9 -n -c < "$WORK/stripped.ps1" | base64 | tr -d '\n\r' > "$WORK/packed.b64"
+_sha=$(sha < "$WORK/stripped.ps1")
+{ printf '# >>> packed-check: gird-check.ps1 without its comments, written into blindspot-fleet.ps1 by tools/gen.sh.\n'
+  printf '$PackedCheck = \047%s\047\n' "$(cat "$WORK/packed.b64")"
+  printf '$PackedSha = \047%s\047\n# <<< packed-check\n' "$_sha"; } > "$WORK/packed-check.ps1"
+splice gird-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/blindspot-fleet.ps1" || exit 1
+_sz=$(wc -c < "$WORK/blindspot-fleet.ps1" | tr -d ' ')
+size_ok blindspot-fleet.ps1 "$_sz" 204800 204,800 "200 KB" Intune || RC=1
+unpacked() { sed -n "s|^\\\$PackedCheck = '\\([A-Za-z0-9+/=]*\\)'\$|\\1|p" "$1" | base64 -d 2> /dev/null | gzip -dc 2> /dev/null | sha; }
+if [ "$(unpacked "$WORK/blindspot-fleet.ps1")" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1 without its comments"; RC=1; fi
+if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.ps1 ]; then
+  splice blindspot-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/here.ps1" 2> /dev/null || : > "$WORK/here.ps1"
+  # The packed block holds its two lines and nothing else: the rest of the file is compared above.
+  _pb=$(awk -v sha="$_sha" '/^# >>> packed-check[: ]/ { on = 1; next } /^# <<< packed-check$/ { on = 0; next }
+    on { n++; if ($0 ~ /^\$PackedCheck = \047[A-Za-z0-9+\/=]*\047$/) c++; else if ($0 == "$PackedSha = \047" sha "\047") h++; else x++ }
+    END { print (n == 2 && c == 1 && h == 1 && !x) ? "ok" : "no" }' blindspot-fleet.ps1)
+  if ! cmp -s "$WORK/here.ps1" "$WORK/blindspot-fleet.ps1" || [ "$(unpacked blindspot-fleet.ps1)" != "$_sha" ] || [ "$_pb" != ok ]; then
+    echo "blindspot-fleet.ps1 is out of date with gird-fleet.ps1 and gird-check.ps1, or was edited: run bash tools/gen.sh"; RC=1
+  fi
+fi
+if [ "$CHECK" -eq 0 ] && [ "$RC" -eq 0 ] && ! cmp -s "$WORK/blindspot-fleet.ps1" blindspot-fleet.ps1; then cat "$WORK/blindspot-fleet.ps1" > blindspot-fleet.ps1; echo "built blindspot-fleet.ps1 ($_sz bytes)"; fi
 exit "$RC"

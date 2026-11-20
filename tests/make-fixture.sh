@@ -4,9 +4,15 @@
 # Keys are random and assembled from pieces at runtime, so no key-shaped string
 # is ever committed to this repository.
 #
-#   bash tests/make-fixture.sh HOME_DIR KEYS_FILE [full|clean]
+# owasp is full with one more finding of each kind the reports tag with an OWASP risk (an agent set to
+# run commands without asking, a tool with a security fix, a link to authorized_keys, an update-level
+# npm incident, a Python version to update and an extension to remove), so every risk and every section
+# line shows on one home.
+#
+#   bash tests/make-fixture.sh HOME_DIR KEYS_FILE [full|clean|owasp]
 set -e
 F=$1; KEYS=$2; MODE=${3:-full}
+FULL=1; [ "$MODE" = clean ] && FULL=0
 rm -rf "$F"; mkdir -p "$F"
 # Random characters from a bounded read: tr reads from head, not straight from
 # /dev/urandom, so it always reaches the end of its input and exits. With SIGPIPE
@@ -59,7 +65,7 @@ mkdir -p "$F/.local/share/opencode"; printf '{}\n' > "$F/.local/share/opencode/a
 
 mkdir -p "$F/work/org/repo/.venv/lib/python3.11/site-packages/litellm-1.106.2.dist-info"
 printf 'home = /usr\n' > "$F/work/org/repo/.venv/pyvenv.cfg"
-if [ "$MODE" = full ]; then
+if [ "$FULL" = 1 ]; then
   mkdir -p "$F/code/py/.venv/lib/python3.12/site-packages/litellm-1.107.0.dist-info"
   printf 'home = /usr\n' > "$F/code/py/.venv/pyvenv.cfg"
   printf 'import cook\n' > "$F/code/py/.venv/lib/python3.12/site-packages/cook.pth"
@@ -73,7 +79,7 @@ printf '{"version":"2.0.0","tasks":[{"label":"build","command":"make"}]}\n' > "$
 printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"say done"}]}]}}\n' > "$F/.claude/settings.json"
 # Lockfiles with good versions of packages that once had bad ones.
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.10","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.10.tgz"},"node_modules/my-axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/my-axios/-/my-axios-1.14.1.tgz"},"node_modules/keyv-x":{"resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.0-beta.1.tgz"},"node_modules/keyv":{"version":"6.0.1","resolved":"https://registry.npmjs.org/keyv/-/keyv-6.0.1.tgz"}}}\n' > "$F/code/lib/package-lock.json"
-if [ "$MODE" = full ]; then
+if [ "$FULL" = 1 ]; then
   # Agent sessions: a key right after an escaped newline, made-up ones (a run of one letter, a
   # documented example, a two-letter pattern, counting digits), and one per agent.
   printf '{"type":"tool_result","content":"HF_TOKEN set\\n%s\\nexample sk-ant-api03-%s docs AKIAIOSFODNN7EXAMPLE and ghp_%s or gsk_1234567890%s"}\n' "$HFK" "$(printf 'A%.0s' $(seq 1 95))" "$(printf 'ab%.0s' $(seq 1 18))" "$(rnd 42)" > "$F/.claude/projects/p1/k.jsonl"
@@ -113,3 +119,22 @@ h1='-----BEGIN OPENSSH '; h2='PRIVATE KEY-----'
 printf '%s%s\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAA\n' "$h1" "$h2" > "$F/.ssh/id_ed25519"
 printf '%s%s\nProc-Type: 4,ENCRYPTED\n' '-----BEGIN RSA ' "$h2" > "$F/.ssh/id_rsa_work"
 printf 'ssh-ed25519 AAAA test\n' > "$F/.ssh/id_ed25519.pub"
+
+if [ "$MODE" = owasp ]; then
+  # Codex set to never ask, with full access (data/auto-approve.tsv), above its MCP servers.
+  { printf 'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n'; cat "$F/.codex/config.toml"; } > "$F/.codex/config.new"
+  mv "$F/.codex/config.new" "$F/.codex/config.toml"
+  # Claude Code 2.1.100 installed globally: inside ranges data/outdated.tsv lists with a fixed version.
+  mkdir -p "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code"
+  printf '{"name":"@anthropic-ai/claude-code","version":"2.1.100"}\n' > "$F/.npm-global/lib/node_modules/@anthropic-ai/claude-code/package.json"
+  # A link to the person's own authorized_keys, outside .ssh.
+  ln -s "$F/.ssh/authorized_keys" "$F/code/app/authorized_keys"
+  # Mistral's npm build, an update-level incident, in a lockfile.
+  mkdir -p "$F/code/mis"
+  printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.2","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.2.tgz"}}}\n' > "$F/code/mis/package-lock.json"
+  # telnyx 4.87.1, whose malware its maintainer says could not run (os none): a Python version to update.
+  mkdir -p "$F/code/tx/.venv/lib/python3.12/site-packages/telnyx-4.87.1.dist-info"
+  printf 'home = /usr\n' > "$F/code/tx/.venv/pyvenv.cfg"
+  # An extension whose malware runs on Windows only: to remove, off Windows.
+  mkdir -p "$F/.vscode/extensions/microsoftvs.microsoftvs-1.0.0"
+fi

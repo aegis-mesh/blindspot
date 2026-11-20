@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Blindspot, the GIRD AI key check, version 1.2.0 (25 October 2026)
+# Blindspot, the GIRD AI key check, version 1.3.0 (20 November 2026)
 # https://gird.ai/blindspot
 #
 # Shows the AI coding agents and MCP servers on this machine, AI and cloud keys
@@ -130,7 +130,7 @@ fi
 # file is not read and is counted, one line each in FLEET_NR, as not checked. Agents installed in
 # /Applications and the shared temp folder are the Mac's, checked once by root, never as an account's.
 # Shared install folders it reads (npm's global folders outside the home, shared Python, Cursor's
-# version) count on every account's row, as docs/fleet.md says.
+# version) count on every account's row, as docs/fleet-reference.md says.
 FLEET_NR=""; FLEET_MAX=16777216; FLEET_PROT=ok
 if [ "$ACCTRUN" -eq 1 ]; then
   APP_CLAUDE=""; APP_CURSOR=""; APP_WINDSURF=""; APP_DEVIN=""; APP_ANTIGRAVITY=""
@@ -340,7 +340,7 @@ banner() {
   done <<EOF
 $_wm
 EOF
-  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.2.0 · 25 Oct 2026 · gird.ai/blindspot${RST}"
+  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.3.0 · 20 Nov 2026 · gird.ai/blindspot${RST}"
   blank
   emit "  ${DIM}Read-only. Prints paths and counts, never a key.${RST}"
   if [ "$OFFLINE" -eq 0 ]; then
@@ -400,6 +400,11 @@ spin_stop() {
   printf '\r%s%s' "${E}[K" "$SHOW"
 }
 
+# The game below is cut from the copy of this script that blindspot-fleet.sh carries (tools/gen.sh):
+# with it gone, game_start stays this one, GAME_PID stays empty and the spinner runs instead.
+GAME_PID=""; KEYS_PID=""; GAME_RC=0; SAVED_TTY=""
+game_start() { return 1; }
+# >>> game
 # ---------------------------------------------------------------------------
 # GIRD Runner, a small game for the wait. It runs in a background process while
 # the scan runs in the foreground. When the scan is done the game gets USR1 and
@@ -412,8 +417,16 @@ spin_stop() {
 #                it back after both have stopped, so they never race over its mode.
 # The runner is drawn with half-height blocks, so it moves in half-row steps.
 # ---------------------------------------------------------------------------
-GAME_PID=""; KEYS_PID=""; GAME_RC=0; SAVED_TTY=""
-if [ -n "${EPOCHREALTIME:-}" ]; then G_MODE=A; elif [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then G_MODE=B; else G_MODE=C; fi
+game_start() { # starts the game in the background, or returns 1 when it can't run here
+  if [ -n "${EPOCHREALTIME:-}" ]; then G_MODE=A; elif [ "${BASH_VERSINFO[0]:-3}" -ge 4 ]; then G_MODE=B; else G_MODE=C; fi
+  game_ok || return 1
+  SAVED_TTY=$(stty -g </dev/tty 2>/dev/null)
+  [ "$G_MODE" = C ] && stty -echo -icanon min 0 time 5 </dev/tty 2>/dev/null
+  game_loop </dev/tty &
+  GAME_PID=$!
+  if [ "$G_MODE" = C ]; then g_keys "$GAME_PID" </dev/tty & KEYS_PID=$!; fi
+  return 0
+}
 # stty must work on /dev/tty too: some Windows terminals (mintty without a console)
 # have a terminal on stdin that stty can't set, and then the spinner is shown instead.
 game_ok() {
@@ -706,6 +719,7 @@ game_loop() {
   if [ "$G_PLAYED" -eq 1 ]; then _b=$((G_BEST / 50 + 1)); [ "$_b" -gt 100 ] && _b=100; exit "$_b"; fi
   exit 0
 }
+# <<< game
 
 # Keys for the menu at the end: one key, read straight from the terminal.
 read_key() {
@@ -724,7 +738,7 @@ drain_keys() {
   stty "$_rs" </dev/tty 2>/dev/null
 }
 
-PROG_FILE=""; SP_FILE=""; SP_PID=""; EARLY=0
+PROG_FILE=""; SP_FILE=""; SP_PID=""; EARLY=0; FLAT_CUT=""
 SESS_PID=""; SESS_FILTER_PID=""; SESS_DIR=""; SESS_FIFO=""; SESS_FILE=""; SESS_WIN=0
 cleanup() {
   spin_stop
@@ -735,6 +749,7 @@ cleanup() {
   if [ -n "$SAVED_TTY" ]; then stty "$SAVED_TTY" </dev/tty 2>/dev/null; SAVED_TTY=""; fi
   [ -n "$PROG_FILE" ] && rm -f "$PROG_FILE"
   [ -n "$SCAN_ERR" ] && rm -f "$SCAN_ERR"
+  [ -n "$FLAT_CUT" ] && rm -f "$FLAT_CUT"
   [ -n "$SP_FILE" ] && rm -f "$SP_FILE"
   [ -n "$SESS_DIR" ] && rm -rf "$SESS_DIR"
   [ -n "$FLEET_NR" ] && rm -f "$FLEET_NR"
@@ -749,11 +764,125 @@ trap 'cleanup; exit 129' HUP
 # printed, kept in a shell variable or sent anywhere.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
-PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
-KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+KEY_PASSES='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+KEY_ALTS='sk-ant-[A-Za-z0-9_-]{90,}
+sk-or-v1-[a-f0-9]{64}
+sk-proj-[A-Za-z0-9_-]{120,}
+sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-None-[A-Za-z0-9_-]{120,}
+sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-svcacct-[A-Za-z0-9_-]{60,}
+sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-admin-[A-Za-z0-9_-]{120,}
+(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
+(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}
+(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}
+gsk_[A-Za-z0-9]{52}
+xai-[A-Za-z0-9]{64,}
+(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)
+pplx-[A-Za-z0-9]{40,52}
+(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}
+(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)
+ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}
+bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}
+gh[pour]_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}
+github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
+npm_[A-Za-z0-9]{36}
+
+(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}
+hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)
+(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)
+(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}
+(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)
+(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}
+(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)
+(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage"
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_(?:(?<![A-Za-z0-9_]hf_)|(?<=\\[ntr]hf_))|pplx-|r8_(?:(?<![A-Za-z0-9+/_-]r8_)|(?<=\\[ntr]r8_))|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi(?:(?<![A-Za-z0-9_-]dapi)|(?<=\\[ntr]dapi))|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.](?:(?<![A-Za-z0-9_.-]SG[.])|(?<=\\[ntr]SG[.]))|pypi-AgEIcHlwaS5vcmc(?:(?<![A-Za-z0-9_-]pypi-AgEIcHlwaS5vcmc)|(?<=\\[ntr]pypi-AgEIcHlwaS5vcmc))|dckr_pat_(?:(?<![A-Za-z0-9_-]dckr_pat_)|(?<=\\[ntr]dckr_pat_))|dop_v1_|doo_v1_|dor_v1_|hvs[.](?:(?<![A-Za-z0-9_.-]hvs[.])|(?<=\\[ntr]hvs[.]))|nvapi-(?:(?<![A-Za-z0-9_-]nvapi-)|(?<=\\[ntr]nvapi-))|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_(?:(?<![A-Za-z0-9_-]sb_secret_)|(?<=\\[ntr]sb_secret_))|ops_eyJ(?:(?<![A-Za-z0-9_-]ops_eyJ)|(?<=\\[ntr]ops_eyJ))|7Q~|8Q~|JQQJ99|[+]ASt|AccountName='
+PASS_FIXED='sk-ant-
+sk-or-v1-
+sk-
+AIza
+AQ.
+gsk_
+xai-
+hf_
+pplx-
+r8_
+AKIA
+ASIA
+ABSK
+bedrock-api-key
+ghp_
+gho_
+ghu_
+ghs_
+ghr_
+github_pat_
+npm_
+
+dapi
+glpat-
+gldt-
+glrt-
+glft-
+glsoat-
+xoxb-
+xoxp-
+xoxe.xapp-
+xapp-
+hooks.slack.com
+sk_live_
+rk_live_
+whsec_
+SG.
+pypi-AgEIcHlwaS5vcmc
+dckr_pat_
+dop_v1_
+doo_v1_
+dor_v1_
+hvs.
+nvapi-
+lsv2_pt_
+lsv2_sk_
+shpat_
+shppa_
+sntryu_
+sntrys_
+sb_secret_
+ops_eyJ
+7Q~
+8Q~
+JQQJ99
++ASt
+AccountName='
 PROV_AWK='
+function at(s, t, o,   b) { for (b = 0; b <= 2; b++) if (substr(s, b + o + 1, length(t)) == t) return 1; return 0 }
 function prov(s) {
+  if (at(s, "7Q~", 3) || at(s, "8Q~", 3)) return "Microsoft Entra"
+  if ((at(s, "JQQJ99", 52) && at(s, "AAAAAZDO", 72))) return "Azure DevOps"
+  if ((at(s, "JQQJ99", 52) && at(s, "ACOG", 76))) return "Azure AI"
+  if ((at(s, "+ASt", 76) && at(s, "==", 86)) || at(s, "AccountName=", 0)) return "Azure Storage"
   sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s)
   if (s ~ /^(sk-ant-)/) return "Anthropic"
   if (s ~ /^(sk-or-v1-)/) return "OpenRouter"
@@ -767,13 +896,67 @@ function prov(s) {
   if (s ~ /^(AKIA|ASIA|ABSK|bedrock-api-key)/) return "AWS"
   if (s ~ /^(gh[pousr]_|github_pat_)/) return "GitHub"
   if (s ~ /^(npm_)/) return "npm"
+  if (s ~ /^(dapi)/) return "Databricks"
+  if (s ~ /^(glpat-|gldt-|glrt-|glft-|glsoat-)/) return "GitLab"
+  if (s ~ /^(xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com)/) return "Slack"
+  if (s ~ /^(sk_live_|rk_live_|whsec_)/) return "Stripe"
+  if (s ~ /^(SG[.])/) return "SendGrid"
+  if (s ~ /^(pypi-AgEIcHlwaS5vcmc)/) return "PyPI"
+  if (s ~ /^(dckr_pat_)/) return "Docker Hub"
+  if (s ~ /^(dop_v1_|doo_v1_|dor_v1_)/) return "DigitalOcean"
+  if (s ~ /^(hvs[.])/) return "HashiCorp Vault"
+  if (s ~ /^(nvapi-)/) return "NVIDIA"
+  if (s ~ /^(lsv2_pt_|lsv2_sk_)/) return "LangSmith"
+  if (s ~ /^(shpat_|shppa_)/) return "Shopify"
+  if (s ~ /^(sntryu_|sntrys_)/) return "Sentry"
+  if (s ~ /^(sb_secret_)/) return "Supabase"
+  if (s ~ /^(ops_eyJ)/) return "1Password"
   return ""
-}'
-prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
+}
+function pmax(p) { if (p == "GitHub") return 1024; if (p == "PyPI") return 600; if (p == "Sentry") return 320; if (p == "1Password") return 1024; return 300 }'
+prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; "Databricks") printf databricks ;; "GitLab") printf gitlab ;; "Slack") printf slack ;; "Stripe") printf stripe ;; "SendGrid") printf sendgrid ;; "PyPI") printf pypi ;; "Docker Hub") printf dockerhub ;; "DigitalOcean") printf digitalocean ;; "HashiCorp Vault") printf vault ;; "NVIDIA") printf nvidia ;; "LangSmith") printf langsmith ;; "Shopify") printf shopify ;; "Sentry") printf sentry ;; "Supabase") printf supabase ;; "1Password") printf onepassword ;; "Microsoft Entra") printf azureentra ;; "Azure DevOps") printf azuredevops ;; "Azure AI") printf azureai ;; "Azure Storage") printf azurestorage ;; esac; }
 # <<< keys
+# >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
+PUBLIC_AWK='
+function public(k) { return 0 || index(k, "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u") || index(k, "19874698323-pdFZKVeTuE8sk7oOcBrzbqgy") || index(k, "N7UND0UgjKTVK-Uodkm0Hg") || index(k, "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5") || index(k, "MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw") || index(k, "5WbX5kEWLlfzsGNjH64I8lOOqUB6e8FH") }'
+# <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.
+# TR_KEYS, the keys as one alternation, is not used to search: tests/run.sh checks that the passes
+# below find what it finds.
+# shellcheck disable=SC2034
 TR_KEYS=$(printf '%s' "$ALL_KEYS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+TR_ALTS=$(printf '%s\n' "$KEY_ALTS" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+TR_PASSES=$(printf '%s\n' "$KEY_PASSES" | sed 's/(^|\[^\([^]]*\)\])/(^|[^\1]|\\\\[ntr"])/g')
+# grep gets the key patterns as one -e each (key_o, files_matching): the grep macOS ships reads one
+# long alternation of them many times slower than all of its parts one by one, and grep -o finds the
+# same matches either way (the leftmost, then the longest).
+# PF[n]: the fixed strings of pass n of data/keys.tsv (from 0), one a line. Every match of a pass's
+# patterns holds one of them, and grep -F finds them many times faster than the patterns run: a
+# later pass is matched only in text that holds one (the first pass, the 1.2.0 types, always is).
+PF=(); _pi=0; _pf=""
+while IFS= read -r _ka; do
+  if [ -z "$_ka" ]; then PF[_pi]=$_pf; _pi=$((_pi + 1)); _pf=""; else _pf="$_pf${_pf:+$'\n'}$_ka"; fi
+done <<EOF
+$PASS_FIXED
+
+EOF
+# The keys in what CMD... prints (grep -o), one grep for each pass of data/keys.tsv, so a key of a
+# later pass never hides one of an earlier pass. KO_X, when set, holds -e patterns for the first pass.
+KO_X=()
+key_o() { # CMD...
+  _ko=(${KO_X[@]+"${KO_X[@]}"}); _kn=0
+  while IFS= read -r _ka; do
+    if [ -n "$_ka" ]; then _ko+=(-e "$_ka"); continue; fi
+    if [ "${#_ko[@]}" -gt 0 ] && { [ "$_kn" -eq 0 ] || "$@" < /dev/null | grep -aqF -e "${PF[_kn]}"; }; then
+      "$@" < /dev/null | grep -aoE "${_ko[@]}"
+    fi
+    _ko=(); _kn=$((_kn + 1))
+  done <<EOF
+$TR_ALTS
+
+EOF
+}
 
 # A secret written as a value: KEY=value in a command, or "token": "value" in a config.
 P_ASSIGN='[A-Z][A-Z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*=[^[:space:]"$\\]{12,}'
@@ -806,7 +989,7 @@ P_NOTSECRET='(_PATH|_FILE|_DIR)S?"?[[:space:]]*[:=]|[:=][[:space:]]*"?(~|\.\.?/|
 # documented example such as AWS's AKIAIOSFODNN7EXAMPLE) is not a key here either. Control
 # characters become spaces first, so the match is one field.
 providers_in() {
-  grep -aoE "$TR_KEYS" "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
+  key_o cat "$1" 2>/dev/null | awk '{ gsub(/[\001-\037\177]/, " "); print "K\t-\t" $0 }' | sess_filter |
     awk -F '\t' '$1 == "H" { out = out (out == "" ? "" : ", ") $3 } END { printf "%s", out }'
 }
 # The providers of a Claude Code settings file's keys that are not in its permission rules (cc_rules),
@@ -815,7 +998,7 @@ providers_in() {
 # comments too, as providers_in reads a file, and the keys stay inside the pipe. The matches left go
 # through sess_filter as providers_in's do, so a key that looks made up is not one here either.
 cc_providers() { # file
-  { cc_rules "$1" | grep -aoE "$TR_KEYS" | sed 's/^/R /'; grep -aoE "$TR_KEYS" "$1" 2>/dev/null | sed 's/^/F /'; } | awk '
+  { key_o cc_rules "$1" | sed 's/^/R /'; key_o cat "$1" 2>/dev/null | sed 's/^/F /'; } | awk '
     function norm(s) { sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s); return s }
     substr($0, 1, 2) == "R " { r[norm(substr($0, 3))]++; next }
     { m = substr($0, 3); k = norm(m); if (r[k] > 0) { r[k]--; next }
@@ -825,8 +1008,23 @@ cc_providers() { # file
 # Print the files in a newline list that contain a match, in order, with one grep pass. Only regular
 # files are read, following links: a pipe, socket or device at a fixed path (a fifo made at
 # ~/.zsh_history, a link to /dev/tty) would hold the read for ever.
-files_matching() { # pattern; list on stdin
-  while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\0' "$_fm"; done | xargs -0 grep -alE "$1" 2>/dev/null
+# The key patterns are added here, a pass at a time as key_o has them, and a later pass's only on the
+# files that hold one of its fixed strings (PF); the -e patterns given go with the first pass.
+files_matching() { # -e pattern...; list on stdin
+  _fl=$(while IFS= read -r _fm; do [ -f "$_fm" ] && printf '%s\n' "$_fm"; done)
+  [ -n "$_fl" ] || return 0
+  { _ko=(${1+"$@"}); _kn=0
+    while IFS= read -r _ka; do
+      if [ -n "$_ka" ]; then _ko+=(-e "$_ka"); continue; fi
+      if [ "$_kn" -eq 0 ]; then printf '%s\n' "$_fl" | tr '\n' '\0' | xargs -0 grep -alE "${_ko[@]}" 2>/dev/null
+      else printf '%s\n' "$_fl" | tr '\n' '\0' | xargs -0 grep -alF -e "${PF[_kn]}" 2>/dev/null | tr '\n' '\0' | xargs -0 grep -alE "${_ko[@]}" 2>/dev/null; fi
+      _ko=(); _kn=$((_kn + 1))
+    done <<EOF
+$TR_ALTS
+
+EOF
+    printf '\001\n%s\n' "$_fl"
+  } | awk '$0 == "\001" { l = 1; next } l { if (($0 in hit) && !seen[$0]++) print; next } { hit[$0] = 1 }'
 }
 # Codex's env_http_headers name the environment variable each header's value comes from, so they hold
 # no token: a TOML file is read without them, in an inline table, as dotted keys and in a
@@ -852,71 +1050,41 @@ yaml_headers() { # file
       n = split(f, e, ","); for (i = 1; i <= n; i++) print e[i]; next }
     t ~ /(:|^-) +[|>][-+0-9]* *(#.*)?$/ { insc = 1; scind = ind }' "$1" 2>/dev/null
 }
+# Drops the matches that hold a published value (data/public-values.tsv, PUBLIC_AWK): an emulator's
+# key in an MCP config or a saved command is no more a key there than in a .env file, where
+# sess_filter's madeup() drops it with the same public().
+not_public() { awk "$PUBLIC_AWK"' !public($0)'; }
 inline_secret() {
-  _ip="$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET"
-  case "$1" in *.toml|*.yaml|*.yml) _ip="$_ip|$P_HEADERSQ" ;; esac
-  { no_env_headers "$1" | grep -aoE "$_ip"
+  KO_X=(-e "$P_JSONSECRET" -e "$P_TOMLSECRET" -e "$P_HEADERSECRET")
+  case "$1" in *.toml|*.yaml|*.yml) KO_X+=(-e "$P_HEADERSQ") ;; esac
+  { key_o no_env_headers "$1"
     case "$1" in *.yaml|*.yml) yaml_headers "$1" | grep -aoE "$P_HEADERYAML" ;; esac
-  } | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
+  } | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | not_public | grep -q .; _r=$?; KO_X=(); return "$_r"
 }
 # A key in a Claude Code settings file's permission rules (cc_rules): a saved command (section 4). A key
 # elsewhere in the file, such as its env, is a key in plain text (section 3) and nothing more.
 command_secret() {
-  cc_rules "$1" | grep -aoE "$TR_KEYS|$P_ASSIGN" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | grep -q .
+  KO_X=(-e "$P_ASSIGN"); key_o cc_rules "$1" | grep -viE "$P_PLACEHOLDER" | grep -vE "$P_NOTSECRET" | not_public | grep -q .; _r=$?; KO_X=(); return "$_r"
 }
 
 # ---------------------------------------------------------------------------
 # Fixed lists for the case-study counts in the report. Only ids from these
 # lists, counts and yes/no leave the Mac: never a path, a file name or a name
 # you gave an MCP server. gird.ai keeps the same lists and drops anything else,
-# so change both together. Agent ids are in the table under "1. Coding agents".
+# so change both together. Agent ids are in data/agents.tsv.
 # ---------------------------------------------------------------------------
 # Key providers, for key_providers and provider_files (names in providers_in).
 
-# MCP clients, for mcp_clients and mcp_token_clients, by the file the servers are in:
-#   claude-code     ~/.claude.json, and .mcp.json in a project folder
-#   claude-desktop  Claude Desktop's claude_desktop_config.json
-#   cursor          ~/.cursor/mcp.json, and .cursor/mcp.json in a project folder
-#   windsurf        ~/.codeium/windsurf/mcp_config.json
-#   codex           ~/.codex/config.toml
-#   gemini-cli      ~/.gemini/settings.json
-#   vscode          VS Code's mcp.json, and .vscode/mcp.json in a project folder
-#   cline           Cline's cline_mcp_settings.json, in VS Code or in Cursor
-#   continue        ~/.continue/config.json and ~/.continue/config.yaml
-#   goose           ~/.config/goose/config.yaml
-#   opencode        ~/.config/opencode/opencode.json
-#   other           any other file
+# MCP apps, for mcp_clients and mcp_token_clients (data/mcp-clients.tsv); well-known MCP servers, for
+# mcp_known, and the labels that mean them (data/mcp-servers.tsv says how a server's label is matched:
+# any other label only adds one to mcp_other, and is never sent); and kinds of file, for key_places
+# (data/key-places.tsv).
+# >>> report-lists: generated from data/mcp-clients.tsv, data/mcp-servers.tsv and data/key-places.tsv by tools/gen.sh. Edit those files, then run it.
 MCP_CLIENT_IDS="claude-code claude-desktop cursor windsurf codex gemini-cli vscode cline continue goose opencode other"
-
-# Well-known MCP servers, for mcp_known. A server's label, its name in the
-# config, is lowercased and cut to the part after the last / (so @scope/name
-# gives name). Spaces, dots and underscores become -, and mcp- and server- come
-# off the front and -mcp and -server off the end, as often as they appear. When
-# nothing is left, as with @playwright/mcp, the part before the / is used. What
-# remains must equal an id below or an alias (alias=id). Any other label only
-# adds one to mcp_other, and is never sent.
-MCP_KNOWN_IDS="github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase
-  playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence
-  sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking
-  time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana
-  shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster
-  shadcn deepwiki neon prisma netlify heroku azure huggingface"
-MCP_ALIASES="gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres
-  sqlite3=sqlite mongo=mongodb browserbasehq=browserbase brave=brave-search notionhq=notion
-  figma-dev-mode=figma figma-developer=figma perplexity-ask=perplexity
-  sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes
-  desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster
-  task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface"
-
-# Places, for key_places. Each file counted in key_files gets the first that fits:
-#   shell_rc       ~/.zshrc .zprofile .zshenv .zlogin .bashrc .bash_profile .profile, fish's config.fish
-#   shell_history  the shell and REPL history files, the same ones history_keys counts
-#   env_file       .env, .env.* and .envrc, anywhere
-#   mcp_config     an MCP config from the list of clients above, at home or in a project folder
-#   agent_config   other coding-agent settings, like ~/.claude/settings.json or ~/.aider.conf.yml
-#   project_file   any other file found in a project folder
-#   other          anything else
+MCP_KNOWN_IDS="github gitlab filesystem git postgres mysql sqlite mongodb redis supabase firebase playwright puppeteer browserbase chrome-devtools slack linear notion jira atlassian confluence sentry stripe figma context7 memory fetch brave-search exa tavily perplexity sequential-thinking time gdrive google-maps aws cloudflare vercel docker kubernetes terraform datadog grafana shopify hubspot salesforce zapier n8n everything desktop-commander serena firecrawl taskmaster shadcn deepwiki neon prisma netlify heroku azure huggingface"
+MCP_ALIASES="gh=github fs=filesystem file-system=filesystem pg=postgres postgresql=postgres sqlite3=sqlite mongo=mongodb browserbasehq=browserbase notionhq=notion figma-dev-mode=figma figma-developer=figma brave=brave-search perplexity-ask=perplexity sequentialthinking=sequential-thinking google-drive=gdrive k8s=kubernetes desktopcommander=desktop-commander taskmaster-ai=taskmaster task-master-ai=taskmaster task-master=taskmaster shadcn-ui=shadcn hf=huggingface hugging-face=huggingface"
 KEY_PLACE_IDS="shell_rc shell_history env_file mcp_config agent_config project_file other"
+# <<< report-lists
 
 in_list() { for _il in $2; do [ "$_il" = "$1" ] && return 0; done; return 1; } # id list
 # The well-known ids among MCP server labels ("=label" lines on stdin), in list
@@ -1106,6 +1274,34 @@ Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.ini
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
+# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
+RC_SIGS='ssh|exact|on other machines over SSH
+aws ssm send-command|exact|on AWS servers
+aws ssm start-session|exact|on AWS servers
+aws ecs execute-command|exact|in AWS containers
+gcloud compute ssh|exact|on Google Cloud servers
+az vm run-command invoke|exact|on Azure servers
+az ssh vm|exact|on Azure servers
+kubectl exec|exact|in Kubernetes containers
+Invoke-Command|any|on other machines with PowerShell
+Enter-PSSession|any|on other machines with PowerShell'
+RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
+Claude Code|all|claude|local|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|only in sessions you start in your home folder
+Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-
+Gemini CLI|all|gemini-toml|agent|${GEMINI_CLI_HOME:-$H}/.gemini/policies/*.toml|-
+Gemini CLI|all|gemini-json|agent|${GEMINI_CLI_HOME:-$H}/.gemini/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/profiles/*/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/profiles/*/settings.json|-
+Roo Code|all|roo|file|$AS/Code/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/profiles/*/settings.json|while its auto-approve for commands is on
+Amazon Q|all|amazonq|file|$H/.aws/amazonq/cli-agents/*.json|when you use that agent"
+# <<< remote-commands
 # One pass over the home folder, depth-limited, skipping heavy and system folders:
 # dependency caches, build output, model and VM images, cloud sync folders.
 scan_home() {
@@ -1147,11 +1343,19 @@ EOF
     for e in "$d"/* "$d"/.[!.]*; do [ -d "$e" ] && [ ! -L "$e" ] || continue
       if [ ! -x "$e" ]; then printf "find: %s: Permission denied\n" "$e" >&2
       elif [ -f "$e/pyvenv.cfg" ] && [ ! -L "$e/pyvenv.cfg" ]; then printf "%s\n" "$e/pyvenv.cfg"; fi; done; done'
+  # A project's .github folder 5 or 6 folders down, where the scan stops before its workflows: sh lists
+  # its workflows folder as the scan would (regular files ending in .yml or .yaml), so a repo as deep as
+  # ~/src/github.com/org/repo has its workflows read. A workflows folder it can't read is named in
+  # find's own words.
+  # shellcheck disable=SC2016  # $d, $w and $f are for the sh that find starts
+  _ghw='for d; do w=$d/workflows; [ -d "$w" ] && [ ! -L "$w" ] || continue
+    if [ ! -r "$w" ] || [ ! -x "$w" ]; then printf "find: %s: Permission denied\n" "$w" >&2; continue; fi
+    for f in "$w"/* "$w"/.[!.]* "$w"/..?*; do case "$f" in *.yml|*.yaml) [ -f "$f" ] && [ ! -L "$f" ] && printf "%s\n" "$f" ;; esac; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
     _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
     [ -e "$H/.ssh/authorized_keys" ] && _lk=(\( -ilname '*authorized_keys' -o ! -lname '/*' -o -lname "$H/*" \) -exec printf 'L %s\n' {} +)
-    _tx=(-exec sh -c "$_tz" sh {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); fi
+    _tx=(-exec sh -c "$_tz" sh {} +); _gx=(-exec sh -c "$_ghw" sh {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); _gx=(-exec sh -c "$_ghw" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -1177,12 +1381,14 @@ EOF
   BS_PC=$_pc BS_PV=$_pv find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
     \( -type d -name .tox -prune "${_tx[@]}" \) -o \
     \( -type d \( "$@" \) -prune \) -o \
+    \( -type d -name .github -path "$H/*/*/*/*/.github" "${_gx[@]}" \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' -o -path '*/.vscode/tasks.json' "${_pf[@]}" \
        -o -name package-lock.json -o -name npm-shrinkwrap.json -o -name pnpm-lock.yaml -o -name yarn.lock -o -name bun.lock -o -name bun.lockb -o -name deno.lock \
-       -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \) -print \) -o \
+       -o -name .aider.chat.history.md -o -name .aider.input.history -o -path '*/.vscode/settings.json' "${_aa[@]}" \
+       -o -path '*/.github/workflows/*.yml' -o -path '*/.github/workflows/*.yaml' \) -print \) -o \
     \( -type l \( -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' -o -path '*/.vscode/tasks.json' \
        -o -path '*/.vscode/settings.json' "${_pf[@]}" -o -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json \
        -o -path '*/.cursor/mcp.json' -o -path '*/.vscode/mcp.json' \) "${_ls[@]}" \) -o \
@@ -1213,10 +1419,8 @@ case "$OS" in Darwin) _os=mac ;; *) _os=linux ;; esac; [ "$WIN" -eq 1 ] && _os=w
 # Git Bash, MSYS2 and Cygwin uppercase only a few Windows variables' names (PROGRAMFILES and SYSTEMDRIVE
 # among them, their runtime's environ.cc), so ProgramData keeps its Windows spelling.
 _pd=""; if [ "$WIN" -eq 1 ]; then _pd=$(winpath "${PROGRAMDATA:-${ProgramData:-}}"); _pd=${_pd%/}; fi
-# Coding agents: name | commands | install paths | folders that change when it is used | id
-# Windsurf became Devin Desktop on 2 June 2026: Devin.app, the devin-desktop command, and editor data
-# under Devin, not Windsurf, while ~/.codeium stays (docs.devin.ai/desktop/devin-desktop-faq).
-# >>> agents: this table's home; tools/gen.sh copies it into gird-fleet.sh.
+# Coding agents (data/agents.tsv): name | commands | install paths | folders that change when it is used | id
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
@@ -1232,12 +1436,12 @@ Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/global
 Continue||$H/.continue|$H/.continue/sessions|continue"
 # <<< agents
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; uipath) printf '%s' 'UiPath npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026' ;; mastra) printf '%s' 'Mastra npm packages, June 2026' ;; antv) printf '%s' 'AntV account takeover, May 2026' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; esac; }
-incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; uipath) printf '%s' 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' ;; mastra) printf '%s' 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' ;; antv) printf '%s' 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' ;; esac; }
+npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; uipath) printf '%s' 'UiPath npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026' ;; mastra) printf '%s' 'Mastra npm packages, June 2026' ;; antv) printf '%s' 'AntV account takeover, May 2026' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026' ;; checkmarxvsx) printf '%s' 'Checkmarx Open VSX extensions, March 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; claudeext) printf '%s' 'Trojanized Claude Code extension, October 2026' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2, November 2026' ;; esac; }
+incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; uipath) printf '%s' 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' ;; mastra) printf '%s' 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' ;; antv) printf '%s' 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' ;; checkmarxvsx) printf '%s' 'Checkmarx Open VSX extensions, March 2026: on activation, fetched and ran a credential stealer where cloud credentials were found. wiz.io' ;; injective) printf '%s' 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' ;; claudeext) printf '%s' 'Trojanized Claude Code extension, October 2026: builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel. cursor.com' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2, November 2026: a .pth file started a credential stealer every time Python started. github.com' ;; esac; }
 incident_level() { case "$1" in mistral) printf update ;; uipath) printf update ;; opencode) printf leak ;; railway) printf leak ;; zeabur) printf leak ;; injective) printf update ;; *) printf act ;; esac; }
-incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; uipath) printf '%s' 'UiPath npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; minishai) printf '%s' 'Mini Shai-Hulud worm' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2' ;; mastra) printf '%s' 'Mastra npm packages' ;; antv) printf '%s' 'AntV account takeover' ;; nxconsole) printf '%s' 'Nx Console 18.95.0' ;; redhat) printf '%s' 'Red Hat Cloud Services packages' ;; keyv) printf '%s' 'keyv worm' ;; keyvscope) printf '%s' 'keyv account takeover' ;; keyvspread) printf '%s' 'keyv worm spread' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormzig) printf '%s' 'GlassWorm extensions' ;; glasswormdec) printf '%s' 'GlassWorm native extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; glasswormuni) printf '%s' 'GlassWorm invisible code' ;; glasswasm) printf '%s' 'GlassWASM extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
-incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; uipath) printf '%s' 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; minishai) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' ;; lightning) printf '%s' 'github.com/advisories/GHSA-g4wr-mm54-799x' ;; durabletask) printf '%s' 'github.com/advisories/GHSA-3qf7-886j-9wrc' ;; telnyx) printf '%s' 'github.com/advisories/GHSA-955r-262c-33jc' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; antv) printf '%s' 'osv.dev/vulnerability/MAL-2026-3973' ;; nxconsole) printf '%s' 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' ;; redhat) printf '%s' 'osv.dev/vulnerability/MAL-2026-5111' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; keyvscope) printf '%s' 'github.com/advisories/GHSA-q99r-cjmf-3xrf' ;; keyvspread) printf '%s' 'osv.dev/vulnerability/MAL-2026-11952' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; sandsleep) printf '%s' 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; litellmmar) printf '%s' 'docs.litellm.ai/blog/security-update-march-2026' ;; opencode) printf '%s' 'x.com/opencode/status/2111519637049319818' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormzig) printf '%s' 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' ;; glasswormdec) printf '%s' 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; glasswormuni) printf '%s' 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' ;; glasswasm) printf '%s' 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in uipath) printf '%s' 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' ;; keyvscope) printf '%s' 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' ;; sandworm) printf '%s' 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' ;; glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormzig) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; injective) printf '%s' 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; uipath) printf '%s' 'UiPath npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; minishai) printf '%s' 'Mini Shai-Hulud worm' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2' ;; mastra) printf '%s' 'Mastra npm packages' ;; antv) printf '%s' 'AntV account takeover' ;; nxconsole) printf '%s' 'Nx Console 18.95.0' ;; redhat) printf '%s' 'Red Hat Cloud Services packages' ;; keyv) printf '%s' 'keyv worm' ;; keyvscope) printf '%s' 'keyv account takeover' ;; keyvspread) printf '%s' 'keyv worm spread' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormzig) printf '%s' 'GlassWorm extensions' ;; glasswormdec) printf '%s' 'GlassWorm native extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; glasswormuni) printf '%s' 'GlassWorm invisible code' ;; glasswasm) printf '%s' 'GlassWASM extensions' ;; checkmarxvsx) printf '%s' 'Checkmarx Open VSX extensions' ;; injective) printf '%s' 'Injective SDK' ;; claudeext) printf '%s' 'Trojanized Claude Code extension' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2' ;; esac; }
+incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; uipath) printf '%s' 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; minishai) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' ;; lightning) printf '%s' 'github.com/advisories/GHSA-g4wr-mm54-799x' ;; durabletask) printf '%s' 'github.com/advisories/GHSA-3qf7-886j-9wrc' ;; telnyx) printf '%s' 'github.com/advisories/GHSA-955r-262c-33jc' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; antv) printf '%s' 'osv.dev/vulnerability/MAL-2026-3973' ;; nxconsole) printf '%s' 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' ;; redhat) printf '%s' 'osv.dev/vulnerability/MAL-2026-5111' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; keyvscope) printf '%s' 'github.com/advisories/GHSA-q99r-cjmf-3xrf' ;; keyvspread) printf '%s' 'osv.dev/vulnerability/MAL-2026-11952' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; sandsleep) printf '%s' 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; litellmmar) printf '%s' 'docs.litellm.ai/blog/security-update-march-2026' ;; opencode) printf '%s' 'x.com/opencode/status/2111519637049319818' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormzig) printf '%s' 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' ;; glasswormdec) printf '%s' 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; glasswormuni) printf '%s' 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' ;; glasswasm) printf '%s' 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' ;; checkmarxvsx) printf '%s' 'www.wiz.io/blog/teampcp-attack-kics-github-action' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; claudeext) printf '%s' 'cursor.com/blog/claude-code-extension-security-notice' ;; agentfw) printf '%s' 'github.com/advisories/GHSA-764m-3ppc-5m73' ;; esac; }
+incident_advice() { case "$1" in uipath) printf '%s' 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' ;; keyvscope) printf '%s' 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' ;; sandworm) printf '%s' 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' ;; glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormzig) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; checkmarxvsx) printf '%s' 'On Linux, also check your systemd user services for one you did not add: off CI, this malware adds one that fetches more code every 50 minutes.' ;; injective) printf '%s' 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' ;; claudeext) printf '%s' 'First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up: on a Mac run launchctl bootout gui/UID/com.apple.sysmond, with UID the number id -u prints, and on Windows end and delete the scheduled task SysMon; then end every process whose command line names .smt, .smtk, smt.cmd, sysmon.cmd or a .stk_ file (the loops that start ssh or autossh again about every 60 seconds, and the tunnel itself). Then remove the line in ~/.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ (its comment may read svc-telemetry), ~/.config/.smt, ~/.config/.smtk and ~/.config/smt.cmd, ~/Library/LaunchAgents/com.apple.sysmond.plist on a Mac, the @reboot line that runs .smt in your crontab on Linux, the .stk_ file in your temp folder, and on Windows ~/.config/smtk, sysmon.cmd in the Startup folder and the same key line in administrators_authorized_keys in the ssh folder of ProgramData. Then turn off Remote Login on a Mac (the SSH server on Linux, OpenSSH Server on Windows) if you did not turn it on yourself.' ;; esac; }
 incident_summary() { case "$1" in uipath) printf '%s' 'UiPath builds: update them, UiPath says no risk' ;; injective) printf '%s' 'Injective SDK: move the funds out of its wallets' ;; esac; }
 # <<< incidents
 # >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
@@ -1277,7 +1481,25 @@ telnyx|linux|startup|no|$H/.config/audiomon/audiomon.py|the backdoor the telnyx 
 telnyx|linux|startup|no|$H/.config/systemd/user/audiomon.service|starts the backdoor the telnyx malware leaves, at login
 telnyx|win|startup|no|$H/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe|the telnyx malware, which Windows starts at every login from the Startup folder
 telnyx|mac|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
-telnyx|linux|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says."
+telnyx|linux|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
+claudeext|mac|startup|no|$H/.config/.smt|the trojanized Claude Code extension's reverse SSH tunnel script
+claudeext|linux|startup|no|$H/.config/.smt|the trojanized Claude Code extension's reverse SSH tunnel script
+claudeext|mac|startup|no|$H/.config/.smtk|a file the trojanized Claude Code extension writes beside .smt
+claudeext|linux|startup|no|$H/.config/.smtk|a file the trojanized Claude Code extension writes beside .smt
+claudeext|all|startup|no|$H/.config/smt.cmd|a script the trojanized Claude Code extension writes to keep its tunnel running
+claudeext|win|startup|no|$H/.config/smtk|a file the trojanized Claude Code extension writes beside smt.cmd
+claudeext|mac|startup|no|$H/Library/LaunchAgents/com.apple.sysmond.plist|a LaunchAgent of the trojanized Claude Code extension, not Apple's
+claudeext|win|startup|no|$H/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sysmon.cmd|starts the trojanized Claude Code extension's tunnel at every login
+agentfw|all|site|no|agent_framework_meta.pth|-
+agentfw|all|site|no|af_runtime_diag.pth|-
+agentfw|all|site|no|af_runtime_diag.py|-"
+IND_ALONE="claudeext|$H/.config/.smt
+claudeext|$H/.config/.smt
+claudeext|$H/.config/.smtk
+claudeext|$H/.config/.smtk
+claudeext|$H/.config/smt.cmd
+claudeext|$H/.config/smtk
+claudeext|$H/Library/LaunchAgents/com.apple.sysmond.plist"
 # <<< indicators
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a malicious agent could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
@@ -1295,6 +1517,7 @@ claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web pa
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.1.38|2.1.163|a malicious repository could run code outside the sandbox|github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|-|2.1.179|a plugin repository could install code that bypasses its pinned hash|github.com/advisories/GHSA-pq7j-f95f-qfcv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.0.68|2.1.260|a stored API key could start sessions without the managed settings of an Enterprise or Team organization|github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
+claudecode|Claude Code|mac|npm|@anthropic-ai/claude-code|-|2.1.251|code a malicious repository runs in its sandbox could make it write files outside the workspace|github.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|npm|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h
@@ -1315,6 +1538,85 @@ PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/openc
 railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.|Railway CLI found: rotate secrets stored there
 zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.|Zeabur CLI found: rotate secrets stored there"
 # <<< platforms
+# The OWASP Agentic Top 10 risk of each kind of finding (data/owasp.tsv, docs/designs/owasp.md).
+# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it.
+OWASP_TABLE="agents_run_without_asking|ASI02|Tool Misuse and Exploitation|run without asking|01|yolo
+agents_run_remote_commands|ASI02|Tool Misuse and Exploitation|remote commands without asking|01|remote
+tools_to_update|ASI04|Agentic Supply Chain Vulnerabilities|tools with a security fix|01|tools
+mcp_token_files|ASI03|Identity and Privilege Abuse|tokens in MCP configs|02|mcp_token_files
+authorized_keys_links|ASI03|Identity and Privilege Abuse|links to authorized_keys|02|ak_links
+project_settings_on_open|ASI05|Unexpected Code Execution|settings that act on opening|02|on_open
+scripts_started_like_worms|ASI05|Unexpected Code Execution|scripts started like worms|02|autostart
+key_files|ASI03|Identity and Privilege Abuse|keys in plain text|03|key_files
+history_keys|ASI03|Identity and Privilege Abuse|keys in shell history|03|history_keys
+session_files_with_keys|ASI03|Identity and Privilege Abuse|keys in agent sessions|03|session_files
+ssh_keys_no_passphrase|ASI03|Identity and Privilege Abuse|SSH keys without a passphrase|03|ssh_open
+allow_list_keys|ASI03|Identity and Privilege Abuse|keys in allow lists|04|allow_list_keys
+incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|05|incidents:act
+incidents_to_update|ASI04|Agentic Supply Chain Vulnerabilities|versions to update|05|incidents:update
+wiper|ASI04|Agentic Supply Chain Vulnerabilities|gh-token-monitor|05|wiper
+planted_files|ASI04|Agentic Supply Chain Vulnerabilities|files a worm plants|05|planted
+authorized_keys_planted_keys|ASI04|Agentic Supply Chain Vulnerabilities|SSH keys malware adds|05|ssh_planted
+lockfile_only_incidents|ASI04|Agentic Supply Chain Vulnerabilities|npm malware in a lockfile|05|lock_only
+versions_to_update|ASI04|Agentic Supply Chain Vulnerabilities|Python versions to update|05|updates
+extensions_to_remove|ASI04|Agentic Supply Chain Vulnerabilities|extensions to remove|05|remove
+platforms_found|ASI04|Agentic Supply Chain Vulnerabilities|platforms with a leak|05|platforms
+machine.incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|-|machine:incidents"
+# <<< owasp
+# >>> owasp-derive: this block's home; tools/gen.sh copies it into gird-fleet.sh.
+# The one rule from findings to risks, which the person's report and root in gird-fleet.sh both run:
+# each reads the finding fields the account run sends (FA_<key>, set by finding_fields in gird-check.sh
+# and by fl_parse in gird-fleet.sh). Root runs this copy through fl_owasp_kinds in gird-fleet.sh. It
+# reads bash's own reprint of these functions and refuses any line not on its list of the lines they
+# need (fl_owasp_code_ok), then runs them with a search path that holds nothing. A line of a new shape
+# here needs adding to that list, or every fleet run reads failed.
+# owasp_set SOURCE: 0 when the field SOURCE names holds a finding: a number above 0, a list that is
+# not empty, or for incidents:act an act-level incident and for incidents:update one of any other level.
+owasp_set() {
+  case "$1" in
+    incidents:act|incidents:update)
+      for _ow in $FA_incidents; do
+        if [ "$(incident_level "$_ow")" = act ]; then
+          [ "$1" = incidents:act ] && return 0
+        else
+          [ "$1" = incidents:update ] && return 0
+        fi
+      done
+      return 1 ;;
+    yolo) _ov=$FA_yolo ;;
+    remote) _ov=$FA_remote ;;
+    tools) _ov=$FA_tools ;;
+    mcp_token_files) _ov=$FA_mcp_token_files ;;
+    ak_links) _ov=$FA_ak_links ;;
+    ssh_planted) _ov=$FA_ssh_planted ;;
+    autostart) _ov=$FA_autostart ;;
+    on_open) _ov=$FA_on_open ;;
+    key_files) _ov=$FA_key_files ;;
+    history_keys) _ov=$FA_history_keys ;;
+    session_files) _ov=$FA_session_files ;;
+    ssh_open) _ov=$FA_ssh_open ;;
+    allow_list_keys) _ov=$FA_allow_list_keys ;;
+    wiper) _ov=$FA_wiper ;;
+    planted) _ov=$FA_planted ;;
+    lock_only) _ov=$FA_lock_only ;;
+    updates) _ov=$FA_updates ;;
+    remove) _ov=$FA_remove ;;
+    platforms) _ov=$FA_platforms ;;
+    *) return 1 ;;
+  esac
+  [ -n "$_ov" ] && [ "$_ov" != 0 ]
+}
+# owasp_kinds: risk|kind|section|name|label for each kind of finding the FA_ fields hold, in
+# OWASP_TABLE's order. The Mac's own kinds and those only the person's report shows are not fields.
+owasp_kinds() {
+  while IFS='|' read -r _ok _or _on _ol _os _osrc; do
+    case "$_osrc" in
+      ''|machine:*|report) continue ;;
+    esac
+    if owasp_set "$_osrc"; then printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"; fi
+  done <<< "$OWASP_TABLE"
+}
+# <<< owasp-derive
 
 # ===========================================================================
 # Public totals for the line under the banner, fetched while the banner prints.
@@ -1336,17 +1638,11 @@ PROG_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || PROG_FILE=""
 # be written to, and with neither, every row it feeds reads partly checked (SCAN_LOST).
 SCAN_ERR=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null || mktemp /tmp/blindspot.XXXXXX 2>/dev/null) || SCAN_ERR=""
 SCAN_LOST=0; [ -n "$SCAN_ERR" ] || SCAN_LOST=1
+# The files whose flat crashed (flat_cut), read back where section 2 names the files it could not read.
+FLAT_CUT=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null || mktemp /tmp/blindspot.XXXXXX 2>/dev/null) || FLAT_CUT=""
 # An account run counts each folder the scan could not read as not checked, so it needs the file.
 if [ "$ACCTRUN" -eq 1 ] && [ -z "$SCAN_ERR" ]; then exit 13; fi
-if game_ok; then
-  SAVED_TTY=$(stty -g </dev/tty 2>/dev/null)
-  [ "$G_MODE" = C ] && stty -echo -icanon min 0 time 5 </dev/tty 2>/dev/null
-  game_loop </dev/tty &
-  GAME_PID=$!
-  if [ "$G_MODE" = C ]; then g_keys "$GAME_PID" </dev/tty & KEYS_PID=$!; fi
-else
-  spin_start "Checking your agents, configs and keys"
-fi
+game_start || spin_start "Checking your agents, configs and keys"
 SCAN_T0=$SECONDS
 
 # --- Keys in agent sessions, checked in the background --------------------------
@@ -1462,15 +1758,17 @@ SESS_PRE=$KEY_STARTS
 # or start an escape such as \n (a backslash never ends a piece), so a huge database file never loads at once and a piece never ends
 # inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers;
 # a worker exits when its parent or the script that started everything is gone, so a kill -9 of the
-# script stops them at the next piece.
+# script stops them at the next piece. Tests only: GIRD_CHECK_TEST_LIST_HOLD, a pipe nobody writes to,
+# holds the parent's listing, as a folder that does not answer would.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
-my $re = qr/$ENV{SESS_KEYS}/; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
+my @passes = map { [map { qr/$_/m } grep { length } split /\n/] } split /\n\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/m; my $owner = getppid(); my $parent = $$; my @kids;
 $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
 my @f = grep { !-d $_ && -f $_ } @ARGV; my $unread = 0;
 {
   local $SIG{__WARN__} = sub { $unread++ if $_[0] =~ /^Can.t opendir/ };
   my @d = map { "$_/" } grep { -d $_ } @ARGV;
+  if (my $hold = $ENV{GIRD_CHECK_TEST_LIST_HOLD}) { my $x; open($x, "<", $hold) and <$x> }  # tests only
   find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } }, @d) if @d;
 }
 my %m; $m{$_} = (stat $_)[9] || 0 for @f;
@@ -1492,12 +1790,31 @@ for my $w (0 .. $n - 1) {
       if ($file =~ /\.(zst|gz)$/) { print "Z\t$fn\n"; next }
       my $h; unless (open($h, "<", $file)) { print "U\t$fn\n"; next }
       binmode $h; local $/ = \1048576; my $buf = "";
-      my $scan = sub { my $t = shift; if ($t =~ $pre) { while ($t =~ /$re/g) { (my $k = $&) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n" } } };
+      # One regex a pattern (SESS_KEYS), each run from where the last match ended: the leftmost
+      # match wins, and of two at one place the pattern listed first, as in one alternation. Each
+      # pass (an empty line in SESS_KEYS) is matched on its own. Each is compiled with /m, so ^ and $
+      # match at the ends of every line, as grep and ripgrep read them: a key at the start of a line
+      # is found after one whose boundary took the line break before it.
+      my $scan = sub { my $t = shift; return unless $t =~ $pre; $_->($t) for map { my $re = $_; sub {
+        my $t = shift; my @re = @$re;
+        my $at = 0; my @nx;
+        my $find = sub { my $i = shift; pos($t) = $at; $nx[$i] = $t =~ /$re[$i]/g ? [$-[0], $+[0]] : undef };
+        $find->($_) for 0 .. $#re;
+        while (1) {
+          my $b; for my $i (0 .. $#re) { $b = $i if $nx[$i] && (!defined $b || $nx[$i][0] < $nx[$b][0]) }
+          last unless defined $b;
+          my ($s, $e) = @{$nx[$b]}; (my $k = substr($t, $s, $e - $s)) =~ tr/\x00-\x1f\x7f/ /; print "K\t$fn\t$k\n";
+          $at = $e > $s ? $e : $s + 1;
+          for my $i (0 .. $#re) { $find->($i) if $nx[$i] && $nx[$i][0] < $at }
+        }
+      } } @passes };
       while (defined(my $c = <$h>)) {
         exit 0 unless $alive->();
         select(undef, undef, undef, 0.3) if $ENV{GIRD_CHECK_SESSIONS_SLOW};  # tests only
         $buf .= $c;
-        my $cut = $buf =~ /[^A-Za-z0-9_.+\/=\\-][A-Za-z0-9_.+\/=\\-]*\z/ ? $-[0] + 1 : -1;
+        # A piece ends after a character no key holds: an Entra secret holds ~ and a Storage
+        # connection string ;, so those two never end one.
+        my $cut = $buf =~ /[^A-Za-z0-9_.+\/=~;\\-][A-Za-z0-9_.+\/=~;\\-]*\z/ ? $-[0] + 1 : -1;
         next if $cut < 0 && length($buf) < 8388608;
         $scan->(substr($buf, 0, $cut < 0 ? length($buf) : $cut, ""));
       }
@@ -1522,15 +1839,14 @@ while ($sel->count) {
 # With rg, the input is ripgrep's own: the file, the NUL that --null puts after it (the one byte
 # a path can't hold) turned into a tab by tr, which turns every real tab into ?, then the match.
 # So a line without a tab is a piece of a file name that holds a newline, and the match may hold
-# any byte but a newline. No key is longer than 300 characters (GitHub's 93-character tokens are
-# the longest fixed format, OpenAI project keys run to about 170) but GitHub's stateless ghs_ tokens,
-# about 520 with two dots: a longer run of key characters is data, not a key, and would make madeup()
-# slow. Always called in a subshell (a pipe or a
+# any byte but a newline. A match longer than its provider's max in data/keys.tsv (pmax, 300 unless
+# the line says more, as for GitHub's stateless ghs_ tokens of about 520) is a run of data, not a
+# key, and so is any match over 1024: madeup() would be slow on it. Always called in a subshell (a pipe or a
 # background job): exec makes awk that job's own process, the one sess_stop signals.
 sess_filter() { # [rg]
-  exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK"'
+  exec awk -F '\t' -v rg="${1:-}" "$PROV_AWK$PUBLIC_AWK"'
     function madeup(k,   i, c, run, last, n, seen, len) {
-      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF/) return 1
+      if (k ~ /EXAMPLE|xxxx|XXXX|0123456789|1234567890|abcdef|ABCDEF/ || public(k)) return 1
       run = 0; last = ""; n = 0; len = length(k)
       for (i = 1; i <= len; i++) {
         c = substr(k, i, 1)
@@ -1555,8 +1871,8 @@ sess_filter() { # [rg]
         if (i == 0) { part = part $0 "?"; next }
         f = part substr($0, 1, i - 1); k = substr($0, i + 1); part = ""
       } else if ($1 == "K") { f = $2; k = $3 } else next
-      if (length(k) > 1024 || (length(k) > 300 && k !~ /ghs_[A-Za-z0-9_-]+\./)) next
-      p = prov(k); if (p == "") next
+      if (length(k) > 1024) next
+      p = prov(k); if (p == "" || length(k) > pmax(p)) next
       sub(/^[^A-Za-z]*\\[ntr"]/, "", k); sub(/^[^A-Za-z]+/, "", k); sub(/[^A-Za-z0-9_.-]+$/, "", k)
       if (madeup(k) || cli_own(f, k) || ((f "|" p) in done)) next
       done[f "|" p] = 1; print "H\t" f "\t" p; fflush()
@@ -1565,18 +1881,27 @@ sess_filter() { # [rg]
 SESS_ENGINE=none; SESS_RC=""
 RG_BIN=$(type -P rg 2>/dev/null)
 # >>> owned-walk: this function's home; tools/gen.sh copies it into gird-fleet.sh.
-# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
-# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
-# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
+# owned_only UID PATH [sticky]: 0 when PATH and every folder above it are owned by root or UID and
+# writable by no one else: the full mode read with four digits (so 002 is not read as 2), and no ACL
+# entry that lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be
+# resolved. With sticky, a folder that root owns with mode 1777, as /private/tmp, passes:
+# there no other account can rename, unlink or replace a file root owns. Only gird-fleet.sh's start
+# asks for it, and it then runs a copy of the file in a folder of its own (docs/designs/fleet-mode.md).
+# The two calls that differ by OS: owner and mode, and whether an ACL entry lets anyone write (macOS).
+oo_mode() { /usr/bin/stat -f '%u %Mp%03Lp' "$1" 2>/dev/null; }
+oo_acl_open() { # 0: an entry lets someone write; 1: none does; 2: the ACL could not be read
+  _oo_a=$(/bin/ls -lde "$1" 2>/dev/null) || return 2
+  printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }'
+}
 owned_only() {
   _oo_p=$2
   while :; do
-    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
+    _oo_m=$(oo_mode "$_oo_p")
     case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
-    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
-    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
+    case "${_oo_m#* }" in [0-7][0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    if [ "${3:-}" = sticky ] && [ "$_oo_m" = "0 1777" ] && [ -d "$_oo_p" ]; then :
+    else case "${_oo_m#* }" in ??[2367]?|???[2367]) return 1 ;; esac; fi
+    oo_acl_open "$_oo_p"; [ $? -eq 1 ] || return 1
     [ "$_oo_p" = / ] && return 0
     _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
   done
@@ -1604,6 +1929,17 @@ elif type -P perl >/dev/null 2>&1; then SESS_ENGINE=perl; fi
 [ "$SESS_ENGINE" = perl ] && ! type -P perl >/dev/null 2>&1 && SESS_ENGINE=none
 # SESS_FAIL is set when the check could not start, so the report can say the sessions were not checked.
 SESS_FAIL=0
+# Stops the ripgrep run in progress, from inside the job that started it: TERM to $_rgp, the process
+# that job started, and nothing else. No process is ever stopped by an id read from somewhere else
+# (such as /proc or a process list): by the time it is used, the process may be gone and its id
+# given to another. Under Git Bash ripgrep is a Windows program and TERM may not end it. Then
+# sess_stop stops the filter it started, awk: tr, which passes ripgrep's output on to it, ends at its
+# next write, which closes the pipe ripgrep writes to, and ripgrep ends at its own next write. A ripgrep that finds nothing
+# more writes nothing, so it reads on to the end of the session files and exits, and tr with it:
+# both only read. The run is reported partly checked either way, as any stopped run is.
+rg_stop() {
+  [ -n "$_rgp" ] && kill -TERM "$_rgp" 2>/dev/null
+}
 sess_start() {
   [ -n "$SESS_ROOTS" ] && [ "$SESS_ENGINE" != none ] || return 0
   # Keys pass through a pipe inside a folder that only the owner can open, whatever the umask
@@ -1618,14 +1954,34 @@ EOF
     [ -n "$GIRD_CHECK_SESSIONS_HOLD" ] && _roots+=("$GIRD_CHECK_SESSIONS_HOLD")  # tests only: a pipe nobody writes to holds ripgrep
     # --null ends each file name with a NUL, the one byte a path can't hold: tr turns it into the
     # tab the filter splits on, and every real tab into ?, so a file name can't shift the fields.
-    tr '\000\t' '\t?' < "$SESS_FIFO" | sess_filter rg > "$SESS_FILE" &
+    # tr runs on its own, through a second pipe, never in the filter's job: it may outlive the
+    # script, with a ripgrep left to finish (rg_stop), and a wait for the filter would wait for it
+    # too. So it holds none of the script's output or fd 3, and nothing ever waits for it.
+    mkfifo -m 600 "$SESS_DIR/text" 2>/dev/null || { rm -rf "$SESS_DIR"; SESS_DIR=""; SESS_FILE=""; SESS_FIFO=""; SESS_FAIL=1; return 0; }
+    tr '\000\t' '\t?' < "$SESS_FIFO" > "$SESS_DIR/text" 2>/dev/null 3>&- &
+    sess_filter rg < "$SESS_DIR/text" > "$SESS_FILE" &
     SESS_FILTER_PID=$!
     # --no-unicode: in its default Unicode mode a class such as [^A-Z0-9] matches no byte that is not
     # UTF-8, so a key right after one (a SQLite value after a binary column) would be missed. The
     # patterns are byte patterns, as perl and grep read them under LC_ALL=C. 3>&-: in an account run
     # fd 3 is root's pipe, and ripgrep gets no handle to it.
-    "$RG_BIN" -a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
-      -e "$TR_KEYS" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null 3>&- &
+    # One run for each pass of data/keys.tsv, one after the other, in one job that holds the pipe open
+    # and stops the run in progress when it is stopped (rg_stop). Its status is the worst of the
+    # runs': 2 for an error, else 0 when any found a key.
+    (
+      _rgp=""
+      trap 'rg_stop; exit 143' TERM
+      _rgs=1
+      while IFS= read -r _rgx; do
+        "$RG_BIN" -a --no-unicode --hidden --no-ignore --no-config --no-messages -o --no-line-number --with-filename --null \
+          -e "$_rgx" -- "${_roots[@]}" < /dev/null 2>/dev/null 3>&- &
+        _rgp=$!; wait "$_rgp"; _r=$?; _rgp=""
+        if [ "$_r" -gt 1 ]; then _rgs=$_r; elif [ "$_r" -eq 0 ] && [ "$_rgs" -le 1 ]; then _rgs=0; fi
+      done <<EOF
+$TR_PASSES
+EOF
+      exit "$_rgs"
+    ) > "$SESS_FIFO" 3>&- &
     SESS_PID=$!
     [ "$WIN" -eq 1 ] && SESS_WIN=1
   else
@@ -1634,7 +1990,7 @@ EOF
     _nw=$( (sysctl -n hw.ncpu || nproc || getconf _NPROCESSORS_ONLN) 2>/dev/null | head -n 1)
     case "$_nw" in ''|*[!0-9]*) _nw=4 ;; esac
     [ "$_nw" -gt 8 ] && _nw=8; [ "$_nw" -lt 1 ] && _nw=1
-    SESS_KEYS=$TR_KEYS SESS_PRE=$SESS_PRE SESS_WORKERS=$_nw perl -e "$SESS_PERL" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
+    SESS_KEYS=$TR_ALTS SESS_PRE=$SESS_PRE SESS_WORKERS=$_nw perl -e "$SESS_PERL" -- "${_roots[@]}" > "$SESS_FIFO" 2>/dev/null &
     SESS_PID=$!
   fi
 }
@@ -1645,9 +2001,6 @@ sess_stop() { # [wait|kill]
   if [ -n "$SESS_PID" ]; then
     if [ "${1:-}" = wait ]; then wait "$SESS_PID" 2>/dev/null; SESS_RC=$?
     elif kill -0 "$SESS_PID" 2>/dev/null; then
-      if [ "$SESS_WIN" -eq 1 ] && [ -r "/proc/$SESS_PID/winpid" ]; then
-        taskkill //F //PID "$(cat "/proc/$SESS_PID/winpid")" >/dev/null 2>&1
-      fi
       kill -TERM "$SESS_PID" 2>/dev/null; wait "$SESS_PID" 2>/dev/null; SESS_RC=stopped
     else wait "$SESS_PID" 2>/dev/null; SESS_RC=$?; fi
     SESS_PID=""
@@ -1774,6 +2127,9 @@ FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.vscode/settings\.json$')
 [ -n "$AA_ERE" ] && FOUND=$(printf '%s\n' "$FOUND" | grep -vE "/($AA_ERE)\$")
 # The files added for the npm checks are left out of FOUND, so files_found counts what it always has.
 FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|deno\.lock|\.aider\.chat\.history\.md|\.aider\.input\.history|\.vscode/tasks\.json|'"$PLANTED_ERE"')$')
+# A project's GitHub Actions workflows (section 5): GitHub runs those directly in .github/workflows.
+WORKFLOWS=$(printf '%s\n' "$FOUND" | grep -E '/\.github/workflows/[^/]+\.ya?ml$' | LC_ALL=C sort)
+FOUND=$(printf '%s\n' "$FOUND" | grep -vE '/\.github/workflows/.*\.ya?ml$')
 ENV_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.env(rc|\.[^/]*)?$')
 ALLOW_FILES=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/\.claude/settings(\.local)?\.json$')
 PROJECT_MCP=$(printf '%s\n%s\n' "$FOUND" "$LINKED" | grep -E '/(\.mcp\.json|\.cursor/mcp\.json|\.vscode/mcp\.json)$')
@@ -1839,8 +2195,8 @@ if [ "$N_AG" -gt 0 ]; then progress i "Found $(plural "$N_AG" "coding agent" "co
 else progress i "No coding agents found"; fi
 
 # --- 2. MCP servers ----------------------------------------------------------
-# app | client id, from the fixed list | config file
-# Devin Desktop, Windsurf renamed, keeps its MCP config in ~/.codeium (docs.devin.ai/desktop/devin-desktop-faq).
+# app | client id, from the fixed list | config file (data/mcp-files.tsv)
+# >>> mcp-files: generated from data/mcp-files.tsv by tools/gen.sh. Edit that file, then run it.
 MCP_FILES="Claude Code|claude-code|$H/.claude.json
 Claude Desktop|claude-desktop|$AS/Claude/claude_desktop_config.json
 Cursor|cursor|$H/.cursor/mcp.json
@@ -1855,6 +2211,7 @@ Continue|continue|$H/.continue/config.json
 Continue|continue|$H/.continue/config.yaml
 Goose|goose|$GOOSE_CFG/config.yaml
 OpenCode|opencode|$H/.config/opencode/opencode.json"
+# <<< mcp-files
 
 MCP_ROWS=""; N_MCP=0; N_MCP_TOKEN=0; MCP_TOK_FIRST=""; N_MCP_CACHE=0; N_MCP_CACHEF=0
 # Configs inside plugin catalogs and caches (Codex's .tmp/plugins, Claude's plugins folder) are
@@ -1866,7 +2223,7 @@ is_plugin_path() {
 # For the report: "client count" lines, the labels to match, and clients with a token.
 MCP_TALLY=""; MCP_NAMES=""; MCP_TOK_IDS=""
 MCP_LIST=$(printf '%s\n' "$MCP_FILES" | sed 's/^[^|]*|[^|]*|//'; printf '%s\n' "$PROJECT_MCP")
-MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching "$TR_KEYS|$P_JSONSECRET|$P_TOMLSECRET|$P_HEADERSECRET|$P_HEADERSQ" | tr '\n' '|')"
+MCP_FLAGGED="|$(printf '%s\n' "$MCP_LIST" | fleet_filter | files_matching -e "$P_JSONSECRET" -e "$P_TOMLSECRET" -e "$P_HEADERSECRET" -e "$P_HEADERSQ" | tr '\n' '|')"
 mcp_row() { # who file client-id
   _f=$2; _c=""; _nm=""
   case "$_f" in
@@ -1937,7 +2294,16 @@ AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
 # or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
 # echo that names the file. A rule or a guard that only names the file, or passes it to another
 # script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
-# ./, and must end there.
+# ./, and must end there. The interpreter or the file may come after the words that run the rest of a
+# command (cmd_wrap).
+# cmd_wrap sets _wx, from the caller's _wp, to those words: nohup, exec, setsid, npx and env (as
+# /usr/bin/env too), each with its flags; timeout with its options and time; VAR=value; the ( of a
+# subshell; and sh, bash or zsh -c, whose quoted code is read as a command from its start. A command
+# after a ; inside that code is not read: trying the rest of the expression after each ; there made
+# long code slow.
+cmd_wrap() {
+  _wx='((nohup|exec|setsid|npx)[[:space:]]+(-[A-Za-z]+[[:space:]]+)*|timeout[[:space:]]+(-[^[:space:]"\\]+[[:space:]]+([A-Z0-9]+[[:space:]]+)?)*[0-9.]+[smhd]?[[:space:]]+|\([[:space:]]*|'"$_wp"'(env[[:space:]]+(-[A-Za-z]+[[:space:]]+)*|(sh|bash|zsh)(\.exe)?[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-[A-Za-z]*c[A-Za-z]*[[:space:]]+(\\"|'"'"'))|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
+}
 worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these files
   _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
@@ -1945,14 +2311,151 @@ worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these fi
   # One piece of a command before a separator: a character outside quotes, a JSON escape other than
   # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
   _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  cmd_wrap
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp"'(node|bun|deno|tsx)(\.exe)?"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s' "$_ws$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
+  printf '%s' "$_ws$_wx$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wx$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
 }
 WORM_CMD_ALONE=""; [ -n "$WORM_RUN_ALONE" ] && WORM_CMD_ALONE=$(worm_cmd "$WORM_RUN_ALONE")
 WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN_WEAK")
+# A script a session-start hook or a folder-open task runs from the project itself, from one of the
+# folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
+# path), so it is named for the person to check, never counted as malware. A command runs one as
+# worm_cmd reads it, with sh, bash, zsh and python too (never the code of -e or -p, and the code of -c
+# only as cmd_wrap reads it), or as the command itself, after the words that run the rest of a
+# command (cmd_wrap), or when cat pipes it to sh, bash or zsh. START_PATH is the script; START_CMD a
+# command that runs one.
+START_PATH='\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
+start_cmd() { # script-ERE prefix-ERE [cd]: five expressions, one per line, and with cd a sixth
+  _wf='(\\"|'"'"')?'"$2$1"'(\\"|["'"'"'[:space:];&|)])'
+  _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
+  _wo='(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^[:space:]"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)[[:space:]]+'
+  _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  cmd_wrap
+  _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
+  _wn='(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
+  _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
+  _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
+  _wb='([^{}]|\{[^{}]*\})*'
+  printf '%s\n%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi" \
+    "$_ws$_wx"'cat[[:space:]]+(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*\|[[:space:]]*'"$_wp"'(sh|bash|zsh)(\.exe)?([[:space:];&|)"'"'"']|\\)'
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter, npx or a
+  # package manager, or a ./ script, which run a file from there, after at most one of nohup, exec or
+  # setsid: a cd followed by rm or ls runs nothing. The words of cmd_wrap come before the cd only: with
+  # them after it too, macOS's grep -o crashed now and then.
+  if [ "${3:-}" = cd ]; then
+    printf '\n%s' "$_ws$_wx"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*((nohup|exec|setsid)[[:space:]]+)?('"$_wp"'('"$_wn"'|(npx|npm|pnpm|yarn)(\.cmd|\.exe)?)[[:space:]]|\.[/\\])'
+  fi
+}
+# One expression per line, each given to grep alone: macOS's grep can crash on them all joined by |.
+START_CMD=$(start_cmd "$START_PATH" '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?')
+# The elements of every array that is the value of the key K, one line each, from flat's one-line
+# text: a session-start hook's entries, or each task of a tasks.json. Strings are copied whole and
+# brackets counted outside them only, each piece split once, so the time grows with the file's size.
+json_elems() { # key
+  K=$1 awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    { nq = split($0, q, "\""); st = 0; w = 0; cap = 0; d = 0; e = 0; s = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 1) {            # in a string: a key is compared whole; inside an element it is copied
+          if (cap) printf "%s", q[i]; else s = s q[i]
+          if (i < nq) {
+            if (cap) printf "\""
+            if (trail(q[i]) % 2 == 1) { if (!cap) s = s "\""; continue }
+          }
+          st = 0
+          if (!cap) { w = (s == ENVIRON["K"]); s = "" }
+          continue
+        }
+        n = split(q[i], c, "")
+        for (j = 1; j <= n; j++) {
+          ch = c[j]
+          if (!cap) {
+            if (w == 1) { if (ch == ":") w = 2; else if (ch != " ") w = 0 }
+            else if (w == 2) { if (ch == "[") { cap = 1; d = 0; e = 0 } else if (ch != " ") w = 0 }
+            continue
+          }
+          if (ch == "[" || ch == "{") d++
+          else if (ch == "]" || ch == "}") { if (d == 0) { if (e) printf "\n"; cap = 0; w = 0; e = 0; continue }; d-- }
+          else if (ch == "," && d == 0) { if (e) printf "\n"; e = 0; continue }
+          if (ch != " " || e) { printf "%s", ch; e = 1 }
+        }
+        if (i < nq) { st = 1; if (cap) { printf "\""; e = 1 } }
+      }
+      if (cap && e) printf "\n"
+    }'
+}
+# Each part of a command, as "command": "part": the command is split at ;, &, | outside shell quotes
+# ('...' and \"...\"), so each script a chain runs is matched, not only the last. Characters are printed
+# as they are read, so the time grows with the command's length.
+cmd_parts() {
+  grep -oE '"command"[[:space:]]*:[[:space:]]*"([^"\\]|\\.)*"' | awk '
+    { sub(/^"command"[[:space:]]*:[[:space:]]*"/, ""); sub(/"$/, "")
+      n = split($0, c, ""); sq = 0; dq = 0; on = 0
+      for (i = 1; i <= n; i++) {
+        ch = c[i]
+        if (!sq && !dq && (ch == ";" || ch == "&" || ch == "|")) { if (on) printf "\"\n"; on = 0; continue }
+        if (!on) { if (ch == " ") continue; printf "\"command\": \""; on = 1 }
+        if (ch == "\\" && i < n) { if (!sq && c[i + 1] == "\"") dq = !dq; printf "%s%s", ch, c[i + 1]; i++; continue }
+        if (!dq && ch == "'"'"'") sq = !sq
+        printf "%s", ch
+      }
+      if (on) printf "\"\n"
+    }'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -le 1 ] && [ "$2" -eq 0 ]
+}
+# With an element-ERE, a task one of those elements lists in dependsOn by label counts too: one level, so a
+# task the dependency itself depends on does not.
+start_scripts() { # flattened-text key [element-ERE]: the scripts those elements run, one per line
+  # grep exits 0 on a match, 1 on none, and above 1 when it failed or crashed; awk exits 0 unless it
+  # failed. On a failure nothing is printed and the caller names the file as not read, never as one
+  # that runs no script.
+  _all=$(printf '%s' "$1" | json_elems "$2") || return 2
+  if [ -n "${3:-}" ]; then _el=$(printf '%s\n' "$_all" | grep -E "$3"); [ $? -le 1 ] || return 2; else _el=$_all; fi
+  if [ -n "${3:-}" ] && [ -n "$_el" ]; then
+    _dl=$(printf '%s\n' "$_el" | grep -oE '"dependsOn"[[:space:]]*:[[:space:]]*(\[[^]]*\]|"([^"\\]|\\.)*")'); [ $? -le 1 ] || return 2
+    if [ -n "$_dl" ]; then
+      _dl=$(printf '%s\n' "$_dl" | sed -E 's/^"dependsOn"[[:space:]]*:[[:space:]]*//' | grep -oE '"([^"\\]|\\.)*"'); [ $? -le 1 ] || return 2
+      _dl=$(printf '%s\n' "$_dl" | sed -E 's/^"//; s/"$//')
+    fi
+    if [ -n "$_dl" ]; then
+      _dep=$(printf '%s\n' "$_all" | DEPS="$_dl" awk '
+        BEGIN { n = split(ENVIRON["DEPS"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") w[a[i]] = 1 }
+        match($0, /"label"[ \t]*:[ \t]*"([^"\\]|\\.)*"/) { s = substr($0, RSTART, RLENGTH); sub(/^"label"[ \t]*:[ \t]*"/, "", s); sub(/"$/, "", s); if (s in w) print }') || return 2
+      [ -n "$_dep" ] && _el=$(printf '%s\n%s\n' "$_el" "$_dep")
+    fi
+  fi
+  [ -n "$_el" ] || return 0
+  cmd_scripts "$_el" "$START_CMD" "$START_PATH"
+}
+# The scripts the commands in these elements run, one per line: each command whole and each part of it
+# (cmd_parts) is matched by each of the expressions (one per line), and the script is the last path
+# in the match. Returns 2, printing nothing, when grep or awk fails.
+cmd_scripts() { # elements expressions script-ERE
+  _in=$(printf '%s\n' "$1"; printf '%s\n' "$1" | cmd_parts) || return 2; _mt=""
+  while IFS= read -r _rx; do
+    _o=$(printf '%s\n' "$_in" | grep -oE "$_rx"); [ $? -le 1 ] || return 2
+    _mt="$_mt$_o$NL"
+  done <<EOF
+$2
+EOF
+  # One grep numbers every path by its line, and awk keeps each line's last, so the time grows with
+  # the text, not with the number of commands.
+  _mt=$(printf '%s' "$_mt" | grep -noE "$3"); [ $? -le 1 ] || return 2
+  _mt=$(printf '%s\n' "$_mt" | awk '{ i = index($0, ":"); if (i) l[substr($0, 1, i - 1)] = substr($0, i + 1) } END { for (k in l) print l[k] }') || return 2
+  [ -z "$_mt" ] || printf '%s\n' "$_mt" | sed -E 's#[/\\]+#/#g' | sort -u
+}
+in_words() { # lines: them as "a", "a and b" or "a, b and c"
+  printf '%s\n' "$1" | awk 'NF { a[++n] = $0 } END { for (i = 1; i <= n; i++) printf "%s%s", (i == 1 ? "" : (i == n ? " and " : ", ")), a[i] }'
+}
+START_HOOKS=""; START_TASKS=""
+FOLDER_OPEN='"runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo][Ll][Dd][Ee][Rr][Oo][Pp][Ee][Nn]"'
 TAB=$(printf '\t')
 # One line of text, with comments removed first: // to the end of the line and /* */, outside
 # strings only (a \" does not end a string; a line break does, unless a \ escapes it, as VS Code's
@@ -1972,6 +2475,14 @@ TAB=$(printf '\t')
 # U+1680, U+2000 to U+200B, U+202F, U+205F, U+3000 and U+FEFF as whitespace. As UTF-8 bytes, sed makes
 # the first two line breaks and the rest a space, in strings too, as a plain space there is, which the
 # matchers ignore: one sed pass is linear, where a regex split or gsub with many matches in awk is not.
+# An awk in flat that is killed by a signal names the file as not read (FLAT_CUT, and FLEET_NR in an
+# account run): flat is read through a pipe, whose status is its last command's, so its callers can't
+# see it fail. SIGPIPE is not counted: it means only that the reader stopped early, as json_top does.
+flat_cut() {
+  [ -n "$FLAT_CUT" ] && printf '%s\n' "$1" >> "$FLAT_CUT"
+  [ -n "$FLEET_NR" ] && printf '%s\n' "$1" >> "$FLEET_NR"
+  return 0
+}
 FLAT_SED="s/$(printf '\342\200[\250\251]')/\\
 /g
 $(printf 's/\302\240/ /g\ns/\341\232\200/ /g\ns/\342\200[\200\201\202\203\204\205\206\207\210\211\212\213\257]/ /g\ns/\342\201\237/ /g\ns/\343\200\200/ /g\ns/\357\273\277/ /g')"
@@ -2029,15 +2540,20 @@ flat() {
       }
       printf " "
     }'
+  _fr=$?
+  if [ "$_fr" -gt 128 ] && [ "$_fr" -ne 141 ]; then flat_cut "$1"; fi
+  return "$_fr"
 }
-auto_row() { # file what flattened-text
+auto_row() { # file what flattened-text [script-note]
   # A worm file counts only when a command runs it (worm_cmd), and a file projects use too only in a
-  # project that counts (WORM_PROJ).
-  if { [ -n "$WORM_CMD_ALONE" ] && printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; } ||
-     { [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1" && printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; }; then
-    WORM_REFS="$WORM_REFS$1
+  # project that counts (WORM_PROJ). A grep that fails (above 1) leaves the file named as not read,
+  # never as one that runs no worm file.
+  _wr=1
+  if [ -n "$WORM_CMD_ALONE" ]; then printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; _wr=$?; fi
+  if [ "$_wr" -eq 1 ] && [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1"; then printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; _wr=$?; fi
+  if [ "$_wr" -eq 0 ]; then WORM_REFS="$WORM_REFS$1
 "
-  fi
+  elif [ "$_wr" -gt 1 ]; then cut_file "$1"; fi
   # With nothing to list (hooks turned off), only a hook that runs a worm file counts: the worm wrote it.
   [ -n "$2" ] || return 0
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
@@ -2051,7 +2567,7 @@ auto_row() { # file what flattened-text
   AUTO_SEEN="$AUTO_SEEN$_sum$TAB"
   N_AUTO=$((N_AUTO + 1))
   progress w "Project settings that $2: $(short "$1")"
-  AUTO_ROWS="$AUTO_ROWS$_rp$TAB$2$TAB$_sum${TAB}0
+  AUTO_ROWS="$AUTO_ROWS$_rp$TAB$2${4:+. $4}$TAB$_sum${TAB}0
 "
 }
 # For aa_hit, a .json file's text (one line, spaces removed), then a line for each object that is the
@@ -2191,6 +2707,8 @@ cc_rules() { # file
 # tried once per line: linear on every awk, where a gsub on the joined text, or an index() of the rest
 # of the line at every near miss, is quadratic on macOS's awk for a large file.
 AA_CUT=""
+# A file not read in full: section 2 names it as not read, and an account run counts it as not checked.
+cut_file() { AA_CUT="$AA_CUT$1$NL"; [ -n "$FLEET_NR" ] && printf '%s\n' "$1" >> "$FLEET_NR"; }
 aa_hit() { # file pattern|pattern...
   case "$1" in *.toml) _tm=1 ;; *) _tm=0 ;; esac
   { if [ "$_tm" -eq 1 ]; then tr -d ' \t\r\f\v' < "$1"; else flat "$1" | tr -d '[:space:]' | aa_keys "$2"; fi | AA_P=$2 awk -v toml="$_tm" '
@@ -2292,7 +2810,7 @@ aa_hit() { # file pattern|pattern...
   # file not checked: it is never a file with no match.
   _ah=$?
   [ "$_ah" -le 1 ] && return "$_ah"
-  AA_CUT="$AA_CUT$1$NL"; [ -n "$FLEET_NR" ] && printf '%s\n' "$1" >> "$FLEET_NR"; return 2
+  cut_file "$1"; return 2
 }
 # The value of a top-level key of a .json file, from its text as one line with the spaces removed:
 # true, false, or nothing. Strings and brackets are read as aa_keys reads them, so the same key inside
@@ -2321,6 +2839,435 @@ json_top() { # key
       print v; exit
     }'
 }
+# --- Saved rules that run commands on other machines (data/remote-commands.tsv) ---------------
+# Every scalar of a .json file, as path<TAB>value: the path is each key the value sits under, each
+# after a \034 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
+# The file is read as flat reads it and split as aa_keys splits it, one quote and one bracket at a
+# time, the text between on its commas: printed as it is read, linear on every awk. A string is
+# joined from its pieces half at a time, as joining them one at a time is quadratic in its escaped
+# quotes; one longer than 4096 characters keeps its first 4096 and ends in \003, read as a rule with
+# more after them. Whitespace outside strings is dropped with a gsub only on a short chunk (a gsub with
+# many matches is quadratic on macOS's awk): a longer one is read as its first word, and \003 when
+# more follow. Only values within 8 brackets are printed: the rules sit within 4, and the path of a
+# deeper one is never built, as keeping one at each level takes memory in the square of the depth.
+json_leaves() { # file
+  flat "$1" | awk '
+    function trail(s) {
+      if (s !~ /\\$/) return 0
+      if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+      return length(s)
+    }
+    function emit(v) { if (dep > 0 && dep <= 8) printf "%s%s\t%s\n", P[dep], (T[dep] == "o" ? "\034" key : "[]"), v }
+    function flush() { if (sc != "") emit(sc); sc = "" }
+    function ob(c,   np) { flush(); np = (dep < 1 || dep >= 8) ? "" : P[dep] (T[dep] == "o" ? "\034" key : "[]"); dep++; P[dep] = np; T[dep] = (c == "{" ? "o" : "a"); ek = (c == "{") }
+    function cb() { flush(); if (dep > 0) dep--; ek = 0 }
+    # A chunk without its whitespace. A long one is read as its first word, and \003 when more follow.
+    function nows(s,   w) {
+      if (length(s) <= 64) { gsub(/[[:space:]]/, "", s); return s }
+      if (!match(s, /[^[:space:]]+/)) return ""
+      w = substr(s, RSTART, RLENGTH)
+      return substr(s, RSTART + RLENGTH) ~ /[^[:space:]]/ ? w "\003" : w
+    }
+    function text(t,   a, n, i, m) {
+      n = split(t, a, ",")
+      for (i = 1; i <= n; i++) {
+        if (i > 1) { flush(); if (dep > 0 && T[dep] == "o") ek = 1 }
+        m = index(a[i], ":"); if (m) { flush(); ek = 0; a[i] = substr(a[i], m + 1) }
+        if (length(sc) < 64) sc = sc nows(a[i])
+      }
+    }
+    # The pieces a to b of a string, with the quotes between them.
+    function join(a, b,   m) { if (a == b) return q[a]; m = int((a + b) / 2); return join(a, m) "\"" join(m + 1, b) }
+    function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
+      na = split(s, a, "{")
+      for (i = 1; i <= na; i++) {
+        nb = split(a[i], b, "}")
+        for (j = 1; j <= nb; j++) {
+          nc = split(b[j], c, "[")
+          for (k = 1; k <= nc; k++) {
+            nd = split(c[k], d, "]")
+            for (l = 1; l <= nd; l++) { text(d[l]); if (l < nd) cb() }
+            if (k < nc) ob("[")
+          }
+          if (j < nb) cb()
+        }
+        if (i < na) ob("{")
+      }
+    }
+    { nq = split($0, q, "\""); st = 0; dep = 0; ek = 0; sc = ""; key = ""
+      for (i = 1; i <= nq; i++) {
+        if (st == 0) { code(q[i]); if (i < nq) { st = 1; qa = i + 1; ln = 0; qb = 0 }; continue }
+        if (!qb) { ln += length(q[i]) + 1; if (ln > 4097) qb = i }
+        if (i < nq && trail(q[i]) % 2 == 1) continue
+        st = 0
+        sv = qb ? substr(join(qa, qb), 1, 4096) "\003" : join(qa, i)
+        if (dep > 0 && T[dep] == "o" && ek) { key = sv; ek = 0 } else emit("\"" sv "\"")
+      }
+      flush()
+    }'
+}
+# A rule as the words it fixes before its first wildcard (data/remote-commands.tsv), as each agent
+# reads it: a last word * when more may follow, a word ending in * that any word it starts matches,
+# * alone for every command, nothing for a rule that is not read. Only the first 256 characters are
+# read, so the time stays linear in the file: a longer rule is read as having more after them.
+RC_FN='
+function unq(v) { v = substr(v, 2, length(v) - 2); gsub(/\\\\/, "\001", v); gsub(/\\"/, "\"", v); gsub(/\001/, "\\", v); return v }
+function wsplit(s,   a, n, i, o) { n = split(s, a, " "); o = ""; for (i = 1; i <= n; i++) if (a[i] != "") o = o (o == "" ? "" : " ") a[i]; return o }
+function opn(w) { return w == "" ? "*" : w " *" }
+function cap(s) { RC_T = 0; if (length(s) > 256) { s = substr(s, 1, 256); RC_T = 1 }; return s }
+# RC_TAIL is 1 when text after the wildcard narrows the rule (Bash(ssh * rm)): such a deny or ask rule
+# does not cover every use of a command, so it never drops a hit.
+function fixed(s, sty,   k, pre, w) {
+  s = cap(s); RC_TAIL = 0
+  if (RC_T && sty != "rx" && sty != "rxfull") sub(/[^ \t]*$/, "", s)
+  if (sty == "claude") {
+    if (s ~ /:\*$/) s = substr(s, 1, length(s) - 2) " *"
+    k = index(s, "*")
+    if (k == 0) w = wsplit(s)
+    else { pre = substr(s, 1, k - 1); w = wsplit(pre); w = (pre == "" || pre ~ /[ \t]$/) ? opn(w) : w "*"; if (substr(s, k + 1) ~ /[^ \t*]/) RC_TAIL = 1 }
+  } else if (sty == "prefix") w = opn(wsplit(s))
+  else if (sty == "str") { if (s ~ /^[ \t]*\*[ \t]*$/) w = "*"; else if (s ~ /[ \t]$/) w = opn(wsplit(s)); else { w = wsplit(s); if (w != "") w = w "*" } }
+  else w = rx(s, sty == "rx")
+  if (RC_T) RC_TAIL = 1
+  if (RC_T && w != "" && w !~ /\*$/) w = (sty == "rx" || sty == "rxfull") ? w "*" : opn(w)
+  return w
+}
+# A regex: the literal text it starts with. An escaped space, \s or \s+ is a space in it, and \b ends it; a quantifier
+# after a character makes it optional; a regex matched to the end of the command (rxfull) and literal
+# throughout is an exact command. Anything after the literal text but .* (or .+) narrows it (RC_TAIL).
+function rx(r, open,   i, n, c, d, lit, stop, w, rest) {
+  if (substr(r, 1, 1) == "^") r = substr(r, 2)
+  lit = ""; stop = ""; n = length(r)
+  for (i = 1; i <= n; i++) {
+    c = substr(r, i, 1)
+    if (c == "\\") {
+      d = substr(r, i + 1, 1)
+      if (d == "s" || d == " ") { lit = lit " "; i++; if (d == "s" && substr(r, i + 1, 1) == "+") i++; continue }
+      if (d == "b") { lit = lit " "; stop = "w"; break }
+      if (d == "" || d ~ /[A-Za-z0-9]/) { stop = "m"; break }
+      lit = lit d; i++; continue
+    }
+    if (index(".^$|?*+()[]{}", c)) { stop = c; break }
+    lit = lit c
+  }
+  if (stop == "") return open ? opn(wsplit(lit)) : wsplit(lit)
+  if (stop == "$" && i == n) return wsplit(lit)
+  if (stop == "w") { rest = substr(r, i + 2); if (rest !~ /^\+?(\.[*+])?\$?$/) RC_TAIL = 1 }
+  else if (substr(r, i) !~ /^\.[*+]\$?$/) RC_TAIL = 1
+  if (stop == "?" || stop == "*" || stop == "{") lit = substr(lit, 1, length(lit) - 1)
+  w = wsplit(lit)
+  if (lit == "" || lit ~ /[ \t]$/) return opn(w)
+  return w "*"
+}
+# A regex split at each | outside a group or a class, into A[1..n].
+function alts(r, A,   i, n, c, dp, cl, s, k) {
+  r = substr(r, 1, 256); n = length(r); k = 0; s = ""; dp = 0; cl = 0
+  for (i = 1; i <= n; i++) {
+    c = substr(r, i, 1)
+    if (c == "\\") { s = s c substr(r, i + 1, 1); i++; continue }
+    if (cl) { if (c == "]") cl = 0 }
+    else if (c == "[") cl = 1
+    else if (c == "(") dp++
+    else if (c == ")") dp--
+    else if (c == "|" && dp == 0) { A[++k] = s; s = ""; continue }
+    s = s c
+  }
+  A[++k] = s; return k
+}
+# An entry, with RC_TAIL or RC_NC (a rule that covers no whole command), RC_RAW (the rule as written:
+# a regex, or a rule that allows every command, shown so when it holds nothing past the words it
+# shares with the command), RC_NOTE (when the rule applies) and RC_MR (1 when RC_RAW is one of a
+# regex'"'"'s alternatives). RC_TAIL, RC_RAW and RC_MR are reset for the next entry.
+function out(d, r, ci, kd, w,   t) {
+  t = (RC_TAIL || RC_NC) ? 1 : 0
+  if (w != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", FID, REP, d, r, ci, kd, w, t, RC_RAW, RC_NOTE, RC_MR + 0
+  RC_TAIL = 0; RC_RAW = ""; RC_MR = 0
+}
+function outrx(d, r, ci, kd, v, sty, raw,   A, n, k, w, x) {
+  n = alts(v, A); gsub(/[\t\r\n]/, " ", raw)
+  for (k = 1; k <= n; k++) { w = fixed(A[k], sty); x = A[k]; gsub(/[\t\r\n]/, " ", x); RC_RAW = n > 1 ? x : substr(raw, 1, 256); RC_MR = n > 1; out(d, r, ci, kd, w) }
+}
+# A file not read in full: one cut line for it.
+function rccut() { if (!RC_CT) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; RC_CT = 1 }
+'
+# The rules of one agent file, as fid<TAB>rep<TAB>decision<TAB>rank<TAB>case<TAB>kind<TAB>words lines
+# for rc_run (decision allow, ask, deny, or cut for a file not read in full). A deny or ask rule
+# overrides an allow rule of no higher rank (data/remote-commands.tsv says how each agent ranks them).
+rc_read() { # file format fid rep
+  case "$2" in
+    codex) { tr -d '\r' < "$1"; } 2>/dev/null | FID=$3 REP=$4 awk "$RC_FN"'
+      BEGIN { FID = ENVIRON["FID"]; REP = ENVIRON["REP"] }
+      function trail(s) {
+        if (s !~ /\\$/) return 0
+        if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
+        return length(s)
+      }
+      function cut() { if (!ct) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; ct = 1 }
+      # The pieces a to b of a string, with the quotes between them, joined half at a time: one at a
+      # time is quadratic in its escaped quotes.
+      function join(a, b,   m) { if (a == b) return q[a]; m = int((a + b) / 2); return join(a, m) "\"" join(m + 1, b) }
+      # A rule ends: its words up to its first list, then each of that list, then the words after it.
+      # A second list ends what is read, as more follows (RC_TAIL). canonical_matching=True matches
+      # without case (cm).
+      function done(   w, x, k, j, d) {
+        d = dec == "prompt" ? "ask" : dec == "forbidden" ? "deny" : dec == "allow" ? "allow" : ""
+        if (d == "") return
+        w = ""; x = ""; j = 0
+        for (k = 1; k <= nt; k++) {
+          if (T[k] == "\002") j = k
+          else if (j) x = x " " T[k]
+          else w = w (w == "" ? "" : " ") T[k]
+        }
+        if (!j) { if (w != "") out(d, 0, cm, "", opn(w)); return }
+        for (k = 1; k <= na; k++) { RC_TAIL = stop; out(d, 0, cm, "", opn(w (w == "" ? "" : " ") A[k] x)) }
+      }
+      function str(s) {
+        gsub(/\\\\/, "\001", s); gsub(/\\"/, "\"", s); gsub(/\001/, "\\", s); gsub(/[ \t]/, "\001", s)
+        if (kw == "pattern" && bd == 1 && !stop) T[++nt] = s
+        else if (kw == "pattern" && bd == 2 && !fa) A[++na] = s
+        else if (kw == "decision" && bd == 0) dec = s
+      }
+      # The code between strings, a character at a time (at most 1,024 between two quotes).
+      function codep(s,   i, n, c, k) {
+        while (!on) { k = index(s, "prefix_rule("); h = index(s, "#"); if (h && (!k || h < k)) { cmt = 1; return }; if (!k) return
+          s = substr(s, k + 12); on = 1; dp = 1; bd = 0; kw = ""; id = ""; nt = 0; na = 0; fa = 0; stop = 0; dec = "allow"; cm = 0 }
+        if (length(s) > 1024) { cut(); on = 0; return }
+        n = length(s)
+        for (i = 1; i <= n; i++) {
+          c = substr(s, i, 1)
+          if (c ~ /[A-Za-z0-9_]/) { id = id c; continue }
+          if (c == " " || c == "\t") continue
+          if (kw == "canonical_matching" && bd == 0 && id == "True") cm = 1
+          if (c == "=") kw = id
+          else if (c == "[") { bd++ }
+          else if (c == "]") { if (kw == "pattern" && bd == 2) { if (fa) stop = 1; else { T[++nt] = "\002"; fa = 1 } }; bd-- }
+          else if (c == "(") dp++
+          else if (c == ")") { dp--; if (dp == 0) { done(); on = 0; codep(substr(s, i + 1)); return } }
+          else if (c == "," && bd == 0) kw = ""
+          else if (c == "#") { cmt = 1; return }
+          else if (c == "\047") { cut(); on = 0; return }
+          id = ""
+        }
+      }
+      { if (!on && $0 ~ /^[ \t]*#/) next
+        nq = split($0, q, "\""); st = 0; cmt = 0
+        for (i = 1; i <= nq && !cmt; i++) {
+          if (st == 0) { codep(q[i]); if (i < nq && !cmt) { st = 1; qa = i + 1; ln = 0; qb = 0 }; continue }
+          if (!qb) { ln += length(q[i]) + 1; if (ln > 4097) qb = i }
+          if (i < nq && trail(q[i]) % 2 == 1) continue
+          # A token longer than 4096 characters keeps its first 4096 and \003, so it matches no command word.
+          st = 0; if (on && (kw == "pattern" || kw == "decision")) str(qb ? substr(join(qa, qb), 1, 4096) "\003" : join(qa, i))
+        }
+        if (st == 1 && on) { cut(); on = 0 }
+      }
+      END { if (on) cut() }' ;;
+    gemini-toml) { tr -d '\r' < "$1"; } 2>/dev/null | FID=$3 REP=$4 awk "$RC_FN"'
+      BEGIN { FID = ENVIRON["FID"]; REP = ENVIRON["REP"] }
+      # The strings in a TOML value, in V[1..n]: basic ones with their \\ and \" read, literal ones as
+      # they are. BAL is 0 while a list is still open.
+      function strs(v,   i, n, c, d, s, k, dp) {
+        n = length(v); k = 0; dp = 0; i = 1
+        while (i <= n) {
+          c = substr(v, i, 1)
+          if (c == "\"") { s = ""; i++
+            while (i <= n) { c = substr(v, i, 1)
+              if (c == "\\") { d = substr(v, i + 1, 1); if (d == "\\" || d == "\"") s = s d; else s = s c d; i += 2; continue }
+              if (c == "\"") break
+              s = s c; i++ }
+            V[++k] = s; i++; continue }
+          if (c == "\047") { s = ""; i++; while (i <= n && substr(v, i, 1) != "\047") { s = s substr(v, i, 1); i++ }; V[++k] = s; i++; continue }
+          if (c == "[") dp++; else if (c == "]") dp--; else if (c == "#") break
+          i++
+        }
+        BAL = dp <= 0; return k
+      }
+      function endrule(   d, r, k, df, ml, w) {
+        if (!inr) return; inr = 0
+        if (args || mcp || !shell || bad) return
+        d = dec == "allow" ? "allow" : dec == "deny" ? "deny" : dec == "ask_user" ? "ask" : ""
+        if (d == "") return
+        # A rule with modes applies only in them. Without default among them, a deny or ask covers no
+        # command in default mode, and an allow is said with its modes, or skipped for yolo alone, where
+        # Gemini CLI runs every command without asking anyway.
+        df = 0; ml = ""; for (k = 1; k <= nm; k++) { if (MD[k] == "default") df = 1; ml = ml (k == 1 ? "" : k == nm ? " and " : ", ") MD[k] }
+        if (nm > 0 && !df) {
+          if (d != "allow") RC_NC = 1
+          else if (nm == 1 && MD[1] == "yolo") return
+          else RC_NOTE = "only in " ml (nm > 1 ? " modes" : " mode")
+        }
+        r = 4 + pri / 1000
+        if (np > 0) for (k = 1; k <= np; k++) { w = fixed(PX[k], "prefix"); if (w == "*") RC_RAW = tn; out(d, r, 0, "", w) }
+        else if (rgx != "") outrx(d, r, 0, "", rgx, "rx", rgx)
+        else { RC_RAW = tn; out(d, r, 0, "", "*") }
+        RC_NC = 0; RC_NOTE = ""
+      }
+      # A rule with a value or a key this does not read is not read, and the file is named as not
+      # read in full: rather than taken as a rule with no command, which a deny would make cover all.
+      function cutr() { rccut(); if (inr) bad = 1 }
+      # A value that opens a multi-line string ("""), or holds one: the delimiter, and ML set to it
+      # while its lines follow.
+      function mls(v,   k, n, d) {
+        k = index(v, "\"\"\""); n = index(v, "\047\047\047")
+        if (!k && !n) return ""
+        d = (k && (!n || k < n)) ? "\"\"\"" : "\047\047\047"
+        if (!index(substr(v, index(v, d) + 3), d)) ML = d
+        return d
+      }
+      function val(k, v,   n, j) {
+        if (k !~ /^(toolName|commandPrefix|commandRegex|decision|priority|argsPattern|mcpName|modes)$/) { if (length(v) > 4096 || (mls(v) != "" && ML != "")) rccut(); return }
+        if (length(v) > 4096 || mls(v) != "") { cutr(); return }
+        n = strs(v)
+        if (k == "toolName") { for (j = 1; j <= n; j++) if (V[j] == "run_shell_command" || V[j] == "ShellTool") { shell = 1; tn = V[j] } }
+        else if (k == "commandPrefix") { np = 0; for (j = 1; j <= n; j++) PX[++np] = V[j] }
+        else if (k == "commandRegex") rgx = n ? V[1] : ""
+        else if (k == "decision") dec = n ? V[1] : ""
+        else if (k == "priority" && match(v, /^[ \t]*[0-9]+/)) pri = substr(v, RSTART, RLENGTH) + 0
+        else if (k == "argsPattern") args = 1
+        else if (k == "mcpName") mcp = 1
+        else if (k == "modes") { nm = 0; for (j = 1; j <= n; j++) if (V[j] != "") MD[++nm] = V[j] }
+      }
+      ML != "" { if (index($0, ML)) ML = ""; next }
+      acc != "" { acc = acc " " $0; if (length(acc) > 4096) { val(ak, acc); acc = ""; next }; strs(acc); if (BAL) { val(ak, acc); acc = "" }; next }
+      /^[ \t]*#/ { next }
+      /^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$/ { endrule(); inr = 1; shell = 0; np = 0; rgx = ""; dec = ""; pri = 0; args = 0; mcp = 0; nm = 0; bad = 0; tn = ""; next }
+      /^[ \t]*\[/ { endrule(); next }
+      # A key this does not read: in a rule, a quoted or dotted one may be one of its keys, so the
+      # rule is not read. A value that opens a multi-line string has its lines skipped, and the file
+      # is named as not read in full.
+      !match($0, /^[ \t]*[A-Za-z_]+[ \t]*=[ \t]*/) { if (inr && $0 ~ /^[ \t]*([A-Za-z0-9_-]+[ \t]*\.|["\047])/) { cutr(); mls($0) } else if (mls($0) != "" && ML != "") rccut(); next }
+      !inr { if (mls($0) != "" && ML != "") rccut(); next }
+      {
+        k = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", k); sub(/[ \t]*=.*$/, "", k)
+        v = substr($0, RSTART + RLENGTH)
+        if (v ~ /^\[/ && length(v) <= 4096) { strs(v); if (!BAL) { acc = v; ak = k; next } }
+        val(k, v)
+      }
+      END { if (acc != "") val(ak, acc); endrule() }' ;;
+    *) json_leaves "$1" | FID=$3 REP=$4 FMT=$2 WIN=$([ "$_os" = win ] && echo 1 || echo 0) awk -F '\t' "$RC_FN"'
+      BEGIN { FID = ENVIRON["FID"]; REP = ENVIRON["REP"]; FMT = ENVIRON["FMT"]; S = "\034"
+              QK = S "toolsSettings" S (ENVIRON["WIN"] == "1" ? "execute_cmd" : "execute_bash") S }
+      { p = $1; v = substr($0, length($1) + 2) }
+      # json_leaves keeps the first 4096 characters of a longer string and ends it in \003 (lg): a rule
+      # is read only as far as its first 256 (fixed), so one such is read as having more after them.
+      FMT == "claude" && p ~ ("^" S "permissions" S "(allow|ask|deny)\\[\\]$") && v ~ /^"/ {
+        d = substr(p, 14, length(p) - 15); v = unq(v); lg = sub("\003$", "", v)
+        # Bash and PowerShell are two tools (KD), and PowerShell rules match without case.
+        if (v == "Bash" || v == "PowerShell") { RC_RAW = v; out(d, 0, 0, v, "*") }
+        else if (match(v, /^(Bash|PowerShell)\(/) && (lg || v ~ /\)$/)) { kd = substr(v, 1, RLENGTH - 1); w = fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - (lg ? 0 : 1)), "claude"); if (w == "*") RC_RAW = v; out(d, 0, kd == "PowerShell", kd, w) }
+      }
+      FMT == "gemini-json" && v ~ /^"/ {
+        v = unq(v); lg = sub("\003$", "", v); sh = (v == "run_shell_command" || v == "ShellTool")
+        if (p == S "tools" S "core[]") core = 1
+        if (p == S "tools" S "allowed[]" || p == S "tools" S "core[]") {
+          r = p == S "tools" S "core[]" ? 4.25 : 4.3
+          if (sh) { RC_RAW = v; out("allow", r, 0, "", "*") }
+          else if (match(v, /^(run_shell_command|ShellTool)\(/) && (lg || v ~ /\)$/)) { w = fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - (lg ? 0 : 1)), "prefix"); if (w == "*") RC_RAW = v; out("allow", r, 0, "", w); if (r == 4.3) nar = 1 }
+        }
+        if (p == S "tools" S "confirmationRequired[]" && sh) out("ask", 4.35, 0, "", "*")
+        if (p == S "tools" S "exclude[]" && sh) out("deny", 4.4, 0, "", "*")
+      }
+      # chat.tools.terminal.enableAutoApprove set to false turns off every rule of the file.
+      FMT == "vscode" && p == S "chat.tools.terminal.enableAutoApprove" && v == "false" { out("deny", 0, 0, "", "*") }
+      FMT == "vscode" && index(p, S "chat.tools.terminal.autoApprove" S) == 1 && (v == "true" || v == "false") {
+        k = substr(p, 34); m = index(k, S)
+        if (m) { if (substr(k, m + 1) != "approve") next; k = substr(k, 1, m - 1) }
+        # A regex key cut short has lost its flags: it is not read.
+        if (sub("\003$", "", k) && k ~ /^\//) { rccut(); next }
+        gsub(/\\\\/, "\001", k); gsub(/\\"/, "\"", k); gsub(/\001/, "\\", k)
+        d = v == "true" ? "allow" : "deny"
+        if (match(k, /^\/.+\/[dgimsuvy]*$/)) { f = k; sub(/^.*\//, "", f); outrx(d, 0, index(f, "i") > 0, "", substr(k, 2, length(k) - length(f) - 2), "rx", k) }
+        else out(d, 0, 0, "", fixed(k, "prefix"))
+      }
+      FMT == "roo" && (p == S "roo-cline.allowedCommands[]" || p == S "roo-cline.deniedCommands[]") && v ~ /^"/ {
+        v = unq(v); sub("\003$", "", v)
+        w = fixed(v, "str"); if (w == "*") RC_RAW = v; out(p ~ /allowed/ ? "allow" : "deny", length(v), 1, "", w)
+      }
+      FMT == "amazonq" && (p == QK "allowedCommands[]" || p == QK "deniedCommands[]") && v ~ /^"/ {
+        v = unq(v); sub("\003$", "", v)
+        outrx(p ~ /allowed/ ? "allow" : "deny", 0, 0, "", v, "rxfull", v)
+      }
+      END { if (nar) out("deny", 4.29, 0, "", "*"); if (core) out("deny", 4.24, 0, "", "*") }' ;;
+  esac
+}
+# The hits of a set of an agent's files whose rules apply together (data/remote-commands.tsv): an
+# allow rule of a file marked to report whose words hit a cmd line that no deny or ask rule of the set
+# for the same tool covers at its rank or higher. Prints fid<TAB>rule as shown<TAB>what it allows;
+# fid<TAB>!cut for a file not read in full. A rule is shown only as far as the words it shares with
+# the command, and ... when more follows; a regex, or a rule that allows every command, is shown as
+# written only when it holds nothing past those words but its wildcard, and then up to any run of 16
+# letters and digits and to 64 characters, so a key in a rule is never printed.
+RC_MATCH='
+function agree(a, b, ci) {
+  if (ci) { a = tolower(a); b = tolower(b) }
+  if (a ~ /\*$/) { a = substr(a, 1, length(a) - 1); return substr(b, 1, length(a)) == a }
+  return a == b
+}
+function words(w,   n) { n = split(w, W, " "); OPEN = 0; if (n > 0 && W[n] == "*") { OPEN = 1; n-- } else if (n > 0 && W[n] ~ /\*$/) OPEN = 1; return n }
+function agrees(wn, j, ci,   k, m) { m = wn < SN[j] ? wn : SN[j]; for (k = 1; k <= m; k++) if (!agree(W[k], S[j, k], ci)) return 0; return 1 }
+function safe(s) { if (match(s, RUN)) s = substr(s, 1, RSTART - 1) "..."; if (length(s) > 64) s = substr(s, 1, 64) "..."; return s }
+BEGIN { ns = split(ENVIRON["RC_SIGS"], L, "\n")
+  for (j = 1; j <= ns; j++) { split(L[j], f, "|"); SN[j] = split(f[1], t, " "); for (k = 1; k <= SN[j]; k++) S[j, k] = t[k]; SC[j] = f[2] == "any"; SL[j] = f[3] }
+  RUN = ""; for (k = 1; k <= 16; k++) RUN = RUN "[A-Za-z0-9_-]" }
+$3 == "cut" { if (!($1 in CUT)) { CUT[$1] = 1; print $1 "\t!cut" }; next }
+{ n++; F[n] = $1; R[n] = $2 ""; D[n] = $3; K[n] = $4 + 0; C[n] = $5; KD[n] = $6; WS[n] = $7; TL[n] = $8; RW[n] = $9; NT[n] = $10; MR[n] = $11 }
+END {
+  # A deny or ask rule covers only its own tool (KD): Claude Code'"'"'s Bash and PowerShell are two.
+  for (i = 1; i <= n; i++) {
+    if (D[i] != "deny" && D[i] != "ask") continue
+    wn = words(WS[i]); if (!OPEN || TL[i] == 1) continue
+    for (j = 1; j <= ns; j++) if (wn <= SN[j] && agrees(wn, j, C[i] || SC[j]) && (!((KD[i], j) in OV) || K[i] > OV[KD[i], j])) OV[KD[i], j] = K[i]
+  }
+  for (i = 1; i <= n; i++) {
+    if (D[i] != "allow" || (R[i] != "1" && R[i] != "b")) continue
+    # A rule that matches one exact command (no wildcard, no prefix) can not run a command of an
+    # attacker'"'"'s choosing: it is never reported. A rule that allows every command is (one with no
+    # words before its wildcard, and nothing after it), but for Claude Code'"'"'s Bash in a file whose
+    # rep is b: section 1 or 2 lists it there.
+    wn = words(WS[i]); if (!OPEN) continue
+    if (wn == 0 && (TL[i] == 1 || (R[i] == "b" && KD[i] == "Bash"))) continue
+    nl = 0; sn = 0; br = 0; seen = "\001"
+    for (j = 1; j <= ns; j++) {
+      if (!agrees(wn, j, C[i] || SC[j])) continue
+      if (((KD[i], j) in OV) && OV[KD[i], j] >= K[i]) continue
+      if (!index(seen, "\001" SL[j] "\001")) { seen = seen SL[j] "\001"; LB[++nl] = SL[j] }
+      m = wn < SN[j] ? wn : SN[j]; if (m > sn) sn = m
+      if (wn < SN[j]) br = 1
+    }
+    if (nl == 0) continue
+    lb = LB[1]; for (k = 2; k <= nl; k++) lb = lb (k == nl ? " and " : ", ") LB[k]
+    # A rule with more after its wildcard (TL) allows only some of the commands its words start.
+    if (wn == 0) tx = "allows every command, including ones that run commands " lb
+    else if (br) { tx = W[1]; for (k = 2; k <= wn; k++) tx = tx " " W[k]; tx = (TL[i] == 1 ? "allows " tx " commands" : "allows every " tx " command") ", including ones that run commands " lb }
+    else tx = "runs commands " lb
+    if (NT[i] != "") tx = tx ", " NT[i]
+    # A rule that allows every command is its tool or a wildcard alone, shown as written.
+    if (wn == 0) { sh = RW[i] != "" ? RW[i] : KD[i] != "" ? KD[i] : "*"; if (length(sh) > 64) sh = substr(sh, 1, 64) "..."; sh = sh (MR[i] == 1 ? " ..." : "") }
+    else if (RW[i] != "" && TL[i] != 1 && wn == sn) sh = safe(RW[i]) (MR[i] == 1 ? " ..." : "")
+    else {
+      sh = W[1]; for (k = 2; k <= sn; k++) sh = sh " " W[k]
+      if (wn > sn || TL[i] == 1 || RW[i] != "") sh = sh " ..."; else if (OPEN && W[wn] !~ /\*$/) sh = sh " *"
+      if (KD[i] != "") sh = KD[i] "(" sh ")"
+    }
+    if (!((F[i] SUBSEP sh) in SEEN)) { SEEN[F[i], sh] = 1; print F[i] "\t" sh "\t" tx }
+  }
+}'
+# rep|format|file lines, one set: file<TAB>rule<TAB>labels for each hit, file<TAB>!cut for each file
+# not read in full. A rep is 1 for a file whose hits are reported, b for one whose Claude Code Bash
+# allowed whole is listed elsewhere, 0 for one read only for its deny and ask rules. One awk maps
+# each hit's fid back to its file.
+rc_run() { # lines
+  printf '%s\n' "$1" | awk 'NF' | { _n=0; while IFS='|' read -r _rp _rfm _rf; do _n=$((_n + 1)); rc_read "$_rf" "$_rfm" "$_n" "$_rp"; done; } |
+    RC_SIGS=$RC_SIGS awk -F '\t' "$RC_MATCH" | RC_SET=$1 awk -F "$TAB" '
+      BEGIN { n = split(ENVIRON["RC_SET"], L, "\n"); k = 0
+        for (i = 1; i <= n; i++) if (L[i] ~ /[^ \t]/) { s = substr(L[i], index(L[i], "|") + 1); FL[++k] = substr(s, index(s, "|") + 1) } }
+      { print FL[$1] "\t" $2 "\t" $3 }'
+}
+# The person's own Claude Code settings files whose deny and ask rules apply in every project: the
+# agent group's (data/remote-commands.tsv). A local one applies only in its own folder.
+RC_CC_USER=$(printf '%s\n' "$RC_FILES" | while IFS='|' read -r _a _o _fm _g _p _nt; do
+  case "$_o" in (all|"$_os") ;; (*) continue ;; esac
+  [ "$_fm" = claude ] && [ "$_g" = agent ] && [ -f "$_p" ] && fleet_ok "$_p" && [ -r "$_p" ] && ! too_big "$_p" && printf '0|claude|%s\n' "$_p"
+done)
 # Claude Code's endpoint variables, and each one's provider's own API host (its env-vars page and each
 # provider's page): ANTHROPIC_BASE_URL at api.anthropic.com; Amazon Bedrock at bedrock-runtime in an AWS
 # region, and its Mantle endpoint at bedrock-mantle (AWS's Bedrock endpoints page, as Claude Code builds
@@ -2367,7 +3314,8 @@ while IFS= read -r f; do
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
   own_cc "$f" && continue
   [ -f "$f" ] && ! too_big "$f" || continue
-  _t=$(flat "$f"); _w=""
+  # An awk that fails while flat reads the file names it as not read, never as one that sets nothing.
+  _t=$(flat "$f") || { cut_file "$f"; continue; }; _w=""
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
   # (Managed settings can set it too; they are not read here.)
   _dah=""
@@ -2378,8 +3326,20 @@ while IFS= read -r f; do
     [ -n "$_v" ] && { _dah=$_v; break; }
   done
   if [ "$_dah" = true ]; then _rx="\"($CMD_ALWAYS)\"[[:space:]]*:"; else _rx="$HOOK_RUN|\"($CMD_KEYS)\"[[:space:]]*:"; fi
-  if printf '%s' "$_t" | grep -qE "$_rx"; then
+  _note=""
+  # grep exits above 1 when it fails: the file is then named as not read, never as one that runs nothing.
+  printf '%s' "$_t" | grep -qE "$_rx"; _hr=$?
+  [ "$_hr" -gt 1 ] && cut_file "$f"
+  if [ "$_hr" -eq 0 ]; then
     _w="run commands while the agent works"
+    if [ "$_dah" != true ]; then
+      _ss=$(start_scripts "$_t" SessionStart) || cut_file "$f"
+      if [ -n "$_ss" ]; then
+        _note="Each agent session starts by running this project's $(in_words "$_ss")"
+        START_HOOKS="$START_HOOKS$(_p=$(rowsafe "${f%/.claude/*}"); printf '%s\n' "$_ss" | while IFS= read -r _x; do printf '%s\t%s\n' "$_p" "$_x"; done)
+"
+      fi
+    fi
   fi
   if printf '%s' "$_t" | grep -qE '"enableAllProjectMcpServers"[[:space:]]*:[[:space:]]*true|"enabledMcpjsonServers"[[:space:]]*:[[:space:]]*\[[[:space:]]*"'; then
     _w="${_w:+$_w, }turn on MCP servers without asking"
@@ -2403,11 +3363,36 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"Bash(\(\*\))?"'; then
     if aa_hit "$f" '"permissions": {"allow": ["Bash"'; then _ab=Bash; elif aa_hit "$f" '"permissions": {"allow": ["Bash(*)"'; then _ab='Bash(*)'; fi
   fi
+  # The note that the folder must be trusted follows the last of the allow rules listed.
+  _tr=""
   if [ -n "$_ab" ]; then
-    case "$f" in */settings.local.json) _tr="" ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
-    _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab$_tr"
+    case "$f" in */settings.local.json) ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
+    _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab"
   fi
-  auto_row "$f" "$_w" "$_t"
+  # Allow rules for commands that run commands on other machines (data/remote-commands.tsv), with the
+  # person's own deny and ask rules and both of the project's files. A settings.local.json's apply
+  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here. Bash
+  # allowed whole is said above (rep b).
+  case "$_t" in *'"Bash'*|*'"PowerShell'*)
+    _rp=1; [ -n "$_ab" ] && _rp=b
+    _rs=""; for _s in "${f%/*}/settings.json" "${f%/*}/settings.local.json"; do
+      if [ "$_s" = "$f" ]; then _rs="$_rs${NL}$_rp|claude|$_s"; elif [ -f "$_s" ] && [ -r "$_s" ] && ! too_big "$_s"; then _rs="$_rs${NL}0|claude|$_s"; fi
+    done
+    _rh=$(rc_run "$RC_CC_USER$_rs" | awk -F "$TAB" -v f="$f" '$1 == f && $2 != "!cut"')
+    if [ -n "$_rh" ]; then
+      case "$f" in
+        */settings.local.json) RC_PROJ="$RC_PROJ$(printf '%s
+' "$_rh" | awk -F "$TAB" -v OFS="$TAB" '{ print $1, "Claude Code", $2 ": " $3 }')$NL" ;;
+        *) _tr=". Claude Code applies a project's allow rules once you trust the folder"
+           # A rule that allows every command (PowerShell alone) is said as that, as Bash alone is above.
+           _rv="run commands on other machines"; case "$_rh" in *"${TAB}allows every command,"*) _rv="run every command" ;; esac
+           _w="${_w:+$_w, }$_rv without asking, with permissions.allow: $(printf '%s
+' "$_rh" | cut -f2 | paste -sd ',' - | sed 's/,/, /g')" ;;
+      esac
+    fi ;;
+  esac
+  _w="$_w$_tr"
+  auto_row "$f" "$_w" "$_t" "$_note"
 done <<EOF
 $ALLOW_FILES
 EOF
@@ -2417,10 +3402,21 @@ EOF
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
-  _t=$(flat "$f"); _w=""
-  printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo][Ll][Dd][Ee][Rr][Oo][Pp][Ee][Nn]"' && _w="run a task when the folder opens in VS Code or Cursor"
+  _t=$(flat "$f") || { cut_file "$f"; continue; }; _w=""
+  _note=""
+  printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; _hr=$?
+  [ "$_hr" -gt 1 ] && cut_file "$f"
+  if [ "$_hr" -eq 0 ]; then
+    _w="run a task when the folder opens in VS Code or Cursor"
+    _ss=$(start_scripts "$_t" tasks "$FOLDER_OPEN") || cut_file "$f"
+    if [ -n "$_ss" ]; then
+      _note="That task runs this project's $(in_words "$_ss")"
+      START_TASKS="$START_TASKS$(_p=$(rowsafe "${f%/.vscode/*}"); printf '%s\n' "$_ss" | while IFS= read -r _x; do printf '%s\t%s\n' "$_p" "$_x"; done)
+"
+    fi
+  fi
   printf '%s' "$_t" | grep -qE '"runOn"[[:space:]]*:[[:space:]]*"[Ww][Oo][Rr][Kk][Tt][Rr][Ee][Ee][Cc][Rr][Ee][Aa][Tt][Ee][Dd]"' && _w="${_w:+$_w, }run a task when VS Code creates a worktree of the project"
-  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t"
+  [ -n "$_w" ] && auto_row "$f" "$_w" "$_t" "$_note"
 done <<EOF
 $TASK_FILES
 EOF
@@ -2466,8 +3462,137 @@ while IFS= read -r f; do
 done <<EOF
 $VSC_SETTINGS
 EOF
+# Listed in byte order of the path, as gird-check.ps1 sorts them.
+AUTO_ROWS=$(printf '%s' "$AUTO_ROWS" | LC_ALL=C sort -t "$TAB" -k1,1)
 # Row 02 counts projects: the folders holding these settings.
 N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/[^/]*$##' | sort -u | grep -c .)
+# The worms' own wiring (Wiz on Mini Shai-Hulud, SafeDep on the AntV wave): a session-start hook and a
+# folder-open task in one project that both run a planted file (data/planted.tsv: its folder and name)
+# of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
+# compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
+# A worktree is left out when its repo is listed. The list is in byte order of the path, as
+# gird-check.ps1 sorts it.
+WIRED=$(printf '%s\n' "$PLANTED" "-" "$START_TASKS" "-" "$START_HOOKS" | awk -F "$TAB" '
+  function base(s) { sub(/.*\//, "", s); return s }
+  $0 == "-" { part++; next }
+  part == 0 { if (NF) P[$0] = 1; next }
+  part == 1 { if (NF == 2 && ($2 in P)) T[$1 FS base($2)] = 1; next }
+  NF == 2 && ($2 in P) && (($1 FS base($2)) in T) && !seen[$1 FS base($2)]++ { r[++n] = $1 FS base($2); p[$1] = 1 }
+  END { for (i = 1; i <= n; i++) { split(r[i], x, FS); w = x[1]; sub(/\/\.claude\/worktrees\/.*/, "", w); if (w != x[1] && (w in p)) continue; print r[i] } }' | LC_ALL=C sort)
+N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
+# The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
+# SessionStart hook that runs it to the Claude Code and Codex settings files it finds (SafeDep). The
+# copy is an indicator of its own (data/indicators.tsv); the hook stays after the copy is gone. Codex
+# reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
+# there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
+# with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it, or in an inline
+# table at the top (hooks = { SessionStart = [ ... ] }), that array alone.
+toml_session_start() { # file: the lines of its SessionStart hook tables, comments removed
+  # The first awk prints each line, then a tab, its count of [ less ] outside strings, a tab, and 1 when
+  # the line starts inside a multi-line string (""" or '''), which goes on over lines, # and brackets too.
+  # Quotes are compared character by character (c[]), never with substr, which measures the whole line
+  # on macOS's awk: a long line is read in time that grows with its length.
+  { awk '
+    { n = split($0, c, ""); q = ""; b = 0; m = (ml != "")
+      for (i = 1; i <= n; i++) {
+        ch = c[i]
+        if (ml != "") {
+          if (ml == "\"\"\"" && ch == "\\" && i < n) { printf "%s%s", ch, c[i + 1]; i++; continue }
+          if (ch == mq && c[i + 1] == ch && c[i + 2] == ch) { k = i + 3; while (k <= n && k < i + 5 && c[k] == ch) k++; for (j = i; j < k; j++) printf "%s", c[j]; i = k - 1; ml = ""; continue }
+        } else if (q == "") {
+          if (ch == "#") break
+          if ((ch == "\"" || ch == "'"'"'") && c[i + 1] == ch && c[i + 2] == ch) { ml = ch ch ch; mq = ch; printf "%s", ml; i += 2; continue }
+          if (ch == "\"" || ch == "'"'"'") q = ch
+          else if (ch == "[") b++
+          else if (ch == "]") b--
+        }
+        else if (ch == "\\" && q == "\"" && i < n) { printf "%s%s", ch, c[i + 1]; i++; continue }
+        else if (ch == q) q = ""
+        printf "%s", ch
+      }
+      printf "\t%d\t%d\n", b, m }' < "$1"; } 2>/dev/null | awk '
+    # The inline table hooks = { ... }, read a character at a time over as many lines as it takes, its
+    # strings skipped: ib and ia are its { and [ depths, iq the quote of the string it is in, ik the key
+    # being read at the level of the table itself (its characters but spaces and tabs, the first 64),
+    # and the array whose key is SessionStart is printed, a line for each line it is on.
+    function inl(t,   n, c, i, ch) {
+      n = split(t, c, "")
+      for (i = 1; i <= n; i++) {
+        ch = c[i]
+        if (io) printf "%s", ch
+        if (iq != "") {
+          if (ch == "\\" && iq == "\"" && i < n) { i++; if (io) printf "%s", c[i]; ch = ch c[i] }
+          else if (ch == iq) iq = ""
+        } else if (ch == "\"" || ch == "'"'"'") iq = ch
+        else if (ch == "{" || ch == "}" || ch == "[" || ch == "]" || ch == ",") {
+          if (ch == "[" && !io && ib == 1 && ia == 0 && ik ~ /^["'"'"']?SessionStart["'"'"']?=$/) { io = 1; printf "%s", ch }
+          if (ch == "{") ib++
+          else if (ch == "}") { ib--; if (ib <= 0) { if (io) printf "\n"; io = 0; il = 0; return } }
+          else if (ch == "[") ia++
+          else if (ch == "]") { ia--; if (ia <= 0 && io) { io = 0; printf "\n" } }
+          ik = ""; continue
+        }
+        if (ib == 1 && ia == 0 && ch != " " && ch != "\t" && ch != "\r" && length(ik) < 64) ik = ik ch
+      }
+      if (io) printf "\n"
+    }
+    BEGIN { top = 1 }
+    { match($0, /\t-?[0-9]+\t[01]$/); l = substr($0, 1, RSTART - 1); split(substr($0, RSTART + 1), x, "\t"); b = x[1] + 0 }
+    il { inl(l); next }
+    d > 0 { print l; d += b; next }
+    x[2] == 1 { if (s) print l; next }
+    l ~ /^[[:space:]]*\[/ { t = l; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); top = 0; next }
+    s { print l; next }
+    (h && l ~ /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && l ~ /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print l; d = b; next }
+    top && l ~ /^[[:space:]]*["'"'"']?hooks["'"'"']?[[:space:]]*=[[:space:]]*\{/ { ib = 0; ia = 0; iq = ""; ik = ""; io = 0; il = 1; inl(l) }'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -eq 0 ] && [ "$2" -eq 0 ]
+}
+# Each command = "..." in these TOML lines, written as JSON writes it ("command": "..."), for
+# cmd_scripts: a literal string ('...' or '''...''') with its \ and " escaped, a basic one ("..." or
+# """...""") as it is. sed escapes them, in time that grows with the length of the string.
+toml_cmds() {
+  grep -oE '(^|[^A-Za-z0-9_=-])["'"'"']?command["'"'"']?[[:space:]]*=[[:space:]]*("""(("|"")?([^"\\]|\\.))*("|"")?"""|'"'''(('|'')?[^'])*('|'')?'''"'|"([^"\\]|\\.)*"|'"'[^']*'"')' |
+    awk '{ v = substr($0, index($0, "=") + 1); sub(/^[[:space:]]+/, "", v); t = substr(v, 1, 3)
+      if (t == "'"'''"'") print "L" substr(v, 4, length(v) - 6)
+      else if (substr(t, 1, 1) == "'"'"'") print "L" substr(v, 2, length(v) - 2)
+      else if (t == "\"\"\"") print "B" substr(v, 4, length(v) - 6)
+      else print "B" substr(v, 2, length(v) - 2) }' |
+    sed -e '/^L/{' -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e '}' -e 's/^./"command": "/' -e 's/$/"/'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -le 1 ] && [ "$2" -eq 0 ] && [ "$3" -eq 0 ]
+}
+# A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
+# as start_cmd reads a command, with any folder before .claude or .codex, or when it cds into the folder
+# and then runs a command: a guard that only tests for the file, or a command that deletes it, does not.
+UH_PATH='\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
+UH_CMD=$(start_cmd "$UH_PATH" '(([^[:space:]"'"'"'\\;&|]|\\\\)*(/|\\\\))?' cd)
+# A command written over several lines (""" or ''' left open on its line) is not read: the file is
+# named as not read in full, never as one with no such hook.
+TOML_OPEN='(^|[^A-Za-z0-9_=-])["'"'"']?command["'"'"']?[[:space:]]*=[[:space:]]*("""(("|"")?([^"\\]|\\.))*("|"")?\\?|'"'''(('|'')?[^'])*('|'')?"')$'
+USER_HOOKS=""
+_cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
+UHOOK_FILES="$_ccd/settings.json
+$_cxd/hooks.json
+$_cxd/settings.json
+$_cxd/config.toml"
+for _uf in "$_ccd/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "$_cxd/settings.json" "$_cxd/config.toml"; do
+  [ -f "$_uf" ] && ! too_big "$_uf" || continue
+  case "$USER_HOOKS" in "$(rowsafe "$_uf")$TAB"*|*"
+$(rowsafe "$_uf")$TAB"*) continue ;; esac
+  # An awk or grep that fails names the file as not read, never as one with no such hook (a file that
+  # can't be opened is named already).
+  case "$_uf" in
+    *.toml) _ut=$(toml_session_start "$_uf") && _uo=$(printf '%s\n' "$_ut" | grep -cE "$TOML_OPEN"; [ $? -le 1 ]) &&
+            _ut=$(printf '%s\n' "$_ut" | toml_cmds) ;;
+    *) _uo=0; _ut=$(flat "$_uf" | json_elems SessionStart) ;;
+  esac || { [ -r "$_uf" ] && cut_file "$_uf"; continue; }
+  [ "${_uo:-0}" -gt 0 ] && cut_file "$_uf"
+  _us=$(cmd_scripts "$_ut" "$UH_CMD" "$UH_PATH") || { cut_file "$_uf"; continue; }
+  _us=$(printf '%s\n' "$_us" | sed -n -E 's#^\.(claude|codex)/package.*#.\1/package#p' | head -n 1)
+  [ -n "$_us" ] && USER_HOOKS="$USER_HOOKS$(rowsafe "$_uf")$TAB$_us
+"
+done
+N_UHOOK=$(printf '%s' "$USER_HOOKS" | grep -c .)
 if [ "$N_MCP_TOKEN" -eq 0 ]; then
   if [ "$N_MCP" -gt 0 ]; then progress o "Found $(plural "$N_MCP" "MCP server" "MCP servers")$MCP_CACHE_NOTE, no tokens written in their configs"
   else progress i "No MCP servers configured$MCP_CACHE_NOTE"; fi
@@ -2541,7 +3666,7 @@ CC_PROJECT=$(printf '%s\n' "$ALLOW_FILES" | while IFS= read -r _f; do
   case "$_f" in (""|"$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
   own_cc "$_f" || too_big "$_f" || printf '%s\n' "$_f"
 done)
-MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching "$TR_KEYS")
+MATCHED=$(printf '%s\n%s\n' "$CANDIDATES" "$CC_PROJECT" | awk 'NF && !seen[$0]++' | fleet_filter | files_matching)
 # For the report: one place id per file, and one provider id per file and provider.
 KEY_PLACES=""; PROV_TALLY=""
 MCP_SET="|$(printf '%s\n' "$MCP_LIST" | tr '\n' '|')"; PROJECT_SET="|$(printf '%s\n%s\n' "$PROJECT_FILES" "$CC_PROJECT" | tr '\n' '|')"
@@ -2596,14 +3721,22 @@ elif [ "$KEY_FILES" -eq 0 ]; then progress o "No keys in shell profiles, history
 
 # Login files any agent you run can read.
 LOGINS=""; LOGIN_IDS=""
-login() { # file label id [marker regex]
+login() { # file label id [marker regex [awk program that exits 0 for a secret the marker misses]]
   fleet_ok "$1" && [ -f "$1" ] || return
-  if [ -n "${4:-}" ]; then grep -aqE "$4" "$1" 2>/dev/null || return; fi
+  if [ -n "${4:-}" ]; then grep -aqE "$4" "$1" 2>/dev/null || { [ -n "${5:-}" ] && awk "$5" "$1" 2>/dev/null; } || return; fi
   LOGINS="${LOGINS:+$LOGINS, }$2"; LOGIN_IDS="${LOGIN_IDS:+$LOGIN_IDS }$3"
 }
 login "$H/.aws/credentials" "AWS keys" aws
 login "$H/.config/gcloud/application_default_credentials.json" "Google Cloud login" gcloud
-login "$H/.azure/msal_token_cache.json" "Azure login" azure
+# The folders these tools are told to use in the environment, a Windows path (C:\...) in Git Bash
+# written as this shell reads it, as APPDATA is.
+_azd=${AZURE_CONFIG_DIR:-}; _dbd=${DBT_ENGINE_PROFILES_DIR:-${DBT_PROFILES_DIR:-}}; _sfh=${SNOWFLAKE_HOME:-}
+if [ "$WIN" -eq 1 ]; then _azd=$(winpath "$_azd"); _dbd=$(winpath "$_dbd"); _sfh=$(winpath "$_sfh"); fi
+# The Azure CLI keeps its logins, and a service principal's secret, in AZURE_CONFIG_DIR or ~/.azure:
+# plain text on macOS and Linux, encrypted (.bin) on Windows (learn.microsoft.com, MSAL-based Azure
+# CLI). A service principal signed in with a certificate has no client_secret there.
+login "${_azd:-$H/.azure}/msal_token_cache.json" "Azure login" azure
+login "${_azd:-$H/.azure}/service_principal_entries.json" "Azure service principal secrets" azure-sp '"client_secret"'
 login "$H/.kube/config" "Kubernetes logins" kube
 login "$H/.docker/config.json" "Docker registry logins" docker '"auth"[[:space:]]*:[[:space:]]*"[A-Za-z0-9+/=]{8,}'
 login "$H/.npmrc" "npm token" npm '_authToken'
@@ -2616,6 +3749,32 @@ login "$H/.claude/.credentials.json" "Claude Code login" claude-code
 login "$H/.gemini/oauth_creds.json" "Gemini CLI login" gemini
 login "$H/.local/share/opencode/auth.json" "OpenCode provider keys" opencode
 login "$H/.railway/config.json" "Railway login" railway
+# Data platforms' own files: Databricks configuration profiles (docs.databricks.com), dbt's
+# profiles.yml in DBT_PROFILES_DIR or ~/.dbt (docs.getdbt.com; a project's own profiles.yml is not read,
+# and a value taken from env_var is not in the file),
+# and Snowflake's connections.toml and config.toml, in the folder Snowflake CLI picks
+# (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
+# else the system's own folder. A file is listed when a line sets one of the secrets its tool's docs
+# name: Databricks' token, client secrets (azure_client_secret for an Entra service principal) and
+# password; dbt's passwords, tokens and a private_key in the file, on its line or, for a private_key
+# or password, as a YAML block (| or >, then the value on the next line that is not blank, indented
+# more than the key); Snowflake's password, OAuth token and client secret, and an inline private key
+# or the password of a key file.
+login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret|azure_client_secret|password)[[:space:]]*='
+login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]' '
+  { sub(/\r$/, "") }
+  on { if ($0 ~ /^[ \t]*$/) next; on = 0; if (substr($0, 1, length(w)) == w && substr($0, length(w) + 1) ~ /^[ \t]+[^ \t]/) { f = 1; exit } }
+  /^[ \t]*(password|private_key)[ \t]*:[ \t]*[|>][0-9+-]*[ \t]*(#.*)?$/ { on = 1; match($0, /^[ \t]*/); w = substr($0, 1, RLENGTH) }
+  END { exit !f }'
+_sf=""
+if [ -n "$_sfh" ]; then [ -d "$_sfh" ] && _sf=$_sfh
+elif [ -d "$H/.snowflake" ]; then _sf=$H/.snowflake; fi
+if [ -z "$_sf" ]; then
+  case "$_os" in win) _sf=$WLAPP/snowflake ;; mac) _sf="$H/Library/Application Support/snowflake" ;; *) _sf=${XDG_CONFIG_HOME:-$H/.config}/snowflake ;; esac
+fi
+for _sfc in connections.toml config.toml; do
+  case " $LOGIN_IDS " in *" snowflake "*) ;; *) login "$_sf/$_sfc" "Snowflake logins" snowflake '^[[:space:]]*(password|token|oauth_client_secret|private_key_raw|private_key_passphrase|private_key_file_pwd)[[:space:]]*=' ;; esac
+done
 if [ "$WIN" -eq 1 ]; then # where these tools keep the same logins on Windows
   case " $LOGIN_IDS " in *" gcloud "*) ;; *) login "$WAPP/gcloud/application_default_credentials.json" "Google Cloud login" gcloud ;; esac
   case " $LOGIN_IDS " in *" netrc "*) ;; *) login "$H/_netrc" "saved passwords in _netrc" netrc ;; esac
@@ -2625,6 +3784,8 @@ N_SSH=0; N_SSH_OPEN=0
 for k in "$H"/.ssh/*; do
   case "$k" in *.pub|*known_hosts*|*config|*authorized_keys*) continue ;; esac
   [ -d "$k" ] && continue
+  # A ~/.ssh that can't be listed leaves the pattern as written: the home scan counts that folder once.
+  [ -e "$k" ] || continue
   fleet_ok "$k" && [ -f "$k" ] || continue
   grep -q 'PRIVATE KEY-----' "$k" 2>/dev/null || continue
   N_SSH=$((N_SSH + 1))
@@ -2651,12 +3812,12 @@ unread_files() { # files on stdin that are there but not read (not_read), each o
 }
 # Section 2's files and section 4's that are there but can't be read: what they hold was not checked,
 # so those sections name them and never read clean, as section 3 does for key files.
-SEC2_UNREAD=$({ printf '%s\n' "$MCP_LIST" | unread_files; printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" | unread_files big; } | awk '!s[$0]++')
+SEC2_UNREAD=$({ printf '%s\n' "$MCP_LIST" | unread_files; printf '%s\n%s\n%s\n%s\n' "$ALLOW_FILES" "$TASK_FILES" "$VSC_SETTINGS" "$UHOOK_FILES" | unread_files big; } | awk '!s[$0]++')
 N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD")
 ALLOW_UNREAD=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | unread_files big)
 N_ALLOW_UNREAD=$(count_lines "$ALLOW_UNREAD")
 ALLOW_ALL=$(printf '%s\n%s\n%s\n' "$ALLOW_FILES" "$H/.claude/settings.json" "$H/.claude/settings.local.json" | grep -v '^$' | sort -u | fleet_filter |
-  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; }; done | files_matching "$TR_KEYS|$P_ASSIGN")
+  while IFS= read -r _f; do [ -f "$_f" ] && { too_big "$_f" || own_alias "$_f" || printf '%s\n' "$_f"; }; done | files_matching -e "$P_ASSIGN")
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] || continue
   command_secret "$f" || continue
@@ -2768,8 +3929,10 @@ durabletask 1.4.1 durabletask linux
 durabletask 1.4.2 durabletask linux
 durabletask 1.4.3 durabletask linux
 telnyx 4.87.1 telnyx none
-telnyx 4.87.2 telnyx all"
-PY_INCIDENTS="litellm litellmmar mistralpy guardrails lightning durabletask telnyx"
+telnyx 4.87.2 telnyx all
+agent_framework 1.26.1 agentfw all
+agent_framework 1.26.2 agentfw all"
+PY_INCIDENTS="litellm litellmmar mistralpy guardrails lightning durabletask telnyx agentfw"
 # <<< bad-pypi
 # A folder the walks below could not enter (find's error), or the folder on the way to a root that can't
 # be read, is printed as "?<TAB>folder" and counted as an environment not read (PY_UNREAD), never as one
@@ -6496,6 +7659,7 @@ rwc-client 0.29.17 keyvspread
 rwc-client 0.29.18 keyvspread
 rwc-client 0.29.19 keyvspread
 server-hemera-mongo 0.0.12 keyvspread
+server-hemera-mongo 0.0.16 keyvspread
 sn-listbox 0.3.3 keyvspread
 tslint-folder-schema 1.0.6 keyvspread
 tslint-folder-schema 1.0.7 keyvspread
@@ -6728,8 +7892,15 @@ vims-vsce.vscode-vim * glasswormdec any mac,win
 vsceue.volar-vscode * glasswormdec any mac,win
 exargd.vsblack 0.0.1 glasswasm openvsx all
 noellee-doc.flint-debug 0.1.1 glasswasm openvsx all
-nrwl.angular-console 18.95.0 nxconsole any all"
+nrwl.angular-console 18.95.0 nxconsole any all
+anthropic.claude-code 2.1.312 claudeext any all 134.209.82.225;svc-telemetry
+anthropic.claude-code 2.1.313 claudeext any all 134.209.82.225;svc-telemetry
+checkmarx.ast-results 2.53.0 checkmarxvsx openvsx all
+checkmarx.cx-dev-assist 1.7.0 checkmarxvsx openvsx all"
 # <<< bad-extensions
+# >>> ssh-keys: generated from data/ssh-keys.tsv by tools/gen.sh. Edit that file, then run it.
+SSH_PLANTED='claudeext|ssh-ed25519|AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ/k2TpezcTfedrkHyFSK9IZ3vmP6vhY4Ss0P|the SSH key the trojanized Claude Code extension adds for the attacker'
+# <<< ssh-keys
 # Prints "file|name version|tag" for each bad package a lockfile or cache index names. It reads
 # tarball URLs (/name/-/name-1.2.3.tgz: npm, yarn 1 and npm's cache), name@version tokens (pnpm,
 # bun, yarn berry's name@npm:version), npm's "node_modules/name" entries with a "version" line,
@@ -7071,7 +8242,7 @@ $AA_TABLE
 EOF
 # One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
 # it with the other settings files it could not read, so the summary doesn't read clean over it.
-_aau=$({ printf '%s\n' "$AA_TRIED" | unread_files big; printf '%s' "$AA_CUT"; } | awk 'length && !s[$0]++')
+_aau=$({ printf '%s\n' "$AA_TRIED" | unread_files big; printf '%s' "$AA_CUT"; [ -n "$FLAT_CUT" ] && cat "$FLAT_CUT"; } | awk 'length && !s[$0]++')
 if [ -n "$_aau" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_aau" | awk 'length && !s[$0]++'); N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD"); fi
 # One row per file and agent: file<TAB>agent<TAB>settings. VS Code's settings file can hold two agents'.
 AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '{ k = $1 FS $2 } !(k in o) { o[k] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[k]] = st[o[k]] ", " $3 }
@@ -7080,6 +8251,75 @@ N_YOLO=$(count_lines "$AA_LIST")
 # Row 01 counts agents: one can be set so in several files.
 N_YOLO_AG=$(printf '%s\n' "$AA_LIST" | cut -f2 | sort -u | grep -c .)
 [ "$N_YOLO" -gt 0 ] && progress w "Agents set to run commands without asking: $(printf '%s\n' "$AA_LIST" | head -n 1 | cut -f2)"
+# Saved rules that let an agent run commands on other machines without asking (data/remote-commands.tsv):
+# the person's own files of each agent, read together or each file alone as the data file's group
+# says, then the projects' Claude Code settings.local.json files section 2 read. A row each:
+# file<TAB>agent<TAB>rule: what it allows.
+rc_expand() { # path: the files it names; a *.ext file name is every such file in that folder
+  case "$1" in
+    */\*/*) aa_glob "$1" ;;
+    */\*.*) for _rg in "${1%/*}"/*."${1##*.}"; do [ -f "$_rg" ] && printf '%s\n' "$_rg"; done ;;
+    *) [ -e "$1" ] && printf '%s\n' "$1" ;;
+  esac
+}
+RC_ROWS=""; RC_TRIED=""; RC_CUTS=""
+while IFS= read -r _ra; do
+  [ -n "$_ra" ] || continue
+  # T|file for each file named, then group|rep|format|note|file for each one read. Its rep is b when
+  # section 1 lists the file for this agent, which says there that Bash is allowed whole.
+  _rsets=$(printf '%s\n' "$RC_FILES" | while IFS='|' read -r _a _o _fm _g _p _nt; do
+    [ "$_a" = "$_ra" ] || continue
+    case "$_o" in (all|"$_os") ;; (*) continue ;; esac
+    rc_expand "$_p" | while IFS= read -r _f; do
+      printf 'T|%s\n' "$_f"
+      [ -f "$_f" ] && fleet_ok "$_f" && [ -r "$_f" ] && ! too_big "$_f" || continue
+      case "$NL$AA_LIST" in (*"$NL$_f$TAB$_a$TAB"*) _rp=b ;; (*) _rp=1 ;; esac
+      printf '%s|%s|%s|%s|%s\n' "$_g" "$_rp" "$_fm" "$_nt" "$_f"
+    done
+  done)
+  RC_TRIED="$RC_TRIED$(printf '%s\n' "$_rsets" | sed -n 's/^T|//p')$NL"
+  # Each file's note, as note<TAB>file.
+  _rnotes=$(printf '%s\n' "$_rsets" | awk '!/^T\|/ { s = $0; for (k = 1; k <= 3; k++) s = substr(s, index(s, "|") + 1); nt = substr(s, 1, index(s, "|") - 1); if (nt != "-") print nt "\t" substr(s, index(s, "|") + 1) }')
+  _rsetl=$(printf '%s\n' "$_rsets" | awk '
+  # The sets, a blank line after each: the agent group'"'"'s files together, each file of the file
+  # group alone, and each local one with the agent group'"'"'s, whose deny and ask rules apply over it
+  # while its own reach only it (data/remote-commands.tsv). A line is rep|format|file.
+  function one(s, r,   rp, fm) { rp = substr(s, 1, index(s, "|") - 1); s = substr(s, index(s, "|") + 1); fm = substr(s, 1, index(s, "|") - 1); s = substr(s, index(s, "|") + 1); return (r == "" ? rp : r) "|" fm "|" substr(s, index(s, "|") + 1) }
+  /^T\|/ { next }
+  { g = substr($0, 1, index($0, "|") - 1); s = substr($0, index($0, "|") + 1) }
+  g == "agent" { A[++na] = s } g == "file" { F[++nf] = s } g == "local" { LC[++nl] = s }
+  END {
+    if (na) { for (i = 1; i <= na; i++) print one(A[i], ""); print "" }
+    for (i = 1; i <= nf; i++) { print one(F[i], ""); print "" }
+    for (i = 1; i <= nl; i++) { for (j = 1; j <= na; j++) print one(A[j], 0); print one(LC[i], ""); print "" }
+  }')
+  _rset=""
+  while :; do
+    IFS= read -r _rl; _eof=$?
+    if [ -n "$_rl" ]; then _rset="$_rset$_rl$NL"; [ "$_eof" -eq 0 ] && continue; fi
+    if [ -n "$_rset" ]; then
+      _rh=$(rc_run "$_rset")
+      RC_CUTS="$RC_CUTS$(printf '%s\n' "$_rh" | awk -F "$TAB" '$2 == "!cut" { print $1 }')$NL"
+      RC_ROWS="$RC_ROWS$(printf '%s\n' "$_rh" | RN=$_rnotes awk -F "$TAB" -v OFS="$TAB" -v a="$_ra" '
+        BEGIN { n = split(ENVIRON["RN"], L, "\n"); for (i = 1; i <= n; i++) { k = index(L[i], "\t"); if (k) N[substr(L[i], k + 1)] = substr(L[i], 1, k - 1) } }
+        $2 != "!cut" && NF >= 3 { nt = N[$1]; print $1, a, $2 ": " $3 (nt == "" ? "" : ", " nt) }')$NL"
+      _rset=""
+    fi
+    [ "$_eof" -eq 0 ] || break
+  done <<EOF
+$_rsetl
+EOF
+done <<EOF
+$(printf '%s\n' "$RC_FILES" | cut -d'|' -f1 | awk 'length && !s[$0]++')
+EOF
+# A file there but not read, too big to, or not read in full is named in section 2 with the others.
+_rcu=$({ printf '%s\n' "$RC_TRIED" | unread_files big; printf '%s\n' "$RC_CUTS"; } | awk 'length && !s[$0]++')
+if [ -n "$_rcu" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_rcu" | awk 'length && !s[$0]++'); N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD"); fi
+REMOTE_LIST=$(printf '%s%s' "$RC_ROWS" "$RC_PROJ" | awk 'length && !s[$0]++' | while IFS="$TAB" read -r _f _a _r; do printf '%s\t%s\t%s\n' "$(rowsafe "$_f")" "$_a" "$_r"; done)
+N_REMOTE=$(count_lines "$REMOTE_LIST")
+# Row 01 counts agents.
+N_REMOTE_AG=$(printf '%s\n' "$REMOTE_LIST" | cut -f2 | sort -u | grep -c .)
+[ "$N_REMOTE" -gt 0 ] && progress w "Allowed to run commands on other machines: $(printf '%s\n' "$REMOTE_LIST" | head -n 1 | cut -f2)"
 # Agent versions with a published fix (data/outdated.tsv). Only a version of numbers and dots is
 # compared, part by part as numbers; anything else is not reported.
 ver_ok() { case "$1" in ''|*[!0-9.]*|.*|*.|*..*) return 1 ;; esac; return 0; }
@@ -7223,7 +8463,9 @@ NPM_ROWS=$( { printf '%s\n' "$NPM_ROWS" | grep -v "(npm's download cache)$TAB" |
 # dropper targets too (Socket's post of 18 March 2026, Aikido's of April), keeps them in
 # ~/.positron/extensions and its server's in ~/.positron-server/extensions, from Posit's mirror of
 # Open VSX (its product.json). A line whose bad build was only ever on Open VSX (registry openvsx)
-# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A
+# is not looked for in VS Code's own folders, where the same id is the Marketplace's own build. A line
+# with a marker (a clean build has the same id and version) counts only when the folder's extension.js
+# holds one of its strings, and an extension.js that is missing or can't be read counts in EXT_UNREAD. A
 # folder that can't be read leaves the check not done in full (EXT_UNREAD), never clean, and so does
 # an editor's own folder (~/.windsurf) that can't be opened, which hides its extensions folder.
 ext_roots() { printf '%s\n' "$H/.vscode/extensions" "$H/.cursor/extensions" "$H/.windsurf/extensions" "$H/.devin/extensions" "$H/.vscode-oss/extensions" "$H/.kiro/extensions" "$H/.antigravity-ide/extensions" "$H/.antigravity/extensions" \
@@ -7246,7 +8488,7 @@ _ext_found=$(ext_roots | while IFS= read -r r; do
     case "$r" in ("$H/.vscode/extensions"|"$H/.vscode-insiders/extensions"|"$H/.vscode-server/extensions"|"$H/.vscode-server-insiders/extensions") _rg=marketplace ;; (*) _rg=openvsx ;; esac
     for d in "$r"/*; do [ -d "$d" ] && printf '%s\t%s\n' "$_rg" "$d"; done
   done | BAD_EXT_LIST=$BAD_EXT awk -F '\t' '
-  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4]; os[i] = f[5] } }
+  BEGIN { n = split(ENVIRON["BAD_EXT_LIST"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, " "); id[i] = tolower(f[1]); sp[i] = f[1]; v[i] = f[2]; t[i] = f[3]; rg[i] = f[4]; os[i] = f[5]; mk[i] = f[6] } }
   { reg = $1; d = substr($0, length($1) + 2); gsub(/[[:cntrl:]]/, "?", d); b = d; sub(/.*\//, "", b); lb = tolower(b)
     # Split as VS Code splits a folder name (its ExtensionKey): the id is the longest start that leaves
     # a version of three numbers, alone or before a -, so oorzc.ssh-tools-2-0.1.0 is oorzc.ssh-tools-2.
@@ -7267,7 +8509,26 @@ _ext_found=$(ext_roots | while IFS= read -r r; do
       if (v[i] == ver) { hit = i; break }
       if (v[i] == "*" && !hit) hit = i
     }
-    if (hit) print d "\t" sp[hit] " " ver "\t" t[hit] "\t" os[hit] }')
+    if (hit) print d "\t" sp[hit] " " ver "\t" t[hit] "\t" os[hit] "\t" mk[hit] }')
+# A line with a marker: the folder is the bad build only when its extension.js holds one of the strings.
+# A folder name with control characters reaches here with them as ?, so its extension.js is not found
+# and counts as not read.
+_ext_kept=""
+while IFS="$TAB" read -r _xd _xv _xt _xo _xm; do
+  [ -n "$_xd" ] || continue
+  if [ -n "$_xm" ]; then
+    _xj="$_xd/extension.js"
+    if [ ! -f "$_xj" ] || [ ! -r "$_xj" ]; then EXT_UNREAD=$((EXT_UNREAD + 1)); continue; fi
+    _xa=(); _oifs=$IFS; IFS=';'; for _xs in $_xm; do _xa+=(-e "$_xs"); done; IFS=$_oifs
+    grep -qF "${_xa[@]}" "$_xj" 2>/dev/null; _xr=$?
+    if [ "$_xr" -eq 1 ]; then continue; elif [ "$_xr" -ne 0 ]; then EXT_UNREAD=$((EXT_UNREAD + 1)); continue; fi
+  fi
+  _ext_kept="$_ext_kept$_xd$TAB$_xv$TAB$_xt$TAB$_xo
+"
+done <<EOF
+$_ext_found
+EOF
+_ext_found=$_ext_kept
 # Where its malware could run (the os column: all, one OS, or two such as mac,win), an extension that
 # shipped malware means a compromised machine (EXT_ROWS: folder, id and version, incident). Elsewhere it
 # is a malicious extension to remove (EXT_UPD, with the os), with no part in EXT_HIT, the score or the
@@ -7471,14 +8732,45 @@ NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' '
 # packages and Nx Console 18.95.0 leave the same kitty-monitor files) is listed once, by the incident
 # IND_OWNER names: the extension's when it was found and none of the npm incident's packages was found
 # installed (NPM_INST_TAGS): a version only in a lockfile is no sign of what made these files.
-EXT_FOUND=" $(printf '%s\n' "$EXT_ROWS" | cut -f3 | sort -u | tr '\n' ' ')"
+# An SSH key malware adds to ~/.ssh/authorized_keys (data/ssh-keys.tsv) is its incident's sign, shown
+# with that incident's extensions (EXT_KEY). A line counts when the key's type and then the key itself
+# are two of its fields, whatever options come before them or comment after: a comment alone never
+# counts. A file, or a .ssh folder, that can't be read leaves the check not done in full
+# (SSHK_UNREAD), never clean: so does anything but a regular file (a pipe would hold the read for
+# ever, a link to a device never end it), and a file over READ_MAX. /dev/null holds nothing.
+EXT_KEY=""; EXT_KEY_TAGS=""; SSHK_UNREAD=0; _akf="$H/.ssh/authorized_keys"
+if [ ! -e "$_akf" ]; then
+  # Not there, or there and out of reach: a .ssh folder that can't be listed, or that lists the file
+  # but can't be entered, or a link to nothing.
+  if [ -d "$H/.ssh" ]; then
+    if [ ! -r "$H/.ssh" ]; then SSHK_UNREAD=1
+    else for _xe in "$H/.ssh"/authorized_key[s]; do [ "$_xe" = "$H/.ssh/authorized_key[s]" ] || SSHK_UNREAD=1; done; fi
+  fi
+else
+  if [ -d "$_akf" ] || [ ! -r "$_akf" ]; then SSHK_UNREAD=1
+  elif [ "$_akf" -ef /dev/null ]; then :
+  elif [ ! -f "$_akf" ] || too_big "$_akf"; then SSHK_UNREAD=1
+  elif _akh=$(SSHK=$SSH_PLANTED awk '
+      BEGIN { n = split(ENVIRON["SSHK"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, "|"); inc[i] = f[1]; t[i] = f[2]; k[i] = f[3]; nt[i] = f[4] } }
+      { sub(/\r$/, ""); for (j = 2; j <= NF; j++) for (i = 1; i <= n; i++) if ($j == k[i] && $(j - 1) == t[i] && !s[i]++) print inc[i] "\t" nt[i] }' "$_akf" 2>/dev/null); then
+    while IFS="$TAB" read -r _ki _kn; do
+      [ -n "$_ki" ] || continue
+      EXT_KEY="$EXT_KEY$(rowsafe "$_akf")$TAB$_kn
+"; EXT_KEY_TAGS="$EXT_KEY_TAGS$_ki
+"
+    done <<EOF
+$_akh
+EOF
+  else SSHK_UNREAD=1; fi
+fi
+EXT_FOUND=" $( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_KEY_TAGS"; } | grep -v '^$' | sort -u | tr '\n' ' ')"
 IND_OWNER=$(printf '%s\n' "$IND_TABLE" | awk -F '|' -v e="$EXT_INCS" -v n="$NPM_INCS" -v f="$EXT_FOUND" -v t="$NPM_INST_TAGS" -v o="$_os" '
   $3 == "startup" && ($2 == "all" || $2 == o) && $5 != "" {
     if (index(e, " " $1 " ") && !index(n, " " $1 " ")) { if (!($5 in xa)) xa[$5] = $1; if (index(f, " " $1 " ") && !($5 in xf)) xf[$5] = $1 }
     else { if (!($5 in m)) m[$5] = $1; if (index(t, " " $1 " ")) nf[$5] = 1 }
   }
   END { for (p in m) if (p in xa) print p "|" ((p in xf) && !(p in nf) ? xf[p] : m[p]) }')
-WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; EXT_CHECK=""; EXT_CHECK_TAGS=""; IND_HITS=""
+WIPER=""; PERSIST=""; EXT_PERSIST=""; EXT_PERSIST_TAGS=""; EXT_CHECK=""; EXT_CHECK_TAGS=""; _xcpend=""; IND_HITS=""
 while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   case "$_ik" in wiper|startup) ;; *) continue ;; esac
   # A Python incident's startup file is shown in its row (PY_START).
@@ -7507,23 +8799,33 @@ while IFS='|' read -r _ii _io _ik _iown _ip _in; do
   if [ "$_ik" = wiper ]; then WIPER="$WIPER$_ip
 "
   elif [ "$_ext" -eq 1 ]; then
-    case "$EXT_FOUND" in
-      *" $_ii "*) EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
+    # A file whose name is the malware's own (data/indicators.tsv's alone) is its sign on its own.
+    _al=0; case "$EXT_FOUND" in *" $_ii "*) _al=1 ;; *) printf '%s\n' "$IND_ALONE" | grep -qxF "$_ii|$_ip" && _al=1 ;; esac
+    if [ "$_al" -eq 1 ]; then EXT_PERSIST="$EXT_PERSIST$(rowsafe "$_ip")$TAB$_in
 "; EXT_PERSIST_TAGS="$EXT_PERSIST_TAGS$_ii
-" ;;
-      *) EXT_CHECK="$EXT_CHECK$(rowsafe "$_ip")$TAB$_in
-"; EXT_CHECK_TAGS="$EXT_CHECK_TAGS$_ii
-" ;;
-    esac
+"
+    else _xcpend="$_xcpend$_ii$TAB$(rowsafe "$_ip")$TAB$_in
+"; fi
   else PERSIST="$PERSIST$(rowsafe "$_ip")$TAB$_in
 "; fi
 done <<EOF
 $IND_TABLE
 EOF
+# Beside a file of the same incident that is its sign on its own, a file is its sign too.
+while IFS="$TAB" read -r _ci _cp _cn; do
+  [ -n "$_ci" ] || continue
+  if printf '%s' "$EXT_PERSIST_TAGS" | grep -qxF "$_ci"; then EXT_PERSIST="$EXT_PERSIST$_cp$TAB$_cn
+"
+  else EXT_CHECK="$EXT_CHECK$_cp$TAB$_cn
+"; EXT_CHECK_TAGS="$EXT_CHECK_TAGS$_ci
+"; fi
+done <<EOF
+$_xcpend
+EOF
 # A registry value is not a file, so the Mastra malware's Run key stays code.
 if [ "$WIN" -eq 1 ]; then
-  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra malware at login
-"
+  win_reg 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' NvmProtocal >/dev/null && { PERSIST="${PERSIST}NvmProtocal in your startup programs${TAB}starts the Mastra malware at login
+"; IND_HITS="$IND_HITS mastra"; }
 fi
 [ -n "$WORM_HIT" ] && PERSIST="$PERSIST$(printf '%s' "$WORM_HIT" | while IFS= read -r _f; do printf '%s\t%s\n' "$(rowsafe "$_f")" "$(planted_note "$_f")"; done)
 "
@@ -7534,12 +8836,13 @@ WIPER_HIT=0; [ -n "$WIPER" ] && WIPER_HIT=1
 MAL_HIT=0; if [ "$NPM_HIT" -eq 1 ] || [ -n "$PERSIST" ] || [ "$WIPER_HIT" -eq 1 ]; then MAL_HIT=1; fi
 MAL_LOCKONLY=0; if [ "$MAL_HIT" -eq 1 ] && [ "$NPM_INST" -eq 0 ] && [ -z "$PERSIST" ] && [ "$WIPER_HIT" -eq 0 ]; then MAL_LOCKONLY=1; fi
 # Editor extension malware is its own finding, never called npm malware: EXT_HIT, the link's ex. An
-# extension incident's startup file next to it is its sign too.
-EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ]; then EXT_HIT=1; fi
+# extension incident's startup file next to it is its sign too, and so are a startup file whose name
+# is the malware's own and an SSH key it adds.
+EXT_HIT=0; if [ -n "$EXT_ROWS" ] || [ -n "$EXT_PERSIST" ] || [ -n "$EXT_KEY" ]; then EXT_HIT=1; fi
 # The incidents of what EXT_HIT counts (EXT_ACT_TAGS), for their advice and lines, and of the extensions
 # to remove (EXT_UPD_TAGS). EXT_TAGS is both: the account run sends it, so an extension to remove is
 # never left out of an account's row.
-EXT_ACT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST_TAGS"; } | grep -v '^$' | sort -u)
+EXT_ACT_TAGS=$( { printf '%s\n' "$EXT_ROWS" | cut -f3; printf '%s' "$EXT_PERSIST_TAGS$EXT_KEY_TAGS"; } | grep -v '^$' | sort -u)
 EXT_UPD_TAGS=$(printf '%s\n' "$EXT_UPD" | cut -f3 | grep -v '^$' | sort -u)
 EXT_TAGS=$(printf '%s\n' $EXT_ACT_TAGS $EXT_UPD_TAGS | grep -v '^$' | sort -u)
 ANY_MAL=0; if [ "$MAL_HIT" -eq 1 ] || [ "$EXT_HIT" -eq 1 ]; then ANY_MAL=1; fi
@@ -7580,6 +8883,150 @@ PLAT_FIX=$(printf '%s' "$PLAT_FIX" | awk -F '\t' '{ for (i = 1; i <= NF; i++) pr
 plat_hit() { case "$PLAT_FOUND" in *" $1 "*) printf 1 ;; *) printf 0 ;; esac; }
 # The report's fixed fields opencode and railway.
 OC=$(plat_hit opencode); RW=$(plat_hit railway)
+# Workflows that name a GitHub Action whose code was replaced by malware for a time (data/actions.tsv).
+# A uses: line names owner/repo[/path]@ref. A ref of 40 hex digits is a pin to a commit: it matches
+# a malicious commit the source lists, or any pin but a known-good one when the source says pins ran
+# it too. Any other ref
+# matches the line's patterns, as a shell case does. Whether a project was hit depends on whether its
+# workflows ran in the window, so a match is a project to check, never a sign on this machine.
+# >>> actions: generated from data/actions.tsv by tools/gen.sh. Edit that file, then run it.
+ACT_TABLE="tj-actions/changed-files|tj-actions/changed-files|v[1-9] v[1-9].* v[1-3][0-9]* v4[0-4]* v45 v45.0.[0-7]|0e58ed8671d6b60d0890c21b07f8835ace038e67|-|safe|on 14 and 15 March 2025|github.com|Its tags were restored after the attack. Pin it to a full commit SHA.
+tj-actions/eslint-changed-files|tj-actions/eslint-changed-files|v8.[1-6] v9* v1[0-9]* v2[0-4]* v25 v25.[0-3].* !v18 !v18.3.* !v19.0.[01] !v25.3.[1-9]*|-|7adb8a5909bfca3634cd850d891fe1d4a3d1fbe6,375e1e762440d560bdeec981b5caebb0f9d187d0,137bb2bffdbdc04bc3a50b58f2eef7de9a3ec8fd,ff7ef55105504caae0ac003e73fb0b5297e6805f,4fd6e147e9cf0d5904c9f9cff85735e1a2a31e1f,0cfcd35949a961d13e964a7c2a4971c0e89b68fc,536c35c8184b8bbd361d3703aa63439e0895c340|unsafe|on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025|wiz.io|It ran reviewdog/action-setup@v1 and, from v9, tj-actions/changed-files by tag, both compromised then. Pin it to the full commit SHA of v25.3.2 or later, which pins both by commit.
+reviewdog/action-shellcheck|reviewdog/action-shellcheck|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-composite-template|reviewdog/action-composite-template|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-staticcheck|reviewdog/action-staticcheck|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-ast-grep|reviewdog/action-ast-grep|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-typos|reviewdog/action-typos|*|-|-|unsafe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Every version and pin of it ran the compromised reviewdog/action-setup@v1 in that window.
+reviewdog/action-setup|reviewdog/action-setup|v1|f0d342d24037bb11d26b9bd8496e0808ba32e9ec|-|safe|on 11 March 2025, 18:42 to 20:31 UTC|github.com|Its v1 tag was restored after the attack. Pin it to a full commit SHA.
+xygeni/xygeni-action|xygeni/xygeni-action|v5|4bf1d4e19ad81a3e8d4063755ae0f482dd3baf12|-|safe|from about 3 to 10 March 2026|github.com|Pin it to 13c6ed2797df7d85749864e2cbcf09c893f43b23, its v6.4.0, as Xygeni advises.
+aquasecurity/trivy-action|aquasecurity/trivy-action|0.* !0.35.0|-|76071ef0d7ec797419534a183b498b4d6366cf37,dc5a429b52fcf669ce959baa2c2dd26090d2a6c4,f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808,b6643a29fecd7f34b3597bc6acb0a98b03d33ff8,c1824fd6edce30d7ab345a9989de00bbd46ef284,e368e328979b113139d6f9068e03accaed98a518,97e0b3872f55f89b95b2f65b3dbab56962816478,57a97c7e7821a5776cebc9bb87c984fa69cba8f1,ed142fd0673e97e23eac54620cfb913e5ce36c25|unsafe|on 19 and 20 March 2026|github.com|Pin it to the full commit SHA of v0.35.0 or v0.36.0. A pin to a commit from before 9 April 2025 ran the compromised setup-trivy then too; the advisory calls a pin to a later commit of the action safe.
+aquasecurity/setup-trivy|aquasecurity/setup-trivy|v0.2.*|-|-|safe|on 19 March 2026, about 17:43 to 21:44 UTC|github.com|Pin it to the full commit SHA of v0.2.6 or later, published again with safe code.
+checkmarx/kics-github-action|Checkmarx/kics-github-action|v1 v1.0 v1.1 v1.2 v1.3 v1.4 v1.5 v1.6 v1.6.1 v1.6.2 v1.6.3 v1.7.0 v2 v2.0.0 v2.1.0 v2.1.1 v2.1.2 v2.1.3 v2.1.4 v2.1.5 v2.1.6 v2.1.7 v2.1.8 v2.1.9 v2.1.10 v2.1.11 v2.1.12 v2.1.13 v2.1.14 v2.1.15 v2.1.16 v2.1.17 v2.1.18 v2.1.19 v2.1.20|0e22ec8d1e0dda3c62bf4beffcd4a8a5db1abda1,45f3749467a6017cb4fb749054b498d149dd5924,8e20c7a67bb95632e2040327a355fb97e6014d29,93de85c910d859b759cf9185aa78d5a23a4b7000,0e7343ba084735863db92b6f8ba2fa9dee604f7c,2dc0fa613f6f4c15f26ad98225ad253475681616,f00191dd3352c0cd83c6cce4e6bf04b628214dd0,e0359b1a253ee66c8018586c3225e6e9cd2d8a4f,dc6dbf358998c0c64da83edc8fcd581c12656b19,08b9ea97eb292d5e1f9ac2d8e21c0ba32f0fdff0,005fb0837553de722f8bf11d98e905dbdde19861,a5471d37c656ecd4560e8e0b3977910f27025618,3d49875ed47c6b8b4c8b50e0421418cf6b9f35f4,121c38fb49c9fc82160245fb6e2a9119db636e4d,1e9eeaba37fe0032deba133f598e74dab0ceb3b7,c5c07508527fc6a125855eebfb533e64f675bd8e,c999dbb9cc904e23675f9929f7e0e51d132879cf,4ebf62dd8ff318412b38d19841fc3c8650e294bf,3ae9f0d6f8139964635d411149f9b3e0a6eb935e,96a0e8eb31c3cce6c495c9a49dd49c881cd17934,31fbf5831a2e52429738fdc0cbaa20e57872b6fc,fca3a20afcb8ec7f9932c060a236d2a9021fdd2b,0f81f132f9f09bb4976d403914a44a1a1eb6158d,c0e23718a5074f3b8ad286f37b532e02057af35f,d66f0657133bc42f8264458063999bf1910490db,e35c9d6a5faffc1c5b3450d0bf09006aa9b9e906,2eee333d70fb6e14ce1d4aa73f12058bc5d70193,f9641eb512f5c6530d13275903e8a97baf0925f1,e8754eebc822b5122e96a6142b28dbc0e179c91c,69b3f020390222a9fcb6029ba56533b2fb12f103,db942a0dd7e9d1aeac72bc675bdb67f39a688b63,208813bf5feca5df9a935363cd426bc914614d0b,3fdeadb81fbeddc1453163cc87bc173911fd47e2,310734c0ffd29438f6195a24e2cbbacfdc33c9ab,b974e53df1e3a2cd22ea90f0ec01882394feede4|-|safe|on 23 March 2026, 12:58 to 16:50 UTC|wiz.io|Pin it to the full commit SHA of a release published after the attack.
+actions-cool/issues-helper|actions-cool/issues-helper|v3.8.0 v3.7.6 v3.7.5 v3.7.4 v3.7.3 v3.7.2 v3.7.1 v3.7.0 v3.6.3 v3.6.2 v3.6.1 v3.6.0 v3.5.2 v3.5.1 v3.5.0 v3.4.0 v3.3.3 v3.3.2 v3.3.1 v3.3.0 v3.2.1 v3.2.0 v3.1.0 v3.0.1 v3.0.0 v3 v2.5.0 v2.4.3 v2.4.2 v2.4.1 v2.4.0 v2.3.1 v2.3.0 v2.2.1 v2.2.0 v2.1.2 v2.1.1 v2.1.0 v2.0.0 v2 v1.12 v1.11 v1.10 v1.9 v1.8 v1.7 v1.6 v1.5 v1.4 v1.3 v1.2 v1.1 v1|1c9e803c80cc7fed000022d4c94f4b5bc2e90062,f0448c62fc57b8a5ce23d8acd6e795cdd76a3b6c,abc4310e6b8520aff6af79a4880217917cd1436b,aea87833045e38098e64310e962b897ae8aaba33,aeb05195dbd618afce6f22ca4937e46940d86be1,4b10341e231301a86c66f6c09e3e4de76d8719fe,8a3a7c2960ff3a4e3fd1481cfd1eb31301e16337,aa44b5492c787fbc4c51edb8d98d88b668fe89d1,03bbf452b52fb318196d9c193fd178a79a6d7f9b,257849272e291fb74ff4bee4d3be4796dd35fbbb,4bb72d31eaee87562b70a0cf1b93579bb2b14c23,e0585c10366288eeec3117d65ed24240ccbf1f47,419b34c603623ea8749a98b7153df20e389dd0ec,8cc2629c5681d794c494b79283d23aa3ce78749c,4b69521f9829a1114b94d74fdc1a38f2291d8c34,dc5687b71897e8b57bc9743e325ac72cee763c9c,3846bd4230da36f68a4cc1527298ca9ab2652fb9,459b0cfc4dd708b6218b72a7a01dda6c6a7ab0c0,fa6a4ca487f2dc699d428126ea2b18e9d0d15c9d,15c89f718cd325833aad8000d3ec72e2660f6584,a7d3c46a35564fa85321f3557700f6ea0c0616a9,85c9d842e1c0f41f8805f17600c25237e08a0224,64ed6d61b6eee8744417e1d1cc651665a8bce236,d9b1764cbe78ec9b12f01a66b2d2c902b15981b6,b9c83f01929e190cda300e76f688bf7ea7e37a7a,147337a919d92f4bf42f02843682d694650f1e22,e9631d2e615d95a19111c272049444fb073a99be,91b26b99c50ad890f98c2184d251bd3a16f5b1b1,3f4d6804812734dfe945bbe8ef619f151e4b27f6,46eff1378ad0faee27c017ebd97f605548777098,071e169dfb36005b3262b3853c9894698b8b303b,55253d49c68133ae52e791a3f1f8242b191f5e91,edf8cf78d6feeb5a73cda9317af5ddfc4da6c5fd,a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d,896379edfaac994ff214a3097c6c82e21be16066,9bd6ce03e0c279f347b519548b87d26699ad31c9,d2877f69bae9d8dcbadb06b3214ebf0789ed566e,601e1296a5a0853b5e109f9820151c72619e11e4,75fb02043af24e6f3eaf534464de338173993629,3480e51eec2be03a70d6fe17507413a96fe5b57d,67716d94ad07d7fe793cabc6f6d1ffe24f77bdf7,cd96d6518c6338f8510638bce764c7abd7194983,6a538e928b8856062de61103ed5a08f0ea0faee9,9793761b1bc3dde7ad1ccb9be6211919e20a3f01,8a64710bb8fee9f5c92eb1a816e016ed00fbcce0,710ff89debb143f6859cf8d54c0e8739224ff6c1,3904fe935f1a18fee5dbad6db46a66c9dcffde01,cfbd14ccc97afd3baa822bd231df8460e4f02f29,15dc537110a44b0625622e82b7d6ca95583f276a,e778a401e233bf0a416f3fe2a52d9039949b30a6,203671479d663755cb5bf8ffbeca6d2b685af7ae,a7156495f3403674cafe3796382bded1d9af8931,5c267592a87e92c2b005b338bd0d2724c2f64acb|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit, and in September 2026 the tags still ran it.
+actions-cool/maintain-one-comment|actions-cool/maintain-one-comment|v3.3.0 v3.2.1 v3.2.0 v3.1.1 v3.1.0 v3 v2.0.2 v2.0.1 v2.0.0 v2 v1.2.1 v1.2.0 v1.1.0 v1.0.0 v0.0.1-wip|7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit."
+# <<< actions
+# A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
+# indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
+# after the { or a , on a line that has one, a # comment cut off first: a # after a space or tab,
+# outside quotes, so a name such as "Check #1" is not one. A , that ends a value is a flow mapping's
+# written over several lines. Each line is split on its quotes, its { and its , once, so the time grows
+# with the size of the file.
+act_uses() { # workflow: "owner/repo<TAB>ref" for each uses: line, owner/repo in lowercase
+  awk '
+    function use(v,   q, i, at, a, r, p) {
+      q = substr(v, 1, 1)
+      if (q == "\"" || q == "\047") { v = substr(v, 2); i = index(v, q); if (i == 0) return; v = substr(v, 1, i - 1) }
+      else { sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v); sub(/[ \t]*,$/, "", v) }
+      at = index(v, "@"); if (at == 0) return
+      a = substr(v, 1, at - 1); r = substr(v, at + 1)
+      if (a !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/ || r == "" || r ~ /[ \t]/) return
+      split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r
+    }
+    # The line before its comment, split once on its double quotes and each piece once on its single
+    # quotes (a gsub over many quotes is slow in some awks). A quote opens a string only outside the
+    # other kind and where a value starts (lc, the last character before it that is not a space or a
+    # tab: none, or one of { [ , : -), or right after the same quote closed one (a single quote written
+    # twice inside single quotes); any other quote, as in the word dont with its apostrophe, is part of
+    # plain text. k and kk count the characters before a piece.
+    function opn(c) { return c == "" || index("{[,:-", c) > 0 }
+    function nocmt(s,   nd, d, j, ns, x, m, q, k, kk, h, h2, lc, cl) {
+      if (!index(s, "#")) return s
+      nd = split(s, d, "\""); k = 0; q = ""; lc = ""; cl = 0
+      for (j = 1; j <= nd; j++) {
+        if (j > 1) {
+          if (q == "\"") { q = ""; lc = "\"" }
+          else if (q == "") { if (opn(lc)) q = "\""; else lc = "\"" }
+        }
+        if (q != "\"") {
+          if (index(d[j], "\047")) ns = split(d[j], x, "\047"); else { ns = 1; x[1] = d[j] }
+          kk = k
+          for (m = 1; m <= ns; m++) {
+            if (m > 1) {
+              if (q == "\047") { q = ""; lc = "\047"; cl = m }
+              else if (opn(lc) || (cl == m - 1 && x[m - 1] == "")) q = "\047"
+              else lc = "\047"
+            }
+            if (q == "") {
+              h = index(x[m], " #"); h2 = index(x[m], "\t#"); if (h2 && (!h || h2 < h)) h = h2; if (h) return substr(s, 1, kk + h - 1)
+              if (match(x[m], /[^ \t][ \t]*$/)) lc = substr(x[m], RSTART, 1)
+            }
+            kk += length(x[m]) + 1
+          }
+          cl = 0
+        }
+        k += length(d[j]) + 1
+      }
+      return s
+    }
+    { sub(/\r$/, "") }
+    nx > 0 {
+      if ($0 ~ /^[ \t]*(#|$)/) next
+      w = nx; nx = 0; match($0, /^[ \t]*/)
+      if (RLENGTH >= w) { use(substr($0, RLENGTH + 1)); next }
+    }
+    match($0, /^[ \t]*(-[ \t]+)?["\047]?uses["\047]?[ \t]*:[ \t]*/) {
+      v = substr($0, RSTART + RLENGTH)
+      if (v ~ /^(#.*)?$/ || v ~ /^[|>][0-9+-]*[ \t]*(#.*)?$/) { match($0, /^[ \t]*(-[ \t]+)?/); nx = RLENGTH + 1; next }
+      use(v); next
+    }
+    index($0, "{") && $0 !~ /^[ \t]*#/ {
+      s = nocmt($0); n = split(s, c, "{")
+      for (i = 2; i <= n; i++) {
+        m = split(c[i], d, ",")
+        for (j = 1; j <= m; j++) if (match(d[j], /^[ \t]*["\047]?uses["\047]?[ \t]*:[ \t]*/)) {
+          v = substr(d[j], RLENGTH + 1); k = index(v, "}"); if (k) v = substr(v, 1, k - 1); use(v)
+        }
+      }
+    }' "$1" 2>/dev/null
+}
+ACT_HITS=""; ACT_UNREAD=0; N_WF=0
+while IFS= read -r _wf; do
+  [ -n "$_wf" ] || continue
+  if [ ! -r "$_wf" ] || too_big "$_wf"; then ACT_UNREAD=$((ACT_UNREAD + 1)); continue; fi
+  # An awk that fails leaves the workflow not read, never one with no listed action.
+  _au=$(act_uses "$_wf") || { ACT_UNREAD=$((ACT_UNREAD + 1)); continue; }
+  N_WF=$((N_WF + 1))
+  while IFS="$TAB" read -r _ua _ur; do
+    [ -n "$_ua" ] || continue
+    _sha=""; case "$_ur" in *[!0-9a-fA-F]*) ;; *) [ "${#_ur}" -eq 40 ] && _sha=$(printf '%s' "$_ur" | tr 'A-F' 'a-f') ;; esac
+    while IFS='|' read -r _al _an _arefs _ashas _agood _apin _awin _ahost _afix; do
+      [ "$_al" = "$_ua" ] || continue
+      _kind=""
+      if [ -n "$_sha" ]; then
+        case ",$_ashas," in *",$_sha,"*) _kind=commit ;; *) case ",$_agood," in *",$_sha,"*) ;; *) [ "$_apin" = unsafe ] && _kind=pin ;; esac ;; esac
+      else
+        _in=0; _out=0; read -r -a _pats <<< "$_arefs"
+        # The refs are shell patterns (data/actions.tsv), so each is matched as a glob on purpose.
+        # shellcheck disable=SC2254
+        for _p in "${_pats[@]}"; do
+          case "$_p" in
+            !*) case "$_ur" in ${_p#!}) _out=1 ;; esac ;;
+            *) case "$_ur" in $_p) _in=1 ;; esac ;;
+          esac
+        done
+        [ "$_in" -eq 1 ] && [ "$_out" -eq 0 ] && _kind=ref
+      fi
+      [ -n "$_kind" ] || continue
+      _row="$(rowsafe "$_wf")$TAB$_an$TAB$(rowsafe "${_sha:-$_ur}")$TAB$_kind$TAB$_awin$TAB$_ahost$TAB$_afix"
+      case "
+$ACT_HITS" in *"
+$_row
+"*) ;; *) ACT_HITS="$ACT_HITS$_row
+" ;; esac
+    done <<EOF
+$ACT_TABLE
+EOF
+  done <<EOF
+$_au
+EOF
+done <<EOF
+$WORKFLOWS
+EOF
+N_ACT=$(count_lines "$ACT_HITS")
+N_ACT_PROJ=$(printf '%s' "$ACT_HITS" | cut -f1 | sed 's#/\.github/workflows/[^/]*$##' | sort -u | grep -c .)
+if [ "$N_ACT" -gt 0 ]; then progress w "A project's workflows use a GitHub Action that was compromised"
+elif [ "$ACT_UNREAD" -gt 0 ] || [ "$HOME_PARTIAL" -eq 1 ]; then progress w "GitHub Actions workflows not fully checked"
+elif [ "$N_WF" -gt 0 ]; then progress o "No compromised GitHub Actions in $(plural "$N_WF" "workflow file" "workflow files")"; fi
 
 # --- Keys in agent sessions: the results --------------------------------------
 # Stopped here, when the rest of the check is done, unless --all-sessions asked to wait.
@@ -7591,6 +9038,9 @@ elif [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
 # some, ripgrep gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
 # looked at, because there is none or the check could not start.
 SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""; SESS_UNREAD=0; SESS_UNREAD_FILES=0; SESS_NOTRUN=0
+# An account run whose session check was stopped before it ended does not list the files again here
+# (SESS_CUT): a listing that held the check up would hold the run past its time. They are partly checked.
+SESS_CUT=0; [ "$ACCTRUN" -eq 1 ] && [ "$SESS_RC" = stopped ] && SESS_CUT=1
 if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
   SESS_HITS=$(awk -F '\t' '$1 == "H" { print $2 "\t" $3 }' "$SESS_FILE")
   # Under Git Bash a native rg.exe is handed Windows paths and prints them back (C:/Users/...\...):
@@ -7605,13 +9055,14 @@ if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
     SESS_TOTAL=$(awk -F '\t' '$1 == "T" { print $2; exit }' "$SESS_FILE")
     SESS_DONE=$(grep -c '^D' "$SESS_FILE")
     # Stopped while still listing the files: count them here, none were checked.
-    if [ -z "$SESS_TOTAL" ]; then
+    [ -n "$SESS_TOTAL" ] && SESS_CUT=0
+    if [ -z "$SESS_TOTAL" ] && [ "$SESS_CUT" -eq 0 ]; then
       SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find -H "$_r" -type f -print0 2>/dev/null; done | tr -cd '\000' | wc -c | tr -d ' ')
     fi
     SESS_ZST=$(grep -c '^Z' "$SESS_FILE")
     SESS_UNREAD_FILES=$(grep -c '^U' "$SESS_FILE")
     SESS_UNREAD=$(awk -F '\t' '$1 == "S" { print $2; exit }' "$SESS_FILE")
-  else
+  elif [ "$SESS_CUT" -eq 0 ]; then
     _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
 $SESS_ROOTS
 EOF
@@ -7649,7 +9100,7 @@ while IFS= read -r f; do
   SESS_TOTAL=$((SESS_TOTAL + 1))
   if [ ! -r "$f" ]; then SESS_UNREAD_FILES=$((SESS_UNREAD_FILES + 1)); continue; fi
   [ "$SESS_DONE" -ge 0 ] && SESS_DONE=$((SESS_DONE + 1))
-  _h=$(grep -aoE "$TR_KEYS" "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
+  _h=$(key_o cat "$f" 2>/dev/null | SESS_F=$f awk '{ f = ENVIRON["SESS_F"]; gsub(/[\001-\037\177]/, "?", f); gsub(/[\001-\037\177]/, " "); print "K\t" f "\t" $0 }' | sess_filter | awk -F '\t' '$1 == "H" { print $2 "\t" $3 }')
   [ -n "$_h" ] && SESS_HITS="$SESS_HITS
 $_h"
 done <<EOF
@@ -7688,13 +9139,14 @@ fi
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
 # check was stopped), or a folder that could not be read.
 SESS_PARTIAL=0
-if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
+if [ "$SESS_CUT" -eq 1 ] || [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
 # A check that was not done in full never leaves the headline green: the home folder was not
 # scanned, the sessions were partly checked, or a key file, part of npm's cache, a Python environment
 # or an extension folder could not be read. The headline then says what it can: no findings in the
 # paths checked.
 PARTIAL=0
-if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+if [ "$SCAN_FAILED" -eq 1 ] || [ "$HOME_PARTIAL" -eq 1 ] || [ "$SESS_PARTIAL" -eq 1 ] || [ "$N_KEY_UNREAD" -gt 0 ] || [ "$N_SEC2_UNREAD" -gt 0 ] || [ "$N_ALLOW_UNREAD" -gt 0 ] || [ "$NPM_UNREAD" -gt 0 ] || [ "$N_LOCK_UNREAD" -gt 0 ] || [ "$EXT_UNREAD" -gt 0 ] || [ "$SSHK_UNREAD" -eq 1 ] || [ "$PY_UNREAD" -gt 0 ]; then PARTIAL=1; fi
+[ "$ACT_UNREAD" -gt 0 ] && PARTIAL=1
 # The encrypted .pb files in those folders, as "agent|count" lines, one per agent. A folder that
 # holds none (Antigravity's newer conversations are SQLite, read above) is never named.
 SESS_SEALED_FOUND=$(printf '%s\n' "$SESS_SEALED" | while IFS='|' read -r _a _p; do
@@ -7800,11 +9252,17 @@ if [ "$MAL_HIT" -eq 1 ] && [ "$MAL_LOCKONLY" -eq 0 ]; then
   todo 5 "Treat this machine as compromised. From another computer, rotate every key this machine could reach, then delete the packages and files listed in section 5 and clear npm's cache with npm cache clean --force."
 fi
 if [ "$EXT_HIT" -eq 1 ]; then
-  # Only what section 5 lists: the extensions, the incident's startup file, or both.
-  if [ "$(printf '%s' "$EXT_PERSIST" | grep -c .)" -gt 1 ]; then _edo="Uninstall the extensions listed in section 5, delete the startup files listed there, and"
-  elif [ -n "$EXT_PERSIST" ]; then _edo="Uninstall the extensions listed in section 5, delete the startup file listed there, and"
-  else _edo="Uninstall the extensions listed in section 5 and"; fi
-  todo 5 "Treat this machine as compromised. $_edo rotate every key this machine could reach."
+  # Only what section 5 lists: the extensions, the incident's startup files, an SSH key it adds.
+  _ed=""; _edn=0; _edw="listed in section 5"
+  if [ -n "$EXT_ROWS" ]; then _ed="uninstall the extensions $_edw"; _edn=1; _edw="listed there"; fi
+  case "$(printf '%s' "$EXT_PERSIST" | grep -c .)" in
+    0) ;;
+    1) _ed="${_ed:+$_ed, }delete the startup file $_edw"; _edn=$((_edn + 1)); _edw="listed there" ;;
+    *) _ed="${_ed:+$_ed, }delete the startup files $_edw"; _edn=$((_edn + 1)); _edw="listed there" ;;
+  esac
+  [ -n "$EXT_KEY" ] && { _ed="${_ed:+$_ed, }remove the SSH key $_edw from ~/.ssh/authorized_keys"; _edn=$((_edn + 1)); }
+  if [ "$_edn" -gt 1 ]; then _ed="$_ed, and"; else _ed="$_ed and"; fi
+  todo 5 "Treat this machine as compromised. $(printf '%s' "${_ed:0:1}" | tr 'a-z' 'A-Z')${_ed:1} rotate every key this machine could reach."
 fi
 case "$PY_HITS" in *" "*) _adv="each advisory in section 5" ;; *) _adv="$PY_SHORT's advisory" ;; esac
 # "Don't run Python" only when a Python environment holds the bad package, not for a temp file alone.
@@ -7820,7 +9278,18 @@ if [ "$MAL_LOCKONLY" -eq 1 ]; then
   if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
   todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $_ll to a version without the malware."
 fi
-[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
+# A startup file named like one of an incident whose own fix starts with "First" (what it leaves must
+# go before any key is rotated, as claudeext's sysmon.cmd on Windows): that fix comes ahead of the rotate.
+if [ -n "$EXT_CHECK" ]; then
+  _xf=""
+  for _t in $EXT_CHECK_TAGS; do
+    _a=$(incident_advice "$_t"); case "$_a" in First\ *) ;; *) continue ;; esac
+    case "$_xf" in *"$_a"*|*"f${_a#F}"*) continue ;; esac
+    if [ -z "$_xf" ]; then _xf="f${_a#F} "; else _xf="$_xf$_a "; fi
+  done
+  if [ -n "$_xf" ]; then todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, ${_xf}After that, treat this machine as compromised: delete it and rotate every key this machine could reach."
+  else todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."; fi
+fi
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 advice_todos lock
 advice_todos update
@@ -7831,6 +9300,12 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*) _store="Windows Credential Manager or a secrets manager" ;;
   *)      _store="a secrets manager" ;;
 esac
+# Opening a project in an editor or an agent runs its worm-style startup and the settings section 2
+# marks (a folder-open task), so reading those scripts and settings comes before the fixes that open
+# projects to move or rotate keys.
+[ "$N_WIRED" -gt 0 ] && todo 2 "Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn't put it there, delete it, the hook and the task."
+[ "$N_UHOOK" -gt 0 ] && todo 2 "Check the session hooks section 2 lists in your own agent settings. If you didn't add them, delete them and read what is in the folder they run from."
+[ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 N_AK=$(count_lines "$AK_LINKS")
 [ "$N_AK" -gt 0 ] && todo 2 "Delete the links to ~/.ssh/authorized_keys listed in section 2."
 [ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
@@ -7840,9 +9315,9 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_ALLOW" -gt 0 ] && todo 4 "Delete the saved Claude Code commands that contain keys, add .claude/ to .npmignore, and rotate those keys."
 [ "$N_SSH_OPEN" -gt 0 ] && todo 3 "Add a passphrase to SSH keys that have none, with ssh-keygen -p -f followed by the key file."
 [ "$N_YOLO" -gt 0 ] && todo 1 "Turn off run-without-asking in the agents listed in section 1, unless they run in a sandbox."
+[ "$N_REMOTE" -gt 0 ] && todo 1 "Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first."
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
-[ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
@@ -7853,6 +9328,7 @@ _upd_fix=0; for _t in $NPM_TAGS; do [ "$(incident_level "$_t")" = update ] || co
 [ "$PY_UPD_HIT" -eq 1 ] && todo 5 "Update the Python packages listed in section 5 to a version without the malware."
 [ "$EXT_HIT" -eq 0 ] && [ -n "$EXT_UPD" ] && todo 5 "Uninstall the editor extensions listed in section 5. Their malware could not run on this system."
 [ "$N_PLAT_FOUND" -gt 0 ] && todo 5 "If you used $PLAT_FIX, rotate the keys stored there, even if nothing above looks wrong."
+[ "$N_ACT" -gt 0 ] && todo 5 "If the workflows section 5 lists ran while their GitHub Action was compromised, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions[bot] that you didn't make. Then pin or remove each action as section 5 says."
 
 SCORE=100
 [ "$PY_HIT" -eq 1 ] && SCORE=$((SCORE - 40))
@@ -7879,39 +9355,284 @@ else progress o "Scan done: no findings"; fi
 # An account run ends here: the fixed lines root reads, on the pipe root gave it, and nothing else.
 # Only numbers and ids from the fixed lists; root checks every line again and builds the row itself.
 fleet_ids() { tr ' ' '\n' | grep -E '^[a-z0-9-]+$' | awk '!s[$0]++' | paste -sd ' ' -; }
-fleet_agent_id() { # an agent's name in data/auto-approve.tsv: its id in AGENTS, or the name made an id
+fleet_agent_id() { # an agent's name in data/auto-approve.tsv or data/remote-commands.tsv: its id in AGENTS, or the name made an id
   _fa=$(printf '%s\n' "$AGENTS" | awk -F '|' -v n="$1" '$1 == n { print $5; exit }')
   [ -n "$_fa" ] || _fa=$(printf '%s' "$1" | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9-')
   printf '%s' "$_fa"
 }
-if [ "$ACCTRUN" -eq 1 ]; then
-  _yolo=$(printf '%s\n' "$AA_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
+# The finding fields the account run sends root, set as FA_<key> (the names gird-fleet.sh's fl_parse
+# gives them), so the account run prints them and the person's report tags its OWASP risks from them.
+finding_fields() {
+  FA_yolo=$(printf '%s\n' "$AA_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
+  FA_tools=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '$4 != "-"' | cut -f1 | fleet_ids)
+  FA_remote=$(printf '%s\n' "$REMOTE_LIST" | cut -f2 | while IFS= read -r _n; do [ -n "$_n" ] && fleet_agent_id "$_n" && echo; done | fleet_ids)
   # A bad npm version found only in a lockfile, nothing installed (MAL_LOCKONLY), is act-if-installed:
   # its act-level incidents go in lock_only, worded as the person's report words them.
-  _npm_inc=$NPM_TAGS; _lock=""
+  _npm_inc=$NPM_TAGS; FA_lock_only=""
   if [ "$MAL_LOCKONLY" -eq 1 ]; then
-    _lock=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] && printf '%s\n' "$_t"; done | fleet_ids)
+    FA_lock_only=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" = act ] && printf '%s\n' "$_t"; done | fleet_ids)
     _npm_inc=$(printf '%s\n' $NPM_TAGS | while IFS= read -r _t; do [ -n "$_t" ] && [ "$(incident_level "$_t")" != act ] && printf '%s\n' "$_t"; done)
   fi
   # An extension whose malware can't run on this system (EXT_UPD) is one to remove, not a sign.
-  _inc=$(printf '%s\n' $_npm_inc $EXT_ACT_TAGS $PY_HITS $IND_HITS | fleet_ids)
-  # Each error find printed is a folder not read, and a find that refused the scan prints one too.
-  _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
-  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
+  FA_incidents=$(printf '%s\n' $_npm_inc $EXT_ACT_TAGS $PY_HITS $IND_HITS | fleet_ids)
   # Planted files that count (WORM_HIT), as the report lists them; one named like them alone is to read.
-  _planted=$(( $(count_lines "$WORM_HIT") + $(count_lines "$WORM_REFS") ))
+  FA_planted=$(( $(count_lines "$WORM_HIT") + $(count_lines "$WORM_REFS") ))
   # Possible signs, to check: a LiteLLM leftover with nothing else of LiteLLM, and a startup file
   # named like an extension incident's with no such extension (EXT_CHECK).
-  _poss=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && _poss=litellm
-  _poss=$(printf '%s\n' $_poss $EXT_CHECK_TAGS | fleet_ids)
+  FA_possible=""; [ -n "$LITE_PYC" ] && [ "$LITELLM_HIT" -eq 0 ] && FA_possible=litellm
+  FA_possible=$(printf '%s\n' $FA_possible $EXT_CHECK_TAGS | fleet_ids)
+  FA_mcp_token_files=$N_MCP_TOKEN; FA_key_files=$KEY_FILES; FA_history_keys=$HIST_KEYS; FA_session_files=$N_SESS
+  FA_allow_list_keys=$N_ALLOW; FA_ssh_open=$N_SSH_OPEN; FA_ak_links=$N_AK; FA_on_open=$N_AUTO; FA_to_read=$N_LOOK
+  # An SSH key malware adds (EXT_KEY), and projects or settings that start a script the way worms do.
+  FA_ssh_planted=$(count_lines "$EXT_KEY"); FA_autostart=$((N_WIRED + N_UHOOK))
+  FA_platforms=$(printf '%s' "$PLAT_FOUND" | fleet_ids)
+  FA_updates=$(printf '%s\n' "$PY_UPD" | cut -f1 | fleet_ids)
+  FA_wiper=$WIPER_HIT
+  FA_remove=$(printf '%s\n' $EXT_UPD_TAGS | fleet_ids)
+  FA_tmp_marks=$(printf '%s\n' $FLEET_TMPMARK | fleet_ids); FA_tmp_wiper=$FLEET_TMPWIPER
+}
+finding_fields
+if [ "$ACCTRUN" -eq 1 ]; then
+  # Each error find printed is a folder not read, and a find that refused the scan prints one too.
+  _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
+  # Section 2's files that are there but were not read in full count too (SEC2_UNREAD: a rules file
+  # its reader gave up on, a user hook file such as ~/.codex/hooks.json), each file once with FLEET_NR,
+  # as gird-check.ps1 counts each once.
+  _nr=$({ cat "$FLEET_NR" 2>/dev/null; printf '%s\n' "$SEC2_UNREAD"; } | sort -u | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + SSHK_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
   # Root starts the run with a clean environment, so a variable a shell profile sets to move an agent's
-  # folders (CLAUDE_CONFIG_DIR and the like) is not followed: the account is partly checked then. The
-  # profiles are read, never run.
-  # The npm and Python tools' folder variables move a folder only when set somewhere other than the
-  # default the run reads: nvm's, Volta's and bun's installers write their own default into a profile.
-  # One with no default here counts whenever it is set.
+  # or a tool's folders (CLAUDE_CONFIG_DIR, NVM_DIR and the like, data/folder-vars.tsv) is not
+  # followed: the account is partly checked then. A variable set to a folder the run reads anyway
+  # (fleet_dflt: nvm's, Volta's and bun's installers write their own default into a profile) moves
+  # nothing.
+  # One file's lines, for the reader above: prints M when a line moves a folder, N when one names a
+  # listed variable, L for a file it sources that can't be told, V name value for a value a later path
+  # may use, A path for a file it sources, G path for the files a glob or a folder names, Z when a line
+  # sets zsh's ZDOTDIR in a form other than the plain assignment V gives the value of. A line that
+  # names a listed variable other than to read it ($X, ${X}, ${X:-y}) moves a folder, unless it is
+  # export X=value, X=value or fish's set -x X value, of a folder the run reads for X (mv_seen).
+  FLEET_MV_AWK='
+    function code(l,   q, i, c, n) {
+      if (index(l, "#") == 0) return l
+      q = ""; n = length(l)
+      for (i = 1; i <= n; i++) {
+        c = substr(l, i, 1)
+        if (q == SQ) { if (c == SQ) q = ""; continue }
+        if (q == DQ) { if (c == DQ) q = ""; else if (c == "\\") i++; continue }
+        if (c == SQ || c == DQ) { q = c; continue }
+        if (c == "\\") { i++; continue }
+        if (c == "#" && (i == 1 || index(" \t;(){|&", substr(l, i - 1, 1)) > 0) && !(i > 2 && substr(l, i - 1, 1) == "(" && index(" \t;(){|&", substr(l, i - 2, 1)) == 0)) return substr(l, 1, i - 1)
+      }
+      return l
+    }
+    function seen(n,   v) { if (ENVIRON[n] != "") return ENVIRON[n]; return (n in DF) ? DF[n] : NUL }
+    function getv(n,   v) {
+      if (n in VARS) return VARS[n]
+      if (n == "HOME") return H
+      if (n in LISTED) { v = seen(n); if (v != NUL) return v }
+      if (ENVIRON[n] != "") return ENVIRON[n]
+      return NUL
+    }
+    function repl(x, from, to,   o, k) { o = ""; while ((k = index(x, from)) > 0) { o = o substr(x, 1, k - 1) to; x = substr(x, k + length(from)) }; return o x }
+    function expand(raw,   x, out, m, d, hasd, v, bad) {
+      if (raw ~ /^\047[^\047]*\047$/) x = substr(raw, 2, length(raw) - 2)
+      else {
+        # A default that names plain variables (${X:-$HOME/y}) is followed; any other $ in ${...} gives up.
+        if (raw ~ /\$\{[^}]*\$([^A-Za-z_]|$)/) return NUL
+        x = repl(raw, DQ, ""); out = ""; bad = 0
+        while (match(x, /\$\{[A-Za-z_][A-Za-z0-9_]*(:?-[^}]*)?\}|\$[A-Za-z_][A-Za-z0-9_]*/)) {
+          m = substr(x, RSTART, RLENGTH); out = out substr(x, 1, RSTART - 1); x = substr(x, RSTART + RLENGTH); d = ""; hasd = 0
+          if (substr(m, 2, 1) == "{") {
+            m = substr(m, 3, length(m) - 3)
+            if (match(m, /:?-/)) { d = substr(m, RSTART + RLENGTH); hasd = 1; m = substr(m, 1, RSTART - 1) }
+          } else m = substr(m, 2)
+          v = getv(m)
+          if (v == NUL && hasd) v = expand(d)
+          if (v == NUL) { bad = 1; v = "" }
+          out = out v
+        }
+        x = out x
+        if (bad) return NUL
+      }
+      if (x ~ /^~(\/|$)/) x = H substr(x, 2)
+      if (x ~ /[$`()]/) return NUL
+      return x
+    }
+    function value(v,   x, k, o) {
+      sub(/^[ \t]+/, "", v)
+      if (substr(v, 1, 1) == SQ) { x = substr(v, 2); return substr(x, 1, index(x, SQ) - 1) }
+      if (substr(v, 1, 1) == DQ) { x = substr(v, 2); x = substr(x, 1, index(x, DQ) - 1) }
+      else if (match(v, /^[^ \t;)}#,]+/)) x = substr(v, 1, RLENGTH)
+      else return NUL
+      if (x ~ /^~(\/|$)/) x = H substr(x, 2)
+      x = repl(x, "${HOME}", H); o = ""
+      while ((k = index(x, "$HOME")) > 0) {
+        if (substr(x, k + 5, 1) ~ /[A-Za-z0-9_]/) { o = o substr(x, 1, k + 4); x = substr(x, k + 5); continue }
+        o = o substr(x, 1, k - 1) H; x = substr(x, k + 5)
+      }
+      x = o x
+      if (x ~ /[$`(]/) return NUL
+      return x
+    }
+    function norm(p) { gsub(/\/+/, "/", p); if (length(p) > 1) sub(/\/$/, "", p); return p }
+    function bound(raw,   x, v) {
+      x = raw; gsub(/["\047]/, "", x); gsub(/\$\{?([A-Za-z_][A-Za-z0-9_]*|[0-9@*#])\}?/, "", x); if (x ~ /[$`()]/) return 0
+      if (raw ~ /\$\{?[0-9@*#]/ && inner(1)) return 1
+      x = raw
+      while (match(x, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { v = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH); gsub(/[${]/, "", v); if (isb(v)) return 1 }
+      return 0
+    }
+    function follow(raw,   v, n, g, i, x, p) {
+      if (raw ~ /^</ || raw == "-" || raw ~ /^\{/) return
+      x = raw; gsub(/["\047]/, "", x)
+      for (i = 1; i <= NOWN; i++) if (x == OWN[i]) return
+      if (raw ~ /^"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?$/) {
+        v = raw; gsub(/["${}]/, "", v)
+        if (v in LOOPS) { n = split(LOOPS[v], g, " "); for (i = 1; i <= n; i++) { x = expand(g[i]); if (x == NUL) print "L"; else print "G\t" x }; return }
+      }
+      p = expand(raw)
+      if (p == NUL) { if (!bound(raw)) print "L"; return }
+      print ((p ~ /[*?]/) ? "G\t" : "A\t") p
+    }
+    function track(l,   r, n, v, w, pre, a, i, k) {
+      r = l; sub(/^[ \t]+/, "", r); sub(/^(export|local|readonly)[ \t]+/, "", r)
+      if (match(r, /^[A-Za-z_][A-Za-z0-9_]*=/)) {
+        n = substr(r, 1, RLENGTH - 1); r = substr(r, RLENGTH + 1)
+        if (match(r, /^("[^"]*"|\047[^\047]*\047|[^ \t;\047"]*)/)) {
+          v = substr(r, 1, RLENGTH)
+          if (substr(r, RLENGTH + 1) ~ /^[ \t]*(;|$)/) { VARS[n] = expand(v); print "V\t" n "\t" VARS[n]; if (n == "ZDOTDIR") ZV = 1 }
+        }
+      }
+      r = l
+      while (match(r, /for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]+[^;]*|for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)/)) {
+        pre = substr(r, 1, RSTART - 1); w = substr(r, RSTART, RLENGTH); r = substr(r, RSTART + RLENGTH)
+        if (pre ~ /[A-Za-z0-9_]$/) continue
+        sub(/^for[ \t]+/, "", w); match(w, /^[A-Za-z_][A-Za-z0-9_]*/); n = substr(w, 1, RLENGTH); w = substr(w, RLENGTH + 1)
+        if (w ~ /^[ \t]*\(/) { sub(/^[ \t]*\(/, "", w); sub(/\)$/, "", w) } else sub(/^[ \t]+in[ \t]+/, "", w)
+        gsub(/[ \t]+/, " ", w); sub(/^ /, "", w); sub(/ $/, "", w)
+        k = split(w, a, " "); w = ""; for (i = 1; i <= k; i++) { if (a[i] ~ /[*?][^()]*\([N.]+\)$/) sub(/\([N.]+\)$/, "", a[i]); w = w (i > 1 ? " " : "") a[i] }
+        LOOPS[n] = w
+      }
+    }
+    function sources(l,   i, n, pre, rest, c) {
+      n = length(l)
+      for (i = 1; i <= n; i++) {
+        rest = substr(l, i)
+        if (!match(rest, /^\\?(\.|source)[ \t]+/)) continue
+        pre = substr(l, 1, i - 1); sub(/[ \t]+$/, "", pre)
+        if (!(pre == "" || pre ~ /[;&|{(]$/ || pre ~ /(^|[^A-Za-z0-9_])(then|else|do)$/ || pre ~ /(^|[^A-Za-z0-9_])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*\(([^()]|\([^()]*\))*\)$/)) continue
+        if (i > 1 && substr(l, i - 1, 1) !~ /[ \t;&|{()]/) continue
+        rest = substr(rest, RLENGTH + 1)
+        if (match(rest, /^("[^"]*"|\047[^\047]*\047|(\$\{[^}]*\}|\$\([^)]*\)|[^ \t;&|)}])+)/)) { NSRC++; SP[NSRC] = i; SR[NSRC] = substr(rest, 1, RLENGTH) }
+      }
+    }
+    # Where a function or a loop begins and ends, as far as the words of a line tell: a name it binds
+    # (a loop variable, a local of a function or one set from its arguments) counts as bound only inside it.
+    # A } or done at the start of a line ends every one.
+    function san(l,   o, n, i, c, q, d) {
+      o = ""; n = length(l); q = ""; d = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(l, i, 1)
+        if (d > 0) { if (c == "{" || c == "(") d++; else if (c == "}" || c == ")") d--; o = o "_"; continue }
+        if (q != "") { if (c == q) q = ""; else if (c == "\\" && q == DQ && i < n) { o = o "_"; i++ }; o = o "_"; continue }
+        if (c == SQ || c == DQ || c == "`") { q = c; o = o "_"; continue }
+        if (c == "\\" && i < n) { o = o "_" substr(l, i + 1, 1); i++; continue }
+        if (c == "$" && (substr(l, i + 1, 1) == "{" || substr(l, i + 1, 1) == "(")) { d = 1; o = o "__"; i++; continue }
+        o = o c
+      }
+      return o
+    }
+    function push(k) { SID++; NS++; STK[NS] = SID; KIND[SID] = k; ACT[SID] = 1; return SID }
+    function pop(k,   id) { while (NS > 0) { id = STK[NS--]; ACT[id] = 0; if (KIND[id] == k || (k == "b" && KIND[id] == "f")) return } }
+    function bind(n, id) { if (id) BND[n] = BND[n] " " id }
+    function inner(f,   i) { for (i = NS; i > 0; i--) if (ACT[STK[i]] && (!f || KIND[STK[i]] == "f")) return STK[i]; return 0 }
+    function isb(n,   a, k, i) { k = split(BND[n], a, " "); for (i = 1; i <= k; i++) if (ACT[a[i]]) return 1; return 0 }
+    function walk(l,   s, r, p, nt, tk, tp, k, j, t, cmd, si, nm, f, d) {
+      s = san(l); r = s; p = 0; nt = 0
+      while (match(r, /[;&|()]|[^ \t;&|()]+/)) { nt++; tk[nt] = substr(r, RSTART, RLENGTH); tp[nt] = p + RSTART; p += RSTART + RLENGTH - 1; r = substr(r, RSTART + RLENGTH) }
+      cmd = 1; si = 1
+      for (k = 1; k <= nt; k++) {
+        t = tk[k]; while (si <= NSRC && SP[si] <= tp[k]) follow(SR[si++])
+        if (t ~ /^[;&|()]$/) { cmd = 1; continue }
+        if (!cmd) continue
+        cmd = 0
+        if (t == "{") { if (PFN && NR - PFN <= 1) { push("f"); PFN = 0 } else { f = push("b"); if (PFOR != "" && NR - PFL <= 1) { bind(PFOR, f); PFOR = "" } }; cmd = 1 }
+        else if (t == "}") { pop("b"); cmd = 1 }
+        else if (t == "do") { f = push("d"); if (PFOR != "" && NR - PFL <= 1) { bind(PFOR, f); PFOR = "" }; cmd = 1 }
+        else if (t == "done") { pop("d"); cmd = 1 }
+        else if (t ~ /^(then|else|elif|if|while|until|!|builtin|command|time)$/) cmd = 1
+        else if (t == "for" && k < nt && tk[k + 1] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+          nm = tk[++k]; PFOR = nm; PFL = NR
+          if (k < nt && tk[k + 1] == "(") {
+            d = 0; for (j = k + 1; j <= nt; j++) { if (tk[j] == "(") d++; else if (tk[j] == ")" && --d == 0) break }
+            if (j < nt && tk[j + 1] !~ /^(;|do|\{)$/) { bind(nm, push("l")); PFOR = "" }
+            k = j; cmd = 1
+          }
+        }
+        else if (t == "function" && k < nt) { k++; PFN = NR; cmd = 1 }
+        else if (k + 2 <= nt && tk[k + 1] == "(" && tk[k + 2] == ")") { PFN = NR; k += 2; cmd = 1 }
+        else if (t == "local") { f = inner(1); for (j = k + 1; j <= nt && tk[j] !~ /^[;&|()]$/; j++) { nm = tk[j]; sub(/=.*/, "", nm); if (f && nm ~ /^[A-Za-z_][A-Za-z0-9_]*$/) bind(nm, f) }; k = j - 1 }
+        else if (match(t, /^[A-Za-z_][A-Za-z0-9_]*=/)) { if ((f = inner(1)) && substr(l, tp[k] + RLENGTH) ~ /^["\047]?\$\{?[0-9@*]/) bind(substr(t, 1, RLENGTH - 1), f); cmd = 1 }
+      }
+      while (si <= NSRC) follow(SR[si++])
+      while (NS > 0 && KIND[STK[NS]] == "l") ACT[STK[NS--]] = 0
+      if (s ~ /^(\}|done)([ \t;]|$)/) while (NS > 0) ACT[STK[NS--]] = 0
+    }
+    BEGIN {
+      SQ = "\047"; DQ = "\""; NUL = "\001"; H = ENVIRON["MV_H"]
+      n = split(ENVIRON["MV_NAMES"], a, "|"); for (i = 1; i <= n; i++) LISTED[a[i]] = 1
+      n = split(ENVIRON["MV_DFLT"], a, "\n"); for (i = 1; i <= n; i++) if ((k = index(a[i], "\t")) > 0) { v = substr(a[i], 1, k - 1); if (!(v in DF)) DF[v] = substr(a[i], k + 1); DS[v] = DS[v] "\n" substr(a[i], k + 1) "\n" }
+      NOWN = split(ENVIRON["MV_OWN"], OWN, "\n")
+      n = split(ENVIRON["MV_VARS"], a, "\n"); for (i = 1; i <= n; i++) if ((k = index(a[i], "\t")) > 0) VARS[substr(a[i], 1, k - 1)] = substr(a[i], k + 1)
+    }
+    {
+      l = code($0); if (l !~ /[^ \t]/) next
+      ZV = 0; track(l); w = 0; zw = 0; r = l; p = 0
+      while (match(r, /[A-Za-z0-9_]+/)) {
+        t = substr(r, RSTART, RLENGTH); pre = substr(l, 1, p + RSTART - 1); post = substr(r, RSTART + RLENGTH)
+        p += RSTART + RLENGTH - 1; r = post
+        if (t == "ZDOTDIR") { if (pre !~ /\$\{?#?$/ || pre ~ /\$#$/ || (pre ~ /\$\{#?$/ && post ~ /^:?=/)) zw = 1; continue }
+        if (!(t in LISTED)) continue
+        named = 1
+        if (pre !~ /\$\{?#?$/ || pre ~ /\$#$/) w++
+        else if (pre ~ /\$\{#?$/ && post ~ /^:?=/) w++
+      }
+      if (zw && !ZV && l !~ /^[ \t]*export([ \t]+[A-Za-z_][A-Za-z0-9_]*)+[ \t]*;?[ \t]*$/) print "Z"
+      NSRC = 0; sources(l); walk(l)
+      if (w == 0 || l ~ /^[ \t]*export([ \t]+[A-Za-z_][A-Za-z0-9_]*)+[ \t]*;?[ \t]*$/) next
+      if (w > 1) { print "M"; exit }
+      r = l; sub(/^[ \t]+/, "", r); n = ""
+      if (match(r, /^(export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*=/)) { n = substr(r, 1, RLENGTH - 1); sub(/^export[ \t]+/, "", n); r = substr(r, RLENGTH + 1) }
+      else if (match(r, /^set[ \t]+-[A-Za-z]*x[A-Za-z]*[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+/)) { n = substr(r, 1, RLENGTH); sub(/[ \t]+$/, "", n); sub(/.*[ \t]/, "", n); r = substr(r, RLENGTH + 1) }
+      if (!(n in LISTED) || !match(r, /^(\047[^\047]*\047|"[^"]*"|[^ \t;\047"#,)]+)/) || substr(r, RLENGTH + 1) !~ /^[ \t]*;?[ \t]*$/) { print "M"; exit }
+      v = value(substr(r, 1, RLENGTH))
+      if (v == NUL || index(ENVIRON[n] != "" ? "\n" norm(ENVIRON[n]) "\n" : DS[n], "\n" norm(v) "\n") == 0) { print "M"; exit }
+    }
+    END { if (named) print "N" }'
+# >>> folder-vars: generated from data/folder-vars.tsv and data/tool-scripts.tsv by tools/gen.sh. Edit those files, then run it.
+  _mv_agent='CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME'
+  _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR|PNPM_HOME'
+  _mv_own='/opt/homebrew/opt/nvm/nvm.sh
+/usr/local/opt/nvm/nvm.sh
+$(brew --prefix)/opt/nvm/nvm.sh
+$(brew --prefix nvm)/nvm.sh
+$HOMEBREW_PREFIX/opt/nvm/nvm.sh
+${HOMEBREW_PREFIX}/opt/nvm/nvm.sh
+/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm
+/usr/local/opt/nvm/etc/bash_completion.d/nvm
+$(brew --prefix)/opt/nvm/etc/bash_completion.d/nvm
+$(brew --prefix nvm)/etc/bash_completion.d/nvm
+$HOMEBREW_PREFIX/opt/nvm/etc/bash_completion.d/nvm
+${HOMEBREW_PREFIX}/opt/nvm/etc/bash_completion.d/nvm
+/opt/homebrew/opt/asdf/libexec/asdf.sh
+/usr/local/opt/asdf/libexec/asdf.sh
+$(brew --prefix)/opt/asdf/libexec/asdf.sh
+$(brew --prefix asdf)/libexec/asdf.sh
+$HOMEBREW_PREFIX/opt/asdf/libexec/asdf.sh
+${HOMEBREW_PREFIX}/opt/asdf/libexec/asdf.sh'
   fleet_dflt() { # variable: the folders the run reads when it is not set
     case "$1" in
+      XDG_CONFIG_HOME) printf '%s\n' "$H/.config" ;;
+      XDG_DATA_HOME) printf '%s\n' "$H/.local/share" ;;
       NVM_DIR) printf '%s\n' "$H/.nvm" ;;
       VOLTA_HOME) printf '%s\n' "$H/.volta" ;;
       BUN_INSTALL) printf '%s\n' "$H/.bun" ;;
@@ -7919,64 +9640,172 @@ if [ "$ACCTRUN" -eq 1 ]; then
       ASDF_DATA_DIR) printf '%s\n' "$H/.asdf" ;;
       MISE_DATA_DIR) printf '%s\n' "$H/.local/share/mise" ;;
       MAMBA_ROOT_PREFIX) printf '%s\n' "$H/micromamba" ;;
-      PIPX_HOME) printf '%s\n%s\n' "$H/.local/pipx" "$H/.local/share/pipx" ;;
-      WORKON_HOME) printf '%s\n%s\n' "$H/.virtualenvs" "$H/.local/share/virtualenvs" ;;
+      PIPX_HOME) printf '%s\n' "$H/.local/pipx" "$H/.local/share/pipx" ;;
+      WORKON_HOME) printf '%s\n' "$H/.virtualenvs" "$H/.local/share/virtualenvs" ;;
       UV_CACHE_DIR) printf '%s\n' "$H/.cache/uv" ;;
+      POETRY_CACHE_DIR) printf '%s\n' "$H/Library/Caches/pypoetry" "$H/.cache/pypoetry" ;;
+      POETRY_VIRTUALENVS_PATH) printf '%s\n' "$H/Library/Caches/pypoetry/virtualenvs" "$H/.cache/pypoetry/virtualenvs" ;;
+      HATCH_DATA_DIR) printf '%s\n' "$H/Library/Application Support/hatch" "$H/.local/share/hatch" ;;
       XDG_CACHE_HOME) printf '%s\n' "$H/.cache" ;;
-      POETRY_CACHE_DIR) printf '%s\n%s\n' "$H/Library/Caches/pypoetry" "$H/.cache/pypoetry" ;;
-      POETRY_VIRTUALENVS_PATH) printf '%s\n%s\n' "$H/Library/Caches/pypoetry/virtualenvs" "$H/.cache/pypoetry/virtualenvs" ;;
-      HATCH_DATA_DIR) printf '%s\n%s\n' "$H/Library/Application Support/hatch" "$H/.local/share/hatch" ;;
-      npm_config_prefix|NPM_CONFIG_PREFIX) printf '%s\n' "$H/.npm-global" ;;
-      PNPM_HOME) printf '%s\n%s\n' "$H/Library/pnpm" "$H/.local/share/pnpm" ;;
+      npm_config_prefix) printf '%s\n' "$H/.npm-global" ;;
+      NPM_CONFIG_PREFIX) printf '%s\n' "$H/.npm-global" ;;
+      PNPM_HOME) printf '%s\n' "$H/Library/pnpm" "$H/.local/share/pnpm" ;;
     esac
   }
-  _mv_set='^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?'
-  _mv_tool='NVM_DIR|VOLTA_HOME|BUN_INSTALL|BUN_INSTALL_GLOBAL_DIR|N_PREFIX|ASDF_DATA_DIR|MISE_DATA_DIR|MISE_INSTALLS_DIR|MAMBA_ROOT_PREFIX|PIPX_HOME|PIPX_GLOBAL_HOME|WORKON_HOME|UV_CACHE_DIR|UV_TOOL_DIR|UV_PYTHON_INSTALL_DIR|POETRY_CACHE_DIR|POETRY_VIRTUALENVS_PATH|HATCH_DATA_DIR|XDG_CACHE_HOME|npm_config_prefix|NPM_CONFIG_PREFIX|npm_config_userconfig|NPM_CONFIG_USERCONFIG|CLINE_PROVIDER_SETTINGS_PATH|QWEN_RUNTIME_DIR|PNPM_HOME'
+  fleet_scripts() { # variable: its tool's own scripts in its folder, which set it to that folder
+    case "$1" in
+      NVM_DIR) printf '%s\n' nvm.sh bash_completion ;;
+      BUN_INSTALL) printf '%s\n' _bun ;;
+      ASDF_DATA_DIR) printf '%s\n' asdf.sh asdf.fish completions/asdf.bash ;;
+    esac
+  }
+# <<< folder-vars
   _moved=0
-  for _pf in "$H/.zshenv" "$H/.zprofile" "$H/.zshrc" "$H/.bash_profile" "$H/.bashrc" "$H/.profile" "$H/.config/fish/config.fish"; do
-    [ -f "$_pf" ] && fleet_ok "$_pf" || continue
-    grep -qE "${_mv_set}(CLAUDE_CONFIG_DIR|CODEX_HOME|CODEX_SQLITE_HOME|GEMINI_CLI_HOME|QWEN_HOME|COPILOT_HOME|CLINE_DIR|CLINE_DATA_DIR|CLINE_SESSION_DATA_DIR|CONTINUE_GLOBAL_DIR|GOOSE_PATH_ROOT|KIRO_HOME|XDG_CONFIG_HOME|XDG_DATA_HOME|XDG_STATE_HOME)([=[:space:]])" "$_pf" 2>/dev/null && _moved=1
-    _mvl=$(awk -v re="${_mv_set}(${_mv_tool})([=[:space:]])" 'match($0, re) { n = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*(export[[:space:]]+|set[[:space:]]+-[A-Za-z]*x[A-Za-z]*[[:space:]]+)?/, "", n); sub(/[=[:space:]]$/, "", n); v = substr($0, RSTART + RLENGTH); sub(/^[[:space:]]+/, "", v); sub(/[[:space:]]+#.*$/, "", v); sub(/[[:space:]]*;.*$/, "", v); sub(/[[:space:]]+$/, "", v); print n "\t" v }' "$_pf" 2>/dev/null)
-    while IFS="$TAB" read -r _mvn _mvv; do
-      [ -n "$_mvn" ] || continue
-      _mvv=${_mvv#\"}; _mvv=${_mvv%\"}; _mvv=${_mvv#\'}; _mvv=${_mvv%\'}
-      case "$_mvv" in '$HOME'*) _mvv="$H${_mvv#\$HOME}" ;; '${HOME}'*) _mvv="$H${_mvv#\$\{HOME\}}" ;; '~'*) _mvv="$H${_mvv#\~}" ;; esac
-      _mvv=${_mvv%/}
-      _mvd=$(fleet_dflt "$_mvn")
-      if [ -z "$_mvd" ] || ! printf '%s\n' "$_mvd" | grep -qxF -- "$_mvv"; then _moved=1; fi
+  # Every file read, as text, never run: the profiles, then each file they source with . or source, to
+  # any depth, and the files of a loop that sources a folder's files. Only an existing regular file
+  # on a local disk is read: never a link, a device or pipe, a file under /Volumes or /Network, or one
+  # over FLEET_MAX bytes. At most 64 files and 16 MiB in all are read. A sourced file that exists but
+  # can't be followed or read, or a cap reached, counts only when some file read names a listed
+  # variable: ordinary setups source completion scripts and plugins by the dozen. When unsure, the
+  # account reads partly checked, never clear: a path with a command in it, a nested ${...} or a zsh
+  # glob qualifier other than (N), (.) and (.N) can't be followed. A path built from a loop's or a
+  # function's own variable, or from an argument, does not count inside that loop or function: it
+  # names whatever the loop or function is given (a plugin loader's). A tool's own script sourced from
+  # its own folder (fleet_scripts, such as nvm.sh), or by its whole path from Homebrew's prefix
+  # (_mv_own, such as $HOMEBREW_PREFIX/opt/nvm/nvm.sh), is not read: it sets the tool's variable its
+  # own way. What a command prints (eval "$(...)", source <(...)) is not followed. gird-check.ps1
+  # -AccountRun reads them the same way. As zsh and fish load them by themselves, the files of fish's
+  # ~/.config/fish/conf.d are read with the profiles, and once a file read sets ZDOTDIR, the
+  # .zshenv, .zprofile, .zshrc and .zlogin in that folder. Setting ZDOTDIR names a listed variable, and
+  # a ZDOTDIR that can't be told (set in another form, or to a path with a command in it) is a file
+  # that can't be followed, so the account reads partly checked. Windows ships neither shell, so
+  # gird-check.ps1 reads neither.
+  _mv_names="$_mv_agent|$_mv_tool"; _mv_dflt=""; _mv_scr=""
+  for _mvn in $(printf '%s' "$_mv_names" | tr '|' ' '); do
+    _mv_dflt="$_mv_dflt$(fleet_dflt "$_mvn" | sed "s/^/$_mvn$TAB/")$NL"
+    _mv_scr="$_mv_scr$(fleet_scripts "$_mvn" | sed "s/^/$_mvn$TAB/")$NL"
+  done
+  # mv_seen VAR: the folders the run reads for VAR: its own value, else its defaults.
+  mv_seen() { _mvs=$(printenv "$1" 2>/dev/null); if [ -n "$_mvs" ]; then printf '%s\n' "$_mvs"; else fleet_dflt "$1"; fi; }
+  mv_norm() { printf '%s' "$1" | sed -e 's#//*#/#g' -e 's#\(.\)/$#\1#'; }
+  mv_linked() { # path: 0 when it, or a folder on its way inside the home, is a link
+    _mvk=$1
+    while [ -n "$_mvk" ] && [ "$_mvk" != / ]; do
+      [ -L "$_mvk" ] && return 0
+      case "$_mvk" in "$H"/*) ;; *) return 1 ;; esac
+      _mvk=${_mvk%/*}
+    done
+    return 1
+  }
+  mv_local() { case "$1" in //*|/Volumes/*|/Network/*|/net/*) return 1 ;; /*) return 0 ;; esac; return 1; }
+  mv_add() { # path: queues a file a line sources
+    case "$1" in /*) ;; *) _mv_lost=1; return ;; esac
+    _mvp=$(mv_norm "$1")
+    while IFS="$TAB" read -r _mvv _mvs; do
+      [ -n "$_mvv" ] || continue
+      mv_seen "$_mvv" | while IFS= read -r _mvd; do [ "$(mv_norm "$_mvd/$_mvs")" = "$_mvp" ] && echo own; done | grep -q own && return
     done <<EOF
-$_mvl
+$_mv_scr
+EOF
+    mv_local "$_mvp" || { _mv_lost=1; return; }
+    if [ ! -e "$_mvp" ] && [ ! -L "$_mvp" ]; then behind_closed "$_mvp" && _mv_lost=1; return; fi
+    [ -d "$_mvp" ] && [ ! -L "$_mvp" ] && return
+    if [ ! -f "$_mvp" ] || mv_linked "$_mvp"; then _mv_lost=1; return; fi
+    _mv_q="$_mv_q$_mvp$NL"
+  }
+  mv_profile() { # path: queues a profile the shell reads by itself, as the profiles below are
+    if [ -f "$1" ]; then fleet_ok "$1" && _mv_q="$_mv_q$1$NL"
+    elif [ -e "$1" ] || [ -L "$1" ] || behind_closed "$1"; then _mv_lost=1; fi
+  }
+  mv_zdot() { # value: once a file read sets ZDOTDIR, zsh reads its startup files from there
+    _mv_named=1
+    case "$1" in /*) ;; *) _mv_lost=1; return ;; esac
+    mv_local "$1" || { _mv_lost=1; return; }
+    for _mvzf in .zshenv .zprofile .zshrc .zlogin; do mv_profile "$(mv_norm "$1/$_mvzf")"; done
+  }
+  mv_glob() { # path with * or ? in its last part, or a folder: queues each file it names, in order
+    _mvg=$(mv_norm "$1")
+    mv_local "$_mvg" || { _mv_lost=1; return; }
+    if [ -d "$_mvg" ]; then _mvg="$_mvg/*"; else case "$_mvg" in *[*?]*) ;; *) mv_add "$_mvg"; return ;; esac; fi
+    _mvgd=${_mvg%/*}; _mvgp=${_mvg##*/}
+    case "$_mvgd$_mvgp" in *\[*) _mv_lost=1; return ;; esac
+    case "$_mvgd" in ''|*[*?]*) _mv_lost=1; return ;; esac
+    mv_linked "$_mvgd" && { _mv_lost=1; return; }
+    if [ ! -d "$_mvgd" ]; then behind_closed "$_mvgd" && _mv_lost=1; return; fi
+    for _mvgf in "$_mvgd"/$_mvgp; do { [ -e "$_mvgf" ] || [ -L "$_mvgf" ]; } && mv_add "$_mvgf"; done
+  }
+  _mv_q=""; _mv_done="$NL"; _mv_lost=0; _mv_named=0; _mv_files=0; _mv_bytes=0; _mv_vars=""
+  for _pf in "$H/.zshrc" "$H/.zprofile" "$H/.zshenv" "$H/.zlogin" "$H/.bashrc" "$H/.bash_profile" "$H/.profile" "$H/.config/fish/config.fish"; do
+    [ -f "$_pf" ] && fleet_ok "$_pf" && _mv_q="$_mv_q$_pf$NL"
+  done
+  # fish runs each .fish file in conf.d before config.fish. A conf.d it can't list can't be told.
+  if [ -d "$H/.config/fish/conf.d" ]; then
+    if [ -r "$H/.config/fish/conf.d" ] && [ -x "$H/.config/fish/conf.d" ]; then
+      for _pf in "$H/.config/fish/conf.d"/*.fish; do mv_profile "$_pf"; done
+    else _mv_lost=1; _mv_named=1; fi
+  elif behind_closed "$H/.config/fish/conf.d"; then _mv_lost=1; _mv_named=1; fi
+  while [ -n "$_mv_q" ] && [ "$_moved" -eq 0 ]; do
+    _pf=${_mv_q%%"$NL"*}; _mv_q=${_mv_q#*"$NL"}
+    case "$_mv_done" in *"$NL$_pf$NL"*) continue ;; esac
+    _mv_done="$_mv_done$_pf$NL"
+    [ -f "$_pf" ] || continue
+    [ -r "$_pf" ] || { _mv_lost=1; continue; }
+    _mvz=$(/usr/bin/stat -L -f %z -- "$_pf" 2>/dev/null); case "$_mvz" in ''|*[!0-9]*) _mv_lost=1; continue ;; esac
+    [ "$_mvz" -le "$FLEET_MAX" ] || { _mv_lost=1; continue; }
+    # A cap reached counts as a file not read. fish runs each conf.d file by itself, so one left
+    # unread there counts whatever the files read name, as a conf.d it can't list does.
+    if [ "$_mv_files" -ge 64 ] || [ $((_mv_bytes + _mvz)) -gt 16777216 ]; then
+      _mv_lost=1; case "$NL$_pf$NL$_mv_q" in *"$NL$H/.config/fish/conf.d/"*) _mv_named=1 ;; esac; break
+    fi
+    _mv_files=$((_mv_files + 1)); _mv_bytes=$((_mv_bytes + _mvz))
+    _mvo=$(MV_NAMES="$_mv_names" MV_H="$H" MV_DFLT="$_mv_dflt" MV_VARS="$_mv_vars" MV_OWN="$_mv_own" awk "$FLEET_MV_AWK" "$_pf" 2>/dev/null) || _mv_lost=1
+    while IFS="$TAB" read -r _mvk _mvx _mvy; do
+      case "$_mvk" in
+        M) _moved=1 ;;
+        N) _mv_named=1 ;;
+        L) _mv_lost=1 ;;
+        V) _mv_vars="$_mv_vars$_mvx$TAB$_mvy$NL"; [ "$_mvx" = ZDOTDIR ] && mv_zdot "$_mvy" ;;
+        Z) _mv_lost=1; _mv_named=1 ;;
+        A) [ "$_moved" -eq 0 ] && mv_add "$_mvx" ;;
+        G) [ "$_moved" -eq 0 ] && mv_glob "$_mvx" ;;
+      esac
+    done <<EOF
+$_mvo
 EOF
   done
+  [ "$_mv_lost" -eq 1 ] && [ "$_mv_named" -eq 1 ] && _moved=1
   {
     echo "v=1"
     echo "agents=$(printf '%s' "$AGENT_IDS" | fleet_ids)"
-    echo "yolo=$_yolo"
-    echo "tools=$(printf '%s' "$OLD_ROWS" | awk -F "$TAB" '$4 != "-"' | cut -f1 | fleet_ids)"
+    echo "yolo=$FA_yolo"
+    echo "remote=$FA_remote"
+    echo "tools=$FA_tools"
     echo "mcp_servers=$N_MCP"
-    echo "mcp_token_files=$N_MCP_TOKEN"
-    echo "key_files=$KEY_FILES"
+    echo "mcp_token_files=$FA_mcp_token_files"
+    echo "key_files=$FA_key_files"
     echo "key_providers=$(printf '%s' "$PROV_IDS" | fleet_ids)"
-    echo "history_keys=$HIST_KEYS"
-    echo "session_files=$N_SESS"
+    echo "history_keys=$FA_history_keys"
+    echo "session_files=$FA_session_files"
     echo "sessions_partial=$SESS_PARTIAL"
-    echo "allow_list_keys=$N_ALLOW"
-    echo "ssh_open=$N_SSH_OPEN"
-    echo "ak_links=$N_AK"
-    echo "planted=$_planted"
-    echo "possible=$_poss"
-    echo "incidents=$_inc"
-    echo "platforms=$(printf '%s' "$PLAT_FOUND" | fleet_ids)"
-    echo "on_open=$N_AUTO"
-    echo "to_read=$N_LOOK"
-    echo "updates=$(printf '%s\n' "$PY_UPD" | cut -f1 | fleet_ids)"
-    echo "wiper=$WIPER_HIT"
-    echo "lock_only=$_lock"
-    echo "remove=$(printf '%s\n' $EXT_UPD_TAGS | fleet_ids)"
+    echo "allow_list_keys=$FA_allow_list_keys"
+    echo "ssh_open=$FA_ssh_open"
+    echo "ak_links=$FA_ak_links"
+    echo "ssh_planted=$FA_ssh_planted"
+    echo "planted=$FA_planted"
+    echo "possible=$FA_possible"
+    echo "incidents=$FA_incidents"
+    echo "platforms=$FA_platforms"
+    echo "on_open=$FA_on_open"
+    echo "to_read=$FA_to_read"
+    echo "autostart=$FA_autostart"
+    echo "updates=$FA_updates"
+    echo "wiper=$FA_wiper"
+    echo "lock_only=$FA_lock_only"
+    echo "remove=$FA_remove"
     echo "not_read=$_nr"
     echo "moved=$_moved"
-    echo "tmp_marks=$(printf '%s\n' $FLEET_TMPMARK | fleet_ids)"
-    echo "tmp_wiper=$FLEET_TMPWIPER"
+    echo "tmp_marks=$FA_tmp_marks"
+    echo "tmp_wiper=$FA_tmp_wiper"
     echo "protected=$FLEET_PROT"
     echo "engine=$SESS_ENGINE"
     echo "end=1"
@@ -8060,8 +9889,16 @@ case "${__CFBundleIdentifier:-}" in
   net.kovidgoyal.kitty) TERMAPP=kitty ;; com.github.wez.wezterm) TERMAPP=wezterm ;; org.alacritty|io.alacritty) TERMAPP=alacritty ;;
   co.zeit.hyper) TERMAPP=hyper ;; com.jetbrains.*) TERMAPP=jetbrains ;;
   *) case "${TERM_PROGRAM:-}" in
-       Apple_Terminal) TERMAPP=terminal ;; iTerm.app) TERMAPP=iterm2 ;; vscode) TERMAPP=vscode ;; WarpTerminal) TERMAPP=warp ;;
-       ghostty) TERMAPP=ghostty ;; WezTerm) TERMAPP=wezterm ;; Hyper) TERMAPP=hyper ;; tmux) TERMAPP=tmux ;;
+# >>> term-programs: generated from data/term-programs.tsv by tools/gen.sh. Edit that file, then run it.
+       Apple_Terminal) TERMAPP=terminal ;;
+       iTerm.app) TERMAPP=iterm2 ;;
+       vscode) TERMAPP=vscode ;;
+       WarpTerminal) TERMAPP=warp ;;
+       ghostty) TERMAPP=ghostty ;;
+       WezTerm) TERMAPP=wezterm ;;
+       Hyper) TERMAPP=hyper ;;
+       tmux) TERMAPP=tmux ;;
+# <<< term-programs
        '') TERMAPP=unknown ;; *) TERMAPP=other ;;
      esac ;;
 esac
@@ -8102,6 +9939,18 @@ if [ "$OFFLINE" -eq 0 ] && command -v curl >/dev/null 2>&1; then
   case "$_rank" in ""|0*|*[!0-9]*) ;; *) [ "${#_rank}" -le 9 ] && RANK=$_rank ;; esac   # a whole number from 1, or unknown
 fi
 
+
+# The OWASP Agentic Top 10 risks of what was found (owasp_kinds): risk|kind|section|name|label for
+# each kind, and the risks in code order. With nothing tagged every OWASP line is left out, partly
+# checked or not: no line ever says none.
+OW_FOUND=$(owasp_kinds)
+OW_CODES=$(printf '%s\n' "$OW_FOUND" | cut -d'|' -f1 | grep -v '^$' | sort -u | paste -sd ',' - | sed 's/,/, /g')
+owasp_sec() { # section: one dimmed line under its rule for each risk with a finding there, in code order
+  _osl=$(printf '%s\n' "$OW_FOUND" | awk -F '|' -v s="$1" '$3 == s && !seen[$1]++ { print $1 "|" $4 }' | sort)
+  while IFS='|' read -r _oc _on; do [ -n "$_oc" ] && emit "     ${DIM}OWASP $_oc $_on${RST}"; done <<EOF
+$_osl
+EOF
+}
 
 # ===========================================================================
 # The report. Every part is built first, then shown: a summary on a terminal,
@@ -8147,7 +9996,7 @@ fi
 [ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths."
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM" 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
-# Folders the home scan could not enter, so sections 2 to 5 did not read the files in them.
+# Folders the home scan could not enter, so sections 1 to 5 did not read the files in them.
 dir_list() { # paths, one a line: the first three as short() shows them, then how many more
   _dl=""; _dn=0
   while IFS= read -r _d; do
@@ -8160,21 +10009,23 @@ EOF
   printf '%s' "$_dl"
 }
 if [ "$N_UNREAD_DIRS" -gt 0 ]; then
-  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 2 to 5 did not check the files in it"
-  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 2 to 5 did not check the files in them"; fi
+  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 1 to 5 did not check the files in it"
+  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 1 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$UNREAD_DIRS")." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ "$SCAN_LOST" -eq 1 ]; then
-  wrap "No temp folder could be written to, so the home scan could not tell which folders it could not read, and sections 2 to 5 may have missed files in them." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+  wrap "No temp folder could be written to, so the home scan could not tell which folders it could not read, and sections 1 to 5 may have missed files in them." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ "$N_NL_DIRS" -gt 0 ]; then
-  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 2 to 5 did not check the files in it"
-  else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
+  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 1 to 5 did not check the files in it"
+  else _it="$N_NL_DIRS folders have a line break in their name, so sections 1 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$NL_DIRS"), the line break shown as ?." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
+if [ -n "$OW_CODES" ]; then blank; emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"; fi
 HEAD_FULL="$HEAD_SHORT$CAP"; CAP=""
 
 section 01 "CODING AGENTS" "$N_AG found, $N_IDLE idle"
+owasp_sec 01
 if [ "$N_AG" -eq 0 ]; then emit "     No coding agents found."; fi
 while IFS='|' read -r n st; do
   [ -n "$n" ] || continue
@@ -8198,6 +10049,21 @@ if [ "$N_YOLO" -gt 0 ]; then
 $AA_LIST
 EOF
   wrap "A prompt injection in anything the agent reads can then run commands on this computer. Turn it off unless the agent runs in a sandbox." 8 "        " "        " "$DIM"
+fi
+if [ "$N_REMOTE" -gt 0 ]; then
+  blank
+  emit "     ${B}Allowed to run commands on other machines without asking${RST}"
+  # A line for each file, then its rules under it.
+  _pf=""
+  while IFS="$TAB" read -r f a st; do
+    [ -n "$f" ] || continue
+    [ "$a$TAB$f" = "$_pf" ] || pair "${YEL}!${RST}" "$a" 16 "$(short "$f")"
+    _pf="$a$TAB$f"
+    wrap "$st" 8 "        " "        "
+  done <<EOF
+$REMOTE_LIST
+EOF
+  wrap "A prompt injection in anything the agent reads can then run commands on those machines." 8 "        " "        " "$DIM"
 fi
 if [ "$N_OLD" -gt 0 ]; then
   blank
@@ -8239,6 +10105,7 @@ fi
 
 SEC1=$CAP; CAP=""
 section 02 "MCP SERVERS" "$(plural "$N_MCP" server servers)"
+owasp_sec 02
 if [ "$N_MCP" -eq 0 ] && [ "$N_MCP_TOKEN" -eq 0 ]; then emit "     No MCP servers configured."; fi
 while IFS='|' read -r who c tok pl f; do
   [ -n "$who" ] || continue
@@ -8252,6 +10119,28 @@ $MCP_ROWS
 EOF
 if [ "$N_MCP_CACHE" -gt 0 ]; then
   pair "${DIM}·${RST}" "Plugin folders" 46 "${DIM}$(plural "$N_MCP_CACHE" server servers) in $(plural "$N_MCP_CACHEF" file files), not counted above${RST}"
+fi
+if [ "$N_WIRED" -gt 0 ]; then
+  blank
+  emit "     ${B}Projects that start a script the way worms do${RST}"
+  while IFS="$TAB" read -r p b; do
+    [ -n "$p" ] || continue
+    emit "     ${YEL}!${RST}  $(short "$p")"
+    wrap "A session-start hook and a folder-open task both run $b from this project, the way some npm worms do. Read it before an agent or editor opens this folder. If you didn't put it there, delete it, the hook and the task." 8 "        " "        " "$DIM"
+  done <<EOF
+$WIRED
+EOF
+fi
+if [ "$N_UHOOK" -gt 0 ]; then
+  blank
+  emit "     ${B}Session hooks in your own agent settings${RST}"
+  while IFS="$TAB" read -r f d; do
+    [ -n "$f" ] || continue
+    emit "     ${YEL}!${RST}  $(short "$f")"
+    wrap "Set to run a file from $d each time a session starts. The AntV wave copies its payload there and adds a hook like this one. If you didn't add it, delete the hook and read what is in that folder." 8 "        " "        " "$DIM"
+  done <<EOF
+$USER_HOOKS
+EOF
 fi
 if [ "$N_AUTO" -gt 0 ]; then
   blank
@@ -8271,7 +10160,7 @@ if [ "$N_LOOK" -gt 0 ]; then
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     emit "     ${YEL}!${RST}  $(short "$f")"
-    wrap "Named like $(planted_note "$f"), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
+    wrap "Named like $(planted_note "$f"), but no file that only the malware uses is beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
   done <<EOF
 $WORM_LOOK
 EOF
@@ -8299,6 +10188,7 @@ fi
 
 SEC2=$CAP; CAP=""
 section 03 "KEYS IN PLAIN TEXT" "$(plural "$KEY_FILES" file files)"
+owasp_sec 03
 # With files that could not be read, this line comes below, with them.
 if [ "$KEY_FILES" -eq 0 ] && [ "$N_KEY_UNREAD" -eq 0 ]; then
   if [ "$HOME_PARTIAL" -eq 1 ]; then wrap "No AI or cloud keys in shell profiles, history, agent configs or .env files, but some folders in your home were not read." 8 "     ${YEL}!${RST}  " "        "
@@ -8404,6 +10294,7 @@ fi
 
 SEC3=$CAP; CAP=""
 section 04 "KEYS IN CLAUDE CODE ALLOW LISTS" "$(plural "$N_ALLOW" file files)"
+owasp_sec 04
 if [ "$N_ALLOW" -eq 0 ] && [ "$N_ALLOW_UNREAD" -gt 0 ]; then wrap "No saved commands with keys in the files read, but $(plural "$N_ALLOW_UNREAD" "file" "files") could not be read:" 8 "     ${YEL}!${RST}  " "        "
   _shown=0
   while IFS= read -r f; do
@@ -8426,8 +10317,9 @@ EOF
 [ "$N_ALLOW" -gt 0 ] && [ "$N_ALLOW_UNREAD" -gt 0 ] && wrap "$(plural "$N_ALLOW_UNREAD" "file" "files") could not be read, so this is not the full list." 8 "     ${YEL}!${RST}  " "        "
 
 SEC4=$CAP; CAP=""
-N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 2 + N_PLAT))   # the Python incidents, npm, editor extensions and each platform
+N_LEAKS=$(($(printf '%s\n' $PY_INCIDENTS | grep -c .) + 3 + N_PLAT))   # the Python incidents, npm, editor extensions, GitHub Actions and each platform
 section 05 "RECENT KEY LEAKS" "$N_LEAKS checked"
+owasp_sec 05
 # One row per Python incident. cook.pyc, the installed versions and the loader are LiteLLM's. The
 # advice under a hit: for a bad package in an environment, don't run Python there; for its temp
 # files, the incident's own (data/indicators.tsv); for a version whose malware could not run on this
@@ -8637,7 +10529,7 @@ EOF
     emit "        $(short "$f")"
     emit "          ${p}"
   done <<EOF
-$EXT_PERSIST
+$EXT_PERSIST$EXT_KEY
 EOF
   [ -n "$EXT_UPD" ] && ext_upd_rows
   if [ -n "$EXT_CHECK" ]; then
@@ -8678,14 +10570,24 @@ EOF
   for _t in $EXT_CHECK_TAGS; do wrap "$(incident_line "$_t")" 8 "        " "        " "$DIM"; done
 elif [ "$EXT_UNREAD" -gt 0 ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: $(plural "$EXT_UNREAD" "extension folder" "extension folders") could not be read${RST}"
+elif [ "$SSHK_UNREAD" -eq 1 ]; then
+  pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: ~/.ssh/authorized_keys could not be read${RST}"
 else
-  pair "${GRN}✓${RST}" "Editor extensions" 16 "none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
-  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron" 26 "                          " "                          " "$DIM"
+  # A startup file of an extension incident (~/.config/.smt) is looked for by its path: under a folder
+  # in the home that could not be read, whether it is there can't be told, as the Python rows say.
+  _xnone="none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
+  if [ "$HOME_PARTIAL" -eq 1 ]; then pair "${YEL}!${RST}" "Editor extensions" 16 "$_xnone, but some folders in your home were not read"
+  else pair "${GRN}✓${RST}" "Editor extensions" 16 "$_xnone"; fi
+  wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron, and ~/.ssh/authorized_keys for an SSH key such malware adds" 26 "                          " "                          " "$DIM"
 fi
 # With findings above, a folder that could not be read still has to be said.
 if [ "$EXT_UNREAD" -gt 0 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [ -n "$EXT_UPD" ]; }; then
   if [ "$EXT_UNREAD" -eq 1 ]; then _xm="An extension folder"; else _xm="Some extension folders"; fi
   wrap "$_xm could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+fi
+if [ "$SSHK_UNREAD" -eq 1 ] && { [ "$EXT_HIT" -eq 1 ] || [ -n "$EXT_CHECK" ] || [ -n "$EXT_UPD" ] || [ "$EXT_UNREAD" -gt 0 ]; }; then
+  # shellcheck disable=SC2088  # a literal ~ for home paths, as short() prints
+  wrap "~/.ssh/authorized_keys could not be read, so whether it holds an SSH key such malware adds is not known." 8 "        " "        " "$YEL"
 fi
 while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
   [ -n "$_pid" ] || continue
@@ -8699,17 +10601,48 @@ while IFS='|' read -r _pid _pnm _pcmd _ppath _pw _padv _psum; do
 done <<EOF
 $PLATFORMS
 EOF
+# Projects whose workflows use a compromised GitHub Action, each use under its workflow file.
+if [ "$N_ACT" -gt 0 ]; then
+  pair "${YEL}!${RST}" "GitHub Actions" 16 "${YEL}$(plural "$N_ACT_PROJ" "project uses" "projects use") an action that was compromised${RST}"
+  _lw=""
+  while IFS="$TAB" read -r _wf _an _ur _kind _awin _ahost _afix; do
+    [ -n "$_wf" ] || continue
+    [ "$_wf" = "$_lw" ] || emit "        $(short "$_wf")"; _lw=$_wf
+    case "$_kind" in
+      commit) _t="Uses $_an pinned to a commit the source lists as malicious, compromised $_awin." ;;
+      pin) _t="Uses $_an pinned to a commit, compromised $_awin." ;;
+      *) _t="Uses $_an@$_ur, compromised $_awin." ;;
+    esac
+    wrap "$_t $_afix ($_ahost)" 10 "          " "          " "$DIM"
+  done <<EOF
+$ACT_HITS
+EOF
+  wrap "$(rotate_wait "If these workflows ran in the window shown for each, check their run logs from then, rotate the secrets they could read, and check the repository's history for commits by github-actions[bot] that you didn't make.")" 8 "        " "        "
+  [ "$ACT_UNREAD" -gt 0 ] && wrap "$(plural "$ACT_UNREAD" "workflow file" "workflow files") could not be read, so this is not the full list." 8 "        " "        " "$YEL"
+elif [ "$ACT_UNREAD" -gt 0 ]; then
+  pair "${YEL}!${RST}" "GitHub Actions" 16 "${YEL}not fully checked: $(plural "$ACT_UNREAD" "workflow file" "workflow files") could not be read${RST}"
+elif [ "$HOME_PARTIAL" -eq 1 ]; then
+  pair "${YEL}!${RST}" "GitHub Actions" 16 "${YEL}not fully checked: some folders were not read${RST}"
+elif [ "$N_WF" -eq 0 ]; then
+  pair "${DIM}·${RST}" "GitHub Actions" 16 "${DIM}no workflow files found${RST}"
+else
+  pair "${GRN}✓${RST}" "GitHub Actions" 16 "none of $(count_lines "$ACT_TABLE") compromised actions in $(plural "$N_WF" "workflow file" "workflow files")"
+fi
 
 SEC5=$CAP; CAP=""
-heading "WHAT TO DO" "most urgent first"
-_i=0
-while IFS= read -r t; do
-  [ -n "$t" ] || continue
-  _i=$((_i + 1)); printf -v _num '%2d' "$_i"
-  wrap "$t" 10 "     ${TEAL}${_num}.${RST}  " "          "
-done <<EOF
+# Every fix, numbered: the full report's list and the summary's.
+todo_list() {
+  _i=0
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    _i=$((_i + 1)); printf -v _num '%2d' "$_i"
+    wrap "$t" 10 "     ${TEAL}${_num}.${RST}  " "          "
+  done <<EOF
 $TODO
 EOF
+}
+heading "WHAT TO DO" "most urgent first"
+todo_list
 [ "$_i" -gt 0 ] && blank
 wrap "Also: set a monthly spend limit on every AI provider key, at the provider." 5 "     " "     "
 
@@ -8803,14 +10736,21 @@ for _t in $NPM_TAGS; do
   [ "$(incident_level "$_t")" = update ] || continue
   _s=$(incident_summary "$_t"); if [ -n "$_s" ]; then UPD_SUM=$_s; break; fi
 done
+# A settings or rules file section 1 reads for its findings that is there but was not read, or a rules
+# file not read in full: section 2 names it, and row 01 does not read clean over it.
+N_RULE_UNREAD=$(count_lines "$({ printf '%s\n%s\n' "$AA_TRIED" "$RC_TRIED" | unread_files big; printf '%s\n' "$RC_CUTS"; } | awk 'length && !s[$0]++')")
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
+elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_REMOTE_AG can run commands on other machines"
+elif [ "$N_RULE_UNREAD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, but $(plural "$N_RULE_UNREAD" "settings file" "settings files") could not be read"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi
 if [ "$N_AK" -gt 0 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, $(plural "$N_AK" "file links" "files link") to your SSH logins"
 elif [ "$N_MCP_TOKEN" -gt 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, tokens in $N_MCP_TOKEN files, like $(short "$MCP_TOK_FIRST")"
 elif [ "$N_MCP_TOKEN" -eq 1 ]; then G2="${RED}✗${RST}"; D2="$MCP_SUM, a token in $(short "$MCP_TOK_FIRST")"
+elif [ "$N_WIRED" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, worm-style startup in $(plural "$N_WIRED" project projects)"
+elif [ "$N_UHOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_UHOOK" "session hook" "session hooks") to check"
 elif [ "$N_AUTO" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_AUTO_PROJ" "project acts" "projects act") on opening"
 elif [ "$N_LOOK" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, $(plural "$N_LOOK" "project file" "project files") to read"
 elif [ "$N_SEC2_UNREAD" -gt 0 ]; then G2="${YEL}!${RST}"; D2="$MCP_SUM, but $(plural "$N_SEC2_UNREAD" "file" "files") could not be read"
@@ -8844,6 +10784,7 @@ elif [ -n "$EXT_UPD" ]; then G5="${YEL}!${RST}"; D5="an editor extension to remo
 elif [ "$NPM_UPD" -eq 1 ] && [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="npm and Python packages to update, see section 5"
 elif [ "$NPM_UPD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="an npm package to update, see section 5"
 elif [ "$PY_UPD_HIT" -eq 1 ]; then G5="${YEL}!${RST}"; D5="a Python package to update, see section 5"
+elif [ "$N_ACT" -gt 0 ]; then G5="${YEL}!${RST}"; D5="$(plural "$N_ACT_PROJ" "project uses" "projects use") a compromised GitHub Action"
 elif [ "$N_PLAT_FOUND" -ge 2 ]; then
   G5="${YEL}!${RST}"; _l=""; _i=0
   while IFS='|' read -r _pid _pnm _rest; do
@@ -8863,6 +10804,8 @@ elif [ "$N_LOCK_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not f
 elif [ "$((NPM_UNREAD - NPM_GUNREAD))" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: cache unreadable"
 elif [ "$NPM_GUNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="npm packages not fully checked: folder unreadable"
 elif [ "$EXT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="extensions not fully checked: folder unreadable"
+elif [ "$SSHK_UNREAD" -eq 1 ]; then G5="${YEL}!${RST}"; D5="SSH logins not fully checked: file unreadable"
+elif [ "$ACT_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="workflows not fully checked: files unreadable"
 elif [ "$PY_UNREAD" -gt 0 ]; then G5="${YEL}!${RST}"; D5="Python not fully checked: folder unreadable"
 elif [ "$HOME_PARTIAL" -eq 1 ]; then G5="${YEL}!${RST}"; D5="none found, but some folders were not read"
 else G5="${GRN}✓${RST}"; D5="none of the $N_LEAKS recent leaks or malware it checks"; fi
@@ -8872,9 +10815,11 @@ cline 02 "$G2" "MCP servers" "$D2"
 cline 03 "$G3" "Keys in plain text" "$D3"
 cline 04 "$G4" "Allow lists" "$D4"
 cline 05 "$G5" "Recent leaks" "$D5"
+if [ -n "$OW_CODES" ]; then blank; emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"; fi
 if [ "$ISSUES" -gt 0 ]; then
   blank
-  wrap "$(printf '%s' "$TODO" | head -n 1)" 14 "   ${B}First fix:${RST} " "              "
+  emit "   ${B}What to do, most urgent first${RST}"
+  todo_list
 fi
 # Argus in two lines, with the same claims as the full report.
 if [ "$OS" = Darwin ]; then

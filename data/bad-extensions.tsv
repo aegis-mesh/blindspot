@@ -14,6 +14,11 @@
 #             extension's malware could run, as its source says. It is looked for on every OS; on one
 #             where its malware could not run, the report shows it as a malicious extension to remove,
 #             not a compromised machine (as data/bad-pypi.tsv's os does)
+#   marker    optional: for a version whose clean build has the same id and version as the bad one,
+#             strings only the bad build's extension.js holds, separated by ;. Such a folder counts only
+#             when its extension.js (the file the extension's package.json names as main, at the top
+#             of its folder) holds one of them. An extension.js that is missing or can't be read leaves
+#             the check not done in full, never clean
 # Looked for as <id>-<version> folders (a platform suffix such as -darwin-arm64 may follow).
 # GlassWorm, from Socket's posts, two of Aikido's and one of Koi's, each its own incident. A version where the post gives one, every
 # version (*) where it names the extension without one: these are the attacker's own extensions, which
@@ -98,7 +103,29 @@
 #   Nx's own advisory, GHSA-c9j4-9m59-847w, says that build was on the VS Code Marketplace for 18
 #   minutes and on Open VSX for 36 (any), and gives its signs on macOS, Linux and Windows (all). The
 #   kitty-monitor files it leaves have lines of their own in data/indicators.tsv, beside the AntV wave's.
-# id	version	incident	registry	os
+# Trojanized Claude Code extension, October 2026 (claudeext): Cursor's security notice (updated 30
+#   October) and StepSecurity's post. Cursor's extension marketplace served tampered
+#   builds of anthropic.claude-code 2.1.312 and 2.1.313, for macOS (darwin-arm64) and Windows
+#   (win32-x64), on 29 October 2026 from 09:27 to 20:35 UTC. StepSecurity found the 2.1.312 build Open VSX serves clean, and the bad
+#   extension.js to be that build's with a loader put in front; Anthropic says 2.1.313 was never
+#   published anywhere else, and went on to 2.1.314. So the id and version prove nothing (registry any,
+#   with a marker): StepSecurity's check looks in the extension.js of those two versions for the
+#   attacker's address, 134.209.82.225, and svc-telemetry, the comment of the SSH key the loader adds
+#   (the bad extension.js's SHA-256, which both sources publish, is
+#   ecb58cb29078d9646ad1dcdbe51526f2d9cfea06be5fb2ab183e8ecc3ab6bf15). The loader is
+#   JavaScript with steps for macOS, Linux (an @reboot crontab line, sshd) and Windows (both sources), so
+#   it runs wherever that file is found: all. The files it leaves have lines in data/indicators.tsv, and
+#   the SSH key it adds a line in data/ssh-keys.tsv.
+# Checkmarx's Open VSX extensions, March 2026 (checkmarxvsx): Wiz's post on the TeamPCP attack on KICS (its
+#   update of 23 March, 22:35 UTC, and its OpenVSX Payload section). checkmarx.ast-results 2.53.0 and
+#   checkmarx.cx-dev-assist 1.7.0 were published 12 seconds apart at 12:53 UTC on 23 March 2026 from a
+#   compromised account. Wiz says the VS Code Marketplace versions appear unaffected, and the Marketplace
+#   lists neither version (20 November 2026): openvsx. Open VSX no longer serves either. On activation the
+#   payload looks for cloud credentials and, finding any, fetches a credential stealer and runs it through
+#   npx, bunx, pnpx or yarn dlx; Wiz describes no check of the OS before that step: all. Off CI it adds a
+#   systemd user service (Linux), which the incident's advice names; Wiz gives no file name for it, so it
+#   has no line in data/indicators.tsv.
+# id	version	incident	registry	os	marker
 oorzc.ssh-tools	0.5.1	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
 oorzc.mind-map	1.0.61	glassworm	openvsx	mac
@@ -242,3 +269,7 @@ vsceue.volar-vscode	*	glasswormdec	any	mac,win
 exargd.vsblack	0.0.1	glasswasm	openvsx	all
 noellee-doc.flint-debug	0.1.1	glasswasm	openvsx	all
 nrwl.angular-console	18.95.0	nxconsole	any	all
+anthropic.claude-code	2.1.312	claudeext	any	all	134.209.82.225;svc-telemetry
+anthropic.claude-code	2.1.313	claudeext	any	all	134.209.82.225;svc-telemetry
+checkmarx.ast-results	2.53.0	checkmarxvsx	openvsx	all
+checkmarx.cx-dev-assist	1.7.0	checkmarxvsx	openvsx	all

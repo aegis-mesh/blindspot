@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Proves that a new incident of each data-only kind (and a new gh-token-monitor file, agent setting,
-# agent version, extension, extension whose malware runs on another OS, and Python incident's startup file) needs nothing but data lines: copies the repo
+# agent version, extension, extension whose malware runs on another OS, Python incident's startup file and
+# compromised GitHub Action) needs nothing but data lines: copies the repo
 # to REPO, appends a made-up incident of each kind to the data files, runs tools/gen.sh there, and
 # checks that only the generated blocks changed. Then plants matching files in HOME (a copy of a
 # clean fixture home) and in HOME/tmp for the temp folder. The suites run the copy's scripts.
@@ -9,7 +10,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 R=$1; C=$2; F=$3
-mkdir -p "$R"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$R/"
+mkdir -p "$R"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$R/"
 T=$(printf '\t')
 cat >> "$R/data/incidents.tsv" <<EOF
 madeplat${T}Made Platform${T}October 2026${T}a made-up platform leak for the tests${T}https://example.com/madeplat${T}leak
@@ -37,10 +38,13 @@ printf 'Made Agent\tall\t~/.madeagent/config.json\tmadeMode\t"made": "yolo"\n' >
 printf 'Made Agent\tall\t~/.madeagent/profiles/*/config.json\tmadeMode profile\t"made": "profile"\n' >> "$R/data/auto-approve.tsv"
 printf 'madetool\tMade Tool\tall\tnpm\tmade-tool\t<2.0.0\ta made-up hole for the tests\thttps://example.com/madetool\nmadetool\tMade Tool\tall\tnpm\tmade-tool\t<3.0.0\ta second made-up hole\thttps://example.com/madetool2\n' >> "$R/data/outdated.tsv"
 printf 'made.ext\t1.0.0\tmadeext\tany\tall\nmade.winext\t2.0.0\tmadeext\tany\twin\n' >> "$R/data/bad-extensions.tsv"
-bash "$R/tools/gen.sh" > /dev/null
-# Outside the generated blocks, both scripts are unchanged.
+printf 'Made-Org/made-action\tv1*\t-\t-\tsafe\tin October 2026\thttps://example.com/madeaction\tRemove it.\n' >> "$R/data/actions.tsv"
+# Exit code 3: the blocks were written, and blindspot-fleet.ps1 was not built for want of PowerShell.
+bash "$R/tools/gen.sh" > /dev/null 2> "$R/gen-err.txt" || { _r=$?; [ "$_r" -eq 3 ] || { cat "$R/gen-err.txt" >&2; exit 1; }; }
+# Outside the generated blocks, both scripts are unchanged. The game block is code, not generated, so
+# it is compared too.
 for s in gird-check.sh gird-check.ps1; do
-  if ! cmp -s <(awk '/^# >>> /{skip=1} !skip{print} /^# <<< /{skip=0}' "$s") <(awk '/^# >>> /{skip=1} !skip{print} /^# <<< /{skip=0}' "$R/$s"); then
+  if ! cmp -s <(awk '/^# >>> / && !/^# >>> game$/{skip=1} !skip{print} /^# <<< / && !/^# <<< game$/{skip=0}' "$s") <(awk '/^# >>> / && !/^# >>> game$/{skip=1} !skip{print} /^# <<< / && !/^# <<< game$/{skip=0}' "$R/$s"); then
     echo "made-up.sh: $s changed outside its generated blocks" >&2; exit 1
   fi
   if cmp -s "$s" "$R/$s"; then echo "made-up.sh: gen.sh did not change $s" >&2; exit 1; fi
@@ -64,3 +68,4 @@ mkdir -p "$F/.madeagent" "$F/.npm-global/lib/node_modules/made-tool" "$F/.vscode
 printf '{\n  "made": "yolo"\n}\n' > "$F/.madeagent/config.json"
 mkdir -p "$F/.madeagent/profiles/p1"; printf '{"made": "profile"}\n' > "$F/.madeagent/profiles/p1/config.json"
 printf '{"name":"made-tool","version":"1.5.0"}\n' > "$F/.npm-global/lib/node_modules/made-tool/package.json"
+mkdir -p "$F/code/made/.github/workflows"; printf 'jobs:\n  a:\n    steps:\n      - uses: made-org/made-action@v1.2\n' > "$F/code/made/.github/workflows/made.yml"

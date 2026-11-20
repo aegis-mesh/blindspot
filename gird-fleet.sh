@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 # Blindspot for IT teams: checks every account on a Mac, run as root by an MDM (macOS).
 # https://gird.ai/blindspot, docs/fleet.md
 #
@@ -7,19 +7,211 @@
 # --account-run through sudo -n -u, with a clean environment, and sends back a fixed set of lines.
 # Root checks every line and builds the account's row itself. The result is saved in
 # /var/db/blindspot/last.json, readable by root only. Nothing is sent anywhere.
-# gird-check.sh must sit next to this file; both, and every folder above them, must be root's alone.
+# blindspot-fleet.sh carries gird-check.sh inside it; gird-fleet.sh needs gird-check.sh next to it.
+# Run it from a file, by a path that holds a slash, with /bin/bash -p as its first line says. The file
+# and every folder above it must be root's alone (a folder root owns with the sticky bit, as
+# /private/tmp, is accepted).
 #
-#   sudo bash gird-fleet.sh --all-users             a report per account
-#   sudo bash gird-fleet.sh --all-users --list      who would be checked, and why anyone is not
-#   sudo bash gird-fleet.sh --all-users --json      the result as JSON (--summary-to-stdout: one line)
-#     --exit-zero  --deadline=<seconds>  --hash-accounts=<secret>
-#   sudo bash gird-fleet.sh --inventory             the saved inventory value (--stale-days=<days>,
-#                                                    --result-tags)
+#   sudo /bin/bash -p ./blindspot-fleet.sh               what an MDM runs: with no options it is
+#                                                        --all-users --exit-zero --summary-to-stdout
+#                                                        --deadline=3000
+#   sudo /bin/bash -p ./blindspot-fleet.sh --all-users   a report per account
+#     --all-users --list     who would be checked, and why anyone is not
+#     --all-users --json     the result as JSON (--summary-to-stdout: one line)
+#     --exit-zero  --deadline=<seconds>
+#   sudo /bin/bash -p ./blindspot-fleet.sh --inventory   the saved inventory value
+#                                                        (--stale-days=<days>, --result-tags)
+#   Jamf Pro's three first arguments (/, the computer's name, the user's name) are dropped.
+#   Accounts are shown as a keyed hash of their names when /var/db/blindspot/hash-key holds a secret.
 
 # shellcheck disable=SC2034  # the generated tables carry fields only gird-check.sh reads
-export LC_ALL=C
+
+# The start (docs/designs/fleet-mode.md, How a run starts), before anything else: bash started with -p;
+# a fixed PATH; the file's own path, which must hold a slash; that file and every folder above it
+# root's alone; a copy of it in a new folder only root can open, checked by SHA-256; then that copy,
+# started again with an empty environment. Everything after the start runs from the copy.
+# Until -p is proven, a function from the environment may stand in for any builtin but the special
+# ones, which posix mode finds first: so only an assignment, case and special builtins run here, and
+# printf only after unset -f. SHELLOPTS=privileged puts p in $- yet imports functions, so both count.
+POSIXLY_CORRECT=1; FL_O=$-; set +xvkaeufCET -B; unset -f declare; FL_FN=$(declare -F)
+case $FL_O in *x*) FL_O= ;; esac
+case $FL_O in *p*) case $FL_FN in '') FL_O=ok ;; esac ;; esac
+case $FL_O in
+  ok) unset POSIXLY_CORRECT FL_O FL_FN ;;
+  *) unset -f printf; printf '%s\n' "blindspot: start it as its first line says, with /bin/bash -p, and without -x: without -p, bash takes functions and settings from its environment before the file can check anything. It stopped before doing anything." >&2; exit 13 ;;
+esac
+PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
+unset BASH_ENV ENV CDPATH GLOBIGNORE TMPDIR
+IFS=$' \t\n'; umask 077; export LC_ALL=C
+NL=$'\n'
+FLEET_REAL=0
+# Every read of a GIRD_CHECK_* test setting below also needs FLEET_REAL=0 and EUID not 0, and the
+# copy starts with env -i, so as root no test setting is read or passed on.
+if [ "$EUID" -eq 0 ] || [ "${GIRD_CHECK_FLEET_REAL_ROOT:-}" = 1 ]; then FLEET_REAL=1; fi
+FL_PATH=/usr/bin:/bin:/usr/sbin:/sbin
+FL_STATE=/var/db/blindspot; FL_OWNER=0; FL_TMPROOT=/private/tmp; FL_OLD="/Library/Application Support/Blindspot"
+FL_OSNAME=$(/usr/bin/uname -s 2>/dev/null)
+if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
+  FL_STATE=${GIRD_CHECK_FLEET_STATE:-$FL_STATE}; FL_OWNER=$EUID; FL_OLD=${GIRD_CHECK_FLEET_OLD:-$FL_OLD}
+  FL_OSNAME=${GIRD_CHECK_FLEET_OS:-$FL_OSNAME}
+fi
+# >>> packed-sha: written into blindspot-fleet.sh by tools/gen.sh; empty here, where gird-check.sh sits next to this file.
+FL_PACKED_SHA=''
+# <<< packed-sha
+
+# What differs by OS, one small function each (macOS here; Linux has no fleet mode yet).
+fl_um() { /usr/bin/stat -f '%u %Lp' "$1" 2>/dev/null; }   # owner and mode
+fl_ul() { /usr/bin/stat -f '%u %l' "$1" 2>/dev/null; }    # owner and number of links
+fl_size() { /usr/bin/stat -f %z "$1" 2>/dev/null; }
+fl_sha256() { /usr/bin/env -i /usr/bin/shasum -a 256 2>/dev/null < "$1" | /usr/bin/cut -c1-64; }
+# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# owned_only UID PATH [sticky]: 0 when PATH and every folder above it are owned by root or UID and
+# writable by no one else: the full mode read with four digits (so 002 is not read as 2), and no ACL
+# entry that lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be
+# resolved. With sticky, a folder that root owns with mode 1777, as /private/tmp, passes:
+# there no other account can rename, unlink or replace a file root owns. Only gird-fleet.sh's start
+# asks for it, and it then runs a copy of the file in a folder of its own (docs/designs/fleet-mode.md).
+# The two calls that differ by OS: owner and mode, and whether an ACL entry lets anyone write (macOS).
+oo_mode() { /usr/bin/stat -f '%u %Mp%03Lp' "$1" 2>/dev/null; }
+oo_acl_open() { # 0: an entry lets someone write; 1: none does; 2: the ACL could not be read
+  _oo_a=$(/bin/ls -lde "$1" 2>/dev/null) || return 2
+  printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }'
+}
+owned_only() {
+  _oo_p=$2
+  while :; do
+    _oo_m=$(oo_mode "$_oo_p")
+    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
+    case "${_oo_m#* }" in [0-7][0-7][0-7][0-7]) ;; *) return 1 ;; esac
+    if [ "${3:-}" = sticky ] && [ "$_oo_m" = "0 1777" ] && [ -d "$_oo_p" ]; then :
+    else case "${_oo_m#* }" in ??[2367]?|???[2367]) return 1 ;; esac; fi
+    oo_acl_open "$_oo_p"; [ $? -eq 1 ] || return 1
+    [ "$_oo_p" = / ] && return 0
+    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
+  done
+}
+# <<< owned-walk
+
+# The saved result's folder: root's, mode 0700. One that is a link, not a folder, or not root's with
+# mode 0700 is moved aside and made again, unless it holds a hash-key: moved aside, the next run would
+# find no hash-key and show the names it is there to hide. That folder stays as it is, nothing is
+# written to it, and every run that needs it is refused until an admin makes it root's with mode 0700.
+fl_state_ok() { [ ! -L "$FL_STATE" ] && [ -d "$FL_STATE" ] && [ "$(fl_um "$FL_STATE")" = "$FL_OWNER 700" ]; }
+fl_state_prep() {
+  if ! fl_state_ok; then
+    { [ -L "$FL_STATE/hash-key" ] || [ -e "$FL_STATE/hash-key" ]; } && return 1
+    if [ -L "$FL_STATE" ] || [ -e "$FL_STATE" ]; then
+      /bin/mv -f -- "$FL_STATE" "$FL_STATE.replaced-$(/bin/date -u +%Y%m%d%H%M%S)-$$" 2>/dev/null || return 1
+    fi
+    /bin/mkdir -m 700 -- "$FL_STATE" 2>/dev/null || return 1
+    fl_state_ok || return 1
+  fi
+}
+fl_write() { # name text: written to a new file, then renamed into place, root's only
+  fl_state_prep || return 1
+  _sf=$(/usr/bin/mktemp "$FL_STATE/.$1.XXXXXX") || return 1
+  printf '%s\n' "$2" > "$_sf" && /bin/chmod 600 "$_sf" && /bin/mv -f -- "$_sf" "$FL_STATE/$1" || { /bin/rm -f -- "$_sf"; return 1; }
+}
+# A run refused before it checks anything says why in the saved-result folder, so the inventory reads
+# failed with that reason, not an older result or none. A run that only reads (--inventory, --list,
+# --help) records nothing.
+fl_record_args() { FL_RECORD=1; case " $* " in *" --inventory "*|*" --list "*|*" --help "*|*" -h "*) FL_RECORD=0 ;; esac; }
+fl_refuse() { # exit-code reason message: the reason is a fixed phrase, never a path
+  printf 'blindspot: %s\n' "$3" >&2
+  [ "$FL_RECORD" -eq 1 ] && fl_write refused "refused $(/bin/date -u +%Y-%m-%dT%H:%MZ): $2$NL$(/bin/date -u +%s)" 2>/dev/null
+  exit "$1"
+}
+fl_first_bad() { # PATH: the first folder from / down, or PATH itself, that fails the ownership walk
+  _fb=""; _fr=${1#/}
+  while :; do
+    _fb="$_fb/${_fr%%/*}"; [ "$_fr" = "${_fr#*/}" ] && _fr="" || _fr=${_fr#*/}
+    owned_only "$FL_OWNER" "$_fb" sticky || { printf '%s' "$_fb"; return; }
+    [ -n "$_fr" ] || break
+  done
+  printf '%s' "$1"
+}
+
+if [ -z "${BLINDSPOT_STAGE:-}" ]; then
+  # Jamf Pro passes three arguments first: the mount point, /, the computer's name and the user's
+  # name, which may be empty. An MDM's unused parameters arrive empty and are dropped. With no options
+  # at all it runs as the MDM runs it. The copy gets the options as they stand after this.
+  if [ $# -ge 3 ] && [ "$1" = / ]; then shift 3; fi
+  _args=(); for arg in "$@"; do [ -n "$arg" ] && _args+=("$arg"); done
+  if [ "${#_args[@]}" -eq 0 ]; then set -- --all-users --exit-zero --summary-to-stdout --deadline=3000; else set -- "${_args[@]}"; fi
+  fl_record_args "$@"
+  if [ "$FL_OSNAME" != Darwin ]; then
+    FL_RECORD=0
+    case "$FL_OSNAME" in
+      Linux) fl_refuse 13 "" "checking every account is built for macOS only so far; Linux comes next" ;;
+      *) fl_refuse 13 "" "checking every account is built for macOS only" ;;
+    esac
+  fi
+  [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 1 ] && fl_refuse 13 "not run as root" "it needs root: run it with sudo, or from your MDM"
+  # bash names the file it reads in BASH_SOURCE. Empty, it read standard input or bash -c; with no
+  # slash, bash may have found the name in the current folder or on PATH.
+  FL_SELF=${BASH_SOURCE[0]:-}
+  case "$FL_SELF" in
+    */*) ;;
+    *) fl_refuse 13 "not run from a file by its path" "run it from a file, by a path that holds a slash, such as /bin/bash -p ./blindspot-fleet.sh: before anything else it checks who can change that file, then copies it. Standard input, bash -c and a bare file name are refused" ;;
+  esac
+  _d=$(cd -P -- "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
+  FL_SELF="${_d%/}/${FL_SELF##*/}"
+  # What root runs, and copies for every account, must be root's alone: this file (and, for
+  # gird-fleet.sh, gird-check.sh next to it) and every folder above them, owned by root (the tests'
+  # stand-in owns them in a test run) and writable by nobody else.
+  _bad=""; _chk=""
+  if [ -z "$_d" ] || [ -L "$FL_SELF" ] || [ ! -f "$FL_SELF" ]; then _bad=$FL_SELF
+  elif ! owned_only "$FL_OWNER" "$FL_SELF" sticky; then _bad=$(fl_first_bad "$FL_SELF"); fi
+  if [ -z "$FL_PACKED_SHA" ] && [ "$FL_RECORD" -eq 1 ] && [ -z "$_bad" ]; then
+    _chk="${_d%/}/gird-check.sh"
+    [ ! -L "$_chk" ] && [ -f "$_chk" ] || fl_refuse 13 "gird-check.sh is not next to gird-fleet.sh" "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link"
+    owned_only "$FL_OWNER" "$_chk" sticky || _bad=$(fl_first_bad "$_chk")
+  fi
+  # tests only: a path whose mode a test run can't give the script or a folder it must reach
+  [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && { owned_only "$FL_OWNER" "$GIRD_CHECK_FLEET_CHECK_ALSO" || _bad=$GIRD_CHECK_FLEET_CHECK_ALSO; }
+  [ -z "$_bad" ] || fl_refuse 13 "the file or a folder above it can be changed by an account other than root" "the file it runs from, and every folder above it, must be owned by root and writable by no one else ($_bad is not): install it in such a folder and run it from there"
+  # The copy: root's alone in a folder only root can open, so the file bash goes on reading can't
+  # be swapped, and compared with the file just checked.
+  FL_STAGE=$(/usr/bin/mktemp -d "$FL_TMPROOT/blindspot-run.XXXXXXXX" 2>/dev/null) || fl_refuse 13 "could not copy itself" "could not make a folder for its copy in $FL_TMPROOT"
+  _ok=1
+  [ ! -L "$FL_STAGE" ] && [ "$(fl_um "$FL_STAGE")" = "$FL_OWNER 700" ] || _ok=0
+  for _p in "$FL_SELF:blindspot-fleet.sh" "$_chk:gird-check.sh"; do
+    _src=${_p%:*}; [ -n "$_src" ] && [ "$_ok" -eq 1 ] || continue
+    _h=$(fl_sha256 "$_src")
+    /bin/cp -- "$_src" "$FL_STAGE/${_p##*:}" 2>/dev/null && /bin/chmod 600 "$FL_STAGE/${_p##*:}" && [ -n "$_h" ] || _ok=0
+    # tests only: a copy that no longer matches the file
+    [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_STAGE_EDIT:-}" ] && printf '#\n' >> "$FL_STAGE/${_p##*:}"
+    [ "$_ok" -eq 1 ] && [ "$(fl_sha256 "$FL_STAGE/${_p##*:}")" = "$_h" ] || _ok=0
+  done
+  [ "$_ok" -eq 1 ] || { /bin/rm -rf -- "$FL_STAGE"; fl_refuse 13 "its copy did not match the file" "its copy in $FL_STAGE did not match the file it was made from"; }
+  set -- "PATH=$FL_PATH" "BLINDSPOT_STAGE=$FL_STAGE" /bin/bash -p "$FL_STAGE/blindspot-fleet.sh" "$@"
+  if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
+    for _v in $(compgen -e); do case "$_v" in GIRD_CHECK_*|FLL_*) set -- "$_v=${!_v}" "$@" ;; esac; done   # tests only
+  fi
+  exec /usr/bin/env -i "$@"
+fi
+
+# From here on this is the copy. It runs only from a folder the start made: its name, root's with mode
+# 0700, the copy root's with mode 0600; never from a BLINDSPOT_STAGE an environment carried in.
+fl_record_args "$@"
+FL_STAGE=$BLINDSPOT_STAGE; unset BLINDSPOT_STAGE
+FL_SELF=${BASH_SOURCE[0]:-}
+case "$FL_STAGE" in "$FL_TMPROOT"/blindspot-run.????????) ;; *) FL_STAGE="" ;; esac
+if [ -z "$FL_STAGE" ] || [ "$FL_SELF" != "$FL_STAGE/blindspot-fleet.sh" ] || [ -L "$FL_STAGE" ] || [ "$(fl_um "$FL_STAGE")" != "$FL_OWNER 700" ]; then
+  fl_refuse 13 "its copy was not where its start put it" "its copy is not in a folder its start made: run the file itself, never with BLINDSPOT_STAGE set"
+fi
+# The folder is root's, named as the start names it, and bash is reading this file from it: from here
+# a refusal removes it too.
+trap '/bin/rm -rf -- "$FL_STAGE"' EXIT
+if [ -L "$FL_SELF" ] || [ ! -f "$FL_SELF" ] || [ "$(fl_um "$FL_SELF")" != "$FL_OWNER 600" ] || ! owned_only "$FL_OWNER" "$FL_SELF" sticky; then
+  fl_refuse 13 "its copy was not where its start put it" "its copy is not in a folder its start made: run the file itself, never with BLINDSPOT_STAGE set"
+fi
+FL_CHECK="$FL_STAGE/gird-check.sh"
+cd / || exit 13
+
 ALL=0; ALLUSERS=0; JSON=0; SUMOUT=0; EXITZERO=0; LISTONLY=0; HASHKEY=""; INVENTORY=0; RESULTTAGS=0
 DEADLINE=""; STALE_DAYS=""
+fleet_usage() { fl_refuse "${2:-2}" "${3:-it was started with options it does not take together}" "$1"; }
 for arg in "$@"; do
   case "$arg" in
     --all-users) ALLUSERS=1 ;;
@@ -27,48 +219,20 @@ for arg in "$@"; do
     --summary-to-stdout) SUMOUT=1 ;;
     --exit-zero) EXITZERO=1 ;;
     --list) LISTONLY=1 ;;
-    --hash-accounts=?*) HASHKEY=${arg#*=} ;;
+    --hash-accounts|--hash-accounts=*) fleet_usage "--hash-accounts is not taken as an argument: every account can read root's arguments while it runs, and the MDM keeps them in its logs. Put the secret in $FL_STATE/hash-key instead (docs/fleet-reference.md, Account names as a keyed hash)" 2 "--hash-accounts was given as an argument" ;;
     --deadline=*) DEADLINE=${arg#*=} ;;
     --inventory) INVENTORY=1 ;;
     --stale-days=*) STALE_DAYS=${arg#*=} ;;
     --result-tags) RESULTTAGS=1 ;;
     --all) ALL=1 ;;
-    -h|--help) /usr/bin/sed -n '2,/^$/p' "$0" | /usr/bin/sed -n 's/^# \{0,1\}//p'; exit 0 ;;
-    *) printf 'Unknown option: %s (try --help)\n' "$arg"; exit 2 ;;
+    -h|--help) /usr/bin/sed -n '2,/^$/p' "$FL_SELF" | /usr/bin/sed -n 's/^# \{0,1\}//p'; exit 0 ;;
+    *) fleet_usage "it does not take ${arg%%=*} (try --help)" 2 "it was given a word it does not take" ;;
   esac
 done
-# Root never obeys a test setting, a function from its environment or a tool on the MDM's PATH.
-while read -r _ _ _f; do [ -n "$_f" ] && unset -f "$_f"; done <<EOF
-$(declare -F)
-EOF
-FLEET_REAL=0
-# Every read of a GIRD_CHECK_* test setting below also needs FLEET_REAL=0 and EUID not 0, and each
-# account's run starts with env -i, so as root no test setting is read or passed on.
-if [ "$EUID" -eq 0 ] || [ "${GIRD_CHECK_FLEET_REAL_ROOT:-}" = 1 ]; then FLEET_REAL=1; fi
-fleet_usage() { printf 'blindspot: %s\n' "$1" >&2; exit "${2:-2}"; }
-# >>> owned-walk: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
-# owned_only UID PATH: 0 when PATH and every folder above it are owned by root or UID and writable
-# by no one else: the mode read with three digits (so 002 is not read as 2), and no ACL entry that
-# lets anyone write, add or delete. A path whose ACL can't be read fails. PATH must be resolved.
-owned_only() {
-  _oo_p=$2
-  while :; do
-    _oo_m=$(/usr/bin/stat -f '%u %03Lp' "$_oo_p" 2>/dev/null)
-    case "$_oo_m" in "0 "*|"$1 "*) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in [0-7][0-7][0-7]) ;; *) return 1 ;; esac
-    case "${_oo_m#* }" in ?[2367]?|??[2367]) return 1 ;; esac
-    _oo_a=$(/bin/ls -lde "$_oo_p" 2>/dev/null) || return 1
-    printf '%s\n' "$_oo_a" | /usr/bin/awk 'NR > 1 && / allow / && /write|append|add_file|add_subdirectory|delete|chown/ { f = 1 } END { exit !f }' && return 1
-    [ "$_oo_p" = / ] && return 0
-    _oo_p=${_oo_p%/*}; [ -n "$_oo_p" ] || _oo_p=/
-  done
-}
-# <<< owned-walk
 case "$DEADLINE" in ''|[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]) ;; *) fleet_usage "--deadline takes a number of seconds, up to 99999" ;; esac
 case "$STALE_DAYS" in ''|[1-9]|[12][0-9]|30) ;; *) fleet_usage "--stale-days takes a number of days, from 1 to 30" ;; esac
-case "$HASHKEY" in *[!A-Za-z0-9._~+/=-]*) fleet_usage "--hash-accounts takes letters, digits and . _ ~ + / = - only" ;; esac
 if [ "$ALLUSERS" -eq 0 ]; then
-  for _o in "$JSON:--json" "$SUMOUT:--summary-to-stdout" "$EXITZERO:--exit-zero" "$LISTONLY:--list" "${HASHKEY:+1}:--hash-accounts" "${DEADLINE:+1}:--deadline"; do
+  for _o in "$JSON:--json" "$SUMOUT:--summary-to-stdout" "$EXITZERO:--exit-zero" "$LISTONLY:--list" "${DEADLINE:+1}:--deadline"; do
     [ "${_o%%:*}" = 1 ] && fleet_usage "${_o#*:} works with --all-users only"
   done
 fi
@@ -77,51 +241,22 @@ fi
 [ "$ALLUSERS" -eq 1 ] && [ "$INVENTORY" -eq 1 ] && fleet_usage "--inventory reads the saved result: run it without --all-users"
 [ "$ALLUSERS" -eq 1 ] || [ "$INVENTORY" -eq 1 ] || fleet_usage "give --all-users to check every account, or --inventory to read the saved result (try --help)"
 [ "$JSON" -eq 1 ] && [ "$SUMOUT" -eq 1 ] && fleet_usage "choose --json or --summary-to-stdout, not both"
-{
-  PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
-  unset BASH_ENV ENV CDPATH GLOBIGNORE TMPDIR
-  IFS=$' \t\n'; umask 077
-  # Each account runs a copy of gird-check.sh from this file's folder, found before cd /.
-  FL_SELF=${BASH_SOURCE[0]:-}
-  case "$FL_SELF" in ''|/*) ;; *) FL_SELF="$PWD/$FL_SELF" ;; esac
-  cd / || exit 13
-  _fos=$(/usr/bin/uname -s 2>/dev/null)
-  [ "$FLEET_REAL" -eq 0 ] && [ -n "${GIRD_CHECK_FLEET_OS:-}" ] && _fos=$GIRD_CHECK_FLEET_OS   # tests only
-  case "$_fos" in
-    Darwin) ;;
-    Linux) fleet_usage "checking every account is built for macOS only so far; Linux comes next" 13 ;;
-    *) fleet_usage "checking every account is built for macOS only" 13 ;;
-  esac
-  [ "$ALL" -eq 1 ] && fleet_usage "--all is refused with --all-users: Desktop and Documents can hold cloud files that download when read" 13
-  if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
-    fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13
+[ "$ALL" -eq 1 ] && fleet_usage "--all is refused with --all-users: Desktop and Documents can hold cloud files that download when read" 13 "--all was given"
+if [ "$EUID" -ne 0 ] && { [ "$FLEET_REAL" -eq 1 ] || [ "${GIRD_CHECK_FLEET_ROOT:-}" != 1 ]; }; then
+  fleet_usage "$( [ "$INVENTORY" -eq 1 ] && printf '%s' '--inventory' || printf '%s' '--all-users') needs root: run it with sudo, or from your MDM" 13 "not run as root"
+fi
+# --hash-accounts: the secret lives only in a file root placed, root's alone, never in an argument.
+if [ "$ALLUSERS" -eq 1 ] && { [ -L "$FL_STATE/hash-key" ] || [ -e "$FL_STATE/hash-key" ]; }; then
+  _hk="$FL_STATE/hash-key"; _hd=$(cd -P -- "$FL_STATE" 2>/dev/null && /bin/pwd -P)
+  if fl_state_ok && [ -n "$_hd" ] && [ ! -L "$_hk" ] && [ -f "$_hk" ] && [ "$(fl_um "$_hk")" = "$FL_OWNER 600" ] && owned_only "$FL_OWNER" "$_hd/hash-key" &&
+     [ "$(fl_size "$_hk")" -le 200 ]; then
+    HASHKEY=$(/bin/cat -- "$_hk"; printf x); HASHKEY=${HASHKEY%x}; HASHKEY=${HASHKEY%"$NL"}
   fi
-  # Each path an account or admin could make is tested as a link first and never followed.
-  if [ "$ALLUSERS" -eq 1 ] && { [ -z "$FL_SELF" ] || { [ ! -L "$FL_SELF" ] && [ ! -f "$FL_SELF" ]; }; }; then
-    fleet_usage "run it from a file: it copies gird-check.sh from its own folder for each account" 13
-  fi
-  # What root runs, and copies for every account, must be root's alone: gird-fleet.sh, gird-check.sh
-  # next to it and every folder above them owned by root (the tests' stand-in owns them in a test
-  # run) and writable by nobody else (owned_only). Root then copies the path it checked.
-  if [ "$ALLUSERS" -eq 1 ]; then
-    _own=0; [ "$FLEET_REAL" -eq 0 ] && [ "$EUID" -ne 0 ] && _own=$EUID
-    _d=$(cd "${FL_SELF%/*}/" 2>/dev/null && /bin/pwd -P) || _d=""
-    _bad=""; [ -n "$_d" ] && [ ! -L "$FL_SELF" ] || _bad=1
-    if [ -z "$_bad" ]; then
-      FL_SELF="${_d%/}/${FL_SELF##*/}"; FL_CHECK="${_d%/}/gird-check.sh"
-      [ ! -L "$FL_CHECK" ] && [ -f "$FL_CHECK" ] || fleet_usage "gird-check.sh must sit next to gird-fleet.sh, as a file, not a link" 13
-      owned_only "$_own" "$FL_SELF" && owned_only "$_own" "$FL_CHECK" || _bad=1
-      # tests only: a path whose mode a test run can't give the script or a folder it must reach
-      [ "$_own" -ne 0 ] && [ -n "${GIRD_CHECK_FLEET_CHECK_ALSO:-}" ] && { owned_only "$_own" "$GIRD_CHECK_FLEET_CHECK_ALSO" || _bad=1; }
-    fi
-    [ -z "$_bad" ] || fleet_usage "gird-fleet.sh, gird-check.sh and every folder above them must be owned by root and writable by no one else: install them in such a folder and run them from there" 13
-    [ -r "$FL_CHECK" ] || fleet_usage "gird-check.sh next to gird-fleet.sh could not be read" 13
-  fi
-  HOME=/var/empty
-}
+  case "$HASHKEY" in ''|*[!A-Za-z0-9._~+/=-]*) fl_refuse 13 "the hash-key file is not root's alone, or not one line of letters and digits" "$_hk must be root's, mode 0600, in a folder that is root's with mode 0700, and hold one line of letters, digits and . _ ~ + / = - only" ;; esac
+fi
+HOME=/var/empty
 
 TTY=0; [ -t 1 ] && TTY=1
-NL=$'\n'
 # The places the tables below name, for an account that is not there: root reads none of them.
 H=/var/empty; AS="$H/Library/Application Support"; WIN=0; _os=mac; _pd=""; WLAPP=""
 APP_CLAUDE=/Applications/Claude.app; APP_CURSOR=/Applications/Cursor.app
@@ -134,11 +269,125 @@ unset CLAUDE_CONFIG_DIR CODEX_HOME
 # The tables gird-check.sh checks with, written here by tools/gen.sh: never edit them here.
 # ---------------------------------------------------------------------------
 # >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.
-ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}'
-PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm"
-KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_|pplx-|r8_|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_'
+ALL_KEYS='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+KEY_PASSES='sk-ant-[A-Za-z0-9_-]{90,}|sk-or-v1-[a-f0-9]{64}|sk-proj-[A-Za-z0-9_-]{120,}|sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-None-[A-Za-z0-9_-]{120,}|sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-svcacct-[A-Za-z0-9_-]{60,}|sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)|sk-admin-[A-Za-z0-9_-]{120,}|(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}|(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}|gsk_[A-Za-z0-9]{52}|xai-[A-Za-z0-9]{64,}|(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)|pplx-[A-Za-z0-9]{40,52}|(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}|(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)|ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}|bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}|gh[pour]_[A-Za-z0-9]{36}|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}|npm_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}|hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)|(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}|(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)|(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)|(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}|(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+KEY_ALTS='sk-ant-[A-Za-z0-9_-]{90,}
+sk-or-v1-[a-f0-9]{64}
+sk-proj-[A-Za-z0-9_-]{120,}
+sk-proj-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-None-[A-Za-z0-9_-]{120,}
+sk-None-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-svcacct-[A-Za-z0-9_-]{60,}
+sk-svcacct-[A-Za-z0-9]{20}T3BlbkFJ[A-Za-z0-9]{20}([^A-Za-z0-9_-]|$)
+sk-admin-[A-Za-z0-9_-]{120,}
+(^|[^A-Za-z0-9-])sk-[A-Za-z0-9]{48}([^A-Za-z0-9]|$)
+(^|[^A-Za-z0-9+/_-])AIza[0-9A-Za-z_-]{35}
+(^|[^A-Za-z0-9])AQ\.[A-Za-z0-9_-]{40,}
+gsk_[A-Za-z0-9]{52}
+xai-[A-Za-z0-9]{64,}
+(^|[^A-Za-z0-9_])hf_[A-Za-z0-9]{34,40}([^A-Za-z0-9_]|$)
+pplx-[A-Za-z0-9]{40,52}
+(^|[^A-Za-z0-9+/_-])r8_[A-Za-z0-9]{37}
+(^|[^A-Za-z0-9])(AKIA|ASIA)[A-Z0-9]{16}([^A-Z0-9]|$)
+ABSKQmVkcm9ja0FQSUtleS[A-Za-z0-9+/]{60,}
+bedrock-api-key-YmVkcm9jay5hbWF6b25hd3MuY29t[A-Za-z0-9+/=]{144}
+gh[pour]_[A-Za-z0-9]{36}
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9]{36}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])ghs_[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}
+github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}
+npm_[A-Za-z0-9]{36}
+
+(^|[^A-Za-z0-9_-])dapi[a-f0-9]{32}(-[0-9])?([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])gl(pat|dt|rt|ft|soat)-[A-Za-z0-9_-]{20}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])xox[bp]-[0-9]{8,14}-[0-9]{8,14}(-[0-9]{8,14})?-[A-Za-z0-9]{24,34}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_.-])(xoxe\.)?xapp-[0-9]-[A-Za-z0-9]{8,14}-[0-9]{8,16}-[A-Za-z0-9]{32,}
+hooks[.]slack[.]com/services/T[A-Z0-9]{8,12}/B[A-Z0-9]{8,12}/[A-Za-z0-9]{24}([^A-Za-z0-9]|$)
+(^|[^A-Za-z0-9_])[sr]k_live_[A-Za-z0-9]{20,247}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])whsec_[A-Za-z0-9]{32,}([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_.-])SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}([^A-Za-z0-9_.-]|$)
+(^|[^A-Za-z0-9_-])pypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{70,}
+(^|[^A-Za-z0-9_-])dckr_pat_[A-Za-z0-9_-]{27}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])do[opr]_v1_[a-f0-9]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_.-])hvs\.[A-Za-z0-9_-]{90,120}([^A-Za-z0-9_.-]|$)
+(^|[^A-Za-z0-9_-])nvapi-[A-Za-z0-9_-]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])lsv2_(pt|sk)_[a-f0-9]{32}_[a-f0-9]{10}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])shp(at|pa)_[a-fA-F0-9]{32}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])sntrys_[A-Za-z0-9+/=]{100,255}_[A-Za-z0-9+/]{43}([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)
+(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}
+(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)
+(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)
+(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}=='
+PROVIDER_IDS="anthropic openrouter openai google groq xai huggingface perplexity replicate aws github npm databricks gitlab slack stripe sendgrid pypi dockerhub digitalocean vault nvidia langsmith shopify sentry supabase onepassword azureentra azuredevops azureai azurestorage"
+KEY_STARTS='sk-ant-|sk-or-v1-|sk-|AIza|AQ[.]|gsk_|xai-|hf_(?:(?<![A-Za-z0-9_]hf_)|(?<=\\[ntr]hf_))|pplx-|r8_(?:(?<![A-Za-z0-9+/_-]r8_)|(?<=\\[ntr]r8_))|AKIA|ASIA|ABSK|bedrock-api-key|gh[pousr]_|github_pat_|npm_|dapi(?:(?<![A-Za-z0-9_-]dapi)|(?<=\\[ntr]dapi))|glpat-|gldt-|glrt-|glft-|glsoat-|xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com|sk_live_|rk_live_|whsec_|SG[.](?:(?<![A-Za-z0-9_.-]SG[.])|(?<=\\[ntr]SG[.]))|pypi-AgEIcHlwaS5vcmc(?:(?<![A-Za-z0-9_-]pypi-AgEIcHlwaS5vcmc)|(?<=\\[ntr]pypi-AgEIcHlwaS5vcmc))|dckr_pat_(?:(?<![A-Za-z0-9_-]dckr_pat_)|(?<=\\[ntr]dckr_pat_))|dop_v1_|doo_v1_|dor_v1_|hvs[.](?:(?<![A-Za-z0-9_.-]hvs[.])|(?<=\\[ntr]hvs[.]))|nvapi-(?:(?<![A-Za-z0-9_-]nvapi-)|(?<=\\[ntr]nvapi-))|lsv2_pt_|lsv2_sk_|shpat_|shppa_|sntryu_|sntrys_|sb_secret_(?:(?<![A-Za-z0-9_-]sb_secret_)|(?<=\\[ntr]sb_secret_))|ops_eyJ(?:(?<![A-Za-z0-9_-]ops_eyJ)|(?<=\\[ntr]ops_eyJ))|7Q~|8Q~|JQQJ99|[+]ASt|AccountName='
+PASS_FIXED='sk-ant-
+sk-or-v1-
+sk-
+AIza
+AQ.
+gsk_
+xai-
+hf_
+pplx-
+r8_
+AKIA
+ASIA
+ABSK
+bedrock-api-key
+ghp_
+gho_
+ghu_
+ghs_
+ghr_
+github_pat_
+npm_
+
+dapi
+glpat-
+gldt-
+glrt-
+glft-
+glsoat-
+xoxb-
+xoxp-
+xoxe.xapp-
+xapp-
+hooks.slack.com
+sk_live_
+rk_live_
+whsec_
+SG.
+pypi-AgEIcHlwaS5vcmc
+dckr_pat_
+dop_v1_
+doo_v1_
+dor_v1_
+hvs.
+nvapi-
+lsv2_pt_
+lsv2_sk_
+shpat_
+shppa_
+sntryu_
+sntrys_
+sb_secret_
+ops_eyJ
+7Q~
+8Q~
+JQQJ99
++ASt
+AccountName='
 PROV_AWK='
+function at(s, t, o,   b) { for (b = 0; b <= 2; b++) if (substr(s, b + o + 1, length(t)) == t) return 1; return 0 }
 function prov(s) {
+  if (at(s, "7Q~", 3) || at(s, "8Q~", 3)) return "Microsoft Entra"
+  if ((at(s, "JQQJ99", 52) && at(s, "AAAAAZDO", 72))) return "Azure DevOps"
+  if ((at(s, "JQQJ99", 52) && at(s, "ACOG", 76))) return "Azure AI"
+  if ((at(s, "+ASt", 76) && at(s, "==", 86)) || at(s, "AccountName=", 0)) return "Azure Storage"
   sub(/^[^A-Za-z]*\\[ntr"]/, "", s); sub(/^[^A-Za-z]+/, "", s)
   if (s ~ /^(sk-ant-)/) return "Anthropic"
   if (s ~ /^(sk-or-v1-)/) return "OpenRouter"
@@ -152,9 +401,25 @@ function prov(s) {
   if (s ~ /^(AKIA|ASIA|ABSK|bedrock-api-key)/) return "AWS"
   if (s ~ /^(gh[pousr]_|github_pat_)/) return "GitHub"
   if (s ~ /^(npm_)/) return "npm"
+  if (s ~ /^(dapi)/) return "Databricks"
+  if (s ~ /^(glpat-|gldt-|glrt-|glft-|glsoat-)/) return "GitLab"
+  if (s ~ /^(xoxb-|xoxp-|xoxe[.]xapp-|xapp-|hooks[.]slack[.]com)/) return "Slack"
+  if (s ~ /^(sk_live_|rk_live_|whsec_)/) return "Stripe"
+  if (s ~ /^(SG[.])/) return "SendGrid"
+  if (s ~ /^(pypi-AgEIcHlwaS5vcmc)/) return "PyPI"
+  if (s ~ /^(dckr_pat_)/) return "Docker Hub"
+  if (s ~ /^(dop_v1_|doo_v1_|dor_v1_)/) return "DigitalOcean"
+  if (s ~ /^(hvs[.])/) return "HashiCorp Vault"
+  if (s ~ /^(nvapi-)/) return "NVIDIA"
+  if (s ~ /^(lsv2_pt_|lsv2_sk_)/) return "LangSmith"
+  if (s ~ /^(shpat_|shppa_)/) return "Shopify"
+  if (s ~ /^(sntryu_|sntrys_)/) return "Sentry"
+  if (s ~ /^(sb_secret_)/) return "Supabase"
+  if (s ~ /^(ops_eyJ)/) return "1Password"
   return ""
-}'
-prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; esac; }
+}
+function pmax(p) { if (p == "GitHub") return 1024; if (p == "PyPI") return 600; if (p == "Sentry") return 320; if (p == "1Password") return 1024; return 300 }'
+prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf openrouter ;; "OpenAI") printf openai ;; "Google") printf google ;; "Groq") printf groq ;; "xAI") printf xai ;; "Hugging Face") printf huggingface ;; "Perplexity") printf perplexity ;; "Replicate") printf replicate ;; "AWS") printf aws ;; "GitHub") printf github ;; "npm") printf npm ;; "Databricks") printf databricks ;; "GitLab") printf gitlab ;; "Slack") printf slack ;; "Stripe") printf stripe ;; "SendGrid") printf sendgrid ;; "PyPI") printf pypi ;; "Docker Hub") printf dockerhub ;; "DigitalOcean") printf digitalocean ;; "HashiCorp Vault") printf vault ;; "NVIDIA") printf nvidia ;; "LangSmith") printf langsmith ;; "Shopify") printf shopify ;; "Sentry") printf sentry ;; "Supabase") printf supabase ;; "1Password") printf onepassword ;; "Microsoft Entra") printf azureentra ;; "Azure DevOps") printf azuredevops ;; "Azure AI") printf azureai ;; "Azure Storage") printf azurestorage ;; esac; }
 # <<< keys
 # >>> auto-approve: generated from data/auto-approve.tsv by tools/gen.sh. Edit that file, then run it.
 AA_TABLE="Claude Code|all|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|bypassPermissions|\"permissions\": {\"defaultMode\": \"bypassPermissions\"
@@ -206,7 +471,35 @@ Claude Code|all|$AS/Code - Insiders/User/profiles/*/settings.json|claudeCode.ini
 Claude Code|all|$AS/Cursor/User/profiles/*/settings.json|claudeCode.initialPermissionMode: bypassPermissions|\"claudeCode.initialPermissionMode\": \"bypassPermissions\"|\"claudeCode.allowDangerouslySkipPermissions\": true"
 AA_PROJECT='.codex/config.toml'
 # <<< auto-approve
-# >>> agents: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# >>> remote-commands: generated from data/remote-commands.tsv by tools/gen.sh. Edit that file, then run it.
+RC_SIGS='ssh|exact|on other machines over SSH
+aws ssm send-command|exact|on AWS servers
+aws ssm start-session|exact|on AWS servers
+aws ecs execute-command|exact|in AWS containers
+gcloud compute ssh|exact|on Google Cloud servers
+az vm run-command invoke|exact|on Azure servers
+az ssh vm|exact|on Azure servers
+kubectl exec|exact|in Kubernetes containers
+Invoke-Command|any|on other machines with PowerShell
+Enter-PSSession|any|on other machines with PowerShell'
+RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
+Claude Code|all|claude|local|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|only in sessions you start in your home folder
+Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-
+Gemini CLI|all|gemini-toml|agent|${GEMINI_CLI_HOME:-$H}/.gemini/policies/*.toml|-
+Gemini CLI|all|gemini-json|agent|${GEMINI_CLI_HOME:-$H}/.gemini/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code/User/profiles/*/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/settings.json|-
+VS Code Copilot|all|vscode|file|$AS/Code - Insiders/User/profiles/*/settings.json|-
+Roo Code|all|roo|file|$AS/Code/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Code - Insiders/User/profiles/*/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/settings.json|while its auto-approve for commands is on
+Roo Code|all|roo|file|$AS/Cursor/User/profiles/*/settings.json|while its auto-approve for commands is on
+Amazon Q|all|amazonq|file|$H/.aws/amazonq/cli-agents/*.json|when you use that agent"
+# <<< remote-commands
+# >>> agents: generated from data/agents.tsv by tools/gen.sh. Edit that file, then run it.
 AGENTS="Claude Code|claude|$H/.claude|$H/.claude/projects|claude-code
 Claude Desktop||$APP_CLAUDE;$AS/Claude|$AS/Claude|claude-desktop
 Codex|codex|$H/.codex|$H/.codex/sessions|codex
@@ -222,12 +515,12 @@ Cline||$AS/Code/User/globalStorage/saoudrizwan.claude-dev;$AS/Cursor/User/global
 Continue||$H/.continue|$H/.continue/sessions|continue"
 # <<< agents
 # >>> incidents: generated from data/incidents.tsv by tools/gen.sh. Edit that file, then run it.
-npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; uipath) printf '%s' 'UiPath npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026' ;; mastra) printf '%s' 'Mastra npm packages, June 2026' ;; antv) printf '%s' 'AntV account takeover, May 2026' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; esac; }
-incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; uipath) printf '%s' 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' ;; mastra) printf '%s' 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' ;; antv) printf '%s' 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' ;; injective) printf '%s' 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' ;; esac; }
+npm_label() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026' ;; tanstack) printf '%s' 'TanStack worm, May 2026' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026' ;; uipath) printf '%s' 'UiPath npm packages, May 2026' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026' ;; opensearch) printf '%s' 'OpenSearch client, May 2026' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026' ;; mastra) printf '%s' 'Mastra npm packages, June 2026' ;; antv) printf '%s' 'AntV account takeover, May 2026' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026' ;; keyv) printf '%s' 'keyv worm, August 2026' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026' ;; tensorlake) printf '%s' 'tensorlake package, October 2026' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026' ;; opencode) printf '%s' 'OpenCode Console, October 2026' ;; railway) printf '%s' 'Railway, October 2026' ;; zeabur) printf '%s' 'Zeabur, October 2026' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026' ;; checkmarxvsx) printf '%s' 'Checkmarx Open VSX extensions, March 2026' ;; injective) printf '%s' 'Injective SDK, July 2026' ;; claudeext) printf '%s' 'Trojanized Claude Code extension, October 2026' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2, November 2026' ;; esac; }
+incident_line() { case "$1" in axios) printf '%s' 'Axios takeover, March 2026: downloaded payloads, including a remote access trojan, onto machines that installed it. cisa.gov' ;; tanstack) printf '%s' 'TanStack worm, May 2026: stole cloud, GitHub, npm and SSH credentials on install, then republished itself. github.com' ;; mistral) printf '%s' 'Mistral AI npm packages, May 2026: published with malware Mistral says could not run, as its setup script names a missing file. docs.mistral.ai' ;; uipath) printf '%s' 'UiPath npm packages, May 2026: published with malware UiPath says a bug made non-functional. trust.uipath.com' ;; mistralpy) printf '%s' 'mistralai 2.4.6, May 2026: started a credential stealer in the background when imported on Linux. docs.mistral.ai' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1, May 2026: downloaded and ran a credential stealer, on Linux only. wiz.io' ;; opensearch) printf '%s' 'OpenSearch client, May 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; bitwarden) printf '%s' 'Bitwarden CLI, April 2026: stole SSH keys, npm, GitHub and cloud credentials, and AI tool configs. stepsecurity.io' ;; minishai) printf '%s' 'Mini Shai-Hulud worm, April 2026: stole GitHub, npm and cloud credentials, and tried to spread through stolen tokens. wiz.io' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3, April 2026: started a credential stealer when imported, then tried to spread itself. github.com' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3, May 2026: fetched and ran a credential-stealing payload when imported on Linux. github.com' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2, March 2026: stole SSH keys and cloud and Kubernetes credentials when imported, and left a backdoor. github.com' ;; mastra) printf '%s' 'Mastra npm packages, June 2026: pulled in malware that started at login and sent browser history to the attackers. socket.dev' ;; antv) printf '%s' 'AntV account takeover, May 2026: published from a hijacked maintainer account with an install hook that steals credentials. osv.dev' ;; nxconsole) printf '%s' 'Nx Console 18.95.0, May 2026: a malicious build fetched a payload that harvested credentials from disk and memory. github.com' ;; redhat) printf '%s' 'Red Hat Cloud Services packages, June 2026: published by the worm with an install hook that steals cloud, GitHub and npm credentials. osv.dev' ;; keyv) printf '%s' 'keyv worm, August 2026: stole cloud, GitHub and npm credentials, and planted hooks that run when repos open. socket.dev' ;; keyvscope) printf '%s' 'keyv account takeover, August 2026: GitHub malware advisories say to treat a computer that installed one as fully compromised. github.com' ;; keyvspread) printf '%s' 'keyv worm spread, August 2026: republished by the worm with an install hook that steals GitHub, npm and cloud credentials. osv.dev' ;; sandworm) printf '%s' 'SANDWORM_MODE worm, February 2026: stole credentials and AI provider keys, and added an MCP server to AI assistants. socket.dev' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages, February 2026: GitHub malware advisories say to treat a machine that installed one as compromised. github.com' ;; tensorlake) printf '%s' 'tensorlake package, October 2026: GitHub says any computer that installed it should be treated as fully compromised. github.com' ;; litellm) printf '%s' 'LiteLLM 1.107.0, October 2026: stole credentials and loaded remote-code execution tools on machines that installed it. docs.litellm.ai' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8, March 2026: harvested SSH keys, cloud credentials and Kubernetes tokens, and sent them out. docs.litellm.ai' ;; opencode) printf '%s' 'OpenCode Console, October 2026: a breach hit 1.4% of Console users, some of those who had linked external providers. x.com' ;; railway) printf '%s' 'Railway, October 2026: an attacker may have accessed encrypted environment variables and obtained the decrypted contents of some. blog.railway.com' ;; zeabur) printf '%s' 'Zeabur, October 2026: an attacker read environment variables and secrets stored on the platform. zeabur.com' ;; glassworm) printf '%s' 'GlassWorm extensions, January 2026: malicious Open VSX extensions; on Macs, its payload stole credentials, keychains and crypto wallets. socket.dev' ;; glasswormmar) printf '%s' 'GlassWorm extensions, March 2026: ran attacker code in memory that could reach local credentials, tokens and secrets. socket.dev' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions, March 2026: installed a malicious extension from GitHub into every editor it found. socket.dev' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions, April 2026: updated cloned extensions to install malware from GitHub into VS Code, Cursor and Windsurf. socket.dev' ;; glasswormzig) printf '%s' 'GlassWorm extensions, April 2026: native code in an extension installed a GlassWorm dropper into every editor it found. aikido.dev' ;; glasswormdec) printf '%s' 'GlassWorm native extensions, November 2025: Rust binaries in the extensions fetched and decrypted further payloads on macOS and Windows. paloaltonetworks.com' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes, December 2025: a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders. socket.dev' ;; glasswormuni) printf '%s' 'GlassWorm invisible code, March 2026: hid code in characters that show as blank, which it then decodes and runs. aikido.dev' ;; glasswasm) printf '%s' 'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage. socket.dev' ;; checkmarxvsx) printf '%s' 'Checkmarx Open VSX extensions, March 2026: on activation, fetched and ran a credential stealer where cloud credentials were found. wiz.io' ;; injective) printf '%s' 'Injective SDK, July 2026: sent out the seed phrases and hex private keys of wallets created or loaded with it. github.com' ;; claudeext) printf '%s' 'Trojanized Claude Code extension, October 2026: builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel. cursor.com' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2, November 2026: a .pth file started a credential stealer every time Python started. github.com' ;; esac; }
 incident_level() { case "$1" in mistral) printf update ;; uipath) printf update ;; opencode) printf leak ;; railway) printf leak ;; zeabur) printf leak ;; injective) printf update ;; *) printf act ;; esac; }
-incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; uipath) printf '%s' 'UiPath npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; minishai) printf '%s' 'Mini Shai-Hulud worm' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2' ;; mastra) printf '%s' 'Mastra npm packages' ;; antv) printf '%s' 'AntV account takeover' ;; nxconsole) printf '%s' 'Nx Console 18.95.0' ;; redhat) printf '%s' 'Red Hat Cloud Services packages' ;; keyv) printf '%s' 'keyv worm' ;; keyvscope) printf '%s' 'keyv account takeover' ;; keyvspread) printf '%s' 'keyv worm spread' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormzig) printf '%s' 'GlassWorm extensions' ;; glasswormdec) printf '%s' 'GlassWorm native extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; glasswormuni) printf '%s' 'GlassWorm invisible code' ;; glasswasm) printf '%s' 'GlassWASM extensions' ;; injective) printf '%s' 'Injective SDK' ;; esac; }
-incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; uipath) printf '%s' 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; minishai) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' ;; lightning) printf '%s' 'github.com/advisories/GHSA-g4wr-mm54-799x' ;; durabletask) printf '%s' 'github.com/advisories/GHSA-3qf7-886j-9wrc' ;; telnyx) printf '%s' 'github.com/advisories/GHSA-955r-262c-33jc' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; antv) printf '%s' 'osv.dev/vulnerability/MAL-2026-3973' ;; nxconsole) printf '%s' 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' ;; redhat) printf '%s' 'osv.dev/vulnerability/MAL-2026-5111' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; keyvscope) printf '%s' 'github.com/advisories/GHSA-q99r-cjmf-3xrf' ;; keyvspread) printf '%s' 'osv.dev/vulnerability/MAL-2026-11952' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; sandsleep) printf '%s' 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; litellmmar) printf '%s' 'docs.litellm.ai/blog/security-update-march-2026' ;; opencode) printf '%s' 'x.com/opencode/status/2111519637049319818' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormzig) printf '%s' 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' ;; glasswormdec) printf '%s' 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; glasswormuni) printf '%s' 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' ;; glasswasm) printf '%s' 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; esac; }
-incident_advice() { case "$1" in uipath) printf '%s' 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' ;; keyvscope) printf '%s' 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' ;; sandworm) printf '%s' 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' ;; glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormzig) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; injective) printf '%s' 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' ;; esac; }
+incident_name() { case "$1" in axios) printf '%s' 'Axios takeover' ;; tanstack) printf '%s' 'TanStack worm' ;; mistral) printf '%s' 'Mistral AI npm packages' ;; uipath) printf '%s' 'UiPath npm packages' ;; mistralpy) printf '%s' 'mistralai 2.4.6' ;; guardrails) printf '%s' 'guardrails-ai 0.10.1' ;; opensearch) printf '%s' 'OpenSearch client' ;; bitwarden) printf '%s' 'Bitwarden CLI' ;; minishai) printf '%s' 'Mini Shai-Hulud worm' ;; lightning) printf '%s' 'lightning 2.6.2 and 2.6.3' ;; durabletask) printf '%s' 'durabletask 1.4.1 to 1.4.3' ;; telnyx) printf '%s' 'telnyx 4.87.1 and 4.87.2' ;; mastra) printf '%s' 'Mastra npm packages' ;; antv) printf '%s' 'AntV account takeover' ;; nxconsole) printf '%s' 'Nx Console 18.95.0' ;; redhat) printf '%s' 'Red Hat Cloud Services packages' ;; keyv) printf '%s' 'keyv worm' ;; keyvscope) printf '%s' 'keyv account takeover' ;; keyvspread) printf '%s' 'keyv worm spread' ;; sandworm) printf '%s' 'SANDWORM_MODE worm' ;; sandsleep) printf '%s' 'SANDWORM_MODE sleeper packages' ;; tensorlake) printf '%s' 'tensorlake package' ;; litellm) printf '%s' 'LiteLLM 1.107.0' ;; litellmmar) printf '%s' 'LiteLLM 1.82.7 and 1.82.8' ;; opencode) printf '%s' 'OpenCode Console' ;; railway) printf '%s' 'Railway' ;; zeabur) printf '%s' 'Zeabur' ;; glassworm) printf '%s' 'GlassWorm extensions' ;; glasswormmar) printf '%s' 'GlassWorm extensions' ;; glasswormvsix) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormapr) printf '%s' 'GlassWorm sleeper extensions' ;; glasswormzig) printf '%s' 'GlassWorm extensions' ;; glasswormdec) printf '%s' 'GlassWorm native extensions' ;; glasswormoct) printf '%s' 'GlassWorm-linked themes' ;; glasswormuni) printf '%s' 'GlassWorm invisible code' ;; glasswasm) printf '%s' 'GlassWASM extensions' ;; checkmarxvsx) printf '%s' 'Checkmarx Open VSX extensions' ;; injective) printf '%s' 'Injective SDK' ;; claudeext) printf '%s' 'Trojanized Claude Code extension' ;; agentfw) printf '%s' 'agent-framework 1.26.1 and 1.26.2' ;; esac; }
+incident_source() { case "$1" in axios) printf '%s' 'www.cisa.gov/news-events/alerts/2026/04/20/supply-chain-compromise-impacts-axios-node-package-manager' ;; tanstack) printf '%s' 'github.com/advisories/GHSA-g7cv-rxg3-hmpx' ;; mistral) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; uipath) printf '%s' 'trust.uipath.com/?tcuUid=d146e497-71c6-4d69-afac-0134100df8b0' ;; mistralpy) printf '%s' 'docs.mistral.ai/resources/security-advisories/MAI-2026-002' ;; guardrails) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-strikes-again-tanstack-more-npm-packages-compromised' ;; opensearch) printf '%s' 'github.com/advisories/GHSA-298w-vvm4-ww55' ;; bitwarden) printf '%s' 'www.stepsecurity.io/blog/bitwarden-cli-hijacked-on-npm-bun-staged-credential-stealer-targets-developers-github-actions-and-ai-tools' ;; minishai) printf '%s' 'www.wiz.io/blog/mini-shai-hulud-supply-chain-sap-npm' ;; lightning) printf '%s' 'github.com/advisories/GHSA-g4wr-mm54-799x' ;; durabletask) printf '%s' 'github.com/advisories/GHSA-3qf7-886j-9wrc' ;; telnyx) printf '%s' 'github.com/advisories/GHSA-955r-262c-33jc' ;; mastra) printf '%s' 'socket.dev/blog/mastra-npm-packages-compromised' ;; antv) printf '%s' 'osv.dev/vulnerability/MAL-2026-3973' ;; nxconsole) printf '%s' 'github.com/nrwl/nx-console/security/advisories/GHSA-c9j4-9m59-847w' ;; redhat) printf '%s' 'osv.dev/vulnerability/MAL-2026-5111' ;; keyv) printf '%s' 'socket.dev/blog/popular-npm-packages-in-the-keyv-and-cacheable-namespaces-compromised-in-active-supply-chain' ;; keyvscope) printf '%s' 'github.com/advisories/GHSA-q99r-cjmf-3xrf' ;; keyvspread) printf '%s' 'osv.dev/vulnerability/MAL-2026-11952' ;; sandworm) printf '%s' 'socket.dev/blog/sandworm-mode-npm-worm-ai-toolchain-poisoning' ;; sandsleep) printf '%s' 'github.com/advisories/GHSA-9w7p-hqx2-pjjx' ;; tensorlake) printf '%s' 'github.com/advisories/GHSA-rqxj-g25x-4v9v' ;; litellm) printf '%s' 'docs.litellm.ai/blog/security-incident-oct-21-2026' ;; litellmmar) printf '%s' 'docs.litellm.ai/blog/security-update-march-2026' ;; opencode) printf '%s' 'x.com/opencode/status/2111519637049319818' ;; railway) printf '%s' 'blog.railway.com/p/security-disclosure-wednesday-october-21st' ;; zeabur) printf '%s' 'zeabur.com/blogs/october-2026-security-incident' ;; glassworm) printf '%s' 'socket.dev/blog/glassworm-loader-hits-open-vsx-via-suspected-developer-account-compromise' ;; glasswormmar) printf '%s' 'socket.dev/blog/open-vsx-transitive-glassworm-campaign' ;; glasswormvsix) printf '%s' 'socket.dev/blog/glassworm-sleeper-extensions-activated-on-open-vsx' ;; glasswormapr) printf '%s' 'socket.dev/blog/73-open-vsx-sleeper-extensions-glassworm' ;; glasswormzig) printf '%s' 'www.aikido.dev/blog/glassworm-zig-dropper-infects-every-ide-on-your-machine' ;; glasswormdec) printf '%s' 'www.paloaltonetworks.com/blog/security-operations/glassworm-goes-native-rust-loader-vscode-openvsx/' ;; glasswormoct) printf '%s' 'socket.dev/blog/glassworm-vscode-themes' ;; glasswormuni) printf '%s' 'www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode' ;; glasswasm) printf '%s' 'socket.dev/blog/glasswasm-malware-open-vsx-extensions' ;; checkmarxvsx) printf '%s' 'www.wiz.io/blog/teampcp-attack-kics-github-action' ;; injective) printf '%s' 'github.com/advisories/GHSA-5fc4-fm2x-6f4r' ;; claudeext) printf '%s' 'cursor.com/blog/claude-code-extension-security-notice' ;; agentfw) printf '%s' 'github.com/advisories/GHSA-764m-3ppc-5m73' ;; esac; }
+incident_advice() { case "$1" in uipath) printf '%s' 'UiPath says the @uipath builds section 5 lists pose no risk of malware, as a bug left it non-functional. Update them to a version without it.' ;; keyvscope) printf '%s' 'Rotate the secrets this machine held from another computer, then remove each @keyv package listed in section 5, as the GitHub advisory says.' ;; sandworm) printf '%s' 'First find and remove what the SANDWORM_MODE worm leaves: git hooks in the folder that git config --global init.templateDir names and in the .git/hooks and .husky folders of your repositories, and MCP servers you did not add to your AI assistants. Its pre-push hook sends npm tokens out on every push.' ;; glassworm) printf '%s' 'On a Mac, also check ~/Library/LaunchAgents for unfamiliar plists such as com.user.nodestart.plist, and look for /tmp/ijewf and /tmp/out.zip, where the malware collects what it steals.' ;; glasswormvsix) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormapr) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; glasswormzig) printf '%s' 'Also check every editor you use, VS Code included, for extensions you did not install yourself: this malware installs one from GitHub into each editor it finds.' ;; checkmarxvsx) printf '%s' 'On Linux, also check your systemd user services for one you did not add: off CI, this malware adds one that fetches more code every 50 minutes.' ;; injective) printf '%s' 'From a clean machine, move the funds out of every wallet whose seed phrase or private key was used with Injective SDK 1.20.21, into a new wallet.' ;; claudeext) printf '%s' 'First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up: on a Mac run launchctl bootout gui/UID/com.apple.sysmond, with UID the number id -u prints, and on Windows end and delete the scheduled task SysMon; then end every process whose command line names .smt, .smtk, smt.cmd, sysmon.cmd or a .stk_ file (the loops that start ssh or autossh again about every 60 seconds, and the tunnel itself). Then remove the line in ~/.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ (its comment may read svc-telemetry), ~/.config/.smt, ~/.config/.smtk and ~/.config/smt.cmd, ~/Library/LaunchAgents/com.apple.sysmond.plist on a Mac, the @reboot line that runs .smt in your crontab on Linux, the .stk_ file in your temp folder, and on Windows ~/.config/smtk, sysmon.cmd in the Startup folder and the same key line in administrators_authorized_keys in the ssh folder of ProgramData. Then turn off Remote Login on a Mac (the SSH server on Linux, OpenSSH Server on Windows) if you did not turn it on yourself.' ;; esac; }
 incident_summary() { case "$1" in uipath) printf '%s' 'UiPath builds: update them, UiPath says no risk' ;; injective) printf '%s' 'Injective SDK: move the funds out of its wallets' ;; esac; }
 # <<< incidents
 # >>> indicators: generated from data/indicators.tsv by tools/gen.sh. Edit that file, then run it.
@@ -267,7 +560,25 @@ telnyx|linux|startup|no|$H/.config/audiomon/audiomon.py|the backdoor the telnyx 
 telnyx|linux|startup|no|$H/.config/systemd/user/audiomon.service|starts the backdoor the telnyx malware leaves, at login
 telnyx|win|startup|no|$H/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/msbuild.exe|the telnyx malware, which Windows starts at every login from the Startup folder
 telnyx|mac|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
-telnyx|linux|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says."
+telnyx|linux|temp|yes|.initd_state|Telnyx lists this file as the malware's state file: treat every secret this machine could reach as compromised and rotate it, then remove telnyx and pin 4.87.0, as Telnyx says.
+claudeext|mac|startup|no|$H/.config/.smt|the trojanized Claude Code extension's reverse SSH tunnel script
+claudeext|linux|startup|no|$H/.config/.smt|the trojanized Claude Code extension's reverse SSH tunnel script
+claudeext|mac|startup|no|$H/.config/.smtk|a file the trojanized Claude Code extension writes beside .smt
+claudeext|linux|startup|no|$H/.config/.smtk|a file the trojanized Claude Code extension writes beside .smt
+claudeext|all|startup|no|$H/.config/smt.cmd|a script the trojanized Claude Code extension writes to keep its tunnel running
+claudeext|win|startup|no|$H/.config/smtk|a file the trojanized Claude Code extension writes beside smt.cmd
+claudeext|mac|startup|no|$H/Library/LaunchAgents/com.apple.sysmond.plist|a LaunchAgent of the trojanized Claude Code extension, not Apple's
+claudeext|win|startup|no|$H/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sysmon.cmd|starts the trojanized Claude Code extension's tunnel at every login
+agentfw|all|site|no|agent_framework_meta.pth|-
+agentfw|all|site|no|af_runtime_diag.pth|-
+agentfw|all|site|no|af_runtime_diag.py|-"
+IND_ALONE="claudeext|$H/.config/.smt
+claudeext|$H/.config/.smt
+claudeext|$H/.config/.smtk
+claudeext|$H/.config/.smtk
+claudeext|$H/.config/smt.cmd
+claudeext|$H/.config/smtk
+claudeext|$H/Library/LaunchAgents/com.apple.sysmond.plist"
 # <<< indicators
 # >>> outdated: generated from data/outdated.tsv by tools/gen.sh. Edit that file, then run it.
 OUT_TABLE="cursor|Cursor|mac|plist|/Applications/Cursor.app/Contents/Info.plist|-|3.0|a malicious agent could escape the sandbox|github.com/cursor/cursor/security/advisories/GHSA-3p48-7v9f-v5cw
@@ -285,6 +596,7 @@ claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|0.2.116|1.0.24|a web pa
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.1.38|2.1.163|a malicious repository could run code outside the sandbox|github.com/advisories/GHSA-7835-87q9-rgvv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|-|2.1.179|a plugin repository could install code that bypasses its pinned hash|github.com/advisories/GHSA-pq7j-f95f-qfcv
 claudecode|Claude Code|all|npm|@anthropic-ai/claude-code|2.0.68|2.1.260|a stored API key could start sessions without the managed settings of an Enterprise or Team organization|github.com/anthropics/claude-code/security/advisories/GHSA-gfvf-j8jh-jxxw
+claudecode|Claude Code|mac|npm|@anthropic-ai/claude-code|-|2.1.251|code a malicious repository runs in its sandbox could make it write files outside the workspace|github.com/anthropics/claude-code/security/advisories/GHSA-5xjx-9qx6-jcrv
 mcpremote|mcp-remote|all|npm|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|mcparg|mcp-remote|0.0.5|0.1.16|a hostile MCP server could run commands|github.com/advisories/GHSA-6xpm-ggf7-wc3p
 mcpremote|mcp-remote|all|npm|mcp-remote|0.1.16|!0.1.38|a hostile server could open an internal address in your browser|github.com/advisories/GHSA-v65w-6crh-cp3h
@@ -303,22 +615,106 @@ PLATFORMS="opencode|OpenCode|opencode|$H/.config/opencode/;$H/.local/share/openc
 railway|Railway|railway|$H/.railway/config.json|CLI found|Railway asked all users to rotate every environment variable stored there, including API keys and private registry credentials, and to review their logs for unusual activity.|Railway CLI found: rotate secrets stored there
 zeabur|Zeabur|zeabur|$H/.config/zeabur/|CLI found|Zeabur said on 19 October that an attacker read the service environment variables stored on the platform, and asked users to replace every password and key stored there. Revoke each old key at its provider first.|Zeabur CLI found: rotate secrets stored there"
 # <<< platforms
+# >>> owasp: generated from data/owasp.tsv by tools/gen.sh. Edit that file, then run it.
+OWASP_TABLE="agents_run_without_asking|ASI02|Tool Misuse and Exploitation|run without asking|01|yolo
+agents_run_remote_commands|ASI02|Tool Misuse and Exploitation|remote commands without asking|01|remote
+tools_to_update|ASI04|Agentic Supply Chain Vulnerabilities|tools with a security fix|01|tools
+mcp_token_files|ASI03|Identity and Privilege Abuse|tokens in MCP configs|02|mcp_token_files
+authorized_keys_links|ASI03|Identity and Privilege Abuse|links to authorized_keys|02|ak_links
+project_settings_on_open|ASI05|Unexpected Code Execution|settings that act on opening|02|on_open
+scripts_started_like_worms|ASI05|Unexpected Code Execution|scripts started like worms|02|autostart
+key_files|ASI03|Identity and Privilege Abuse|keys in plain text|03|key_files
+history_keys|ASI03|Identity and Privilege Abuse|keys in shell history|03|history_keys
+session_files_with_keys|ASI03|Identity and Privilege Abuse|keys in agent sessions|03|session_files
+ssh_keys_no_passphrase|ASI03|Identity and Privilege Abuse|SSH keys without a passphrase|03|ssh_open
+allow_list_keys|ASI03|Identity and Privilege Abuse|keys in allow lists|04|allow_list_keys
+incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|05|incidents:act
+incidents_to_update|ASI04|Agentic Supply Chain Vulnerabilities|versions to update|05|incidents:update
+wiper|ASI04|Agentic Supply Chain Vulnerabilities|gh-token-monitor|05|wiper
+planted_files|ASI04|Agentic Supply Chain Vulnerabilities|files a worm plants|05|planted
+authorized_keys_planted_keys|ASI04|Agentic Supply Chain Vulnerabilities|SSH keys malware adds|05|ssh_planted
+lockfile_only_incidents|ASI04|Agentic Supply Chain Vulnerabilities|npm malware in a lockfile|05|lock_only
+versions_to_update|ASI04|Agentic Supply Chain Vulnerabilities|Python versions to update|05|updates
+extensions_to_remove|ASI04|Agentic Supply Chain Vulnerabilities|extensions to remove|05|remove
+platforms_found|ASI04|Agentic Supply Chain Vulnerabilities|platforms with a leak|05|platforms
+machine.incidents|ASI04|Agentic Supply Chain Vulnerabilities|malware signs|-|machine:incidents"
+# <<< owasp
+# >>> owasp-derive: copied from gird-check.sh by tools/gen.sh. Edit it there, then run it.
+# The one rule from findings to risks, which the person's report and root in gird-fleet.sh both run:
+# each reads the finding fields the account run sends (FA_<key>, set by finding_fields in gird-check.sh
+# and by fl_parse in gird-fleet.sh). Root runs this copy through fl_owasp_kinds in gird-fleet.sh. It
+# reads bash's own reprint of these functions and refuses any line not on its list of the lines they
+# need (fl_owasp_code_ok), then runs them with a search path that holds nothing. A line of a new shape
+# here needs adding to that list, or every fleet run reads failed.
+# owasp_set SOURCE: 0 when the field SOURCE names holds a finding: a number above 0, a list that is
+# not empty, or for incidents:act an act-level incident and for incidents:update one of any other level.
+owasp_set() {
+  case "$1" in
+    incidents:act|incidents:update)
+      for _ow in $FA_incidents; do
+        if [ "$(incident_level "$_ow")" = act ]; then
+          [ "$1" = incidents:act ] && return 0
+        else
+          [ "$1" = incidents:update ] && return 0
+        fi
+      done
+      return 1 ;;
+    yolo) _ov=$FA_yolo ;;
+    remote) _ov=$FA_remote ;;
+    tools) _ov=$FA_tools ;;
+    mcp_token_files) _ov=$FA_mcp_token_files ;;
+    ak_links) _ov=$FA_ak_links ;;
+    ssh_planted) _ov=$FA_ssh_planted ;;
+    autostart) _ov=$FA_autostart ;;
+    on_open) _ov=$FA_on_open ;;
+    key_files) _ov=$FA_key_files ;;
+    history_keys) _ov=$FA_history_keys ;;
+    session_files) _ov=$FA_session_files ;;
+    ssh_open) _ov=$FA_ssh_open ;;
+    allow_list_keys) _ov=$FA_allow_list_keys ;;
+    wiper) _ov=$FA_wiper ;;
+    planted) _ov=$FA_planted ;;
+    lock_only) _ov=$FA_lock_only ;;
+    updates) _ov=$FA_updates ;;
+    remove) _ov=$FA_remove ;;
+    platforms) _ov=$FA_platforms ;;
+    *) return 1 ;;
+  esac
+  [ -n "$_ov" ] && [ "$_ov" != 0 ]
+}
+# owasp_kinds: risk|kind|section|name|label for each kind of finding the FA_ fields hold, in
+# OWASP_TABLE's order. The Mac's own kinds and those only the person's report shows are not fields.
+owasp_kinds() {
+  while IFS='|' read -r _ok _or _on _ol _os _osrc; do
+    case "$_osrc" in
+      ''|machine:*|report) continue ;;
+    esac
+    if owasp_set "$_osrc"; then printf '%s|%s|%s|%s|%s\n' "$_or" "$_ok" "$_os" "$_on" "$_ol"; fi
+  done <<< "$OWASP_TABLE"
+}
+# <<< owasp-derive
 
 # ===========================================================================
 # Fleet mode, the root side (docs/designs/fleet-mode.md). Root lists the accounts, checks the
 # Mac's shared places, starts one account run at a time as that account, and builds every row
 # itself from lines it has checked. It calls every tool by its full path.
-# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof and find. They
+# The GIRD_CHECK_FLEET_* settings let the tests stand in for root, dscl, sudo, lsof, ps and find. They
 # are read only when the script is not running as root.
 # ===========================================================================
-FL_STATE=/var/db/blindspot; FL_USERS=""; FL_LAUNCH=""; FL_OWNER=0; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
+FL_USERS=""; FL_LAUNCH=""; FL_SHARED_TMP=/private/tmp; FL_LSOF=/usr/sbin/lsof
 FL_FIND=/usr/bin/find; FL_PS=/bin/ps
+# The search path root runs the owasp-derive block with: a folder that holds nothing, so a command the
+# block names without its full path is not found (docs/designs/owasp.md). macOS ships it empty, and it
+# and every folder above it are root's alone, so owned_only can check the whole path; a folder made
+# under /tmp could not pass that, as everyone can write to /tmp.
+FL_NOPATH=/private/var/empty
 if [ "$EUID" -ne 0 ] && [ "$FLEET_REAL" -eq 0 ]; then
-  FL_STATE=${GIRD_CHECK_FLEET_STATE:-$FL_STATE}; FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
+  FL_USERS=${GIRD_CHECK_FLEET_USERS:-}
   FL_SHARED_TMP=${GIRD_CHECK_FLEET_SHARED_TMP:-$FL_SHARED_TMP}; FL_LSOF=${GIRD_CHECK_FLEET_LSOF:-$FL_LSOF}
-  FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}; FL_OWNER=$EUID
+  FL_FIND=${GIRD_CHECK_FLEET_FIND:-$FL_FIND}; FL_LAUNCH=${GIRD_CHECK_FLEET_LAUNCH:-}
+  FL_PS=${GIRD_CHECK_FLEET_PS:-$FL_PS}
+  FL_NOPATH=${GIRD_CHECK_FLEET_NOPATH:-$FL_NOPATH}
 fi
-FL_PATH=/usr/bin:/bin:/usr/sbin:/sbin
 FL_OUT_MAX=4096                 # bytes root reads from one account run
 FL_US=$(printf '\037'); FL_TMP=""; FL_COPYDIR=""; FL_COPY=""
 fl_cleanup() {
@@ -329,7 +725,8 @@ fl_cleanup() {
   fi
   [ -n "$FL_TMP" ] && /bin/rm -rf -- "$FL_TMP"
   [ -n "$FL_COPYDIR" ] && /bin/rm -rf -- "$FL_COPYDIR"
-  FL_TMP=""; FL_COPYDIR=""
+  [ -n "$FL_STAGE" ] && /bin/rm -rf -- "$FL_STAGE"
+  FL_TMP=""; FL_COPYDIR=""; FL_STAGE=""
 }
 # fl_timed LIMIT OUT -- COMMAND...: runs COMMAND in its own process group with no terminal, its
 # output into a pipe root made and read up to FL_OUT_MAX + 1 bytes into OUT. At LIMIT seconds a
@@ -352,7 +749,7 @@ fl_timed() {
   _tt=$!
   set +m
   { wait "$_tr"; } 2>/dev/null
-  _ts=$(/usr/bin/stat -f %z "$_to" 2>/dev/null)
+  _ts=$(fl_size "$_to" 2>/dev/null)
   # More than root reads: stop the run now, its output is refused anyway.
   [ "${_ts:-0}" -gt "$FL_OUT_MAX" ] && kill -KILL -- "-$_tj" 2>/dev/null
   { wait "$_tj"; } 2>/dev/null
@@ -444,15 +841,19 @@ fl_reason_text() {
     time_limit) printf 'not checked: its check ran out of time' ;;
     deadline) printf 'not checked: the run reached its deadline first' ;;
     copy_changed) printf 'not checked: the script copy was changed during the run' ;;
+    release_mismatch) printf 'not checked: gird-check.sh and gird-fleet.sh know different key types: install both from one release' ;;
     *) printf 'not checked' ;;
   esac
 }
 # The ids an account run may send, from the tables above.
 FL_AGENT_IDS=$(printf '%s\n' "$AGENTS" | /usr/bin/cut -d'|' -f5 | /usr/bin/tr '\n' ' ')
 FL_YOLO_IDS="$FL_AGENT_IDS $(printf '%s\n' "$AA_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
+FL_REMOTE_IDS="$FL_AGENT_IDS $(printf '%s\n' "$RC_FILES" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr 'A-Z ' 'a-z-' | /usr/bin/tr -cd 'a-z0-9-\n' | /usr/bin/tr '\n' ' ')"
 FL_OUT_IDS=$(printf '%s\n' "$OUT_TABLE" | /usr/bin/cut -d'|' -f1 | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')
 FL_PLAT_IDS=$(printf '%s\n' "$PLATFORMS" | /usr/bin/cut -d'|' -f1 | /usr/bin/tr '\n' ' ')
-FL_KEYS="v agents yolo tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links planted possible incidents platforms on_open to_read updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected engine end"
+# >>> account-run-keys: generated from data/account-run.tsv by tools/gen.sh. Edit that file, then run it.
+FL_KEYS="v agents yolo remote tools mcp_servers mcp_token_files key_files key_providers history_keys session_files sessions_partial allow_list_keys ssh_open ak_links ssh_planted planted possible incidents platforms on_open to_read autostart updates wiper lock_only remove not_read moved tmp_marks tmp_wiper protected engine end"
+# <<< account-run-keys
 fl_ids_ok() { # value allowed-ids: every id allowed, none twice, at most 40
   _c=0; _sn=" "
   for _x in $1; do
@@ -473,7 +874,7 @@ fl_incidents_ok() { # every id is an incident in data/incidents.tsv
 # Sets FA_<key> for each.
 fl_parse() {
   _f=$1
-  _sz=$(/usr/bin/stat -f %z "$_f" 2>/dev/null); case "$_sz" in ''|*[!0-9]*) return 1 ;; esac
+  _sz=$(fl_size "$_f" 2>/dev/null); case "$_sz" in ''|*[!0-9]*) return 1 ;; esac
   [ "$_sz" -gt 0 ] && [ "$_sz" -le "$FL_OUT_MAX" ] || return 1
   [ "$(LC_ALL=C /usr/bin/tr -d '\n a-z0-9=_-' < "$_f" | /usr/bin/wc -c | /usr/bin/tr -d ' ')" = 0 ] || return 1
   [ "$(/usr/bin/tail -c 1 "$_f" | /usr/bin/od -An -tx1 | /usr/bin/tr -d ' \n')" = 0a ] || return 1
@@ -486,6 +887,7 @@ fl_parse() {
       v|end) [ "$_v" = 1 ] || return 1 ;;
       agents) fl_ids_ok "$_v" "$FL_AGENT_IDS" || return 1 ;;
       yolo) fl_ids_ok "$_v" "$FL_YOLO_IDS" || return 1 ;;
+      remote) fl_ids_ok "$_v" "$FL_REMOTE_IDS" || return 1 ;;
       tools) fl_ids_ok "$_v" "$FL_OUT_IDS" || return 1 ;;
       key_providers) fl_ids_ok "$_v" "$PROVIDER_IDS" || return 1 ;;
       platforms) fl_ids_ok "$_v" "$FL_PLAT_IDS" || return 1 ;;
@@ -497,12 +899,12 @@ fl_parse() {
       *) case "$_v" in [0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9]|[1-9][0-9][0-9][0-9][0-9][0-9]) ;; *) return 1 ;; esac ;;
     esac
     case "$_k" in
-      agents) FA_agents=$_v ;; yolo) FA_yolo=$_v ;; tools) FA_update=$_v ;; mcp_servers) FA_mcp_servers=$_v ;;
+      agents) FA_agents=$_v ;; yolo) FA_yolo=$_v ;; remote) FA_remote=$_v ;; tools) FA_tools=$_v ;; mcp_servers) FA_mcp_servers=$_v ;;
       mcp_token_files) FA_mcp_token_files=$_v ;; key_files) FA_key_files=$_v ;; key_providers) FA_key_providers=$_v ;;
       history_keys) FA_history_keys=$_v ;; session_files) FA_session_files=$_v ;; sessions_partial) FA_sessions_partial=$_v ;;
-      allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;;
+      allow_list_keys) FA_allow_list_keys=$_v ;; ssh_open) FA_ssh_open=$_v ;; ak_links) FA_ak_links=$_v ;; ssh_planted) FA_ssh_planted=$_v ;;
       planted) FA_planted=$_v ;; possible) FA_possible=$_v ;; incidents) FA_incidents=$_v ;; platforms) FA_platforms=$_v ;;
-      on_open) FA_on_open=$_v ;; to_read) FA_to_read=$_v ;; updates) FA_updates=$_v ;; wiper) FA_wiper=$_v ;; lock_only) FA_lock_only=$_v ;; remove) FA_remove=$_v ;;
+      on_open) FA_on_open=$_v ;; to_read) FA_to_read=$_v ;; autostart) FA_autostart=$_v ;; updates) FA_updates=$_v ;; wiper) FA_wiper=$_v ;; lock_only) FA_lock_only=$_v ;; remove) FA_remove=$_v ;;
       not_read) FA_not_read=$_v ;; protected) FA_protected=$_v ;; engine) FA_engine=$_v ;;
       moved) FA_moved=$_v ;; tmp_marks) FA_tmp_marks=$_v ;; tmp_wiper) FA_tmp_wiper=$_v ;;
     esac
@@ -510,12 +912,83 @@ fl_parse() {
   done < "$_f"
   [ $# -eq 0 ]
 }
-fl_copy_ok() { # the copy each account runs: owned by root, nobody else can change it
+fl_copy_ok() { # the copy each account runs: owned by root, nobody else can change it, as made
   [ ! -L "$FL_COPYDIR" ] && [ -d "$FL_COPYDIR" ] && [ ! -L "$FL_COPY" ] && [ -f "$FL_COPY" ] || return 1
-  [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPYDIR" 2>/dev/null)" = "$FL_OWNER 755" ] || return 1
+  [ "$(fl_um "$FL_COPYDIR" 2>/dev/null)" = "$FL_OWNER 755" ] || return 1
   # Not its link count: any account can hard-link a file in /tmp, and a link can't change a file
   # root owns at 0644, so counting links would let one account stop every later account's check.
-  [ "$(/usr/bin/stat -f '%u %Lp' "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644" ]
+  [ "$(fl_um "$FL_COPY" 2>/dev/null)" = "$FL_OWNER 644" ] && [ "$(fl_sha256 "$FL_COPY")" = "$FL_CHECK_SHA" ]
+}
+# blindspot-fleet.sh carries gird-check.sh without its game after its last line, which bash never
+# reaches: written from this file's copy into the start's folder, which only root can open, and
+# checked against the SHA-256 tools/gen.sh wrote in. The SHA-256 proves the copy was written as built,
+# not that the file is authentic; that is the published SHA-256 the admin checks before uploading it.
+fl_unpack() {
+  /usr/bin/awk '/^# >>> packed-check[: ]/ && !s { s = 1; next } s { if (n) print p; p = $0; n = 1 } END { exit !(s && p == "# <<< packed-check") }' "$FL_SELF" > "$FL_CHECK" &&
+    [ "$(fl_sha256 "$FL_CHECK")" = "$FL_PACKED_SHA" ]
+}
+# The file this run came from, kept for the MDM's inventory reader: root's, 0700, in root's folder.
+fl_keep() {
+  /usr/bin/cmp -s "$FL_SELF" "$FL_STATE/blindspot-fleet.sh" 2>/dev/null && return 0
+  _kf=$(/usr/bin/mktemp "$FL_STATE/.blindspot-fleet.sh.XXXXXX") || return 1
+  /bin/cp -- "$FL_SELF" "$_kf" && /bin/chmod 700 "$_kf" && /usr/bin/cmp -s "$FL_SELF" "$_kf" && /bin/mv -f -- "$_kf" "$FL_STATE/blindspot-fleet.sh" || { /bin/rm -f -- "$_kf"; return 1; }
+}
+fl_nopath_ok() { # FL_NOPATH: a folder, reached through no link, root's alone (owned_only) and empty
+  [ ! -L "$FL_NOPATH" ] && [ -d "$FL_NOPATH" ] || return 1
+  [ "$(cd "$FL_NOPATH" 2>/dev/null && /bin/pwd -P)" = "$FL_NOPATH" ] || return 1
+  owned_only "$FL_OWNER" "$FL_NOPATH" || return 1
+  _fne=$(/bin/ls -A "$FL_NOPATH" 2>/dev/null) && [ -z "$_fne" ]
+}
+# fl_owasp_code_ok: 0 when bash's own reprint of the three functions the owasp-derive block runs holds
+# only the lines below, each trimmed of spaces at both ends. It is an allowlist: bash writes the
+# reprint, so no quoting can hide text in it, and any other line (another command, a full path, a
+# redirection, a $( ) or a function the block would call) is refused. A change to the block that adds
+# a line of a new shape needs that line added here, which is code review (docs/designs/owasp.md).
+fl_owasp_code_ok() {
+  _fkc=$(declare -f owasp_kinds owasp_set incident_level) || return 1
+  _fkh=""
+  while IFS= read -r _fkl; do
+    _fkl=${_fkl#"${_fkl%%[! ]*}"}; _fkl=${_fkl%"${_fkl##*[! ]}"}
+    case "$_fkl" in
+      'owasp_kinds ()'|'owasp_set ()'|'incident_level ()') _fkh="$_fkh${_fkl% *} " ;;
+      '{'|'}'|'do'|'else'|'fi;'|'done;'|';;'|'esac'|'esac;'|'continue'|'return 1'|'*)') ;;
+      "while IFS='|' read -r _ok _or _on _ol _os _osrc; do"|'case "$_osrc" in'|"'' | machine:* | report)") ;;
+      'if owasp_set "$_osrc"; then'|"printf '%s|%s|%s|%s|%s\n' \"\$_or\" \"\$_ok\" \"\$_os\" \"\$_on\" \"\$_ol\";"|'done <<< "$OWASP_TABLE"') ;;
+      'case "$1" in'|'incidents:act | incidents:update)'|'for _ow in $FA_incidents;'|'if [ "$(incident_level "$_ow")" = act ]; then') ;;
+      '[ "$1" = incidents:act ] && return 0;'|'[ "$1" = incidents:update ] && return 0;'|'[ -n "$_ov" ] && [ "$_ov" != 0 ]') ;;
+      '_ov=$FA_'*) _fkr=${_fkl#'_ov=$FA_'}; case "$_fkr" in ''|*[!a-z_]*) return 1 ;; esac ;;
+      'printf '*) _fkr=${_fkl#printf }; case "$_fkr" in ''|*[!a-z]*) return 1 ;; esac ;;
+      *')') _fkr=${_fkl%')'}; case "$_fkr" in ''|*[!a-z0-9_]*) return 1 ;; esac ;;
+      *) return 1 ;;
+    esac
+  done <<< "$_fkc"
+  [ "$_fkh" = "owasp_kinds owasp_set incident_level " ]
+}
+fl_owfail() { # CAUSE: adds it to FL_OWFAIL once, so the result names every cause seen in the run
+  case " $FL_OWFAIL " in *" $1 "*) ;; *) FL_OWFAIL="${FL_OWFAIL:+$FL_OWFAIL }$1" ;; esac
+}
+# fl_owasp_kinds: owasp_kinds for the FA_ fields fl_parse set, into FL_OWK. 1, with each cause added to
+# FL_OWFAIL, when the block holds a line fl_owasp_code_ok does not allow (code), FL_NOPATH is not safe
+# (nopath), or the block exits non-zero, writes anything to standard error or prints a line that is not
+# one OWASP_TABLE gives, once and in its order (rule). The block runs in its own subshell with PATH set
+# to FL_NOPATH, so a command it names without a full path is not found. The rest of root keeps FL_PATH.
+fl_owasp_kinds() {
+  FL_OWK=""; _fkf=0
+  fl_owasp_code_ok || { fl_owfail code; _fkf=1; }
+  fl_nopath_ok || { fl_owfail nopath; _fkf=1; }
+  [ "$_fkf" -eq 0 ] || return 1
+  _fko=$(PATH=$FL_NOPATH; owasp_kinds 2>&1) || { fl_owfail rule; return 1; }
+  _fkw=$NL
+  while IFS='|' read -r _fkk _fkr _fkn _fkl _fks _fksrc; do
+    case "$_fksrc" in ''|machine:*|report) continue ;; esac
+    _fkw="$_fkw$_fkr|$_fkk|$_fks|$_fkn|$_fkl$NL"
+  done <<< "$OWASP_TABLE"
+  if [ -n "$_fko" ]; then
+    while IFS= read -r _fkx; do
+      case "$_fkw" in *"$NL$_fkx$NL"*) _fkw=$NL${_fkw#*"$NL$_fkx$NL"} ;; *) fl_owfail rule; return 1 ;; esac
+    done <<< "$_fko"
+  fi
+  FL_OWK=$_fko
 }
 fl_json_list() { _o=""; for _x in $1; do _o="${_o:+$_o,}\"$_x\""; done; printf '[%s]' "$_o"; }
 fl_json_incidents() { _o=""; for _x in $1; do _o="${_o:+$_o,}{\"id\":\"$_x\",\"level\":\"$(incident_level "$_x")\"}"; done; printf '[%s]' "$_o"; }
@@ -524,12 +997,14 @@ fl_worst() { # outcomes on stdin: the worst, in the order failed, act, not_check
     ($1 in r) && r[$1] > r[w] { w = $1 } END { print w }'
 }
 fl_name() { # the account as the result shows it: its name, or a keyed hash with --hash-accounts
+  # An account named machine, in any case, would read as the Mac's own row in the inventory value.
+  case "$1" in [Mm][Aa][Cc][Hh][Ii][Nn][Ee]) printf invalid-name; return ;; esac
   if [ -z "$HASHKEY" ] || [ "$1" = invalid-name ]; then printf '%s' "$1"; return; fi
   BS_K=$HASHKEY /usr/bin/perl -MDigest::SHA=hmac_sha256_hex -e 'print substr(hmac_sha256_hex($ARGV[0], $ENV{BS_K}), 0, 16)' -- "$1"
 }
 fl_agent_name() { # an id: the agent's name for the report
   _a=$(printf '%s\n' "$AGENTS" | /usr/bin/awk -F '|' -v i="$1" '$5 == i { print $1; exit }')
-  [ -n "$_a" ] || _a=$(printf '%s\n' "$AA_TABLE" | /usr/bin/awk -F '|' -v i="$1" '{ n = tolower($1); gsub(/ /, "-", n); gsub(/[^a-z0-9-]/, "", n) } n == i { print $1; exit }')
+  [ -n "$_a" ] || _a=$(printf '%s\n%s\n' "$AA_TABLE" "$RC_FILES" | /usr/bin/awk -F '|' -v i="$1" '{ n = tolower($1); gsub(/ /, "-", n); gsub(/[^a-z0-9-]/, "", n) } n == i { print $1; exit }')
   printf '%s' "${_a:-$1}"
 }
 fl_prov_name() { # a provider id: its name
@@ -540,7 +1015,26 @@ fl_prov_name() { # a provider id: its name
 }
 fl_join() { _o=""; for _x in "$@"; do _o="${_o:+$_o, }$_x"; done; printf '%s' "$_o"; }
 fl_plural() { if [ "$1" = 1 ]; then printf '%s %s' "$1" "$2"; else printf '%s %s' "$1" "$3"; fi; }
-
+fl_codes() { # risk|... lines on stdin: their risks, once each, in code order, separated by spaces
+  /usr/bin/awk -F '|' 'NF && !s[$1]++ { print $1 }' | /usr/bin/sort | /usr/bin/paste -sd ' ' -
+}
+# The OWASP Agentic Top 10 tags of the run (docs/designs/owasp.md), from the lines owasp_kinds gave
+# each checked account, each led by the account's row number, and the Mac's, led by M: one line per
+# risk found, in code order, as risk|name|accounts|mac|labels|kinds, the labels and kinds once each in
+# data/owasp.tsv's order. Accounts are told apart by row number, never by name.
+fl_owasp() {
+  { while IFS= read -r _l; do [ -n "$_l" ] && printf 'T|%s\n' "$_l"; done <<EOF
+$OWASP_TABLE
+EOF
+    /bin/cat; } | /usr/bin/awk -F '|' '
+    $1 == "T" { n++; kd[n] = $2; lb[n] = $5; next }
+    NF >= 6 { r = $2; nm[r] = $5; hk[r SUBSEP $3] = 1
+      if ($1 == "M") mac[r] = 1; else if (!((r SUBSEP $1) in seen)) { seen[r SUBSEP $1] = 1; cnt[r]++ } }
+    END { for (c = 1; c <= 10; c++) { r = sprintf("ASI%02d", c); if (!(r in nm)) continue
+        ls = ""; ks = ""; split("", got)
+        for (i = 1; i <= n; i++) if ((r SUBSEP kd[i]) in hk) { ks = ks (ks == "" ? "" : " ") kd[i]; if (!(lb[i] in got)) { got[lb[i]] = 1; ls = ls (ls == "" ? "" : ", ") lb[i] } }
+        print r "|" nm[r] "|" (cnt[r] + 0) "|" ((r in mac) ? 1 : 0) "|" ls "|" ks } }'
+}
 # The Mac's shared places, checked once, by root, by name only: nothing in them is read or run.
 fl_machine() {
   FM_AGENTS=""; FM_INC=""; FM_POSS=""; FM_TMPWIPER=0; FM_ROOTLOADER=0; FM_COMPLETE=true; FM_WHY=""; _late=0; _tend=$((SECONDS + ${FM_FIND_S:-20}))
@@ -578,7 +1072,7 @@ EOF
         # one root owns under one name is a possible sign for the Mac, as above (gh-token-monitor's logs).
         if [ "$_iown" = yes ]; then
           case "$_ip" in /tmp/*) _ip="$FL_SHARED_TMP/${_ip#/tmp/}" ;; *) continue ;; esac
-          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(fl_ul "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
             if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
           fi
           continue
@@ -588,7 +1082,7 @@ EOF
         # not a link, and then only as a possible sign, as the markers above.
         case "$_ip" in /tmp/*)
           _ip="$FL_SHARED_TMP/${_ip#/tmp/}"
-          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(/usr/bin/stat -f '%u %l' "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+          if [ ! -L "$_ip" ] && [ -f "$_ip" ] && [ "$(fl_ul "$_ip" 2>/dev/null)" = "$FL_OWNER 1" ]; then
             if [ "$_ik" = wiper ]; then FM_TMPWIPER=1; else FM_POSS="$FM_POSS $_ii"; fi
           fi
           continue ;;
@@ -602,15 +1096,24 @@ EOF
   # The LiteLLM loader holds its lock file open while it runs.
   _lk="$FL_SHARED_TMP/remote_code_loader.lock"
   # Only a lock file root made: one an account owns is that account's marker, found by its own run.
-  if [ ! -L "$_lk" ] && [ -f "$_lk" ] && [ "$(/usr/bin/stat -f '%u %l' "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
+  if [ ! -L "$_lk" ] && [ -f "$_lk" ] && [ "$(fl_ul "$_lk" 2>/dev/null)" = "$FL_OWNER 1" ]; then
     fl_timed "${FM_LSOF_S:-10}" "$FL_TMP/lsof" -- "$FL_LSOF" -t "$_lk" || FL_TIMEOUT=1
     # A running loader is a sign only when root's own process holds the lock: any account can open a
-    # root-owned file it can read, and keep it open.
+    # root-owned file it can read, and keep it open. A holder whose account ps can't give (ps refused,
+    # or the process gone) leaves this part not checked, never read as another account's.
     _held=""; for _p in $(/usr/bin/tr -cs '0-9' ' ' < "$FL_TMP/lsof" 2>/dev/null); do
-      [ "$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' ')" = "$FL_OWNER" ] && { _held=root; break; }
-      _held=other
+      _pu=$(/usr/bin/env LC_ALL=C "$FL_PS" -o uid= -p "$_p" 2>/dev/null | /usr/bin/tr -d ' \n')
+      case "$_pu" in
+        "$FL_OWNER") _held=root; break ;;
+        ''|*[!0-9]*) _held=unknown ;;
+        *) [ "$_held" = unknown ] || _held=other ;;
+      esac
     done
-    case "$_held" in root) FM_INC="$FM_INC litellm"; FM_ROOTLOADER=1 ;; other) FM_POSS="$FM_POSS litellm" ;; esac
+    case "$_held" in
+      root) FM_INC="$FM_INC litellm"; FM_ROOTLOADER=1 ;;
+      other) FM_POSS="$FM_POSS litellm" ;;
+      unknown) FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }who holds the LiteLLM loader's lock file could not be read" ;;
+    esac
     [ "$FL_TIMEOUT" -eq 1 ] && { FM_COMPLETE=false; FM_WHY="${FM_WHY:+$FM_WHY, and }a running LiteLLM loader could not be looked for in time"; }
   fi
   FM_AGENTS=$(printf '%s\n' $FM_AGENTS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
@@ -618,23 +1121,7 @@ EOF
   FM_POSS=$(printf '%s\n' $FM_POSS | /usr/bin/awk 'NF && !s[$0]++' | /usr/bin/paste -sd ' ' -)
 }
 
-# The saved result: /var/db/blindspot/last.json, readable by root only. A folder that is a link,
-# not a folder, or not root's with mode 0700 is moved aside and made again.
-fl_state_ok() { [ ! -L "$FL_STATE" ] && [ -d "$FL_STATE" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$FL_STATE" 2>/dev/null)" = "$FL_OWNER 700" ]; }
-fl_state_prep() {
-  if ! fl_state_ok; then
-    if [ -L "$FL_STATE" ] || [ -e "$FL_STATE" ]; then
-      /bin/mv -f -- "$FL_STATE" "$FL_STATE.replaced-$(/bin/date -u +%Y%m%d%H%M%S)-$$" 2>/dev/null || return 1
-    fi
-    /bin/mkdir -m 700 -- "$FL_STATE" 2>/dev/null || return 1
-    fl_state_ok || return 1
-  fi
-}
-fl_write() { # name text: written to a new file, then renamed into place, root's only
-  fl_state_prep || return 1
-  _sf=$(/usr/bin/mktemp "$FL_STATE/.$1.XXXXXX") || return 1
-  printf '%s\n' "$2" > "$_sf" && /bin/chmod 600 "$_sf" && /bin/mv -f -- "$_sf" "$FL_STATE/$1" || { /bin/rm -f -- "$_sf"; return 1; }
-}
+# The saved result: /var/db/blindspot/last.json, readable by root only (fl_write).
 fl_save() { fl_write last.json "$1"; }
 # Each run first saves when it started and its deadline, so a run the MDM stopped part-way is not
 # hidden behind the last finished result.
@@ -648,25 +1135,88 @@ fl_attempt() { fl_write attempt "$FL_EPOCH ${DEADLINE:-3000}"; }
 fl_inv_out() { if [ "$RESULTTAGS" -eq 1 ]; then printf '<result>%s</result>\n' "$1"; else printf '%s\n' "$1"; fi; }
 fl_unfinished() { # epoch of the last finished run, 0 for none: prints "failed" when a later run stopped part-way
   _a="$FL_STATE/attempt"
-  [ ! -L "$_a" ] && [ -f "$_a" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
+  [ ! -L "$_a" ] && [ -f "$_a" ] && [ "$(fl_um "$_a" 2>/dev/null)" = "$FL_OWNER 600" ] || return 1
   _at=$(/usr/bin/head -c 64 "$_a" | /usr/bin/sed -n '1s/^\([0-9]\{1,12\}\) \([0-9]\{1,5\}\)$/\1 \2/p')
-  [ -n "$_at" ] && [ "${_at% *}" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - ${_at% *} )) -gt "${_at#* }" ] || return 1
-  fl_inv_out "failed: the run started $(/bin/date -u -r "${_at% *}" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
+  [ -n "$_at" ] && _ae=$((10#${_at% *})) && [ "$_ae" -gt "$1" ] && [ $(( $(/bin/date -u +%s) - _ae )) -gt "${_at#* }" ] || return 1
+  fl_inv_out "failed: the run started $(/bin/date -u -r "$_ae" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
+}
+fl_refused() { # epoch of the last finished run, 0 for none: prints "failed" and why when a later run was refused
+  _rf="$FL_STATE/refused"
+  [ ! -L "$_rf" ] && [ -f "$_rf" ] && [ "$(fl_um "$_rf")" = "$FL_OWNER 600" ] || return 1
+  _rl=$(/usr/bin/head -c 400 "$_rf" | /usr/bin/sed -n '1s/^\(refused [0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9]\{2\}:[0-9]\{2\}Z: [A-Za-z0-9 ,._'"'"'-]\{1,160\}\)$/\1/p')
+  _re=$(/usr/bin/head -c 400 "$_rf" | /usr/bin/sed -n '2s/^\([0-9]\{1,12\}\)$/\1/p')
+  [ -n "$_rl" ] && [ -n "$_re" ] && [ "$_re" -gt "$1" ] || return 1
+  fl_inv_out "failed: $_rl"
 }
 fl_inventory() {
   _f="$FL_STATE/last.json"
-  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then fl_state_ok && fl_unfinished 0 && return 0; fl_inv_out none; return 0; fi
-  if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(/usr/bin/stat -f '%u %Lp' "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
+  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then
+    fl_state_ok && { fl_refused 0 || fl_unfinished 0; } && return 0
+    # A folder kept in place for its hash-key (fl_state_prep) could not record why its runs were
+    # refused: never none.
+    if ! fl_state_ok && { [ -L "$FL_STATE/hash-key" ] || [ -e "$FL_STATE/hash-key" ]; }; then fl_inv_out unreadable; else fl_inv_out none; fi
+    return 0
+  fi
+  if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(fl_um "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
   _ep=$(/usr/bin/sed -n 's/^  "checked_epoch": \([0-9]\{1,12\}\),$/\1/p' "$_f" | /usr/bin/head -n 1)
   _iv=$(/usr/bin/sed -n 's/^  "inventory": "\([A-Za-z0-9 ._:;,|+-]*\)",$/\1/p' "$_f" | /usr/bin/head -n 1)
   [ "${#_iv}" -le 300 ] || _iv=""
   if [ -z "$_ep" ] || [ -z "$_iv" ]; then fl_inv_out unreadable; return 0; fi
+  fl_refused "$_ep" && return 0
   fl_unfinished "$_ep" && return 0
   _age=$(( $(/bin/date -u +%s) - _ep ))
   if [ "$_age" -gt $(( ${STALE_DAYS:-3} * 86400 )) ] || [ "$_age" -lt -3600 ]; then
     fl_inv_out "stale: last run $(/bin/date -u -r "$_ep" +%Y-%m-%dT%H:%MZ)"; return 0
   fi
   fl_inv_out "$_iv"
+}
+
+# The inventory value: one line for an MDM's inventory field, no path, file name or key, at most 250
+# characters, in the order the report reads it: the accounts (a cut value keeps them in order of need),
+# the Mac's own row, old-install, then no accounts. Too long, it keeps old-install and no accounts, and chooses the rest by need: act, then
+# not_checked, then review, then as many clear ones as fit, the Mac's row before an account at the same
+# level. Rows go before details: every row that is not clear gets its outcome first, then each act
+# account its gh-token-monitor and incidents, then each clear row its outcome, then each row as much
+# of the rest as fits (the Mac's row drops its last parts first). It ends with +more whenever anything was cut; the saved file has the rest.
+fl_value() { # head parts accounts [token]: parts each start with " | "; accounts 0 adds " | no accounts"
+  # The OWASP token goes last, and only when the whole value fits with it, so it never costs an
+  # account any of its content; a cut value has no token.
+  _vp=$2; [ "$3" -eq 0 ] && _vp="$_vp | no accounts"
+  _vv="$1$_vp"; _vt=${4:+ | $4}
+  if [ "${#_vv}" -le 250 ]; then
+    if [ $(( ${#_vv} + ${#_vt} )) -le 250 ]; then printf '%s' "$_vv$_vt"; else printf '%s' "$_vv"; fi
+    return
+  fi
+  printf '%s' "$_vp" | /usr/bin/awk -v head="$1" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
+      { n = 0; tail = ""
+        for (i = 2; i <= NF; i++) {
+          if ($i == "old-install" || $i == "no accounts") { tail = tail " | " $i; continue }
+          split($i, p, "[ ;]"); n++; mach[n] = (p[1] == "machine:"); k[n] = (p[2] in r) ? r[p[2]] : 5
+          base = p[1] " " p[2]; c = 0; cand[n, ++c] = $i; keyc[n] = 0
+          if (mach[n]) { m = split($i, d, "; "); for (x = m - 1; x >= 1; x--) { s = d[1]; for (y = 2; y <= x; y++) s = s "; " d[y]; cand[n, ++c] = s } }
+          else if (p[2] == "act") { key = base; m = split(substr($i, length(base) + 2), d, "; ")
+            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key = key (key == base ? " " : "; ") d[x]
+            if (key == $i && key != base) keyc[n] = 1
+            if (key != base && key != $i) { cand[n, ++c] = key; keyc[n] = c } }
+          if (cand[n, c] != base) cand[n, ++c] = base
+          nc[n] = c
+        }
+        room = 243 - length(head) - length(tail); cut = 0; acc = ""; mrow = ""
+        # The order rows are kept in: by need, the row of the Mac before an account at the same level.
+        no = 0; for (lv = 5; lv >= 0; lv--) for (pass = 1; pass >= 0; pass--) for (j = 1; j <= n; j++) if (k[j] == lv && mach[j] == pass) ord[++no] = j
+        # Rows before details: every row that is not clear its shortest form, in that order, while there
+        # is room; then each act account with gh-token-monitor and its incidents (its key form, the
+        # candidate keyc, its whole row when that is all it holds), which no clear row may take the room
+        # of; then the clear rows their outcome while there is room.
+        kept = 0; full = 1
+        for (i = 1; i <= no; i++) { j = ord[i]; if (k[j] <= 1) break; if (length(cand[j, nc[j]]) + 3 > room) { full = 0; break }; got[j] = nc[j]; room -= length(cand[j, nc[j]]) + 3; kept = i }
+        for (i = 1; i <= kept; i++) { j = ord[i]; if (keyc[j]) { c = keyc[j]; dl = length(cand[j, c]) - length(cand[j, got[j]]); if (dl <= room) { room -= dl; got[j] = c } } }
+        if (full) for (i = kept + 1; i <= no; i++) { j = ord[i]; if (length(cand[j, nc[j]]) + 3 > room) break; got[j] = nc[j]; room -= length(cand[j, nc[j]]) + 3; kept = i }
+        if (kept < no) cut = 1
+        # Then the rest of the details, in the same order: each row the longest form that fits.
+        for (i = 1; i <= kept; i++) { j = ord[i]; for (c = 1; c < got[j]; c++) { dl = length(cand[j, c]) - length(cand[j, got[j]]); if (dl <= room) { room -= dl; got[j] = c; break } } }
+        for (i = 1; i <= kept; i++) { j = ord[i]; if (got[j] > 1) cut = 1; if (mach[j]) mrow = " | " cand[j, got[j]]; else acc = acc " | " cand[j, got[j]] }
+        print head acc mrow tail (cut ? " +more" : "") }'
 }
 
 fleet_main() {
@@ -690,22 +1240,32 @@ fleet_main() {
   _dl=${DEADLINE:-3000}; _rs=$((_dl / 10)); [ "$_rs" -gt 40 ] && _rs=40
   FM_FIND_S=$((_rs / 2)); [ "$FM_FIND_S" -gt 20 ] && FM_FIND_S=20; [ "$FM_FIND_S" -lt 1 ] && FM_FIND_S=1
   FM_LSOF_S=$((_rs / 4)); [ "$FM_LSOF_S" -gt 10 ] && FM_LSOF_S=10; [ "$FM_LSOF_S" -lt 1 ] && FM_LSOF_S=1
-  FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0; FL_FAILED=""
-  # One version for both files: gird-check.sh's release, from its header.
+  FL_END=$((SECONDS + _dl - _rs)); FL_DEADLINE_HIT=0
+  # The check each account runs, then one version for both files: gird-check.sh's release, from its header.
+  FL_FAILED=""; FL_OWFAIL=""
+  if [ -n "$FL_PACKED_SHA" ]; then FL_CHECK_SHA=$FL_PACKED_SHA; fl_unpack || FL_FAILED=copy
+  else FL_CHECK_SHA=$(fl_sha256 "$FL_CHECK"); fi
   FL_REL=$(/usr/bin/sed -n '1,5{s/^# Blindspot, .*, version \([0-9][0-9.]*\) .*/\1/p;}' "$FL_CHECK" | /usr/bin/head -n 1)
   [ -n "$FL_REL" ] || FL_REL=unknown
+  # An account run may name only the key types this file knows, so a gird-check.sh with other key
+  # types would have every account's output refused as unexpected: that is named instead, for every
+  # account, and nothing is run. Only the key types are compared, not the release: gird-check.sh
+  # states its release in its header (line 2), but this file states none to compare it with, so two
+  # releases with the same key types are not told apart.
+  FL_SKEW=0
+  [ "$(/usr/bin/sed -n 's/^PROVIDER_IDS="\(.*\)"$/\1/p' "$FL_CHECK" | /usr/bin/head -n 1)" = "$PROVIDER_IDS" ] || FL_SKEW=1
   FL_AT=$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ); FL_EPOCH=$(/bin/date -u +%s)
   fl_attempt || :   # a folder that cannot be written fails the save at the end, too
   FL_OS="macOS $(/usr/bin/sw_vers -productVersion 2>/dev/null | /usr/bin/tr -cd '0-9.' | /usr/bin/cut -d. -f1-2)"; FL_OS=${FL_OS% }
   # The copy each account runs: gird-check.sh, made once, in a new folder only root can change.
   _src=$FL_CHECK
-  if [ -f "$_src" ] && [ -r "$_src" ] && FL_COPYDIR=$(/usr/bin/mktemp -d /tmp/blindspot-copy.XXXXXXXX); then
+  if [ -z "$FL_FAILED" ] && [ -f "$_src" ] && [ -r "$_src" ] && FL_COPYDIR=$(/usr/bin/mktemp -d /tmp/blindspot-copy.XXXXXXXX); then
     FL_COPY="$FL_COPYDIR/gird-check.sh"
     { /bin/cp -- "$_src" "$FL_COPY" && /bin/chmod 0644 "$FL_COPY" && /bin/chmod 0755 "$FL_COPYDIR" && fl_copy_ok; } || FL_FAILED=copy
   else FL_FAILED=copy; fi
   fl_accounts > "$FL_TMP/accounts"
   _left=$(/usr/bin/grep -c "${FL_US}ok\$" "$FL_TMP/accounts")
-  ROWS=""; OUTS=""; N_NC_RUN=0; N_ACC=0; N_ACT=0; N_UPD=0; N_NC=0; TERM_VIEW=""; INV=""
+  ROWS=""; OUTS=""; N_NC_RUN=0; N_ACC=0; N_ACT=0; N_UPD=0; N_NC=0; N_PART=0; TERM_VIEW=""; INV=""; OW_ALL=""
   while IFS="$FL_US" read -r _n _u _h _r; do
     N_ACC=$((N_ACC + 1))
     _shown=$(fl_name "$_n")
@@ -715,6 +1275,7 @@ fleet_main() {
       # spends only its own share.
       _lim=$(( (FL_END - SECONDS) / (_left > 0 ? _left : 1) - 3 )); _left=$((_left - 1))
       if [ -n "$FL_FAILED" ]; then _r=copy_changed
+      elif [ "$FL_SKEW" -eq 1 ]; then _r=release_mismatch
       elif [ "$_lim" -lt 1 ]; then _r=deadline; FL_DEADLINE_HIT=1
       elif ! fl_copy_ok; then _r=copy_changed; FL_FAILED=copy
       else
@@ -745,9 +1306,13 @@ fleet_main() {
       # What an incident leaves that must go before any key is rotated (SANDWORM_MODE's git hooks and MCP
       # servers: its pre-push hook sends npm tokens out), as the person's own report puts it first.
       _first=""; for _x in $_ia $FA_lock_only; do case "$(incident_advice "$_x")" in First\ *) case " $_first " in *" $_x "*) ;; *) _first="$_first $_x" ;; esac ;; esac; done
-      for _x in $_first; do _lines="$_lines$NL    x  Remove what the $(incident_name "$_x") leaves (git hooks, MCP servers) before anyone rotates a key"; done
+      _fl=""
+      for _x in $_first; do
+        case "$_x" in sandworm) _fw=" (git hooks, MCP servers)" ;; claudeext) _fw=" (an SSH key, startup files)" ;; *) _fw="" ;; esac
+        _lines="$_lines$NL    x  Remove what the $(incident_name "$_x") leaves$_fw before anyone rotates a key"; _fl="${_fl:+$_fl and }the $(incident_name "$_x")"
+      done
       _wait=""; [ "$FA_wiper" -eq 1 ] && _wait="gh-token-monitor is stopped"
-      [ -n "$_first" ] && _wait="${_wait:+$_wait and }the worm's leftovers are removed"
+      [ -n "$_first" ] && _wait="${_wait:+$_wait and }what $_fl leaves is removed"
       [ -n "$_ia" ] && _act=1
       for _x in $_ia; do _lines="$_lines$NL    x  $(incident_line "$_x" | /usr/bin/sed 's/\. [a-z0-9.-]*$//')"; done
       [ -n "$_ia" ] && _inv="$_inv; incidents$(printf ' %s' $_ia | /usr/bin/tr -s ' ' | /usr/bin/sed 's/^ //; s/ /,/g; s/^/ /')"
@@ -762,6 +1327,7 @@ fleet_main() {
       done
       if [ "$FA_planted" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Files a worm plants in a project, or settings that run one: $FA_planted"; _inv="$_inv; planted $FA_planted"; fi
       if [ -n "$FA_yolo" ]; then _upd=1; for _x in $FA_yolo; do _lines="$_lines$NL    !  $(fl_agent_name "$_x") set to run commands without asking"; done; _inv="$_inv; run-without-asking $(printf '%s' "$FA_yolo" | /usr/bin/tr ' ' ',')"; fi
+      if [ -n "$FA_remote" ]; then _upd=1; for _x in $FA_remote; do _lines="$_lines$NL    !  $(fl_agent_name "$_x") allowed to run commands on other machines without asking"; done; _inv="$_inv; remote-commands $(printf '%s' "$FA_remote" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_key_files" -gt 0 ]; then
         _act=1; _pn=""; for _x in $FA_key_providers; do _pn="${_pn:+$_pn, }$(fl_prov_name "$_x")"; done
         _lines="$_lines$NL    x  Keys in plain text: $(fl_plural "$FA_key_files" file files)${_pn:+ ($_pn)}"
@@ -771,15 +1337,18 @@ fleet_main() {
       if [ "$FA_session_files" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Keys in agent sessions: $(fl_plural "$FA_session_files" file files)"; _inv="$_inv; sessions $FA_session_files"; fi
       if [ "$FA_mcp_token_files" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Tokens written in MCP configs: $(fl_plural "$FA_mcp_token_files" file files)"; _inv="$_inv; mcp-tokens $FA_mcp_token_files"; fi
       if [ "$FA_allow_list_keys" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Keys saved in Claude Code allow lists: $(fl_plural "$FA_allow_list_keys" file files)"; _inv="$_inv; allow-lists $FA_allow_list_keys"; fi
+      # An SSH key malware adds (its incident is in incidents too): a login to the Mac for the attacker.
+      if [ "$FA_ssh_planted" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  SSH keys malware adds, in authorized_keys: $FA_ssh_planted"; _inv="$_inv; ssh-planted $FA_ssh_planted"; fi
       if [ "$FA_ak_links" -gt 0 ]; then _act=1; _lines="$_lines$NL    x  Links to authorized_keys outside .ssh: $FA_ak_links"; _inv="$_inv; ssh-links $FA_ak_links"; fi
       if [ "$FA_ssh_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  $(fl_plural "$FA_ssh_open" "SSH key" "SSH keys") without a passphrase"; _inv="$_inv; ssh-open $FA_ssh_open"; fi
-      if [ -n "$FA_update" ]; then _upd=1; _tn=""; for _x in $FA_update; do _tn="${_tn:+$_tn, }$(printf '%s\n' "$OUT_TABLE" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $2; exit }')"; done; _lines="$_lines$NL    !  Tools with a security fix to install: $_tn"; _inv="$_inv; update-tools $(printf '%s' "$FA_update" | /usr/bin/tr ' ' ',')"; fi
+      if [ -n "$FA_tools" ]; then _upd=1; _tn=""; for _x in $FA_tools; do _tn="${_tn:+$_tn, }$(printf '%s\n' "$OUT_TABLE" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $2; exit }')"; done; _lines="$_lines$NL    !  Tools with a security fix to install: $_tn"; _inv="$_inv; update-tools $(printf '%s' "$FA_tools" | /usr/bin/tr ' ' ',')"; fi
       # Found means its CLI or files are there, not that the person used the hosted service: each
       # platform's own summary says what to check, as the person's report does.
       # With gh-token-monitor there, its rotate waits for it, as every rotate in the person's report does.
       if [ -n "$FA_platforms" ]; then _upd=1; for _x in $FA_platforms; do _lines="$_lines$NL    !  $(printf '%s\n' "$PLATFORMS" | /usr/bin/awk -F '|' -v i="$_x" '$1 == i { print $7; exit }')$( [ -n "$_wait" ] && printf ', once %s' "$_wait")"; done; _inv="$_inv; platforms $(printf '%s' "$FA_platforms" | /usr/bin/tr ' ' ',')"; fi
       if [ "$FA_on_open" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Project settings that act when an agent or editor opens the folder: $FA_on_open"; _inv="$_inv; on-open $FA_on_open"; fi
       if [ "$FA_to_read" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Files named like the ones worms plant, to read: $FA_to_read"; _inv="$_inv; to-read $FA_to_read"; fi
+      if [ "$FA_autostart" -gt 0 ]; then _upd=1; _lines="$_lines$NL    !  Projects or agent settings that start a script the way worms do, to check: $FA_autostart"; _inv="$_inv; autostart $FA_autostart"; fi
       for _x in $FA_updates; do _upd=1; _lines="$_lines$NL    !  A version to update: $(incident_name "$_x")"; done
       # An editor extension whose malware runs only on another system: one to remove, not a sign.
       for _x in $FA_remove; do _upd=1; _lines="$_lines$NL    !  An extension to remove, its malware made for another system: $(incident_name "$_x")"; done
@@ -798,18 +1367,27 @@ fleet_main() {
       if [ "$FA_tmp_wiper" -eq 1 ]; then _upd=1; _lines="$_lines$NL    !  gh-token-monitor's logs in /tmp, this account's, nothing else of it: check them before anyone revokes a GitHub token"; _inv="$_inv; tmp-wiper"; fi
       for _x in $FA_tmp_marks; do _upd=1; _lines="$_lines$NL    !  Files named like the $(incident_name "$_x") markers in /tmp, this account's: check them, as another account can link one there"; done
       [ -n "$FA_tmp_marks" ] && _inv="$_inv; tmp-marks $(printf '%s' "$FA_tmp_marks" | /usr/bin/tr ' ' ',')"
+      # Its OWASP tags, from the fields fl_parse checked. Tags that could not be worked out leave the
+      # account partly checked and the run failed, never clear.
+      _owf=0; if fl_owasp_kinds; then _ok=$FL_OWK; else _ok=""; _owf=1; fi
       _why=""
       [ "$FA_sessions_partial" -eq 1 ] && _why="${_why:+$_why, }agent sessions partly checked"
       [ "$FA_not_read" -gt 0 ] && _why="${_why:+$_why, }$(fl_plural "$FA_not_read" "file or folder was" "files or folders were") not read"
       [ "$FA_moved" -eq 1 ] && _why="${_why:+$_why, }a shell profile moves an agent's folders, which this check does not follow"
       [ "$FA_protected" != ok ] && _why="${_why:+$_why, }folders macOS protects were not checked (Full Disk Access)"
       [ -n "$FA_stop" ] && _why="${_why:+$_why, }its check ran out of time"
+      [ "$_owf" -eq 1 ] && _why="${_why:+$_why, }its OWASP tags could not be worked out"
       [ -n "$_why" ] && _complete=false
       if [ "$_act" -eq 1 ]; then _out=act; elif [ "$_complete" = false ]; then _out=not_checked; elif [ "$_upd" -eq 1 ]; then _out=review; else _out=clear; fi
       case "$_out" in act) N_ACT=$((N_ACT + 1)) ;; review) N_UPD=$((N_UPD + 1)) ;; not_checked) N_NC=$((N_NC + 1)) ;; esac
       [ "$_complete" = false ] && { _lines="$_lines$NL    ?  Partly checked: $_why"; _inv="$_inv; partial"; }
       _prot=checked; [ "$FA_protected" = ok ] || _prot=not_checked
-      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"tools_to_update\":$(fl_json_list "$FA_update"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")}"
+      # A partly checked account is tagged with what was found, and counted apart.
+      [ "$_complete" = false ] && N_PART=$((N_PART + 1))
+      while IFS= read -r _l; do [ -n "$_l" ] && OW_ALL="$OW_ALL$N_ACC|$_l$NL"; done <<EOF
+$_ok
+EOF
+      _row="{\"account\":\"$_shown\",\"complete\":$_complete,\"outcome\":\"$_out\",\"agents\":$(fl_json_list "$FA_agents"),\"agents_run_without_asking\":$(fl_json_list "$FA_yolo"),\"agents_run_remote_commands\":$(fl_json_list "$FA_remote"),\"tools_to_update\":$(fl_json_list "$FA_tools"),\"mcp_servers\":$FA_mcp_servers,\"mcp_token_files\":$FA_mcp_token_files,\"key_files\":$FA_key_files,\"key_providers\":$(fl_json_list "$FA_key_providers"),\"history_keys\":$FA_history_keys,\"session_files_with_keys\":$FA_session_files,\"allow_list_keys\":$FA_allow_list_keys,\"ssh_keys_no_passphrase\":$FA_ssh_open,\"authorized_keys_links\":$FA_ak_links,\"authorized_keys_planted_keys\":$FA_ssh_planted,\"planted_files\":$FA_planted,\"possible_signs\":$(fl_json_list "$FA_possible"),\"project_settings_on_open\":$FA_on_open,\"files_to_read\":$FA_to_read,\"scripts_started_like_worms\":$FA_autostart,\"versions_to_update\":$(fl_json_list "$FA_updates"),\"wiper\":$( [ "$FA_wiper" = 1 ] && echo true || echo false),\"lockfile_only_incidents\":$(fl_json_list "$FA_lock_only"),\"extensions_to_remove\":$(fl_json_list "$FA_remove"),\"platforms_found\":$(fl_json_list "$FA_platforms"),\"files_not_checked\":$FA_not_read,\"agent_folders_moved\":$( [ "$FA_moved" = 1 ] && echo true || echo false),\"shared_tmp_markers\":$(fl_json_list "$FA_tmp_marks"),\"shared_tmp_wiper_logs\":$( [ "$FA_tmp_wiper" = 1 ] && echo true || echo false),\"sessions_partly_checked\":$( [ "$FA_sessions_partial" = 1 ] && echo true || echo false),\"protected_folders\":\"$_prot\",\"session_engine\":\"$FA_engine\"$( [ -n "$FA_stop" ] && printf ',"stopped":"time_limit"')$( [ "${FL_LEFT:-0}" = 1 ] && printf ',"processes_left":true')$( [ "$_owf" = 1 ] && printf ',"owasp_failed":true'),\"incidents\":$(fl_json_incidents "$FA_incidents")$( [ "$_owf" -eq 1 ] || printf ',\"owasp\":%s' "$(fl_json_list "$(printf '%s\n' "$_ok" | fl_codes)")")}"
       case "$_out" in act) _word="act now" ;; review) _word="review" ;; not_checked) _word="partly checked" ;; *) _word="nothing found" ;; esac
       TERM_VIEW="${TERM_VIEW:+$TERM_VIEW$NL}$(printf '\n  %-44s%s' "$_shown" "$_word")$_lines"
       INV="$INV | $_shown: $_out$( [ -n "$_inv" ] && printf ' %s' "${_inv#; }")"
@@ -831,44 +1409,52 @@ fleet_main() {
   if [ "$FM_TMPWIPER" -eq 1 ]; then [ "$FM_OUT" = act ] || FM_OUT=review; _ml="$_ml$NL    !  gh-token-monitor's logs in /tmp, root's: check them before anyone revokes a GitHub token"; fi
   # A machine check that did not answer in time leaves the Mac partly checked.
   [ "$FM_COMPLETE" = true ] || { [ "$FM_OUT" = act ] || FM_OUT=not_checked; _ml="$_ml$NL    ?  Partly checked: $FM_WHY"; }
-  MACHINE="{\"complete\":$FM_COMPLETE,\"outcome\":\"$FM_OUT\",\"agents\":$(fl_json_list "$FM_AGENTS"),\"possible_signs\":$(fl_json_list "$FM_POSS"),\"shared_tmp_wiper_logs\":$( [ "$FM_TMPWIPER" -eq 1 ] && echo true || echo false),\"incidents\":$(fl_json_incidents "$FM_INC")}"
+  # The Mac's own OWASP tags: its incidents (data/indicators.tsv holds act-level ones only, and the
+  # LiteLLM loader is one), whether its check was complete or not. Its possible signs are leads.
+  _mo=""; [ -n "$FM_INC" ] && _mo=$(printf '%s\n' "$OWASP_TABLE" | /usr/bin/awk -F '|' '$6 == "machine:incidents" { print $2 "|" $1 "|" $5 "|" $3 "|" $4 }')
+  while IFS= read -r _l; do [ -n "$_l" ] && OW_ALL="${OW_ALL}M|$_l$NL"; done <<EOF
+$_mo
+EOF
+  MACHINE="{\"complete\":$FM_COMPLETE,\"outcome\":\"$FM_OUT\",\"agents\":$(fl_json_list "$FM_AGENTS"),\"possible_signs\":$(fl_json_list "$FM_POSS"),\"shared_tmp_wiper_logs\":$( [ "$FM_TMPWIPER" -eq 1 ] && echo true || echo false),\"incidents\":$(fl_json_incidents "$FM_INC"),\"owasp\":$(fl_json_list "$(printf '%s\n' "$_mo" | fl_codes)")}"
   _mi=$(printf '%s' "$FM_INC" | /usr/bin/tr ' ' ','); _mp=$(printf '%s' "$FM_POSS" | /usr/bin/tr ' ' ',')
   [ "$FM_OUT" != clear ] && INV="$INV | machine: $FM_OUT${_mi:+ incidents $_mi}${_mp:+; possible $_mp}$( [ "$FM_TMPWIPER" -eq 1 ] && printf '; tmp-wiper')"
   OUTS="$OUTS$FM_OUT$NL"
   [ "$N_ACC" -eq 0 ] && OUTS="${OUTS}not_checked$NL"
   [ -n "$FL_FAILED" ] && OUTS="${OUTS}failed$NL"
+  [ -n "$FL_OWFAIL" ] && OUTS="${OUTS}failed$NL"
   OUTCOME=$(printf '%s' "$OUTS" | fl_worst)
+  # The two-file install the one file replaces: its daily item would still run beside this one.
+  FL_OLDINST=false
+  for _x in gird-fleet.sh gird-check.sh; do { [ -L "$FL_OLD/$_x" ] || [ -e "$FL_OLD/$_x" ]; } && FL_OLDINST=true; done
+  [ "$FL_OLDINST" = true ] && INV="$INV | old-install"
   _short=$(printf '%s' "$FL_AT" | /usr/bin/cut -c1-16)Z
-  SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
-  # The inventory value: one line for an MDM's inventory field, no path, file name or key. Too
-  # long, it keeps the accounts that need attention first, cuts details before accounts (an act account
-  # keeps gh-token-monitor and its incidents), and ends with +more when anything was cut; the saved
-  # file has the rest.
-  INVENTORY_V="v1 $OUTCOME $_short$INV"; [ "$N_ACC" -eq 0 ] && INVENTORY_V="$INVENTORY_V | no accounts"
-  if [ "${#INVENTORY_V}" -gt 250 ]; then
-    _iv="v1 $OUTCOME $_short"
-    # The accounts that need attention come first, act, then not_checked, then review, then as many
-    # clear ones as fit. An account whose details don't fit keeps its outcome, and an act account its
-    # wiper and incidents too.
-    _iv=$(printf '%s' "$INV" | /usr/bin/awk -v head="$_iv" -F ' [|] ' 'BEGIN { r["act"] = 4; r["not_checked"] = 3; r["review"] = 2; r["clear"] = 1 }
-      { n = 0
-        for (i = 2; i <= NF; i++) {
-          split($i, p, " "); n++; full[n] = $i; base[n] = p[1] " " p[2]; k[n] = (p[2] in r) ? r[p[2]] : 5
-          key[n] = base[n]
-          if (p[2] == "act") { m = split(substr($i, length(base[n]) + 2), d, "; ")
-            for (x = 1; x <= m; x++) if (d[x] == "wiper" || d[x] ~ /^incidents /) key[n] = key[n] (key[n] == base[n] ? " " : "; ") d[x] }
-        }
-        out = head; cut = 0; stop = 0
-        for (lv = 5; lv >= 0 && !stop; lv--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv) {
-          if (length(out " | " full[j]) <= 243) { out = out " | " full[j]; continue }
-          cut = 1
-          if (key[j] != base[j] && length(out " | " key[j]) <= 243) out = out " | " key[j]
-          else if (length(out " | " base[j]) <= 243) out = out " | " base[j]
-          else stop = 1
-        }
-        print out (cut ? " +more" : "") }')
-    INVENTORY_V=$_iv
+  # The OWASP part, by risk: how many checked accounts have it, +mac when the Mac has it. Every account
+  # not checked, and every one partly checked, is counted beside it, so a count never reads as the
+  # rest being free of the risk. Nothing tagged leaves it out: it never says none.
+  N_COUNTED=$((N_ACC - N_NC_RUN))
+  OW_RISKS=$(printf '%s' "$OW_ALL" | fl_owasp)
+  _owsum=""; _owinv=""; _owrj=""
+  while IFS='|' read -r _or _on _oa _om _ol _ok; do
+    [ -n "$_or" ] || continue
+    _owsum="${_owsum:+$_owsum,}$_or:$_oa$( [ "$_om" = 1 ] && printf '+mac')"
+    _owinv="${_owinv:+$_owinv }owasp.$_or:$_oa$( [ "$_om" = 1 ] && printf '+mac')"
+    _owrj="${_owrj:+$_owrj,}{\"id\":\"$_or\",\"name\":\"$_on\",\"accounts\":$_oa,\"machine\":$( [ "$_om" = 1 ] && echo true || echo false),\"findings\":$(fl_json_list "$_ok")}"
+  done <<EOF
+$OW_RISKS
+EOF
+  if [ -n "$_owsum" ]; then
+    _owinv="$_owinv; counted $N_COUNTED"; _owsum=" owasp=$_owsum;counted:$N_COUNTED"
+    [ "$N_NC_RUN" -gt 0 ] && { _owsum="$_owsum;not_counted:$N_NC_RUN"; _owinv="$_owinv; not-counted $N_NC_RUN"; }
+    [ "$N_PART" -gt 0 ] && { _owsum="$_owsum;partial:$N_PART"; _owinv="$_owinv; partial $N_PART"; }
   fi
+  # Every cause the tags failed for, in the JSON and the summary line as well as the terminal view.
+  _owfs=""; [ -n "$FL_OWFAIL" ] && _owfs=" owasp_failed=$(printf '%s' "$FL_OWFAIL" | /usr/bin/tr ' ' ',')"
+  _owsum="$_owsum$_owfs"
+  OWASP_JSON="{\"accounts_counted\":$N_COUNTED,\"accounts_not_checked\":$N_NC_RUN,\"accounts_partly_checked\":$N_PART,\"failed_because\":$(fl_json_list "$FL_OWFAIL"),\"risks\":[$_owrj]}"
+  _sx=""; [ "$FL_OLDINST" = true ] && _sx=" old_install=yes"
+  SUMMARY="blindspot $OUTCOME accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT$_owsum$_sx"
+  # The inventory value (fl_value), with the OWASP token only when it fits; the saved file has the rest.
+  INVENTORY_V=$(fl_value "v1 $OUTCOME $_short" "$INV" "$N_ACC" "$_owinv")
   JSON_DOC="{
   \"blindspot\": \"1\",
   \"script\": \"$FL_REL\",
@@ -877,15 +1463,18 @@ fleet_main() {
   \"os\": \"$FL_OS\",
   \"outcome\": \"$OUTCOME\",
   \"deadline_reached\": $( [ "$FL_DEADLINE_HIT" -eq 1 ] && echo true || echo false),
+  \"old_install\": $FL_OLDINST,
   \"accounts\": [$ROWS],
   \"machine\": $MACHINE,
+  \"owasp\": $OWASP_JSON,
   \"summary\": \"$SUMMARY\",
   \"inventory\": \"$INVENTORY_V\",
   \"learn_more\": \"https://gird.ai/argus\"
 }"
   FL_SAVED=1; fl_save "$JSON_DOC" || { FL_SAVED=0; OUTCOME=failed; }
+  [ "$FL_SAVED" -eq 1 ] && { /bin/rm -f -- "$FL_STATE/refused"; fl_keep; }
   if [ "$FL_SAVED" -eq 0 ]; then
-    SUMMARY="blindspot failed accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT"
+    SUMMARY="blindspot failed accounts=$N_ACC act=$N_ACT review=$N_UPD not_checked=$N_NC v=$FL_REL at=$FL_AT$_owsum$_sx"
     JSON_DOC=$(printf '%s\n' "$JSON_DOC" | /usr/bin/sed 's/^  "outcome": "[a-z_]*",$/  "outcome": "failed",/')
   fi
   if [ "$JSON" -eq 1 ]; then printf '%s\n' "$JSON_DOC"
@@ -898,7 +1487,27 @@ fleet_main() {
     # The word is set first: bash 3.2, macOS's own, ends a $( ) at a case pattern's ")".
     case "$FM_OUT" in act) _mw="act now" ;; not_checked) _mw="partly checked" ;; *) _mw=review ;; esac
     if [ -n "$_ml" ]; then printf '\n  %-44s%s%s\n' "This Mac" "$_mw" "$_ml"; fi
+    if [ -n "$OW_RISKS" ]; then
+      printf '\n  OWASP Agentic Top 10\n'
+      while IFS='|' read -r _or _on _oa _om _ol _ok; do
+        [ -n "$_or" ] || continue
+        if [ "$_oa" -gt 0 ]; then _owt="$_oa of $(fl_plural "$N_COUNTED" "checked account" "checked accounts")$( [ "$_om" = 1 ] && printf ' and this Mac')"; else _owt="this Mac"; fi
+        printf '    %s %s  %s (%s)\n' "$_or" "$_on" "$_owt" "$_ol"
+      done <<EOF
+$OW_RISKS
+EOF
+      [ "$N_NC_RUN" -gt 0 ] && printf '    Not counted: %s not checked\n' "$(fl_plural "$N_NC_RUN" account accounts)"
+      [ "$N_PART" -gt 0 ] && printf '    %s\n' "$(fl_plural "$N_PART" "account partly checked: its tags may be incomplete" "accounts partly checked: their tags may be incomplete")"
+    fi
     [ -n "$FL_FAILED" ] && printf '\n  The run stopped: the script copy each account runs was changed.\n'
+    [ "$FL_OLDINST" = true ] && printf '\n  An older install of Blindspot, two files and a daily MDM item, is still on this Mac.\n  Remove its daily item first, then its install item and its two files (keep rg if you installed\n  ripgrep): docs/fleet.md, Moving from two files.\n'
+    for _x in $FL_OWFAIL; do
+      case "$_x" in
+        code) printf '\n  The run failed: no OWASP tags were worked out, as the rule that works them out holds a line root does not run.\n' ;;
+        nopath) printf '\n  The run failed: no OWASP tags were worked out, as %s is not an empty folder only root can change.\n' "$FL_NOPATH" ;;
+        rule) printf '\n  The run failed: the rule that works out the OWASP tags did not run cleanly.\n' ;;
+      esac
+    done
     if [ "$FL_SAVED" -eq 1 ]; then printf '\n  Saved: %s/last.json\n' "$FL_STATE"; else printf '\n  Not saved: %s could not be written safely.\n' "$FL_STATE"; fi
     if [ "$TTY" -eq 1 ]; then
       if [ "$OUTCOME" = clear ]; then _a1="Nothing found on this Mac today."; else _a1="This is one Mac, checked once."; fi
@@ -911,3 +1520,5 @@ fleet_main() {
 }
 fleet_main
 exit $?
+# >>> packed-check: gird-check.sh without its game, written into blindspot-fleet.sh by tools/gen.sh; empty here.
+# <<< packed-check
