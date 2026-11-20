@@ -60,8 +60,11 @@
 # named Stripe, and one with them is missed); SendGrid's 69 characters (twilio.com SendGrid API keys);
 # PyPI's pypi- and a base64 macaroon whose location is pypi.org (docs.pypi.org, secrets), which can pass
 # 300 characters;
-# Sentry's sntryu_ and sntrys_ formats (docs.sentry.io, token formats); Supabase's sb_secret_
-# (supabase.com, API keys). The vendors document the start but not the length of GitLab's glpat-,
+# Sentry's sntryu_ and sntrys_ formats (docs.sentry.io, token formats). Supabase documents sb_secret_
+# (supabase.com, API keys) but not its shape, 22 characters, _ and an 8-character checksum, which is
+# how its own script for self-hosted keys builds one (github.com/supabase/supabase,
+# docker/utils/add-new-auth-keys.sh) and the shape of its CLI's local key. The vendors document the
+# start but not the length of GitLab's glpat-,
 # gldt-, glrt-, glft- and glsoat- (docs.gitlab.com, token prefixes; a personal access token is 20
 # characters), Docker Hub's dckr_pat_ (docs.docker.com, access tokens), DigitalOcean's dop_v1_,
 # doo_v1_ and dor_v1_ (its blog, April 2022), Vault's hvs. (developer.hashicorp.com, tokens: 24 or
@@ -73,7 +76,10 @@
 # characters, so the short tokens in Vault's own docs are not keys.
 # A line #pass starts the next pass. Each pass is matched on its own, so a key of a later pass never
 # hides a key an earlier pass finds, glued to it or one character after it. The first pass holds the
-# twelve types of Blindspot 1.2.0, which so find just what they found before.
+# twelve types of Blindspot 1.2.0, which so find just what they found before. Within a pass the leftmost
+# match wins, so two keys of one pass glued together or one character apart can hide one another: on
+# consecutive lines of an agent's JSON transcript the \n between them is two characters, and the first
+# key's end takes the \.
 # id	name	starts	pattern	at	max
 anthropic	Anthropic	sk-ant-	sk-ant-[A-Za-z0-9_-]{90,}	start	-
 openrouter	OpenRouter	sk-or-v1-	sk-or-v1-[a-f0-9]{64}	start	-
