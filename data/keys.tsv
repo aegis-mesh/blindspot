@@ -76,7 +76,12 @@
 # characters, so the short tokens in Vault's own docs are not keys.
 # A line #pass starts the next pass. Each pass is matched on its own, so a key of a later pass never
 # hides a key an earlier pass finds, glued to it or one character after it. The first pass holds the
-# twelve types of Blindspot 1.2.0, which so find just what they found before. Within a pass the leftmost
+# twelve types of Blindspot 1.2.0, so in files they find just what they found before. In agent
+# sessions they can differ. The perl and .NET engines read the text after a piece's last character no
+# key holds on its own, and ~ and ; now count as key characters (an Entra secret holds ~ and a Storage
+# connection string ;), so a key right after another key and a ~ or ; at a file's end or a 1 MB cut
+# can now be hidden, as grep hides it. And perl now finds a key at the start of a line after one whose
+# match took the line break, as grep does, which 1.2.0's perl missed. Within a pass the leftmost
 # match wins, so two keys of one pass glued together or one character apart can hide one another: on
 # consecutive lines of an agent's JSON transcript the \n between them is two characters, and the first
 # key's end takes the \.
