@@ -5074,7 +5074,7 @@ if [ "$(grep -c '=0$' "$MV/cap0.txt")" -eq 3 ] && [ "$(grep -c '=1$' "$MV/cap1.t
 else bad "fleet: past 64 files or 16 MiB read, moved is 1 only where a listed variable was named" "$(cat "$MV/cap0.txt" "$MV/cap1.txt" | tr '\n' ' ')"; fi
 
 # blindspot-fleet.ps1, the one file an MDM runs, built as tools/gen.sh builds it for a release.
-mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf/"
+mkdir -p "$FW/bf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$FW/bf/"
 if (cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh > /dev/null 2>&1) && [ -f "$FW/bf/blindspot-fleet.ps1" ] && [ "$(wc -c < "$FW/bf/blindspot-fleet.ps1")" -lt 204800 ]; then ok "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ') bytes"
 else bad "fleet: blindspot-fleet.ps1 is under 200 KB" "$(wc -c < "$FW/bf/blindspot-fleet.ps1" 2>/dev/null)"; fi
 fw_home bfh; mkdir -p "$FW/bfrun"; cp "$FW/bf/blindspot-fleet.ps1" "$FW/bfrun/"
@@ -5093,7 +5093,7 @@ else bad "fleet: a packed check whose SHA-256 differs is never started, reason=u
 # gird-fleet.ps1 carries comment lines that put blindspot-fleet.ps1 at about 190,000 bytes.
 (cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$FW/bf-check.log" 2>&1); _rc=$?
 _sz=$(wc -c < "$FW/bf/blindspot-fleet.ps1" | tr -d ' ')
-mkdir -p "$FW/bf90"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$FW/bf90/"
+mkdir -p "$FW/bf90"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$FW/bf90/"
 python3 -c "import sys; n = 190000 - int(sys.argv[2]); open(sys.argv[1], 'a').write(('# ' + 'x' * 97 + '\n') * (n // 100))" "$FW/bf90/gird-fleet.ps1" "$_sz"
 (cd "$FW/bf90" && PWSH="$PWSH" bash tools/gen.sh > "$FW/bf90.log" 2>&1); _rc90=$?
 _sz90=$(wc -c < "$FW/bf90/blindspot-fleet.ps1" 2> /dev/null | tr -d ' ')

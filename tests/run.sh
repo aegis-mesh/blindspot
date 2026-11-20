@@ -99,20 +99,20 @@ if cmp -s gird-fleet.sh "$WORK/ow/gird-fleet.sh"; then bad "a hand edit to gird-
 elif ! (cd "$WORK/ow" && bash tools/gen.sh --check > "$WORK/ow.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/ow.txt"; then ok "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check"
 else bad "a hand edit to gird-fleet.sh's copy of the ownership walk fails gen.sh --check" "$(cat "$WORK/ow.txt")"; fi
 # docs/checks.md lists what the data files hold: a hand edit to its generated block is drift.
-mkdir -p "$WORK/ck"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data docs "$WORK/ck/"
+mkdir -p "$WORK/ck"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data docs "$WORK/ck/"
 awk '/^- `axios` / { print "- `axios` 0.0.0"; next } { print }' docs/checks.md > "$WORK/ck/docs/checks.md"
 if cmp -s docs/checks.md "$WORK/ck/docs/checks.md"; then bad "a hand edit to the lists in docs/checks.md fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ck" && bash tools/gen.sh --check > "$WORK/ck.txt" 2>&1) && grep -q 'docs/checks.md is out of date' "$WORK/ck.txt"; then ok "a hand edit to the lists in docs/checks.md fails gen.sh --check"
 else bad "a hand edit to the lists in docs/checks.md fails gen.sh --check" "$(cat "$WORK/ck.txt")"; fi
 # The lines an account run prints have one home, data/account-run.tsv: the readers are written from it,
 # and a printer that sends another key, or the keys in another order, fails gen.sh --check.
-mkdir -p "$WORK/ar"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ar/"
+mkdir -p "$WORK/ar"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/ar/"
 sed 's/^    echo "moved=\$_moved"$/    echo "folders_moved=$_moved"/' gird-check.sh > "$WORK/ar/gird-check.sh"
 if cmp -s gird-check.sh "$WORK/ar/gird-check.sh"; then bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "the edit did not apply"
 elif ! (cd "$WORK/ar" && bash tools/gen.sh --check > "$WORK/ar.txt" 2>&1) && grep -q 'gird-check.sh --account-run prints' "$WORK/ar.txt"; then ok "an account-run line not in data/account-run.tsv fails gen.sh --check"
 else bad "an account-run line not in data/account-run.tsv fails gen.sh --check" "$(cat "$WORK/ar.txt")"; fi
 # The printers' lines are found at any indentation: printers moved one level in still match.
-mkdir -p "$WORK/ari"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$WORK/ari/"
+mkdir -p "$WORK/ari"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/ari/"
 sed 's/^    echo "\([a-z_]*\)=/      echo "\1=/' gird-check.sh > "$WORK/ari/gird-check.sh"; sed "s/^    \([\'\"]\)\([a-z_]*\)=/  \1\2=/" gird-check.ps1 > "$WORK/ari/gird-check.ps1"
 (cd "$WORK/ari" && PWSH=/nonexistent bash tools/gen.sh --check > "$WORK/ari.txt" 2>&1); _ari=$?
 if cmp -s gird-check.sh "$WORK/ari/gird-check.sh" || cmp -s gird-check.ps1 "$WORK/ari/gird-check.ps1"; then bad "gen.sh --check finds the account-run lines at any indentation" "the edit did not apply"
@@ -3926,18 +3926,18 @@ gen_refuses "an OWASP risk on a source owasp_set has no arm for" owasp.tsv 'edit
 # The Mac's own incidents come from these files and are tagged as malware signs: each must be act level.
 gen_refuses "an indicator of an incident that is not act level" indicators.tsv "injective${T}all${T}startup${T}no${T}~/.config/inj.cjs${T}starts it"
 # The data file and the scripts: an edit not written in fails --check, and so does a hand edit to root's copy.
-rm -rf "$WORK/owg"; mkdir -p "$WORK/owg"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/owg/"
+rm -rf "$WORK/owg"; mkdir -p "$WORK/owg"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/owg/"
 awk -F '\t' -v OFS='\t' '$1 == "key_files" { $4 = "keys kept in plain text" } { print }' data/owasp.tsv > "$WORK/owg/data/owasp.tsv"
 (cd "$WORK/owg" && bash tools/gen.sh --check > "$WORK/owg.txt" 2>&1); RC=$?
 if [ "$RC" -eq 1 ] && grep -q 'gird-check.sh is out of date' "$WORK/owg.txt" && grep -q 'gird-fleet.sh is out of date' "$WORK/owg.txt"; then ok "gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check"
 else bad "gen.sh: an edit to data/owasp.tsv not written into the scripts fails --check" "exit $RC $(head -n 3 "$WORK/owg.txt")"; fi
-rm -rf "$WORK/owf"; mkdir -p "$WORK/owf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/owf/"
+rm -rf "$WORK/owf"; mkdir -p "$WORK/owf"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/owf/"
 sed 's/^    yolo) _ov=\$FA_yolo ;;$/    yolo) _ov="" ;;/' gird-fleet.sh > "$WORK/owf/gird-fleet.sh"
 if cmp -s gird-fleet.sh "$WORK/owf/gird-fleet.sh"; then bad "gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check" "the edit did not apply"
 elif ! (cd "$WORK/owf" && bash tools/gen.sh --check > "$WORK/owf.txt" 2>&1) && grep -q 'gird-fleet.sh is out of date' "$WORK/owf.txt"; then ok "gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check"
 else bad "gen.sh: a hand edit to gird-fleet.sh's copy of owasp_kinds fails --check" "$(cat "$WORK/owf.txt")"; fi
 # Root runs the owasp-derive block: gen.sh refuses a bare command in it, as an early warning.
-rm -rf "$WORK/owb"; mkdir -p "$WORK/owb"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/owb/"
+rm -rf "$WORK/owb"; mkdir -p "$WORK/owb"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/owb/"
 sed 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  _ov=$(printf "%s" "$_ov" | tr -d " "); [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/' gird-check.sh > "$WORK/owb/gird-check.sh"
 (cd "$WORK/owb" && bash tools/gen.sh > "$WORK/owb.txt" 2>&1); RC=$?
 if cmp -s gird-check.sh "$WORK/owb/gird-check.sh"; then bad "gen.sh: a bare command in the owasp-derive block is refused" "the edit did not apply"
@@ -3951,7 +3951,7 @@ else bad "gen.sh: the same command by its full path is written into gird-fleet.s
 # refused outright. od_put TEXT: gen.sh on a copy whose owasp_kinds has TEXT in place of its here-string
 # line; sets RC, and OD_SAME when the edit did not apply.
 od_put() {
-  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/odr/"
   OD_TEXT=$1 awk '$0 == "  done <<< \"$OWASP_TABLE\"" { print ENVIRON["OD_TEXT"]; next } { print }' gird-check.sh > "$WORK/odr/gird-check.sh"
   OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
   (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
@@ -3992,19 +3992,19 @@ OD_BODY='id $(id) > /tmp/ow `id` "'
 od_put "$(printf "%s\n  : <<'X'\n%s\n  X\nX" "$OD_DONE" "$OD_BODY")"
 if [ "$OD_SAME" -eq 0 ] && [ "$RC" -eq 0 ] && grep -qxF -- "$OD_BODY" "$WORK/odr/gird-fleet.sh"; then ok "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh"
 else bad "gen.sh: a quoted here-document in the owasp-derive block is skipped and written into gird-fleet.sh" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
-rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/odr/"
 (cd "$WORK/odr" && bash tools/gen.sh --check > "$WORK/odr.txt" 2>&1); RC=$?
 if [ "$RC" -eq 0 ] && ! grep -q 'owasp-derive block' "$WORK/odr.txt"; then ok "gen.sh: the committed owasp-derive block passes the guard"
 else bad "gen.sh: the committed owasp-derive block passes the guard" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
 od_edit() { # sed-program: gen.sh on a copy whose gird-check.sh has the edit; sets RC, and OD_SAME when the edit did not apply
-  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/odr/"
+  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/odr/"
   sed "$1" gird-check.sh > "$WORK/odr/gird-check.sh"; OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
   (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
 }
 od_edit 's/^  \[ -n "\$_ov" \] && \[ "\$_ov" != 0 \]$/  printf "%s" "$_ov" > \/tmp\/ow; [ -n "$_ov" ] \&\& [ "$_ov" != 0 ]/'
 if od_says 'redirects output (>)'; then ok "gen.sh: an output redirection in the owasp-derive block is refused"; else bad "gen.sh: an output redirection in the owasp-derive block is refused" "$OD_WHY"; fi
 # gird-check.ps1 tags by its own Owasp-Set: a source with a risk and no arm there would never be tagged.
-rm -rf "$WORK/opa"; mkdir -p "$WORK/opa"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh tools data "$WORK/opa/"
+rm -rf "$WORK/opa"; mkdir -p "$WORK/opa"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/opa/"
 grep -v "^    'ak_links' { return" gird-check.ps1 > "$WORK/opa/gird-check.ps1"
 (cd "$WORK/opa" && bash tools/gen.sh > "$WORK/opa.txt" 2>&1); RC=$?
 if cmp -s gird-check.ps1 "$WORK/opa/gird-check.ps1"; then bad "gen.sh: an OWASP source with no arm in gird-check.ps1's Owasp-Set is refused" "the edit did not apply"
@@ -5782,7 +5782,7 @@ echo "fleet mode: one file for the MDM (blindspot-fleet.sh)"
 # tools/gen.sh builds blindspot-fleet.sh for a release from a copy of the repo here; PWSH points nowhere,
 # so it stops before blindspot-fleet.ps1 (exit 3) once the Mac file is built.
 OF=$WORK/onefile; mkdir -p "$OF"
-of_repo() { rm -rf "${OF:?}/${1:?}"; mkdir -p "$OF/$1"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 tools data "$OF/$1/"; }
+of_repo() { rm -rf "${OF:?}/${1:?}"; mkdir -p "$OF/$1"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$OF/$1/"; }
 of_gen() { (cd "$OF/$1" && PWSH=/nonexistent bash tools/gen.sh "${@:2}" > "$OF/$1.log" 2>&1); echo "$?" > "$OF/$1.rc"; }
 of_repo bld; of_gen bld
 ONEB=$OF/bld/blindspot-fleet.sh
