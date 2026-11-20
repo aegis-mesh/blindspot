@@ -50,6 +50,14 @@ jobs:
         with:
           persist-credentials: false
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep && rg --version
+      # The runner image installs Microsoft Graph's modules for every user, and PowerShell 7 looks in its
+      # own module folders before PSModulePath, so tests/intune.sh would load them in place of its
+      # stand-in and sign in for real. Only the stand-in may be seen: remove each Microsoft.Graph module
+      # folder the runner has, then fail if PowerShell still lists one.
+      - run: |
+          pwsh -NoProfile -Command 'Get-Module -ListAvailable -Name Microsoft.Graph* | ForEach-Object { Split-Path $_.ModuleBase } | Sort-Object -Unique' > "$RUNNER_TEMP/graph-dirs"
+          while IFS= read -r d; do case "${d##*/}" in Microsoft.Graph*) echo "removing $d"; sudo rm -rf -- "$d" ;; esac; done < "$RUNNER_TEMP/graph-dirs"
+          pwsh -NoProfile -Command 'if (Get-Module -ListAvailable -Name Microsoft.Graph*) { Get-Module -ListAvailable -Name Microsoft.Graph* | ForEach-Object Path; exit 1 }'
       # Both suites, each recording its test names, then tests/parity.sh on the two lists.
       - run: bash tests/parity-run.sh
 

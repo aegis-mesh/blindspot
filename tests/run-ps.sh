@@ -5426,7 +5426,9 @@ mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='
   mv_case condaps "$PSP" '#region conda initialize' 'If (Test-Path "C:\Users\u\miniconda3\Scripts\conda.exe") {' '    (& "C:\Users\u\miniconda3\Scripts\conda.exe" "shell.powershell" "hook") | Out-String | ?{$_} | Invoke-Expression' '}' '#endregion'
   mv_case omp "$PSP" 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression'
   mv_case starship "$PSP" 'Invoke-Expression (&starship init powershell)' '$ENV:STARSHIP_CONFIG = "$HOME\.config\starship.toml"'
-  mv_case starsh .bashrc 'eval "$(starship init bash)"' 'eval "$(oh-my-posh init bash)"' 'source /usr/share/bash-completion/bash_completion'
+  # A sourced file that is not there moves nothing. bash-completion's own script, where it is installed,
+  # reads partly checked (issue #82): the path is one no runner has.
+  mv_case starsh .bashrc 'eval "$(starship init bash)"' 'eval "$(oh-my-posh init bash)"' 'source /usr/share/blindspot-tests/no-such-completion'
   mv_case reads "$PSP" 'if ($env:CLAUDE_CONFIG_DIR) { Write-Host $env:CLAUDE_CONFIG_DIR }' 'if ([Environment]::GetEnvironmentVariable("CODEX_HOME")) { }' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
 } > "$MV/plain.txt"
 if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 8 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
