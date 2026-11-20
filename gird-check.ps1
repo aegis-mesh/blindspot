@@ -1641,7 +1641,12 @@ $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([
 # or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
 # echo that names the file. A rule or a guard that only names the file, or passes it to another
 # script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
-# ./, and must end there. The same expression as gird-check.sh's worm_cmd.
+# ./, and must end there, after the words that run the rest of a command (Cmd-Wrap). The same
+# expression as gird-check.sh's worm_cmd.
+# Cmd-Wrap: those words, as gird-check.sh's cmd_wrap.
+function Cmd-Wrap([string]$cp) {
+  '((nohup|exec|setsid|npx)\s+(-[A-Za-z]+\s+)*|timeout\s+(-[^\s"\\]+\s+([A-Z0-9]+\s+)?)*[0-9.]+[smhd]?\s+|\(\s*|' + $cp + '(env\s+(-[A-Za-z]+\s+)*|(sh|bash|zsh)(\.exe)?\s+(-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*\s+(\\"|''))|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
+}
 function Worm-Cmd([string]$name) {
   if (-not $name) { return $null }
   $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $name + '(\\"|["''\s;&|)])'
@@ -1650,7 +1655,7 @@ function Worm-Cmd([string]$name) {
   # One piece of a command before a separator: a character outside quotes, a JSON escape other than
   # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
   $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
-  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?' + (Cmd-Wrap $cp)
   $ci = '"command"\s*:\s*"' + $cp + '(node|bun|deno|tsx)(\.exe)?"'
   $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $name + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
@@ -1660,27 +1665,28 @@ $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # A script a session-start hook or a folder-open task runs from the project itself, from one of the
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
-# Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself, and after the words that run the rest of a command: nohup, exec, env (as
-# /usr/bin/env too), npx and VAR=value. The same expressions as gird-check.sh's START_PATH and
-# START_CMD (start_cmd).
+# Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -e or -p, and the code of -c
+# only as Cmd-Wrap reads it), or as the command itself, after the words that run the rest of a
+# command (Cmd-Wrap), or when cat pipes it to sh, bash or zsh. The same expressions as gird-check.sh's
+# START_PATH and START_CMD (start_cmd).
 $StartPath = '\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
 $RxStartPath = New-Object regex($StartPath, $RxOpt, $RxTimeout)
 function Start-Cmd([string]$path, [string]$pre, [switch]$cd) {
   $cf = '(\\"|'')?' + $pre + $path + '(\\"|["''\s;&|)])'
   $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
-  $cx = '((nohup|exec|npx|' + $cp + 'env)\s+|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
   $co = '(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^\s"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)\s+'
   $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
-  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?' + (Cmd-Wrap $cp)
   $cn = '(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
   $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $path + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
-  $rx = $cs + $cx + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cx + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci
-  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and a command: what runs next
-  # runs from there.
-  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*[^\s;&|"]' }
+  $rx = $cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci +
+    '|' + $cs + 'cat\s+(\\"|'')?' + $pre + $path + '(\\"|'')?\s*\|\s*' + $cp + '(sh|bash|zsh)(\.exe)?([\s;&|)"'']|\\)'
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter or a ./
+  # script, which run a file from there: a cd followed by rm or ls runs nothing. Cmd-Wrap's words come
+  # before the cd only, as in gird-check.sh.
+  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*(' + $cp + $cn + '\s|\.[/\\])' }
   New-Object regex($rx, $RxOpt, $RxTimeout)
 }
 $RxStartCmd = Start-Cmd $StartPath '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'
@@ -2646,7 +2652,9 @@ foreach ($f in $AllowFiles) {
       if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { foreach ($h in $rh) { $RcProj.Add(@($f, 'Claude Code', "$($h[1]): $($h[2])")) } }
       else {
         $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
-        $w.Add("run commands on other machines without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')")
+        # A rule that allows every command (PowerShell alone) is said as that, as Bash alone is above.
+        $rv = 'run commands on other machines'; if (@($rh | ForEach-Object { $_[2] }) -cmatch '^allows every command,') { $rv = 'run every command' }
+        $w.Add("$rv without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')")
       }
     }
   }
@@ -2698,6 +2706,8 @@ foreach ($f in $VscSettings) {
   }
   if ($w.Count -gt 0) { Auto-Row $f ($w -join ', ') ([string](Flat-Text $f)) }
 }
+# In the order gird-check.sh lists them: byte order of the path with / between folders.
+$AutoRows = $AutoRows.ToArray(); [Array]::Sort([Array][string[]]@($AutoRows | ForEach-Object { $_.File.Replace('\', '/') }), [Array]$AutoRows, [Collections.IComparer][StringComparer]::Ordinal)
 $N_AUTO = $AutoRows.Count
 # Row 02 counts projects: the folders holding these settings.
 $AutoProj = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
@@ -8250,10 +8260,12 @@ if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.
 Add-Advice 'lock'
 Add-Advice 'update'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
-# Opening a project in an editor or an agent runs its worm-style startup, so reading those scripts comes
-# before the fixes that open projects to move or rotate keys.
+# Opening a project in an editor or an agent runs its worm-style startup and the settings section 2
+# marks (a folder-open task), so reading those scripts and settings comes before the fixes that open
+# projects to move or rotate keys.
 if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
 if ($N_UHOOK -gt 0) { Add-Todo 2 'Check the session hooks section 2 lists in your own agent settings. If you didn''t add them, delete them and read what is in the folder they run from.' }
+if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
@@ -8266,7 +8278,6 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_REMOTE -gt 0) { Add-Todo 1 'Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first.' }
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
-if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
@@ -9348,7 +9359,7 @@ foreach ($f in $rcCuts) { if ($f -and -not $ruleUnread.Contains($f)) { $ruleUnre
 $N_RULE_UNREAD = $ruleUnread.Count
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
-elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, rules let $(Plural $N_REMOTE_AG 'agent' 'agents') run commands on other machines" }
+elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_REMOTE_AG can run commands on other machines" }
 elseif ($N_RULE_UNREAD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, but $(Plural $N_RULE_UNREAD 'settings file' 'settings files') could not be read" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }

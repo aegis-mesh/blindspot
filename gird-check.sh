@@ -2291,7 +2291,16 @@ AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
 # or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
 # echo that names the file. A rule or a guard that only names the file, or passes it to another
 # script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
-# ./, and must end there.
+# ./, and must end there. The interpreter or the file may come after the words that run the rest of a
+# command (cmd_wrap).
+# cmd_wrap sets _wx, from the caller's _wp, to those words: nohup, exec, setsid, npx and env (as
+# /usr/bin/env too), each with its flags; timeout with its options and time; VAR=value; the ( of a
+# subshell; and sh, bash or zsh -c, whose quoted code is read as a command from its start. A command
+# after a ; inside that code is not read: trying the rest of the expression after each ; there made
+# long code slow.
+cmd_wrap() {
+  _wx='((nohup|exec|setsid|npx)[[:space:]]+(-[A-Za-z]+[[:space:]]+)*|timeout[[:space:]]+(-[^[:space:]"\\]+[[:space:]]+([A-Z0-9]+[[:space:]]+)?)*[0-9.]+[smhd]?[[:space:]]+|\([[:space:]]*|'"$_wp"'(env[[:space:]]+(-[A-Za-z]+[[:space:]]+)*|(sh|bash|zsh)(\.exe)?[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-[A-Za-z]*c[A-Za-z]*[[:space:]]+(\\"|'"'"'))|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
+}
 worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these files
   _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
@@ -2299,40 +2308,44 @@ worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these fi
   # One piece of a command before a separator: a character outside quotes, a JSON escape other than
   # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
   _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  cmd_wrap
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp"'(node|bun|deno|tsx)(\.exe)?"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s' "$_ws$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
+  printf '%s' "$_ws$_wx$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wx$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
 }
 WORM_CMD_ALONE=""; [ -n "$WORM_RUN_ALONE" ] && WORM_CMD_ALONE=$(worm_cmd "$WORM_RUN_ALONE")
 WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN_WEAK")
 # A script a session-start hook or a folder-open task runs from the project itself, from one of the
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
-# worm_cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself, and after the words that run the rest of a command: nohup, exec, env (as
-# /usr/bin/env too), npx and VAR=value. START_PATH is the script; START_CMD a command that runs one.
+# worm_cmd reads it, with sh, bash, zsh and python too (never the code of -e or -p, and the code of -c
+# only as cmd_wrap reads it), or as the command itself, after the words that run the rest of a
+# command (cmd_wrap), or when cat pipes it to sh, bash or zsh. START_PATH is the script; START_CMD a
+# command that runs one.
 START_PATH='\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
-start_cmd() { # script-ERE prefix-ERE [cd]: four expressions, one per line, and with cd a fifth
+start_cmd() { # script-ERE prefix-ERE [cd]: five expressions, one per line, and with cd a sixth
   _wf='(\\"|'"'"')?'"$2$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
-  _wx='((nohup|exec|npx|'"$_wp"'env)[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
   _wo='(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^[:space:]"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)[[:space:]]+'
   _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  cmd_wrap
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wn='(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
-  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and a command: what runs next
-  # runs from there.
+  printf '%s\n%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi" \
+    "$_ws$_wx"'cat[[:space:]]+(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*\|[[:space:]]*'"$_wp"'(sh|bash|zsh)(\.exe)?([[:space:];&|)"'"'"']|\\)'
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter or a ./
+  # script, which run a file from there: a cd followed by rm or ls runs nothing. The words of cmd_wrap
+  # come before the cd only: with them after it too, macOS's grep -o crashed now and then.
   if [ "${3:-}" = cd ]; then
-    printf '\n%s' "$_ws"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*[^[:space:];&|"]'
+    printf '\n%s' "$_ws$_wx"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*('"$_wp$_wn"'[[:space:]]|\.[/\\])'
   fi
 }
-# One expression per line, each given to grep alone: macOS's grep can crash on all four joined by |.
+# One expression per line, each given to grep alone: macOS's grep can crash on them all joined by |.
 START_CMD=$(start_cmd "$START_PATH" '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?')
 # The elements of every array that is the value of the key K, one line each, from flat's one-line
 # text: a session-start hook's entries, or each task of a tasks.json. Strings are copied whole and
@@ -3286,7 +3299,8 @@ while IFS= read -r f; do
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
   own_cc "$f" && continue
   [ -f "$f" ] && ! too_big "$f" || continue
-  _t=$(flat "$f"); _w=""
+  # An awk that fails while flat reads the file names it as not read, never as one that sets nothing.
+  _t=$(flat "$f") || { cut_file "$f"; continue; }; _w=""
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
   # (Managed settings can set it too; they are not read here.)
   _dah=""
@@ -3355,7 +3369,9 @@ while IFS= read -r f; do
         */settings.local.json) RC_PROJ="$RC_PROJ$(printf '%s
 ' "$_rh" | awk -F "$TAB" -v OFS="$TAB" '{ print $1, "Claude Code", $2 ": " $3 }')$NL" ;;
         *) _tr=". Claude Code applies a project's allow rules once you trust the folder"
-           _w="${_w:+$_w, }run commands on other machines without asking, with permissions.allow: $(printf '%s
+           # A rule that allows every command (PowerShell alone) is said as that, as Bash alone is above.
+           _rv="run commands on other machines"; case "$_rh" in *"${TAB}allows every command,"*) _rv="run every command" ;; esac
+           _w="${_w:+$_w, }$_rv without asking, with permissions.allow: $(printf '%s
 ' "$_rh" | cut -f2 | paste -sd ',' - | sed 's/,/, /g')" ;;
       esac
     fi ;;
@@ -3371,7 +3387,7 @@ EOF
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
-  _t=$(flat "$f"); _w=""
+  _t=$(flat "$f") || { cut_file "$f"; continue; }; _w=""
   _note=""
   printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; _hr=$?
   [ "$_hr" -gt 1 ] && cut_file "$f"
@@ -3431,6 +3447,8 @@ while IFS= read -r f; do
 done <<EOF
 $VSC_SETTINGS
 EOF
+# Listed in byte order of the path, as gird-check.ps1 sorts them.
+AUTO_ROWS=$(printf '%s' "$AUTO_ROWS" | LC_ALL=C sort -t "$TAB" -k1,1)
 # Row 02 counts projects: the folders holding these settings.
 N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/[^/]*$##' | sort -u | grep -c .)
 # The worms' own wiring (Wiz on Mini Shai-Hulud, SafeDep on the AntV wave): a session-start hook and a
@@ -9252,10 +9270,12 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*) _store="Windows Credential Manager or a secrets manager" ;;
   *)      _store="a secrets manager" ;;
 esac
-# Opening a project in an editor or an agent runs its worm-style startup, so reading those scripts comes
-# before the fixes that open projects to move or rotate keys.
+# Opening a project in an editor or an agent runs its worm-style startup and the settings section 2
+# marks (a folder-open task), so reading those scripts and settings comes before the fixes that open
+# projects to move or rotate keys.
 [ "$N_WIRED" -gt 0 ] && todo 2 "Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn't put it there, delete it, the hook and the task."
 [ "$N_UHOOK" -gt 0 ] && todo 2 "Check the session hooks section 2 lists in your own agent settings. If you didn't add them, delete them and read what is in the folder they run from."
+[ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 N_AK=$(count_lines "$AK_LINKS")
 [ "$N_AK" -gt 0 ] && todo 2 "Delete the links to ~/.ssh/authorized_keys listed in section 2."
 [ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
@@ -9268,7 +9288,6 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_REMOTE" -gt 0 ] && todo 1 "Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first."
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
-[ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a
 # lockfile-only hit's fix does not), or its incident's own fix already says to update it.
@@ -10692,7 +10711,7 @@ done
 N_RULE_UNREAD=$(count_lines "$({ printf '%s\n%s\n' "$AA_TRIED" "$RC_TRIED" | unread_files big; printf '%s\n' "$RC_CUTS"; } | awk 'length && !s[$0]++')")
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
-elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, rules let $(plural "$N_REMOTE_AG" agent agents) run commands on other machines"
+elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_REMOTE_AG can run commands on other machines"
 elif [ "$N_RULE_UNREAD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, but $(plural "$N_RULE_UNREAD" "settings file" "settings files") could not be read"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
