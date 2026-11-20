@@ -8423,7 +8423,7 @@ if ($OptAcctRun) {
   # command builds it.
   function Fleet-MvExpand([string]$raw, [string]$from, [bool]$ps) {
     if ($raw -match "^'([^']*)'$") { $x = $Matches[1] } else {
-      if ($raw -match '\$\{[^}]*\$') { return $null }
+      if ($raw -match '\$\{[^}]*\$(?![A-Za-z_])') { return $null }
       $bad = @{ B = $false }
       $x = [regex]::Replace($raw.Replace('"', ''), '\$\{(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)(?::?-(?<d>[^}]*))?\}|\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)', [Text.RegularExpressions.MatchEvaluator] {
         param($m)

@@ -9353,7 +9353,8 @@ if [ "$ACCTRUN" -eq 1 ]; then
     function expand(raw,   x, out, m, d, hasd, v, bad) {
       if (raw ~ /^\047[^\047]*\047$/) x = substr(raw, 2, length(raw) - 2)
       else {
-        if (raw ~ /\$\{[^}]*\$/) return NUL
+        # A default that names plain variables (${X:-$HOME/y}) is followed; any other $ in ${...} gives up.
+        if (raw ~ /\$\{[^}]*\$([^A-Za-z_]|$)/) return NUL
         x = repl(raw, DQ, ""); out = ""; bad = 0
         while (match(x, /\$\{[A-Za-z_][A-Za-z0-9_]*(:?-[^}]*)?\}|\$[A-Za-z_][A-Za-z0-9_]*/)) {
           m = substr(x, RSTART, RLENGTH); out = out substr(x, 1, RSTART - 1); x = substr(x, RSTART + RLENGTH); d = ""; hasd = 0

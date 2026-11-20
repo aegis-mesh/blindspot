@@ -5328,6 +5328,16 @@ mkdir -p "$MV/unread"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/unread/.secr
 chmod 600 "$MV/unread/.secret.sh"
 if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
 else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# A path whose default names plain variables, as XDG's usual form does, is followed with
+# XDG_CONFIG_HOME unset, as the account's shell starts: a file there that moves nothing moves nothing.
+# A default with anything else in it ($1 here) can't be told and counts.
+for _n in xdgsrc xdgsrcmv; do mkdir -p "$MV/$_n/.config/sh"; done
+printf 'alias ll="ls -l"\n' > "$MV/xdgsrc/.config/sh/env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/xdgsrcmv/.config/sh/env.sh"
+_xs=$({ mv_case xdgsrc .bashrc '. "${XDG_CONFIG_HOME:-$HOME/.config}/sh/env.sh"'
+  mv_case xdgsrcmv .bashrc '. "${XDG_CONFIG_HOME:-$HOME/.config}/sh/env.sh"'
+  mv_case xdgsrcarg .bashrc '. "${XDG_CONFIG_HOME:-$1}/sh/env.sh"'; } | tr '\n' ' ')
+if [ "$_xs" = "xdgsrc=0 xdgsrcmv=1 xdgsrcarg=1 " ]; then ok "fleet: a file sourced through XDG_CONFIG_HOME's usual default is read, and a default it can't tell counts"
+else bad "fleet: a file sourced through XDG_CONFIG_HOME's usual default is read, and a default it can't tell counts" "$_xs"; fi
 # Each way a profile can reach a file that moves a folder: from outside the home, two files down, by
 # & or Import-Module of a path, through a module's manifest, in a loop over a folder's files, and a
 # file placed in a tool's own folder that is not the tool's own script.
