@@ -51,13 +51,13 @@ The result never holds a file path, a file name or a key. It does name each acco
 Rollout from an MDM works on Macs, below, and on Windows PCs: there `blindspot-fleet.ps1` is one file your MDM runs once a day as the person who is signed in. It checks that person's account only, with their own rights, and needs no administrator rights; other people's profiles on the PC are counted, not read. [docs/fleet.md](docs/fleet.md#windows) has the Windows steps. It has not yet been run on a real Windows PC. On Linux, each person runs the check themselves ([issue #39](https://github.com/aegis-mesh/blindspot/issues/39)): see [Run it on one computer](#run-it-on-one-computer).
 
 1. **Try it on one Mac.** [docs/fleet.md](docs/fleet.md) is the one-screen quick start.
-2. **Add it to your MDM.** [docs/mdm/](docs/mdm/) has a page each for Jamf Pro, Iru, Microsoft Intune and ManageEngine Endpoint Central (Mobile Device Manager Plus alone runs no scripts on a Mac; [its page](docs/mdm/manageengine-mdm-plus.md) says what to do instead). The MDM installs two files once, runs the check once a day, and shows the result. None of these pages has been run end to end on a real Mac yet, so try it on a few Macs before the whole fleet.
-3. **Read the results.** Look at `act` first, then `not_checked`, `failed` and `stale`, which means the last run is more than 3 days old. Treat `none`, meaning no run yet, and `unreadable` as not checked too.
+2. **Add it to your MDM.** [docs/mdm/](docs/mdm/) has a page each for Jamf Pro, Iru, Microsoft Intune and ManageEngine Endpoint Central (Mobile Device Manager Plus alone runs no scripts on a Mac; [its page](docs/mdm/manageengine-mdm-plus.md) says what to do instead). The MDM runs one file, `blindspot-fleet.sh`, as root once a day, with nothing to install first, and shows the result. None of these pages has been run end to end on a real Mac yet, so try it on a few Macs before the whole fleet.
+3. **Read the results.** Look at `act` first, then `failed`, `not_checked` and `stale`, which means the last run is more than 3 days old. Treat `none`, meaning no run yet, and `unreadable` as not checked too.
 
 What an admin should know before deploying:
 
-- `gird-fleet.sh` runs as root, the Mac's built-in system account with every right. It checks each person's account with that person's own rights, never root's, using `gird-check.sh`.
-- Root runs both files only from a folder that root alone can change.
+- `blindspot-fleet.sh` runs as root, the Mac's built-in system account with every right. It checks each person's account with that person's own rights, never root's, using the copy of `gird-check.sh` it carries as plain text.
+- It runs only from a file that no account but root can change, and only when your MDM starts it as its first line says, `#!/bin/bash -p`. Otherwise it stops before doing anything and says why.
 - It makes no network request. The result stays on the Mac, in `/var/db/blindspot/last.json`, which only root can read, for your MDM to show.
 - Your MDM's own agent needs Full Disk Access, the macOS permission to read protected folders. Give it to that agent, never to `/bin/bash`. Without it, each account reads `not_checked`. The page for your MDM says how.
 - It runs once a day in the background, one account after another, and stops at a time limit you set: 50 minutes unless you change it. A developer with a long AI tool history takes minutes to check, or seconds if you also install ripgrep, a fast search tool.
@@ -73,7 +73,18 @@ What an admin should know before deploying:
 2. **Connections to other systems.** AI tools reach systems such as GitHub or a database through add-ons called MCP servers. Blindspot lists the ones each tool starts, and flags an access token written straight into their settings. It also flags project settings that act as soon as a tool or editor opens the folder, such as hooks and tasks that run commands. A project copied from the internet brings these with it.
 3. **Keys in plain text.** AI and cloud keys, and the tokens of the developer platforms agents use (Azure, Databricks, GitLab, Slack, Stripe and others: [docs/checks.md](docs/checks.md#3-keys-in-plain-text) lists them), in the files developers commonly keep them in: shell settings, the history of typed commands, AI tool settings and `.env` files. It also reads the AI tools' own history of past sessions. A key in a session history is one the tool has already read. It also lists login files any tool can read, such as an SSH key with no passphrase.
 4. **Keys saved by "always allow".** When a person clicks "always allow" on a command that has a key in it, Claude Code saves the whole command, key included, in the project's settings file. Blindspot flags each one, and whether publishing that project would publish the key.
-5. **Recent attacks.** The npm and Python package versions, editor extensions and leftover files from this year's supply-chain attacks, and GitHub Actions that were compromised, in each project's workflows. It looks in each project's list of installed packages, in packages installed for the whole computer, in download caches and in Python environments. Each finding says what the attack did and links its source. One piece of malware, `gh-token-monitor`, runs a destructive command when its stolen GitHub token stops working. If Blindspot finds it, it says to stop and remove it before anyone revokes a token.
+5. **Recent attacks.** The npm and Python package versions, editor extensions and leftover files from this year's supply-chain attacks, and GitHub Actions that were compromised, in each project's workflows. It looks in each project's list of installed packages, in packages installed for the whole computer, in download caches and in Python environments. Each finding says what the attack did and links its source. One piece of malware, `gh-token-monitor`, runs a destructive command when its stolen GitHub token stops working. If Blindspot finds it, it says to stop and remove it before anyone revokes a token. Fleet results do not carry the GitHub Actions yet ([issue #57](https://github.com/aegis-mesh/blindspot/issues/57)): a person's own run shows them.
+
+### OWASP Agentic Top 10 tags
+
+Each finding is also tagged with the risk of the [OWASP Top 10 for Agentic Applications (2026)](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) it falls under. The mapping is Blindspot's own, not OWASP's, and covers ASI02 to ASI05 only, the risks files on disk can show, so a missing tag never means a risk is absent. A person's own report, on every system, shows the tags after its summary and at the top of each section's details. On a Mac, fleet mode puts them in the result ([docs/fleet-reference.md](docs/fleet-reference.md#owasp-tags)); Windows fleet mode does not tag them yet.
+
+| Risk | Tagged on |
+|---|---|
+| ASI02 Tool Misuse and Exploitation | run without asking, remote commands without asking |
+| ASI03 Identity and Privilege Abuse | tokens in MCP configs, links to authorized_keys, keys in plain text, keys in shell history, keys in agent sessions, SSH keys without a passphrase, keys in allow lists |
+| ASI04 Agentic Supply Chain Vulnerabilities | tools with a security fix, malware signs, versions to update, gh-token-monitor, files a worm plants, SSH keys malware adds, npm malware in a lockfile, Python versions to update, extensions to remove, platforms with a leak |
+| ASI05 Unexpected Code Execution | settings that act on opening, scripts started like worms |
 
 ## What it never does
 
