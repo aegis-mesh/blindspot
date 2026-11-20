@@ -1051,12 +1051,22 @@ has    "a hook that runs a file from .claude/package after nohup, from \$HOME, i
 has    "and so is a SessionStart array in an inline hooks table in Codex's config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk2.txt"
 hasnot "but not a hook on another event in that inline table" '~/\.codex/config\.toml' "$WORK/uhk3.txt"
 has    "a TOML literal string with VAR= and a Windows path is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk4.txt"
+# A hook that cds into .claude/package or .codex/package and then runs a command runs it from there, so it
+# is listed too; one that only names the folder, or cds into it and runs nothing after, is not.
+mkdir -p "$WORK/uhk5/.claude" "$WORK/uhk5/.codex" "$WORK/uhk6/.claude" "$WORK/uhk6/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"cd ~/.claude/package && node index.js"}]}]}}\n' > "$WORK/uhk5/.claude/settings.json"
+printf '[[hooks.SessionStart]]\ncommand = %s\n' "'cd \"\$HOME/.codex/package\"; bun index.js'" > "$WORK/uhk5/.codex/config.toml"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"ls ~/.claude/package; echo ok"}]}]}}\n' > "$WORK/uhk6/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"test -d ~/.codex/package && cd ~/.codex/package"}]}]}}\n' > "$WORK/uhk6/.codex/hooks.json"
 # A SessionStart command written over several lines in config.toml (""" or ''') is not read: the file is
 # named as not read in full, never as one with no such hook.
 mkdir -p "$WORK/uhk7/.codex" "$WORK/uhk8/.codex"
 printf '[[hooks.SessionStart]]\ncommand = """\nnode ~/.codex/package/index.js\n"""\n' > "$WORK/uhk7/.codex/config.toml"
 printf "[hooks]\nSessionStart = [\n  { command = '''node ~/.codex/package/index.js\n''' },\n]\n" > "$WORK/uhk8/.codex/config.toml"
-for _h in uhk7 uhk8; do psrun "$WORK/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+for _h in uhk5 uhk6 uhk7 uhk8; do psrun "$WORK/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+has    "a hook that cds into .claude/package and runs a command there is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts' "$WORK/uhk5.txt"
+has    "and so is one in config.toml that cds into \$HOME/.codex/package" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk5.txt"
+hasnot "a hook that only names the folder, or cds into it and runs nothing after, is not" 'Session hooks in your own agent settings' "$WORK/uhk6.txt"
 has    "a SessionStart command over several lines in config.toml names the file as not read in full" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/config\.toml' "$WORK/uhk7.txt"
 has    "and so does one in ''' quotes in a SessionStart array" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/config\.toml' "$WORK/uhk8.txt"
 # A hook and a task that run the planted file after a word that runs the rest of the command (nohup, exec,

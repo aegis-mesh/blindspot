@@ -2310,7 +2310,7 @@ WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN
 # command itself, and after the words that run the rest of a command: nohup, exec, env (as
 # /usr/bin/env too), npx and VAR=value. START_PATH is the script; START_CMD a command that runs one.
 START_PATH='\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
-start_cmd() { # script-ERE prefix-ERE: four expressions, one per line
+start_cmd() { # script-ERE prefix-ERE [cd]: four expressions, one per line, and with cd a fifth
   _wf='(\\"|'"'"')?'"$2$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
   _wx='((nohup|exec|npx|'"$_wp"'env)[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
@@ -2322,6 +2322,11 @@ start_cmd() { # script-ERE prefix-ERE: four expressions, one per line
   _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
   printf '%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and a command: what runs next
+  # runs from there.
+  if [ "${3:-}" = cd ]; then
+    printf '\n%s' "$_ws"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*[^[:space:];&|"]'
+  fi
 }
 # One expression per line, each given to grep alone: macOS's grep can crash on all four joined by |.
 START_CMD=$(start_cmd "$START_PATH" '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?')
@@ -3519,10 +3524,10 @@ toml_cmds() {
   set -- "${PIPESTATUS[@]}"; [ "$1" -le 1 ] && [ "$2" -eq 0 ] && [ "$3" -eq 0 ]
 }
 # A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
-# as start_cmd reads a command, with any folder before .claude or .codex: a guard that only tests for
-# the file, or a command that deletes it, does not.
+# as start_cmd reads a command, with any folder before .claude or .codex, or when it cds into the folder
+# and then runs a command: a guard that only tests for the file, or a command that deletes it, does not.
 UH_PATH='\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
-UH_CMD=$(start_cmd "$UH_PATH" '(([^[:space:]"'"'"'\\;&|]|\\\\)*(/|\\\\))?')
+UH_CMD=$(start_cmd "$UH_PATH" '(([^[:space:]"'"'"'\\;&|]|\\\\)*(/|\\\\))?' cd)
 # A command written over several lines (""" or ''' left open on its line) is not read: the file is
 # named as not read in full, never as one with no such hook.
 TOML_OPEN='(^|[^A-Za-z0-9_=-])["'"'"']?command["'"'"']?[[:space:]]*=[[:space:]]*("""(("|"")?([^"\\]|\\.))*("|"")?\\?|'"'''(('|'')?[^'])*('|'')?"')$'

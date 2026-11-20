@@ -1653,7 +1653,7 @@ $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # START_CMD (start_cmd).
 $StartPath = '\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
 $RxStartPath = New-Object regex($StartPath, $RxOpt, $RxTimeout)
-function Start-Cmd([string]$path, [string]$pre) {
+function Start-Cmd([string]$path, [string]$pre, [switch]$cd) {
   $cf = '(\\"|'')?' + $pre + $path + '(\\"|["''\s;&|)])'
   $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
   $cx = '((nohup|exec|npx|' + $cp + 'env)\s+|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
@@ -1664,7 +1664,11 @@ function Start-Cmd([string]$path, [string]$pre) {
   $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
   $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $path + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
-  New-Object regex(($cs + $cx + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cx + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
+  $rx = $cs + $cx + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cx + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and a command: what runs next
+  # runs from there.
+  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*[^\s;&|"]' }
+  New-Object regex($rx, $RxOpt, $RxTimeout)
 }
 $RxStartCmd = Start-Cmd $StartPath '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'
 # The elements of every array that is the value of the key $key, from Flat-Text's text: a
@@ -2804,11 +2808,12 @@ $cxd = Env-Or 'CODEX_HOME' (J $HomeDir '.codex')
 $ccd = Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')
 $UHookFiles = @((J $ccd 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))
 # A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
-# as Start-Cmd reads a command, with any folder before .claude or .codex: a guard that only tests for
-# the file, or a command that deletes it, does not. As gird-check.sh's UH_PATH and UH_CMD.
+# as Start-Cmd reads a command, with any folder before .claude or .codex, or when it cds into the folder
+# and then runs a command: a guard that only tests for the file, or a command that deletes it, does not.
+# As gird-check.sh's UH_PATH and UH_CMD.
 $UhPath = '\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
 $RxUhPath = New-Object regex($UhPath, $RxOpt, $RxTimeout)
-$RxUhCmd = Start-Cmd $UhPath '(([^\s"''\\;&|]|\\\\)*(/|\\\\))?'
+$RxUhCmd = Start-Cmd $UhPath '(([^\s"''\\;&|]|\\\\)*(/|\\\\))?' -cd
 # A command written over several lines (""" or ''' left open on its line) is not read: the file is
 # named as not read in full, never as one with no such hook. As gird-check.sh's TOML_OPEN.
 $RxTomlOpen = New-Object regex('(^|[^A-Za-z0-9_=-])["'']?command["'']?\s*=\s*("""(("|"")?([^"\\]|\\.))*("|"")?\\?|''''''((''|'''')?[^''])*(''|'''')?)$', $RxOpt, $RxTimeout)
