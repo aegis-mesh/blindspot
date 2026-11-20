@@ -3491,9 +3491,9 @@ SKIPPING=""
 echo "data platform login files"
 # Login files are listed by name when they hold a secret, never shown. Built from pieces at run time.
 LG=$WORK/lg; _sec=$(rnd 32)
-mkdir -p "$LG"; for _h in has none env sys; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG"; for _h in has none env sys oth; do cp -R "$WORK/clean" "$LG/$_h"; done
 mkdir -p "$LG/has/.azure" "$LG/has/.dbt" "$LG/has/.snowflake" "$LG/none/.azure" "$LG/none/.dbt" "$LG/none/.snowflake" \
-  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf" "$LG/sys/Library/Application Support/snowflake" "$LG/sys/.config/snowflake"
+  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf"
 printf '[{"client_id": "%s", "tenant": "t", "client_secret": "%s"}]\n' "$(rnd 8)" "$_sec" > "$LG/has/.azure/service_principal_entries.json"
 printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\ntoken = %s\n' "$_sec" > "$LG/has/.databrickscfg"
 printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n' "$_sec" > "$LG/has/.dbt/profiles.yml"
@@ -3504,15 +3504,22 @@ printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ en
 printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\nprivate_key_file = "/home/me/rsa_key.p8"\ntoken_file_path = "/home/me/token"\n' > "$LG/none/.snowflake/connections.toml"
 cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
 # The system's own folder, as gird-check.sh picks it: Application Support on a Mac, ~/.config on Linux.
-cp "$LG/has/.snowflake/connections.toml" "$LG/sys/Library/Application Support/snowflake/config.toml"
-cp "$LG/has/.snowflake/connections.toml" "$LG/sys/.config/snowflake/config.toml"
-for _h in has none sys; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+# One home holds the file there and one in the other system's folder, which is not read.
+case "$(uname -s)" in
+  Darwin) _sfsys="Library/Application Support/snowflake"; _sfoth=".config/snowflake" ;;
+  *) _sfsys=".config/snowflake"; _sfoth="Library/Application Support/snowflake" ;;
+esac
+mkdir -p "$LG/sys/$_sfsys" "$LG/oth/$_sfoth"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/$_sfsys/config.toml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/oth/$_sfoth/config.toml"
+for _h in has none sys oth; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
 psrun "$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
 _want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
 has    "lists the Azure, Databricks, dbt and Snowflake login files that hold a secret" "$_want" "$LG/has.txt"
 hasnot "but not one with only a certificate, a host, a key file's path, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
 has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
 has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
+hasnot "but not in another system's folder"           'Snowflake logins' "$LG/oth.txt"
 # The other secrets each tool's docs name, one home for each run: Databricks' azure_client_secret
 # (an Entra service principal) and password, dbt's inline private_key (a key pair with no passphrase),
 # and Snowflake's OAuth token, oauth_client_secret, private_key_raw and private_key_file_pwd.
@@ -3540,6 +3547,8 @@ cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connec
 for _h in sq win; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
 has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
 hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
+psrun "$LG/win" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/winon.txt"
+has    "Windows: Snowflake's file is read from LOCALAPPDATA" 'Snowflake logins' "$LG/winon.txt"
 
 echo "shared access signatures"
 # A shared access signature is not a key type: GitHub hands out short-lived signed links to its own
