@@ -4983,7 +4983,11 @@ if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: a rule that runs comma
 ow_kind autostart
 if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05"; else bad "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05" "$OW_ONE"; fi
 ow_kind ssh_planted
-if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE"; fi
+# The key is also the incident of the extension that adds it, which tags section 05 with ASI04 by
+# itself, so the kind's own arm in owasp_set is run too: with its field alone set, then 0.
+sed -n '/^# >>> owasp-derive/,/^# <<< owasp-derive/p' "$SCRIPT" > "$OW/derive.sh"
+_osp=$(FA_ssh_planted=1 bash -c '. "$1"; owasp_set ssh_planted && echo set; FA_ssh_planted=0; owasp_set ssh_planted || echo unset' _ "$OW/derive.sh" 2>&1 | tr '\n' ' ')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && [ "$_osp" = "set unset " ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE, arm: $_osp"; fi
 # The tags in the docs are written by hand: every risk, name and label in the data file is in both.
 OW_MISS=""
 while IFS="$(printf '\t')" read -r _k _r _n _l _rest; do

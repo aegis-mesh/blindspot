@@ -4372,7 +4372,11 @@ if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: a rule that runs comma
 ow_kind autostart
 if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05"; else bad "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05" "$OW_ONE"; fi
 ow_kind ssh_planted
-if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE"; fi
+# The key is also the incident of the extension that adds it, which tags section 05 with ASI04 by
+# itself, so the kind's own arm in Owasp-Set is run too, read out of the script by PowerShell's own
+# parser: with $ExtKey alone set, then empty.
+_osp=$(BS_PS1=$SCRIPT "$PWSH" -NoProfile -NonInteractive -Command '$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:BS_PS1, [ref]$null, [ref]$null); $f = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Owasp-Set" }, $true); . ([scriptblock]::Create($f.Extent.Text)); $ExtKey = @("k"); $a = Owasp-Set "ssh_planted"; $ExtKey = @(); $b = Owasp-Set "ssh_planted"; "$a $b"' 2>&1)
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && [ "$_osp" = "True False" ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE, arm: $_osp"; fi
 # The account run (-AccountRun) keeps only ids of lowercase letters, digits and - (Fleet-Ids): a key id it
 # would drop is lost from the fleet result without a word. Its function, run on $PROVIDER_IDS, read out of
 # the script by PowerShell's own parser.
