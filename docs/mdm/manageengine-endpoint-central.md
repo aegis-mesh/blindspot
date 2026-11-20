@@ -74,16 +74,14 @@ prints the saved result and exits with its outcome's code. It runs the copy `Bli
      "v1 act "*) printf '%s\n' "$v"; exit 10 ;;
      "v1 review "*) printf '%s\n' "$v"; exit 11 ;;
      "v1 not_checked "*) printf '%s\n' "$v"; exit 12 ;;
-     "v1 failed "*) printf '%s\n' "$v"; exit 13 ;;
    esac
    exec /usr/bin/env -i /bin/bash -p "$f" --all-users --summary-to-stdout --deadline=3000
    ```
 
    A saved result less than a day old is printed, and the script exits with its outcome's code. A
-   result that reads `none`, `stale`, `unreadable` or `failed:` and why starts a full check, so after
-   a run that did not finish, or stopped before it started, every refresh cycle tries again. A result
-   that starts `v1 failed` came from a run that finished and saved it, so it waits a day like the
-   others; the saved result says why.
+   result that reads `none`, `stale`, `unreadable`, `failed:` and why, or `v1 failed` starts a full
+   check, so after a run that failed, did not finish, or stopped before it started, every refresh
+   cycle tries again, as the page for 1.2.0 did.
 
    The full check gives the file its own options, which replace the defaults: the defaults without
    `--exit-zero`, so its exit code is its outcome's, 0 for `clear`, 10 for `act`, 11 for `review`, 12
