@@ -223,6 +223,7 @@ Level: **act** means treat the machine as compromised, **update** means update t
 | GlassWorm-linked themes | December 2025 | a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders | act | 2 extensions | [socket.dev](https://socket.dev/blog/glassworm-vscode-themes) |
 | GlassWorm invisible code | March 2026 | hid code in characters that show as blank, which it then decodes and runs | act | npm: 6 versions of 2 packages, 1 extension | [aikido.dev](https://www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode) |
 | GlassWASM extensions | June 2026 | clones of Marketplace extensions on Open VSX, built to download and run a second stage | act | 2 extensions | [socket.dev](https://socket.dev/blog/glasswasm-malware-open-vsx-extensions) |
+| Checkmarx Open VSX extensions | March 2026 | on activation, fetched and ran a credential stealer where cloud credentials were found | act | 2 extensions | [wiz.io](https://www.wiz.io/blog/teampcp-attack-kics-github-action) |
 | Injective SDK | July 2026 | sent out the seed phrases and hex private keys of wallets created or loaded with it | update | npm: 1 version of 1 package | [github.com](https://github.com/advisories/GHSA-5fc4-fm2x-6f4r) |
 | Trojanized Claude Code extension | October 2026 | builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel | act | 2 extensions, 6 files, 1 SSH key | [cursor.com](https://cursor.com/blog/claude-code-extension-security-notice) |
 | agent-framework 1.26.1 and 1.26.2 | November 2026 | a .pth file started a credential stealer every time Python started | act | Python: 2 versions, 3 files | [github.com](https://github.com/advisories/GHSA-764m-3ppc-5m73) |
@@ -542,6 +543,13 @@ agent-framework 1.26.1 and 1.26.2, November 2026:
 
 </details>
 
+<details><summary>Checkmarx Open VSX extensions, March 2026: 2 extensions</summary>
+
+- `checkmarx.ast-results` 2.53.0 (Open VSX editors only)
+- `checkmarx.cx-dev-assist` 1.7.0 (Open VSX editors only)
+
+</details>
+
 <details><summary>Trojanized Claude Code extension, October 2026: 2 extensions</summary>
 
 - `anthropic.claude-code` 2.1.312 (every editor)
@@ -561,7 +569,8 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
 
 | Action | Compromised | Refs that ran it | A pin to a commit | Source |
 |---|---|---|---|---|
-| `tj-actions/changed-files` | on 14 and 15 March 2025 | `v[1-9]`, `v[1-9].*`, `v[1-3][0-9]`, `v[1-3][0-9].*`, `v4[0-5]`, `v4[0-5].*` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3) |
+| `tj-actions/changed-files` | on 14 and 15 March 2025 | `v[1-9]`, `v[1-9].*`, `v[1-3][0-9]*`, `v4[0-4]*`, `v45`, `v45.0.[0-7]` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3) |
+| `tj-actions/eslint-changed-files` | on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025 | `v8.[1-6]`, `v9*`, `v1[0-9]*`, `v2[0-4]*`, `v25`, `v25.[0-3].*`, except `v18`, `v18.3.*`, `v19.0.[01]`, `v25.3.[1-9]*` | flagged, except the releases the source names safe | [wiz.io](https://www.wiz.io/blog/new-github-action-supply-chain-attack-reviewdog-action-setup) |
 | `reviewdog/action-shellcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `reviewdog/action-composite-template` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `reviewdog/action-staticcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
@@ -1971,8 +1980,10 @@ GitHub Actions workflows:
   action whose code was replaced by malware for a time, from its GitHub advisory or a named research
   firm's post. A use matches on a tag or a malicious commit its source names. A pin to any other
   commit does not, except for the five reviewdog actions, whose advisory says every pin ran the
-  malware, and `trivy-action`, where a pin to a commit from before 9 April 2025 did: a pin to its safe
-  release, 0.35.0, or to 0.36.0 is not flagged.
+  malware, `tj-actions/eslint-changed-files`, whose versions that ran `reviewdog/action-setup@v1`
+  or `tj-actions/changed-files` by tag did (a pin to a release that pinned both, or came after, is
+  not flagged), and `trivy-action`, where a pin to a commit from before 9 April 2025 did: a pin to
+  one of its releases from after that date, v0.31.0 to v0.36.0, is not flagged.
 - Whether a project was hit depends on whether its workflows ran in that window, which no file shows,
   so a match is a project to check, never a compromised machine: check the workflows' run logs from
   then, rotate the secrets they could read, look in the project's history for commits by

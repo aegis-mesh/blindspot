@@ -2583,7 +2583,8 @@ has    "with the trojanized extension's sourced line" 'Trojanized Claude Code ex
 hasnot "the same version without the loader is Anthropic's clean build" '\.vscode/extensions/anthropic\.claude-code' "$WORK/dz-cx.txt"
 hasnot "another version in Cursor's folder is not flagged" 'claude-code-2\.1\.314|claude-code 2\.1\.314' "$WORK/dz-cx.txt"
 hasnot "and the check is done in full"                 'not fully checked|could not be read' "$WORK/dz-cx.txt"
-has    "its fix to remove what it leaves comes first" ' 1\. First remove what the trojanized Claude Code extension leaves: the line in ~/\.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ \(its comment may read svc-telemetry\), ~/\.config/\.smt, ~/\.config/\.smtk and ~/\.config/smt\.cmd, ~/Library/LaunchAgents/com\.apple\.sysmond\.plist on a Mac, the @reboot line that runs \.smt in your crontab on Linux, the \.stk_ file in your temp folder, and on Windows ~/\.config/smtk, sysmon\.cmd in the Startup folder, the scheduled task SysMon and the same key line in administrators_authorized_keys in the ssh folder of ProgramData\. End any ssh or autossh process that keeps a tunnel open\. Then turn off Remote Login on a Mac .* 2\. Treat this machine as compromised\. Uninstall the extensions listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cx.txt"
+has    "its fix to remove what it leaves comes first" ' 1\. First remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up: .* Then remove the line in ~/\.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ \(its comment may read svc-telemetry\), ~/\.config/\.smt, ~/\.config/\.smtk and ~/\.config/smt\.cmd, ~/Library/LaunchAgents/com\.apple\.sysmond\.plist on a Mac, the @reboot line that runs \.smt in your crontab on Linux, the \.stk_ file in your temp folder, and on Windows ~/\.config/smtk, sysmon\.cmd in the Startup folder and the same key line in administrators_authorized_keys in the ssh folder of ProgramData\. Then turn off Remote Login on a Mac .* 2\. Treat this machine as compromised\. Uninstall the extensions listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cx.txt"
+has    "and it first stops the loop that starts the tunnel again" 'starting with what keeps its tunnel up: on a Mac run launchctl bootout gui/UID/com\.apple\.sysmond, with UID the number id -u prints, and on Windows end and delete the scheduled task SysMon; then end every process whose command line names \.smt, \.smtk, smt\.cmd, sysmon\.cmd or a \.stk_ file \(the loops that start ssh or autossh again about every 60 seconds, and the tunnel itself\)\. Then remove' "$WORK/dz-cx.txt"
 has    "the extension's summary row"                  'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cx-sum.txt"
 has    "the extension's first fix in the summary"     'most urgent first 1\. First remove what the trojanized Claude Code extension leaves' "$WORK/dz-cx-sum.txt"
 has    "the result link names the extension's fix that comes first" '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cx.txt"
@@ -2673,6 +2674,18 @@ hasnot "a version of it the post does not name is not flagged" 'quartz-markdown-
 has    "a GlassWASM clone in an Open VSX editor's folder is malware" '~/\.cursor/extensions/exargd\.vsblack-0\.0\.1 exargd\.vsblack 0\.0\.1 \(GlassWASM extensions, June 2026\), installed' "$WORK/dz-gw2.txt"
 has    "with Socket's sourced line"                   'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage\. socket\.dev' "$WORK/dz-gw2.txt"
 hasnot "the clean Marketplace original in VS Code's own folder is not flagged" 'noellee-doc' "$WORK/dz-gw2.txt"
+# Checkmarx's Open VSX extensions (Wiz, March 2026): the two builds published to Open VSX, in an Open VSX
+# editor's folder, with Wiz's sourced line and the incident's advice; not in VS Code's own folder, where Wiz
+# says the Marketplace's versions appear unaffected, nor at another version.
+rm -rf "$WORK/dz-cmx"; cp -R "$WORK/clean" "$WORK/dz-cmx"
+mkdir -p "$WORK/dz-cmx/.cursor/extensions/checkmarx.ast-results-2.53.0" "$WORK/dz-cmx/.windsurf/extensions/checkmarx.cx-dev-assist-1.7.0" \
+  "$WORK/dz-cmx/.vscode/extensions/checkmarx.ast-results-2.53.0" "$WORK/dz-cmx/.cursor/extensions/checkmarx.ast-results-2.52.0"
+dzrun "$WORK/dz-cmx" | tr -s ' \n' '  ' > "$WORK/dz-cmx.txt"
+has    "Checkmarx's ast-results 2.53.0 in an Open VSX editor's folder is malware" '~/\.cursor/extensions/checkmarx\.ast-results-2\.53\.0 checkmarx\.ast-results 2\.53\.0 \(Checkmarx Open VSX extensions, March 2026\), installed' "$WORK/dz-cmx.txt"
+has    "and its cx-dev-assist 1.7.0"                   '~/\.windsurf/extensions/checkmarx\.cx-dev-assist-1\.7\.0 checkmarx\.cx-dev-assist 1\.7\.0 \(Checkmarx Open VSX extensions, March 2026\), installed' "$WORK/dz-cmx.txt"
+has    "with Wiz's sourced line for the Checkmarx extensions" 'Checkmarx Open VSX extensions, March 2026: on activation, fetched and ran a credential stealer where cloud credentials were found\. wiz\.io' "$WORK/dz-cmx.txt"
+has    "and the advice on the service they add"        'On Linux, also check your systemd user services for one you did not add: off CI, this malware adds one that fetches more code every 50 minutes\.' "$WORK/dz-cmx.txt"
+hasnot "the same version in VS Code's own folder is not flagged, nor another version" '\.vscode/extensions/checkmarx|ast-results-2\.52\.0|ast-results 2\.52\.0' "$WORK/dz-cmx.txt"
 # Codex reads a trusted project's .codex/config.toml above the user's file, and a project may set its approvals
 # and sandbox (its docs and config loader): the same settings count there. ~/.codex/config.toml is the person's own.
 rm -rf "$WORK/cxp"; mkdir -p "$WORK/cxp/.codex" "$WORK/cxp/code/p/.codex" "$WORK/cxp/code/q/.codex" "$WORK/cxp/code/r/.codex" "$WORK/cxp/AppData/Roaming" "$WORK/cxp/AppData/Local/Temp"
@@ -3336,6 +3349,26 @@ mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
 GA_RUN "$GA" "$GA/partial.txt"
 chmod 755 "$GA/code/locked"
 has    "a folder the scan cannot read leaves the row not fully checked" 'GitHub Actions +not fully checked: some folders were not read' "$GA/partial.txt"
+# Tags and pins the sources set apart: every tag of tj-actions/changed-files was moved, the -sec ones too,
+# and two came out after the attack; tj-actions/eslint-changed-files ran it in the versions that used
+# reviewdog/action-setup@v1 or a tag of changed-files, not in those that pinned both or came after; and a
+# trivy-action pin to a release from after 9 April 2025 fetched no compromised setup-trivy.
+GT=$WORK/ga-tags; rm -rf "$GT"; mkdir -p "$GT/AppData/Roaming" "$GT/AppData/Local/Temp"
+for _p in sec late es esok tv tvold; do mkdir -p "$GT/code/$_p/.github/workflows"; done
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v35-sec\n' > "$GT/code/sec/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v45.0.8\n      - uses: tj-actions/changed-files@v45.0.9\n' > "$GT/code/late/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/eslint-changed-files@v24\n      - uses: tj-actions/eslint-changed-files@74f98653675512158746d3136cd2d9326fbfb6e1\n' > "$GT/code/es/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/eslint-changed-files@v18.3.2\n      - uses: tj-actions/eslint-changed-files@v25.3.2\n      - uses: tj-actions/eslint-changed-files@536c35c8184b8bbd361d3703aa63439e0895c340\n' > "$GT/code/esok/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.31.0\n      - uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # v0.34.0\n      - uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478 # 0.34.2\n' > "$GT/code/tv/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0\n' > "$GT/code/tvold/.github/workflows/ci.yml"
+GA_RUN "$GT" "$GT/out.txt"
+has    "a -sec tag of tj-actions/changed-files is flagged" '~/code/sec/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35-sec, compromised on 14 and 15 March 2025\.' "$GT/out.txt"
+hasnot "its two releases after the attack are not"       'changed-files@v45\.0\.[89]' "$GT/out.txt"
+has    "tj-actions/eslint-changed-files by a tag that ran it is flagged" '~/code/es/\.github/workflows/ci\.yml Uses tj-actions/eslint-changed-files@v24, compromised on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025\.' "$GT/out.txt"
+has    "and pinned to a release that ran it"             'Uses tj-actions/eslint-changed-files pinned to a commit, compromised on 11 March 2025, 18:42 to 20:31 UTC' "$GT/out.txt"
+hasnot "but not by a release that pinned both, nor one from after the attack" '~/code/esok/' "$GT/out.txt"
+hasnot "a trivy-action pin to a release from after 9 April 2025 is not flagged" '~/code/tv/' "$GT/out.txt"
+has    "a trivy-action pin to an earlier release is"     '~/code/tvold/\.github/workflows/ci\.yml Uses aquasecurity/trivy-action pinned to a commit, compromised on 19 and 20 March 2026\.' "$GT/out.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python

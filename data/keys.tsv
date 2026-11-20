@@ -38,7 +38,9 @@
 # HighConfidenceSecurityModels.json) give the shapes of its identifiable keys: an Entra app secret
 # has 8Q~ or 7Q~ after its first three characters (SEC101/156); Azure DevOps and Azure AI keys are 84
 # letters and digits with JQQJ99 at 53 and AZDO (SEC101/201) or one of ACOG's service letters A to o
-# (SEC101/205 to 245) at 77, where c is Microsoft's dummy key (SEC101/233) and is left out; an
+# (SEC101/205 to 245) at 77, where c is Microsoft's dummy key (SEC101/233) and is left out, each after
+# anything but a letter or digit, as those rules have it, so a PAT in a git address
+# (https://<PAT>@dev.azure.com/...) counts; an
 # identifiable Storage account key is 88 base64 characters with +ASt at 77 (SEC101/152). Azure
 # DevOps documents the 84 characters and AZDO at 77 (learn.microsoft.com, use personal access
 # tokens). Any Storage account key counts after AccountName=...;AccountKey=, as Microsoft writes a
@@ -53,10 +55,16 @@
 # Databricks dapi and 32 hex (Microsoft Purview's Databricks token definition, SEC101/110); Slack's
 # xoxb-, xoxp-, xapp- and xoxe.xapp- and its incoming webhook address (docs.slack.dev, tokens and
 # incoming webhooks); Stripe's sk_live_, rk_live_ and whsec_ (docs.stripe.com, keys and webhook
-# signatures); SendGrid's 69 characters (twilio.com SendGrid API keys); PyPI's pypi- and a base64
-# macaroon whose location is pypi.org (docs.pypi.org, secrets), which can pass 300 characters;
-# Sentry's sntryu_ and sntrys_ formats (docs.sentry.io, token formats); Supabase's sb_secret_
-# (supabase.com, API keys). The vendors document the start but not the length of GitLab's glpat-,
+# signatures; whsec_ also starts a Standard Webhooks signing secret, standardwebhooks.com, which Svix
+# and the services that send webhooks through it issue as whsec_ and base64: one with no + or / in it is
+# named Stripe, and one with them is missed); SendGrid's 69 characters (twilio.com SendGrid API keys);
+# PyPI's pypi- and a base64 macaroon whose location is pypi.org (docs.pypi.org, secrets), which can pass
+# 300 characters;
+# Sentry's sntryu_ and sntrys_ formats (docs.sentry.io, token formats). Supabase documents sb_secret_
+# (supabase.com, API keys) but not its shape, 22 characters, _ and an 8-character checksum, which is
+# how its own script for self-hosted keys builds one (github.com/supabase/supabase,
+# docker/utils/add-new-auth-keys.sh) and the shape of its CLI's local key. The vendors document the
+# start but not the length of GitLab's glpat-,
 # gldt-, glrt-, glft- and glsoat- (docs.gitlab.com, token prefixes; a personal access token is 20
 # characters), Docker Hub's dckr_pat_ (docs.docker.com, access tokens), DigitalOcean's dop_v1_,
 # doo_v1_ and dor_v1_ (its blog, April 2022), Vault's hvs. (developer.hashicorp.com, tokens: 24 or
@@ -68,7 +76,10 @@
 # characters, so the short tokens in Vault's own docs are not keys.
 # A line #pass starts the next pass. Each pass is matched on its own, so a key of a later pass never
 # hides a key an earlier pass finds, glued to it or one character after it. The first pass holds the
-# twelve types of Blindspot 1.2.0, which so find just what they found before.
+# twelve types of Blindspot 1.2.0, which so find just what they found before. Within a pass the leftmost
+# match wins, so two keys of one pass glued together or one character apart can hide one another: on
+# consecutive lines of an agent's JSON transcript the \n between them is two characters, and the first
+# key's end takes the \.
 # id	name	starts	pattern	at	max
 anthropic	Anthropic	sk-ant-	sk-ant-[A-Za-z0-9_-]{90,}	start	-
 openrouter	OpenRouter	sk-or-v1-	sk-or-v1-[a-f0-9]{64}	start	-
@@ -99,6 +110,6 @@ sentry	Sentry	sntryu_|sntrys_	(^|[^A-Za-z0-9_-])sntryu_[a-f0-9]{64}([^A-Za-z0-9_
 supabase	Supabase	sb_secret_	(^|[^A-Za-z0-9_-])sb_secret_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]{8}([^A-Za-z0-9_-]|$)	start	-
 onepassword	1Password	ops_eyJ	(^|[^A-Za-z0-9_-])ops_eyJ[A-Za-z0-9+/]{250,}={0,3}	start	1024
 azureentra	Microsoft Entra	7Q~@3|8Q~@3	(^|[^A-Za-z0-9_~.+/-])[A-Za-z0-9_~.-]{3}[78]Q~[A-Za-z0-9_~.-]{31,34}([^A-Za-z0-9_~.+/-]|$)	in	-
-azuredevops	Azure DevOps	JQQJ99@52&AAAAAZDO@72	(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)	in	-
-azureai	Azure AI	JQQJ99@52&ACOG@76	(^|[^A-Za-z0-9+/_-])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)	in	-
+azuredevops	Azure DevOps	JQQJ99@52&AAAAAZDO@72	(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAAAAZDO[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)	in	-
+azureai	Azure AI	JQQJ99@52&ACOG@76	(^|[^A-Za-z0-9])[A-Za-z0-9]{52}JQQJ99[A-Za-z0-9][A-L][A-Za-z0-9]{12}AAA[A-Zabd-o]ACOG[A-Za-z0-9]{4}([A-Za-z0-9]{2}==)?([^A-Za-z0-9+/_=-]|$)	in	-
 azurestorage	Azure Storage	[+]ASt@76&==@86|AccountName=@0	(^|[^A-Za-z0-9+/_-])[A-Za-z0-9+/]{76}\+ASt[A-Za-z0-9+/]{5}[AQgw]==([^A-Za-z0-9+/_=-]|$)|(^|[^A-Za-z0-9])AccountName=[a-z0-9]{3,24};AccountKey=[A-Za-z0-9+/]{86}==	in	-

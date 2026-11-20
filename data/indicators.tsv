@@ -74,7 +74,9 @@
 # imports the stealer in its agent_framework_meta folder; 1.26.2 adds af_runtime_diag.pth and the stealer
 # itself, af_runtime_diag.py. No line for 1.26.1's stealer, agent_framework_meta/_telemetry.py: a site
 # line is a name at the top of site-packages, and the agent_framework_meta folder it sits in ships in the
-# clean 1.26.0 wheel too. Its .pth file and 1.26.1's dist-info are the signs. Both posts say it leaves nothing outside site-packages.
+# clean 1.26.0 wheel too. Its .pth file and 1.26.1's dist-info are the signs. OpenSourceMalware's post on it
+# (opensourcemalware.com/blog/agent-framework-pypi-compromised) says it creates no service, cron job, scheduled
+# task or registry key, and runs only while its files stay in site-packages; Wiz's and Aikido's do not say.
 # GlassWorm's LaunchAgent: Socket. A startup file of an incident whose packages are only editor
 # extensions (data/bad-extensions.tsv) is shown with them, as that incident's sign, not as npm malware,
 # and only when an extension that shipped malware is found: alone, it is a file to check.
@@ -89,7 +91,11 @@
 # check. No line for the scheduled task SysMon (no kind reads a scheduled task, and the same tool uses
 # that name), the Linux crontab line @reboot /bin/sh "<HOME>/.config/.smt" (no kind reads a crontab;
 # it runs nothing once .smt is gone) or the tunnel's key, .stk_<10 hex> in the temp folder (a temp line
-# is a Python incident's hit): the incident's fix names all three.
+# is a Python incident's hit): the incident's fix names all three. The fix stops the tunnel first, as
+# Cursor's remediation scripts do (launchctl bootout of com.apple.sysmond, the task SysMon, then every
+# process whose command line names .smt, .smtk, smt.cmd, sysmon.cmd or a .stk_ key): StepSecurity shows the
+# tunnel run from a while-true loop that starts ssh or autossh again every 60 seconds, so ending ssh alone,
+# or deleting the files, leaves it running.
 # alone     optional, a startup line of an incident whose packages are only editor extensions: the file
 #           is that incident's sign even when none of its extensions is found, as its name is the
 #           malware's own. Without it, such a file alone is a file to check

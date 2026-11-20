@@ -117,7 +117,8 @@ def new_kinds():
                        [(lambda p=p: p + random.choice('78') + 'Q' '~' + r(U2, 34), 0) for p in ENTRA_PRE],
                        [('digit 6', lambda: r(U2, 3) + '6Q' '~' + r(U2, 34)), ('30 after', lambda: r(U2, 3) + '8Q' '~' + r(U2, 30)),
                         ('35 after', lambda: r(U2, 3) + '8Q' '~' + r(U2, 35))]),
-        'azuredevops': ('Azure DevOps', [(lambda: msft('AAAAA' 'ZDO'), 0), (lambda: msft('AAAAA' 'ZDO') + r(AN, 2) + '==', 0)] +
+        'azuredevops': ('Azure DevOps', [(lambda: msft('AAAAA' 'ZDO'), 0), (lambda: msft('AAAAA' 'ZDO') + r(AN, 2) + '==', 0),
+                                         (lambda: 'https://' + msft('AAAAA' 'ZDO') + '@dev.azure.com/org/proj/_git/repo', 1)] +
                         [(lambda p=p: msft('AAAAA' 'ZDO', p), 0) for p in MSFT_PRE],
                         [('no JQQJ99', lambda: r(AN, 52) + 'XQQ' 'J99' + r(AN, 14) + 'AAAAA' 'ZDO' + r(AN, 4)),
                          ('51 before', lambda: msft('AAAAA' 'ZDO')[1:]), ('documented example shape', lambda: r(AN, 76) + 'AZ' 'DO' + r(AN, 4))]),
@@ -170,11 +171,20 @@ def public_cases(pv):
     for line in open(pv):
         if line.startswith('#') or not line.strip():
             continue
-        i, part, _ = line.rstrip('\n').split('\t')
-        if i == 'azurestorage':
+        i, part, src = line.rstrip('\n').split('\t')
+        if i == 'azurestorage' and 'cosmos-db' in src:
+            # The Cosmos DB emulator's Table connection string, as Microsoft writes it.
+            out.append((i, 'DefaultEndpointsProtocol=http;AccountName=localhost;Account' 'Key=' + part + b64n(86 - len(part)) + '==;TableEndpoint=http://localhost:8902/;'))
+        elif i == 'azurestorage':
             out.append((i, 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account' 'Key=' + part + b64n(86 - len(part)) + '==;'))
         elif i == 'slack':
             out.append((i, 'xo' 'xb-17653672481-' + part))
+        elif i == 'stripe':
+            # A Standard Webhooks signing secret from Svix's docs, which has Stripe's whsec_ start.
+            out.append((i, 'wh' 'sec_' + part))
+        elif i == 'supabase':
+            # Supabase CLI's local secret key: 22 characters, _ and an 8-character checksum.
+            out.append((i, 'sb' '_secret_' + part + '_' + r(AN, 8)))
     return out
 
 

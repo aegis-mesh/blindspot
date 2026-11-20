@@ -203,8 +203,10 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
         $3 !~ /^AAAA[A-Za-z0-9+\/]+=*$/ || $4 == "" || $4 ~ /[\047"`$|\\]/ || seen[$3]++ { print "data/ssh-keys.tsv: " $0 }'
       # A compromised action: owner/repo once (GitHub ignores case), refs as shell patterns of the
       # characters a tag or branch name uses, full 40-character SHAs, and plain text the scripts quote.
+      # A [ ] in a ref pattern is one whole set or range, such as [1-9]: PowerShell's -clike throws on
+      # one left open, where bash reads it as text.
       rows data/actions.tsv | awk -F '\t' '
-        function refs_ok(s,   n, a, i) { n = split(s, a, " "); if (n < 1) return 0; for (i = 1; i <= n; i++) if (a[i] !~ /^!?[]A-Za-z0-9_.*?\/[-]+$/ || a[i] ~ /^!?\*$/ && n > 1) return 0; return 1 }
+        function refs_ok(s,   n, a, i, b) { n = split(s, a, " "); if (n < 1) return 0; for (i = 1; i <= n; i++) { b = a[i]; gsub(/\[[A-Za-z0-9_.-]+\]/, "", b); if (a[i] !~ /^!?[]A-Za-z0-9_.*?\/[-]+$/ || index(b, "[") || index(b, "]") || a[i] ~ /^!?\*$/ && n > 1) return 0 }; return 1 }
         function shas_ok(s,   n, a, i) { if (s == "-") return 1; n = split(s, a, ","); for (i = 1; i <= n; i++) if (a[i] !~ /^[0-9a-f]+$/ || length(a[i]) != 40) return 0; return 1 }
         function text_ok(s) { return s != "" && s !~ /[\047"`$|\\]/ }
         function apart(b, g,   n, a, i) { if (g == "-") return 1; n = split(g, a, ","); for (i = 1; i <= n; i++) if (index("," b ",", "," a[i] ",")) return 0; return 1 }
