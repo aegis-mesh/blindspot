@@ -3668,7 +3668,7 @@ chmod 000 "$GA/code/ok/.github/workflows/ci.yml"
 GA_RUN "$GA" "$GA/unread.txt"; GA_RUN "$GA" "$GA/unread-sum.txt" compact
 chmod 644 "$GA/code/ok/.github/workflows/ci.yml"
 has    "a workflow file that cannot be read is not called clean" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$GA/unread.txt"
-has    "and row 05 says so"                             'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
+has    "and row 05 says the workflows were not fully checked" 'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
 mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
 GA_RUN "$GA" "$GA/partial.txt"
 chmod 755 "$GA/code/locked"
@@ -4409,10 +4409,11 @@ then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them";
 if awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all.txt" \
   && awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all-full.txt"
 then ok "owasp: --full and piped output carry the line at the end of the header"; else bad "owasp: --full and piped output carry the line at the end of the header"; fi
-for _f in "$OW/all.txt" "$OW/all-full.txt"; do
-  if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$_f"
-  then ok "owasp: --full and piped output set the line apart from the stats lines by a blank line"; else bad "owasp: --full and piped output set the line apart from the stats lines by a blank line" "$_f"; fi
-done
+# A blank line before it, after the stats lines: in piped output, then with --full.
+if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$OW/all.txt"
+then ok "owasp: piped output sets the line apart from the stats lines by a blank line"; else bad "owasp: piped output sets the line apart from the stats lines by a blank line"; fi
+if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$OW/all-full.txt"
+then ok "owasp: --full output sets the line apart from the stats lines by a blank line"; else bad "owasp: --full output sets the line apart from the stats lines by a blank line"; fi
 if awk '/OWASP/ { n++; if (length($0) > 60) w = 1 } END { exit !(n >= 8 && !w) }' "$OW/all.txt"; then ok "owasp: every OWASP line fits the narrowest report, 60 columns"
 else bad "owasp: every OWASP line fits the narrowest report, 60 columns" "$(awk '/OWASP/ && length($0) > 60' "$OW/all.txt")"; fi
 # One kind each, as in tests/run.sh. Keys come from the fixture's random ones.
