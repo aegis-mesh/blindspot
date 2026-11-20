@@ -359,6 +359,14 @@ SKIPPING=$NORG
 psrun "$SE/unread" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
 has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
 SKIPPING=""
+# A later pass whose ripgrep can't start, after the first ran: a stand-in that finds nothing and
+# deletes itself. That pass's keys were not looked for, so the sessions are partly checked.
+mkdir -p "$SE/pass2/.claude/projects/p" "$SE/pass2/AppData/Roaming" "$SE/pass2/AppData/Local/Temp" "$SE/pass2bin"; printf '{}\n' > "$SE/pass2/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash\n[ "$1" = --version ] && { echo "ripgrep 14.1.0"; exit 0; }\n/bin/rm -f "$0"; exit 1\n' > "$SE/pass2bin/rg"; chmod +x "$SE/pass2bin/rg"
+psrun "$SE/pass2" PATH="$WORK/bin:$SE/pass2bin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/pass2.txt"
+if [ -e "$SE/pass2bin/rg" ]; then bad "rg: a later pass that can't start leaves the sessions partly checked" "the stand-in never ran"
+elif grep -q 'Agent sessions were partly checked' "$SE/pass2.txt" && ! grep -q 'No keys in' "$SE/pass2.txt"; then ok "rg: a later pass that can't start leaves the sessions partly checked"
+else bad "rg: a later pass that can't start leaves the sessions partly checked" "$(grep -o 'No keys in [^.]*\.' "$SE/pass2.txt")"; fi
 # A long token that crosses a 1 MB piece is not mistaken for a key.
 for D in piece esc esc2; do mkdir -p "$SE/$D/.claude/projects/p" "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"

@@ -1300,7 +1300,9 @@ $SessWorker = {
     $pf = $null
     $halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() } catch { }; $gone = $false; try { $gone = $st.Proc.WaitForExit(2000) } catch { }; if (-not $gone) { $st.Hung = $true } }
     # One run for each pass of data/keys.tsv ($keys), one after the other; RgExit is the worst of
-    # their codes: 2 for an error, else 0 when any found a key. The deadline ($stopAt) covers them all.
+    # their codes: an error (any code but 0 and 1: a crashed rg.exe's is negative), else 0 when any
+    # found a key. A pass that can't start or be read after an earlier one ran is an error too, -1,
+    # so the sessions read partly checked. The deadline ($stopAt) covers them all.
     $first = $true; $worst = 1
     try { foreach ($kp in $keys) {
       if ($st.Stop) { break }
@@ -1340,9 +1342,9 @@ $SessWorker = {
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
       $ms = $graceMs; if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
       if (-not $st.Proc.WaitForExit($ms)) { & $halt; return }
-      if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -gt 1) { $worst = $c } elseif ($c -eq 0 -and $worst -le 1) { $worst = 0 }; $st.RgExit = $worst }
+      if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -ne 0 -and $c -ne 1) { $worst = $c } elseif ($c -eq 0 -and $worst -eq 1) { $worst = 0 }; $st.RgExit = $worst }
     }
-    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally {
+    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } else { $st.RgExit = -1 } } finally {
       if ($st.Proc) { try { if (-not $st.Proc.HasExited) { & $halt } } catch { } }
       if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
     }

@@ -291,6 +291,18 @@ hasnot "a partial check with nothing found never says no keys" 'No keys in .*age
 has    "and says it was partial"                 'Checked the newest 0 of 2 agent session files' "$SE/clean-part.txt"
 HOME="$WORK/home" GIRD_CHECK_SESSIONS_ENGINE=none bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/none.txt"
 has    "with no engine the sessions are named as not checked" 'agent session files were not checked: this needs perl or ripgrep' "$SE/none.txt"
+# A later pass whose ripgrep can't start, after the first ran: a stand-in that finds nothing and
+# deletes itself. That pass's keys were not looked for, so the sessions are partly checked.
+mkdir -p "$SE/pass2/.claude/projects/p" "$SE/pass2bin"; printf '{}\n' > "$SE/pass2/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash\n[ "$1" = --version ] && { echo "ripgrep 14.1.0"; exit 0; }\n/bin/rm -f "$0"; exit 1\n' > "$SE/pass2bin/rg"; chmod +x "$SE/pass2bin/rg"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) skip "rg: a later pass that can't start leaves the sessions partly checked" "a bash stand-in for ripgrep is not a Windows program" ;;
+  *)
+    HOME="$SE/pass2" PATH="$SE/pass2bin:$PATH" GIRD_CHECK_SESSIONS_ENGINE=rg bash "$SCRIPT" --offline --all-sessions 2>&1 | tr -s ' \n' '  ' > "$SE/pass2.txt"
+    if [ -e "$SE/pass2bin/rg" ]; then bad "rg: a later pass that can't start leaves the sessions partly checked" "the stand-in never ran"
+    elif grep -q 'Agent sessions were partly checked' "$SE/pass2.txt" && ! grep -q 'No keys in' "$SE/pass2.txt"; then ok "rg: a later pass that can't start leaves the sessions partly checked"
+    else bad "rg: a later pass that can't start leaves the sessions partly checked" "$(grep -o 'No keys in [^.]*\.' "$SE/pass2.txt")"; fi ;;
+esac
 # A file that can't be read is not counted as checked.
 mkdir -p "$SE/unread/.claude/projects/p"; printf '{}\n' > "$SE/unread/.claude/projects/p/a.jsonl"; printf '{}\n' > "$SE/unread/.claude/projects/p/b.jsonl"; chmod 000 "$SE/unread/.claude/projects/p/b.jsonl"
 HOME="$SE/unread" GIRD_CHECK_SESSIONS_ENGINE=perl bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-perl.txt"
