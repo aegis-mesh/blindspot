@@ -25,8 +25,9 @@
 #             SHELL_FILE, PSRUN and RUN_PS below); any inline interpreter code (python -c, perl
 #             -e). A shell or interpreter counts wherever its name starts a word, so after sudo,
 #             timeout or nohup too, and a tool counts with its folder (/bin/sh) or .exe. A line that
-#             is only a # comment is skipped. In *.ps1, & on a variable is flagged unless the file
-#             assigns that variable a { script block }; & on an expression, a string with a
+#             is only a # comment is skipped, unless it holds $( ${ or a backtick: inside a heredoc
+#             or a here-string such a line runs. In *.ps1, & on a variable is flagged unless the
+#             file assigns that variable a { script block }; & on an expression, a string with a
 #             variable in it or $env: is always flagged, and so are assigning Get-Command,
 #             [Diagnostics.Process]::Start and Import-Module given a variable.
 #   network   in code, an added line that names a network tool where a command starts (after
@@ -272,7 +273,9 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
       ;;
   esac
   if ! is_data "$path"; then
-    grep -av "^[0-9]*${TAB}[[:space:]]*#" "$W/add" > "$W/code"
+    # A line that is only a # comment is skipped, unless it holds $( ${ or a backtick: inside a
+    # heredoc or a PowerShell here-string such a line is not a comment, and runs.
+    awk -v T="$TAB" '{ t = substr($0, index($0, T) + 1) } t ~ /^[[:space:]]*#/ && t !~ /[$][({]|`/ { next } { print }' "$W/add" > "$W/code"
     # Tests write shell profiles, hooks and configs as fixtures: on a line that writes one (printf,
     # echo, cat or mv_case) and hands no text to a shell or interpreter, single-quoted text is
     # left out before the run rule reads it. The network rule reads the whole line: tests run
@@ -303,7 +306,7 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
           /^[[:space:]]*# >>> [a-z-]+: generated from data\// { g = 1; next }
           /^[[:space:]]*# <<< / { g = 0 }
           g { print NR }'; } > "$W/gen"
-        awk -F "$TAB" 'NR == FNR { gen[$1] = 1; next } !($1 in gen)' "$W/gen" "$W/code" > "$W/code-own"
+        awk -F "$TAB" 'NR == FNR { gen[$1] = 1; next } !($1 in gen) && $2 !~ /^[[:space:]]*#/' "$W/gen" "$W/code" > "$W/code-own"
         rule network "$URL" "$W/code-own" -i ;;
     esac
   fi

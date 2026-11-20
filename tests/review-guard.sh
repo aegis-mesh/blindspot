@@ -370,6 +370,14 @@ printf '%s\n' 'command -v curl > /dev/null' 'cmd /c ver' 'Out-File $f -Encoding 
 EOF
 want "a check that curl exists, cmd /c with fixed text and PowerShell given fixed text are not flagged" 0
 
+kase hashrun <<'EOF'
+printf '%s\n' 'cat <<Y >/dev/null' '#$(eval "$found")' 'Y' '  # ${x:=$(id)} `id`' >> gird-check.sh
+printf '%s\n' '$h = @"' '#$(Invoke-Expression $found)' '"@' >> gird-check.ps1
+EOF
+want "a # line holding \$( inside a heredoc is read by the run rule" 1 '^run: gird-check\.sh:5:'
+has "and one inside a PowerShell here-string" '^run: gird-check\.ps1:4:' "$OUT"
+hasnot "a # line with \${ and a backtick but nothing that runs text is not flagged" '^run: gird-check\.sh:7:' "$OUT"
+
 kase gen <<'EOF'
 printf '%s\n' '# >>> x: generated from data/x.tsv by tools/gen.sh.' 'X="a https://example.org/a"' '# <<< x' >> gird-check.sh
 EOF
