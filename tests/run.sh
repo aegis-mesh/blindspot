@@ -1035,6 +1035,48 @@ printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .c
 printf '#!/bin/sh\ncase "$*" in *"run[[:space:]]+"*"(claude|vscode|github|codex|cursor)"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v grep)" > "$WORK/ast9-bin/grep"; chmod +x "$WORK/ast9-bin/grep"
 HOME="$WORK/ast9" PATH="$WORK/ast9-bin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast9.txt"
 has    "a grep that crashes matching a startup script names the file as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/p/\.claude/settings\.json' "$WORK/ast9.txt"
+# The same for the other greps and awks that read a project's settings and tasks: the hooks match, the
+# folder-open match, the folder-open task filter and the match for a hook that runs a worm file (issue
+# #60). A grep or awk put first on PATH crashes on the expression AST10_PAT names, and the file it read is
+# named as not read, never as clean.
+mkdir -p "$WORK/ast10/code/p/.claude" "$WORK/ast10/code/p/.vscode" "$WORK/ast10/code/r/.claude" "$WORK/ast10-bin"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$WORK/ast10/code/p/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast10/code/p/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/router_runtime.js"}]}]}}\n' > "$WORK/ast10/code/r/.claude/settings.json"
+for _t in grep awk; do printf '#!/bin/sh\ncase "$*" in *"$AST10_PAT"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v "$_t")" > "$WORK/ast10-bin/$_t"; chmod +x "$WORK/ast10-bin/$_t"; done
+ast10() { # home name expression
+  HOME="$WORK/$1" PATH="$WORK/ast10-bin:$PATH" AST10_PAT=$3 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$1-$2.txt"; }
+AST10_NR='could not be read, so the servers, tokens and settings in them were not checked: .*'
+ast10 ast10 hook '\[[[:space:]]*\][[:space:]]*,)*'
+has    "a grep that crashes matching a project's hooks names the file as not read" "$AST10_NR~/code/p/\\.claude/settings\\.json" "$WORK/ast10-hook.txt"
+ast10 ast10 open '-qE "runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo]'
+has    "a grep that crashes matching a folder-open task names the file as not read" "$AST10_NR~/code/p/\\.vscode/tasks\\.json" "$WORK/ast10-open.txt"
+ast10 ast10 pick '-E "runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo]'
+has    "a grep that crashes picking the folder-open tasks names the file as not read" "$AST10_NR~/code/p/\\.vscode/tasks\\.json" "$WORK/ast10-pick.txt"
+ast10 ast10 worm '(router_runtime\.js|math_init\.js)'
+has    "a grep that crashes matching a hook that runs a worm file names the file as not read" "$AST10_NR~/code/r/\\.claude/settings\\.json" "$WORK/ast10-worm.txt"
+# A session-start hook of 5,000 commands, each running a script (225 KB): every script is named, in time
+# that grows with the size of the file (a grep for each command took three minutes on macOS).
+mkdir -p "$WORK/ssbig/code/p/.claude"
+python3 - "$WORK/ssbig/code/p/.claude/settings.json" <<'PY3'
+import sys
+hooks = ','.join('{"type":"command","command":".claude/a%d.sh"}' % i for i in range(5000))
+open(sys.argv[1], 'w').write('{"hooks":{"SessionStart":[{"hooks":[' + hooks + ']}]}}\n')
+PY3
+T0=$(date +%s); HOME="$WORK/ssbig" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ssbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "a session-start hook of 5,000 commands names every script they run" 'starts by running this project.s \.claude/a0\.sh, .*\.claude/a4999\.sh' "$WORK/ssbig.txt"
+if [ "$T" -le 30 ]; then ok "and in time that grows with the file, not with its commands" "${T}s"; else bad "and in time that grows with the file, not with its commands" "took ${T}s"; fi
+# A tasks.json whose folder-open task holds 150,000 dependsOn lists that never close (2 MB): a regex for
+# each can take as long as the file, and gird-check.ps1's then runs out of time. The report is still
+# printed to its end, and the file is read or named as partly checked, never as clean.
+mkdir -p "$WORK/dpo/code/p/.vscode"
+python3 - "$WORK/dpo/code/p/.vscode/tasks.json" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('{"tasks":[{"label":"a","command":"node .vscode/x.js","runOptions":{"runOn":"folderOpen"},' + '"dependsOn":[' * 150000 + '\n')
+PY3
+HOME="$WORK/dpo" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dpo.txt"
+has    "a tasks.json of 150,000 dependsOn lists left open still gets a report to its end" 'Your AI Exposure Check' "$WORK/dpo.txt"
+has    "and that file is read, or named as partly checked" '~/code/p/\.vscode/tasks\.json Set to run a task when the folder opens|took too long to check ~/code/p/\.vscode/tasks\.json' "$WORK/dpo.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents"

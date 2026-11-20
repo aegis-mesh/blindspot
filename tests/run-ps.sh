@@ -1033,6 +1033,28 @@ psrun "$WORK/ast7" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast7.txt"
 psrun "$WORK/ast8" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast8.txt"
 has    "a ] inside a multi-line string does not end a SessionStart array in config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts\.' "$WORK/ast7.txt"
 hasnot "a table header inside a multi-line string in config.toml is not a SessionStart hook" '~/\.codex/config\.toml' "$WORK/ast8.txt"
+# A session-start hook of 5,000 commands, each running a script (225 KB): every script is named, in time
+# that grows with the size of the file (a grep for each command took three minutes on macOS).
+mkdir -p "$WORK/ssbig/code/p/.claude"
+python3 - "$WORK/ssbig/code/p/.claude/settings.json" <<'PY3'
+import sys
+hooks = ','.join('{"type":"command","command":".claude/a%d.sh"}' % i for i in range(5000))
+open(sys.argv[1], 'w').write('{"hooks":{"SessionStart":[{"hooks":[' + hooks + ']}]}}\n')
+PY3
+T0=$(date +%s); psrun "$WORK/ssbig" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ssbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "a session-start hook of 5,000 commands names every script they run" 'starts by running this project.s \.claude/a0\.sh, .*\.claude/a4999\.sh' "$WORK/ssbig.txt"
+if [ "$T" -le 60 ]; then ok "and in time that grows with the file, not with its commands" "${T}s"; else bad "and in time that grows with the file, not with its commands" "took ${T}s"; fi
+# A tasks.json whose folder-open task holds 150,000 dependsOn lists that never close (2 MB): a regex for
+# each can take as long as the file, and gird-check.ps1's then runs out of time. The report is still
+# printed to its end, and the file is read or named as partly checked, never as clean.
+mkdir -p "$WORK/dpo/code/p/.vscode"
+python3 - "$WORK/dpo/code/p/.vscode/tasks.json" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('{"tasks":[{"label":"a","command":"node .vscode/x.js","runOptions":{"runOn":"folderOpen"},' + '"dependsOn":[' * 150000 + '\n')
+PY3
+psrun "$WORK/dpo" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dpo.txt"
+has    "a tasks.json of 150,000 dependsOn lists left open still gets a report to its end" 'Your AI Exposure Check' "$WORK/dpo.txt"
+has    "and that file is read, or named as partly checked" '~/code/p/\.vscode/tasks\.json Set to run a task when the folder opens|took too long to check ~/code/p/\.vscode/tasks\.json' "$WORK/dpo.txt"
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents" "$WORK/mst/AppData/Roaming" "$WORK/mst/AppData/Local/Temp"

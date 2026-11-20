@@ -2371,32 +2371,48 @@ cmd_parts() {
       }
       if (on) printf "\"\n"
     }'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -le 1 ] && [ "$2" -eq 0 ]
 }
 # With an element-ERE, a task one of those elements lists in dependsOn by label counts too: one level, so a
 # task the dependency itself depends on does not.
 start_scripts() { # flattened-text key [element-ERE]: the scripts those elements run, one per line
-  _all=$(printf '%s' "$1" | json_elems "$2")
-  _el=$(printf '%s\n' "$_all" | { if [ -n "${3:-}" ]; then grep -E "$3"; else cat; fi; })
+  # grep exits 0 on a match, 1 on none, and above 1 when it failed or crashed; awk exits 0 unless it
+  # failed. On a failure nothing is printed and the caller names the file as not read, never as one
+  # that runs no script.
+  _all=$(printf '%s' "$1" | json_elems "$2") || return 2
+  if [ -n "${3:-}" ]; then _el=$(printf '%s\n' "$_all" | grep -E "$3"); [ $? -le 1 ] || return 2; else _el=$_all; fi
   if [ -n "${3:-}" ] && [ -n "$_el" ]; then
-    _dl=$(printf '%s\n' "$_el" | grep -oE '"dependsOn"[[:space:]]*:[[:space:]]*(\[[^]]*\]|"([^"\\]|\\.)*")' | sed -E 's/^"dependsOn"[[:space:]]*:[[:space:]]*//' | grep -oE '"([^"\\]|\\.)*"' | sed -E 's/^"//; s/"$//')
+    _dl=$(printf '%s\n' "$_el" | grep -oE '"dependsOn"[[:space:]]*:[[:space:]]*(\[[^]]*\]|"([^"\\]|\\.)*")'); [ $? -le 1 ] || return 2
+    if [ -n "$_dl" ]; then
+      _dl=$(printf '%s\n' "$_dl" | sed -E 's/^"dependsOn"[[:space:]]*:[[:space:]]*//' | grep -oE '"([^"\\]|\\.)*"'); [ $? -le 1 ] || return 2
+      _dl=$(printf '%s\n' "$_dl" | sed -E 's/^"//; s/"$//')
+    fi
     if [ -n "$_dl" ]; then
       _dep=$(printf '%s\n' "$_all" | DEPS="$_dl" awk '
         BEGIN { n = split(ENVIRON["DEPS"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") w[a[i]] = 1 }
-        match($0, /"label"[ \t]*:[ \t]*"([^"\\]|\\.)*"/) { s = substr($0, RSTART, RLENGTH); sub(/^"label"[ \t]*:[ \t]*"/, "", s); sub(/"$/, "", s); if (s in w) print }')
+        match($0, /"label"[ \t]*:[ \t]*"([^"\\]|\\.)*"/) { s = substr($0, RSTART, RLENGTH); sub(/^"label"[ \t]*:[ \t]*"/, "", s); sub(/"$/, "", s); if (s in w) print }') || return 2
       [ -n "$_dep" ] && _el=$(printf '%s\n%s\n' "$_el" "$_dep")
     fi
   fi
   [ -n "$_el" ] || return 0
-  _in=$(printf '%s\n' "$_el"; printf '%s\n' "$_el" | cmd_parts); _mt=""
-  # grep exits 0 on a match, 1 on none, and above 1 when it failed or crashed: then nothing is printed
-  # and the caller names the file as not read, never as one that runs no script.
+  cmd_scripts "$_el" "$START_CMD" "$START_PATH"
+}
+# The scripts the commands in these elements run, one per line: each command whole and each part of it
+# (cmd_parts) is matched by each of the expressions (one per line), and the script is the last path
+# in the match. Returns 2, printing nothing, when grep or awk fails.
+cmd_scripts() { # elements expressions script-ERE
+  _in=$(printf '%s\n' "$1"; printf '%s\n' "$1" | cmd_parts) || return 2; _mt=""
   while IFS= read -r _rx; do
     _o=$(printf '%s\n' "$_in" | grep -oE "$_rx"); [ $? -le 1 ] || return 2
     _mt="$_mt$_o$NL"
   done <<EOF
-$START_CMD
+$2
 EOF
-  printf '%s' "$_mt" | while IFS= read -r _m; do [ -n "$_m" ] && printf '%s\n' "$_m" | grep -oE "$START_PATH" | tail -n 1; done | sed -E 's#[/\\]+#/#g' | sort -u
+  # One grep numbers every path by its line, and awk keeps each line's last, so the time grows with
+  # the text, not with the number of commands.
+  _mt=$(printf '%s' "$_mt" | grep -noE "$3"); [ $? -le 1 ] || return 2
+  _mt=$(printf '%s\n' "$_mt" | awk '{ i = index($0, ":"); if (i) l[substr($0, 1, i - 1)] = substr($0, i + 1) } END { for (k in l) print l[k] }') || return 2
+  [ -z "$_mt" ] || printf '%s\n' "$_mt" | sed -E 's#[/\\]+#/#g' | sort -u
 }
 in_words() { # lines: them as "a", "a and b" or "a, b and c"
   printf '%s\n' "$1" | awk 'NF { a[++n] = $0 } END { for (i = 1; i <= n; i++) printf "%s%s", (i == 1 ? "" : (i == n ? " and " : ", ")), a[i] }'
@@ -2482,12 +2498,14 @@ flat() {
 }
 auto_row() { # file what flattened-text [script-note]
   # A worm file counts only when a command runs it (worm_cmd), and a file projects use too only in a
-  # project that counts (WORM_PROJ).
-  if { [ -n "$WORM_CMD_ALONE" ] && printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; } ||
-     { [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1" && printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; }; then
-    WORM_REFS="$WORM_REFS$1
+  # project that counts (WORM_PROJ). A grep that fails (above 1) leaves the file named as not read,
+  # never as one that runs no worm file.
+  _wr=1
+  if [ -n "$WORM_CMD_ALONE" ]; then printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; _wr=$?; fi
+  if [ "$_wr" -eq 1 ] && [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1"; then printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; _wr=$?; fi
+  if [ "$_wr" -eq 0 ]; then WORM_REFS="$WORM_REFS$1
 "
-  fi
+  elif [ "$_wr" -gt 1 ]; then cut_file "$1"; fi
   # With nothing to list (hooks turned off), only a hook that runs a worm file counts: the worm wrote it.
   [ -n "$2" ] || return 0
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
@@ -3187,7 +3205,10 @@ while IFS= read -r f; do
   done
   if [ "$_dah" = true ]; then _rx="\"($CMD_ALWAYS)\"[[:space:]]*:"; else _rx="$HOOK_RUN|\"($CMD_KEYS)\"[[:space:]]*:"; fi
   _note=""
-  if printf '%s' "$_t" | grep -qE "$_rx"; then
+  # grep exits above 1 when it fails: the file is then named as not read, never as one that runs nothing.
+  printf '%s' "$_t" | grep -qE "$_rx"; _hr=$?
+  [ "$_hr" -gt 1 ] && cut_file "$f"
+  if [ "$_hr" -eq 0 ]; then
     _w="run commands while the agent works"
     if [ "$_dah" != true ]; then
       _ss=$(start_scripts "$_t" SessionStart) || cut_file "$f"
@@ -3254,7 +3275,9 @@ while IFS= read -r f; do
   case "$f" in */.claude/plugins/*) continue ;; esac
   _t=$(flat "$f"); _w=""
   _note=""
-  if printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; then
+  printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; _hr=$?
+  [ "$_hr" -gt 1 ] && cut_file "$f"
+  if [ "$_hr" -eq 0 ]; then
     _w="run a task when the folder opens in VS Code or Cursor"
     _ss=$(start_scripts "$_t" tasks "$FOLDER_OPEN") || cut_file "$f"
     if [ -n "$_ss" ]; then

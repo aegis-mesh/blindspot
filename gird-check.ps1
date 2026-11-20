@@ -1712,24 +1712,33 @@ $RxLabel = New-Object regex('"label"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTime
 # With a filter, a task one of those elements lists in dependsOn by label counts too: one level, so a
 # task the dependency itself depends on does not. As gird-check.sh's start_scripts.
 function Start-Scripts([string]$f, [string]$t, [string]$key, [regex]$filter) {
-  $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
   $all = New-Object System.Collections.Generic.List[string]; foreach ($x in (Json-Elems $t $key)) { $all.Add($x) }
   $sel = New-Object System.Collections.Generic.List[string]
   foreach ($el in $all) { if (-not $filter -or (Flat-Match $f $el $filter)) { $sel.Add($el) } }
   if ($filter -and $sel.Count -gt 0) {
-    $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
-    foreach ($el in @($sel)) {
-      foreach ($dm in $RxDepends.Matches($el)) { foreach ($lm in $RxQuoted.Matches($dm.Groups[1].Value)) { [void]$want.Add($lm.Groups[1].Value) } }
-    }
-    foreach ($el in $all) {
-      $lb = $RxLabel.Match($el)
-      if ($lb.Success -and $want.Contains($lb.Groups[1].Value) -and -not $sel.Contains($el)) { $sel.Add($el) }
-    }
-  }
-  foreach ($el in $sel) {
+    # A crafted file can make these run out of time, as any regex here can: the file is then partly
+    # checked (Mark-Slow), never a stop of the whole check.
     try {
-      foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $RxStartCmd.Matches($_) })) {
-        $ps = $RxStartPath.Matches($m.Value)
+      $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+      foreach ($el in @($sel)) {
+        foreach ($dm in $RxDepends.Matches($el)) { foreach ($lm in $RxQuoted.Matches($dm.Groups[1].Value)) { [void]$want.Add($lm.Groups[1].Value) } }
+      }
+      foreach ($el in $all) {
+        $lb = $RxLabel.Match($el)
+        if ($lb.Success -and $want.Contains($lb.Groups[1].Value) -and -not $sel.Contains($el)) { $sel.Add($el) }
+      }
+    } catch { Mark-Slow $f }
+  }
+  Cmd-Scripts $f $sel $RxStartCmd $RxStartPath
+}
+# The scripts the commands in these elements run: each command whole and each part of it (Cmd-Parts) is
+# matched, and the script is the last path in the match. As gird-check.sh's cmd_scripts.
+function Cmd-Scripts([string]$f, $els, [regex]$rxCmd, [regex]$rxPath) {
+  $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
+  foreach ($el in $els) {
+    try {
+      foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $rxCmd.Matches($_) })) {
+        $ps = $rxPath.Matches($m.Value)
         if ($ps.Count -gt 0) { [void]$set.Add(($ps[$ps.Count - 1].Value -replace '[/\\]+', '/')) }
       }
     } catch { Mark-Slow $f }
