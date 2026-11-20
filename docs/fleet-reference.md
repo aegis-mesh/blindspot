@@ -459,12 +459,14 @@ A row that was not checked reads `<account>: not_checked <word>`, with a word fr
 1. `old-install` and `no accounts` are always kept.
 2. The rows are taken by need: `act`, then `not_checked`, then `review`, then `clear`, the Mac's
    `machine:` row before an account at the same level.
-3. Every row's outcome comes before any row's details. In that order, each row first gets its bare
-   outcome, such as `asha: act`, until one does not fit: that row and the rows after it are left out.
-4. Then the details, in the same order. First each `act` account gets `wiper` and its `incidents`, so
-   stopping gh-token-monitor and the malware found are never cut for something less urgent. Then each
-   row gets all its findings if they fit; the Mac's row drops its last parts until it fits.
-5. The value ends with `+more`. Its parts are in this order: the accounts it kept, in order of need,
+3. In that order, each row that is not `clear` gets its bare outcome, such as `asha: act`, until one
+   does not fit: that row and the rows after it are left out.
+4. Then each `act` account gets `wiper` and its `incidents`, so stopping gh-token-monitor and the
+   malware found are never cut for something less urgent, a `clear` account included.
+5. Then each `clear` row gets its bare outcome, until one does not fit.
+6. Then the rest of the details, in the same order: each row gets all its findings if they fit; the
+   Mac's row drops its last parts until it fits.
+7. The value ends with `+more`. Its parts are in this order: the accounts it kept, in order of need,
    then `machine:`, `old-install` and `no accounts`.
 
 The OWASP part comes last, and only when the whole value fits with it in 250 characters: it never

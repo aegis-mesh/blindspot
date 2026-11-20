@@ -2423,7 +2423,7 @@ rm -f "${WP:?}/.config/smt.cmd" "${WP:?}/.config/smtk" "${WP:?}/.config/.smt" "$
 has    "Windows: sysmon.cmd alone is a file to check" 'Startup/sysmon\.cmd has the name of a file that starts the trojanized Claude Code extension.s tunnel at every login' "$WORK/win-cx0.txt"
 hasnot "Windows: and not a sign of the malware"        'Editor extensions signs of the malware found' "$WORK/win-cx0.txt"
 # Its own fix, to remove what it leaves, comes before any rotate even here: if you did not set it up.
-has    "Windows: sysmon.cmd alone: the fix removes what the extension leaves before the rotate" 'Open the startup file listed in section 5 and check what it starts at login\. If you did not set it up yourself, first remove what the trojanized Claude Code extension leaves: .* if you did not turn it on yourself\. After that, treat this machine as compromised: delete it and rotate every key this machine could reach\.' "$WORK/win-cx0.txt"
+has    "Windows: sysmon.cmd alone: the fix removes what the extension leaves before the rotate" 'Open the startup file listed in section 5 and check what it starts at login\. If you did not set it up yourself, first remove what the trojanized Claude Code extension leaves, starting with what keeps its tunnel up: .* if you did not turn it on yourself\. After that, treat this machine as compromised: delete it and rotate every key this machine could reach\.' "$WORK/win-cx0.txt"
 has    "Windows: the trojanized extension's smt.cmd is its sign" 'Editor extensions signs of the malware found .*~/\.config/smt\.cmd a script the trojanized Claude Code extension writes to keep its tunnel running' "$WORK/win-cx.txt"
 has    "Windows: and so is its smtk"                  '~/\.config/smtk a file the trojanized Claude Code extension writes beside smt\.cmd' "$WORK/win-cx.txt"
 hasnot "Windows: its macOS and Linux tunnel script is not looked for" '~/\.config/\.smt the trojanized' "$WORK/win-cx.txt"
@@ -6054,6 +6054,24 @@ IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 2 ""' _ "$FL/invfit.sh" "v1 ac
 if [ "$IV_OUT" = "v1 act 2026-10-25T09:12Z | asha: act incidents tanstack | ravi: not_checked time_limit | machine: review; possible litellm +more" ]
 then ok "fleet: a cut inventory value keeps every account that needs attention before any account's details"
 else bad "fleet: a cut inventory value keeps every account that needs attention before any account's details" "$IV_OUT"; fi
+# Many clear accounts never take the room of an act account's gh-token-monitor and incidents: the
+# clear rows' outcomes come after the act rows' key form.
+IV_P3=" | asha: act wiper; incidents shai-hulud,tanstack; keys 3 anthropic,openai,aws; ssh-open 2"
+for _n in alice.anderson bob.brown carol.clark dave.davis erin.evans frank.foster grace.green heidi.hill ivan.irwin judy.jones; do IV_P3="$IV_P3 | $_n: clear"; done
+IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 11 ""' _ "$FL/invfit.sh" "v1 act 2026-10-25T09:12Z" "$IV_P3")
+case $IV_OUT in
+  "v1 act 2026-10-25T09:12Z | asha: act wiper; incidents shai-hulud,tanstack"*" | alice.anderson: clear"*" +more")
+    ok "fleet: a cut inventory value keeps an act account's gh-token-monitor and incidents before clear accounts" ;;
+  *) bad "fleet: a cut inventory value keeps an act account's gh-token-monitor and incidents before clear accounts" "$IV_OUT" ;;
+esac
+# And an act account whose row is only its incidents keeps them before another account's other details.
+IV_P4=" | zoe: act wiper; incidents shai-hulud,litellm; keys 2 openai,anthropic,npm; ssh-open 2 | om: not_checked time_limit | asha: clear | li.wei: not_checked time_limit | kim: not_checked time_limit | ravi: clear | pat: not_checked time_limit | maria.garcia: act incidents tanstack,glassworm"
+IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 8 ""' _ "$FL/invfit.sh" "v1 act 2026-10-25T09:12Z" "$IV_P4")
+case $IV_OUT in
+  "v1 act 2026-10-25T09:12Z | zoe: act wiper; incidents shai-hulud,litellm | maria.garcia: act incidents tanstack,glassworm | "*" +more")
+    ok "fleet: a cut inventory value keeps the incidents of an act account that holds only them" ;;
+  *) bad "fleet: a cut inventory value keeps the incidents of an act account that holds only them" "$IV_OUT" ;;
+esac
 # Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 mkdir -p "$FL/inst700"; cp "$SCRIPT" "$FLEETSH" "$FL/inst700/"; chmod 755 "$FL/inst700/gird-check.sh"; chmod 700 "$FL/inst700/gird-fleet.sh"
