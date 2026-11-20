@@ -130,10 +130,9 @@ PSRUN="$PSRUN|${B}(pwsh|powershell)$X$E.*[[:space:]]-(ec|e(n(c(o(d(e(d(c(o(m(m(a
 PSRUN="$PSRUN|$B${P}cmd$X([[:space:]]+/{1,2}[a-z]+)*[[:space:]]+/{1,2}[ckr]([[:space:]].*)?[$\`]"
 # Running or sourcing a file named as data (*.md, *.txt, *.tsv) or an image: none of them is code.
 DATARUN="$CMD(source|\.|$SHELLS|python[0-9.]*|perl|ruby|node|php|osascript)$X([[:space:]]+-[A-Za-z]+)*[[:space:]]+(<[[:space:]]*)?[\"']?[^[:space:];|&<>\"']*\.(md|txt|tsv|png|jpe?g|gif|webp)([\"'[:space:];|&)]|$)"
-# A pipe into a shell or cmd, and a decoder.
+# A pipe into a shell or cmd, and a decoder: read on the whole line, quotes included, in tests/ too.
 PIPE="(^|[[:space:]])\|[[:space:]]*$P($SHELLS|cmd)$X([[:space:];&)\"'\\\`]|$)"
 PIPE="$PIPE|${B}base64([[:space:]]+-[A-Za-z-]+)*[[:space:]]+(-[A-Za-z]*[dD][A-Za-z]*|--decode)$E|${B}xxd([[:space:]]+-[A-Za-z]+)*[[:space:]]+-r"
-RUN_SH="$RUN_SH|$PIPE"
 RUN_PS="${B}(invoke-expression|iex|invoke-command|start-process|add-type)$E|scriptblock\][[:space:]]*::[[:space:]]*create"
 RUN_PS="$RUN_PS|newscriptblock|invokescript|invokecommand|reflection\.assembly\][[:space:]]*::[[:space:]]*load|\.invoke[[:space:]]*\("
 RUN_PS="$RUN_PS|=[[:space:]]*(get-command|gcm)$E|frombase64string|(^|[;({=[:space:]])&[[:space:]]*(\(|\"[^\"]*[$]|[$]env:)|$CMD\.[[:space:]]+[\$(]"
@@ -320,8 +319,9 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     awk -v T="$TAB" '{ t = substr($0, index($0, T) + 1) } t ~ /^[[:space:]]*#/ && t !~ /[$][({]|`/ { next } { print }' "$W/add" > "$W/code"
     # Tests write shell profiles, hooks and configs as fixtures: on a line that writes one (printf,
     # echo, cat or mv_case) and hands no text to a shell or interpreter, single-quoted text is
-    # left out before the run rule reads it. The network rule reads the whole line: tests run
-    # their scripts as bash "$VAR", so a fixture that downloads is the only place to catch it.
+    # left out before the run rule reads it. The pipe and decoder rules and the network rule read
+    # the whole line: tests run their scripts as bash "$VAR", so a fixture that downloads, or
+    # decodes text into a shell, is the only place to catch it.
     # A line is read on its own, so one inside a quoted string that spans lines is not seen as such.
     case "$path" in
       tests/*) fixtures "$W/code" "$W/code-run" ;;
@@ -329,11 +329,13 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     esac
     cp "$W/add" "$W/add-net"
     if [ "$ps" = 1 ]; then
-      rule run "$RUN_PS|$PSRUN|$PIPE|$DATARUN" "$W/code-run" -i
+      rule run "$RUN_PS|$PSRUN|$DATARUN" "$W/code-run" -i
+      rule run "$PIPE" "$W/code" -i
       call_operator
       rule network "$NET_PS" "$W/add-net" -i
     else
       rule run "$RUN_SH" "$W/code-run"
+      rule run "$PIPE" "$W/code"
       rule run "$INLINE" "$W/code-run"
       rule run "$PSRUN|$DATARUN" "$W/code-run" -i
       case "$path" in tests/*) ;; *) rule run "$SHELL_FILE" "$W/code-run" ;; esac

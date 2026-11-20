@@ -415,6 +415,13 @@ want "a NUL byte in a script git reads as text is flagged" 1 '^hidden: gird-chec
 has "and its line is shown" '^hidden: gird-check\.sh:204: ev\^Aal' "$OUT"
 has "and a NUL byte in gird-check.ps1" '^hidden: gird-check\.ps1:203: Invoke-Ex\^Apression' "$OUT"
 
+kase testenc <<'EOF'
+mkdir -p tests && printf '%s\n' "t=\$(mktemp); printf 'echo ZWNobyBoaQ== | base64 -d | sh\\n' > \"\$t\"; bash \"\$t\"" \
+  "printf 'x | bash\\n' > \"\$t\"" > tests/t.sh
+EOF
+want "a decoder piped into a shell inside a test fixture's quotes is flagged" 1 '^run: tests/t\.sh:1:'
+has "and a pipe into a shell inside one" '^run: tests/t\.sh:2:' "$OUT"
+
 kase gen <<'EOF'
 printf '%s\n' '# >>> x: generated from data/x.tsv by tools/gen.sh.' 'X="a https://example.org/a"' '# <<< x' >> gird-check.sh
 EOF
