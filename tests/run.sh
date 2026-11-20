@@ -3474,6 +3474,21 @@ chmod 000 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
 dzrun "$WORK/rcu" | tr -s ' \n' '  ' > "$WORK/rcu.txt"
 chmod 644 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
 has    "remote commands: two rule files that can't be read are each named as not read" '2 config or settings files could not be read, so the servers, tokens and settings in them were not checked: ~/\.codex/rules/a\.rules ~/\.gemini/policies/b\.toml' "$WORK/rcu.txt"
+# Rules read in linear time: a project's settings file and a Codex rules file of 800 KB, each a string
+# of escaped quotes, and one of spaces between two strings. They took over a minute.
+rm -rf "$WORK/rcbig"; cp -R "$WORK/clean" "$WORK/rcbig"; mkdir -p "$WORK/rcbig/code/x/.claude" "$WORK/rcbig/.codex/rules"
+python3 - "$WORK/rcbig" <<'PY3'
+import sys
+h = sys.argv[1]; q = '\\"' * 400000
+open(h + '/code/x/.claude/settings.json', 'w').write('{"permissions": {"allow": ["Bash(ssh *)", "' + q + '"]}}\n')
+open(h + '/code/x/.claude/settings.local.json', 'w').write('{"permissions": {"allow": ["Bash(kubectl exec *)",' + ' ' * 800000 + '"x"]}}\n')
+open(h + '/.codex/rules/big.rules', 'w').write('prefix_rule(pattern=["ssh", "' + q + '"])\n')
+PY3
+T0=$(date +%s); dzrun "$WORK/rcbig" | tr -s ' \n' '  ' > "$WORK/rcbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "remote commands: a rule beside 800 KB of escaped quotes is read" '! ~/code/x/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: Bash\(ssh \*\)' "$WORK/rcbig.txt"
+has    "remote commands: and one before 800 KB of spaces" '! Claude Code ~/code/x/\.claude/settings\.local\.json Bash\(kubectl exec \*\): runs' "$WORK/rcbig.txt"
+has    "remote commands: and a Codex rule with a token of 800 KB of them" '! Codex ~/\.codex/rules/big\.rules ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rcbig.txt"
+if [ "$T" -le 30 ]; then ok "remote commands: and in linear time" "${T}s"; else bad "remote commands: and in linear time" "took ${T}s"; fi
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/$DAS/Code/User" "$WORK/dz-unr/$DAS/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/$DAS/Code/User/settings.json" > "$WORK/dz-unr/$DAS/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.

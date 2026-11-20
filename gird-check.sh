@@ -2777,7 +2777,12 @@ json_top() { # key
 # Every scalar of a .json file, as path<TAB>value: the path is each key the value sits under, each
 # after a \034 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
 # The file is read as flat reads it and split as aa_keys splits it, one quote and one bracket at a
-# time, the text between on its commas: printed as it is read, linear on every awk.
+# time, the text between on its commas: printed as it is read, linear on every awk. A string is
+# joined from its pieces half at a time, as joining them one at a time is quadratic in its escaped
+# quotes; one longer than 4096 characters keeps its first 4096 and ends in \003, read as a rule with
+# more after them. Whitespace outside strings is dropped with a gsub only on a short chunk (a gsub with
+# many matches is quadratic on macOS's awk): a longer one is read as its first word, and \003 when
+# more follow.
 json_leaves() { # file
   flat "$1" | awk '
     function trail(s) {
@@ -2789,14 +2794,23 @@ json_leaves() { # file
     function flush() { if (sc != "") emit(sc); sc = "" }
     function ob(c,   np) { flush(); np = dep < 1 ? "" : P[dep] (T[dep] == "o" ? "\034" key : "[]"); dep++; P[dep] = np; T[dep] = (c == "{" ? "o" : "a"); ek = (c == "{") }
     function cb() { flush(); if (dep > 0) dep--; ek = 0 }
+    # A chunk without its whitespace. A long one is read as its first word, and \003 when more follow.
+    function nows(s,   w) {
+      if (length(s) <= 64) { gsub(/[[:space:]]/, "", s); return s }
+      if (!match(s, /[^[:space:]]+/)) return ""
+      w = substr(s, RSTART, RLENGTH)
+      return substr(s, RSTART + RLENGTH) ~ /[^[:space:]]/ ? w "\003" : w
+    }
     function text(t,   a, n, i, m) {
       n = split(t, a, ",")
       for (i = 1; i <= n; i++) {
         if (i > 1) { flush(); if (dep > 0 && T[dep] == "o") ek = 1 }
         m = index(a[i], ":"); if (m) { flush(); ek = 0; a[i] = substr(a[i], m + 1) }
-        gsub(/[[:space:]]/, "", a[i]); sc = sc a[i]
+        if (length(sc) < 64) sc = sc nows(a[i])
       }
     }
+    # The pieces a to b of a string, with the quotes between them.
+    function join(a, b,   m) { if (a == b) return q[a]; m = int((a + b) / 2); return join(a, m) "\"" join(m + 1, b) }
     function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
       na = split(s, a, "{")
       for (i = 1; i <= na; i++) {
@@ -2815,10 +2829,11 @@ json_leaves() { # file
     }
     { nq = split($0, q, "\""); st = 0; dep = 0; ek = 0; sc = ""; key = ""
       for (i = 1; i <= nq; i++) {
-        if (st == 0) { code(q[i]); if (i < nq) { st = 1; sv = "" }; continue }
-        sv = sv q[i]
-        if (i < nq && trail(q[i]) % 2 == 1) { sv = sv "\""; continue }
+        if (st == 0) { code(q[i]); if (i < nq) { st = 1; qa = i + 1; ln = 0; qb = 0 }; continue }
+        if (!qb) { ln += length(q[i]) + 1; if (ln > 4097) qb = i }
+        if (i < nq && trail(q[i]) % 2 == 1) continue
         st = 0
+        sv = qb ? substr(join(qa, qb), 1, 4096) "\003" : join(qa, i)
         if (dep > 0 && T[dep] == "o" && ek) { key = sv; ek = 0 } else emit("\"" sv "\"")
       }
       flush()
@@ -2970,10 +2985,11 @@ rc_read() { # file format fid rep
       { if (!on && $0 ~ /^[ \t]*#/) next
         nq = split($0, q, "\""); st = 0; cmt = 0
         for (i = 1; i <= nq && !cmt; i++) {
-          if (st == 0) { codep(q[i]); if (i < nq && !cmt) { st = 1; sv = "" }; continue }
-          sv = sv q[i]
-          if (i < nq && trail(q[i]) % 2 == 1) { sv = sv "\""; continue }
-          st = 0; if (on) str(sv)
+          if (st == 0) { codep(q[i]); if (i < nq && !cmt) { st = 1; qa = i + 1; ln = 0; qb = 0 }; continue }
+          if (!qb) { ln += length(q[i]) + 1; if (ln > 4097) qb = i }
+          if (i < nq && trail(q[i]) % 2 == 1) continue
+          # A token longer than 4096 characters keeps its first 4096 and \003, so it matches no command word.
+          st = 0; if (on && (kw == "pattern" || kw == "decision")) str(qb ? substr(join(qa, qb), 1, 4096) "\003" : join(qa, i))
         }
         if (st == 1 && on) { cut(); on = 0 }
       }

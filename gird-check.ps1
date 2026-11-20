@@ -1962,7 +1962,9 @@ function Toml-Ml([string]$s, [string]$st) {
 # --- Saved rules that run commands on other machines (data/remote-commands.tsv) ---------------
 # Every scalar of a .json file, as path<TAB>value: the path is each key the value sits under, each
 # after a [char]28 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
-# The same as gird-check.sh's json_leaves.
+# The same as gird-check.sh's json_leaves: a string longer than 4096 characters keeps its first 4096
+# and ends in [char]3, read as a rule with more after them, and a chunk of code longer than 64
+# characters is read as its first word, and [char]3 when more follow.
 $RxLeafTok = New-Object regex('"(?:[^"\\]|\\.)*("?)|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
 function Json-Leaves([string]$f) {
   $out = New-Object System.Collections.Generic.List[string]
@@ -1975,6 +1977,7 @@ function Json-Leaves([string]$f) {
     if ($c -eq '"') {
       if ($m.Groups[1].Value -ne '"') { continue }
       $sv = $x.Substring(1, $x.Length - 2)
+      if ($sv.Length -gt 4096) { $sv = $sv.Substring(0, 4096) + [char]3; $x = '"' + $sv + '"' }
       if ($dep -gt 0 -and $T[$dep] -eq 'o' -and $ek) { $key = $sv; $ek = $false }
       elseif ($dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $x) }
       continue
@@ -2002,7 +2005,10 @@ function Json-Leaves([string]$f) {
         if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
         $ek = $false; $a = $a.Substring($k + 1)
       }
-      $sc += ($a -replace '\s', '')
+      if ($sc.Length -lt 64) {
+        if ($a.Length -le 64) { $sc += ($a -replace '\s', '') }
+        else { $mw = [regex]::Match($a, '\S+'); if ($mw.Success) { $sc += $mw.Value; if ($a.Substring($mw.Index + $mw.Length) -match '\S') { $sc += [char]3 } } }
+      }
     }
   }
   if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }
@@ -2144,13 +2150,17 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
     foreach ($line in $t.Replace("`r", '').Split("`n")) {
       if (-not $st.on -and $line -match '^[ \t]*#') { continue }
       if ($line -eq '') { continue }
-      $q = $line.Split('"'); $sq = 0; $st.cmt = $false; $sv = ''
+      # A string is joined from its pieces once it ends: one piece at a time is quadratic in its escaped
+      # quotes.
+      $q = $line.Split('"'); $sq = 0; $st.cmt = $false; $qa = 0; $qn = 0
       for ($i = 0; $i -lt $q.Count -and -not $st.cmt; $i++) {
-        if ($sq -eq 0) { & $codep $q[$i]; if ($i -lt $q.Count - 1 -and -not $st.cmt) { $sq = 1; $sv = '' }; continue }
-        $sv += $q[$i]
-        if ($i -lt $q.Count - 1 -and (Rc-Trail $q[$i]) % 2 -eq 1) { $sv += '"'; continue }
+        if ($sq -eq 0) { & $codep $q[$i]; if ($i -lt $q.Count - 1 -and -not $st.cmt) { $sq = 1; $qa = $i; $qn = 0; $qb = -1 }; continue }
+        if ($qb -lt 0) { $qn += $q[$i].Length + 1; if ($qn -gt 4097) { $qb = $i } }
+        if ($i -lt $q.Count - 1 -and (Rc-Trail $q[$i]) % 2 -eq 1) { continue }
         $sq = 0
-        if ($st.on) {
+        if ($st.on -and ($st.kw -ceq 'pattern' -or $st.kw -ceq 'decision')) {
+          # A token longer than 4096 characters keeps its first 4096 and [char]3, so it matches no command word.
+          if ($qb -ge 0) { $sv = [string]::Join('"', $q, $qa + 1, $qb - $qa).Substring(0, 4096) + [char]3 } else { $sv = [string]::Join('"', $q, $qa + 1, $i - $qa) }
           $v = $sv.Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\') -replace '[ \t]', [string][char]1
           if ($st.kw -ceq 'pattern' -and $st.bd -eq 1 -and -not $st.stop) { $st.nt++; $st.T[$st.nt] = $v }
           elseif ($st.kw -ceq 'pattern' -and $st.bd -eq 2 -and -not $st.fa) { $st.na++; $st.A[$st.na] = $v }
