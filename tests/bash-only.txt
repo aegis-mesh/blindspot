@@ -35,6 +35,7 @@ an action fix with a quote	tools/gen.sh is one bash tool that writes the data fi
 an action fix with a |	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an action good commit that is not 40 hex digits	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 an action commit listed as malicious and good	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
+an action ref with a [ left open	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a platform with another found word	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a site file with a slash	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
 a startup line with no note	tools/gen.sh is one bash tool that writes the data files into both scripts, so its refusals are tested once
