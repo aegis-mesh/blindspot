@@ -2289,7 +2289,16 @@ AUTO_ROWS=""; N_AUTO=0; WORM_REFS=""; AUTO_SEEN=""
 # or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
 # echo that names the file. A rule or a guard that only names the file, or passes it to another
 # script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
-# ./, and must end there.
+# ./, and must end there. The interpreter or the file may come after the words that run the rest of a
+# command (cmd_wrap).
+# cmd_wrap sets _wx, from the caller's _wp, to those words: nohup, exec, setsid, npx and env (as
+# /usr/bin/env too), each with its flags; timeout with its options and time; VAR=value; the ( of a
+# subshell; and sh, bash or zsh -c, whose quoted code is read as a command from its start. A command
+# after a ; inside that code is not read: trying the rest of the expression after each ; there made
+# long code slow.
+cmd_wrap() {
+  _wx='((nohup|exec|setsid|npx)[[:space:]]+(-[A-Za-z]+[[:space:]]+)*|timeout[[:space:]]+(-[^[:space:]"\\]+[[:space:]]+([A-Z0-9]+[[:space:]]+)?)*[0-9.]+[smhd]?[[:space:]]+|\([[:space:]]*|'"$_wp"'(env[[:space:]]+(-[A-Za-z]+[[:space:]]+)*|(sh|bash|zsh)(\.exe)?[[:space:]]+(-[A-Za-z]+[[:space:]]+)*-[A-Za-z]*c[A-Za-z]*[[:space:]]+(\\"|'"'"'))|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
+}
 worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these files
   _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
@@ -2297,40 +2306,44 @@ worm_cmd() { # file-ERE: a command, in flattened JSON, that runs one of these fi
   # One piece of a command before a separator: a character outside quotes, a JSON escape other than
   # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
   _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  cmd_wrap
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp"'(node|bun|deno|tsx)(\.exe)?"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s' "$_ws$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
+  printf '%s' "$_ws$_wx$_wp((node|tsx)(\\.exe)?[[:space:]]+($_wo)*|(bun|deno)(\\.exe)?[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?)$_wf|$_ws$_wx$_wf|$_wi$_wb$_wa|$_wa$_wb$_wi"
 }
 WORM_CMD_ALONE=""; [ -n "$WORM_RUN_ALONE" ] && WORM_CMD_ALONE=$(worm_cmd "$WORM_RUN_ALONE")
 WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN_WEAK")
 # A script a session-start hook or a folder-open task runs from the project itself, from one of the
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
-# worm_cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself, and after the words that run the rest of a command: nohup, exec, env (as
-# /usr/bin/env too), npx and VAR=value. START_PATH is the script; START_CMD a command that runs one.
+# worm_cmd reads it, with sh, bash, zsh and python too (never the code of -e or -p, and the code of -c
+# only as cmd_wrap reads it), or as the command itself, after the words that run the rest of a
+# command (cmd_wrap), or when cat pipes it to sh, bash or zsh. START_PATH is the script; START_CMD a
+# command that runs one.
 START_PATH='\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
-start_cmd() { # script-ERE prefix-ERE [cd]: four expressions, one per line, and with cd a fifth
+start_cmd() { # script-ERE prefix-ERE [cd]: five expressions, one per line, and with cd a sixth
   _wf='(\\"|'"'"')?'"$2$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
-  _wx='((nohup|exec|npx|'"$_wp"'env)[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
   _wo='(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^[:space:]"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)[[:space:]]+'
   _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
+  cmd_wrap
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wn='(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
   _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
-  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and a command: what runs next
-  # runs from there.
+  printf '%s\n%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi" \
+    "$_ws$_wx"'cat[[:space:]]+(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*\|[[:space:]]*'"$_wp"'(sh|bash|zsh)(\.exe)?([[:space:];&|)"'"'"']|\\)'
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter or a ./
+  # script, which run a file from there: a cd followed by rm or ls runs nothing. The words of cmd_wrap
+  # come before the cd only: with them after it too, macOS's grep -o crashed now and then.
   if [ "${3:-}" = cd ]; then
-    printf '\n%s' "$_ws"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*[^[:space:];&|"]'
+    printf '\n%s' "$_ws$_wx"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*('"$_wp$_wn"'[[:space:]]|\.[/\\])'
   fi
 }
-# One expression per line, each given to grep alone: macOS's grep can crash on all four joined by |.
+# One expression per line, each given to grep alone: macOS's grep can crash on them all joined by |.
 START_CMD=$(start_cmd "$START_PATH" '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?')
 # The elements of every array that is the value of the key K, one line each, from flat's one-line
 # text: a session-start hook's entries, or each task of a tasks.json. Strings are copied whole and

@@ -1638,7 +1638,12 @@ $AutoSeen = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([
 # or ||, outside shell quotes: a ; or | inside '...' or \"...\" is text, such as a grep pattern or an
 # echo that names the file. A rule or a guard that only names the file, or passes it to another
 # script, does not count. The file may be quoted, after $CLAUDE_PROJECT_DIR, ${workspaceFolder} or
-# ./, and must end there. The same expression as gird-check.sh's worm_cmd.
+# ./, and must end there, after the words that run the rest of a command (Cmd-Wrap). The same
+# expression as gird-check.sh's worm_cmd.
+# Cmd-Wrap: those words, as gird-check.sh's cmd_wrap.
+function Cmd-Wrap([string]$cp) {
+  '((nohup|exec|setsid|npx)\s+(-[A-Za-z]+\s+)*|timeout\s+(-[^\s"\\]+\s+([A-Z0-9]+\s+)?)*[0-9.]+[smhd]?\s+|\(\s*|' + $cp + '(env\s+(-[A-Za-z]+\s+)*|(sh|bash|zsh)(\.exe)?\s+(-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*\s+(\\"|''))|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
+}
 function Worm-Cmd([string]$name) {
   if (-not $name) { return $null }
   $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $name + '(\\"|["''\s;&|)])'
@@ -1647,7 +1652,7 @@ function Worm-Cmd([string]$name) {
   # One piece of a command before a separator: a character outside quotes, a JSON escape other than
   # \", a '...' span, or a \"...\" span (a shell double-quoted string, its quotes escaped in JSON).
   $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
-  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?' + (Cmd-Wrap $cp)
   $ci = '"command"\s*:\s*"' + $cp + '(node|bun|deno|tsx)(\.exe)?"'
   $ca = '"args"\s*:\s*\[\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $name + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
@@ -1657,27 +1662,28 @@ $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # A script a session-start hook or a folder-open task runs from the project itself, from one of the
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
-# Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself, and after the words that run the rest of a command: nohup, exec, env (as
-# /usr/bin/env too), npx and VAR=value. The same expressions as gird-check.sh's START_PATH and
-# START_CMD (start_cmd).
+# Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -e or -p, and the code of -c
+# only as Cmd-Wrap reads it), or as the command itself, after the words that run the rest of a
+# command (Cmd-Wrap), or when cat pipes it to sh, bash or zsh. The same expressions as gird-check.sh's
+# START_PATH and START_CMD (start_cmd).
 $StartPath = '\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
 $RxStartPath = New-Object regex($StartPath, $RxOpt, $RxTimeout)
 function Start-Cmd([string]$path, [string]$pre, [switch]$cd) {
   $cf = '(\\"|'')?' + $pre + $path + '(\\"|["''\s;&|)])'
   $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
-  $cx = '((nohup|exec|npx|' + $cp + 'env)\s+|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
   $co = '(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^\s"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)\s+'
   $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
-  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
+  $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?' + (Cmd-Wrap $cp)
   $cn = '(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
   $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $path + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
-  $rx = $cs + $cx + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cx + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci
-  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and a command: what runs next
-  # runs from there.
-  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*[^\s;&|"]' }
+  $rx = $cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci +
+    '|' + $cs + 'cat\s+(\\"|'')?' + $pre + $path + '(\\"|'')?\s*\|\s*' + $cp + '(sh|bash|zsh)(\.exe)?([\s;&|)"'']|\\)'
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter or a ./
+  # script, which run a file from there: a cd followed by rm or ls runs nothing. Cmd-Wrap's words come
+  # before the cd only, as in gird-check.sh.
+  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*(' + $cp + $cn + '\s|\.[/\\])' }
   New-Object regex($rx, $RxOpt, $RxTimeout)
 }
 $RxStartCmd = Start-Cmd $StartPath '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'
