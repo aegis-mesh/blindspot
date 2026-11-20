@@ -2809,11 +2809,16 @@ $UHookFiles = @((J $ccd 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settin
 $UhPath = '\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
 $RxUhPath = New-Object regex($UhPath, $RxOpt, $RxTimeout)
 $RxUhCmd = Start-Cmd $UhPath '(([^\s"''\\;&|]|\\\\)*(/|\\\\))?'
+# A command written over several lines (""" or ''' left open on its line) is not read: the file is
+# named as not read in full, never as one with no such hook. As gird-check.sh's TOML_OPEN.
+$RxTomlOpen = New-Object regex('(^|[^A-Za-z0-9_=-])["'']?command["'']?\s*=\s*("""(("|"")?([^"\\]|\\.))*("|"")?\\?|''''''((''|'''')?[^''])*(''|'''')?)$', $RxOpt, $RxTimeout)
 foreach ($uf in @((J $ccd 'settings.json'), (J (J $HomeDir '.claude') 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))) {
   if (-not (Is-File $uf) -or (Too-Big $uf) -or @($UserHooks | Where-Object { $_.File -eq $uf }).Count -gt 0) { continue }
   if ($uf.EndsWith('.toml')) {
     $ut = Read-Text $uf; if ($null -eq $ut) { continue }
-    $els = Toml-Cmds $uf (Toml-SessionStart ($ut -replace "`r", ''))
+    $ut = Toml-SessionStart ($ut -replace "`r", '')
+    try { foreach ($line in $ut.Split("`n")) { if ($RxTomlOpen.IsMatch($line)) { if (-not $AaCut.Contains($uf)) { $AaCut.Add($uf) }; break } } } catch { Mark-Slow $uf }
+    $els = Toml-Cmds $uf $ut
   } else {
     $ft = Flat-Text $uf; if ($null -eq $ft) { continue }
     $els = Json-Elems $ft 'SessionStart'

@@ -1051,6 +1051,14 @@ has    "a hook that runs a file from .claude/package after nohup, from \$HOME, i
 has    "and so is a SessionStart array in an inline hooks table in Codex's config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk2.txt"
 hasnot "but not a hook on another event in that inline table" '~/\.codex/config\.toml' "$WORK/uhk3.txt"
 has    "a TOML literal string with VAR= and a Windows path is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk4.txt"
+# A SessionStart command written over several lines in config.toml (""" or ''') is not read: the file is
+# named as not read in full, never as one with no such hook.
+mkdir -p "$WORK/uhk7/.codex" "$WORK/uhk8/.codex"
+printf '[[hooks.SessionStart]]\ncommand = """\nnode ~/.codex/package/index.js\n"""\n' > "$WORK/uhk7/.codex/config.toml"
+printf "[hooks]\nSessionStart = [\n  { command = '''node ~/.codex/package/index.js\n''' },\n]\n" > "$WORK/uhk8/.codex/config.toml"
+for _h in uhk7 uhk8; do psrun "$WORK/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+has    "a SessionStart command over several lines in config.toml names the file as not read in full" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/config\.toml' "$WORK/uhk7.txt"
+has    "and so does one in ''' quotes in a SessionStart array" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/\.codex/config\.toml' "$WORK/uhk8.txt"
 # A hook and a task that run the planted file after a word that runs the rest of the command (nohup, exec,
 # /usr/bin/env, npx, VAR=value) are worm-style startup too; an echo of those words is not. The projects are
 # listed in byte order of their paths, as both scripts sort them, and What to do says to read those

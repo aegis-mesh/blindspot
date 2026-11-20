@@ -3523,6 +3523,9 @@ toml_cmds() {
 # the file, or a command that deletes it, does not.
 UH_PATH='\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
 UH_CMD=$(start_cmd "$UH_PATH" '(([^[:space:]"'"'"'\\;&|]|\\\\)*(/|\\\\))?')
+# A command written over several lines (""" or ''' left open on its line) is not read: the file is
+# named as not read in full, never as one with no such hook.
+TOML_OPEN='(^|[^A-Za-z0-9_=-])["'"'"']?command["'"'"']?[[:space:]]*=[[:space:]]*("""(("|"")?([^"\\]|\\.))*("|"")?\\?|'"'''(('|'')?[^'])*('|'')?"')$'
 USER_HOOKS=""
 _cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
 UHOOK_FILES="$_ccd/settings.json
@@ -3536,9 +3539,11 @@ $(rowsafe "$_uf")$TAB"*) continue ;; esac
   # An awk or grep that fails names the file as not read, never as one with no such hook (a file that
   # can't be opened is named already).
   case "$_uf" in
-    *.toml) _ut=$(toml_session_start "$_uf") && _ut=$(printf '%s\n' "$_ut" | toml_cmds) ;;
-    *) _ut=$(flat "$_uf" | json_elems SessionStart) ;;
+    *.toml) _ut=$(toml_session_start "$_uf") && _uo=$(printf '%s\n' "$_ut" | grep -cE "$TOML_OPEN"; [ $? -le 1 ]) &&
+            _ut=$(printf '%s\n' "$_ut" | toml_cmds) ;;
+    *) _uo=0; _ut=$(flat "$_uf" | json_elems SessionStart) ;;
   esac || { [ -r "$_uf" ] && cut_file "$_uf"; continue; }
+  [ "${_uo:-0}" -gt 0 ] && cut_file "$_uf"
   _us=$(cmd_scripts "$_ut" "$UH_CMD" "$UH_PATH") || { cut_file "$_uf"; continue; }
   _us=$(printf '%s\n' "$_us" | sed -n -E 's#^\.(claude|codex)/package.*#.\1/package#p' | head -n 1)
   [ -n "$_us" ] && USER_HOOKS="$USER_HOOKS$(rowsafe "$_uf")$TAB$_us
