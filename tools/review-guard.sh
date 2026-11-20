@@ -44,9 +44,12 @@
 #   protected a change under .github/, to a .gitattributes or .gitmodules file, to this guard, its
 #             decision script or its tests, or, at any depth, to what an AI coding agent, editor or
 #             shell opening this repository reads or runs: anything under .claude/ .codex/ .cursor/
-#             .gemini/ .windsurf/ .vscode/ .devcontainer/ .roo/ .kiro/ .zed/ .idea/ .clinerules/,
-#             and any file named .mcp.json, AGENTS.md, CLAUDE.md, GEMINI.md, .cursorrules,
-#             .clinerules, .envrc or .pre-commit-config.yaml
+#             .gemini/ .windsurf/ .vscode/ .devcontainer/ .roo/ .kiro/ .zed/ .idea/ .clinerules/
+#             .amazonq/ .continue/ .junie/ .opencode/, and any file named .mcp.json, AGENTS.md,
+#             AGENTS.override.md, AGENT.md, CLAUDE.md, CLAUDE.local.md, GEMINI.md, .cursorrules,
+#             .clinerules, .windsurfrules, .roorules, .rules, opencode.json, opencode.jsonc,
+#             .aider.conf.yml, .envrc or .pre-commit-config.yaml. An agent's file that is not in
+#             this list is read as any other file.
 # *.ps1 lines are matched without case, as PowerShell reads them; other code with case.
 set -u
 export LC_ALL=C
@@ -161,8 +164,10 @@ is_protected() {
   case "/$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in
     /.github/*|*/.gitattributes|/.gitmodules|/tools/review-guard.sh|/tools/review-guard-decide.sh|/tests/review-guard.sh) return 0 ;;
     */.claude/*|*/.codex/*|*/.cursor/*|*/.gemini/*|*/.windsurf/*|*/.vscode/*|*/.devcontainer/*) return 0 ;;
-    */.roo/*|*/.kiro/*|*/.zed/*|*/.idea/*|*/.clinerules/*) return 0 ;;
+    */.roo/*|*/.kiro/*|*/.zed/*|*/.idea/*|*/.clinerules/*|*/.amazonq/*|*/.continue/*|*/.junie/*|*/.opencode/*) return 0 ;;
     */.mcp.json|*/agents.md|*/claude.md|*/gemini.md|*/.cursorrules|*/.clinerules|*/.envrc|*/.pre-commit-config.yaml) return 0 ;;
+    */claude.local.md|*/agents.override.md|*/agent.md|*/.rules|*/.windsurfrules|*/.roorules) return 0 ;;
+    */opencode.json|*/opencode.jsonc|*/.aider.conf.yml) return 0 ;;
   esac
   return 1
 }

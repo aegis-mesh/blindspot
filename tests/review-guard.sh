@@ -204,6 +204,17 @@ want "AGENTS.md is flagged" 1 '^protected: AGENTS\.md:'
 has "an .envrc is flagged" '^protected: \.envrc:' "$OUT"
 has "a .roo folder is flagged" '^protected: \.roo/rules:' "$OUT"
 
+kase agentfiles <<'EOF'
+mkdir -p .amazonq/rules .continue .junie .opencode/plugin docs
+for f in CLAUDE.local.md AGENTS.override.md AGENT.md .rules .windsurfrules .roorules opencode.json opencode.jsonc .aider.conf.yml \
+  .amazonq/rules/x.md .continue/config.yaml .junie/guidelines.md .opencode/plugin/x.js docs/claude.LOCAL.md; do printf 'x\n' > "$f"; done
+EOF
+want "CLAUDE.local.md is flagged" 1 '^protected: CLAUDE\.local\.md:'
+for _f in AGENTS.override.md AGENT.md .rules .windsurfrules .roorules opencode.json opencode.jsonc .aider.conf.yml \
+  .amazonq/rules/x.md .continue/config.yaml .junie/guidelines.md .opencode/plugin/x.js docs/claude.LOCAL.md; do
+  has "and $_f" "^protected: $(printf '%s' "$_f" | sed 's/\./\\./g'):" "$OUT"
+done
+
 kase sub <<'EOF'
 mkdir -p vendor/sub && git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),vendor/sub"
 EOF
