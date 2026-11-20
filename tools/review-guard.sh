@@ -27,11 +27,12 @@
 #             -e). A shell or interpreter counts wherever its name starts a word, so after sudo,
 #             timeout or nohup too, and a tool counts with its folder (/bin/sh) or .exe. A line that
 #             is only a # comment is skipped, unless it holds $( ${ or a backtick: inside a heredoc
-#             or a here-string such a line runs. In *.ps1, & on a variable is flagged unless the
-#             file assigns that variable a { script block }; & on an expression, a string with a
-#             variable in it or $env: is always flagged, and so are assigning Get-Command,
-#             [Diagnostics.Process]::Start and Import-Module given a variable. Running or sourcing
-#             a file named as data or an image (sh docs/x.png, . notes.txt) is flagged too.
+#             or a here-string such a line runs. In *.ps1, & on a variable is flagged unless its
+#             last assignment in the file at or before that line (or, with none, any) is a
+#             { script block }; & on an expression, a string with a variable in it or $env: is
+#             always flagged, and so are assigning Get-Command, [Diagnostics.Process]::Start and
+#             Import-Module given a variable. Running or sourcing a file named as data or an
+#             image (sh docs/x.png, . notes.txt) is flagged too.
 #   network   in code, an added line that names a network tool where a command starts (after
 #             sudo, timeout, env and the like too, and with its folder or .exe), or a network API
 #             (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
@@ -218,19 +219,31 @@ fixtures() {
       print out
     }' "$1" > "$2"
 }
-# call_operator: in a *.ps1, a run finding for each & $name whose name the file never assigns a
-# { script block } (variable names are compared without case and without a scope: prefix).
+# call_operator: in a *.ps1, a run finding for each & $name whose name's last assignment in the
+# file, at or before that line, is not a { script block }, or, with none before it, that the file
+# never assigns a script block (variable names are compared without case and without a scope:
+# prefix; which function a line is in is not known).
 call_operator() {
   grep -aiE '(^|[;({=[:space:]])&[[:space:]]*[$][A-Za-z_]' "$W/code-run" > "$W/amp" || return 0
+  # Every assignment in the file as "line name kind", kind b for a { script block }.
   git show "$HEAD:$path" 2>/dev/null | tr 'A-Z' 'a-z' |
-    grep -aoE '[$]((script|global|local|private):)?[a-z_][a-z0-9_]*[[:space:]]*=[[:space:]]*[{]' |
-    sed -E 's/^[$]((script|global|local|private):)?([a-z_][a-z0-9_]*).*/\3/' > "$W/blocks"
+    grep -naoE '[$]((script|global|local|private):)?[a-z_][a-z0-9_]*[[:space:]]*[-+*/%]?=[[:space:]]*[^=[:space:]]' |
+    awk '{ i = index($0, ":"); ln = substr($0, 1, i - 1); r = substr($0, i + 2)
+      sub(/^(script|global|local|private):/, "", r); match(r, /^[a-z_][a-z0-9_]*/)
+      n = substr(r, 1, RLENGTH); r = substr(r, RLENGTH + 1); sub(/^[[:space:]]*/, "", r)
+      print ln, n, ((substr(r, 1, 1) == "=" && substr(r, length(r), 1) == "{") ? "b" : "x") }' > "$W/assign"
+  awk '$3 == "b" { print $2 }' "$W/assign" > "$W/blocks"
   while IFS= read -r l; do
     printf '%s\n' "${l#*"$TAB"}" | tr 'A-Z' 'a-z' |
       grep -oE '(^|[;({=[:space:]])&[[:space:]]*[$][a-z_][a-z0-9_:]*' |
       sed -E 's/^.*&[[:space:]]*[$]((script|global|local|private):)?//' > "$W/called"
     while IFS= read -r n; do
-      grep -qxF -- "$n" "$W/blocks" || { finding run "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"; break; }
+      awk -v L="${l%%"$TAB"*}" -v n="$n" '$2 == n && $1 + 0 <= L + 0 { k = $3; f = 1 } END { exit (f ? (k == "b" ? 0 : 1) : 2) }' "$W/assign"
+      case $? in
+        0) continue ;;
+        2) grep -qxF -- "$n" "$W/blocks" && continue ;;
+      esac
+      finding run "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"; break
     done < "$W/called"
   done < "$W/amp"
 }

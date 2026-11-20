@@ -304,6 +304,16 @@ printf '%s\n' '$script:Blk = { param($x) $x }' '& $blk 1' >> gird-check.ps1
 EOF
 want "& on a variable the file sets to a script block is not flagged" 0
 
+kase psamp <<'EOF'
+printf '%s\n' '$runner = { param($a) $a }' '$Runner = Join-Path $dir $found' '& $runner' >> gird-check.ps1
+EOF
+want "& on a script-block name set to something else before the call is flagged" 1 '^run: gird-check\.ps1:5:'
+
+kase psscope <<'EOF'
+printf '%s\n' '$cb = { param($x) $x }' '& $cb 1' 'function F { $cb = Get-Date; $cb }' >> gird-check.ps1
+EOF
+want "& on a name whose last assignment before it is a script block is not flagged" 0
+
 kase pspath <<'EOF'
 printf '%s\n' '$p = "C:\x.exe"; & $p' '$b = Get-Command curl.exe' >> gird-check.ps1
 EOF
