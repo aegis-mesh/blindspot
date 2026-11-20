@@ -2628,10 +2628,40 @@ $N_WIRED = $WiredP.Count
 # reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
 # there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
 # with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
-# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it. As gird-check.sh's
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it, or in an inline
+# table at the top (hooks = { SessionStart = [ ... ] }), that array alone. As gird-check.sh's
 # toml_session_start.
+# The inline table hooks = { ... }, read over as many lines as it takes, its strings skipped: B and A are
+# its { and [ depths, Q the quote of the string it is in, K the key being read at the level of the table
+# itself (its characters but spaces and tabs, the first 64), On while in the array whose key is
+# SessionStart, which is added a line for each line it is on. As gird-check.sh's inl.
+$TomlInlStops = [char[]]@('"', "'", '\', '{', '}', '[', ']', ',')
+function Toml-Inline([string]$l, $s, $out) {
+  $i = 0; $n = $l.Length; $ps = 0
+  while ($i -lt $n) {
+    $k = $l.IndexOfAny($TomlInlStops, $i); if ($k -lt 0) { $k = $n }
+    if ($k -gt $i -and $s.B -eq 1 -and $s.A -eq 0 -and $s.K.Length -lt 64) { $x = $l.Substring($i, $k - $i) -replace '[ \t\r]', ''; $s.K += $x.Substring(0, [Math]::Min($x.Length, 64 - $s.K.Length)) }
+    if ($k -ge $n) { break }
+    $c = [string]$l[$k]; $i = $k + 1
+    if ($s.Q) {
+      if ($c -eq '\' -and $s.Q -eq '"' -and $k + 1 -lt $n) { $c = $l.Substring($k, 2); $i = $k + 2 }
+      elseif ($c -eq $s.Q) { $s.Q = '' }
+    } elseif ($c -eq '"' -or $c -eq "'") { $s.Q = $c }
+    elseif ($c -ne '\') {
+      if ($c -eq '[' -and -not $s.On -and $s.B -eq 1 -and $s.A -eq 0 -and $s.K -cmatch '^["'']?SessionStart["'']?=$') { $s.On = $true; $ps = $k }
+      if ($c -eq '{') { $s.B++ }
+      elseif ($c -eq '}') { $s.B--; if ($s.B -le 0) { if ($s.On) { $out.Add($l.Substring($ps, $k - $ps + 1)) }; $s.On = $false; $s.Il = $false; return } }
+      elseif ($c -eq '[') { $s.A++ }
+      elseif ($c -eq ']') { $s.A--; if ($s.A -le 0 -and $s.On) { $out.Add($l.Substring($ps, $k - $ps + 1)); $s.On = $false } }
+      $s.K = ''; continue
+    }
+    if ($s.B -eq 1 -and $s.A -eq 0 -and $s.K.Length -lt 64) { $s.K += $c }
+  }
+  if ($s.On) { $out.Add($l.Substring($ps)) }
+}
 function Toml-SessionStart([string]$t) {
   $out = New-Object System.Collections.Generic.List[string]; $in = $false; $hk = $false; $top = $true; $d = 0; $ml = ''
+  $is = @{ Il = $false; B = 0; A = 0; Q = ''; K = ''; On = $false }
   foreach ($line in ($t -split "`n")) {
     # A multi-line string (""" or ''') goes on over lines, # and brackets in it too; $br counts [ less ] outside strings.
     $q = ''; $i = 0; $cut = $line.Length; $br = 0; $inml = ($ml -ne '')
@@ -2655,30 +2685,57 @@ function Toml-SessionStart([string]$t) {
       else { $k = $line.IndexOfAny([char[]]@('"', '\'), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '\') { $i = $k + 2 } else { $q = ''; $i = $k + 1 } }
     }
     $l = $line.Substring(0, $cut)
+    if ($is.Il) { Toml-Inline $l $is $out; continue }
     if ($d -gt 0) { $out.Add($l); $d += $br; continue }
     if ($inml) { if ($in) { $out.Add($l) }; continue }
     if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); $top = $false; continue }
     if ($in) { $out.Add($l); continue }
-    if (($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') -or ($top -and $l -cmatch '^\s*hooks\.SessionStart\s*=')) { $out.Add($l); $d = $br }
+    if (($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') -or ($top -and $l -cmatch '^\s*hooks\.SessionStart\s*=')) { $out.Add($l); $d = $br; continue }
+    if ($top -and $l -cmatch '^\s*["'']?hooks["'']?\s*=\s*\{') { $is.B = 0; $is.A = 0; $is.Q = ''; $is.K = ''; $is.On = $false; $is.Il = $true; Toml-Inline $l $is $out }
   }
   $out -join "`n"
+}
+# Each command = "..." in these TOML lines, written as JSON writes it ("command": "..."), for
+# Cmd-Scripts: a literal string ('...' or '''...''') with its \ and " escaped, a basic one ("..." or
+# """...""") as it is. As gird-check.sh's toml_cmds.
+$RxTomlCmd = New-Object regex('(^|[^A-Za-z0-9_=-])["'']?command["'']?\s*=\s*("""(("|"")?([^"\\]|\\.))*("|"")?"""|''''''((''|'''')?[^''])*(''|'''')?''''''|"([^"\\]|\\.)*"|''[^'']*'')', $RxOpt, $RxTimeout)
+function Toml-Cmds([string]$f, [string]$t) {
+  $o = New-Object System.Collections.Generic.List[string]
+  try {
+    foreach ($line in $t.Split("`n")) {
+      foreach ($m in $RxTomlCmd.Matches($line)) {
+        $v = $m.Groups[2].Value
+        if ($v.StartsWith("'''")) { $c = $v.Substring(3, $v.Length - 6).Replace('\', '\\').Replace('"', '\"') }
+        elseif ($v.StartsWith("'")) { $c = $v.Substring(1, $v.Length - 2).Replace('\', '\\').Replace('"', '\"') }
+        elseif ($v.StartsWith('"""')) { $c = $v.Substring(3, $v.Length - 6) }
+        else { $c = $v.Substring(1, $v.Length - 2) }
+        $o.Add('"command": "' + $c + '"')
+      }
+    }
+  } catch { Mark-Slow $f }
+  ,$o
 }
 $UserHooks = New-Object System.Collections.Generic.List[object]
 $cxd = Env-Or 'CODEX_HOME' (J $HomeDir '.codex')
 $ccd = Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')
 $UHookFiles = @((J $ccd 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))
-$RxPkg = New-Object regex('\.(claude|codex)[/\\]+package[/\\]', $RxOpt, $RxTimeout)
+# A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
+# as Start-Cmd reads a command, with any folder before .claude or .codex: a guard that only tests for
+# the file, or a command that deletes it, does not. As gird-check.sh's UH_PATH and UH_CMD.
+$UhPath = '\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
+$RxUhPath = New-Object regex($UhPath, $RxOpt, $RxTimeout)
+$RxUhCmd = Start-Cmd $UhPath '(([^\s"''\\;&|]|\\\\)*(/|\\\\))?'
 foreach ($uf in @((J $ccd 'settings.json'), (J (J $HomeDir '.claude') 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))) {
   if (-not (Is-File $uf) -or (Too-Big $uf) -or @($UserHooks | Where-Object { $_.File -eq $uf }).Count -gt 0) { continue }
   if ($uf.EndsWith('.toml')) {
     $ut = Read-Text $uf; if ($null -eq $ut) { continue }
-    $ut = Toml-SessionStart ($ut -replace "`r", '')
+    $els = Toml-Cmds $uf (Toml-SessionStart ($ut -replace "`r", ''))
   } else {
     $ft = Flat-Text $uf; if ($null -eq $ft) { continue }
-    $ut = (Json-Elems $ft 'SessionStart') -join "`n"
+    $els = Json-Elems $ft 'SessionStart'
   }
-  $m = $null; try { $m = $RxPkg.Match($ut) } catch { Mark-Slow $uf }
-  if ($m -and $m.Success) { $UserHooks.Add(@{ File = $uf; Dir = '.' + $m.Groups[1].Value + '/package' }) }
+  $ss = @(Cmd-Scripts $uf $els $RxUhCmd $RxUhPath)
+  if ($ss.Count -gt 0) { $UserHooks.Add(@{ File = $uf; Dir = ($ss[0] -creplace '^\.(claude|codex)/package.*$', '.$1/package') }) }
 }
 $N_UHOOK = $UserHooks.Count
 

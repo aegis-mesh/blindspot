@@ -3357,20 +3357,23 @@ N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
 # reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
 # there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
 # with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
-# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it.
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it, or in an inline
+# table at the top (hooks = { SessionStart = [ ... ] }), that array alone.
 toml_session_start() { # file: the lines of its SessionStart hook tables, comments removed
   # The first awk prints each line, then a tab, its count of [ less ] outside strings, a tab, and 1 when
   # the line starts inside a multi-line string (""" or '''), which goes on over lines, # and brackets too.
+  # Quotes are compared character by character (c[]), never with substr, which measures the whole line
+  # on macOS's awk: a long line is read in time that grows with its length.
   { awk '
     { n = split($0, c, ""); q = ""; b = 0; m = (ml != "")
       for (i = 1; i <= n; i++) {
         ch = c[i]
         if (ml != "") {
           if (ml == "\"\"\"" && ch == "\\" && i < n) { printf "%s%s", ch, c[i + 1]; i++; continue }
-          if (substr($0, i, 3) == ml) { k = i + 3; while (k <= n && k < i + 5 && c[k] == ch) k++; printf "%s", substr($0, i, k - i); i = k - 1; ml = ""; continue }
+          if (ch == mq && c[i + 1] == ch && c[i + 2] == ch) { k = i + 3; while (k <= n && k < i + 5 && c[k] == ch) k++; for (j = i; j < k; j++) printf "%s", c[j]; i = k - 1; ml = ""; continue }
         } else if (q == "") {
           if (ch == "#") break
-          if ((ch == "\"" || ch == "'"'"'") && substr($0, i, 3) == ch ch ch) { ml = ch ch ch; printf "%s", ml; i += 2; continue }
+          if ((ch == "\"" || ch == "'"'"'") && c[i + 1] == ch && c[i + 2] == ch) { ml = ch ch ch; mq = ch; printf "%s", ml; i += 2; continue }
           if (ch == "\"" || ch == "'"'"'") q = ch
           else if (ch == "[") b++
           else if (ch == "]") b--
@@ -3380,14 +3383,60 @@ toml_session_start() { # file: the lines of its SessionStart hook tables, commen
         printf "%s", ch
       }
       printf "\t%d\t%d\n", b, m }' < "$1"; } 2>/dev/null | awk '
+    # The inline table hooks = { ... }, read a character at a time over as many lines as it takes, its
+    # strings skipped: ib and ia are its { and [ depths, iq the quote of the string it is in, ik the key
+    # being read at the level of the table itself (its characters but spaces and tabs, the first 64),
+    # and the array whose key is SessionStart is printed, a line for each line it is on.
+    function inl(t,   n, c, i, ch) {
+      n = split(t, c, "")
+      for (i = 1; i <= n; i++) {
+        ch = c[i]
+        if (io) printf "%s", ch
+        if (iq != "") {
+          if (ch == "\\" && iq == "\"" && i < n) { i++; if (io) printf "%s", c[i]; ch = ch c[i] }
+          else if (ch == iq) iq = ""
+        } else if (ch == "\"" || ch == "'"'"'") iq = ch
+        else if (ch == "{" || ch == "}" || ch == "[" || ch == "]" || ch == ",") {
+          if (ch == "[" && !io && ib == 1 && ia == 0 && ik ~ /^["'"'"']?SessionStart["'"'"']?=$/) { io = 1; printf "%s", ch }
+          if (ch == "{") ib++
+          else if (ch == "}") { ib--; if (ib <= 0) { if (io) printf "\n"; io = 0; il = 0; return } }
+          else if (ch == "[") ia++
+          else if (ch == "]") { ia--; if (ia <= 0 && io) { io = 0; printf "\n" } }
+          ik = ""; continue
+        }
+        if (ib == 1 && ia == 0 && ch != " " && ch != "\t" && ch != "\r" && length(ik) < 64) ik = ik ch
+      }
+      if (io) printf "\n"
+    }
     BEGIN { top = 1 }
     { match($0, /\t-?[0-9]+\t[01]$/); l = substr($0, 1, RSTART - 1); split(substr($0, RSTART + 1), x, "\t"); b = x[1] + 0 }
+    il { inl(l); next }
     d > 0 { print l; d += b; next }
     x[2] == 1 { if (s) print l; next }
     l ~ /^[[:space:]]*\[/ { t = l; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); top = 0; next }
     s { print l; next }
-    (h && l ~ /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && l ~ /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print l; d = b }'
+    (h && l ~ /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && l ~ /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print l; d = b; next }
+    top && l ~ /^[[:space:]]*["'"'"']?hooks["'"'"']?[[:space:]]*=[[:space:]]*\{/ { ib = 0; ia = 0; iq = ""; ik = ""; io = 0; il = 1; inl(l) }'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -eq 0 ] && [ "$2" -eq 0 ]
 }
+# Each command = "..." in these TOML lines, written as JSON writes it ("command": "..."), for
+# cmd_scripts: a literal string ('...' or '''...''') with its \ and " escaped, a basic one ("..." or
+# """...""") as it is. sed escapes them, in time that grows with the length of the string.
+toml_cmds() {
+  grep -oE '(^|[^A-Za-z0-9_=-])["'"'"']?command["'"'"']?[[:space:]]*=[[:space:]]*("""(("|"")?([^"\\]|\\.))*("|"")?"""|'"'''(('|'')?[^'])*('|'')?'''"'|"([^"\\]|\\.)*"|'"'[^']*'"')' |
+    awk '{ v = substr($0, index($0, "=") + 1); sub(/^[[:space:]]+/, "", v); t = substr(v, 1, 3)
+      if (t == "'"'''"'") print "L" substr(v, 4, length(v) - 6)
+      else if (substr(t, 1, 1) == "'"'"'") print "L" substr(v, 2, length(v) - 2)
+      else if (t == "\"\"\"") print "B" substr(v, 4, length(v) - 6)
+      else print "B" substr(v, 2, length(v) - 2) }' |
+    sed -e '/^L/{' -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e '}' -e 's/^./"command": "/' -e 's/$/"/'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -le 1 ] && [ "$2" -eq 0 ] && [ "$3" -eq 0 ]
+}
+# A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
+# as start_cmd reads a command, with any folder before .claude or .codex: a guard that only tests for
+# the file, or a command that deletes it, does not.
+UH_PATH='\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
+UH_CMD=$(start_cmd "$UH_PATH" '(([^[:space:]"'"'"'\\;&|]|\\\\)*(/|\\\\))?')
 USER_HOOKS=""
 _cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
 UHOOK_FILES="$_ccd/settings.json
@@ -3398,11 +3447,14 @@ for _uf in "$_ccd/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "
   [ -f "$_uf" ] && ! too_big "$_uf" || continue
   case "$USER_HOOKS" in "$(rowsafe "$_uf")$TAB"*|*"
 $(rowsafe "$_uf")$TAB"*) continue ;; esac
+  # An awk or grep that fails names the file as not read, never as one with no such hook (a file that
+  # can't be opened is named already).
   case "$_uf" in
-    *.toml) _ut=$(toml_session_start "$_uf") ;;
+    *.toml) _ut=$(toml_session_start "$_uf") && _ut=$(printf '%s\n' "$_ut" | toml_cmds) ;;
     *) _ut=$(flat "$_uf" | json_elems SessionStart) ;;
-  esac
-  _us=$(printf '%s\n' "$_ut" | grep -oE '\.(claude|codex)[/\\]+package[/\\]' | head -n 1 | sed -E 's#^\.(claude|codex).*#.\1/package#')
+  esac || { [ -r "$_uf" ] && cut_file "$_uf"; continue; }
+  _us=$(cmd_scripts "$_ut" "$UH_CMD" "$UH_PATH") || { cut_file "$_uf"; continue; }
+  _us=$(printf '%s\n' "$_us" | sed -n -E 's#^\.(claude|codex)/package.*#.\1/package#p' | head -n 1)
   [ -n "$_us" ] && USER_HOOKS="$USER_HOOKS$(rowsafe "$_uf")$TAB$_us
 "
 done
