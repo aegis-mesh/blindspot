@@ -80,7 +80,7 @@ nobuilt() {
   awk '/^#.*built by bash tools\/gen\.sh/ { b = 1; next } b && (/^[[:space:]]*$/ || /^#/) { b = 0 } !b' "$W/$1/.gitignore" > "$W/$1.gi" && cat "$W/$1.gi" > "$W/$1/.gitignore"
 }
 # released NAME: the files a release of $W/NAME attaches, one per line, in name order.
-released() { awk '!/^[[:space:]]*#/ && NF == 2 { print $1 }' "$W/$1/.github/release-files" | LC_ALL=C sort; }
+released() { awk '!/^[[:space:]]*#/ && NF == 2 && $2 != "unreleased" { print $1 }' "$W/$1/.github/release-files" | LC_ALL=C sort; }
 # recommit NAME MESSAGE: commits every change in $W/NAME and makes it origin/main.
 recommit() { git -C "$W/$1" commit -q -am "$2" && git -C "$W/$1" push -q origin HEAD:main && git -C "$W/$1" fetch -q origin; }
 # rel NAME ANSWER [ARGS...]: runs the release tool in $W/NAME, typing ANSWER, into $W/NAME.out.
@@ -204,6 +204,20 @@ fresh redir; printf '%s\n' '#!/usr/bin/env bash' 'ROOT=$(pwd); WORK=$(mktemp -d)
 if [ "$LRC" -ne 0 ] && grep -q 'does not name blindspot-q.ps1 blindspot-r.cmd blindspot-s.psm1 which' "$W/redir.list"; then ok "the list check reads quoted and folder-prefixed files gen.sh writes, but not its mktemp folder"; else bad "the list check reads quoted and folder-prefixed files gen.sh writes, but not its mktemp folder" "exit $LRC: $(cat "$W/redir.list")"; fi
 fresh kinds; for f in a.bat b.cmd c.command d.psm1; do : > "$W/kinds/$f"; done; git -C "$W/kinds" add -A; recommit kinds "Scripts of every kind"; lcheck kinds
 if [ "$LRC" -ne 0 ] && grep -q 'does not name a.bat b.cmd c.command d.psm1 which' "$W/kinds.list"; then ok "the list check covers root-level .bat, .cmd, .command and .psm1 files"; else bad "the list check covers root-level .bat, .cmd, .command and .psm1 files" "exit $LRC: $(cat "$W/kinds.list")"; fi
+fresh runnable; R=$W/runnable
+printf '#!/usr/bin/env python3\nprint(1)\n' > "$R/gird-check.py"; printf 'echo 1\n' > "$R/gird-check"; chmod +x "$R/gird-check"
+printf 'echo 1\n' > "$R/a.zsh"; printf 'echo 1\n' > "$R/b.bash"; mkdir -p "$R/docs/mdm" "$R/tests"; printf '#!/bin/sh\necho 1\n' > "$R/docs/mdm/jamf-ea.sh"
+printf '#!/bin/sh\necho 1\n' > "$R/docs/mdm/no-extension"; printf '#!/bin/sh\necho 1\n' > "$R/tests/helper.sh"
+git -C "$R" add -A; recommit runnable "Files people could run, at any depth"; lcheck runnable
+if [ "$LRC" -ne 0 ] && grep -q 'does not name a.zsh b.bash docs/mdm/jamf-ea.sh docs/mdm/no-extension gird-check gird-check.py which' "$W/runnable.list"
+then ok "the list check covers files that are executable, start with #! or have a script's extension, at any depth"; else bad "the list check covers files that are executable, start with #! or have a script's extension, at any depth" "exit $LRC: $(cat "$W/runnable.list")"; fi
+rel runnable 1.3.0 1.3.0
+if refused 'does not name a.zsh b.bash docs/mdm/jamf-ea.sh' runnable && ! grep -q 'Type 1.3.0' "$W/runnable.out"; then ok "and the release refuses them before the review"; else bad "and the release refuses them before the review" "exit $RC: $(tail -n 2 "$W/runnable.out")"; fi
+fresh exempt; printf '#!/bin/sh\necho 1\n' > "$W/exempt/x.sh"; printf '# Not released: a fixture.\nx.sh unreleased\n' >> "$W/exempt/.github/release-files"
+git -C "$W/exempt" add -A; recommit exempt "An exempt script"; lcheck exempt
+if [ "$LRC" -eq 0 ]; then ok "a script the list exempts as unreleased passes the list check"; else bad "a script the list exempts as unreleased passes the list check" "exit $LRC: $(cat "$W/exempt.list")"; fi
+fresh notpath; printf '../x unreleased\n' >> "$W/notpath/.github/release-files"; lcheck notpath
+if [ "$LRC" -ne 0 ] && grep -q 'is not a path in the repository' "$W/notpath.list"; then ok "the list refuses an unreleased path outside the repository"; else bad "the list refuses an unreleased path outside the repository" "exit $LRC: $(cat "$W/notpath.list")"; fi
 fresh noignore; rm "$W/noignore/.gitignore"; lcheck noignore
 if [ "$LRC" -ne 0 ] && grep -q 'no .gitignore' "$W/noignore.list"; then ok "the list check fails with no .gitignore"; else bad "the list check fails with no .gitignore" "exit $LRC: $(cat "$W/noignore.list")"; fi
 fresh nogen; rm "$W/nogen/tools/gen.sh"; lcheck nogen
@@ -248,7 +262,7 @@ C=$(git -C "$W/both" cat-file blob HEAD:gird-check.sh | sha)
 if [ "$RC" -eq 0 ] && grep -qx "$H  blindspot-built.sh" "$GH_LOG.sums" && grep -qx "$C  gird-check.sh" "$GH_LOG.sums"; then ok "a committed file and a built file both land in SHA256SUMS"; else bad "a committed file and a built file both land in SHA256SUMS" "exit $RC: $(tail -n 2 "$W/both.out")"; fi
 # gh's arguments after "release create v1.3.0", up to the first option, as file names.
 ghfiles() { awk 'NR > 3 && /^-/ { exit } NR > 3 { sub(/.*\//, ""); print }' "$GH_LOG" 2>/dev/null; }
-if [ "$(ghfiles)" = "$(git -C "$W/both" show HEAD:.github/release-files | awk '!/^[[:space:]]*#/ && NF == 2 { print $1 }' | LC_ALL=C sort; printf 'SHA256SUMS\nSHA256SUMS.sig')" ] && [ "$(head -n 3 "$GH_LOG" | tr '\n' ' ')" = "release create v1.3.0 " ]
+if [ "$(ghfiles)" = "$(git -C "$W/both" show HEAD:.github/release-files | awk '!/^[[:space:]]*#/ && NF == 2 && $2 != "unreleased" { print $1 }' | LC_ALL=C sort; printf 'SHA256SUMS\nSHA256SUMS.sig')" ] && [ "$(head -n 3 "$GH_LOG" | tr '\n' ' ')" = "release create v1.3.0 " ]
 then ok "and both go to the GitHub release, in name order"; else bad "and both go to the GitHub release, in name order" "gh got: $(tr '\n' ' ' < "$GH_LOG" 2>/dev/null)"; fi
 if grep -q '  gird-fleet.sh$' "$GH_LOG.sums" 2>/dev/null; then ok "the list comes from the reviewed commit, not the working tree"; else bad "the list comes from the reviewed commit, not the working tree"; fi
 

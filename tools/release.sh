@@ -7,7 +7,8 @@
 #
 # --dry-run does every step up to and including checking its own signature, then stops before the
 # tag, the push and the GitHub release, and keeps the files it made for you to look at.
-# --check-list only checks that .github/release-files names every file people run, and exits.
+# --check-list only checks that .github/release-files names every file people run, or exempts it
+# as unreleased, and exits.
 # The release signs the files .github/release-files names, taken from the reviewed commit or built
 # from it by bash tools/gen.sh.
 # ssh-keygen asks for the key's passphrase itself, once for SHA256SUMS and once for the tag; this
@@ -46,33 +47,60 @@ PRINCIPAL=release@blindspot
 NS=blindspot-release
 
 die() { printf 'release: %s\n' "$*" >&2; exit 1; }
+TAB=$(printf '\t')
 say() { printf '%s\n' "$*"; }
 
 # Reads the release list on stdin and prints its entries as "name kind", or says what is wrong.
+# A committed or built entry is a file name; an unreleased one is a path, where * matches any part
+# of a path (tests/*).
 read_list() {
   awk -v f="$RLIST" '
     function no(m) { print "release: " f ", line " NR ": " m > "/dev/stderr"; bad = 1; exit 1 }
     /^[[:space:]]*(#|$)/ { next }
-    NF != 2 || ($2 != "committed" && $2 != "built") { no("not a file name, a space, then committed or built") }
-    $1 !~ /^[A-Za-z0-9_][A-Za-z0-9._-]*$/ || $1 == "SHA256SUMS" || $1 == "SHA256SUMS.sig" || $1 == "allowed_signers" { no($1 " is not a name a release can carry") }
+    NF != 2 || ($2 != "committed" && $2 != "built" && $2 != "unreleased") { no("not a file name, a space, then committed, built or unreleased") }
+    $2 != "unreleased" && ($1 !~ /^[A-Za-z0-9_][A-Za-z0-9._-]*$/ || $1 == "SHA256SUMS" || $1 == "SHA256SUMS.sig" || $1 == "allowed_signers") { no($1 " is not a name a release can carry") }
+    $2 == "unreleased" && ($1 !~ /^[A-Za-z0-9_][A-Za-z0-9._-]*(\/[A-Za-z0-9._*-]+)*$/ || $1 ~ /(^|\/)\.\.?(\/|$)/) { no($1 " is not a path in the repository") }
     seen[$1]++ { no($1 " is listed twice") }
-    { print $1, $2; n++ }
+    { print $1, $2; if ($2 != "unreleased") n++ }
     END { if (!bad && !n) { print "release: " f " names no file" > "/dev/stderr"; exit 1 } }'
 }
-# Prints each file people would run that the entries in $1 do not name: a root-level script
-# (tracked paths on stdin), one the .gitignore at $2 lists under a "built by bash tools/gen.sh"
-# comment, or one the tools/gen.sh at $3 writes by name outside a folder it made with mktemp.
+# blobs [COMMIT]: each file tracked in the index, or in COMMIT, as "mode sha<TAB>path", NUL-ended.
+blobs() {
+  if [ $# -eq 0 ]; then
+    G ls-files -s -z | while IFS= read -r -d '' r; do set -- ${r%%"$TAB"*}; printf '%s %s\t%s\0' "$1" "$2" "${r#*"$TAB"}"; done
+  else
+    G ls-tree -r -z "$1" | while IFS= read -r -d '' r; do set -- ${r%%"$TAB"*}; [ "$2" = blob ] && printf '%s %s\t%s\0' "$1" "$3" "${r#*"$TAB"}"; done
+  fi
+}
+# Prints each file people would run that the entries in $1 neither name nor exempt as unreleased:
+# a tracked file (blobs on stdin) at any depth that is executable, starts with #!, or has a
+# script's extension; one the .gitignore at $2 lists under a "built by bash tools/gen.sh" comment;
+# or one the tools/gen.sh at $3 writes by name outside a folder it made with mktemp.
 unlisted() {
   [ -f "$2" ] || { printf 'release: no .gitignore to read the built files from\n' >&2; return 1; }
   [ -f "$3" ] || { printf 'release: no tools/gen.sh to read the built files from\n' >&2; return 1; }
   _t=$(grep -oE '(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*=\$\(mktemp' "$3" | sed -E 's/^[^A-Za-z_]//; s/=.*//' | tr '\n' ' ')
-  { grep -E '^[^/]+\.(sh|ps1|psm1|bat|cmd|command)$'
+  { shopt -s nocasematch
+    while IFS= read -r -d '' r; do
+      _p=${r#*"$TAB"}; _m=${r%%"$TAB"*}
+      case ${_m%% *} in 100755) printf '%s\n' "$_p"; continue ;; 100644) ;; *) continue ;; esac
+      case $_p in *.sh|*.bash|*.zsh|*.ksh|*.fish|*.ps1|*.psm1|*.psd1|*.bat|*.cmd|*.command|*.py|*.pl|*.rb|*.js|*.vbs) printf '%s\n' "$_p"; continue ;; esac
+      [ "$(G cat-file blob "${_m#* }" 2>/dev/null | head -c 2)" != '#!' ] || printf '%s\n' "$_p"
+    done
     awk '/^#.*built by bash tools\/gen\.sh/ { b = 1; next } /^[[:space:]]*$/ || /^#/ { b = 0; next } b { sub(/^\//, ""); print }' "$2"
     grep -oE '>[[:space:]]*"?(\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/)?[A-Za-z0-9._-]+\.(sh|ps1|psm1|bat|cmd|command)([^A-Za-z0-9._-]|$)' "$3" |
       sed -E 's/^>[[:space:]]*"?//; s/[^A-Za-z0-9._-]$//' |
       awk -v t=" $_t" '{ v = "" } /\// { v = $0; sub(/\/.*/, "", v); gsub(/[${}]/, "", v); sub(/^[^\/]*\//, "") } v == "" || index(t, " " v " ") == 0 { print }'
   } | LC_ALL=C sort -u | while IFS= read -r n; do
-    printf '%s\n' "$1" | awk -v n="$n" '$1 == n { f = 1 } END { exit !f }' || printf '%s\n' "$n"
+    _f=0
+    while read -r _e _k; do
+      # shellcheck disable=SC2254  # an unreleased entry is a pattern: tests/* exempts every test
+      if [ "$_k" = unreleased ]; then case $n in $_e) _f=1; break ;; esac
+      elif [ "$_e" = "$n" ]; then _f=1; break; fi
+    done <<EOF
+$1
+EOF
+    [ "$_f" -eq 1 ] || printf '%s\n' "$n"
   done
 }
 
@@ -98,8 +126,8 @@ G() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
 if [ "$CL" -eq 1 ]; then
   [ -f "$RLIST" ] || die "$RLIST is missing"
   E=$(read_list < "$RLIST") || exit 1
-  M=$(G ls-files | unlisted "$E" .gitignore tools/gen.sh) || exit 1
-  [ -z "$M" ] || die "$RLIST does not name $(printf '%s\n' "$M" | tr '\n' ' ')which people would run: add each, as committed or built, in the pull request that adds it"
+  M=$(blobs | unlisted "$E" .gitignore tools/gen.sh) || exit 1
+  [ -z "$M" ] || die "$RLIST does not name $(printf '%s\n' "$M" | tr '\n' ' ')which people could run: add each, as committed or built, or as unreleased when people never run it from a release, in the pull request that adds it"
   say "$RLIST names every file people run."; exit 0
 fi
 
@@ -173,11 +201,11 @@ awk -v h="## $V," 'index($0, h) == 1 { f = 1 } END { exit !f }' "$W/CHANGELOG.md
 # The files to release come from the reviewed commit's list, never the working tree's.
 G cat-file blob "$SHA:$RLIST" > "$W/release-files" 2>/dev/null || die "$RLIST is not committed at $SHA"
 ENTRIES=$(read_list < "$W/release-files") || die "$RLIST can't be used: fix it by pull request"
-printf '%s\n' "$ENTRIES" | LC_ALL=C sort > "$W/entries"
+printf '%s\n' "$ENTRIES" | awk '$2 != "unreleased"' | LC_ALL=C sort > "$W/entries"
 G cat-file blob "$SHA:.gitignore" > "$W/gitignore" 2>/dev/null || die ".gitignore is not committed at $SHA"
 G cat-file blob "$SHA:tools/gen.sh" > "$W/gen.sh" 2>/dev/null || die "tools/gen.sh is not committed at $SHA"
-MISS=$(G ls-tree --name-only "$SHA" | unlisted "$ENTRIES" "$W/gitignore" "$W/gen.sh") || die "can't check $RLIST"
-[ -z "$MISS" ] || die "$RLIST does not name $(printf '%s\n' "$MISS" | tr '\n' ' ')which people would run: add each by pull request first"
+MISS=$(blobs "$SHA" | unlisted "$ENTRIES" "$W/gitignore" "$W/gen.sh") || die "can't check $RLIST"
+[ -z "$MISS" ] || die "$RLIST does not name $(printf '%s\n' "$MISS" | tr '\n' ' ')which people could run: add each, or exempt it as unreleased, by pull request first"
 
 if [ -n "$PREV" ]; then
   FROM=$PREV; RANGE="$PREV..$SHA"; say "Changes since $PREV:"

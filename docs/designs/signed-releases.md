@@ -20,9 +20,10 @@ A release is a version a maintainer has reviewed and signed. It has three parts.
 - **The files people run**, attached to the GitHub release: every file `.github/release-files` names,
   for macOS, Windows and Linux, fleet and admin files included. Each is either committed, taken as it
   is in the reviewed commit, or built, made from that commit by `bash tools/gen.sh` at release. A
-  pull request that adds a file people run adds its line; `bash tools/release.sh --check-list`, run by
-  the tests, fails when a root-level `.sh`, `.ps1`, `.psm1`, `.bat`, `.cmd` or `.command`, or a file
-  `gen.sh` builds, is missing.
+  pull request that adds a file people run adds its line, and a file people could run but never get
+  from a release (a test, a maintainer tool) gets an `unreleased` line; `bash tools/release.sh
+  --check-list`, run by the tests, fails when a tracked file at any depth that is executable, starts
+  with `#!` or has a script's extension, or a file `gen.sh` builds, is in neither.
 - **A signed list.** `SHA256SUMS` starts with a line `version vX.Y.Z`, then holds the SHA-256 of every
   attached file. `SHA256SUMS.sig` is its signature, made with `ssh-keygen -Y sign` in the namespace
   `blindspot-release`, so a release signature can't be passed off as any other kind. The version is
