@@ -3743,6 +3743,8 @@ N_SSH=0; N_SSH_OPEN=0
 for k in "$H"/.ssh/*; do
   case "$k" in *.pub|*known_hosts*|*config|*authorized_keys*) continue ;; esac
   [ -d "$k" ] && continue
+  # A ~/.ssh that can't be listed leaves the pattern as written: the home scan counts that folder once.
+  [ -e "$k" ] || continue
   fleet_ok "$k" && [ -f "$k" ] || continue
   grep -q 'PRIVATE KEY-----' "$k" 2>/dev/null || continue
   N_SSH=$((N_SSH + 1))

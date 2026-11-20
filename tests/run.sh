@@ -5618,6 +5618,8 @@ for _n in hook all; do mkdir -p "$NR/$_n/.codex"; printf '{"hooks":{"SessionStar
 for _n in ak all; do mkdir -p "$NR/$_n/.ssh"; printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI%s me@laptop\n' "$(rnd 43)" > "$NR/$_n/.ssh/authorized_keys"; chmod 000 "$NR/$_n/.ssh/authorized_keys"; done
 for _n in wf all; do mkdir -p "$NR/$_n/code/app/.github/workflows"; printf 'on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n' > "$NR/$_n/code/app/.github/workflows/ci.yml"; chmod 000 "$NR/$_n/code/app/.github/workflows/ci.yml"; done
 mkdir -p "$NR/all/code/p/.claude"; printf '{"permissions":{"allow":["Bash(ls)"]}}\n' > "$NR/all/code/p/.claude/settings.local.json"; chmod 000 "$NR/all/code/p/.claude/settings.local.json"
+# A ~/.ssh that can't be opened: the folder, and the authorized_keys it may hold, as gird-check.ps1 counts.
+rm -rf "${NR:?}/sshc"; mkdir -p "$NR/sshc/.ssh"; printf 'x\n' > "$NR/sshc/.ssh/id_ed25519"; chmod 000 "$NR/sshc/.ssh"
 nr_is() { # name want home
   _g=$(nr_of "$3"); if [ "$_g" = "$2" ]; then ok "$1"; else bad "$1" "not_read=$_g, want $2"; fi
 }
@@ -5626,7 +5628,8 @@ nr_is "fleet: not_read counts a user hook file it can't read" 1 hook
 nr_is "fleet: not_read counts an authorized_keys it can't read" 1 ak
 nr_is "fleet: not_read counts a workflow it can't read" 1 wf
 nr_is "fleet: not_read counts each file once, however many checks read it" 5 all
-chmod -R u+rw "$NR"
+nr_is "fleet: not_read counts a ~/.ssh it can't open and the authorized_keys it may hold" 2 sshc
+chmod 755 "$NR/sshc/.ssh"; chmod -R u+rw "$NR"
 mkdir -p "$FL/binhome/Library/Safari" "$FL/binhome/.local/bin"; : > "$FL/binhome/.local/bin/aider"; chmod 755 "$FL/binhome/.local/bin/aider"
 users "binhome:$U:$FL/binhome:/bin/zsh"
 fl_run binhome
