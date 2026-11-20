@@ -7220,8 +7220,10 @@ foreach ($ag in $rcAgents) {
   }
 }
 foreach ($h in $RcProj) { $k = "$($h[0])`t$($h[1])`t$($h[2])"; if (-not $rcSeen.ContainsKey($k)) { $rcSeen[$k] = 1; $RemoteList.Add(@{ File = $h[0]; Agent = $h[1]; Rule = $h[2] }) } }
-# A file there but not read, too big to, or not read in full is named in section 2 with the others.
-foreach ($f in @(@(Unread-Files $rcTried $true) + @($rcCuts))) { if ($f -and -not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+# A file there but not read, too big to, or not read in full is named in section 2 with the others,
+# one by one: Unread-Files returns its list whole.
+foreach ($f in (Unread-Files $rcTried $true)) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
+foreach ($f in $rcCuts) { if (-not $Sec2Unread.Contains($f)) { $Sec2Unread.Add($f) } }
 $N_REMOTE = $RemoteList.Count
 # Row 01 counts agents.
 $remoteAg = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)

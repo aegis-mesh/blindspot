@@ -3385,6 +3385,13 @@ printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["^ssh prod$", "^
 dzrun "$WORK/rcr" | tr -s ' \n' '  ' > "$WORK/rcr.txt"
 hasnot "remote commands: an Amazon Q regex for one exact command is not listed" '\^ssh( prod|\\sprod|\\ -T)' "$WORK/rcr.txt"
 has    "remote commands: an Amazon Q regex with a space class then .* is listed" '\^ssh\\s\.\*: runs commands on other machines over SSH' "$WORK/rcr.txt"
+# Two rule files that can't be read are each named as not read, and counted.
+rm -rf "$WORK/rcu"; cp -R "$WORK/clean" "$WORK/rcu"; mkdir -p "$WORK/rcu/.codex/rules" "$WORK/rcu/.gemini/policies"
+printf 'prefix_rule(pattern=["ssh"])\n' > "$WORK/rcu/.codex/rules/a.rules"; printf '[[rule]]\n' > "$WORK/rcu/.gemini/policies/b.toml"
+chmod 000 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
+dzrun "$WORK/rcu" | tr -s ' \n' '  ' > "$WORK/rcu.txt"
+chmod 644 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
+has    "remote commands: two rule files that can't be read are each named as not read" '2 config or settings files could not be read, so the servers, tokens and settings in them were not checked: ~/\.codex/rules/a\.rules ~/\.gemini/policies/b\.toml' "$WORK/rcu.txt"
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/$DAS/Code/User" "$WORK/dz-unr/$DAS/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/$DAS/Code/User/settings.json" > "$WORK/dz-unr/$DAS/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.
