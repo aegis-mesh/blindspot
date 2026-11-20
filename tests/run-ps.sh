@@ -2253,7 +2253,7 @@ printf '{"permissions":{"allow":["Bash(OPENAI_API_KEY=your-openai-key-goes-here 
 psrun "$WORK/ph" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ph.txt"
 has    "a placeholder token is not a token"    'MCP servers +1 server, no tokens in their configs' "$WORK/ph.txt"
 has    "a placeholder key in an allow list is not a key" 'Allow lists +no saved commands with keys' "$WORK/ph.txt"
-has    "no leaks found: row 05 counts the leaks it checks" 'none of the 13 recent leaks or malware it checks' "$WORK/ph.txt"
+has    "no leaks found: row 05 counts the leaks it checks" 'none of the 14 recent leaks or malware it checks' "$WORK/ph.txt"
 
 echo "Zeabur and the LiteLLM leftovers"
 lp()  { psrun "$1" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  '; }
@@ -2264,7 +2264,7 @@ hasnot "no pyc, no malware flag"               'Act now|possible LiteLLM leftove
 # The editor-extension check is counted and has a row when clean; a folder that can't be read is said.
 lpf "$WORK/zb-none" > "$WORK/zb-none-full.txt"
 has    "a clean run shows the editor-extension check" 'Editor extensions +none of [0-9]+ bad versions or [0-9]+ bad extensions checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron' "$WORK/zb-none-full.txt"
-has    "and section 5 counts it"                      'RECENT KEY LEAKS +13 checked' "$WORK/zb-none-full.txt"
+has    "and section 5 counts it"                      'RECENT KEY LEAKS +14 checked' "$WORK/zb-none-full.txt"
 cp -R "$WORK/zb-none" "$WORK/zb-ext"; mkdir -p "$WORK/zb-ext/.cursor/extensions/some.theme-1.0.0"; chmod 000 "$WORK/zb-ext/.cursor/extensions"
 lpf "$WORK/zb-ext" > "$WORK/zb-ext.txt"; lp "$WORK/zb-ext" > "$WORK/zb-ext-c.txt"
 chmod 755 "$WORK/zb-ext/.cursor/extensions"
@@ -2585,7 +2585,7 @@ hasnot "another version in Cursor's folder is not flagged" 'claude-code-2\.1\.31
 hasnot "and the check is done in full"                 'not fully checked|could not be read' "$WORK/dz-cx.txt"
 has    "its fix to remove what it leaves comes first" ' 1\. First remove what the trojanized Claude Code extension leaves: the line in ~/\.ssh/authorized_keys whose key starts AAAAC3NzaC1lZDI1NTE5AAAAIDdvylCEJ \(its comment may read svc-telemetry\), ~/\.config/\.smt, ~/\.config/\.smtk and ~/\.config/smt\.cmd, ~/Library/LaunchAgents/com\.apple\.sysmond\.plist on a Mac, the @reboot line that runs \.smt in your crontab on Linux, the \.stk_ file in your temp folder, and on Windows ~/\.config/smtk, sysmon\.cmd in the Startup folder, the scheduled task SysMon and the same key line in administrators_authorized_keys in the ssh folder of ProgramData\. End any ssh or autossh process that keeps a tunnel open\. Then turn off Remote Login on a Mac .* 2\. Treat this machine as compromised\. Uninstall the extensions listed in section 5 and rotate every key this machine could reach\.' "$WORK/dz-cx.txt"
 has    "the extension's summary row"                  'Recent leaks +signs of malware in an editor extension\. Act now' "$WORK/dz-cx-sum.txt"
-has    "the extension's first fix in the summary"     'First fix: First remove what the trojanized Claude Code extension leaves' "$WORK/dz-cx-sum.txt"
+has    "the extension's first fix in the summary"     'most urgent first 1\. First remove what the trojanized Claude Code extension leaves' "$WORK/dz-cx-sum.txt"
 has    "the result link names the extension's fix that comes first" '&ex=1&wp=0&lo=0&fi=claudeext( |$)' "$WORK/dz-cx.txt"
 # An extension.js of those versions that is missing or can't be read leaves the check not done in full,
 # and is never taken for the trojanized build.
@@ -3350,7 +3350,7 @@ mups() { # home out [compact]
 mups "$WORK/mu-home" "$WORK/mu.txt"
 has    "made-up platform: its row and advice"         'Madeplat +CLI found Madeplat asked customers to rotate stored secrets\.' "$WORK/mu.txt"
 has    "made-up platform: named in the shared fix"    'If you used .*Made Platform, rotate the keys stored there' "$WORK/mu.txt"
-has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +15 checked' "$WORK/mu.txt"
+has    "made-up platform: section 5 counts its row"   'RECENT KEY LEAKS +16 checked' "$WORK/mu.txt"
 has    "made-up startup file and its note"            '~/\.config/madeworm/boot\.cjs starts the Made worm at login' "$WORK/mu.txt"
 has    "a new gh-token-monitor file is a waiting wiper" 'a wiper is waiting ~/\.config/gh-token-monitor-made ' "$WORK/mu.txt"
 has    "made-up npm incident: its sourced line"       'Made npm worm, October 2026: a made-up npm worm for the tests\. example\.com' "$WORK/mu.txt"
@@ -3374,7 +3374,7 @@ has    "and row 05 names it"                          'signs of the Madepkg malw
 rm -rf "$WORK/mu-plat"; cp -R "$WORK/clean" "$WORK/mu-plat"; rm -rf "$WORK/mu-plat/.config/opencode" "$WORK/mu-plat/.railway"
 mups "$WORK/mu-plat" "$WORK/mu-none.txt" compact
 # The summary row is cut at 80 columns, so only its start is checked.
-has    "a clean home: row 05 counts the made-up ones" 'none of the 15 recent leaks or malware it checks' "$WORK/mu-none.txt"
+has    "a clean home: row 05 counts the made-up ones" 'none of the 16 recent leaks or malware it checks' "$WORK/mu-none.txt"
 mkdir -p "$WORK/mu-plat/.config/madeplat"
 mups "$WORK/mu-plat" "$WORK/mu-plat.txt" compact
 has    "a made-up platform alone gives its summary"   'Madeplat CLI found: rotate secrets stored there' "$WORK/mu-plat.txt"
@@ -3951,7 +3951,7 @@ if awk '/^  01  CODING AGENTS/ { s = 1 } /^  02  MCP SERVERS/ { s = 2 } /^  03  
   s == 1 && /OWASP ASI02/ { a = NR } s == 1 && /OWASP ASI04/ { b = NR } s == 2 && /OWASP ASI03/ { c = NR } s == 2 && /OWASP ASI05/ { d = NR }
   END { exit !(a && b && c && d && a < b && c < d) }' "$OW/all.txt"; then ok "owasp: two risks in one section print in code order"
 else bad "owasp: two risks in one section print in code order"; fi
-if awk '/^   05  / { r = NR } /^   OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR } /^   First fix: / { f = NR } END { exit !(r && o && f && r < o && o < f) }' "$OW/all-compact.txt"
+if awk '/^   05  / { r = NR } /^   OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR } /^   What to do, most urgent first/ { f = NR } END { exit !(r && o && f && r < o && o < f) }' "$OW/all-compact.txt"
 then ok "owasp: the summary lists every risk found, in code order, after row 05"; else bad "owasp: the summary lists every risk found, in code order, after row 05" "$(grep -a 'OWASP' "$OW/all-compact.txt")"; fi
 if awk '/^   0[1-5]  / { n[++k] = NR } /^   OWASP Agentic Top 10:/ { o = NR } END { exit !(k == 5 && n[5] - n[1] == 4 && o == n[5] + 2) }' "$OW/all-compact.txt"
 then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; else bad "owasp: summary rows 01 to 05 stay together, the OWASP line after them"; fi
