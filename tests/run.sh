@@ -4957,6 +4957,12 @@ ow_kind remove
 if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an extension to remove alone tags section 05 with ASI04"; else bad "owasp: an extension to remove alone tags section 05 with ASI04" "$OW_ONE"; fi
 ow_kind platforms
 if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: a platform with a leak alone tags section 05 with ASI04"; else bad "owasp: a platform with a leak alone tags section 05 with ASI04" "$OW_ONE"; fi
+ow_kind remote
+if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: a rule that runs commands on other machines alone tags section 01 with ASI02"; else bad "owasp: a rule that runs commands on other machines alone tags section 01 with ASI02" "$OW_ONE"; fi
+ow_kind autostart
+if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05"; else bad "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05" "$OW_ONE"; fi
+ow_kind ssh_planted
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE"; fi
 # The tags in the docs are written by hand: every risk, name and label in the data file is in both.
 OW_MISS=""
 while IFS="$(printf '\t')" read -r _k _r _n _l _rest; do
