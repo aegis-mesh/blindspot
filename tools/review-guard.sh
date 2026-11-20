@@ -13,10 +13,10 @@
 # of file this list does not know is held to the code rules.
 #   hidden    in *.ps1, an added byte that is not printable ASCII, space or tab; in any other file,
 #             a control character (CR included), an invisible or direction-changing character, or
-#             bytes that are not UTF-8; a changed path with a byte that is not printable ASCII; a
-#             binary file, unless it is a png, jpg, gif or webp image under docs/ whose first bytes
-#             are that kind of image; a file named as an image that is not one; a symbolic link or
-#             a submodule
+#             bytes that are not UTF-8; in any file, a NUL byte; a changed path with a byte that is
+#             not printable ASCII; a binary file, unless it is a png, jpg, gif or webp image under
+#             docs/ whose first bytes are that kind of image; a file named as an image that is not
+#             one; a symbolic link or a submodule
 #   mode      a file whose mode changed, such as one made executable
 #   run       in code, an added line that runs text as code: eval and its kin; a shell, interpreter
 #             or trap given text built from a variable (sh -c "$x", su -c "$x", PowerShell
@@ -285,7 +285,12 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
   # Each added line as "+<TAB>number<TAB>text", each removed line as "-<TAB>number<TAB>text".
   # The ---/+++ file header comes only before the first @@, so an added line that starts with ++ is
   # still read as a line.
-  git $DIFF --text -U0 "$BASE...$HEAD" -- ":(literal)$path" > "$W/d" || { echo "review-guard: git diff failed on a file" >&2; exit 2; }
+  git $DIFF --text -U0 "$BASE...$HEAD" -- ":(literal)$path" > "$W/d0" || { echo "review-guard: git diff failed on a file" >&2; exit 2; }
+  # git reads a file as text when its first 8000 bytes hold no NUL. bash drops a NUL and runs the
+  # rest (ev<NUL>al is eval), and grep and awk may stop at one, so a NUL is flagged and read from
+  # here on as ^A, which the hidden rule shows on its line.
+  tr '\000' '\001' < "$W/d0" > "$W/d"
+  cmp -s "$W/d0" "$W/d" || finding hidden "$path" 0 "a NUL byte, shown as ^A on its line"
   awk -v T="$TAB" '
     /^@@ / { h = 1; split($0, a, " "); o = a[2]; n = a[3]; sub(/^-/, "", o); sub(/^\+/, "", n); sub(/,.*/, "", o); sub(/,.*/, "", n); next }
     !h { next }

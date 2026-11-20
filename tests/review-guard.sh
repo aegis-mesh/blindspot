@@ -406,6 +406,15 @@ want "a network tool in a fenced code block of a doc is flagged" 1 '^network: RE
 has "and one in a PowerShell block" '^network: README\.md:11:' "$OUT"
 hasnot "but not a line outside a fenced block" '^network: README\.md:9:' "$OUT"
 
+kase nul <<'EOF'
+_i=0; while [ "$_i" -lt 200 ]; do printf '# padding, so git reads the file as text ......\n'; _i=$((_i + 1)); done > pad.txt
+{ cat pad.txt; printf 'ev\000al "$found"\n'; } >> gird-check.sh
+{ cat pad.txt; printf 'Invoke-Ex\000pression $found\n'; } >> gird-check.ps1; rm pad.txt
+EOF
+want "a NUL byte in a script git reads as text is flagged" 1 '^hidden: gird-check\.sh:0: a NUL byte'
+has "and its line is shown" '^hidden: gird-check\.sh:204: ev\^Aal' "$OUT"
+has "and a NUL byte in gird-check.ps1" '^hidden: gird-check\.ps1:203: Invoke-Ex\^Apression' "$OUT"
+
 kase gen <<'EOF'
 printf '%s\n' '# >>> x: generated from data/x.tsv by tools/gen.sh.' 'X="a https://example.org/a"' '# <<< x' >> gird-check.sh
 EOF
