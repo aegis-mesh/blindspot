@@ -1238,6 +1238,8 @@ $SessSealed = @($SessTable | Where-Object { $_[0] -eq 'sealed' } | ForEach-Objec
 # folder, to a file or a folder, are not followed, as ripgrep and gird-check.sh's perl do not. A
 # pipe, a socket or a device is never listed: opening a pipe waits for a writer, and a device may
 # never end. Text, so the background session check can load it too; it returns the list as one object.
+# Tests only: with GIRD_CHECK_TEST_LIST_HOLD set, a listing waits while that file exists, told to stop
+# or not, as one blocked on a folder that does not answer would.
 $SessListFn = @'
 # A regular file, following a link: what bash's [ -f ] and perl's -f say. PowerShell 7.2 and up
 # say which a file is off Windows (Unix-Kind, from Get-Item); Windows keeps no pipes or devices among
@@ -1262,6 +1264,7 @@ function Empty-Unreadable([string]$p) {
   try { (New-Object IO.FileStream($p, 'Open', 'Read', 'ReadWrite')).Dispose(); $false } catch { $true }
 }
 function Sess-List($roots, $st) {
+  while ($env:GIRD_CHECK_TEST_LIST_HOLD -and (Test-Path -LiteralPath $env:GIRD_CHECK_TEST_LIST_HOLD)) { Start-Sleep -Milliseconds 50 }
   $files = New-Object System.Collections.Generic.List[object]
   $dirs = New-Object System.Collections.Generic.Stack[object]
   foreach ($r in $roots) {
@@ -8045,7 +8048,10 @@ if ($null -ne $AcctEnd -and $null -ne $SessPs) {
 # some, rg.exe gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
 # looked at, because there is none or the check could not start.
 $SESS_TOTAL = [int]$SessSt.Total; $SESS_DONE = [int]$SessSt.Done; $SESS_ZST = [int]$SessSt.Zst; $SESS_UNREAD = [int]$SessSt.Skipped; $SESS_UNREAD_FILES = [int]$SessSt.Unread; $SESS_NOTRUN = 0
-if ($SessEngine -ne 'net' -or -not $SessSt.Listed) {
+# An account run whose session check was stopped before it ended does not list the files again here
+# ($sessCut): a listing that held the check up would hold the run past its time. They are partly checked.
+$sessCut = $OptAcctRun -and $SessSt.Stopped -and ($SessEngine -ne 'net' -or -not $SessSt.Listed)
+if (-not $sessCut -and ($SessEngine -ne 'net' -or -not $SessSt.Listed)) {
   $cnt = @{ Skipped = 0; Stop = $false }
   $sessAll = Sess-List $SessRoots $cnt
   $SESS_TOTAL = $sessAll.Count; $SESS_ZST = @($sessAll | Where-Object { $_.Name.EndsWith('.zst') -or $_.Name.EndsWith('.gz') }).Count; $SESS_UNREAD = [int]$cnt.Skipped
@@ -8107,7 +8113,7 @@ $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
 # check was stopped), a folder that could not be read, or a check or ripgrep that did not end when told to.
-$SESS_PARTIAL = $SessSt.Hung -or ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
+$SESS_PARTIAL = $sessCut -or $SessSt.Hung -or ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
 # The encrypted .pb files in those folders, by agent. A folder that holds none (Antigravity's newer
 # conversations are SQLite, read above) is never named.
 $SessSealedAg = New-Object System.Collections.Generic.List[string]; $SessSealedN = 0
@@ -8423,7 +8429,7 @@ if ($OptAcctRun) {
   # command builds it.
   function Fleet-MvExpand([string]$raw, [string]$from, [bool]$ps) {
     if ($raw -match "^'([^']*)'$") { $x = $Matches[1] } else {
-      if ($raw -match '\$\{[^}]*\$') { return $null }
+      if ($raw -match '\$\{[^}]*\$(?![A-Za-z_])') { return $null }
       $bad = @{ B = $false }
       $x = [regex]::Replace($raw.Replace('"', ''), '\$\{(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)(?::?-(?<d>[^}]*))?\}|\$(?<e>env:)?(?<n>[A-Za-z_][A-Za-z0-9_]*)', [Text.RegularExpressions.MatchEvaluator] {
         param($m)

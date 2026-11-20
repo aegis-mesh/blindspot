@@ -1755,7 +1755,8 @@ SESS_PRE=$KEY_STARTS
 # or start an escape such as \n (a backslash never ends a piece), so a huge database file never loads at once and a piece never ends
 # inside a token, unless a token runs past 8 MB. On TERM, HUP or INT the parent stops its workers;
 # a worker exits when its parent or the script that started everything is gone, so a kill -9 of the
-# script stops them at the next piece.
+# script stops them at the next piece. Tests only: GIRD_CHECK_TEST_LIST_HOLD, a pipe nobody writes to,
+# holds the parent's listing, as a folder that does not answer would.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
 my @passes = map { [map { qr/$_/m } grep { length } split /\n/] } split /\n\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/m; my $owner = getppid(); my $parent = $$; my @kids;
@@ -1764,6 +1765,7 @@ my @f = grep { !-d $_ && -f $_ } @ARGV; my $unread = 0;
 {
   local $SIG{__WARN__} = sub { $unread++ if $_[0] =~ /^Can.t opendir/ };
   my @d = map { "$_/" } grep { -d $_ } @ARGV;
+  if (my $hold = $ENV{GIRD_CHECK_TEST_LIST_HOLD}) { my $x; open($x, "<", $hold) and <$x> }  # tests only
   find({ no_chdir => 1, wanted => sub { exit 0 if getppid() != $owner; push @f, $_ if -f $_ && !-l $_ } }, @d) if @d;
 }
 my %m; $m{$_} = (stat $_)[9] || 0 for @f;
@@ -3743,6 +3745,8 @@ N_SSH=0; N_SSH_OPEN=0
 for k in "$H"/.ssh/*; do
   case "$k" in *.pub|*known_hosts*|*config|*authorized_keys*) continue ;; esac
   [ -d "$k" ] && continue
+  # A ~/.ssh that can't be listed leaves the pattern as written: the home scan counts that folder once.
+  [ -e "$k" ] || continue
   fleet_ok "$k" && [ -f "$k" ] || continue
   grep -q 'PRIVATE KEY-----' "$k" 2>/dev/null || continue
   N_SSH=$((N_SSH + 1))
@@ -8958,6 +8962,9 @@ elif [ "$ALLSESS" -eq 1 ]; then sess_stop wait; else sess_stop; fi
 # some, ripgrep gives no count) and SESS_UNREAD_FILES the files; SESS_NOTRUN the files no engine
 # looked at, because there is none or the check could not start.
 SESS_TOTAL=0; SESS_DONE=0; SESS_ZST=0; SESS_HITS=""; SESS_UNREAD=0; SESS_UNREAD_FILES=0; SESS_NOTRUN=0
+# An account run whose session check was stopped before it ended does not list the files again here
+# (SESS_CUT): a listing that held the check up would hold the run past its time. They are partly checked.
+SESS_CUT=0; [ "$ACCTRUN" -eq 1 ] && [ "$SESS_RC" = stopped ] && SESS_CUT=1
 if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
   SESS_HITS=$(awk -F '\t' '$1 == "H" { print $2 "\t" $3 }' "$SESS_FILE")
   # Under Git Bash a native rg.exe is handed Windows paths and prints them back (C:/Users/...\...):
@@ -8972,13 +8979,14 @@ if [ -n "$SESS_FILE" ] && [ -r "$SESS_FILE" ]; then
     SESS_TOTAL=$(awk -F '\t' '$1 == "T" { print $2; exit }' "$SESS_FILE")
     SESS_DONE=$(grep -c '^D' "$SESS_FILE")
     # Stopped while still listing the files: count them here, none were checked.
-    if [ -z "$SESS_TOTAL" ]; then
+    [ -n "$SESS_TOTAL" ] && SESS_CUT=0
+    if [ -z "$SESS_TOTAL" ] && [ "$SESS_CUT" -eq 0 ]; then
       SESS_TOTAL=$(printf '%s\n' "$SESS_ROOTS" | while IFS= read -r _r; do [ -d "$_r" ] && _r="$_r/"; [ -n "$_r" ] && find -H "$_r" -type f -print0 2>/dev/null; done | tr -cd '\000' | wc -c | tr -d ' ')
     fi
     SESS_ZST=$(grep -c '^Z' "$SESS_FILE")
     SESS_UNREAD_FILES=$(grep -c '^U' "$SESS_FILE")
     SESS_UNREAD=$(awk -F '\t' '$1 == "S" { print $2; exit }' "$SESS_FILE")
-  else
+  elif [ "$SESS_CUT" -eq 0 ]; then
     _roots=(); while IFS= read -r _r; do [ -n "$_r" ] && _roots+=("$_r"); done <<EOF
 $SESS_ROOTS
 EOF
@@ -9055,7 +9063,7 @@ fi
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
 # check was stopped), or a folder that could not be read.
 SESS_PARTIAL=0
-if [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
+if [ "$SESS_CUT" -eq 1 ] || [ "$SESS_UNREAD" -ne 0 ] || { [ "$SESS_TOTAL" -gt 0 ] && { [ "$SESS_NOTRUN" -gt 0 ] || [ "$SESS_DONE" -lt "$SESS_TOTAL" ]; }; }; then SESS_PARTIAL=1; fi
 # A check that was not done in full never leaves the headline green: the home folder was not
 # scanned, the sessions were partly checked, or a key file, part of npm's cache, a Python environment
 # or an extension folder could not be read. The headline then says what it can: no findings in the
@@ -9351,7 +9359,8 @@ if [ "$ACCTRUN" -eq 1 ]; then
     function expand(raw,   x, out, m, d, hasd, v, bad) {
       if (raw ~ /^\047[^\047]*\047$/) x = substr(raw, 2, length(raw) - 2)
       else {
-        if (raw ~ /\$\{[^}]*\$/) return NUL
+        # A default that names plain variables (${X:-$HOME/y}) is followed; any other $ in ${...} gives up.
+        if (raw ~ /\$\{[^}]*\$([^A-Za-z_]|$)/) return NUL
         x = repl(raw, DQ, ""); out = ""; bad = 0
         while (match(x, /\$\{[A-Za-z_][A-Za-z0-9_]*(:?-[^}]*)?\}|\$[A-Za-z_][A-Za-z0-9_]*/)) {
           m = substr(x, RSTART, RLENGTH); out = out substr(x, 1, RSTART - 1); x = substr(x, RSTART + RLENGTH); d = ""; hasd = 0
@@ -9666,7 +9675,11 @@ EOF
     [ -r "$_pf" ] || { _mv_lost=1; continue; }
     _mvz=$(/usr/bin/stat -L -f %z -- "$_pf" 2>/dev/null); case "$_mvz" in ''|*[!0-9]*) _mv_lost=1; continue ;; esac
     [ "$_mvz" -le "$FLEET_MAX" ] || { _mv_lost=1; continue; }
-    if [ "$_mv_files" -ge 64 ] || [ $((_mv_bytes + _mvz)) -gt 16777216 ]; then _mv_lost=1; break; fi
+    # A cap reached counts as a file not read. fish runs each conf.d file by itself, so one left
+    # unread there counts whatever the files read name, as a conf.d it can't list does.
+    if [ "$_mv_files" -ge 64 ] || [ $((_mv_bytes + _mvz)) -gt 16777216 ]; then
+      _mv_lost=1; case "$NL$_pf$NL$_mv_q" in *"$NL$H/.config/fish/conf.d/"*) _mv_named=1 ;; esac; break
+    fi
     _mv_files=$((_mv_files + 1)); _mv_bytes=$((_mv_bytes + _mvz))
     _mvo=$(MV_NAMES="$_mv_names" MV_H="$H" MV_DFLT="$_mv_dflt" MV_VARS="$_mv_vars" MV_OWN="$_mv_own" awk "$FLEET_MV_AWK" "$_pf" 2>/dev/null) || _mv_lost=1
     while IFS="$TAB" read -r _mvk _mvx _mvy; do

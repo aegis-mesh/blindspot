@@ -4983,7 +4983,11 @@ if [ "$OW_ONE" = "top ASI02;01 ASI02;" ]; then ok "owasp: a rule that runs comma
 ow_kind autostart
 if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05"; else bad "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05" "$OW_ONE"; fi
 ow_kind ssh_planted
-if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE"; fi
+# The key is also the incident of the extension that adds it, which tags section 05 with ASI04 by
+# itself, so the kind's own arm in owasp_set is run too: with its field alone set, then 0.
+sed -n '/^# >>> owasp-derive/,/^# <<< owasp-derive/p' "$SCRIPT" > "$OW/derive.sh"
+_osp=$(FA_ssh_planted=1 bash -c '. "$1"; owasp_set ssh_planted && echo set; FA_ssh_planted=0; owasp_set ssh_planted || echo unset' _ "$OW/derive.sh" 2>&1 | tr '\n' ' ')
+if [ "$OW_ONE" = "top ASI04;05 ASI04;" ] && [ "$_osp" = "set unset " ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE, arm: $_osp"; fi
 # The tags in the docs are written by hand: every risk, name and label in the data file is in both.
 OW_MISS=""
 while IFS="$(printf '\t')" read -r _k _r _n _l _rest; do
@@ -5618,6 +5622,8 @@ for _n in hook all; do mkdir -p "$NR/$_n/.codex"; printf '{"hooks":{"SessionStar
 for _n in ak all; do mkdir -p "$NR/$_n/.ssh"; printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI%s me@laptop\n' "$(rnd 43)" > "$NR/$_n/.ssh/authorized_keys"; chmod 000 "$NR/$_n/.ssh/authorized_keys"; done
 for _n in wf all; do mkdir -p "$NR/$_n/code/app/.github/workflows"; printf 'on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n' > "$NR/$_n/code/app/.github/workflows/ci.yml"; chmod 000 "$NR/$_n/code/app/.github/workflows/ci.yml"; done
 mkdir -p "$NR/all/code/p/.claude"; printf '{"permissions":{"allow":["Bash(ls)"]}}\n' > "$NR/all/code/p/.claude/settings.local.json"; chmod 000 "$NR/all/code/p/.claude/settings.local.json"
+# A ~/.ssh that can't be opened: the folder, and the authorized_keys it may hold, as gird-check.ps1 counts.
+rm -rf "${NR:?}/sshc"; mkdir -p "$NR/sshc/.ssh"; printf 'x\n' > "$NR/sshc/.ssh/id_ed25519"; chmod 000 "$NR/sshc/.ssh"
 nr_is() { # name want home
   _g=$(nr_of "$3"); if [ "$_g" = "$2" ]; then ok "$1"; else bad "$1" "not_read=$_g, want $2"; fi
 }
@@ -5626,7 +5632,27 @@ nr_is "fleet: not_read counts a user hook file it can't read" 1 hook
 nr_is "fleet: not_read counts an authorized_keys it can't read" 1 ak
 nr_is "fleet: not_read counts a workflow it can't read" 1 wf
 nr_is "fleet: not_read counts each file once, however many checks read it" 5 all
-chmod -R u+rw "$NR"
+nr_is "fleet: not_read counts a ~/.ssh it can't open and the authorized_keys it may hold" 2 sshc
+chmod 755 "$NR/sshc/.ssh"; chmod -R u+rw "$NR"
+# A session listing that does not end, in the check and when the run would list the files again (the
+# perl engine's held by GIRD_CHECK_TEST_LIST_HOLD, tests only, a pipe nobody writes to, and find by a
+# stand-in that waits while a file is there), as a folder that does not answer would hold both: an
+# account run whose session check was stopped does not list them again, so it prints inside its time,
+# with the key it found and the sessions partly checked. 120 seconds is a safety ceiling.
+if [ -n "$SKIPPING" ]; then skip "fleet: an account run whose session listing does not end still prints inside its time" "$SKIPPING"
+else
+  LH=$FL/lhold; rm -rf "$LH"; mkdir -p "$LH/home/.claude/projects/p" "$LH/home/code/app" "$LH/bin"; printf '{}\n' > "$LH/home/.claude/projects/p/a.jsonl"
+  printf 'AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$LH/home/code/app/.env"; mkfifo "$LH/pipe"; : > "$LH/held"
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */.claude/projects/) while [ -e "%s" ]; do /bin/sleep 0.2; done ;; esac; done\nexec /usr/bin/find "$@"\n' "$LH/held" > "$LH/bin/find"; chmod +x "$LH/bin/find"
+  _t0=$(date +%s)
+  env -i PATH="$LH/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$LH/home" GIRD_CHECK_ACCOUNT_SECONDS=40 GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_TEST_LIST_HOLD="$LH/pipe" \
+    /bin/bash "$SCRIPT" --account-run > "$LH/out" 2> /dev/null < /dev/null &
+  _bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done; _t1=$(date +%s)
+  kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/null; rm -f "$LH/held"
+  if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$LH/out" && grep -q '^sessions_partial=1$' "$LH/out" && grep -q '^end=1$' "$LH/out"
+  then ok "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40"
+  else bad "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$LH/out" | tr '\n' ' ')"; fi
+fi
 mkdir -p "$FL/binhome/Library/Safari" "$FL/binhome/.local/bin"; : > "$FL/binhome/.local/bin/aider"; chmod 755 "$FL/binhome/.local/bin/aider"
 users "binhome:$U:$FL/binhome:/bin/zsh"
 fl_run binhome
@@ -5706,6 +5732,16 @@ mkdir -p "$MV/fifo"; mkfifo "$MV/fifo/.env.sh"
 chmod 600 "$MV/unread/.secret.sh"
 if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
 else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# A path whose default names plain variables, as XDG's usual form does, is followed with
+# XDG_CONFIG_HOME unset, as the account's shell starts: a file there that moves nothing moves nothing.
+# A default with anything else in it ($1 here) can't be told and counts.
+for _n in xdgsrc xdgsrcmv; do mkdir -p "$MV/$_n/.config/sh"; done
+printf 'alias ll="ls -l"\n' > "$MV/xdgsrc/.config/sh/env.sh"; printf 'export CODEX_HOME=/d/codex\n' > "$MV/xdgsrcmv/.config/sh/env.sh"
+_xs=$({ mv_case xdgsrc .bashrc '. "${XDG_CONFIG_HOME:-$HOME/.config}/sh/env.sh"'
+  mv_case xdgsrcmv .bashrc '. "${XDG_CONFIG_HOME:-$HOME/.config}/sh/env.sh"'
+  mv_case xdgsrcarg .bashrc '. "${XDG_CONFIG_HOME:-$1}/sh/env.sh"'; } | tr '\n' ' ')
+if [ "$_xs" = "xdgsrc=0 xdgsrcmv=1 xdgsrcarg=1 " ]; then ok "fleet: a file sourced through XDG_CONFIG_HOME's usual default is read, and a default it can't tell counts"
+else bad "fleet: a file sourced through XDG_CONFIG_HOME's usual default is read, and a default it can't tell counts" "$_xs"; fi
 # zsh reads its startup files from ZDOTDIR, and fish runs every conf.d/*.fish by itself: a folder moved
 # there is found as one moved in ~/.zshrc is. A ZDOTDIR that can't be told counts as moved; one whose
 # files move nothing, and a conf.d that names no listed variable, move nothing.
@@ -5719,6 +5755,23 @@ mkdir -p "$MV/zdot/.zdot" "$MV/zdotok/.zdot"; printf 'export CLAUDE_CONFIG_DIR=/
 } > "$MV/zf0.txt"
 if [ "$(grep -c '=1$' "$MV/zf1.txt")" -eq 3 ] && [ "$(grep -c '=0$' "$MV/zf0.txt")" -eq 2 ]; then ok "fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts"
 else bad "fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts" "$(cat "$MV/zf1.txt" "$MV/zf0.txt" | tr '\n' ' ')"; fi
+# At most 64 files are read. fish runs every conf.d file by itself, so one left unread at the cap counts
+# whatever the files read name. Files a profile sources past it count only where a listed variable is
+# named, as before: here none is.
+mkdir -p "$MV/fishcap/.config/fish/conf.d" "$MV/srccap/.sh.d"
+for _i in $(seq 10 79); do printf 'set -g x%s 1\n' "$_i" > "$MV/fishcap/.config/fish/conf.d/a$_i.fish"; printf 'alias a%s=ls\n' "$_i" > "$MV/srccap/.sh.d/a$_i.sh"; done
+printf 'set -gx CLAUDE_CONFIG_DIR /d/claude\n' > "$MV/fishcap/.config/fish/conf.d/zz.fish"
+_fc=$({ mv_case fishcap .config/fish/config.fish 'set -g fish_greeting ""'; mv_case srccap .bashrc 'for f in ~/.sh.d/*.sh; do . "$f"; done'; } | tr '\n' ' ')
+if [ "$_fc" = "fishcap=1 srccap=0 " ]; then ok "fleet: fish's conf.d files left unread at the cap count, files a profile sources past it do not"
+else bad "fleet: fish's conf.d files left unread at the cap count, files a profile sources past it do not" "$_fc"; fi
+# The usual XDG form of ZDOTDIR is read as a plain one: with XDG_CONFIG_HOME unset, ~/.config/zsh.
+mkdir -p "$MV/zdotxdg/.config/zsh" "$MV/zdotxdgmv/.config/zsh"
+printf 'alias ll="ls -l"\n' > "$MV/zdotxdg/.config/zsh/.zshrc"; printf 'export CLAUDE_CONFIG_DIR=/d/claude\n' > "$MV/zdotxdgmv/.config/zsh/.zshrc"
+_zx=$({ mv_case zdotxdg .zshenv 'export ZDOTDIR=${XDG_CONFIG_HOME:-$HOME/.config}/zsh'
+  mv_case zdotxdgmv .zshenv 'export ZDOTDIR=${XDG_CONFIG_HOME:-$HOME/.config}/zsh'
+  mv_case zdotxdgcmd .zshenv 'export ZDOTDIR=${XDG_CONFIG_HOME:-$(cat ~/.zdot-path)}/zsh'; } | tr '\n' ' ')
+if [ "$_zx" = "zdotxdg=0 zdotxdgmv=1 zdotxdgcmd=1 " ]; then ok "fleet: a ZDOTDIR set through XDG_CONFIG_HOME's usual default is read like a plain one"
+else bad "fleet: a ZDOTDIR set through XDG_CONFIG_HOME's usual default is read like a plain one" "$_zx"; fi
 # Each way a profile can reach a file that moves a folder: from outside the home, two files down, in a
 # loop over a folder's files (bash's and zsh's), through a variable set earlier, and a file placed in
 # a tool's own folder that is not the tool's own script.

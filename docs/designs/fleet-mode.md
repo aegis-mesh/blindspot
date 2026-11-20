@@ -932,6 +932,8 @@ The script then:
    end by the run's time less a margin (10 seconds, or a tenth of the time when that is more), leaves
    the sessions partly checked: the check stops waiting for it then and prints what it found, so its
    lines reach the script before the limit, which the script counts from before the check starts.
+   After a session check it stopped, the check does not list the session files again to count them,
+   as a folder that held the session check could hold that listing too: they read partly checked.
    When the script stops the check at its time limit, the check's own clean-up does not run, so
    ripgrep is not stopped by the check: it ends when its search ends or when the output it writes to
    has no reader left, and the process list below reports it if it is still running.
