@@ -2965,11 +2965,12 @@ Login (J $HomeDir '.gemini/oauth_creds.json') 'Gemini CLI login' 'gemini'
 Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'opencode'
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
 # Data platforms' own files, read where gird-check.sh reads them: Databricks configuration profiles, dbt's
-# profiles.yml (a value taken from env_var is not in the file), and Snowflake's connections.toml and
-# config.toml in the folder Snowflake CLI picks, each listed when a line sets one of the secrets
-# gird-check.sh names.
+# profiles.yml (a value taken from env_var is not in the file; a private_key or password may be a YAML
+# block, its value on the next line that is not blank, indented more than the key), and Snowflake's
+# connections.toml and config.toml in the folder Snowflake CLI picks, each listed when a line sets one
+# of the secrets gird-check.sh names.
 Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret|azure_client_secret|password)[ \t]*='
-Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]'
+Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]|^(?<i>[ \t]*)(password|private_key)[ \t]*:[ \t]*[|>][0-9+-]*[ \t]*(#.*)?\r?\n([ \t]*\r?\n)*\k<i>[ \t]+[^ \t\r\n]'
 $sf = $null
 if ($env:SNOWFLAKE_HOME) { if (Is-Dir $env:SNOWFLAKE_HOME) { $sf = $env:SNOWFLAKE_HOME } }
 elseif (Is-Dir (J $HomeDir '.snowflake')) { $sf = J $HomeDir '.snowflake' }
@@ -7964,11 +7965,13 @@ $ActTable = @(
 # <<< actions
 # A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
 # indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
-# after the { or a , on a line that has one, a # comment cut off first. As gird-check.sh's act_uses.
+# after the { or a , on a line that has one, a # comment cut off first: a # after a space or tab,
+# outside quotes. A , that ends a value is a flow mapping's written over several lines. As
+# gird-check.sh's act_uses.
 function Act-Use([string]$v) {
   if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
     $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { return }; $v = $v.Substring(0, $i)
-  } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' }
+  } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' -replace '[ \t]*,$', '' }
   $at = $v.IndexOf('@'); if ($at -lt 0) { return }
   $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
   if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { return }
@@ -7990,7 +7993,16 @@ function Act-Uses([string]$t) {
       Act-Use $v; continue
     }
     if ($line.IndexOf('{') -lt 0 -or $line -match '^[ \t]*#') { continue }
-    $s = $line; $h = $s.IndexOf(' #'); if ($h -ge 0) { $s = $s.Substring(0, $h) }; $h = $s.IndexOf("`t#"); if ($h -ge 0) { $s = $s.Substring(0, $h) }
+    # The line before its comment: each quote and # found in one pass, a quote opening or closing one
+    # only outside the other kind.
+    $s = $line; $q = ''; $i = 0
+    while (($i = $s.IndexOfAny([char[]]'"''#', $i)) -ge 0) {
+      $c = [string]$s[$i]
+      if ($q) { if ($c -eq $q) { $q = '' } }
+      elseif ($c -ne '#') { $q = $c }
+      elseif ($i -gt 0 -and ($s[$i - 1] -eq ' ' -or $s[$i - 1] -eq "`t")) { $s = $s.Substring(0, $i - 1); break }
+      $i++
+    }
     $c = $s.Split('{')
     for ($i = 1; $i -lt $c.Length; $i++) {
       foreach ($d in $c[$i].Split(',')) {
@@ -8007,7 +8019,7 @@ foreach ($wf in $WfSorted) {
   if (-not (Is-SafeToRead $wf) -or (Too-Big $wf)) { $ActUnread++; continue }
   $t = $null; try { $t = [IO.File]::ReadAllText($wf) } catch { $t = $null }
   if ($null -eq $t) { $ActUnread++; continue }
-  $N_WF++
+  $wfBad = 0
   foreach ($u in @(Act-Uses $t)) {
     $ur = $u[1]; $sha = ''
     if ($ur.Length -eq 40 -and $ur -match '^[0-9a-fA-F]+$') { $sha = $ur.ToLowerInvariant() }
@@ -8018,8 +8030,10 @@ foreach ($wf in $WfSorted) {
         if ((",$($row[3]),").Contains(",$sha,")) { $kind = 'commit' } elseif (-not (",$($row[4]),").Contains(",$sha,") -and $row[5] -ceq 'unsafe') { $kind = 'pin' }
       } else {
         $in = $false; $out = $false
+        # A pattern -clike throws on, such as [9-1], which tools/gen.sh refuses, matches nothing, as in
+        # bash's case, and leaves the workflow not read: never a stopped report.
         foreach ($pt in $row[2].Split(' ')) {
-          if ($pt.StartsWith('!')) { if ($ur -clike $pt.Substring(1)) { $out = $true } } elseif ($ur -clike $pt) { $in = $true }
+          try { if ($pt.StartsWith('!')) { if ($ur -clike $pt.Substring(1)) { $out = $true } } elseif ($ur -clike $pt) { $in = $true } } catch { $wfBad = 1 }
         }
         if ($in -and -not $out) { $kind = 'ref' }
       }
@@ -8030,6 +8044,7 @@ foreach ($wf in $WfSorted) {
       $ActHits.Add(@($wf, $row[1], $shown, $kind, $row[6], $row[7], $row[8]))
     }
   }
+  if ($wfBad) { $ActUnread++ } else { $N_WF++ }
 }
 $N_ACT = $ActHits.Count
 $N_ACT_PROJ = @($ActHits | ForEach-Object { [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($_[0]))) } | Sort-Object -Unique).Count

@@ -165,13 +165,20 @@ def new_kinds():
     }
 
 
+# The published values data/public-values.tsv holds for each key id. The cases below are built from
+# that file, so a line dropped from it would drop its case too and the tests would still pass: a file
+# that holds other ids or counts stops here instead. Adding a value means adding it here.
+PUBLIC_VALUES = {'azurestorage': 2, 'slack': 1, 'stripe': 2, 'supabase': 1}
+
+
 def public_cases(pv):
     """Published values from data/public-values.tsv, completed with random characters."""
-    out = []
+    out, seen = [], {}
     for line in open(pv):
         if line.startswith('#') or not line.strip():
             continue
         i, part, src = line.rstrip('\n').split('\t')
+        seen[i] = seen.get(i, 0) + 1
         if i == 'azurestorage' and 'cosmos-db' in src:
             # The Cosmos DB emulator's Table connection string, as Microsoft writes it.
             out.append((i, 'DefaultEndpointsProtocol=http;AccountName=localhost;Account' 'Key=' + part + b64n(86 - len(part)) + '==;TableEndpoint=http://localhost:8902/;'))
@@ -185,6 +192,11 @@ def public_cases(pv):
         elif i == 'supabase':
             # Supabase CLI's local secret key: 22 characters, _ and an 8-character checksum.
             out.append((i, 'sb' '_secret_' + part + '_' + r(AN, 8)))
+        else:
+            sys.exit('make-keys.py: no case for the published value of %s in %s' % (i, pv))
+    if seen != PUBLIC_VALUES:
+        sys.exit('make-keys.py: %s holds %s published values, the cases expect %s'
+                 % (pv, sorted(seen.items()), sorted(PUBLIC_VALUES.items())))
     return out
 
 

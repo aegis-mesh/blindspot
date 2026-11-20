@@ -3688,9 +3688,9 @@ elif [ "$KEY_FILES" -eq 0 ]; then progress o "No keys in shell profiles, history
 
 # Login files any agent you run can read.
 LOGINS=""; LOGIN_IDS=""
-login() { # file label id [marker regex]
+login() { # file label id [marker regex [awk program that exits 0 for a secret the marker misses]]
   fleet_ok "$1" && [ -f "$1" ] || return
-  if [ -n "${4:-}" ]; then grep -aqE "$4" "$1" 2>/dev/null || return; fi
+  if [ -n "${4:-}" ]; then grep -aqE "$4" "$1" 2>/dev/null || { [ -n "${5:-}" ] && awk "$5" "$1" 2>/dev/null; } || return; fi
   LOGINS="${LOGINS:+$LOGINS, }$2"; LOGIN_IDS="${LOGIN_IDS:+$LOGIN_IDS }$3"
 }
 login "$H/.aws/credentials" "AWS keys" aws
@@ -3723,10 +3723,16 @@ login "$H/.railway/config.json" "Railway login" railway
 # (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
 # else the system's own folder. A file is listed when a line sets one of the secrets its tool's docs
 # name: Databricks' token, client secrets (azure_client_secret for an Entra service principal) and
-# password; dbt's passwords, tokens and an inline private_key; Snowflake's password, OAuth token and
-# client secret, and an inline private key or the password of a key file.
+# password; dbt's passwords, tokens and a private_key in the file, on its line or, for a private_key
+# or password, as a YAML block (| or >, then the value on the next line that is not blank, indented
+# more than the key); Snowflake's password, OAuth token and client secret, and an inline private key
+# or the password of a key file.
 login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret|azure_client_secret|password)[[:space:]]*='
-login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]'
+login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]' '
+  { sub(/\r$/, "") }
+  on { if ($0 ~ /^[ \t]*$/) next; on = 0; if (substr($0, 1, length(w)) == w && substr($0, length(w) + 1) ~ /^[ \t]+[^ \t]/) { f = 1; exit } }
+  /^[ \t]*(password|private_key)[ \t]*:[ \t]*[|>][0-9+-]*[ \t]*(#.*)?$/ { on = 1; match($0, /^[ \t]*/); w = substr($0, 1, RLENGTH) }
+  END { exit !f }'
 _sf=""
 if [ -n "$_sfh" ]; then [ -d "$_sfh" ] && _sf=$_sfh
 elif [ -d "$H/.snowflake" ]; then _sf=$H/.snowflake; fi
@@ -8868,18 +8874,41 @@ actions-cool/maintain-one-comment|actions-cool/maintain-one-comment|v3.3.0 v3.2.
 # <<< actions
 # A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
 # indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
-# after the { or a , on a line that has one, a # comment cut off first. Each line is split on its { and
-# its , once, so the time grows with the size of the file.
+# after the { or a , on a line that has one, a # comment cut off first: a # after a space or tab,
+# outside quotes, so a name such as "Check #1" is not one. A , that ends a value is a flow mapping's
+# written over several lines. Each line is split on its quotes, its { and its , once, so the time grows
+# with the size of the file.
 act_uses() { # workflow: "owner/repo<TAB>ref" for each uses: line, owner/repo in lowercase
   awk '
     function use(v,   q, i, at, a, r, p) {
       q = substr(v, 1, 1)
       if (q == "\"" || q == "\047") { v = substr(v, 2); i = index(v, q); if (i == 0) return; v = substr(v, 1, i - 1) }
-      else { sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v) }
+      else { sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v); sub(/[ \t]*,$/, "", v) }
       at = index(v, "@"); if (at == 0) return
       a = substr(v, 1, at - 1); r = substr(v, at + 1)
       if (a !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/ || r == "" || r ~ /[ \t]/) return
       split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r
+    }
+    # The line before its comment, split once on its double quotes and each piece once on its single
+    # quotes (a gsub over many quotes is slow in some awks). A quote opens or closes a string only
+    # outside the other kind; k and kk count the characters before a piece.
+    function nocmt(s,   nd, d, j, ns, x, m, q, k, kk, h, h2) {
+      if (!index(s, "#")) return s
+      nd = split(s, d, "\""); k = 0; q = ""
+      for (j = 1; j <= nd; j++) {
+        if (j > 1 && q != "\047") q = q == "" ? "\"" : ""
+        if (q != "\"") {
+          if (index(d[j], "\047")) ns = split(d[j], x, "\047"); else { ns = 1; x[1] = d[j] }
+          kk = k
+          for (m = 1; m <= ns; m++) {
+            if (m > 1) q = q == "" ? "\047" : ""
+            if (q == "") { h = index(x[m], " #"); h2 = index(x[m], "\t#"); if (h2 && (!h || h2 < h)) h = h2; if (h) return substr(s, 1, kk + h - 1) }
+            kk += length(x[m]) + 1
+          }
+        }
+        k += length(d[j]) + 1
+      }
+      return s
     }
     { sub(/\r$/, "") }
     nx > 0 {
@@ -8893,8 +8922,7 @@ act_uses() { # workflow: "owner/repo<TAB>ref" for each uses: line, owner/repo in
       use(v); next
     }
     index($0, "{") && $0 !~ /^[ \t]*#/ {
-      s = $0; h = index(s, " #"); if (h) s = substr(s, 1, h - 1); h = index(s, "\t#"); if (h) s = substr(s, 1, h - 1)
-      n = split(s, c, "{")
+      s = nocmt($0); n = split(s, c, "{")
       for (i = 2; i <= n; i++) {
         m = split(c[i], d, ",")
         for (j = 1; j <= m; j++) if (match(d[j], /^[ \t]*["\047]?uses["\047]?[ \t]*:[ \t]*/)) {

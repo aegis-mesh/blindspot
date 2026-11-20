@@ -3636,6 +3636,10 @@ has    "a trivy-action pin to an earlier release is"     '~/code/tvold/\.github/
 GB=$WORK/gb; rm -rf "$GB"; mkdir -p "$GB/code/a/.github/workflows" "$GB/src/github.com/org/repo/.github/workflows" "$GB/a/b/c/d/repo/.github/workflows" \
   "$GB/a/b/c/d/e/repo/.github/workflows" "$GB/AppData/Roaming" "$GB/AppData/Local/Temp"
 printf 'jobs:\n  a:\n    steps:\n      - {uses: tj-actions/changed-files@v40, name: x}\n      - {name: y, uses: "tj-actions/changed-files@v41"}\n      - uses:\n          tj-actions/changed-files@v42\n      # - {uses: tj-actions/changed-files@v43}\n  b:\n    steps: [{uses: actions/checkout@v4}, {uses: tj-actions/changed-files@v44}]\n' > "$GB/code/a/.github/workflows/ci.yml"
+# A # inside a quoted name is not a comment, a quote written twice included, and a flow mapping written
+# over several lines ends its value with a comma; a flow-style step after a quoted name in a comment
+# is still not read.
+printf 'jobs:\n  a:\n    steps:\n      - {name: "Check #1", uses: tj-actions/changed-files@v31}\n      - {name: %s, uses: tj-actions/changed-files@v32}\n      - {name: "x"} # {uses: tj-actions/changed-files@v33}\n      - {\n          name: "Check #3",\n          uses: tj-actions/changed-files@v45.0.7,\n        }\n' "'it''s #2'" > "$GB/code/a/.github/workflows/q.yml"
 for _d in src/github.com/org/repo:v35:yml a/b/c/d/repo:v36:yaml a/b/c/d/e/repo:v37:yml; do
   printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@%s\n' "$(echo "$_d" | cut -d: -f2)" > "$GB/${_d%%:*}/.github/workflows/ci.$(echo "$_d" | cut -d: -f3)"
 done
@@ -3644,6 +3648,10 @@ has    "a flow-style step is read"                      'Uses tj-actions/changed
 has    "and one whose uses: comes after its name"       'Uses tj-actions/changed-files@v41, compromised' "$GB/out.txt"
 has    "a uses: with its value on the next line is read" 'Uses tj-actions/changed-files@v42, compromised' "$GB/out.txt"
 hasnot "a flow-style step in a comment is not read"     'changed-files@v43' "$GB/out.txt"
+has    "a # inside a quoted name does not cut off the uses: after it" 'Uses tj-actions/changed-files@v31, compromised' "$GB/out.txt"
+has    "nor one in single quotes with a quote written twice" 'Uses tj-actions/changed-files@v32, compromised' "$GB/out.txt"
+hasnot "a flow-style step after a quoted name, in a comment, is not read" 'changed-files@v33' "$GB/out.txt"
+has    "a flow mapping over several lines: the comma after the value is not in the ref" 'Uses tj-actions/changed-files@v45\.0\.7, compromised' "$GB/out.txt"
 has    "a step in a flow sequence is read"              'Uses tj-actions/changed-files@v44, compromised' "$GB/out.txt"
 has    "the workflows of a repo 4 folders down are read" '~/src/github\.com/org/repo/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35' "$GB/out.txt"
 has    "and those of a repo 5 folders down"             '~/a/b/c/d/repo/\.github/workflows/ci\.yaml Uses tj-actions/changed-files@v36' "$GB/out.txt"
@@ -3654,6 +3662,18 @@ GA_RUN "$GB" "$GB/deep.txt"
 chmod 755 "$GB/src/github.com/org/repo/.github/workflows"
 has    "a workflows folder that far down that can't be read leaves the row not fully checked" 'GitHub Actions +not fully checked' "$GB/deep.txt"
 SKIPPING=""
+# A ref pattern with a range that runs down, such as v[9-1], which tools/gen.sh refuses, put in a copy
+# of the script: PowerShell's -clike throws on it, and gird-check.ps1 reads it as matching nothing and
+# counts the workflow as not read; bash's case reads it as matching nothing. Either way a use another
+# pattern of the line matches is flagged, and the report reaches its end.
+GR=$WORK/ga-rev; rm -rf "$GR"; mkdir -p "$GR/code/r/.github/workflows" "$GR/code/s/.github/workflows" "$GR/AppData/Roaming" "$GR/AppData/Local/Temp"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@0.28.0\n' > "$GR/code/r/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@v5\n' > "$GR/code/s/.github/workflows/ci.yml"
+sed "s#^\(  ,@('aquasecurity/trivy-action', 'aquasecurity/trivy-action', '\)#\1v[9-1] #" "$SCRIPT" > "$WORK/ga-rev.ps1"
+env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$GR" APPDATA="$GR/AppData/Roaming" LOCALAPPDATA="$GR/AppData/Local" TEMP="$GR/AppData/Local/Temp" \
+  LANG=en_US.UTF-8 "$PWSH" -NoProfile -NonInteractive -File "$WORK/ga-rev.ps1" -Offline 2>&1 | tr -s ' \n' '  ' > "$GR/out.txt"
+has    "a ref pattern with a range that runs down: a use another pattern matches is flagged, and the report ends" 'Uses aquasecurity/trivy-action@0\.28\.0, compromised.*Your AI Exposure Check' "$GR/out.txt"
+has    "and the workflows it is tried on: bash reads them, PowerShell counts them as not read" 'GitHub Actions .*2 workflow files could not be read' "$GR/out.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
@@ -3855,6 +3875,18 @@ cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connec
 for _h in sq win; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
 has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
 hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
+# A dbt private_key or password written as a YAML block (| or >), as a key's PEM lines usually are: its
+# value is on the next line that is not blank, indented more than the key. A block with nothing indented
+# under it holds no secret.
+_pb="-----BEGIN ""PRIVATE KEY-----"; _pe="-----END ""PRIVATE KEY-----"
+for _h in blk blp bln; do cp -R "$WORK/clean" "$LG/$_h"; mkdir -p "$LG/$_h/.dbt"; done
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: |\n        %s\n        %s\n        %s\n' "$_pb" "$(rnd 64)" "$_pe" > "$LG/blk/.dbt/profiles.yml"
+printf 'app:\r\n  outputs:\r\n    dev:\r\n      type: postgres\r\n      password: >-\r\n\r\n        %s\r\n' "$_sec" > "$LG/blp/.dbt/profiles.yml"
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: |\n      private_key_path: /home/me/rsa_key.p8\n' > "$LG/bln/.dbt/profiles.yml"
+for _h in blk blp bln; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "a dbt private_key written as a YAML block is listed" 'dbt warehouse passwords' "$LG/blk.txt"
+has    "and a password in a folded block, its value after a blank line" 'dbt warehouse passwords' "$LG/blp.txt"
+hasnot "but not a YAML block with nothing indented under it" 'dbt warehouse passwords' "$LG/bln.txt"
 psrun "$LG/win" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/winon.txt"
 has    "Windows: Snowflake's file is read from LOCALAPPDATA" 'Snowflake logins' "$LG/winon.txt"
 
