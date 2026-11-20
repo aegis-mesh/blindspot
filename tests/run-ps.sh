@@ -4409,6 +4409,19 @@ for _m in quiet loud; do
   else bad "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "exit $_rc, ended at $((_rgend - _t0))s of $((_t2 - _t0))s, $(grep -E '^(sessions_partial|engine)=' "$FW/rg$_m.out" | tr '\n' ' ')"; fi
   kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
 done
+# A session check that does not end when told, as one blocked in a read would (the .NET engine held
+# with GIRD_CHECK_TEST_SESSIONS_DEAF, tests only): the account run waits for it only until its time
+# less a margin, so its lines, with the key it found and the sessions partly checked, are printed
+# inside the 40 seconds it is given, which gird-fleet.ps1 counts from before this run starts. 120
+# seconds is a safety ceiling.
+fw_home deaf; mkdir -p "$FW/deaf/.claude/projects/p" "$FW/deaf/code/app"; printf '{}\n' > "$FW/deaf/.claude/projects/p/a.jsonl"
+printf 'AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$FW/deaf/code/app/.env"; : > "$FW/deafhold"; _t0=$(date +%s)
+psrun "$FW/deaf" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$FW/deafhold" GIRD_CHECK_TEST_SESSIONS_DEAF=1 -- -AccountRun --account-seconds=40 > "$FW/deaf.out" 2> /dev/null &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done; _t1=$(date +%s)
+kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/null; rm -f "$FW/deafhold"
+if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$FW/deaf.out" && grep -q '^sessions_partial=1$' "$FW/deaf.out" && grep -q '^end=1$' "$FW/deaf.out"
+then ok "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40"
+else bad "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$FW/deaf.out" | tr '\n' ' ')"; fi
 # A ripgrep that closes its output and never ends does not hold up a run by hand, even with
 # -AllSessions: it gets a while (GIRD_CHECK_TEST_GRACE_MS, tests only) and is stopped, and the
 # sessions are partly checked. 120 seconds is a safety ceiling.

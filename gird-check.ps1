@@ -62,10 +62,17 @@ if ($OptAcctRun) {
     try { if (@('S-1-5-18', 'S-1-5-19', 'S-1-5-20') -contains [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { exit 13 } } catch { exit 13 }
   }
   $OptOffline = $true; $OptSave = $false; $OptNoColor = $true; $OptFull = $true; $OptAll = $false; $OptAllSess = $true
-  # The session check stops at three quarters of the time gird-fleet.ps1 gives the run, so what was
-  # found still reaches it, with the sessions partly checked. Its ripgrep is stopped then even while the
-  # rest of the check is still busy, so the run leaves no process behind when gird-fleet.ps1 stops it.
-  if ($AccountSeconds -match '^[0-9]{1,5}$') { $AcctEnd = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds * 3 / 4); $AcctDeadline = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds) }
+  # The session check is told to stop at three quarters of the time gird-fleet.ps1 gives the run. Its
+  # ripgrep is stopped then even while the rest of the check is still busy, so the run leaves no process
+  # behind when gird-fleet.ps1 stops it. A session check that does not end when told (blocked in a read)
+  # is waited for until the time less a margin (10 seconds, or a tenth of the time when that is more),
+  # and no longer: this run starts later than gird-fleet.ps1's clock, so it must print well before the
+  # limit for what it found to reach gird-fleet.ps1, with the sessions partly checked.
+  if ($AccountSeconds -match '^[0-9]{1,5}$') {
+    $acctS = [int]$AccountSeconds; $acctT0 = [DateTime]::UtcNow
+    $AcctEnd = $acctT0.AddSeconds($acctS * 3 / 4)
+    $AcctDeadline = $acctT0.AddSeconds([Math]::Max($acctS * 3 / 4, $acctS - [Math]::Max(10, $acctS / 10)))
+  }
   $AcctOut = [Console]::Out
   [Console]::SetOut([IO.TextWriter]::Null); [Console]::SetError([IO.TextWriter]::Null)
 }
@@ -1293,8 +1300,9 @@ $SessWorker = {
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
   # Tests only: the .NET engine waits while the file named exists; rg.exe gets it as one more root,
-  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held.
-  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }
+  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held. With
+  # GIRD_CHECK_TEST_SESSIONS_DEAF set it waits on when told to stop, as a check blocked in a read would.
+  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and (-not $st.Stop -or $env:GIRD_CHECK_TEST_SESSIONS_DEAF)) { Start-Sleep -Milliseconds 50 } }
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
