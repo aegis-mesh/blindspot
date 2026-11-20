@@ -3,11 +3,14 @@
 #
 #   committed   the file as committed in the reviewed commit
 #   built       made by bash tools/gen.sh from the reviewed commit, at release
+#   unreleased  not released: a path (* matches any part of one) people never run from a release
 #
-# Every root-level .sh, .ps1, .psm1, .bat, .cmd and .command file, and every file tools/gen.sh
-# builds, is named here: a pull
-# request that adds one adds its line too. bash tools/release.sh --check-list checks this, and
-# tests/release.sh runs that check. A name is letters, digits, ".", "_" and "-".
+# Every file people could run is named here: every tracked file, at any depth, that is executable,
+# starts with #!, or ends in .sh, .bash, .zsh, .ksh, .fish, .ps1, .psm1, .psd1, .bat, .cmd,
+# .command, .py, .pl, .rb, .js or .vbs, and every file tools/gen.sh builds. A pull request that
+# adds one adds its line too, or says on an unreleased line, with the reason in a comment above it,
+# why it is not released. bash tools/release.sh --check-list checks this, and tests/release.sh
+# runs that check. A released name is letters, digits, ".", "_" and "-".
 gird-check.ps1 committed
 gird-check.sh committed
 gird-fleet.sh committed
@@ -16,3 +19,8 @@ gird-intune.ps1 committed
 gird-report.ps1 committed
 blindspot-fleet.sh built
 blindspot-fleet.ps1 built
+# The test suites and their helpers: maintainers and CI run them from a checkout.
+tests/* unreleased
+# The maintainers' tools (gen.sh, release.sh, the review guard, strip-comments.ps1, which gen.sh
+# runs to build blindspot-fleet.ps1): run from a checkout, never from a release.
+tools/* unreleased

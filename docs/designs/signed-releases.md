@@ -2,7 +2,10 @@
 
 Status: the release side is built: `tools/release.sh`, tested by `tests/release.sh`. `.github/allowed_signers`
 holds no key yet, so no release has been signed. How gird.ai serves releases is not part of this
-repository.
+repository, and it is not running yet: gird.ai still serves `gird-check.sh`, `gird-check.ps1` and
+`gird-fleet.sh` from `main` (CONTRIBUTING.md, Releases), and the README does not give the commands
+to check a signature yet. "How gird.ai serves it" below is the design it will follow; "Checking a
+download" works on any signed release from its GitHub release page.
 
 For maintainers who cut releases, and for IT teams and others who want to check that the copy of
 Blindspot they downloaded is one the maintainers published.
@@ -20,13 +23,16 @@ A release is a version a maintainer has reviewed and signed. It has three parts.
 - **The files people run**, attached to the GitHub release: every file `.github/release-files` names,
   for macOS, Windows and Linux, fleet and admin files included. Each is either committed, taken as it
   is in the reviewed commit, or built, made from that commit by `bash tools/gen.sh` at release. A
-  pull request that adds a file people run adds its line; `bash tools/release.sh --check-list`, run by
-  the tests, fails when a root-level `.sh`, `.ps1`, `.psm1`, `.bat`, `.cmd` or `.command`, or a file
-  `gen.sh` builds, is missing.
+  pull request that adds a file people run adds its line, and a file people could run but never get
+  from a release (a test, a maintainer tool) gets an `unreleased` line; `bash tools/release.sh
+  --check-list`, run by the tests, fails when a tracked file at any depth that is executable, starts
+  with `#!` or has a script's extension, or a file `gen.sh` builds, is in neither.
 - **A signed list.** `SHA256SUMS` starts with a line `version vX.Y.Z`, then holds the SHA-256 of every
   attached file. `SHA256SUMS.sig` is its signature, made with `ssh-keygen -Y sign` in the namespace
   `blindspot-release`, so a release signature can't be passed off as any other kind. The version is
-  inside what is signed, so an old release's signature can't be reused under a newer number.
+  inside what is signed, so an old release's signature can't be reused under a newer number. That
+  protects only a check that reads the line: gird.ai's does (below), and so does the one under
+  "Checking a download"; a check of the signature and hashes alone accepts an older release.
 
 The keys that may sign are listed in `.github/allowed_signers`. Every line has the same name, so a
 check never needs to know which maintainer signed:
@@ -42,14 +48,17 @@ review, like every file here.
 
 `tools/release.sh <version>` does every step, and publishes nothing until all of them pass.
 
-1. It checks that it runs on a clean checkout at the tip of `origin/main`, that the version is higher
-   than every existing release, and that `CHANGELOG.md` has a section for it. It runs nothing from the
-   checkout until step 2 is confirmed.
+1. It checks that no folder on `PATH` is relative or inside the checkout, before it runs any
+   program, so a file the checkout holds can't run in place of `git` or another tool. It checks that
+   it runs on a clean checkout at the tip of `origin/main`, that the version is higher than every
+   existing release, and that `CHANGELOG.md` has a section for it. It runs nothing from the checkout
+   until step 2 is confirmed.
 2. It lists every commit and changed file since the previous release, and asks the maintainer to type
    the version to confirm they reviewed that range against the
    [security review](../../CONTRIBUTING.md#security-review), with the changes to `tools/`, `.github/`
-   and `.gitattributes` in full. A release is the second look at everything merged since the last
-   one. Then, in a copy of the reviewed commit made with `git archive` and checked file by file
+   and `.gitattributes` in full. Every listing is shown as text whatever `.gitattributes` says, with
+   control bytes made visible, so neither a commit subject nor a changed line can hide or redraw
+   what is shown. A release is the second look at everything merged since the last one. Then, in a copy of the reviewed commit made with `git archive` and checked file by file
    against the commit, it runs `bash tools/gen.sh --check` and `bash tools/gen.sh`. It stops if either fails, if a listed file is missing or empty,
    if a committed file changed, or if `gen.sh` made a file the list does not name as built.
 3. It writes `SHA256SUMS`, one line per listed file in name order, and signs it with the key at `BLINDSPOT_SIGNING_KEY`. `ssh-keygen` asks for
@@ -60,8 +69,9 @@ review, like every file here.
    `SHA256SUMS.sig` and the version's notes from `CHANGELOG.md`.
 
 The repository keeps releases immutable, so a published release's files and tag can't be changed.
-A merge to `main` no longer reaches anyone, so when a merge adds an incident or a malware version,
-cut a release soon after: it is one command.
+Once gird.ai serves signed releases, a merge to `main` reaches no one until the next release, so
+when a merge adds an incident or a malware version, cut a release soon after: it is one command.
+Until then gird.ai serves `main`, and a merge reaches everyone who downloads from it.
 
 ## How gird.ai serves it
 
@@ -89,25 +99,33 @@ release.
 
 ## Checking a download
 
-Most people run the one-line hash check on gird.ai. That shows the file arrived as gird.ai served it,
-and it trusts gird.ai. The signature check below is for IT teams and anyone who wants proof the
-maintainers released it.
+Once gird.ai serves releases, most people will run the one-line hash check it shows. That shows the
+file arrived as gird.ai served it, and it trusts gird.ai. The signature check below is for IT teams
+and anyone who wants proof the maintainers released it.
 
 It needs OpenSSH 8.1 or later for `ssh-keygen -Y verify`: macOS, current Linux distributions, and the
-OpenSSH client on Windows 10 and 11 where its version is 8.1 or later. The README and gird.ai give the
-exact commands for each system, using the files of one release by version, so a new release between
-two downloads can't mix versions. On macOS or Linux:
+OpenSSH client on Windows 10 and 11 where its version is 8.1 or later. Take the files, `SHA256SUMS` and
+`SHA256SUMS.sig` from one release's GitHub page, by its version, so a new release between two
+downloads can't mix versions. `allowed_signers` is the copy of the keys gird.ai serves once it
+serves releases; until then, `.github/allowed_signers` at that release's tag on GitHub. On macOS or
+Linux, in the folder that holds them:
 
 ```sh
 ssh-keygen -Y verify -f allowed_signers -I release@blindspot -n blindspot-release -s SHA256SUMS.sig < SHA256SUMS
+head -n 1 SHA256SUMS
 grep ' gird-check.sh$' SHA256SUMS | shasum -a 256 -c
 ```
 
-On Linux without `shasum`, use `sha256sum -c`. On Windows, run the first line through `cmd /c`, which
-has the `<` that PowerShell lacks, and compare the hash with `Get-FileHash`.
+The first line must say `Good "blindspot-release" signature for release@blindspot`. The second must
+print `version vX.Y.Z` with the version you meant to get, and the releases page must list no newer
+release: the signature alone would also accept an older release served as the newest. The
+third must say `OK`. On Linux without `shasum`, use `sha256sum -c`. On Windows, run the first line
+through `cmd /c`, which has the `<` that PowerShell lacks, read the version line with
+`Get-Content SHA256SUMS -TotalCount 1`, and compare the hash with `Get-FileHash`.
 
-An IT team using fleet mode verifies once, before uploading the files to its MDM
-([fleet guide](../fleet.md)).
+An IT team using fleet mode verifies once, with these steps, before uploading the files to its MDM
+([fleet guide](../fleet.md)). The release notes carry no hashes: `SHA256SUMS` and its signature are
+what to check.
 
 ## Keys
 
