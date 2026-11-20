@@ -3686,9 +3686,9 @@ elif [ "$KEY_FILES" -eq 0 ]; then progress o "No keys in shell profiles, history
 
 # Login files any agent you run can read.
 LOGINS=""; LOGIN_IDS=""
-login() { # file label id [marker regex]
+login() { # file label id [marker regex [awk program that exits 0 for a secret the marker misses]]
   fleet_ok "$1" && [ -f "$1" ] || return
-  if [ -n "${4:-}" ]; then grep -aqE "$4" "$1" 2>/dev/null || return; fi
+  if [ -n "${4:-}" ]; then grep -aqE "$4" "$1" 2>/dev/null || { [ -n "${5:-}" ] && awk "$5" "$1" 2>/dev/null; } || return; fi
   LOGINS="${LOGINS:+$LOGINS, }$2"; LOGIN_IDS="${LOGIN_IDS:+$LOGIN_IDS }$3"
 }
 login "$H/.aws/credentials" "AWS keys" aws
@@ -3721,10 +3721,16 @@ login "$H/.railway/config.json" "Railway login" railway
 # (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
 # else the system's own folder. A file is listed when a line sets one of the secrets its tool's docs
 # name: Databricks' token, client secrets (azure_client_secret for an Entra service principal) and
-# password; dbt's passwords, tokens and an inline private_key; Snowflake's password, OAuth token and
-# client secret, and an inline private key or the password of a key file.
+# password; dbt's passwords, tokens and a private_key in the file, on its line or, for a private_key
+# or password, as a YAML block (| or >, then the value on the next line that is not blank, indented
+# more than the key); Snowflake's password, OAuth token and client secret, and an inline private key
+# or the password of a key file.
 login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret|azure_client_secret|password)[[:space:]]*='
-login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]'
+login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]' '
+  { sub(/\r$/, "") }
+  on { if ($0 ~ /^[ \t]*$/) next; on = 0; if (substr($0, 1, length(w)) == w && substr($0, length(w) + 1) ~ /^[ \t]+[^ \t]/) { f = 1; exit } }
+  /^[ \t]*(password|private_key)[ \t]*:[ \t]*[|>][0-9+-]*[ \t]*(#.*)?$/ { on = 1; match($0, /^[ \t]*/); w = substr($0, 1, RLENGTH) }
+  END { exit !f }'
 _sf=""
 if [ -n "$_sfh" ]; then [ -d "$_sfh" ] && _sf=$_sfh
 elif [ -d "$H/.snowflake" ]; then _sf=$H/.snowflake; fi

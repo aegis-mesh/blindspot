@@ -3875,6 +3875,18 @@ cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connec
 for _h in sq win; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
 has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
 hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
+# A dbt private_key or password written as a YAML block (| or >), as a key's PEM lines usually are: its
+# value is on the next line that is not blank, indented more than the key. A block with nothing indented
+# under it holds no secret.
+_pb="-----BEGIN ""PRIVATE KEY-----"; _pe="-----END ""PRIVATE KEY-----"
+for _h in blk blp bln; do cp -R "$WORK/clean" "$LG/$_h"; mkdir -p "$LG/$_h/.dbt"; done
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: |\n        %s\n        %s\n        %s\n' "$_pb" "$(rnd 64)" "$_pe" > "$LG/blk/.dbt/profiles.yml"
+printf 'app:\r\n  outputs:\r\n    dev:\r\n      type: postgres\r\n      password: >-\r\n\r\n        %s\r\n' "$_sec" > "$LG/blp/.dbt/profiles.yml"
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: |\n      private_key_path: /home/me/rsa_key.p8\n' > "$LG/bln/.dbt/profiles.yml"
+for _h in blk blp bln; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "a dbt private_key written as a YAML block is listed" 'dbt warehouse passwords' "$LG/blk.txt"
+has    "and a password in a folded block, its value after a blank line" 'dbt warehouse passwords' "$LG/blp.txt"
+hasnot "but not a YAML block with nothing indented under it" 'dbt warehouse passwords' "$LG/bln.txt"
 psrun "$LG/win" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/winon.txt"
 has    "Windows: Snowflake's file is read from LOCALAPPDATA" 'Snowflake logins' "$LG/winon.txt"
 

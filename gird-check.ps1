@@ -2962,11 +2962,12 @@ Login (J $HomeDir '.gemini/oauth_creds.json') 'Gemini CLI login' 'gemini'
 Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'opencode'
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
 # Data platforms' own files, read where gird-check.sh reads them: Databricks configuration profiles, dbt's
-# profiles.yml (a value taken from env_var is not in the file), and Snowflake's connections.toml and
-# config.toml in the folder Snowflake CLI picks, each listed when a line sets one of the secrets
-# gird-check.sh names.
+# profiles.yml (a value taken from env_var is not in the file; a private_key or password may be a YAML
+# block, its value on the next line that is not blank, indented more than the key), and Snowflake's
+# connections.toml and config.toml in the folder Snowflake CLI picks, each listed when a line sets one
+# of the secrets gird-check.sh names.
 Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret|azure_client_secret|password)[ \t]*='
-Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]'
+Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]|^(?<i>[ \t]*)(password|private_key)[ \t]*:[ \t]*[|>][0-9+-]*[ \t]*(#.*)?\r?\n([ \t]*\r?\n)*\k<i>[ \t]+[^ \t\r\n]'
 $sf = $null
 if ($env:SNOWFLAKE_HOME) { if (Is-Dir $env:SNOWFLAKE_HOME) { $sf = $env:SNOWFLAKE_HOME } }
 elseif (Is-Dir (J $HomeDir '.snowflake')) { $sf = J $HomeDir '.snowflake' }
