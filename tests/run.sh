@@ -3482,6 +3482,26 @@ mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
 GA_RUN "$GA" "$GA/partial.txt"
 chmod 755 "$GA/code/locked"
 has    "a folder the scan cannot read leaves the row not fully checked" 'GitHub Actions +not fully checked: some folders were not read' "$GA/partial.txt"
+# Tags and pins the sources set apart: every tag of tj-actions/changed-files was moved, the -sec ones too,
+# and two came out after the attack; tj-actions/eslint-changed-files ran it in the versions that used
+# reviewdog/action-setup@v1 or a tag of changed-files, not in those that pinned both or came after; and a
+# trivy-action pin to a release from after 9 April 2025 fetched no compromised setup-trivy.
+GT=$WORK/ga-tags; rm -rf "$GT"; mkdir -p "$GT/AppData/Roaming" "$GT/AppData/Local/Temp"
+for _p in sec late es esok tv tvold; do mkdir -p "$GT/code/$_p/.github/workflows"; done
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v35-sec\n' > "$GT/code/sec/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v45.0.8\n      - uses: tj-actions/changed-files@v45.0.9\n' > "$GT/code/late/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/eslint-changed-files@v24\n      - uses: tj-actions/eslint-changed-files@74f98653675512158746d3136cd2d9326fbfb6e1\n' > "$GT/code/es/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/eslint-changed-files@v18.3.2\n      - uses: tj-actions/eslint-changed-files@v25.3.2\n      - uses: tj-actions/eslint-changed-files@536c35c8184b8bbd361d3703aa63439e0895c340\n' > "$GT/code/esok/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.31.0\n      - uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # v0.34.0\n      - uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478 # 0.34.2\n' > "$GT/code/tv/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0\n' > "$GT/code/tvold/.github/workflows/ci.yml"
+GA_RUN "$GT" "$GT/out.txt"
+has    "a -sec tag of tj-actions/changed-files is flagged" '~/code/sec/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35-sec, compromised on 14 and 15 March 2025\.' "$GT/out.txt"
+hasnot "its two releases after the attack are not"       'changed-files@v45\.0\.[89]' "$GT/out.txt"
+has    "tj-actions/eslint-changed-files by a tag that ran it is flagged" '~/code/es/\.github/workflows/ci\.yml Uses tj-actions/eslint-changed-files@v24, compromised on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025\.' "$GT/out.txt"
+has    "and pinned to a release that ran it"             'Uses tj-actions/eslint-changed-files pinned to a commit, compromised on 11 March 2025, 18:42 to 20:31 UTC' "$GT/out.txt"
+hasnot "but not by a release that pinned both, nor one from after the attack" '~/code/esok/' "$GT/out.txt"
+hasnot "a trivy-action pin to a release from after 9 April 2025 is not flagged" '~/code/tv/' "$GT/out.txt"
+has    "a trivy-action pin to an earlier release is"     '~/code/tvold/\.github/workflows/ci\.yml Uses aquasecurity/trivy-action pinned to a commit, compromised on 19 and 20 March 2026\.' "$GT/out.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python

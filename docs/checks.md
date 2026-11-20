@@ -561,7 +561,8 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
 
 | Action | Compromised | Refs that ran it | A pin to a commit | Source |
 |---|---|---|---|---|
-| `tj-actions/changed-files` | on 14 and 15 March 2025 | `v[1-9]`, `v[1-9].*`, `v[1-3][0-9]`, `v[1-3][0-9].*`, `v4[0-5]`, `v4[0-5].*` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3) |
+| `tj-actions/changed-files` | on 14 and 15 March 2025 | `v[1-9]`, `v[1-9].*`, `v[1-3][0-9]*`, `v4[0-4]*`, `v45`, `v45.0.[0-7]` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3) |
+| `tj-actions/eslint-changed-files` | on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025 | `v8.[1-6]`, `v9*`, `v1[0-9]*`, `v2[0-4]*`, `v25`, `v25.[0-3].*`, except `v18`, `v18.3.*`, `v19.0.[01]`, `v25.3.[1-9]*` | flagged, except the releases the source names safe | [wiz.io](https://www.wiz.io/blog/new-github-action-supply-chain-attack-reviewdog-action-setup) |
 | `reviewdog/action-shellcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `reviewdog/action-composite-template` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `reviewdog/action-staticcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
@@ -1971,8 +1972,10 @@ GitHub Actions workflows:
   action whose code was replaced by malware for a time, from its GitHub advisory or a named research
   firm's post. A use matches on a tag or a malicious commit its source names. A pin to any other
   commit does not, except for the five reviewdog actions, whose advisory says every pin ran the
-  malware, and `trivy-action`, where a pin to a commit from before 9 April 2025 did: a pin to its safe
-  release, 0.35.0, or to 0.36.0 is not flagged.
+  malware, `tj-actions/eslint-changed-files`, whose versions that ran `reviewdog/action-setup@v1`
+  or `tj-actions/changed-files` by tag did (a pin to a release that pinned both, or came after, is
+  not flagged), and `trivy-action`, where a pin to a commit from before 9 April 2025 did: a pin to
+  one of its releases from after that date, v0.31.0 to v0.36.0, is not flagged.
 - Whether a project was hit depends on whether its workflows ran in that window, which no file shows,
   so a match is a project to check, never a compromised machine: check the workflows' run logs from
   then, rotate the secrets they could read, look in the project's history for commits by
