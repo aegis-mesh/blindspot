@@ -862,7 +862,7 @@ $RcSigs = @(
 )
 $RcFiles = @(
   ,@('Claude Code', 'all', 'claude', 'agent', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.json'), '-')
-  ,@('Claude Code', 'all', 'claude', 'agent', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.local.json'), '-')
+  ,@('Claude Code', 'all', 'claude', 'local', (J (Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')) 'settings.local.json'), 'only in sessions you start in your home folder')
   ,@('Codex', 'all', 'codex', 'agent', (J (Env-Or 'CODEX_HOME' (J $HomeDir '.codex')) 'rules/*.rules'), '-')
   ,@('Gemini CLI', 'all', 'gemini-toml', 'agent', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/policies/*.toml'), '-')
   ,@('Gemini CLI', 'all', 'gemini-json', 'agent', (J (Env-Or 'GEMINI_CLI_HOME' $HomeDir) '.gemini/settings.json'), '-')
@@ -2014,7 +2014,7 @@ function Rc-Words([string]$s) { (@($s -split '[ \t\n]+') | Where-Object { $_ -ne
 function Rc-Opn([string]$w) { if ($w -eq '') { '*' } else { $w + ' *' } }
 # $RcTail is $true when text after the wildcard narrows the rule (Bash(ssh * rm)): such a deny or ask
 # rule does not cover every use of a command, so it never drops a hit.
-$RcTail = $false; $RcNc = $false; $RcRaw = ''; $RcNote = ''
+$RcTail = $false; $RcNc = $false; $RcRaw = ''; $RcNote = ''; $RcMr = $false
 function Rc-Fixed([string]$s, [string]$sty) {
   $script:RcTail = $false
   $cut = $false; if ($s.Length -gt 256) { $s = $s.Substring(0, 256); $cut = $true }
@@ -2076,15 +2076,22 @@ function Rc-Alts([string]$r) {
   $out.Add($s.ToString()); ,$out
 }
 # An entry: @(fid, rep, decision, rank, case, kind, words), as gird-check.sh's rc_read prints them.
-# An entry also carries whether it covers no whole command ($RcTail, or $RcNc for the rule), the regex
-# as written ($RcRaw) and when it applies ($RcNote). $RcTail and $RcRaw are reset for the next entry.
+# An entry also carries whether it covers no whole command ($RcTail, or $RcNc for the rule), the rule
+# as written ($RcRaw: a regex, or a rule that allows every command), when it applies ($RcNote) and
+# whether $RcRaw is one of a regex's alternatives ($RcMr). $RcTail, $RcRaw and $RcMr are reset for the
+# next entry.
 function Rc-Out($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$kd, [string]$w) {
-  if ($w -ne '') { $list.Add(@($fid, $rep, $d, [Math]::Round($r, 4), $ci, $kd, $w, ($script:RcTail -or $script:RcNc), $script:RcRaw, $script:RcNote)) }
-  $script:RcTail = $false; $script:RcRaw = ''
+  if ($w -ne '') { $list.Add(@($fid, $rep, $d, [Math]::Round($r, 4), $ci, $kd, $w, ($script:RcTail -or $script:RcNc), $script:RcRaw, $script:RcNote, $script:RcMr)) }
+  $script:RcTail = $false; $script:RcRaw = ''; $script:RcMr = $false
 }
 function Rc-OutRx($list, $fid, $rep, [string]$d, [double]$r, [bool]$ci, [string]$v, [string]$sty, [string]$raw) {
   $raw = $raw -replace '[\t\r\n]', ' '; if ($raw.Length -gt 256) { $raw = $raw.Substring(0, 256) }
-  foreach ($a in (Rc-Alts $v)) { $w = Rc-Fixed $a $sty; $script:RcRaw = $raw; Rc-Out $list $fid $rep $d $r $ci '' $w }
+  $as = Rc-Alts $v
+  foreach ($a in $as) {
+    $w = Rc-Fixed $a $sty
+    if ($as.Count -gt 1) { $script:RcRaw = $a -replace '[\t\r\n]', ' '; $script:RcMr = $true } else { $script:RcRaw = $raw }
+    Rc-Out $list $fid $rep $d $r $ci '' $w
+  }
 }
 function Rc-Trail([string]$s) { $n = 0; for ($i = $s.Length - 1; $i -ge 0 -and $s[$i] -eq '\'; $i--) { $n++ }; $n }
 function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
@@ -2093,16 +2100,20 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
   $cutf = { if (-not $script:RcCt) { $L.Add(@($fid, $rep, 'cut', 0.0, $false, '', '*')) }; $script:RcCt = $true }
   if ($fmt -eq 'codex') {
     $t = Read-Text $f; if ($null -eq $t) { return ,$L }
-    $st = @{ on = $false; dp = 0; bd = 0; kw = ''; id = ''; nt = 0; na = 0; fa = $false; stop = $false; dec = 'allow'; cmt = $false; T = @{}; A = @{} }
+    $st = @{ on = $false; dp = 0; bd = 0; kw = ''; id = ''; nt = 0; na = 0; fa = $false; stop = $false; dec = 'allow'; cmt = $false; cm = $false; T = @{}; A = @{} }
+    # A rule ends: its words up to its first list, then each of that list, then the words after it,
+    # as gird-check.sh reads them.
     $done = {
       $d = switch ($st.dec) { 'prompt' { 'ask' } 'forbidden' { 'deny' } 'allow' { 'allow' } default { '' } }
       if ($d -eq '') { return }
-      $w = ''
+      $w = ''; $x = ''; $j = 0
       for ($k = 1; $k -le $st.nt; $k++) {
-        if ($st.T[$k] -eq [string][char]2) { for ($j = 1; $j -le $st.na; $j++) { $x = $w; if ($x -ne '') { $x += ' ' }; Rc-Out $L $fid $rep $d 0 $false '' (Rc-Opn ($x + $st.A[$j])) }; return }
-        if ($w -ne '') { $w += ' ' }; $w += $st.T[$k]
+        if ($st.T[$k] -eq [string][char]2) { $j = $k }
+        elseif ($j -gt 0) { $x += ' ' + $st.T[$k] }
+        else { if ($w -ne '') { $w += ' ' }; $w += $st.T[$k] }
       }
-      if ($w -ne '') { Rc-Out $L $fid $rep $d 0 $false '' (Rc-Opn $w) }
+      if ($j -eq 0) { if ($w -ne '') { Rc-Out $L $fid $rep $d 0 $st.cm '' (Rc-Opn $w) }; return }
+      for ($k = 1; $k -le $st.na; $k++) { $y = $w; if ($y -ne '') { $y += ' ' }; $script:RcTail = $st.stop; Rc-Out $L $fid $rep $d 0 $st.cm '' (Rc-Opn ($y + $st.A[$k] + $x)) }
     }
     $codep = $null
     $codep = {
@@ -2111,13 +2122,14 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
         $k = $s.IndexOf('prefix_rule(', [StringComparison]::Ordinal); $h = $s.IndexOf([char]'#')
         if ($h -ge 0 -and ($k -lt 0 -or $h -lt $k)) { $st.cmt = $true; return }
         if ($k -lt 0) { return }
-        $s = $s.Substring($k + 12); $st.on = $true; $st.dp = 1; $st.bd = 0; $st.kw = ''; $st.id = ''; $st.nt = 0; $st.na = 0; $st.fa = $false; $st.stop = $false; $st.dec = 'allow'; $st.T = @{}; $st.A = @{}
+        $s = $s.Substring($k + 12); $st.on = $true; $st.dp = 1; $st.bd = 0; $st.kw = ''; $st.id = ''; $st.nt = 0; $st.na = 0; $st.fa = $false; $st.stop = $false; $st.dec = 'allow'; $st.cm = $false; $st.T = @{}; $st.A = @{}
       }
       if ($s.Length -gt 1024) { & $cutf; $st.on = $false; return }
       for ($i = 0; $i -lt $s.Length; $i++) {
         $c = [string]$s[$i]
         if ($c -cmatch '^[A-Za-z0-9_]$') { $st.id += $c; continue }
         if ($c -eq ' ' -or $c -eq "`t") { continue }
+        if ($st.kw -ceq 'canonical_matching' -and $st.bd -eq 0 -and $st.id -ceq 'True') { $st.cm = $true }
         if ($c -eq '=') { $st.kw = $st.id }
         elseif ($c -eq '[') { $st.bd++ }
         elseif ($c -eq ']') { if ($st.kw -ceq 'pattern' -and $st.bd -eq 2) { if ($st.fa) { $st.stop = $true } else { $st.nt++; $st.T[$st.nt] = [string][char]2; $st.fa = $true } }; $st.bd-- }
@@ -2176,7 +2188,7 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
     }
     $endrule = {
       if (-not $g.inr) { return }; $g.inr = $false
-      if ($g.args -or $g.mcp -or -not $g.shell) { return }
+      if ($g.args -or $g.mcp -or -not $g.shell -or $g.bad) { return }
       $d = switch -CaseSensitive ($g.dec) { 'allow' { 'allow' } 'deny' { 'deny' } 'ask_user' { 'ask' } default { '' } }
       if ($d -eq '') { return }
       # A rule with modes applies only in them, as gird-check.sh reads them.
@@ -2188,16 +2200,29 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
         else { $script:RcNote = 'only in ' + $ml + $(if ($md.Count -gt 1) { ' modes' } else { ' mode' }) }
       }
       $r = 4 + $g.pri / 1000
-      if ($g.px.Count -gt 0) { foreach ($x in $g.px) { Rc-Out $L $fid $rep $d $r $false '' (Rc-Fixed $x 'prefix') } }
+      if ($g.px.Count -gt 0) { foreach ($x in $g.px) { $w = Rc-Fixed $x 'prefix'; if ($w -eq '*') { $script:RcRaw = $g.tn }; Rc-Out $L $fid $rep $d $r $false '' $w } }
       elseif ($g.rgx -ne '') { Rc-OutRx $L $fid $rep $d $r $false $g.rgx 'rx' $g.rgx }
-      else { Rc-Out $L $fid $rep $d $r $false '' '*' }
+      else { $script:RcRaw = $g.tn; Rc-Out $L $fid $rep $d $r $false '' '*' }
       $script:RcNc = $false; $script:RcNote = ''
+    }
+    # A rule with a value or a key this does not read is not read, and the file is named as not read
+    # in full, as gird-check.sh reads them. $mls returns the delimiter of a multi-line string the value
+    # opens or holds, and sets $g.ml to it while its lines follow.
+    $cutr = { & $cutf; if ($g.inr) { $g.bad = $true } }
+    $mls = {
+      param([string]$v)
+      $k = $v.IndexOf('"""', [StringComparison]::Ordinal); $n = $v.IndexOf("'''", [StringComparison]::Ordinal)
+      if ($k -lt 0 -and $n -lt 0) { return '' }
+      if ($k -ge 0 -and ($n -lt 0 -or $k -lt $n)) { $d = '"""'; $p = $k } else { $d = "'''"; $p = $n }
+      if ($v.IndexOf($d, $p + 3, [StringComparison]::Ordinal) -lt 0) { $g.ml = $d }
+      $d
     }
     $val = {
       param([string]$k, [string]$v)
-      if ($v.Length -gt 4096) { & $cutf; return }
+      if ($k -cnotmatch '^(toolName|commandPrefix|commandRegex|decision|priority|argsPattern|mcpName|modes)$') { if ($v.Length -gt 4096 -or ((& $mls $v) -ne '' -and $g.ml -ne '')) { & $cutf }; return }
+      if ($v.Length -gt 4096 -or (& $mls $v) -ne '') { & $cutr; return }
       $vals = & $strs $v
-      if ($k -ceq 'toolName') { foreach ($x in $vals) { if ($x -ceq 'run_shell_command' -or $x -ceq 'ShellTool') { $g.shell = $true } } }
+      if ($k -ceq 'toolName') { foreach ($x in $vals) { if ($x -ceq 'run_shell_command' -or $x -ceq 'ShellTool') { $g.shell = $true; $g.tn = $x } } }
       elseif ($k -ceq 'commandPrefix') { $g.px = @($vals) }
       elseif ($k -ceq 'commandRegex') { $g.rgx = ''; if ($vals.Count -gt 0) { $g.rgx = $vals[0] } }
       elseif ($k -ceq 'decision') { $g.dec = ''; if ($vals.Count -gt 0) { $g.dec = $vals[0] } }
@@ -2206,19 +2231,24 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
       elseif ($k -ceq 'mcpName') { $g.mcp = $true }
       elseif ($k -ceq 'modes') { $g.modes = @($vals | Where-Object { $_ -ne '' }) }
     }
-    $acc = ''; $ak = ''
+    $acc = ''; $ak = ''; $g.ml = ''
     foreach ($line in $t.Replace("`r", '').Split("`n")) {
-      if ($acc -ne '') { $acc += ' ' + $line; [void](& $strs $acc); if ($g.bal -or $acc.Length -gt 4096) { & $val $ak $acc; $acc = '' }; continue }
-      if ($line -cmatch '^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$') { & $endrule; $g.inr = $true; $g.shell = $false; $g.px = @(); $g.rgx = ''; $g.dec = ''; $g.pri = 0; $g.args = $false; $g.mcp = $false; $g.modes = @(); continue }
+      if ($g.ml -ne '') { if ($line.IndexOf($g.ml, [StringComparison]::Ordinal) -ge 0) { $g.ml = '' }; continue }
+      if ($acc -ne '') { $acc += ' ' + $line; if ($acc.Length -gt 4096) { & $val $ak $acc; $acc = ''; continue }; [void](& $strs $acc); if ($g.bal) { & $val $ak $acc; $acc = '' }; continue }
+      if ($line -match '^[ \t]*#') { continue }
+      if ($line -cmatch '^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$') { & $endrule; $g.inr = $true; $g.shell = $false; $g.px = @(); $g.rgx = ''; $g.dec = ''; $g.pri = 0; $g.args = $false; $g.mcp = $false; $g.modes = @(); $g.bad = $false; $g.tn = ''; continue }
       if ($line -match '^[ \t]*\[') { & $endrule; continue }
-      if ($g.inr) {
-        $mm = [regex]::Match($line, '^[ \t]*([A-Za-z_]+)[ \t]*=[ \t]*')
-        if ($mm.Success) {
-          $k = $mm.Groups[1].Value; $v = $line.Substring($mm.Length)
-          if ($v.StartsWith('[')) { [void](& $strs $v); if (-not $g.bal) { $acc = $v; $ak = $k; continue } }
-          & $val $k $v
-        }
+      $mm = [regex]::Match($line, '^[ \t]*([A-Za-z_]+)[ \t]*=[ \t]*')
+      # A key this does not read: in a rule, a quoted or dotted one may be one of its keys.
+      if (-not $mm.Success) {
+        if ($g.inr -and $line -match '^[ \t]*([A-Za-z0-9_-]+[ \t]*\.|["''])') { & $cutr; [void](& $mls $line) }
+        elseif ((& $mls $line) -ne '' -and $g.ml -ne '') { & $cutf }
+        continue
       }
+      if (-not $g.inr) { if ((& $mls $line) -ne '' -and $g.ml -ne '') { & $cutf }; continue }
+      $k = $mm.Groups[1].Value; $v = $line.Substring($mm.Length)
+      if ($v.StartsWith('[') -and $v.Length -le 4096) { [void](& $strs $v); if (-not $g.bal) { $acc = $v; $ak = $k; continue } }
+      & $val $k $v
     }
     if ($acc -ne '') { & $val $ak $acc }
     & $endrule
@@ -2234,31 +2264,42 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
     if ($fmt -eq 'claude' -and $str) {
       $mm = [regex]::Match($p, '^\x1cpermissions\x1c(allow|ask|deny)\[\]$')
       if (-not $mm.Success) { continue }
-      $d = $mm.Groups[1].Value; $v = Rc-Unq $v
-      if ($v -ceq 'Bash' -or $v -ceq 'PowerShell') { Rc-Out $L $fid $rep $d 0 $false $v '*' }
-      else { $mm = [regex]::Match($v, '^(Bash|PowerShell)\('); if ($mm.Success -and $v.EndsWith(')')) { Rc-Out $L $fid $rep $d 0 $false $mm.Groups[1].Value (Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - 1) 'claude') } }
+      # Json-Leaves keeps the first 4096 characters of a longer string and ends it in [char]3 ($lg): a
+      # rule is read only as far as its first 256 (Rc-Fixed), as gird-check.sh reads it.
+      $d = $mm.Groups[1].Value; $v = Rc-Unq $v; $lg = $v.EndsWith([string][char]3, [StringComparison]::Ordinal); if ($lg) { $v = $v.Substring(0, $v.Length - 1) }
+      # Bash and PowerShell are two tools (kind), and PowerShell rules match without case.
+      if ($v -ceq 'Bash' -or $v -ceq 'PowerShell') { $script:RcRaw = $v; Rc-Out $L $fid $rep $d 0 $false $v '*' }
+      else { $mm = [regex]::Match($v, '^(Bash|PowerShell)\('); if ($mm.Success -and ($lg -or $v.EndsWith(')'))) { $kd = $mm.Groups[1].Value; $tl = 1; if ($lg) { $tl = 0 }; $w = Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - $tl) 'claude'; if ($w -eq '*') { $script:RcRaw = $v }; Rc-Out $L $fid $rep $d 0 ($kd -ceq 'PowerShell') $kd $w } }
     } elseif ($fmt -eq 'gemini-json' -and $str) {
-      $v = Rc-Unq $v; $sh = ($v -ceq 'run_shell_command' -or $v -ceq 'ShellTool')
+      $v = Rc-Unq $v; $lg = $v.EndsWith([string][char]3, [StringComparison]::Ordinal); if ($lg) { $v = $v.Substring(0, $v.Length - 1) }; $sh = ($v -ceq 'run_shell_command' -or $v -ceq 'ShellTool')
       if ($p -ceq ($fs + 'tools' + $fs + 'core[]')) { $core = $true }
       if ($p -ceq ($fs + 'tools' + $fs + 'allowed[]') -or $p -ceq ($fs + 'tools' + $fs + 'core[]')) {
         $r = 4.3; if ($p -ceq ($fs + 'tools' + $fs + 'core[]')) { $r = 4.25 }
-        if ($sh) { Rc-Out $L $fid $rep 'allow' $r $false '' '*' }
-        else { $mm = [regex]::Match($v, '^(run_shell_command|ShellTool)\('); if ($mm.Success -and $v.EndsWith(')')) { Rc-Out $L $fid $rep 'allow' $r $false '' (Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - 1) 'prefix'); if ($r -eq 4.3) { $nar = $true } } }
+        if ($sh) { $script:RcRaw = $v; Rc-Out $L $fid $rep 'allow' $r $false '' '*' }
+        else { $mm = [regex]::Match($v, '^(run_shell_command|ShellTool)\('); if ($mm.Success -and ($lg -or $v.EndsWith(')'))) { $tl = 1; if ($lg) { $tl = 0 }; $w = Rc-Fixed $v.Substring($mm.Length, $v.Length - $mm.Length - $tl) 'prefix'; if ($w -eq '*') { $script:RcRaw = $v }; Rc-Out $L $fid $rep 'allow' $r $false '' $w; if ($r -eq 4.3) { $nar = $true } } }
       }
       if ($p -ceq ($fs + 'tools' + $fs + 'confirmationRequired[]') -and $sh) { Rc-Out $L $fid $rep 'ask' 4.35 $false '' '*' }
       if ($p -ceq ($fs + 'tools' + $fs + 'exclude[]') -and $sh) { Rc-Out $L $fid $rep 'deny' 4.4 $false '' '*' }
+    } elseif ($fmt -eq 'vscode' -and $p -ceq ($fs + 'chat.tools.terminal.enableAutoApprove') -and $v -ceq 'false') {
+      # chat.tools.terminal.enableAutoApprove set to false turns off every rule of the file.
+      Rc-Out $L $fid $rep 'deny' 0 $false '' '*'
     } elseif ($fmt -eq 'vscode' -and $p.StartsWith($fs + 'chat.tools.terminal.autoApprove' + $fs, [StringComparison]::Ordinal) -and ($v -ceq 'true' -or $v -ceq 'false')) {
       $k = $p.Substring(33); $m = $k.IndexOf([char]28)
       if ($m -ge 0) { if ($k.Substring($m + 1) -cne 'approve') { continue }; $k = $k.Substring(0, $m) }
+      # A regex key cut short has lost its flags: it is not read.
+      if ($k.EndsWith([string][char]3, [StringComparison]::Ordinal)) { $k = $k.Substring(0, $k.Length - 1); if ($k.StartsWith('/')) { & $cutf; continue } }
       $k = $k.Replace('\\', [string][char]1).Replace('\"', '"').Replace([string][char]1, '\')
       $d = 'deny'; if ($v -ceq 'true') { $d = 'allow' }
       if ($k -cmatch '^/.+/[dgimsuvy]*$') { $fl = $k.Substring($k.LastIndexOf('/') + 1); Rc-OutRx $L $fid $rep $d 0 ($fl.Contains('i')) $k.Substring(1, $k.Length - $fl.Length - 2) 'rx' $k }
       else { Rc-Out $L $fid $rep $d 0 $false '' (Rc-Fixed $k 'prefix') }
     } elseif ($fmt -eq 'roo' -and $str -and ($p -ceq ($fs + 'roo-cline.allowedCommands[]') -or $p -ceq ($fs + 'roo-cline.deniedCommands[]'))) {
       $v = Rc-Unq $v; $d = 'deny'; if ($p.Contains('allowed')) { $d = 'allow' }
-      Rc-Out $L $fid $rep $d $v.Length $true '' (Rc-Fixed $v 'str')
+      if ($v.EndsWith([string][char]3, [StringComparison]::Ordinal)) { $v = $v.Substring(0, $v.Length - 1) }
+      $w = Rc-Fixed $v 'str'; if ($w -eq '*') { $script:RcRaw = $v }
+      Rc-Out $L $fid $rep $d $v.Length $true '' $w
     } elseif ($fmt -eq 'amazonq' -and $str -and ($p -ceq ($qk + 'allowedCommands[]') -or $p -ceq ($qk + 'deniedCommands[]'))) {
       $v = Rc-Unq $v; $d = 'deny'; if ($p.EndsWith('allowedCommands[]')) { $d = 'allow' }
+      if ($v.EndsWith([string][char]3, [StringComparison]::Ordinal)) { $v = $v.Substring(0, $v.Length - 1) }
       Rc-OutRx $L $fid $rep $d 0 $false $v 'rxfull' $v
     }
   }
@@ -2267,7 +2308,10 @@ function Rc-Read([string]$f, [string]$fmt, $fid, $rep) {
   ,$L
 }
 # The hits of a set of an agent's files whose rules apply together: @(fid, rule as shown, what it
-# allows), or @(fid, '!cut') for a file not read in full. The same as gird-check.sh's RC_MATCH.
+# allows), or @(fid, '!cut') for a file not read in full. The same as gird-check.sh's RC_MATCH: a deny
+# or ask rule covers only its own tool's allow rules, a rule that allows every command is reported but
+# for Claude Code's Bash in a file whose rep is b, and a rule is shown only as far as the words it
+# shares with the command.
 $RcSigWords = @(foreach ($s in $RcSigs) { ,@($s[0].Split(' ')) })
 function Rc-Agree([string]$a, [string]$b, [bool]$ci) {
   if ($ci) { $a = $a.ToLowerInvariant(); $b = $b.ToLowerInvariant() }
@@ -2294,34 +2338,45 @@ function Rc-Match($entries) {
     if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
     if (-not $open -or $e[7]) { continue }
     for ($j = 0; $j -lt $ns; $j++) {
-      $ci = $e[4] -or $RcSigs[$j][1] -eq 'any'
-      if ($W.Count -le $RcSigWords[$j].Count -and (Rc-Agrees $W $W.Count $j $ci) -and (-not $ov.ContainsKey($j) -or $e[3] -gt $ov[$j])) { $ov[$j] = $e[3] }
+      $ci = $e[4] -or $RcSigs[$j][1] -eq 'any'; $ok = "$($e[5])`t$j"
+      if ($W.Count -le $RcSigWords[$j].Count -and (Rc-Agrees $W $W.Count $j $ci) -and (-not $ov.ContainsKey($ok) -or $e[3] -gt $ov[$ok])) { $ov[$ok] = $e[3] }
     }
   }
-  $seen = @{}
+  $seen = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal)
   foreach ($e in $entries) {
-    if ($e[2] -ne 'allow' -or "$($e[1])" -ne '1') { continue }
+    if ($e[2] -ne 'allow' -or ("$($e[1])" -cne '1' -and "$($e[1])" -cne 'b')) { continue }
     $W = @($e[6].Split(' ')); $open = $false
     if ($W[-1] -eq '*') { $open = $true; $W = @($W | Select-Object -First ($W.Count - 1)) } elseif ($W[-1].EndsWith('*')) { $open = $true }
-    # A rule that matches one exact command is never reported, as in gird-check.sh.
-    $wn = $W.Count; if ($wn -eq 0 -or -not $open) { continue }
+    # A rule that matches one exact command is never reported, as in gird-check.sh. A rule that allows
+    # every command is, but for Claude Code's Bash in a file section 1 or 2 lists for it (rep b).
+    $wn = $W.Count; if (-not $open) { continue }
+    if ($wn -eq 0 -and ($e[7] -or ("$($e[1])" -ceq 'b' -and $e[5] -ceq 'Bash'))) { continue }
     $locs = New-Object System.Collections.Generic.List[string]; $sn = 0; $br = $false
     for ($j = 0; $j -lt $ns; $j++) {
       $sl = $RcSigWords[$j].Count
       if (-not (Rc-Agrees $W $wn $j ($e[4] -or $RcSigs[$j][1] -eq 'any'))) { continue }
-      if ($ov.ContainsKey($j) -and $ov[$j] -ge $e[3]) { continue }
+      $ok = "$($e[5])`t$j"
+      if ($ov.ContainsKey($ok) -and $ov[$ok] -ge $e[3]) { continue }
       if (-not $locs.Contains($RcSigs[$j][2])) { $locs.Add($RcSigs[$j][2]) }
       $m = [Math]::Min($wn, $sl); if ($m -gt $sn) { $sn = $m }
       if ($wn -lt $sl) { $br = $true }
     }
     if ($locs.Count -eq 0) { continue }
     $lb = $locs[0]; for ($k = 1; $k -lt $locs.Count; $k++) { if ($k -eq $locs.Count - 1) { $lb += ' and ' } else { $lb += ', ' }; $lb += $locs[$k] }
-    if ($br) { $tx = 'allows every ' + ($W -join ' ') + ' command, including ones that run commands ' + $lb } else { $tx = 'runs commands ' + $lb }
+    # A rule with more after its wildcard allows only some of the commands its words start.
+    if ($wn -eq 0) { $tx = 'allows every command, including ones that run commands ' + $lb }
+    elseif ($br) { if ($e[7]) { $tx = 'allows ' + ($W -join ' ') + ' commands' } else { $tx = 'allows every ' + ($W -join ' ') + ' command' }; $tx += ', including ones that run commands ' + $lb }
+    else { $tx = 'runs commands ' + $lb }
     if ($e[9] -ne '') { $tx += ', ' + $e[9] }
-    if ($e[8] -ne '') { $sh = Rc-Safe $e[8] }
+    # A rule that allows every command is its tool or a wildcard alone, shown as written.
+    if ($wn -eq 0) {
+      $sh = $e[8]; if ($sh -eq '') { $sh = $e[5] }; if ($sh -eq '') { $sh = '*' }
+      if ($sh.Length -gt 64) { $sh = $sh.Substring(0, 64) + '...' }
+      if ($e[10]) { $sh += ' ...' }
+    } elseif ($e[8] -ne '' -and -not $e[7] -and $wn -eq $sn) { $sh = Rc-Safe $e[8]; if ($e[10]) { $sh += ' ...' } }
     else {
       $sh = ($W[0..($sn - 1)]) -join ' '
-      if ($wn -gt $sn) { $sh += ' ...' } elseif ($open -and -not $W[$wn - 1].EndsWith('*')) { $sh += ' *' }
+      if ($wn -gt $sn -or $e[7] -or $e[8] -ne '') { $sh += ' ...' } elseif ($open -and -not $W[$wn - 1].EndsWith('*')) { $sh += ' *' }
       if ($e[5] -ne '') { $sh = $e[5] + '(' + $sh + ')' }
     }
     $key = "$($e[0])`t$sh"
@@ -2338,8 +2393,9 @@ function Rc-Run($set) {
   foreach ($h in (Rc-Match $entries)) { $f = $set[$h[0] - 1][2]; if ($h[1] -eq '!cut') { $out.Add(@($f, '!cut')) } else { $out.Add(@($f, $h[1], $h[2])) } }
   ,$out
 }
-# The person's own Claude Code settings files: their deny and ask rules apply in every project.
-$RcCcUser = @(foreach ($r in $RcFiles) { if ($r[2] -eq 'claude' -and (Is-File $r[4]) -and (Is-RegularFile $r[4]) -and -not (Too-Big $r[4]) -and $null -ne (Read-Text $r[4])) { ,@('0', 'claude', $r[4]) } })
+# The person's own Claude Code settings files whose deny and ask rules apply in every project: the
+# agent group's. A local one applies only in its own folder.
+$RcCcUser = @(foreach ($r in $RcFiles) { if ($r[2] -eq 'claude' -and $r[3] -eq 'agent' -and (Is-File $r[4]) -and (Is-RegularFile $r[4]) -and -not (Too-Big $r[4]) -and $null -ne (Read-Text $r[4])) { ,@('0', 'claude', $r[4]) } })
 $RcProj = New-Object System.Collections.Generic.List[object]
 $AaCut = New-Object System.Collections.Generic.List[string]
 function Aa-Hit([string]$f, $pats) {
@@ -2509,32 +2565,36 @@ foreach ($f in $AllowFiles) {
   # asking. It applies a project's settings.json allow rules once you trust the folder, and a
   # settings.local.json's (normally your own file) without that step. A rule for some commands
   # (Bash(npm *)) is not one. The test spares the files that never name them.
-  $ab = $null
+  # The note that the folder must be trusted follows the last of the allow rules listed.
+  $ab = $null; $tr = ''
   if ($t.Contains('"Bash"') -or $t.Contains('"Bash(*)"')) {
     if (Aa-Hit $f @('"permissions": {"allow": ["Bash"')) { $ab = 'Bash' } elseif (Aa-Hit $f @('"permissions": {"allow": ["Bash(*)"')) { $ab = 'Bash(*)' }
-    $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
-    if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '' }
-    if ($ab) { $w.Add("run every Bash command without asking, with permissions.allow: $ab$tr") }
+    if ($ab) {
+      if (-not $f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { $tr = '. Claude Code applies a project''s allow rules once you trust the folder' }
+      $w.Add("run every Bash command without asking, with permissions.allow: $ab")
+    }
   }
   # Allow rules for commands that run commands on other machines (data/remote-commands.tsv), with the
   # person's own deny and ask rules and both of the project's files. A settings.local.json's apply
-  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here.
+  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here. Bash
+  # allowed whole is said above (rep b).
   if ($t.Contains('"Bash') -or $t.Contains('"PowerShell')) {
     $set = New-Object System.Collections.Generic.List[object]
     foreach ($u in $RcCcUser) { $set.Add($u) }
+    $rp = '1'; if ($ab) { $rp = 'b' }
     foreach ($s in @((J $dir 'settings.json'), (J $dir 'settings.local.json'))) {
-      if ($s -eq $f) { $set.Add(@('1', 'claude', $s)) } elseif ((Is-File $s) -and (Is-RegularFile $s) -and -not (Too-Big $s) -and $null -ne (Read-Text $s)) { $set.Add(@('0', 'claude', $s)) }
+      if ($s -eq $f) { $set.Add(@($rp, 'claude', $s)) } elseif ((Is-File $s) -and (Is-RegularFile $s) -and -not (Too-Big $s) -and $null -ne (Read-Text $s)) { $set.Add(@('0', 'claude', $s)) }
     }
     $rh = @(foreach ($h in (Rc-Run $set)) { if ($h[0] -eq $f -and $h[1] -ne '!cut') { ,$h } })
     if ($rh.Count -gt 0) {
       if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { foreach ($h in $rh) { $RcProj.Add(@($f, 'Claude Code', "$($h[1]): $($h[2])")) } }
       else {
-        $tr = '. Claude Code applies a project''s allow rules once you trust the folder'; if ($ab) { $tr = '' }
-        $w.Add("run commands on other machines without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')$tr")
+        $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
+        $w.Add("run commands on other machines without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')")
       }
     }
   }
-  Auto-Row $f ($w -join ', ') $t $note
+  Auto-Row $f (($w -join ', ') + $tr) $t $note
 }
 foreach ($f in $TaskFiles) {
   if (($f -replace '\\', '/') -match '/\.claude/plugins/' -or (Too-Big $f)) { continue }
@@ -7193,27 +7253,36 @@ function Rc-Expand([string]$p) {
   @()
 }
 $RemoteList = New-Object System.Collections.Generic.List[object]; $rcTried = New-Object System.Collections.Generic.List[string]
-$rcSeen = @{}; $rcCuts = New-Object System.Collections.Generic.List[string]
+$rcSeen = New-Object 'System.Collections.Generic.Dictionary[string,int]' ([StringComparer]::Ordinal); $rcCuts = New-Object System.Collections.Generic.List[string]
+$rcFileNote = New-Object 'System.Collections.Generic.Dictionary[string,string]' ([StringComparer]::Ordinal)
 $rcAgents = New-Object System.Collections.Generic.List[string]
 foreach ($r in $RcFiles) { if (-not $rcAgents.Contains($r[0])) { $rcAgents.Add($r[0]) } }
 foreach ($ag in $rcAgents) {
-  $sets = New-Object System.Collections.Generic.List[object]; $one = New-Object System.Collections.Generic.List[object]
-  $note = ''
+  # The sets: the agent group's files together, each file of the file group alone, and each local one
+  # with the agent group's, whose deny and ask rules apply over it while its own reach only it. A
+  # file's rep is b when section 1 lists it for this agent, which says there that Bash is allowed whole.
+  $agSet = New-Object System.Collections.Generic.List[object]; $fileSets = New-Object System.Collections.Generic.List[object]
+  $locals = New-Object System.Collections.Generic.List[object]
   foreach ($r in $RcFiles) {
     if ($r[0] -ne $ag) { continue }
-    if ($note -eq '' -and $r[5] -ne '-') { $note = $r[5] }
     if ($r[1] -ne 'all' -and $r[1] -ne $IndOs) { continue }
     foreach ($f in (Rc-Expand $r[4])) {
       if (-not $rcTried.Contains($f)) { $rcTried.Add($f) }
       if (-not (Is-File $f) -or -not (Is-RegularFile $f) -or (Too-Big $f) -or $null -eq (Read-Text $f)) { continue }
-      if ($r[3] -eq 'file') { $sets.Add(@(,@('1', $r[2], $f))) } else { $one.Add(@('1', $r[2], $f)) }
+      $rp = '1'; foreach ($y in $AaList) { if ($y.File -ceq $f -and $y.Agent -ceq $ag) { $rp = 'b'; break } }
+      if ($r[5] -ne '-') { $rcFileNote[$f] = $r[5] }
+      $ent = @($rp, $r[2], $f)
+      if ($r[3] -eq 'file') { $fileSets.Add(@(,$ent)) } elseif ($r[3] -eq 'local') { $locals.Add($ent) } else { $agSet.Add($ent) }
     }
   }
-  if ($one.Count -gt 0) { $sets.Insert(0, $one.ToArray()) }
+  $sets = New-Object System.Collections.Generic.List[object]
+  if ($agSet.Count -gt 0) { $sets.Add($agSet.ToArray()) }
+  foreach ($x in $fileSets) { $sets.Add($x) }
+  foreach ($x in $locals) { $one = New-Object System.Collections.Generic.List[object]; foreach ($y in $agSet) { $one.Add(@('0', $y[1], $y[2])) }; $one.Add($x); $sets.Add($one.ToArray()) }
   foreach ($set in $sets) {
     foreach ($h in (Rc-Run $set)) {
       if ($h[1] -eq '!cut') { $rcCuts.Add($h[0]); continue }
-      $st = "$($h[1]): $($h[2])"; if ($note) { $st += ", $note" }
+      $st = "$($h[1]): $($h[2])"; if ($rcFileNote.ContainsKey($h[0])) { $st += ", $($rcFileNote[$h[0]])" }
       $k = "$($h[0])`t$ag`t$st"
       if (-not $rcSeen.ContainsKey($k)) { $rcSeen[$k] = 1; $RemoteList.Add(@{ File = $h[0]; Agent = $ag; Rule = $st }) }
     }

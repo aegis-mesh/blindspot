@@ -480,7 +480,7 @@ kubectl exec|exact|in Kubernetes containers
 Invoke-Command|any|on other machines with PowerShell
 Enter-PSSession|any|on other machines with PowerShell'
 RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
-Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|-
+Claude Code|all|claude|local|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|only in sessions you start in your home folder
 Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-
 Gemini CLI|all|gemini-toml|agent|${GEMINI_CLI_HOME:-$H}/.gemini/policies/*.toml|-
 Gemini CLI|all|gemini-json|agent|${GEMINI_CLI_HOME:-$H}/.gemini/settings.json|-
