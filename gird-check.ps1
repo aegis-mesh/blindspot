@@ -8144,7 +8144,7 @@ $N_SESS = $SessFiles.Count; $N_PLACES = $SessPlaces.Count
 $SessRows = @($sessAg.Keys | ForEach-Object { , @($_, $sessAg[$_].N, ($sessAg[$_].P -join ', ')) } | Sort-Object -Property @{ Expression = { $_[1] }; Descending = $true }, @{ Expression = { $_[0] } })
 # Partly checked: any file not read to the end (compressed, unreadable, or not reached when the
 # check was stopped), a folder that could not be read, or a check or ripgrep that did not end when told to.
-$SESS_PARTIAL = $sessCut -or $SessSt.Hung -or ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
+$SESS_PARTIAL = $SessSt.Hung -or $sessCut -or ($SESS_UNREAD -ne 0) -or ($SESS_TOTAL -gt 0 -and ($SESS_NOTRUN -gt 0 -or $SESS_DONE -lt $SESS_TOTAL))
 # The encrypted .pb files in those folders, by agent. A folder that holds none (Antigravity's newer
 # conversations are SQLite, read above) is never named.
 $SessSealedAg = New-Object System.Collections.Generic.List[string]; $SessSealedN = 0
