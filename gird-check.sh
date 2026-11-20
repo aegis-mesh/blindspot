@@ -2818,7 +2818,8 @@ json_top() { # key
 # quotes; one longer than 4096 characters keeps its first 4096 and ends in \003, read as a rule with
 # more after them. Whitespace outside strings is dropped with a gsub only on a short chunk (a gsub with
 # many matches is quadratic on macOS's awk): a longer one is read as its first word, and \003 when
-# more follow.
+# more follow. Only values within 8 brackets are printed: the rules sit within 4, and the path of a
+# deeper one is never built, as keeping one at each level takes memory in the square of the depth.
 json_leaves() { # file
   flat "$1" | awk '
     function trail(s) {
@@ -2826,9 +2827,9 @@ json_leaves() { # file
       if (match(s, /[^\\]\\*$/)) return RLENGTH - 1
       return length(s)
     }
-    function emit(v) { if (dep > 0) printf "%s%s\t%s\n", P[dep], (T[dep] == "o" ? "\034" key : "[]"), v }
+    function emit(v) { if (dep > 0 && dep <= 8) printf "%s%s\t%s\n", P[dep], (T[dep] == "o" ? "\034" key : "[]"), v }
     function flush() { if (sc != "") emit(sc); sc = "" }
-    function ob(c,   np) { flush(); np = dep < 1 ? "" : P[dep] (T[dep] == "o" ? "\034" key : "[]"); dep++; P[dep] = np; T[dep] = (c == "{" ? "o" : "a"); ek = (c == "{") }
+    function ob(c,   np) { flush(); np = (dep < 1 || dep >= 8) ? "" : P[dep] (T[dep] == "o" ? "\034" key : "[]"); dep++; P[dep] = np; T[dep] = (c == "{" ? "o" : "a"); ek = (c == "{") }
     function cb() { flush(); if (dep > 0) dep--; ek = 0 }
     # A chunk without its whitespace. A long one is read as its first word, and \003 when more follow.
     function nows(s,   w) {

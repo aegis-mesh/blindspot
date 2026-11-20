@@ -2005,7 +2005,9 @@ function Toml-Ml([string]$s, [string]$st) {
 # after a [char]28 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
 # The same as gird-check.sh's json_leaves: a string longer than 4096 characters keeps its first 4096
 # and ends in [char]3, read as a rule with more after them, and a chunk of code longer than 64
-# characters is read as its first word, and [char]3 when more follow.
+# characters is read as its first word, and [char]3 when more follow. Only values within 8 brackets
+# are listed: the rules sit within 4, and the path of a deeper one is never built, as keeping one at
+# each level takes memory in the square of the depth.
 $RxLeafTok = New-Object regex('"(?:[^"\\]|\\.)*("?)|[{}\[\]]|[^"{}\[\]]+', $RxOpt, $RxTimeout)
 function Json-Leaves([string]$f) {
   $out = New-Object System.Collections.Generic.List[string]
@@ -2020,17 +2022,17 @@ function Json-Leaves([string]$f) {
       $sv = $x.Substring(1, $x.Length - 2)
       if ($sv.Length -gt 4096) { $sv = $sv.Substring(0, 4096) + [char]3; $x = '"' + $sv + '"' }
       if ($dep -gt 0 -and $T[$dep] -eq 'o' -and $ek) { $key = $sv; $ek = $false }
-      elseif ($dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $x) }
+      elseif ($dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $x) }
       continue
     }
     if ($c -eq '{' -or $c -eq '[') {
-      if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
-      $np = ''; if ($dep -ge 1) { $np = $P[$dep]; if ($T[$dep] -eq 'o') { $np += $fs + $key } else { $np += '[]' } }
+      if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+      $np = ''; if ($dep -ge 1 -and $dep -lt 8) { $np = $P[$dep]; if ($T[$dep] -eq 'o') { $np += $fs + $key } else { $np += '[]' } }
       $dep++; $P[$dep] = $np; if ($c -eq '{') { $T[$dep] = 'o'; $ek = $true } else { $T[$dep] = 'a'; $ek = $false }
       continue
     }
     if ($c -eq '}' -or $c -eq ']') {
-      if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+      if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
       if ($dep -gt 0) { $dep-- }; $ek = $false
       continue
     }
@@ -2038,12 +2040,12 @@ function Json-Leaves([string]$f) {
     for ($i = 0; $i -lt $parts.Count; $i++) {
       $a = $parts[$i]
       if ($i -gt 0) {
-        if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+        if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
         if ($dep -gt 0 -and $T[$dep] -eq 'o') { $ek = $true }
       }
       $k = $a.IndexOf([char]':')
       if ($k -ge 0) {
-        if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
+        if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }; $sc = ''
         $ek = $false; $a = $a.Substring($k + 1)
       }
       if ($sc.Length -lt 64) {
@@ -2052,7 +2054,7 @@ function Json-Leaves([string]$f) {
       }
     }
   }
-  if ($sc -ne '' -and $dep -gt 0) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }
+  if ($sc -ne '' -and $dep -gt 0 -and $dep -le 8) { $sfx = '[]'; if ($T[$dep] -eq 'o') { $sfx = $fs + $key }; $out.Add($P[$dep] + $sfx + "`t" + $sc) }
   ,$out
 }
 # A rule as the words it fixes before its first wildcard, as gird-check.sh's RC_FN reads it.

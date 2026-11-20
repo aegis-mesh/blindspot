@@ -3492,6 +3492,27 @@ has    "remote commands: a rule beside 800 KB of escaped quotes is read" '! ~/co
 has    "remote commands: and one before 800 KB of spaces" '! Claude Code ~/code/x/\.claude/settings\.local\.json Bash\(kubectl exec \*\): runs' "$WORK/rcbig.txt"
 has    "remote commands: and a Codex rule with a token of 800 KB of them" '! Codex ~/\.codex/rules/big\.rules ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rcbig.txt"
 if [ "$T" -le 60 ]; then ok "remote commands: and in linear time" "${T}s"; else bad "remote commands: and in linear time" "took ${T}s"; fi
+# Deep brackets cost memory in proportion: only values within 8 brackets are listed, so a settings
+# file of 30,000 nested arrays (60 KB, which took 1 GB in bash and 1.8 GB in PowerShell) costs about
+# what a small one does, and the rule beside them is still read.
+PEAK_PY='import resource, subprocess, sys
+subprocess.run(sys.argv[2:], stdin=subprocess.DEVNULL, stdout=open(sys.argv[1], "w"), stderr=subprocess.STDOUT)
+r = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+print(r // (1048576 if sys.platform == "darwin" else 1024))'
+for _d in 0 30000; do
+  rm -rf "$WORK/rcdeep$_d"; cp -R "$WORK/clean" "$WORK/rcdeep$_d"; mkdir -p "$WORK/rcdeep$_d/code/x/.claude"
+  python3 -c 'import sys; d = int(sys.argv[2]); open(sys.argv[1], "w").write("{\"permissions\": {\"allow\": [\"Bash(ssh *)\", " + "[" * d + "\"x\"" + "]" * d + "]}}\n")' "$WORK/rcdeep$_d/code/x/.claude/settings.json" "$_d"
+done
+for _d in 0 30000; do
+  _h="$WORK/rcdeep$_d"
+  _m=$(python3 -c "$PEAK_PY" "$WORK/rcdeep$_d.txt" /usr/bin/env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$_h" APPDATA="$_h/AppData/Roaming" \
+    LOCALAPPDATA="$_h/AppData/Local" TEMP="$_h/AppData/Local/Temp" LANG=en_US.UTF-8 "$PWSH" -NoProfile -NonInteractive -File "$SCRIPT" -Offline)
+  if [ "$_d" = 0 ]; then M0=$_m; else M1=$_m; fi
+done
+tr -s ' \n' '  ' < "$WORK/rcdeep30000.txt" > "$WORK/rcdeep.txt"
+has    "remote commands: a rule beside 30,000 nested brackets is read" '! ~/code/x/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: Bash\(ssh \*\)' "$WORK/rcdeep.txt"
+if [ "$((M1 - M0))" -le 150 ]; then ok "remote commands: and the brackets cost about what a small file does" "${M0} MB, ${M1} MB"
+else bad "remote commands: and the brackets cost about what a small file does" "${M0} MB, then ${M1} MB"; fi
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/AppData/Roaming/Code/User" "$WORK/dz-unr/AppData/Roaming/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/AppData/Roaming/Code/User/settings.json" > "$WORK/dz-unr/AppData/Roaming/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.
